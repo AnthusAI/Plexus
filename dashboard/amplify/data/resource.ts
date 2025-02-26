@@ -33,6 +33,7 @@ type TaskStageIndexFields = "taskId" | "name" | "order" | "status";
 type DatasetIndexFields = "scorecardId" | "scoreId";
 type DatasetVersionIndexFields = "datasetId";
 type DatasetProfileIndexFields = "datasetId" | "datasetVersionId";
+type ShareLinkIndexFields = "token" | "resourceType" | "resourceId" | "accountId";
 
 const schema = a.schema({
     Account: a
@@ -442,6 +443,30 @@ const schema = a.schema({
         .secondaryIndexes((idx: (field: DatasetProfileIndexFields) => any) => [
             idx("datasetId"),
             idx("datasetVersionId")
+        ]),
+        
+    ShareLink: a
+        .model({
+            token: a.string().required(),
+            resourceType: a.string().required(),
+            resourceId: a.string().required(),
+            createdBy: a.string().required(),
+            accountId: a.string().required(),
+            expiresAt: a.datetime(),
+            viewOptions: a.json(),
+            lastAccessedAt: a.datetime(),
+            accessCount: a.integer(),
+            isRevoked: a.boolean()
+        })
+        .authorization((allow) => [
+            allow.publicApiKey(),
+            allow.authenticated()
+        ])
+        .secondaryIndexes((idx: (field: ShareLinkIndexFields) => any) => [
+            idx("token"),
+            idx("accountId"),
+            idx("resourceType"),
+            idx("resourceId")
         ])
 });
 
