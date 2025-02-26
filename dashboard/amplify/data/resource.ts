@@ -265,7 +265,7 @@ const schema = a.schema({
             allow.authenticated()
         ])
         .secondaryIndexes((idx) => [
-            idx("accountId")
+            idx("accountId").sortKeys(["updatedAt"])
         ]),
 
     ScoringJob: a
@@ -294,7 +294,7 @@ const schema = a.schema({
             allow.authenticated()
         ])
         .secondaryIndexes((idx) => [
-            idx("accountId"),
+            idx("accountId").sortKeys(["updatedAt"]),
             idx("itemId"),
             idx("scorecardId"),
             idx("scoreId"),
@@ -326,7 +326,7 @@ const schema = a.schema({
             allow.authenticated()
         ])
         .secondaryIndexes((idx: (field: ScoreResultIndexFields) => any) => [
-            idx("accountId"),
+            idx("accountId").sortKeys(["updatedAt"]),
             idx("itemId"),
             idx("scoringJobId"),
             idx("scorecardId"),
