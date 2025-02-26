@@ -31,7 +31,7 @@ interface ScoringJobData {
   evaluationId?: string | null
   scoreId?: string | null
   batchJobId: string
-  createdAt: string
+  createdAt: string | null | undefined
 }
 
 export interface BatchJobTaskData {
@@ -159,7 +159,7 @@ export default function BatchJobTask({
               evaluationId: (job.evaluationId as string) || null,
               scoreId: (job.scoreId as string) || null,
               batchJobId: taskData.id,
-              createdAt: job.createdAt as string
+              createdAt: job.createdAt as string | null | undefined
             } satisfies ScoringJobData;
           });
 

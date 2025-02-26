@@ -588,7 +588,7 @@ export function useEvaluationData({ accountId, limit = 24 }: UseEvaluationDataPr
                             text: scoreResult?.metadata?.text ?? parsedMetadata.text ?? (typeof item.metadata === 'object' ? (item.metadata as any).text : null) ?? null
                           },
                           itemId: item.itemId ?? parsedMetadata.item_id?.toString() ?? null,
-                          createdAt: item.createdAt
+                          createdAt: item.createdAt || new Date().toISOString()
                         };
 
                         console.log('Transformed score result in useEvaluationData:', {
