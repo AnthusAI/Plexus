@@ -133,17 +133,14 @@ Implementation was straightforward as all necessary components and infrastructur
 To address security audit requirements and provide more control over shared resources, we will implement a secure sharing mechanism using a Lambda proxy with IAM authorization to AppSync. This approach will replace the direct public access to resources with a token-based system that supports expiration and revocation.
 
 The primary goals of this implementation are:
-1. Create a **centralized table of share URLs** that can be managed, expired, or deleted
+1. Create a **simple lookup table for share URLs** that can be managed, expired, or deleted
 2. Support sharing **multiple types of resources** (evaluations, reports, datasets, etc.)
 3. Provide **fine-grained control** over what nested information is shared
 4. Enable **different view variants** of the same resource for different audiences
 
-### Architecture
-1. **ShareLink Table**: Central repository for all share tokens with expiration and access controls
-2. **Lambda Proxy**: Authorized via IAM to make AppSync queries with content filtering
-3. **Share Route**: Public endpoint that renders appropriate UI based on resource type and view options
-
 ### ShareLink Data Model
+We'll keep the schema simple, similar to a URL shortener with a few additional fields:
+
 ```graphql
 type ShareLink @model @auth(rules: [
   { allow: private },
@@ -156,16 +153,14 @@ type ShareLink @model @auth(rules: [
   createdBy: ID!
   accountId: ID!
   expiresAt: AWSDateTime
-  viewOptions: AWSJSON  # Controls what nested data is included and display variants
+  viewOptions: AWSJSON  # JSON field for all configuration options
   lastAccessedAt: AWSDateTime
   accessCount: Int
   isRevoked: Boolean
-  name: String  # Optional friendly name for the share
-  description: String  # Optional description of what is being shared
 }
 ```
 
-The `viewOptions` field will contain a JSON object that specifies:
+The `viewOptions` field will be a flexible JSON object that specifies all configuration options in one place, rather than as URL parameters:
 - Which nested resources to include/exclude
 - Display variants (detailed vs. summary)
 - Specific fields to hide (e.g., cost metrics, PII)
@@ -191,6 +186,7 @@ The Lambda function will:
 4. If valid, use IAM credentials to query the appropriate resource
 5. Apply view options to filter sensitive data and nested resources
 6. Return the processed data to the client
+7. Log access details to CloudWatch for analytics purposes
 
 ```typescript
 // Lambda handler pseudocode
@@ -229,14 +225,22 @@ export const handler = async (event) => {
     // Apply view options to filter data
     const filteredData = applyViewOptions(result.data, shareLink.viewOptions);
     
+    // Log access for analytics via CloudWatch
+    console.log(JSON.stringify({
+      event: 'share_link_access',
+      token: token,
+      resourceType: shareLink.resourceType,
+      resourceId: shareLink.resourceId,
+      timestamp: new Date().toISOString(),
+      viewOptions: shareLink.viewOptions
+    }));
+    
     return {
       statusCode: 200,
       body: JSON.stringify({
         data: filteredData,
         resourceType: shareLink.resourceType,
-        viewOptions: shareLink.viewOptions,
-        name: shareLink.name,
-        description: shareLink.description
+        viewOptions: shareLink.viewOptions
       })
     };
   } catch (error) {
@@ -247,113 +251,25 @@ export const handler = async (event) => {
     };
   }
 };
-
-// Helper function to build appropriate GraphQL query with field selection
-function buildQueryFromOptions(resourceType, resourceId, viewOptions) {
-  switch(resourceType) {
-    case 'Evaluation':
-      return buildEvaluationQuery(resourceId, viewOptions);
-    case 'Report':
-      return buildReportQuery(resourceId, viewOptions);
-    case 'Dataset':
-      return buildDatasetQuery(resourceId, viewOptions);
-    default:
-      throw new Error(`Unsupported resource type: ${resourceType}`);
-  }
-}
-
-// Example of building a query with selective field inclusion
-function buildEvaluationQuery(id, viewOptions) {
-  // Base fields always included
-  let fields = `
-    id
-    type
-    parameters
-    accuracy
-    status
-    createdAt
-    updatedAt
-  `;
-  
-  // Conditionally include nested resources based on viewOptions
-  if (viewOptions.includeScoreResults) {
-    fields += `
-      scoreResults {
-        items {
-          id
-          value
-          confidence
-          ${viewOptions.includeScoreResultExplanations ? 'explanation' : ''}
-          ${viewOptions.includeScoreResultMetadata ? 'metadata' : ''}
-          itemId
-          createdAt
-        }
-      }
-    `;
-  }
-  
-  // Conditionally include cost metrics
-  if (viewOptions.includeCostMetrics) {
-    fields += `
-      cost
-      inferences
-    `;
-  }
-  
-  // Conditionally include confusion matrix
-  if (viewOptions.includeConfusionMatrix) {
-    fields += `
-      confusionMatrix
-      datasetClassDistribution
-      predictedClassDistribution
-    `;
-  }
-  
-  return {
-    query: `query GetEvaluation($id: ID!) {
-      getEvaluation(id: $id) {
-        ${fields}
-      }
-    }`,
-    variables: { id }
-  };
-}
 ```
 
-### IAM Authorization Setup
-```typescript
-// amplify/data/resource.ts
-const api = a.graphqlApi({
-  name: 'PlexusAPI',
-  schema: schema,
-  authorizationModes: {
-    defaultAuthorizationMode: 'AMAZON_COGNITO_USER_POOLS',
-    apiKeyConfig: {
-      description: 'API key for public access',
-      expiresAfter: '365 days'
-    },
-    iamConfig: {
-      enableIamAuthorizationMode: true
-    }
-  }
-});
+### Analytics with CloudWatch
+Instead of building a complex analytics system upfront, we'll:
+1. Log detailed JSON objects to CloudWatch for each share link access
+2. Use CloudWatch Log Insights to query and analyze usage patterns
+3. Create dashboards for common metrics as needed
+4. Scale analytics capabilities based on actual usage patterns
 
-// Lambda IAM role configuration
-const shareLambdaRole = new iam.Role(this, 'ShareLambdaRole', {
-  assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
-});
-
-// Grant AppSync access to the Lambda role for all resource types
-api.resources.graphqlApi.grantQuery(shareLambdaRole, [
-  'getEvaluation',
-  'getReport',
-  'getDataset',
-  'getShareLink'
-]);
+Example CloudWatch Log Insights query for share link usage:
+```
+filter @message like "share_link_access"
+| parse @message "resourceType\":\"*\"" as resourceType
+| stats count(*) as accessCount by resourceType, resourceId
+| sort accessCount desc
 ```
 
 ### Share Route Implementation
-The share route will dynamically render the appropriate component based on the resource type:
+The share route will use clean URLs without query parameters, with all configuration stored in the ShareLink record:
 
 ```typescript
 // app/share/[token]/page.tsx
@@ -369,7 +285,7 @@ export default function SharePage({ params }) {
     async function fetchSharedResource() {
       try {
         // Call the Lambda function via API Gateway
-        const response = await fetch(`/api/share?token=${token}`);
+        const response = await fetch(`/api/share/${token}`);
         
         if (!response.ok) {
           const errorData = await response.json();
@@ -425,18 +341,12 @@ export default function SharePage({ params }) {
 ```
 
 ### Share Management UI
-We will add a comprehensive management interface for users to:
+We will add a management interface for users to:
 1. Create share links with custom expiration dates
 2. Configure exactly what information is shared via view options
 3. View all active share links across resource types
 4. Revoke links before expiration
-5. Track access statistics and usage patterns
-
-The UI will include:
-- A "Share" button on resource detail pages
-- A modal for configuring share options with presets for common sharing scenarios
-- A dedicated "Shared Links" section in the user settings
-- Detailed analytics on share link usage
+5. View basic access statistics
 
 Example share creation flow:
 ```typescript
@@ -462,8 +372,6 @@ async function createShareLink(resourceType, resourceId, options) {
         resourceId,
         expiresAt,
         viewOptions: JSON.stringify(viewOptions),
-        name: options.name || `Shared ${resourceType}`,
-        description: options.description || '',
         isRevoked: false,
         accessCount: 0
       }
@@ -474,33 +382,15 @@ async function createShareLink(resourceType, resourceId, options) {
 }
 ```
 
-### Content Filtering and View Variants
-The system will support multiple view variants for each resource type:
-
-#### Evaluation Sharing Options:
-- **Full Detail**: Complete evaluation with all metrics and results
-- **Summary**: High-level metrics without individual results
-- **Client View**: Customized view with client-friendly terminology
-- **Technical View**: Detailed view with technical metrics for internal teams
-
-#### Report Sharing Options:
-- **Executive Summary**: Key findings without technical details
-- **Full Report**: Complete report with all sections
-- **Custom Sections**: Only specific sections of the report
-
-#### Dataset Sharing Options:
-- **Metadata Only**: Dataset description without actual data
-- **Sample Data**: Dataset with limited sample records
-- **Full Dataset**: Complete dataset access
-
 ### Security Benefits
 1. **No Direct Resource Access**: Resources are never directly exposed
-2. **Granular Content Control**: Precise control over what nested data is shared
-3. **Time-Limited Access**: All shares have configurable expiration
-4. **Revocation Control**: Links can be immediately revoked
-5. **Access Auditing**: Complete tracking of all access attempts
-6. **IAM Authorization**: Secure delegation pattern for AppSync access
-7. **PII Protection**: Ability to filter out personally identifying information
+2. **No URL Parameters**: All configuration stored in the database, not in URL
+3. **Granular Content Control**: Precise control over what nested data is shared
+4. **Time-Limited Access**: All shares have configurable expiration
+5. **Revocation Control**: Links can be immediately revoked
+6. **Access Auditing**: Complete tracking of all access attempts via CloudWatch
+7. **IAM Authorization**: Secure delegation pattern for AppSync access
+8. **PII Protection**: Ability to filter out personally identifying information
 
 ### Implementation Phases
 
@@ -509,6 +399,7 @@ The system will support multiple view variants for each resource type:
 2. Configure IAM authorization for AppSync
 3. Create Lambda proxy function with IAM role
 4. Set up API Gateway endpoint for Lambda
+5. Configure CloudWatch logging for analytics
 
 #### Phase 2: Share Management
 1. Implement share creation UI with view option configuration
@@ -523,15 +414,16 @@ The system will support multiple view variants for each resource type:
 #### Phase 4: Migration and Analytics
 1. Implement both systems in parallel
 2. Add migration path for existing public URLs
-3. Build analytics dashboard for share usage
+3. Create CloudWatch Log Insights queries for common analytics needs
 4. Gradually phase out direct public access
 
 ### Advantages Over Direct Public Access
-1. **Centralized Management**: One table to manage all shared content
+1. **Simple Schema**: Straightforward lookup table similar to a URL shortener
 2. **Flexible Resource Types**: Support for sharing any resource type
 3. **Content Control**: Precise control over what information is shared
 4. **Security**: No direct exposure of resource IDs or data
-5. **Auditability**: Complete tracking of all share access
+5. **Auditability**: Complete tracking of all share access via CloudWatch
 6. **Compliance**: Meets security audit requirements for sensitive data
+7. **Clean URLs**: No query parameters in shared URLs
 
-This enhanced implementation provides a robust, secure sharing mechanism that will satisfy security audit requirements while maintaining flexibility for future enhancements. The centralized ShareLink table allows for consistent management of all shared content, while the view options system provides fine-grained control over exactly what information is exposed to different audiences.
+This enhanced implementation provides a robust, secure sharing mechanism that will satisfy security audit requirements while maintaining simplicity in the database schema. The flexible `viewOptions` JSON field allows for extensive configuration without complicating the database structure, and CloudWatch logging provides a scalable approach to analytics that can be expanded as needed.
