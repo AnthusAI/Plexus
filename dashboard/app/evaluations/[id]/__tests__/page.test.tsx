@@ -1,6 +1,7 @@
 import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
+import { resizeWindow, mockMatchMedia } from '@/utils/test-utils';
 
 // Mock all the imports before importing the component
 jest.mock('next/navigation', () => ({
@@ -46,6 +47,7 @@ describe('PublicEvaluation Component', () => {
   
   beforeEach(() => {
     jest.clearAllMocks();
+    mockMatchMedia(); // Set up mock media query for responsive tests
     
     // Silence console logs during tests
     console.error = jest.fn();
@@ -146,5 +148,62 @@ describe('PublicEvaluation Component', () => {
     
     // Verify fetchEvaluation was called with the correct ID
     expect(mockFetchEvaluation).toHaveBeenCalledWith('test-evaluation-id');
+  });
+
+  test('should be responsive across different screen sizes', async () => {
+    // Mock evaluation data
+    const mockEvaluationData = {
+      id: 'test-id',
+      type: 'TEST',
+      accuracy: 85,
+      metrics: {
+        precision: 80,
+        sensitivity: 75,
+        specificity: 90
+      },
+      scorecard: { name: 'Test Scorecard', id: 'scorecard-id' },
+      score: { name: 'Test Score', id: 'score-id' },
+      processedItems: 80,
+      totalItems: 100,
+      inferences: 100,
+      cost: 0.25,
+      status: 'COMPLETED',
+      elapsedSeconds: 120,
+      estimatedRemainingSeconds: 0,
+      startedAt: '2023-01-01T00:00:00.000Z',
+      createdAt: '2023-01-01T00:00:00.000Z',
+      task: {
+        id: 'task-id',
+        type: 'EVALUATION',
+        status: 'COMPLETED',
+        target: 'target',
+        command: 'command',
+        metadata: {},
+        stages: { items: [] }
+      }
+    };
+    
+    // Setup the mock to resolve with data
+    mockFetchEvaluation.mockResolvedValue(mockEvaluationData);
+    
+    // Render the component
+    render(<PublicEvaluation evaluationService={mockEvaluationService} />);
+    
+    // Wait for the evaluation to be rendered
+    await waitFor(() => {
+      expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    });
+    
+    // Test mobile view
+    resizeWindow(375, 812); // iPhone X dimensions
+    expect(screen.getByText('Evaluation Results')).toBeInTheDocument();
+    
+    // Test tablet view
+    resizeWindow(768, 1024); // iPad dimensions
+    expect(screen.getByText('Evaluation Results')).toBeInTheDocument();
+    
+    // Test desktop view
+    resizeWindow(1920, 1080);
+    expect(screen.getByText('Evaluation Results')).toBeInTheDocument();
   });
 });
