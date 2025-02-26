@@ -29,7 +29,6 @@ interface EditableFieldProps {
 }
 
 interface ScoreMetadata {
-  configuration: any
   distribution: any[]
   versionHistory: any[]
 }
@@ -87,7 +86,6 @@ const createScore = async (scoreData: {
   accuracy: number
   aiProvider: string
   aiModel: string
-  configuration: any
   distribution: any[]
   versionHistory: any[]
 }) => {
@@ -103,7 +101,6 @@ const updateScore = async (scoreData: {
   accuracy: number
   aiProvider: string
   aiModel: string
-  configuration: any
   distribution: any[]
   versionHistory: any[]
 }) => {
@@ -184,7 +181,6 @@ function EditableField({ value, onChange, className = "" }: EditableFieldProps) 
 }
 
 const defaultMetadata: ScoreMetadata = {
-  configuration: {},
   distribution: [],
   versionHistory: []
 }
@@ -261,13 +257,7 @@ export default function ScoreEditComponent({ scorecardId, scoreId }: ScoreEditPr
           version: scoreData.version ?? Date.now().toString(),
           aiProvider: scoreData.aiProvider ?? 'OpenAI',
           aiModel: scoreData.aiModel ?? 'gpt-4',
-          metadata: {
-            configuration: (scoreData.configuration as ScoreMetadata | undefined)?.configuration ?? {},
-            distribution: Array.isArray((scoreData.configuration as ScoreMetadata | undefined)?.distribution) ?
-              (scoreData.configuration as ScoreMetadata).distribution : [],
-            versionHistory: Array.isArray((scoreData.configuration as ScoreMetadata | undefined)?.versionHistory) ?
-              (scoreData.configuration as ScoreMetadata).versionHistory : []
-          } as ScoreMetadata,
+          metadata: {} as ScoreMetadata,
           section: scoreData.section as unknown as Schema['ScorecardSection']['type'],
           createdAt: scoreData.createdAt,
           updatedAt: scoreData.updatedAt
@@ -300,7 +290,6 @@ export default function ScoreEditComponent({ scorecardId, scoreId }: ScoreEditPr
           accuracy: score.accuracy,
           aiProvider: score.aiProvider,
           aiModel: score.aiModel,
-          configuration: score.metadata.configuration,
           distribution: score.metadata.distribution,
           versionHistory: score.metadata.versionHistory
         })
@@ -314,7 +303,6 @@ export default function ScoreEditComponent({ scorecardId, scoreId }: ScoreEditPr
           accuracy: score.accuracy,
           aiProvider: score.aiProvider,
           aiModel: score.aiModel,
-          configuration: score.metadata.configuration,
           distribution: score.metadata.distribution,
           versionHistory: score.metadata.versionHistory
         })

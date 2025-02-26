@@ -236,7 +236,8 @@ export async function processTask(task: AmplifyTask): Promise<ProcessedTask> {
         updatedAt: evaluationData.data?.updatedAt || new Date().toISOString(),
         task: null,
         scorecard: null,
-        score: null
+        score: null,
+        scoreVersion: evaluationData.data?.scoreVersion || (() => Promise.resolve({ data: null }))
       };
     } catch (error) {
       console.error('Error transforming evaluation data:', error);
