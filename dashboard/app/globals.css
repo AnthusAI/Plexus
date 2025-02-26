@@ -22,6 +22,7 @@
     --foreground: hsl(var(--mauve-11));
     --focus: hsl(var(--mauve-12));
     --attention: hsl(0, 0%, 0%);
+    --foreground-selected: hsl(var(--mauve-12));
     --progress-background: hsl(var(--mauve-6));
     --progress-background-selected: hsl(var(--mauve-7));
     --muted: hsl(var(--mauve-4));
@@ -89,6 +90,7 @@
     --foreground: hsl(var(--mauve-11));
     --focus: hsl(var(--mauve-12));
     --attention: hsl(0, 0%, 100%);
+    --foreground-selected: hsl(var(--mauve-12));
     --progress-background: hsl(var(--mauve-6));
     --progress-background-selected: hsl(var(--mauve-7));
     --muted: hsl(var(--mauve-3));

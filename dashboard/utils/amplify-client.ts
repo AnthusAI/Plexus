@@ -146,6 +146,8 @@ export const amplifyClient = {
     update: async (data: {
       id: string
       name?: string
+      externalId?: string
+      championVersionId?: string
       type?: string
       order?: number
       sectionId?: string
@@ -153,17 +155,100 @@ export const amplifyClient = {
       version?: string
       aiProvider?: string
       aiModel?: string
-      isFineTuned?: boolean
-      configuration?: any
-      distribution?: any[]
-      versionHistory?: any[]
     }) => {
-      const response = await (getClient().models.Score as any).update(data)
-      return { data: response.data as Schema['Score']['type'] }
+      const response = await graphqlRequest<{ updateScore: Schema['Score']['type'] }>(`
+        mutation UpdateScore($input: UpdateScoreInput!) {
+          updateScore(input: $input) {
+            id
+            name
+            externalId
+            championVersionId
+            type
+            order
+            sectionId
+            accuracy
+            version
+            aiProvider
+            aiModel
+            createdAt
+            updatedAt
+          }
+        }
+      `, { input: data });
+      return { data: response.data.updateScore };
     },
     delete: async (params: { id: string }) => {
       const response = await (getClient().models.Score as any).delete(params)
       return { data: response.data as Schema['Score']['type'] }
+    }
+  },
+  ScoreVersion: {
+    list: async (params: any) => {
+      const response = await graphqlRequest<{ listScoreVersions: AmplifyResponse<Schema['ScoreVersion']['type'][]> }>(`
+        query ListScoreVersions($filter: ScoreVersionFilterInput, $limit: Int, $nextToken: String) {
+          listScoreVersions(filter: $filter, limit: $limit, nextToken: $nextToken) {
+            items {
+              id
+              scoreId
+              configuration
+              isFeatured
+              comment
+              createdAt
+              updatedAt
+            }
+            nextToken
+          }
+        }
+      `, params);
+      return response.data.listScoreVersions;
+    },
+    create: async (data: {
+      scoreId: string
+      configuration: string
+      isFeatured: boolean
+      comment?: string
+      createdAt: string
+      updatedAt: string
+    }) => {
+      const response = await graphqlRequest<{ createScoreVersion: Schema['ScoreVersion']['type'] }>(`
+        mutation CreateScoreVersion($input: CreateScoreVersionInput!) {
+          createScoreVersion(input: $input) {
+            id
+            scoreId
+            configuration
+            isFeatured
+            comment
+            createdAt
+            updatedAt
+          }
+        }
+      `, { input: data });
+      return { data: response.data.createScoreVersion };
+    },
+    update: async (data: {
+      id: string
+      configuration?: any
+      isFeatured?: boolean
+      comment?: string
+    }) => {
+      const response = await graphqlRequest<{ updateScoreVersion: Schema['ScoreVersion']['type'] }>(`
+        mutation UpdateScoreVersion($input: UpdateScoreVersionInput!) {
+          updateScoreVersion(input: $input) {
+            id
+            scoreId
+            configuration
+            isFeatured
+            comment
+            createdAt
+            updatedAt
+          }
+        }
+      `, { input: data });
+      return { data: response.data.updateScoreVersion };
+    },
+    delete: async (params: { id: string }) => {
+      const response = await (getClient().models.ScoreVersion as any).delete(params)
+      return { data: response.data as Schema['ScoreVersion']['type'] }
     }
   },
   Evaluation: {

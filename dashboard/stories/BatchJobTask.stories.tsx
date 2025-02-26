@@ -21,32 +21,42 @@ const defaultTask = {
   score: 'Test Score',
   time: new Date().toISOString(),
   data: {
-    type: 'batch',
-    status: 'running',
+    id: '1',
+    title: 'Batch Job Task',
     modelProvider: 'OpenAI',
     modelName: 'gpt-4',
+    type: 'batch',
+    status: 'running',
     totalRequests: 100,
     completedRequests: 50,
     failedRequests: 0,
     startedAt: new Date().toISOString(),
-    scoringJobs: []
+    estimatedEndAt: null,
+    completedAt: null,
+    errorMessage: undefined,
+    errorDetails: {},
+    scoringJobs: [],
+    scoringJobCountCache: 0
   }
 }
 
-export const Default = {
+export const Default: Story = {
   args: {
+    variant: 'grid',
     task: defaultTask
   }
 }
 
 export const WithError: Story = {
   args: {
+    variant: 'grid',
     task: {
       ...defaultTask,
       data: {
         ...defaultTask.data,
         status: 'failed',
         errorMessage: 'API rate limit exceeded',
+        errorDetails: { code: 429, message: 'API rate limit exceeded' }
       },
     },
   },
@@ -54,12 +64,14 @@ export const WithError: Story = {
 
 export const Complete: Story = {
   args: {
+    variant: 'grid',
     task: {
       ...defaultTask,
       data: {
         ...defaultTask.data,
         status: 'done',
         completedRequests: 100,
+        completedAt: new Date().toISOString()
       },
     },
   },
@@ -81,6 +93,7 @@ export const NestedComplete: Story = {
         ...defaultTask.data,
         status: 'done',
         completedRequests: 100,
+        completedAt: new Date().toISOString()
       },
     },
   },

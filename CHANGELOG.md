@@ -1,6 +1,18 @@
 # CHANGELOG
 
 
+## v0.8.0 (2025-02-22)
+
+### Features
+
+- Add foreground-selected color for enhanced UI contrast
+  ([`0dfa243`](https://github.com/AnthusAI/Plexus/commit/0dfa24325f94cc835245f286eec6f393924dc768))
+
+- Introduce new `--foreground-selected` CSS variable in global styles - Update Tailwind config to
+  support the new color token - Modify confusion matrix cell text color to use foreground-selected
+  for high-value cells - Adjust text color threshold from 70% to 90% of max value
+
+
 ## v0.7.0 (2025-02-21)
 
 ### Refactoring
