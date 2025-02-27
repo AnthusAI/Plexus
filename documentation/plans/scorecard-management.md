@@ -79,6 +79,24 @@ This document outlines the implementation of Plexus's scorecard management syste
   - Add version promotion workflow
   - Update evaluation display to show version info
 
+### Phase 3.5: Data Integrity Issues
+- Status: Critical - In Progress
+- Problems Identified:
+  - Incorrect scorecard external IDs causing reference issues
+  - Duplicate scores within scorecards creating ambiguity and evaluation errors
+- Goals:
+  - Fix incorrect external IDs across all scorecards
+  - Identify and resolve duplicate scores
+  - Implement validation to prevent future duplicates
+  - Ensure data consistency between API and CLI tools
+- Next Steps:
+  - Audit all scorecards to identify incorrect external IDs
+  - Create migration script to correct external IDs
+  - Develop duplicate score detection algorithm
+  - Implement score deduplication process
+  - Add validation rules to prevent creation of duplicate scores
+  - Update CLI tools to handle and report data integrity issues
+
 ### Phase 4: CLI API Integration
 - Status: Planned
 - Goals:
@@ -220,52 +238,3 @@ Card (Base)
 │   └── Grid<ScoreCard>
 └── ScoreCard
 ```
-
-### Layout Patterns
-1. Dashboard Layout
-   - Left panel: Grid of ScorecardCards
-   - Right panel: Selected ScorecardCard in detail mode
-
-2. Scorecard Detail Layout
-   - Header: Scorecard metadata
-   - Content: Grid of ScoreCards
-   - Right panel (when score selected): ScoreCard detail
-
-3. Common Features
-   - All cards support selection
-   - Detail views support full-width toggle
-   - Consistent grid/detail transitions
-   - Uniform styling and spacing
-
-### UI/UX Guidelines
-- Consistent card sizing in grids
-- Smooth transitions between states
-- Clear selection indicators
-- Uniform padding and spacing
-- Responsive grid layouts
-- Match existing dashboard patterns (Evaluations, Activity)
-- Clear feedback for user actions
-- Simple YAML editing interface
-- Consistent styling with other components
-
-### Data Flow
-1. Dashboard loads scorecard list using existing GraphQL queries
-2. Selection updates detail view
-3. YAML edits update Score configuration
-4. Changes saved through existing mutations
-
-### Development Guidelines
-
-#### Story Development
-1. Create stories alongside component development
-2. Cover all component variants and states
-3. Document props and usage in story files
-4. Include interactive examples
-5. Test responsive behavior
-6. Ensure accessibility in all states
-
-#### Testing Requirements
-- Visual regression tests for stories
-- Interaction testing for interactive states
-- Accessibility testing in Storybook
-- Responsive testing across breakpoints
