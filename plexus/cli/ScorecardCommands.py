@@ -194,6 +194,270 @@ def generate_key(name: str) -> str:
     """Generate a URL-safe key from a name."""
     return name.lower().replace(' ', '-')
 
+def detect_and_clean_duplicates(client, scorecard_id: str) -> int:
+    """
+    Detect and clean up duplicate scores within a scorecard.
+    
+    Duplicates are identified by either:
+    1. Identical score names within the same section
+    2. Identical externalIds within the scorecard
+    
+    Args:
+        client: GraphQL client
+        scorecard_id: ID of the scorecard to check
+        
+    Returns:
+        Number of duplicates removed
+    """
+    console.print("[bold]Checking for duplicate scores...[/bold]")
+    
+    # Get all sections for this scorecard
+    sections_query = f"""
+    query GetScorecardSections {{
+        getScorecard(id: "{scorecard_id}") {{
+            sections {{
+                items {{
+                    id
+                    name
+                }}
+            }}
+        }}
+    }}
+    """
+    
+    try:
+        sections_result = client.execute(sections_query)
+        sections = sections_result.get('getScorecard', {}).get('sections', {}).get('items', [])
+        
+        total_duplicates_removed = 0
+        
+        # Process each section
+        for section in sections:
+            section_id = section.get('id')
+            section_name = section.get('name')
+            
+            # Get all scores for this section
+            scores_query = f"""
+            query GetSectionScores {{
+                listScores(filter: {{ sectionId: {{ eq: "{section_id}" }} }}) {{
+                    items {{
+                        id
+                        name
+                        externalId
+                        key
+                        createdAt
+                    }}
+                }}
+            }}
+            """
+            
+            scores_result = client.execute(scores_query)
+            scores = scores_result.get('listScores', {}).get('items', [])
+            
+            # Group scores by name
+            scores_by_name = {}
+            for score in scores:
+                name = score.get('name')
+                if name not in scores_by_name:
+                    scores_by_name[name] = []
+                scores_by_name[name].append(score)
+            
+            # Find and remove duplicates by name
+            for name, name_scores in scores_by_name.items():
+                if len(name_scores) > 1:
+                    # Sort by createdAt to keep oldest
+                    sorted_scores = sorted(name_scores, key=lambda s: s.get('createdAt', ''))
+                    keep_score = sorted_scores[0]
+                    to_delete = sorted_scores[1:]
+                    
+                    console.print(f"[yellow]Found {len(to_delete)} duplicate scores with name '{name}' in section '{section_name}'[/yellow]")
+                    console.print(f"[green]Keeping oldest: {keep_score.get('id')} (created: {keep_score.get('createdAt')})[/green]")
+                    
+                    # Delete duplicates
+                    for duplicate in to_delete:
+                        console.print(f"[yellow]Deleting duplicate: {duplicate.get('id')} (created: {duplicate.get('createdAt')})[/yellow]")
+                        delete_mutation = f"""
+                        mutation DeleteScore {{
+                            deleteScore(input: {{ id: "{duplicate.get('id')}" }}) {{
+                                id
+                            }}
+                        }}
+                        """
+                        client.execute(delete_mutation)
+                        total_duplicates_removed += 1
+        
+        # Now check for duplicates by externalId across the entire scorecard
+        external_id_query = f"""
+        query GetAllScoresForScorecard {{
+            getScorecard(id: "{scorecard_id}") {{
+                sections {{
+                    items {{
+                        scores {{
+                            items {{
+                                id
+                                name
+                                externalId
+                                createdAt
+                            }}
+                        }}
+                    }}
+                }}
+            }}
+        }}
+        """
+        
+        external_id_result = client.execute(external_id_query)
+        all_scores = []
+        
+        # Flatten the scores from all sections
+        sections = external_id_result.get('getScorecard', {}).get('sections', {}).get('items', [])
+        for section in sections:
+            section_scores = section.get('scores', {}).get('items', [])
+            all_scores.extend(section_scores)
+        
+        # Group by externalId (if not None or empty)
+        scores_by_external_id = {}
+        for score in all_scores:
+            external_id = score.get('externalId')
+            if external_id and external_id.strip():
+                if external_id not in scores_by_external_id:
+                    scores_by_external_id[external_id] = []
+                scores_by_external_id[external_id].append(score)
+        
+        # Find and remove duplicates by externalId
+        for external_id, ext_id_scores in scores_by_external_id.items():
+            if len(ext_id_scores) > 1:
+                # Sort by createdAt to keep oldest
+                sorted_scores = sorted(ext_id_scores, key=lambda s: s.get('createdAt', ''))
+                keep_score = sorted_scores[0]
+                to_delete = sorted_scores[1:]
+                
+                console.print(f"[yellow]Found {len(to_delete)} duplicate scores with externalId '{external_id}'[/yellow]")
+                console.print(f"[green]Keeping oldest: {keep_score.get('id')} (created: {keep_score.get('createdAt')})[/green]")
+                
+                # Delete duplicates
+                for duplicate in to_delete:
+                    console.print(f"[yellow]Deleting duplicate: {duplicate.get('id')} (created: {duplicate.get('createdAt')})[/yellow]")
+                    delete_mutation = f"""
+                    mutation DeleteScore {{
+                        deleteScore(input: {{ id: "{duplicate.get('id')}" }}) {{
+                            id
+                        }}
+                    }}
+                    """
+                    client.execute(delete_mutation)
+                    total_duplicates_removed += 1
+        
+        if total_duplicates_removed > 0:
+            console.print(f"[green]Successfully removed {total_duplicates_removed} duplicate scores[/green]")
+        else:
+            console.print("[green]No duplicate scores found[/green]")
+            
+        return total_duplicates_removed
+        
+    except Exception as e:
+        console.print(f"[red]Error checking for duplicates: {e}[/red]")
+        return 0
+
+def ensure_valid_external_ids(client, scorecard_id: str) -> int:
+    """
+    Ensure all scores in a scorecard have valid external IDs.
+    
+    If a score has a missing or empty external ID, this function will generate
+    a new one based on the scorecard key and score key.
+    
+    Args:
+        client: GraphQL client
+        scorecard_id: ID of the scorecard to check
+        
+    Returns:
+        Number of scores updated with new external IDs
+    """
+    console.print("[bold]Checking for missing or invalid external IDs...[/bold]")
+    
+    # Get scorecard details to access the key
+    scorecard_query = f"""
+    query GetScorecardDetails {{
+        getScorecard(id: "{scorecard_id}") {{
+            key
+            sections {{
+                items {{
+                    id
+                    name
+                    scores {{
+                        items {{
+                            id
+                            name
+                            key
+                            externalId
+                        }}
+                    }}
+                }}
+            }}
+        }}
+    }}
+    """
+    
+    try:
+        scorecard_result = client.execute(scorecard_query)
+        scorecard = scorecard_result.get('getScorecard', {})
+        scorecard_key = scorecard.get('key', '')
+        
+        if not scorecard_key:
+            console.print("[red]Could not retrieve scorecard key[/red]")
+            return 0
+        
+        sections = scorecard.get('sections', {}).get('items', [])
+        total_updated = 0
+        
+        for section in sections:
+            section_name = section.get('name', 'Unknown Section')
+            scores = section.get('scores', {}).get('items', [])
+            
+            for score in scores:
+                score_id = score.get('id')
+                score_name = score.get('name', 'Unknown Score')
+                score_key = score.get('key', '')
+                external_id = score.get('externalId', '')
+                
+                # If external ID is missing or empty, generate a new one
+                if not external_id or not external_id.strip():
+                    # Generate a key if one doesn't exist
+                    if not score_key or not score_key.strip():
+                        score_key = generate_key(score_name)
+                    
+                    # Create a new external ID based on scorecard key and score key
+                    new_external_id = f"{scorecard_key}_{score_key}"
+                    
+                    console.print(f"[yellow]Updating score '{score_name}' with new externalId: {new_external_id}[/yellow]")
+                    
+                    # Update the score with the new external ID
+                    mutation = f"""
+                    mutation UpdateScore {{
+                        updateScore(input: {{
+                            id: "{score_id}",
+                            externalId: "{new_external_id}"
+                        }}) {{
+                            id
+                            externalId
+                        }}
+                    }}
+                    """
+                    
+                    client.execute(mutation)
+                    total_updated += 1
+        
+        if total_updated > 0:
+            console.print(f"[green]Updated {total_updated} scores with new external IDs[/green]")
+        else:
+            console.print("[green]All scores have valid external IDs[/green]")
+            
+        return total_updated
+        
+    except Exception as e:
+        console.print(f"[red]Error checking external IDs: {e}[/red]")
+        return 0
+
 def format_scorecard_panel(scorecard, include_sections=False, detailed_scores=False):
     """
     Format a scorecard as a rich panel with consistent styling.
@@ -832,220 +1096,13 @@ def pull(scorecard: Optional[str], account: str, output: str):
     except Exception as e:
         console.print(f"[red]Error during pull operation: {e}[/red]")
 
-@scorecards.command()
-@click.option('--file', required=True, help='Path to YAML file containing scorecard configuration')
-@click.option('--account', default='call-criteria', help='Account to push scorecard to (accepts ID, name, or key)')
-@click.option('--update/--no-update', default=False, help='Update existing scorecard if it exists')
-def push(file: str, account: str, update: bool):
-    """Push scorecard configuration from a YAML file to the API.
-    
-    Uploads a scorecard configuration from a YAML file to the API. If the scorecard already
-    exists and --update is specified, the existing scorecard will be updated. Otherwise,
-    a new scorecard will be created.
-    
-    The YAML file should contain a complete scorecard configuration, including sections
-    and scores. The file format should match the output of the 'pull' command.
-    
-    Examples:
-        plexus scorecards push --file ./my-scorecard.yaml
-        plexus scorecards push --file ./my-scorecard.yaml --update
-        plexus scorecards push --file ./my-scorecard.yaml --account acme
-    """
-    client = create_client()
-    
-    # First, get the account ID from the provided identifier
-    account_id = resolve_account_identifier(client, account)
-    if not account_id:
-        console.print(f"[red]No account found matching: {account}[/red]")
-        return
-    
-    # Get account name for display
-    account_query = f"""
-    query GetAccount {{
-        getAccount(id: "{account_id}") {{
-            name
-        }}
-    }}
-    """
-    
-    try:
-        account_result = client.execute(account_query)
-        account_name = account_result.get('getAccount', {}).get('name', account)
-        console.print(f"[green]Using account: {account_name} (ID: {account_id})[/green]")
-        
-        # Read the YAML file
-        if not os.path.exists(file):
-            console.print(f"[red]File not found: {file}[/red]")
-            return
-        
-        with open(file, 'r') as f:
-            yaml_data = yaml.safe_load(f)
-        
-        if not yaml_data:
-            console.print(f"[red]Invalid or empty YAML file: {file}[/red]")
-            return
-        
-        # Extract scorecard data
-        scorecard_name = yaml_data.get('name')
-        scorecard_key = yaml_data.get('key')
-        scorecard_description = yaml_data.get('description', '')
-        scorecard_external_id = yaml_data.get('externalId', '')
-        
-        if not scorecard_name or not scorecard_key:
-            console.print("[red]Scorecard name and key are required[/red]")
-            return
-        
-        console.print(f"[bold]Processing scorecard: {scorecard_name} ({scorecard_key})[/bold]")
-        
-        # Check if scorecard exists
-        existing_scorecard_id = None
-        if update:
-            query = f"""
-            query FindScorecard {{
-                listScorecards(filter: {{ 
-                    and: [
-                        {{ accountId: {{ eq: "{account_id}" }} }},
-                        {{ key: {{ eq: "{scorecard_key}" }} }}
-                    ]
-                }}) {{
-                    items {{
-                        id
-                    }}
-                }}
-            }}
-            """
-            
-            result = client.execute(query)
-            scorecards = result.get('listScorecards', {}).get('items', [])
-            if scorecards:
-                existing_scorecard_id = scorecards[0].get('id')
-                console.print(f"[yellow]Found existing scorecard with key '{scorecard_key}' (ID: {existing_scorecard_id})[/yellow]")
-        
-        # Create or update scorecard
-        if existing_scorecard_id and update:
-            # Update existing scorecard
-            mutation = f"""
-            mutation UpdateScorecard {{
-                updateScorecard(input: {{
-                    id: "{existing_scorecard_id}",
-                    name: "{scorecard_name}",
-                    description: "{scorecard_description}",
-                    externalId: "{scorecard_external_id}"
-                }}) {{
-                    id
-                }}
-            }}
-            """
-            
-            result = client.execute(mutation)
-            scorecard_id = result.get('updateScorecard', {}).get('id')
-            console.print(f"[green]Updated scorecard: {scorecard_name} (ID: {scorecard_id})[/green]")
-        else:
-            # Create new scorecard
-            mutation = f"""
-            mutation CreateScorecard {{
-                createScorecard(input: {{
-                    accountId: "{account_id}",
-                    name: "{scorecard_name}",
-                    key: "{scorecard_key}",
-                    description: "{scorecard_description}",
-                    externalId: "{scorecard_external_id}"
-                }}) {{
-                    id
-                }}
-            }}
-            """
-            
-            result = client.execute(mutation)
-            scorecard_id = result.get('createScorecard', {}).get('id')
-            console.print(f"[green]Created scorecard: {scorecard_name} (ID: {scorecard_id})[/green]")
-        
-        # Process sections and scores
-        sections = yaml_data.get('sections', [])
-        for section_index, section_data in enumerate(sections):
-            section_name = section_data.get('name')
-            section_order = section_data.get('order', section_index)
-            
-            # Create section
-            mutation = f"""
-            mutation CreateSection {{
-                createSection(input: {{
-                    scorecardId: "{scorecard_id}",
-                    name: "{section_name}",
-                    order: {section_order}
-                }}) {{
-                    id
-                }}
-            }}
-            """
-            
-            result = client.execute(mutation)
-            section_id = result.get('createSection', {}).get('id')
-            console.print(f"[green]Created section: {section_name} (ID: {section_id})[/green]")
-            
-            # Process scores
-            scores = section_data.get('scores', [])
-            for score_index, score_data in enumerate(scores):
-                score_name = score_data.get('name')
-                score_key = score_data.get('key', generate_key(score_name))
-                score_description = score_data.get('description', '')
-                score_order = score_data.get('order', score_index)
-                score_type = score_data.get('type', 'binary')
-                score_external_id = score_data.get('externalId', '')
-                
-                # Create score
-                mutation = f"""
-                mutation CreateScore {{
-                    createScore(input: {{
-                        sectionId: "{section_id}",
-                        name: "{score_name}",
-                        key: "{score_key}",
-                        description: "{score_description}",
-                        order: {score_order},
-                        type: {score_type},
-                        externalId: "{score_external_id}"
-                    }}) {{
-                        id
-                    }}
-                }}
-                """
-                
-                result = client.execute(mutation)
-                score_id = result.get('createScore', {}).get('id')
-                console.print(f"[green]Created score: {score_name} (ID: {score_id})[/green]")
-                
-                # Add configuration if available
-                configuration = score_data.get('configuration')
-                if configuration:
-                    # Convert configuration to JSON string
-                    config_json = json.dumps(configuration)
-                    
-                    mutation = f"""
-                    mutation CreateScoreVersion {{
-                        createScoreVersion(input: {{
-                            scoreId: "{score_id}",
-                            configuration: {json.dumps(config_json)},
-                            isChampion: true
-                        }}) {{
-                            id
-                        }}
-                    }}
-                    """
-                    
-                    result = client.execute(mutation)
-                    version_id = result.get('createScoreVersion', {}).get('id')
-                    console.print(f"[green]Created score version with configuration (ID: {version_id})[/green]")
-        
-        console.print("\n[green]Push operation completed successfully[/green]")
-    
-    except Exception as e:
-        console.print(f"[red]Error during push operation: {e}[/red]")
-
 @scorecard.command()
 @click.option('--file', required=True, help='Path to YAML file containing scorecard configuration')
 @click.option('--account', default='call-criteria', help='Account to push scorecard to (accepts ID, name, or key)')
 @click.option('--update/--no-update', default=False, help='Update existing scorecard if it exists')
-def push(file: str, account: str, update: bool):
+@click.option('--skip-duplicate-check', is_flag=True, help='Skip checking for and removing duplicate scores')
+@click.option('--skip-external-id-check', is_flag=True, help='Skip checking for and fixing missing external IDs')
+def push(file: str, account: str, update: bool, skip_duplicate_check: bool, skip_external_id_check: bool):
     """Push scorecard configuration from a YAML file to the API.
     
     Examples:
@@ -1056,6 +1113,22 @@ def push(file: str, account: str, update: bool):
     # Call the scorecards.push implementation
     ctx = click.get_current_context()
     ctx.forward(scorecards.commands['push'])
+
+@scorecard.command()
+@click.option('--scorecard', required=True, help='Scorecard to fix (accepts ID, name, key, or external ID)')
+@click.option('--skip-duplicate-check', is_flag=True, help='Skip checking for and removing duplicate scores')
+@click.option('--skip-external-id-check', is_flag=True, help='Skip checking for and fixing missing external IDs')
+def fix(scorecard: str, skip_duplicate_check: bool, skip_external_id_check: bool):
+    """Fix data integrity issues in an existing scorecard.
+    
+    Examples:
+        plexus scorecard fix --scorecard "QA Scorecard"
+        plexus scorecard fix --scorecard qa-v1 --skip-duplicate-check
+        plexus scorecard fix --scorecard 1234 --skip-external-id-check
+    """
+    # Call the scorecards.fix implementation
+    ctx = click.get_current_context()
+    ctx.forward(scorecards.commands['fix'])
 
 @scorecard.command()
 @click.option('--scorecard', required=True, help='Scorecard to delete (accepts ID, name, key, or external ID)')
