@@ -111,15 +111,42 @@ export default function AddEditScorePage() {
           </p>
           
           <pre className="bg-muted p-4 rounded-lg mb-4">
-            <code>{`# Add a new score to a scorecard
-plexus scores add --scorecard-id "card-id" --name "Quality Score" --type quality --weight 0.5
+            <code>{`# Get information about a specific score
+plexus scores info --score "Quality Score"
 
-# Update an existing score
-plexus scores update score-id --weight 0.6 --threshold 0.8
+# List all scores in a scorecard
+plexus scores list --scorecard "Quality Assurance"
 
-# Remove a score
-plexus scores delete score-id`}</code>
+# View score configuration
+plexus scores info --score "Grammar Check"`}</code>
           </pre>
+          
+          <p className="text-muted-foreground mb-4">
+            The Plexus CLI uses a flexible identifier system that allows you to reference scores and scorecards using different types of identifiers:
+          </p>
+          
+          <ul className="list-disc pl-6 space-y-2 text-muted-foreground mb-4">
+            <li>For scores:
+              <ul className="list-disc pl-6 mt-2">
+                <li>By name: <code>--score "Grammar Check"</code></li>
+                <li>By key: <code>--score grammar-check</code></li>
+                <li>By ID: <code>--score 7a9b2c3d-4e5f-6g7h-8i9j-0k1l2m3n4o5p</code></li>
+                <li>By external ID: <code>--score gc-001</code></li>
+              </ul>
+            </li>
+            <li className="mt-2">For scorecards:
+              <ul className="list-disc pl-6 mt-2">
+                <li>By name: <code>--scorecard "Quality Assurance"</code></li>
+                <li>By key: <code>--scorecard quality-assurance</code></li>
+                <li>By ID: <code>--scorecard e51cd5ec-1940-4d8e-abcc-faa851390112</code></li>
+                <li>By external ID: <code>--scorecard qa-2023</code></li>
+              </ul>
+            </li>
+          </ul>
+          
+          <p className="text-muted-foreground">
+            For more details on using the CLI, see the <a href="/documentation/advanced/cli" className="text-primary hover:underline">CLI documentation</a>.
+          </p>
         </section>
 
         <section>
@@ -133,25 +160,25 @@ plexus scores delete score-id`}</code>
 
 plexus = Plexus(api_key="your-api-key")
 
-# Add a new score to a scorecard
-scorecard = plexus.scorecards.get("card-id")
-score = scorecard.add_score(
-    name="Quality Score",
-    type="quality",
-    weight=0.5,
-    threshold=0.8,
-    parameters={
-        "check_grammar": True,
-        "check_style": True
-    }
-)
+# Get a scorecard using any identifier (name, key, ID, or external ID)
+scorecard = plexus.scorecards.get("Quality Assurance")
 
-# Update a score
-score.update(weight=0.6, threshold=0.85)
+# Get a score using any identifier
+score = plexus.scores.get("Grammar Check")
 
-# Remove a score
-score.delete()`}</code>
+# Get all scores in a scorecard
+scores = scorecard.get_scores()
+
+# Get score configuration
+config = score.get_configuration()
+
+# Get score evaluation results
+results = score.get_results(limit=10)`}</code>
           </pre>
+          
+          <p className="text-muted-foreground mb-4">
+            Like the CLI, the Python SDK also supports the flexible identifier system, allowing you to reference resources using different types of identifiers.
+          </p>
         </section>
 
         <section>
