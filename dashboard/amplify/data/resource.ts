@@ -37,7 +37,7 @@ type ShareLinkIndexFields = "token" | "resourceType" | "resourceId" | "accountId
 
 // Define the share token handler function
 const getResourceByShareTokenHandler = defineFunction({
-    entry: './data/resolvers/getResourceByShareToken.ts'
+    entry: './resolvers/getResourceByShareToken.ts'
 });
 
 const schema = a.schema({
