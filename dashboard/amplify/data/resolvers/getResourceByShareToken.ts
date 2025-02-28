@@ -11,8 +11,10 @@ export const handler: Schema["getResourceByShareToken"]["functionHandler"] = asy
       throw new Error('Token is required');
     }
     
-    // Create a client to interact with the API
-    const client = generateClient();
+    // Create a client to interact with the API with IAM authentication
+    const client = generateClient({
+      authMode: 'iam'
+    });
     
     // Get ShareLink by token
     const shareLinkResponse = await client.graphql({
