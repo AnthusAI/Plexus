@@ -54,7 +54,10 @@ function AuthWrapper({ children }: { children: React.ReactNode }) {
     '/documentation/methods/monitor-tasks',
     '/items'
   ];
-  const isPublicPath = publicPaths.includes(pathname);
+  
+  // Only allow dynamic evaluation pages (with an ID) to be public
+  const isPublicPath = publicPaths.includes(pathname) || 
+    (pathname.startsWith('/evaluations/') && pathname.split('/').length === 3);
   
   useEffect(() => {
     if (!authStatus) {

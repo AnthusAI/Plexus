@@ -78,6 +78,37 @@ export default function AddEditScorePage() {
         </section>
 
         <section>
+          <h2 className="text-2xl font-semibold mb-4">Score Version Management</h2>
+          <p className="text-muted-foreground mb-4">
+            Scores in Plexus support versioning, allowing you to track changes and manage different implementations:
+          </p>
+          
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-xl font-medium mb-2">Creating New Versions</h3>
+              <p className="text-muted-foreground">
+                When you edit a score and save changes, a new version is automatically created. 
+                You can add notes to document the changes made in each version.
+              </p>
+            </div>
+            <div>
+              <h3 className="text-xl font-medium mb-2">Champion Versions</h3>
+              <p className="text-muted-foreground">
+                Each score has a designated "champion" version that is used for evaluations.
+                You can promote any version to champion status when you're satisfied with its performance.
+              </p>
+            </div>
+            <div>
+              <h3 className="text-xl font-medium mb-2">Featured Versions</h3>
+              <p className="text-muted-foreground">
+                Mark important versions as "featured" to highlight them in the version history.
+                This helps track significant milestones in your score's development.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section>
           <h2 className="text-2xl font-semibold mb-4">Score Configuration Tips</h2>
           <div className="space-y-4">
             <div>
@@ -111,7 +142,24 @@ export default function AddEditScorePage() {
           </p>
           
           <pre className="bg-muted p-4 rounded-lg mb-4">
-            <code>{`# Add a new score to a scorecard
+            <code>{`# View detailed information about a score
+plexus scorecards score "Score Name" --account "account-name"
+plexus scorecards score "score-key" --account "account-name"
+
+# Show version history and configuration
+plexus scorecards score "Score Name" --account "account-name" --show-versions --show-config
+
+# List all scores for a specific scorecard
+plexus scorecards list-scores --scorecard-id "scorecard-id"
+
+# Coming soon:
+# View version history for a score
+plexus scorecards history --account-key "account-key" --score-key "score-key"
+
+# Promote a version to champion
+plexus scorecards promote --account-key "account-key" --score-id "score-id" --version-id "version-id"
+
+# Add a new score to a scorecard
 plexus scores add --scorecard-id "card-id" --name "Quality Score" --type quality --weight 0.5
 
 # Update an existing score
@@ -120,6 +168,24 @@ plexus scores update score-id --weight 0.6 --threshold 0.8
 # Remove a score
 plexus scores delete score-id`}</code>
           </pre>
+          
+          <div className="mt-4 space-y-4">
+            <div>
+              <h3 className="text-xl font-medium mb-2">Efficient Score Lookup</h3>
+              <p className="text-muted-foreground">
+                The <code>score</code> command supports multiple lookup methods:
+              </p>
+              <ul className="list-disc pl-6 mt-2 space-y-2 text-muted-foreground">
+                <li>By ID: <code>plexus scorecards score "score-id"</code></li>
+                <li>By key: <code>plexus scorecards score "score-key"</code></li>
+                <li>By name: <code>plexus scorecards score "Score Name"</code></li>
+                <li>By external ID: <code>plexus scorecards score "external-id"</code></li>
+              </ul>
+              <p className="text-muted-foreground mt-2">
+                You can scope the search to a specific account or scorecard for faster results.
+              </p>
+            </div>
+          </div>
         </section>
 
         <section>
@@ -155,6 +221,30 @@ score.delete()`}</code>
         </section>
 
         <section>
+          <h2 className="text-2xl font-semibold mb-4">YAML Configuration</h2>
+          <p className="text-muted-foreground mb-4">
+            Scores can be configured using YAML for advanced customization:
+          </p>
+          
+          <pre className="bg-muted p-4 rounded-lg mb-4">
+            <code>{`name: Quality Score
+key: quality-score
+externalId: score_123
+type: LangGraphScore
+parameters:
+  check_grammar: true
+  check_style: true
+  min_word_count: 100
+threshold: 0.8
+weight: 0.5`}</code>
+          </pre>
+          
+          <p className="text-muted-foreground mt-2">
+            Coming soon: The ability to pull and push YAML configurations using the CLI for offline editing and version control.
+          </p>
+        </section>
+
+        <section>
           <h2 className="text-2xl font-semibold mb-4">Coming Soon</h2>
           <p className="text-muted-foreground">
             Additional score features are being developed. Check back soon for:
@@ -164,6 +254,8 @@ score.delete()`}</code>
             <li>Advanced scoring algorithms</li>
             <li>Custom evaluation parameters</li>
             <li>Score performance analytics</li>
+            <li>Bulk score operations</li>
+            <li>YAML synchronization for offline editing</li>
           </ul>
         </section>
       </div>

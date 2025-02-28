@@ -332,7 +332,6 @@ const DetailContent = React.memo(({
                         score={{
                           id: score.id,
                           name: score.name,
-                          key: score.key,
                           description: score.description || '',
                           type: score.type,
                           order: score.order,
