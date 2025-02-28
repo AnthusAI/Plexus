@@ -109,14 +109,15 @@ export default function ScorecardsComponent() {
         };
       }
 
-      // Get scorecards with nested sections and scores
-      const initialScorecards = await amplifyClient.Scorecard.list({
-        filter: { accountId: { eq: foundAccountId } }
-      })
+      // Get scorecards with nested sections and scores using listFromModel helper
+      const initialScorecardsResult = await listFromModel<Schema['Scorecard']['type']>(
+        getClient().models.Scorecard,
+        { accountId: { eq: foundAccountId } }
+      )
 
       // Process scorecards and load sections/scores in parallel
       const scorecardsWithCounts = await Promise.all(
-        initialScorecards.data
+        initialScorecardsResult.data
           .filter(s => s.accountId === foundAccountId)
           .map(async scorecard => {
             const sectionsResult = await scorecard.sections();
@@ -217,16 +218,17 @@ export default function ScorecardsComponent() {
   const fetchAllScoresForSection = async (sectionId: string) => {
     console.log('fetchAllScoresForSection: Starting to fetch all scores for section:', sectionId)
     let allScores: Schema['Score']['type'][] = []
-    let nextToken: string | null = null
+    let nextToken: string | undefined = undefined
     
     do {
-      const scoresResult = await amplifyClient.Score.list({
-        filter: { sectionId: { eq: sectionId } },
-        ...(nextToken ? { nextToken } : {})
-      })
+      const scoresResult: AmplifyListResult<Schema['Score']['type']> = await listFromModel<Schema['Score']['type']>(
+        getClient().models.Score,
+        { sectionId: { eq: sectionId } },
+        nextToken
+      )
       console.log('fetchAllScoresForSection: Got page of scores:', scoresResult)
       allScores = [...allScores, ...(scoresResult.data || [])]
-      nextToken = scoresResult.nextToken
+      nextToken = scoresResult.nextToken || undefined
     } while (nextToken)
     
     console.log('fetchAllScoresForSection: Total scores found:', allScores.length)
