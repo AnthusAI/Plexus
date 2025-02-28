@@ -12,6 +12,19 @@ const backend = defineBackend({
     data
 });
 
+// Get access to the getResourceByShareToken function
+const getResourceByShareTokenFunction = backend.data.resources.functions.getResourceByShareToken;
+
+// Add AppSync permissions to the getResourceByShareToken function
+if (getResourceByShareTokenFunction) {
+    getResourceByShareTokenFunction.addToRolePolicy(
+        new PolicyStatement({
+            actions: ['appsync:GraphQL'],
+            resources: ['*']
+        })
+    );
+}
+
 // // Force backend to generate an identity pool with unauthenticated access
 // if (backend.auth.resources.cfnResources?.cfnIdentityPool) {
 //     backend.auth.resources.cfnResources.cfnIdentityPool.allowUnauthenticatedIdentities = true;
