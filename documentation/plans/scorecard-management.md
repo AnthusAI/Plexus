@@ -1,5 +1,21 @@
 # Plexus Scorecard Management System
 
+## Important File Locations
+
+### CLI and Backend Files
+- CLI Implementation: `plexus/cli/ScorecardCommands.py` - Contains all scorecard CLI commands including push, pull, fix, etc.
+- CLI Entry Point: `plexus/cli/CommandLineInterface.py` - Main CLI entry point that imports and registers commands
+- Dashboard API Client: `plexus/dashboard/api/client.py` - Client for interacting with the GraphQL API
+- GraphQL Schema: `plexus/dashboard/api/schema.graphql` - GraphQL schema defining the API
+
+### Frontend Files
+- Scorecard Components: `dashboard/components/scorecard/` - React components for scorecard UI
+- Scorecard Pages: `dashboard/app/scorecards/` - Next.js pages for scorecard management
+
+### Running the CLI
+- Use the conda environment: `conda run -n py39 python -m plexus.cli.CommandLineInterface [command]`
+- Example: `conda run -n py39 python -m plexus.cli.CommandLineInterface scorecard push --scorecard "My Scorecard"`
+
 ## Overview
 
 This document outlines the implementation of Plexus's scorecard management system, which will provide a modern, user-friendly interface for managing scorecards and their configurations. The system will evolve from basic YAML editing to a sophisticated no-code visual block editor.
@@ -84,11 +100,13 @@ This document outlines the implementation of Plexus's scorecard management syste
 - Problems Identified:
   - Incorrect scorecard external IDs causing reference issues
   - Duplicate scores within scorecards creating ambiguity and evaluation errors
+  - YAML synchronization issues between local files and API
 - Goals:
   - Fix incorrect external IDs across all scorecards
   - Identify and resolve duplicate scores
   - Implement validation to prevent future duplicates
   - Ensure data consistency between API and CLI tools
+  - Enhance YAML synchronization to properly handle external IDs
 - Next Steps:
   - Audit all scorecards to identify incorrect external IDs
   - Create migration script to correct external IDs
@@ -96,6 +114,80 @@ This document outlines the implementation of Plexus's scorecard management syste
   - Implement score deduplication process
   - Add validation rules to prevent creation of duplicate scores
   - Update CLI tools to handle and report data integrity issues
+  - Enhance `push` command to load YAML from scorecards directory
+  - Ensure proper external ID handling during YAML sync
+
+#### Example YAML Structure
+```yaml
+name: Prime - EDU 3rd Party
+id: 97
+key: primeedu
+
+scores:
+  - name: Good Call
+    id: 0
+    class: LangGraphScore
+    model_provider: ChatOpenAI
+    model_name: gpt-4o-mini-2024-07-18
+    graph:
+      - name: yes_or_no_classifier
+        class: Classifier
+        valid_classes: ["Yes", "No"]
+        system_message: |-
+          Task: You are an expert at classifying phone call transcripts...
+```
+
+### ScoreVersion Management in Push Command
+- Status: Planned - High Priority
+- Implementation Details:
+  - The `push` command will be enhanced to handle ScoreVersion creation and management
+  - Each Score has multiple ScoreVersions, with each version storing the complete configuration
+  - The `configuration` field in ScoreVersion stores the YAML snippet for that specific score
+  - Process for handling ScoreVersions during push:
+    1. For each score in the YAML file:
+       - Identify the Score by name, key, or externalId
+       - Find the appropriate parent ScoreVersion:
+         - If `parent` field exists in YAML, use that ID to find the parent ScoreVersion
+         - If no `parent` field, find the most recent ScoreVersion for that Score
+       - Compare the YAML configuration with the parent ScoreVersion:
+         - Filter out the `parent` field from both configurations before comparison
+         - If configurations differ, create a new ScoreVersion:
+           - Set `parentVersionId` to the parent's ID
+           - Set `configuration` to the new YAML string with updated `parent` field
+           - Set `isFeatured` to true for the new version
+           - Set `createdAt` and `updatedAt` timestamps
+         - If no changes detected, report to user that the score is up-to-date
+    2. After creating new ScoreVersions, update the Score's `championVersionId` to point to the latest version
+  - Benefits:
+    - Maintains version history of score configurations
+    - Allows rollback to previous versions if needed
+    - Provides audit trail of configuration changes
+    - Supports comparison between versions
+
+#### Example GraphQL Mutations for ScoreVersion Management
+```graphql
+# Create a new ScoreVersion
+mutation CreateScoreVersion($input: CreateScoreVersionInput!) {
+  createScoreVersion(input: $input) {
+    id
+    scoreId
+    configuration
+    isFeatured
+    createdAt
+    updatedAt
+    parentVersionId
+  }
+}
+
+# Update Score to point to new champion version
+mutation UpdateScore($input: UpdateScoreInput!) {
+  updateScore(input: $input) {
+    id
+    name
+    championVersionId
+  }
+}
+```
 
 ### Phase 4: CLI API Integration
 - Status: Planned
