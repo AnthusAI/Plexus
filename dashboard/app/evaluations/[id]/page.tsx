@@ -101,6 +101,14 @@ const GET_EVALUATION = `
   }
 `
 
+// Type for ShareLink data returned from the API
+type ShareLinkData = {
+  token: string;
+  resourceType: string;
+  resourceId: string;
+  viewOptions: Record<string, any>;
+};
+
 // Create a service for data fetching that can be easily mocked in tests
 export class EvaluationService {
   constructor(
@@ -136,6 +144,69 @@ export class EvaluationService {
     
     return transformEvaluation(result) as Evaluation;
   }
+
+  // New method to fetch evaluation via the share link proxy Lambda
+  async fetchEvaluationByShareToken(token: string): Promise<Evaluation> {
+    try {
+      // Use the new GraphQL custom resolver instead of the REST API
+      const response = await this.client.graphql({
+        query: `
+          query GetResourceByShareToken($token: String!) {
+            getResourceByShareToken(token: $token) {
+              shareLink {
+                token
+                resourceType
+                resourceId
+                viewOptions
+              }
+              data
+            }
+          }
+        `,
+        variables: { token },
+        authMode: 'none' // Use guest/public access for share links
+      }) as GraphQLResult<{
+        getResourceByShareToken: {
+          shareLink: ShareLinkData;
+          data: any;
+        }
+      }>;
+      
+      if (!response.data?.getResourceByShareToken) {
+        throw new Error('Failed to load shared resource');
+      }
+      
+      const result = response.data.getResourceByShareToken;
+      
+      if (!result.shareLink) {
+        throw new Error('Invalid share link data');
+      }
+      
+      const shareLink = result.shareLink;
+      
+      // Verify that this is an Evaluation resource
+      if (shareLink.resourceType !== 'Evaluation') {
+        throw new Error(`Invalid resource type: ${shareLink.resourceType}. Expected: Evaluation`);
+      }
+      
+      // The resolver now returns the evaluation data directly
+      if (!result.data || !result.data.getEvaluation) {
+        throw new Error('No evaluation data returned from share link resolver');
+      }
+      
+      // Transform the evaluation data
+      return transformEvaluation(result.data.getEvaluation) as Evaluation;
+    } catch (error) {
+      console.error('Error fetching evaluation by share token:', error);
+      throw error;
+    }
+  }
+
+  // Helper method to determine if a string is likely a share token
+  isShareToken(id: string): boolean {
+    // Share tokens are typically random hex strings of a specific length
+    return /^[0-9a-f]{32}$/i.test(id);
+  }
 }
 
 // Props interface for the component
@@ -150,6 +221,7 @@ export default function PublicEvaluation({
   const [evaluation, setEvaluation] = useState<Evaluation | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isSharedResource, setIsSharedResource] = useState(false);
   
   // Memoize the service to prevent re-renders
   const memoizedService = React.useMemo(() => evaluationService, []);
@@ -157,11 +229,20 @@ export default function PublicEvaluation({
   useEffect(() => {
     async function loadEvaluation() {
       try {
-        const data = await memoizedService.fetchEvaluation(id);
+        let data: Evaluation;
+        
+        // Check if the ID is likely a share token
+        if (memoizedService.isShareToken(id)) {
+          data = await memoizedService.fetchEvaluationByShareToken(id);
+          setIsSharedResource(true);
+        } else {
+          data = await memoizedService.fetchEvaluation(id);
+        }
+        
         setEvaluation(data);
       } catch (err) {
         console.error('Error fetching evaluation:', err);
-        setError('Failed to load evaluation');
+        setError(err instanceof Error ? err.message : 'Failed to load evaluation');
       } finally {
         setLoading(false);
       }
@@ -192,6 +273,11 @@ export default function PublicEvaluation({
             </div>
           ) : evaluation ? (
             <div className="space-y-4">
+              {isSharedResource && (
+                <div className="bg-muted p-2 rounded text-sm text-muted-foreground mb-2">
+                  You are viewing a shared evaluation
+                </div>
+              )}
               <h1 className="text-2xl font-semibold">Evaluation Results</h1>
               <EvaluationTask
                 variant="detail"
@@ -248,7 +334,7 @@ export default function PublicEvaluation({
                     estimatedRemainingSeconds: evaluation.estimatedRemainingSeconds || null,
                     startedAt: evaluation.startedAt || undefined,
                     errorMessage: evaluation.errorMessage || undefined,
-                    errorDetails: evaluation.errorDetails || null,
+                    errorDetails: evaluation.errorDetails || undefined,
                     confusionMatrix: evaluation.confusionMatrix ? {
                       matrix: typeof evaluation.confusionMatrix === 'string' ? 
                         JSON.parse(evaluation.confusionMatrix).matrix : 

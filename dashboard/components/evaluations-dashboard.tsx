@@ -60,6 +60,8 @@ import type { LazyLoader } from '@/utils/types'
 import { observeRecentEvaluations, observeTaskUpdates, observeTaskStageUpdates } from '@/utils/subscriptions'
 import { useEvaluationData } from '@/features/evaluations/hooks/useEvaluationData'
 import { toast } from "sonner"
+import { shareLinkClient } from "@/utils/share-link-client"
+import { fetchAuthSession } from 'aws-amplify/auth'
 
 type TaskResponse = {
   items: Evaluation[]
@@ -537,19 +539,43 @@ export default function EvaluationsDashboard() {
     setSelectedScoreResultId(id);
   }, []);
 
-  const copyLinkToClipboard = () => {
-    navigator.clipboard.writeText(window.location.href + '/' + selectedEvaluationId).then(
-      () => {
-        toast.success("Link copied to clipboard", {
-          description: "You can now share this evaluation with others"
-        });
-      },
-      () => {
-        toast.error("Failed to copy link", {
-          description: "Please try again"
-        });
-      }
-    );
+  const copyLinkToClipboard = async () => {
+    if (!selectedEvaluationId || !accountId) return;
+    
+    try {
+      // Create a share link for the evaluation using shareLinkClient
+      const { url } = await shareLinkClient.create({
+        resourceType: 'Evaluation',
+        resourceId: selectedEvaluationId,
+        accountId: accountId,
+        // Set expiration date (30 days from now)
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        // Configure view options
+        viewOptions: {
+          displayMode: 'detailed',
+          includeMetrics: true
+        }
+      });
+      
+      // Copy the URL to clipboard
+      navigator.clipboard.writeText(url).then(
+        () => {
+          toast.success("Share link created and copied to clipboard", {
+            description: "You can now share this evaluation with others"
+          });
+        },
+        () => {
+          toast.error("Failed to copy link", {
+            description: "The share link was created but couldn't be copied to clipboard"
+          });
+        }
+      );
+    } catch (error) {
+      console.error('Error creating share link:', error);
+      toast.error("Failed to create share link", {
+        description: "Please try again"
+      });
+    }
   };
 
   interface EvaluationsGridProps {

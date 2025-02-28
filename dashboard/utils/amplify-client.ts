@@ -300,5 +300,83 @@ export const amplifyClient = {
       const response = await (getClient().models.ScoreResult as any).get(params)
       return { data: response.data as Schema['ScoreResult']['type'] | null }
     }
+  },
+  ShareLink: {
+    create: async (data: {
+      token: string;
+      resourceType: string;
+      resourceId: string;
+      createdBy: string;
+      accountId: string;
+      expiresAt?: string;
+      viewOptions?: string;
+      accessCount?: number;
+      isRevoked?: boolean;
+    }) => {
+      try {
+        const client = getClient();
+        if (!client.models || !client.models.ShareLink) {
+          console.error('ShareLink model not found in client');
+          throw new Error('ShareLink model not available');
+        }
+        const response = await (client.models.ShareLink as any).create(data);
+        return { data: response.data as Schema['ShareLink']['type'] };
+      } catch (error) {
+        console.error('Error in amplifyClient.ShareLink.create:', error);
+        throw error;
+      }
+    },
+    get: async (params: { id: string }) => {
+      try {
+        const client = getClient();
+        if (!client.models || !client.models.ShareLink) {
+          console.error('ShareLink model not found in client');
+          throw new Error('ShareLink model not available');
+        }
+        const response = await (client.models.ShareLink as any).get(params);
+        return { data: response.data as Schema['ShareLink']['type'] | null };
+      } catch (error) {
+        console.error('Error in amplifyClient.ShareLink.get:', error);
+        throw error;
+      }
+    },
+    list: async (params: any) => {
+      try {
+        const client = getClient();
+        if (!client.models || !client.models.ShareLink) {
+          console.error('ShareLink model not found in client');
+          throw new Error('ShareLink model not available');
+        }
+        const response = await (client.models.ShareLink as any).list(params);
+        return response as AmplifyResponse<Schema['ShareLink']['type'][]>;
+      } catch (error) {
+        console.error('Error in amplifyClient.ShareLink.list:', error);
+        throw error;
+      }
+    },
+    update: async (data: {
+      id: string;
+      token?: string;
+      resourceType?: string;
+      resourceId?: string;
+      expiresAt?: string;
+      viewOptions?: string;
+      lastAccessedAt?: string;
+      accessCount?: number;
+      isRevoked?: boolean;
+    }) => {
+      try {
+        const client = getClient();
+        if (!client.models || !client.models.ShareLink) {
+          console.error('ShareLink model not found in client');
+          throw new Error('ShareLink model not available');
+        }
+        const response = await (client.models.ShareLink as any).update(data);
+        return { data: response.data as Schema['ShareLink']['type'] };
+      } catch (error) {
+        console.error('Error in amplifyClient.ShareLink.update:', error);
+        throw error;
+      }
+    }
   }
 } 
