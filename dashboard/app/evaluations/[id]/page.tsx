@@ -15,6 +15,24 @@ import { getValueFromLazyLoader } from '@/utils/data-operations'
 import type { LazyLoader } from '@/utils/types'
 import { fetchAuthSession } from 'aws-amplify/auth'
 
+import outputs from '@/amplify_outputs.json';
+import { Amplify } from 'aws-amplify';
+
+// Configure Amplify with explicit guest access enabled
+Amplify.configure(
+  {
+    ...outputs,
+    Auth: {
+      Cognito: {
+        identityPoolId: outputs.auth.identity_pool_id,
+        userPoolClientId: outputs.auth.user_pool_client_id,
+        userPoolId: outputs.auth.user_pool_id,
+        allowGuestAccess: true,
+      },
+    }
+  }
+);
+
 // GraphQL query
 const GET_EVALUATION = `
   query GetEvaluation($id: ID!) {
@@ -164,7 +182,7 @@ export class EvaluationService {
           }
         `,
         variables: { token },
-        authMode: 'none' // Use guest/public access for share links
+        authMode: 'identityPool' // Use guest/public access for share links
       }) as GraphQLResult<{
         getResourceByShareToken: {
           shareLink: ShareLinkData;

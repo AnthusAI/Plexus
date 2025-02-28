@@ -12,6 +12,11 @@ const backend = defineBackend({
     data
 });
 
+// // Force backend to generate an identity pool with unauthenticated access
+// if (backend.auth.resources.cfnResources?.cfnIdentityPool) {
+//     backend.auth.resources.cfnResources.cfnIdentityPool.allowUnauthenticatedIdentities = true;
+// }
+
 // Get reference to the Task table and enable streams
 const taskTable = backend.data.resources.tables.Task;
 const cfnTable = taskTable.node.defaultChild as dynamodb.CfnTable;
