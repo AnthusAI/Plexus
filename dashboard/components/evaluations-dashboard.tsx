@@ -53,12 +53,13 @@ import type { EvaluationTaskProps } from '@/components/EvaluationTask'
 import type { TaskData } from '@/types/evaluation'
 import { transformAmplifyTask } from '@/utils/data-operations'
 import { AmplifyTask, ProcessedTask, Evaluation, TaskStageType, TaskSubscriptionEvent } from '@/utils/data-operations'
-import { listRecentEvaluations, transformAmplifyTask as transformEvaluationData } from '@/utils/data-operations'
+import { listRecentEvaluations, transformAmplifyTask as transformEvaluationData, standardizeScoreResults } from '@/utils/data-operations'
 import { TaskDisplay } from "@/components/TaskDisplay"
 import { getValueFromLazyLoader, unwrapLazyLoader } from '@/utils/data-operations'
 import type { LazyLoader } from '@/utils/types'
 import { observeRecentEvaluations, observeTaskUpdates, observeTaskStageUpdates } from '@/utils/subscriptions'
 import { useEvaluationData } from '@/features/evaluations/hooks/useEvaluationData'
+import { toast } from "sonner"
 
 type TaskResponse = {
   items: Evaluation[]
@@ -463,8 +464,21 @@ export default function EvaluationsDashboard() {
 
   const renderSelectedTask = () => {
     if (!selectedEvaluationId) return null
-    const evaluation = evaluations.find(e => e.id === selectedEvaluationId)
+    const evaluation = evaluations.find((e: { id: string }) => e.id === selectedEvaluationId)
     if (!evaluation) return null
+
+    console.log('Rendering selected task:', {
+      evaluationId: evaluation.id,
+      hasScoreResults: !!evaluation.scoreResults,
+      scoreResultsType: typeof evaluation.scoreResults,
+      scoreResultsIsArray: Array.isArray(evaluation.scoreResults),
+      scoreResultsCount: Array.isArray(evaluation.scoreResults) ? evaluation.scoreResults.length : 
+                        (evaluation.scoreResults && typeof evaluation.scoreResults === 'object' && 'items' in evaluation.scoreResults ? 
+                         (evaluation.scoreResults as any).items.length : 0),
+      firstScoreResult: Array.isArray(evaluation.scoreResults) ? evaluation.scoreResults[0] : 
+                       (evaluation.scoreResults && typeof evaluation.scoreResults === 'object' && 'items' in evaluation.scoreResults ? 
+                        (evaluation.scoreResults as any).items[0] : undefined)
+    });
 
     return (
       <TaskDisplay
@@ -472,15 +486,8 @@ export default function EvaluationsDashboard() {
         task={evaluation.task}
         evaluationData={{
           ...evaluation,
-          scoreResults: evaluation.scoreResults ? {
-            items: evaluation.scoreResults.map(result => ({
-              id: result.id,
-              value: result.value,
-              confidence: result.confidence,
-              metadata: result.metadata,
-              itemId: result.itemId
-            }))
-          } : undefined
+          // Pass the raw score results - they will be standardized in the components
+          scoreResults: evaluation.scoreResults
         }}
         controlButtons={
           <DropdownMenu>
@@ -492,6 +499,10 @@ export default function EvaluationsDashboard() {
               />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={copyLinkToClipboard}>
+                <Eye className="mr-2 h-4 w-4" />
+                Share
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleDelete(evaluation.id)}>
                 <Trash2 className="mr-2 h-4 w-4" />
                 Delete
@@ -513,7 +524,7 @@ export default function EvaluationsDashboard() {
 
   // Add filtering logic for evaluations based on selected scorecard and score
   const filteredEvaluations = useMemo(() => {
-    return evaluations.filter(evaluation => {
+    return evaluations.filter((evaluation: any) => {
       if (!selectedScorecard && !selectedScore) return true;
       if (selectedScorecard && evaluation.scorecard?.name !== selectedScorecard) return false;
       if (selectedScore && evaluation.score?.name !== selectedScore) return false;
@@ -525,6 +536,84 @@ export default function EvaluationsDashboard() {
   const handleScoreResultSelect = useCallback((id: string | null) => {
     setSelectedScoreResultId(id);
   }, []);
+
+  const copyLinkToClipboard = () => {
+    navigator.clipboard.writeText(window.location.href + '/' + selectedEvaluationId).then(
+      () => {
+        toast.success("Link copied to clipboard", {
+          description: "You can now share this evaluation with others"
+        });
+      },
+      () => {
+        toast.error("Failed to copy link", {
+          description: "Please try again"
+        });
+      }
+    );
+  };
+
+  interface EvaluationsGridProps {
+    evaluations: Evaluation[];
+    selectedEvaluationId: string | null;
+    setSelectedEvaluationId: (id: string | null) => void;
+    isNarrowViewport: boolean;
+    setIsFullWidth: (isFullWidth: boolean) => void;
+    selectedScoreResultId: string | null;
+    onSelectScoreResult: (id: string | null) => void;
+  }
+
+  const EvaluationsGrid: React.FC<EvaluationsGridProps> = React.memo(({ 
+    evaluations, 
+    selectedEvaluationId, 
+    setSelectedEvaluationId, 
+    isNarrowViewport, 
+    setIsFullWidth,
+    selectedScoreResultId,
+    onSelectScoreResult
+  }) => {
+    return (
+      <div className={`
+        grid gap-3
+        ${selectedEvaluationId && !isNarrowViewport && !isFullWidth ? 'grid-cols-1' : 'grid-cols-1 @[640px]:grid-cols-2'}
+      `}>
+        {evaluations.map((evaluation) => (
+          <div 
+            key={evaluation.id} 
+            onClick={() => {
+              setSelectedEvaluationId(evaluation.id)
+              if (isNarrowViewport) {
+                setIsFullWidth(true)
+              }
+            }}
+          >
+            <TaskDisplay
+              variant="grid"
+              task={evaluation.task}
+              evaluationData={evaluation}
+              isSelected={evaluation.id === selectedEvaluationId}
+              onClick={() => {
+                setSelectedEvaluationId(evaluation.id)
+                if (isNarrowViewport) {
+                  setIsFullWidth(true)
+                }
+              }}
+              extra={true}
+              selectedScoreResultId={selectedScoreResultId}
+              onSelectScoreResult={onSelectScoreResult}
+            />
+          </div>
+        ))}
+      </div>
+    );
+  }, (prevProps, nextProps) => {
+    // Custom comparison to prevent unnecessary re-renders
+    return (
+      prevProps.evaluations === nextProps.evaluations &&
+      prevProps.selectedEvaluationId === nextProps.selectedEvaluationId &&
+      prevProps.isNarrowViewport === nextProps.isNarrowViewport &&
+      prevProps.selectedScoreResultId === nextProps.selectedScoreResultId
+    );
+  });
 
   if (isLoading) {
     return (
@@ -578,7 +667,7 @@ export default function EvaluationsDashboard() {
               grid gap-3
               ${selectedEvaluationId && !isNarrowViewport && !isFullWidth ? 'grid-cols-1' : 'grid-cols-1 @[640px]:grid-cols-2'}
             `}>
-              {filteredEvaluations.map((evaluation) => {
+              {filteredEvaluations.map((evaluation: any) => {
                 return (
                   <div 
                     key={evaluation.id} 
@@ -594,15 +683,8 @@ export default function EvaluationsDashboard() {
                       task={evaluation.task}
                       evaluationData={{
                         ...evaluation,
-                        scoreResults: evaluation.scoreResults ? {
-                          items: evaluation.scoreResults.map(result => ({
-                            id: result.id,
-                            value: result.value,
-                            confidence: result.confidence,
-                            metadata: result.metadata,
-                            itemId: result.itemId
-                          }))
-                        } : undefined
+                        // Pass the raw score results - they will be standardized in the components
+                        scoreResults: evaluation.scoreResults
                       }}
                       isSelected={evaluation.id === selectedEvaluationId}
                       onClick={() => {
@@ -618,7 +700,7 @@ export default function EvaluationsDashboard() {
                   </div>
                 );
               })}
-              <div ref={ref} />
+              <div ref={ref} className="h-4" />
             </div>
           )}
         </div>
@@ -696,7 +778,7 @@ function mergeTaskUpdate(evaluations: Evaluation[], taskData: TaskSubscriptionEv
       return evaluation;
     }
 
-    // Create updated task with new data
+    // Create updated task with new data, preserving all existing fields
     const updatedTask = {
       ...task,
       status: taskData.status,
@@ -705,9 +787,12 @@ function mergeTaskUpdate(evaluations: Evaluation[], taskData: TaskSubscriptionEv
       stages: taskData.stages
     };
 
+    // Return updated evaluation while preserving all other fields
     return {
       ...evaluation,
-      task: updatedTask as AmplifyTask
+      task: updatedTask as AmplifyTask,
+      // Explicitly preserve score results
+      scoreResults: evaluation.scoreResults
     };
   });
 }
@@ -752,9 +837,12 @@ function mergeTaskStageUpdate(
         stages: updatedStages
       };
 
+      // Return updated evaluation while preserving all other fields
       return {
         ...evaluation,
-        task: updatedTask as AmplifyTask
+        task: updatedTask as AmplifyTask,
+        // Explicitly preserve score results
+        scoreResults: evaluation.scoreResults
       };
     }
 
@@ -779,9 +867,12 @@ function mergeTaskStageUpdate(
       stages: updatedStages
     };
 
+    // Return updated evaluation while preserving all other fields
     return {
       ...evaluation,
-      task: updatedTask as AmplifyTask
+      task: updatedTask as AmplifyTask,
+      // Explicitly preserve score results
+      scoreResults: evaluation.scoreResults
     };
   });
 }

@@ -28,6 +28,7 @@ import ItemContext from "@/components/ItemContext"
 import ItemDetail from './ItemDetail'
 import { formatTimeAgo } from '@/utils/format-time'
 import type { FeedbackItem } from '@/components/feedback-dashboard'
+import ItemCard, { ItemData } from './items/ItemCard'
 
 // Get the current date and time
 const now = new Date();
@@ -358,6 +359,15 @@ export default function ItemsDashboard() {
   const [sampleMethod, setSampleMethod] = useState("All");
   const [sampleCount, setSampleCount] = useState(100);
   const [scoreResults, setScoreResults] = useState(sampleScoreResults);
+  const [leftPanelWidth, setLeftPanelWidth] = useState(50);
+
+  // Add a debug effect to log items state
+  useEffect(() => {
+    console.log("Items state updated:", {
+      itemsCount: items.length,
+      firstFewItems: items.slice(0, 3)
+    });
+  }, [items]);
 
   useEffect(() => {
     const checkViewportWidth = () => {
@@ -417,6 +427,13 @@ export default function ItemsDashboard() {
   }, [])
 
   const filteredItems = useMemo(() => {
+    // For debugging
+    console.log("Filtering items:", {
+      itemsCount: items.length,
+      selectedScorecard,
+      filterConfigLength: filterConfig.length
+    });
+    
     return items.filter(item => {
       if (!selectedScorecard && filterConfig.length === 0) return true
       
@@ -426,7 +443,7 @@ export default function ItemsDashboard() {
 
       return scorecardMatch && filterConfig.some(group => {
         return group.conditions.every(condition => {
-          const itemValue = String(item[condition.field as keyof typeof item])
+          const itemValue = String(item[condition.field as keyof typeof item] || '')
           switch (condition.operator) {
             case 'equals':
               return itemValue === condition.value
@@ -553,38 +570,54 @@ export default function ItemsDashboard() {
     if (!selectedItemData) return null
 
     return (
-      <ItemDetail
-        item={selectedItemData as unknown as FeedbackItem}
-        getBadgeVariant={getBadgeVariant}
-        getRelativeTime={getRelativeTime}
-        isMetadataExpanded={isMetadataExpanded}
-        setIsMetadataExpanded={setIsMetadataExpanded}
-        isDataExpanded={isDataExpanded}
-        setIsDataExpanded={setIsDataExpanded}
-        isErrorExpanded={isErrorExpanded}
-        setIsErrorExpanded={setIsErrorExpanded}
-        sampleMetadata={sampleMetadata}
-        sampleTranscript={sampleTranscript}
-        sampleScoreResults={scoreResults}
-        handleThumbsUp={handleThumbsUp}
-        handleThumbsDown={handleThumbsDown}
-        handleNewAnnotationSubmit={handleNewAnnotationSubmit}
-        toggleAnnotations={toggleAnnotations}
-        showNewAnnotationForm={showNewAnnotationForm}
-        setShowNewAnnotationForm={setShowNewAnnotationForm}
-        newAnnotation={newAnnotation}
-        setNewAnnotation={setNewAnnotation}
-        expandedAnnotations={expandedAnnotations}
-        thumbedUpScores={thumbedUpScores}
-        setThumbedUpScores={setThumbedUpScores}
-        isFullWidth={isFullWidth}
-        isFeedbackMode={false}
-        onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
-        onClose={() => {
-          setSelectedItem(null);
-          setIsFullWidth(false);
-        }}
-      />
+      <div className="h-full flex flex-col">
+        <ItemCard
+          variant="detail"
+          item={selectedItemData as ItemData}
+          isFullWidth={isFullWidth}
+          onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
+          onClose={() => {
+            setSelectedItem(null);
+            setIsFullWidth(false);
+          }}
+          getBadgeVariant={getBadgeVariant}
+        />
+        
+        <div className="flex-1 overflow-auto">
+          <ItemDetail
+            item={selectedItemData as unknown as FeedbackItem}
+            getBadgeVariant={getBadgeVariant}
+            getRelativeTime={getRelativeTime}
+            isMetadataExpanded={isMetadataExpanded}
+            setIsMetadataExpanded={setIsMetadataExpanded}
+            isDataExpanded={isDataExpanded}
+            setIsDataExpanded={setIsDataExpanded}
+            isErrorExpanded={isErrorExpanded}
+            setIsErrorExpanded={setIsErrorExpanded}
+            sampleMetadata={sampleMetadata}
+            sampleTranscript={sampleTranscript}
+            sampleScoreResults={scoreResults}
+            handleThumbsUp={handleThumbsUp}
+            handleThumbsDown={handleThumbsDown}
+            handleNewAnnotationSubmit={handleNewAnnotationSubmit}
+            toggleAnnotations={toggleAnnotations}
+            showNewAnnotationForm={showNewAnnotationForm}
+            setShowNewAnnotationForm={setShowNewAnnotationForm}
+            newAnnotation={newAnnotation}
+            setNewAnnotation={setNewAnnotation}
+            expandedAnnotations={expandedAnnotations}
+            thumbedUpScores={thumbedUpScores}
+            setThumbedUpScores={setThumbedUpScores}
+            isFullWidth={isFullWidth}
+            isFeedbackMode={false}
+            onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
+            onClose={() => {
+              setSelectedItem(null);
+              setIsFullWidth(false);
+            }}
+          />
+        </div>
+      </div>
     )
   }
 
@@ -805,9 +838,53 @@ export default function ItemsDashboard() {
     }
   }
 
+  const handleDragStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    
+    // Get the initial mouse position and panel width
+    const startX = e.clientX;
+    const startWidth = leftPanelWidth;
+    
+    // Get the container element for width calculations
+    const container = e.currentTarget.parentElement;
+    if (!container) return;
+    
+    // Create the drag handler
+    const handleDrag = (e: MouseEvent) => {
+      // Calculate how far the mouse has moved
+      const deltaX = e.clientX - startX;
+      
+      // Calculate the container width for percentage calculation
+      const containerWidth = container.getBoundingClientRect().width;
+      
+      // Calculate the new width as a percentage of the container
+      const deltaPercentage = (deltaX / containerWidth) * 100;
+      const newWidth = Math.min(Math.max(startWidth + deltaPercentage, 20), 80);
+      
+      // Update the state with the new width
+      requestAnimationFrame(() => {
+        setLeftPanelWidth(newWidth);
+      });
+    };
+    
+    // Create the cleanup function
+    const handleDragEnd = () => {
+      document.removeEventListener('mousemove', handleDrag);
+      document.removeEventListener('mouseup', handleDragEnd);
+      document.body.style.cursor = '';
+    };
+    
+    // Set the cursor for the entire document during dragging
+    document.body.style.cursor = 'col-resize';
+    
+    // Add the event listeners
+    document.addEventListener('mousemove', handleDrag);
+    document.addEventListener('mouseup', handleDragEnd);
+  };
+
   return (
-    <div className="space-y-4 h-full flex flex-col">
-      <div className="flex flex-wrap justify-between items-start gap-4">
+    <div className="flex flex-col h-full p-1.5">
+      <div className="flex flex-wrap justify-between items-start gap-4 mb-3">
         <div className="flex-shrink-0">
           <ScorecardContext 
             selectedScorecard={selectedScorecard}
@@ -829,81 +906,52 @@ export default function ItemsDashboard() {
         </div>
       </div>
 
-      <div className="flex-grow flex flex-col overflow-hidden pb-2">
+      <div className="flex-grow flex flex-col overflow-hidden">
         {selectedItem && (isNarrowViewport || isFullWidth) ? (
           <div className="flex-grow overflow-hidden">
             {renderSelectedItem()}
           </div>
         ) : (
-          <div className={`flex ${isNarrowViewport ? 'flex-col' : 'space-x-6'} h-full`}>
-            <div className={`${isFullWidth ? 'hidden' : 'flex-1'} @container overflow-auto`}>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[40%]">Item</TableHead>
-                    <TableHead className="w-[15%] @[630px]:table-cell hidden text-right">Inferences</TableHead>
-                    <TableHead className="w-[15%] @[630px]:table-cell hidden text-right">Results</TableHead>
-                    <TableHead className="w-[15%] @[630px]:table-cell hidden text-right">Cost</TableHead>
-                    <TableHead className="w-[15%] @[630px]:table-cell hidden text-right">Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredItems.map((item) => (
-                    <TableRow 
-                      key={item.id} 
-                      onClick={() => handleItemClick(item.id)} 
-                      className="cursor-pointer transition-colors duration-200 hover:bg-muted"
-                    >
-                      <TableCell className="font-medium pr-4">
-                        <div>
-                          {/* Narrow variant - visible below 630px */}
-                          <div className="block @[630px]:hidden">
-                            <div className="flex justify-between items-start mb-2">
-                              <div className="font-semibold">{item.scorecard}</div>
-                              <Badge 
-                                className={`w-24 justify-center ${getBadgeVariant(item.status)}`}
-                              >
-                                {item.status}
-                              </Badge>
-                            </div>
-                            <div className="text-sm text-muted-foreground mb-2">
-                              {formatTimeAgo(item.date, true)}
-                            </div>
-                            <div className="flex justify-between items-end">
-                              <div className="text-sm text-muted-foreground">
-                                {item.inferences} inferences<br />
-                                {item.results} results
-                              </div>
-                              <div className="font-semibold">{item.cost}</div>
-                            </div>
-                          </div>
-                          {/* Wide variant - visible at 630px and above */}
-                          <div className="hidden @[630px]:block">
-                            {item.scorecard}
-                            <div className="text-sm text-muted-foreground">
-                              {formatTimeAgo(item.date)}
-                            </div>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="hidden @[630px]:table-cell text-right">{item.inferences}</TableCell>
-                      <TableCell className="hidden @[630px]:table-cell text-right">{item.results}</TableCell>
-                      <TableCell className="hidden @[630px]:table-cell text-right">{item.cost}</TableCell>
-                      <TableCell className="hidden @[630px]:table-cell text-right">
-                        <Badge 
-                          className={`w-24 justify-center ${getBadgeVariant(item.status)}`}
-                        >
-                          {item.status}
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+          <div className={`flex ${isNarrowViewport ? 'flex-col' : ''} h-full`}>
+            <div 
+              className={`${isFullWidth ? 'hidden' : 'flex-1'} overflow-auto`}
+              style={selectedItem && !isNarrowViewport && !isFullWidth ? {
+                width: `${leftPanelWidth}%`
+              } : undefined}
+            >
+              <div>
+                <div className="@container h-full">
+                  <div className="grid grid-cols-2 @[500px]:grid-cols-3 @[700px]:grid-cols-4 @[900px]:grid-cols-5 @[1100px]:grid-cols-6 gap-3">
+                    {filteredItems.map((item) => (
+                      <ItemCard
+                        key={item.id}
+                        variant="grid"
+                        item={item as ItemData}
+                        isSelected={selectedItem === item.id}
+                        onClick={() => handleItemClick(item.id)}
+                        getBadgeVariant={getBadgeVariant}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
             </div>
 
             {selectedItem && !isNarrowViewport && !isFullWidth && (
-              <div className="flex-1 overflow-hidden">
+              <div
+                className="w-[12px] relative cursor-col-resize flex-shrink-0 group"
+                onMouseDown={handleDragStart}
+              >
+                <div className="absolute inset-0 rounded-full transition-colors duration-150 
+                  group-hover:bg-accent" />
+              </div>
+            )}
+
+            {selectedItem && !isNarrowViewport && !isFullWidth && (
+              <div 
+                className="overflow-hidden"
+                style={{ width: `${100 - leftPanelWidth}%` }}
+              >
                 {renderSelectedItem()}
               </div>
             )}
