@@ -38,7 +38,7 @@ type ScoreVersionIndexFields = "scoreId" | "versionNumber" | "isFeatured";
 
 // Define the share token handler function
 const getResourceByShareTokenHandler = defineFunction({
-    entry: './data/resolvers/getResourceByShareToken.ts'
+    entry: './resolvers/getResourceByShareToken.ts'
 });
 
 const schema = a.schema({
