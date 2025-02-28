@@ -621,4 +621,3 @@ export default function ScorecardsComponent() {
     </div>
   )
 }
-

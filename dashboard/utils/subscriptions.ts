@@ -959,4 +959,4 @@ export function observeTaskStageUpdates() {
       subscriptions.forEach(sub => sub.unsubscribe());
     };
   });
-} 
+}
