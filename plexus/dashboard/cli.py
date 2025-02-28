@@ -1012,11 +1012,11 @@ def create(evaluation_id: str, value: str):
         click.echo(f"Error: {str(e)}", err=True)
 
 @cli.group()
-def scorecard():
+def scorecards():
     """Manage scorecards"""
     pass
 
-@scorecard.command()
+@scorecards.command()
 @click.option('--account-key', help='Filter by account key')
 @click.option('--name', help='Filter by name')
 @click.option('--key', help='Filter by key')
@@ -1024,10 +1024,10 @@ def list(account_key: Optional[str], name: Optional[str], key: Optional[str]):
     """List scorecards with optional filtering.
     
     Examples:
-        plexus-dashboard scorecard list
-        plexus-dashboard scorecard list --account-key my-account
-        plexus-dashboard scorecard list --name "QA Scorecard"
-        plexus-dashboard scorecard list --key qa-v1
+        plexus-dashboard scorecards list
+        plexus-dashboard scorecards list --account-key my-account
+        plexus-dashboard scorecards list --name "QA Scorecard"
+        plexus-dashboard scorecards list --key qa-v1
     """
     client = create_client()
     
@@ -1117,16 +1117,16 @@ def list(account_key: Optional[str], name: Optional[str], key: Optional[str]):
         logging.error(f"Error listing scorecards: {str(e)}")
         click.echo(f"Error: {str(e)}", err=True)
 
-@scorecard.command()
+@scorecards.command()
 @click.option('--account-key', default='call-criteria', help='Account key identifier')
 @click.option('--directory', default='scorecards', help='Directory containing YAML scorecard files')
 def sync(account_key: str, directory: str):
     """Sync YAML scorecards to the API.
     
     Examples:
-        plexus-dashboard scorecard sync
-        plexus-dashboard scorecard sync --account-key my-account
-        plexus-dashboard scorecard sync --directory path/to/scorecards
+        plexus-dashboard scorecards sync
+        plexus-dashboard scorecards sync --account-key my-account
+        plexus-dashboard scorecards sync --directory path/to/scorecards
     """
     client = create_client()
     
@@ -1376,11 +1376,16 @@ def sync(account_key: str, directory: str):
         logging.error(f"Error syncing scorecards: {str(e)}")
         click.echo(f"Error: {str(e)}", err=True)
 
-@scorecard.command()
+@scorecards.command()
 @click.option('--account-key', required=True, help='Account key')
 @click.option('--fix', is_flag=True, help='Fix duplicates by removing newer copies')
 def find_duplicates(account_key: str, fix: bool):
-    """Find and optionally fix duplicate scores based on name+order+section combination."""
+    """Find duplicate scorecards and scores.
+    
+    Examples:
+        plexus-dashboard scorecards find-duplicates --account-key my-account
+        plexus-dashboard scorecards find-duplicates --account-key my-account --fix
+    """
     client = create_client()
     account = Account.get_by_key(account_key, client)
 
@@ -1469,12 +1474,18 @@ def find_duplicates(account_key: str, fix: bool):
     else:
         logging.info("No duplicate scores found")
 
-@scorecard.command()
+@scorecards.command()
 @click.option('--scorecard-id', help='Scorecard ID')
 @click.option('--scorecard-key', help='Scorecard key')
 @click.option('--scorecard-name', help='Scorecard name')
 def list_scores(scorecard_id: Optional[str], scorecard_key: Optional[str], scorecard_name: Optional[str]):
-    """List all scores for a specific scorecard."""
+    """List all scores for a specific scorecard.
+    
+    Examples:
+        plexus-dashboard scorecards list-scores --scorecard-id 1234
+        plexus-dashboard scorecards list-scores --scorecard-key qa-v1
+        plexus-dashboard scorecards list-scores --scorecard-name "QA Scorecard"
+    """
     client = create_client()
     
     try:
