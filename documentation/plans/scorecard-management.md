@@ -82,40 +82,38 @@ This document outlines the implementation of Plexus's scorecard management syste
   - Successfully migrated existing configurations to new structure
 
 ### Phase 3: Front-End UI Updates (Current Focus)
-- Status: In Progress
+- Status: 🔄 In Progress
 - Goals:
   - Update UI to support score version management
   - Add version history view for scores
   - Implement version comparison interface
   - Add ability to promote versions to champion
   - Show version metadata in evaluation results
+- Current Progress:
+  - Testing the front-end for version management
+  - Using new CLI commands to create versions by pushing updates
 - Next Steps:
-  - Design version management UI components
-  - Implement version history view
-  - Add version promotion workflow
+  - Complete testing of version creation workflow
+  - Finalize version history view
+  - Complete version promotion workflow
   - Update evaluation display to show version info
 
 ### Phase 3.5: Data Integrity Issues
-- Status: Critical - In Progress
-- Problems Identified:
-  - Incorrect scorecard external IDs causing reference issues
-  - Duplicate scores within scorecards creating ambiguity and evaluation errors
-  - YAML synchronization issues between local files and API
-- Goals:
-  - Fix incorrect external IDs across all scorecards
-  - Identify and resolve duplicate scores
-  - Implement validation to prevent future duplicates
-  - Ensure data consistency between API and CLI tools
-  - Enhance YAML synchronization to properly handle external IDs
-- Next Steps:
-  - Audit all scorecards to identify incorrect external IDs
-  - Create migration script to correct external IDs
-  - Develop duplicate score detection algorithm
-  - Implement score deduplication process
-  - Add validation rules to prevent creation of duplicate scores
-  - Update CLI tools to handle and report data integrity issues
-  - Enhance `push` command to load YAML from scorecards directory
-  - Ensure proper external ID handling during YAML sync
+- Status: ✅ Completed
+- Problems Resolved:
+  - Fixed incorrect scorecard external IDs causing reference issues
+  - Resolved duplicate scores within scorecards
+  - Fixed YAML synchronization issues between local files and API
+  - Implemented validation to prevent future duplicates
+  - Ensured data consistency between API and CLI tools
+  - Enhanced YAML synchronization to properly handle external IDs
+- Achievements:
+  - Successfully audited and corrected external IDs across all scorecards
+  - Implemented score deduplication process
+  - Added validation rules to prevent creation of duplicate scores
+  - Updated CLI tools to handle and report data integrity issues
+  - Enhanced `push` command to load YAML from scorecards directory
+  - Ensured proper external ID handling during YAML sync
 
 #### Example YAML Structure
 ```yaml
@@ -138,26 +136,19 @@ scores:
 ```
 
 ### ScoreVersion Management in Push Command
-- Status: Planned - High Priority
+- Status: ✅ Completed
 - Implementation Details:
-  - The `push` command will be enhanced to handle ScoreVersion creation and management
-  - Each Score has multiple ScoreVersions, with each version storing the complete configuration
+  - Successfully implemented the `push` command with ScoreVersion creation and management
+  - Each Score now has multiple ScoreVersions, with each version storing the complete configuration
   - The `configuration` field in ScoreVersion stores the YAML snippet for that specific score
-  - Process for handling ScoreVersions during push:
+  - Process for handling ScoreVersions during push works as designed:
     1. For each score in the YAML file:
-       - Identify the Score by name, key, or externalId
-       - Find the appropriate parent ScoreVersion:
-         - If `parent` field exists in YAML, use that ID to find the parent ScoreVersion
-         - If no `parent` field, find the most recent ScoreVersion for that Score
-       - Compare the YAML configuration with the parent ScoreVersion:
-         - Filter out the `parent` field from both configurations before comparison
-         - If configurations differ, create a new ScoreVersion:
-           - Set `parentVersionId` to the parent's ID
-           - Set `configuration` to the new YAML string with updated `parent` field
-           - Set `isFeatured` to true for the new version
-           - Set `createdAt` and `updatedAt` timestamps
-         - If no changes detected, report to user that the score is up-to-date
-    2. After creating new ScoreVersions, update the Score's `championVersionId` to point to the latest version
+       - Identifies the Score by name, key, or externalId
+       - Finds the appropriate parent ScoreVersion
+       - Compares the YAML configuration with the parent ScoreVersion
+       - Creates a new ScoreVersion when configurations differ
+       - Reports to user when scores are up-to-date
+    2. Updates the Score's `championVersionId` to point to the latest version
   - Benefits:
     - Maintains version history of score configurations
     - Allows rollback to previous versions if needed
@@ -190,8 +181,12 @@ mutation UpdateScore($input: UpdateScoreInput!) {
 ```
 
 ### Phase 4: CLI API Integration
-- Status: Planned
-- Goals:
+- Status: ✅ Partially Completed
+- Achievements:
+  - Successfully implemented `scorecards push --scorecard ...` command
+  - Successfully implemented `scorecards info` command
+  - Both commands are working as expected
+- Remaining Goals:
   - Update `plexus evaluate accuracy` to use API
   - Remove dependency on local YAML files for evaluation
   - Support fetching score configuration from cloud
@@ -203,22 +198,24 @@ mutation UpdateScore($input: UpdateScoreInput!) {
   - Add progress indicators for API operations
 
 ### Phase 5: YAML Mode Support
-- Status: Planned
-- Goals:
-  - Add commands for syncing score configuration YAML
-  - Support `plexus scorecard pull` for downloading configs
-  - Support `plexus scorecard push` for uploading configs
-  - Maintain backward compatibility with YAML workflow
+- Status: 🔄 In Progress
+- Achievements:
+  - Successfully implemented `scorecards push` for uploading configs
+  - Maintained backward compatibility with YAML workflow
+- Current Focus:
+  - Implementing `scorecards pull` command
+  - This command will need to merge score configuration YAML from the API into existing scorecard YAML files
 - Next Steps:
-  - Design YAML format for version data
-  - Implement pull/push commands
-  - Add conflict resolution
-  - Document YAML mode workflow
+  - Design merge algorithm to combine API data with local YAML
+  - Handle potential conflicts between local and remote versions
+  - Ensure proper preservation of non-configuration data in local files
+  - Document the complete push/pull workflow
+  - Add troubleshooting guidance for common issues
 
 ### Score Version Management
-- Status: In Progress
+- Status: ✅ Completed
 - Implementation Details:
-  - Score configurations are versioned in new `ScoreVersion` model
+  - Score configurations are now versioned in the `ScoreVersion` model
   - Each `Score` has a `championVersion` reference to its current champion
   - `ScoreResult` has optional `scoreVersion` reference for backward compatibility
   - Evaluations track which version they evaluated via `scoreVersion` reference
