@@ -1049,20 +1049,19 @@ def pull(scorecard: Optional[str], account: str, output: str):
         filter_conditions = [f'accountId: {{ eq: "{account_id}" }}']
         
         if scorecard:
-            # Try to resolve the scorecard identifier
+            # If a specific scorecard was provided, resolve it to an ID
             scorecard_id = resolve_scorecard_identifier(client, scorecard)
-            if scorecard_id:
-                filter_conditions = [f'id: {{ eq: "{scorecard_id}" }}']
-            else:
-                console.print(f"[red]Could not find scorecard: {scorecard}[/red]")
+            if not scorecard_id:
+                console.print(f"[red]No scorecard found matching: {scorecard}[/red]")
                 return
+            
+            filter_conditions.append(f'id: {{ eq: "{scorecard_id}" }}')
         
-        filter_str = ", ".join(filter_conditions)
+        filter_string = ", ".join(filter_conditions)
         
-        # Query for scorecards with sections and scores
         query = f"""
         query ListScorecards {{
-            listScorecards(filter: {{ {filter_str} }}, limit: 100) {{
+            listScorecards(filter: {{ {filter_string} }}) {{
                 items {{
                     id
                     name
@@ -1083,9 +1082,12 @@ def pull(scorecard: Optional[str], account: str, output: str):
                                     order
                                     type
                                     externalId
+                                    championVersionId
                                     championVersion {{
                                         id
                                         configuration
+                                        createdAt
+                                        updatedAt
                                     }}
                                 }}
                             }}
@@ -1138,13 +1140,31 @@ def pull(scorecard: Optional[str], account: str, output: str):
                         'description': score.get('description', ''),
                         'order': score.get('order'),
                         'type': score.get('type'),
-                        'externalId': score.get('externalId', '')
+                        'externalId': score.get('externalId', ''),
+                        'championVersionId': score.get('championVersion', {}).get('id', ''),
+                        'versions': []
                     }
                     
                     # Add configuration if available
                     champion_version = score.get('championVersion')
                     if champion_version:
-                        score_data['configuration'] = champion_version.get('configuration', {})
+                        config_yaml = champion_version.get('configuration', '')
+                        if config_yaml:
+                            try:
+                                # Parse the configuration YAML
+                                config_data = yaml.safe_load(config_yaml)
+                                if isinstance(config_data, dict):
+                                    # Merge the configuration with the score data
+                                    # This preserves the full YAML structure
+                                    # Add section back to the config data
+                                    config_data['section'] = section.get('name')
+                                    
+                                    # Replace score_data with the full config
+                                    score_data = config_data
+                                else:
+                                    console.print(f"[yellow]Warning: Configuration for score {score.get('name')} is not a valid YAML dictionary[/yellow]")
+                            except Exception as e:
+                                console.print(f"[yellow]Warning: Could not parse configuration for score {score.get('name')}: {e}[/yellow]")
                     
                     section_data['scores'].append(score_data)
                 
@@ -1154,8 +1174,24 @@ def pull(scorecard: Optional[str], account: str, output: str):
             file_name = f"{scorecard_key}.yaml"
             file_path = os.path.join(output, file_name)
             
+            # Restructure the YAML data to match the expected format
+            # Move scores to the top level
+            scores = []
+            for section in yaml_data['sections']:
+                for score in section['scores']:
+                    scores.append(score)
+            
+            # Create the final YAML structure
+            final_yaml = {
+                'name': yaml_data['name'],
+                'key': yaml_data['key'],
+                'description': yaml_data.get('description', ''),
+                'externalId': yaml_data.get('externalId', ''),
+                'scores': scores
+            }
+            
             with open(file_path, 'w') as f:
-                yaml.dump(yaml_data, f, default_flow_style=False, sort_keys=False)
+                yaml.dump(final_yaml, f, default_flow_style=False, sort_keys=False)
             
             console.print(f"[green]Saved scorecard to {file_path}[/green]")
         
@@ -1479,6 +1515,16 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
                 score_name = score_data.get('name')
                 section_name = score_data.get('section', 'Default')
                 
+                # Ensure we have the complete score data structure
+                # This is important to preserve the original YAML structure
+                # including top-level fields like name, id, class, model_name, etc.
+                
+                # Remove section from score_data as it's not part of the score configuration
+                # but used for organizing scores in the UI
+                score_config_data = score_data.copy()
+                if 'section' in score_config_data:
+                    del score_config_data['section']
+                
                 # Create section if it doesn't exist
                 if section_name not in section_map:
                     create_section_mutation = f"""
@@ -1508,8 +1554,8 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
                     score_id = existing_score.get('id')
                     
                     # Handle ScoreVersion management
-                    # Convert score_data to JSON string for configuration
-                    score_config = json.dumps(score_data)
+                    # We want to store the complete score_data in the configuration
+                    # This includes all top-level fields like name, id, class, model_name, etc.
                     
                     # Get existing versions for this score
                     existing_versions = existing_score.get('versions', {}).get('items', [])
@@ -1550,7 +1596,7 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
                                 parent_config_obj = {}
                         
                         # Create a copy of score_data without parent field for comparison
-                        score_data_for_comparison = score_data.copy()
+                        score_data_for_comparison = score_config_data.copy()
                         if 'parent' in score_data_for_comparison:
                             del score_data_for_comparison['parent']
                         
@@ -1559,9 +1605,20 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
                             del parent_config_obj['parent']
                         
                         # Compare the configurations
-                        if yaml.dump(score_data_for_comparison, sort_keys=True) == yaml.dump(parent_config_obj, sort_keys=True):
+                        # Use sort_keys=False for both to preserve field order in the comparison
+                        # We're comparing the full score_data object, not just a subset
+                        # Convert to YAML strings for comparison to ensure consistent formatting
+                        yaml_str1 = yaml.dump(score_data_for_comparison, sort_keys=False, default_flow_style=False)
+                        yaml_str2 = yaml.dump(parent_config_obj, sort_keys=False, default_flow_style=False)
+                        
+                        # Log the comparison for debugging
+                        console.print(f"[dim]Comparing configurations for score: {score_name}[/dim]")
+                        
+                        if yaml_str1 == yaml_str2:
                             create_new_version = False
                             console.print(f"[green]No changes detected for score: {score_name}[/green]")
+                        else:
+                            console.print(f"[yellow]Changes detected for score: {score_name}[/yellow]")
                     
                     # Check if external ID needs to be updated regardless of configuration changes
                     yaml_id = str(score_data.get('id', ''))
@@ -1591,10 +1648,12 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
                     if create_new_version:
                         # Add parent ID to score_data for the new version
                         if parent_version_id:
-                            score_data['parent'] = parent_version_id
+                            score_config_data['parent'] = parent_version_id
                         
                         # Convert score_data to YAML string for configuration
-                        yaml_config = yaml.dump(score_data)
+                        # Use yaml.dump with sort_keys=False to preserve field order
+                        # and default_flow_style=False for better readability
+                        yaml_config = yaml.dump(score_config_data, sort_keys=False, default_flow_style=False)
                         
                         # Create new ScoreVersion
                         now = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -1630,16 +1689,30 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
                         # Always use the 'id' field from the YAML as the external ID
                         external_id = str(score_data.get('id', ''))
                         
+                        # Ensure key is not an empty string to avoid DynamoDB errors
+                        score_key = score_data.get('key', '')
+                        if not score_key or score_key.strip() == '':
+                            score_key = generate_key(score_name)
+                        
+                        # Ensure aiProvider and aiModel are not empty strings
+                        ai_provider = score_data.get('model_provider', '')
+                        if not ai_provider or ai_provider.strip() == '':
+                            ai_provider = "unknown"
+                            
+                        ai_model = score_data.get('model_name', '')
+                        if not ai_model or ai_model.strip() == '':
+                            ai_model = "unknown"
+                        
                         update_score_mutation = f"""
                         mutation UpdateScore {{
                             updateScore(input: {{
                                 id: "{score_id}"
                                 championVersionId: "{new_version_id}"
                                 name: "{score_name}"
-                                key: "{score_data.get('key', '')}"
+                                key: "{score_key}"
                                 externalId: "{external_id}"
-                                aiProvider: "{score_data.get('model_provider', '')}"
-                                aiModel: "{score_data.get('model_name', '')}"
+                                aiProvider: "{ai_provider}"
+                                aiModel: "{ai_model}"
                             }}) {{
                                 id
                                 name
@@ -1660,6 +1733,15 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
                     # Always use the 'id' field from the YAML as the external ID
                     external_id = str(score_data.get('id', ''))
                     
+                    # Ensure aiProvider and aiModel are not empty strings
+                    ai_provider = score_data.get('model_provider', '')
+                    if not ai_provider or ai_provider.strip() == '':
+                        ai_provider = "unknown"
+                        
+                    ai_model = score_data.get('model_name', '')
+                    if not ai_model or ai_model.strip() == '':
+                        ai_model = "unknown"
+                    
                     create_score_mutation = f"""
                     mutation CreateScore {{
                         createScore(input: {{
@@ -1668,8 +1750,8 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
                             externalId: "{external_id}"
                             order: 0
                             type: "STANDARD"
-                            aiProvider: "{score_data.get('model_provider', '')}"
-                            aiModel: "{score_data.get('model_name', '')}"
+                            aiProvider: "{ai_provider}"
+                            aiModel: "{ai_model}"
                             sectionId: "{section_id}"
                         }}) {{
                             id
@@ -1685,7 +1767,9 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
                     now = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
                     
                     # Convert score_data to YAML string for configuration
-                    yaml_config = yaml.dump(score_data)
+                    # Use yaml.dump with sort_keys=False to preserve field order
+                    # and default_flow_style=False for better readability
+                    yaml_config = yaml.dump(score_config_data, sort_keys=False, default_flow_style=False)
                     
                     create_version_mutation = f"""
                     mutation CreateScoreVersion {{
@@ -1713,16 +1797,30 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
                     # Always use the 'id' field from the YAML as the external ID
                     external_id = str(score_data.get('id', ''))
                     
+                    # Ensure key is not an empty string to avoid DynamoDB errors
+                    score_key = score_data.get('key', '')
+                    if not score_key or score_key.strip() == '':
+                        score_key = generate_key(score_name)
+                    
+                    # Ensure aiProvider and aiModel are not empty strings
+                    ai_provider = score_data.get('model_provider', '')
+                    if not ai_provider or ai_provider.strip() == '':
+                        ai_provider = "unknown"
+                        
+                    ai_model = score_data.get('model_name', '')
+                    if not ai_model or ai_model.strip() == '':
+                        ai_model = "unknown"
+                    
                     update_score_mutation = f"""
                     mutation UpdateScore {{
                         updateScore(input: {{
                             id: "{new_score_id}"
                             championVersionId: "{new_version_id}"
                             name: "{score_name}"
-                            key: "{score_data.get('key', '')}"
+                            key: "{score_key}"
                             externalId: "{external_id}"
-                            aiProvider: "{score_data.get('model_provider', '')}"
-                            aiModel: "{score_data.get('model_name', '')}"
+                            aiProvider: "{ai_provider}"
+                            aiModel: "{ai_model}"
                         }}) {{
                             id
                             name
