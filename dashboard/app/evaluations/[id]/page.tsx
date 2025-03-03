@@ -166,7 +166,8 @@ export class EvaluationService {
   // New method to fetch evaluation via the share link proxy Lambda
   async fetchEvaluationByShareToken(token: string): Promise<Evaluation> {
     try {
-      // Use the new GraphQL custom resolver instead of the REST API
+      console.log('Fetching evaluation by share token:', token);
+      
       const response = await this.client.graphql({
         query: `
           query GetResourceByShareToken($token: String!) {
@@ -207,13 +208,31 @@ export class EvaluationService {
         throw new Error(`Invalid resource type: ${shareLink.resourceType}. Expected: Evaluation`);
       }
       
-      // The resolver now returns the evaluation data directly
-      if (!result.data || !result.data.getEvaluation) {
-        throw new Error('No evaluation data returned from share link resolver');
+      // Handle the data as a string that needs to be parsed
+      if (!result.data) {
+        throw new Error('No data returned from share link resolver');
+      }
+      
+      // Parse the string data to JSON
+      let evaluationData;
+      if (typeof result.data === 'string') {
+        try {
+          const parsedData = JSON.parse(result.data);
+          if (parsedData.getEvaluation) {
+            evaluationData = parsedData.getEvaluation;
+          } else {
+            throw new Error('Missing evaluation data in parsed result');
+          }
+        } catch (e) {
+          console.error('Error parsing result.data as JSON:', e);
+          throw new Error('Failed to parse evaluation data');
+        }
+      } else {
+        throw new Error('Unexpected data format returned from share link resolver');
       }
       
       // Transform the evaluation data
-      return transformEvaluation(result.data.getEvaluation) as Evaluation;
+      return transformEvaluation(evaluationData) as Evaluation;
     } catch (error) {
       console.error('Error fetching evaluation by share token:', error);
       throw error;
@@ -251,15 +270,25 @@ export default function PublicEvaluation({
         
         // Check if the ID is likely a share token
         if (memoizedService.isShareToken(id)) {
+          console.log('Loading evaluation with share token:', id);
           data = await memoizedService.fetchEvaluationByShareToken(id);
           setIsSharedResource(true);
         } else {
+          console.log('Loading evaluation with ID:', id);
           data = await memoizedService.fetchEvaluation(id);
         }
         
+        console.log('Successfully loaded evaluation:', data);
         setEvaluation(data);
       } catch (err) {
         console.error('Error fetching evaluation:', err);
+        if (err instanceof Error) {
+          console.error('Error details:', {
+            message: err.message,
+            stack: err.stack,
+            name: err.name
+          });
+        }
         setError(err instanceof Error ? err.message : 'Failed to load evaluation');
       } finally {
         setLoading(false);
