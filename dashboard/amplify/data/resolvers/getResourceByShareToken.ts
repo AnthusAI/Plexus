@@ -1,6 +1,11 @@
 import type { Schema } from '../resource';
-import { generateClient } from 'aws-amplify/api';
 import { type GraphQLResult } from '@aws-amplify/api-graphql';
+import { Sha256 } from '@aws-crypto/sha256-js';
+import { defaultProvider } from '@aws-sdk/credential-provider-node';
+import { SignatureV4 } from '@aws-sdk/signature-v4';
+import { HttpRequest } from '@aws-sdk/protocol-http';
+import fetch from 'node-fetch';
+import { Request } from 'node-fetch';
 
 // Define the handler function with the correct type from Schema
 export const handler: Schema["getResourceByShareToken"]["functionHandler"] = async (event) => {
@@ -11,32 +16,62 @@ export const handler: Schema["getResourceByShareToken"]["functionHandler"] = asy
       throw new Error('Token is required');
     }
     
-    // Create a client to interact with the API with IAM authentication
-    const client = generateClient({
-      authMode: 'iam'
+    // Get the GraphQL endpoint from environment variables
+    const GRAPHQL_ENDPOINT = process.env.API_PLEXUSDASHBOARD_GRAPHQLAPIENDPOINTOUTPUT;
+    const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
+    
+    if (!GRAPHQL_ENDPOINT) {
+      throw new Error('GraphQL endpoint not found in environment variables');
+    }
+    
+    // Create a signer for AWS Signature v4
+    const endpoint = new URL(GRAPHQL_ENDPOINT);
+    const signer = new SignatureV4({
+      credentials: defaultProvider(),
+      region: AWS_REGION,
+      service: 'appsync',
+      sha256: Sha256
     });
     
     // Get ShareLink by token
-    const shareLinkResponse = await client.graphql({
-      query: `
-        query GetShareLinkByToken($token: String!) {
-          listShareLinks(filter: { token: { eq: $token } }) {
-            items {
-              id
-              token
-              resourceType
-              resourceId
-              expiresAt
-              viewOptions
-              lastAccessedAt
-              accessCount
-              isRevoked
-            }
+    const shareLinkQuery = `
+      query GetShareLinkByToken($token: String!) {
+        listShareLinks(filter: { token: { eq: $token } }) {
+          items {
+            id
+            token
+            resourceType
+            resourceId
+            expiresAt
+            viewOptions
+            lastAccessedAt
+            accessCount
+            isRevoked
           }
         }
-      `,
-      variables: { token }
-    }) as GraphQLResult<any>;
+      }
+    `;
+    
+    // Prepare the request to be signed
+    const shareLinkRequest = new HttpRequest({
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        host: endpoint.host
+      },
+      hostname: endpoint.host,
+      body: JSON.stringify({ 
+        query: shareLinkQuery,
+        variables: { token }
+      }),
+      path: endpoint.pathname
+    });
+    
+    // Sign and execute the request
+    const signedShareLinkRequest = await signer.sign(shareLinkRequest);
+    const shareLinkFetchRequest = new Request(GRAPHQL_ENDPOINT, signedShareLinkRequest);
+    const shareLinkFetchResponse = await fetch(shareLinkFetchRequest);
+    const shareLinkResponse = await shareLinkFetchResponse.json() as any;
     
     // Check for errors
     if (shareLinkResponse.errors && shareLinkResponse.errors.length > 0) {
@@ -65,26 +100,43 @@ export const handler: Schema["getResourceByShareToken"]["functionHandler"] = asy
     
     // Update access metrics
     const currentCount = shareLink.accessCount || 0;
-    await client.graphql({
-      query: `
-        mutation UpdateShareLinkAccess($id: ID!, $lastAccessedAt: AWSDateTime!, $accessCount: Int!) {
-          updateShareLink(input: {
-            id: $id
-            lastAccessedAt: $lastAccessedAt
-            accessCount: $accessCount
-          }) {
-            id
-            accessCount
-            lastAccessedAt
-          }
+    const updateShareLinkQuery = `
+      mutation UpdateShareLinkAccess($id: ID!, $lastAccessedAt: AWSDateTime!, $accessCount: Int!) {
+        updateShareLink(input: {
+          id: $id
+          lastAccessedAt: $lastAccessedAt
+          accessCount: $accessCount
+        }) {
+          id
+          accessCount
+          lastAccessedAt
         }
-      `,
-      variables: {
-        id: shareLink.id,
-        lastAccessedAt: new Date().toISOString(),
-        accessCount: currentCount + 1
       }
+    `;
+    
+    // Prepare the update request to be signed
+    const updateShareLinkRequest = new HttpRequest({
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        host: endpoint.host
+      },
+      hostname: endpoint.host,
+      body: JSON.stringify({ 
+        query: updateShareLinkQuery,
+        variables: {
+          id: shareLink.id,
+          lastAccessedAt: new Date().toISOString(),
+          accessCount: currentCount + 1
+        }
+      }),
+      path: endpoint.pathname
     });
+    
+    // Sign and execute the update request
+    const signedUpdateRequest = await signer.sign(updateShareLinkRequest);
+    const updateFetchRequest = new Request(GRAPHQL_ENDPOINT, signedUpdateRequest);
+    await fetch(updateFetchRequest);
     
     // Fetch the actual resource based on resourceType
     let resourceQuery;
@@ -184,10 +236,26 @@ export const handler: Schema["getResourceByShareToken"]["functionHandler"] = asy
     }
     
     // Execute the resource query
-    const resourceResponse = await client.graphql({
-      query: resourceQuery,
-      variables: resourceVariables
-    }) as GraphQLResult<any>;
+    // Prepare the resource request to be signed
+    const resourceRequest = new HttpRequest({
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        host: endpoint.host
+      },
+      hostname: endpoint.host,
+      body: JSON.stringify({ 
+        query: resourceQuery,
+        variables: resourceVariables
+      }),
+      path: endpoint.pathname
+    });
+    
+    // Sign and execute the resource request
+    const signedResourceRequest = await signer.sign(resourceRequest);
+    const resourceFetchRequest = new Request(GRAPHQL_ENDPOINT, signedResourceRequest);
+    const resourceFetchResponse = await fetch(resourceFetchRequest);
+    const resourceResponse = await resourceFetchResponse.json() as any;
     
     // Check for errors
     if (resourceResponse.errors && resourceResponse.errors.length > 0) {
