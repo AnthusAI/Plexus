@@ -530,7 +530,11 @@ const schema = a.schema({
         .query()
         .arguments({ token: a.string().required() })
         .returns(a.ref('ResourceByShareTokenResponse'))
-        .authorization(allow => [allow.guest()])
+        .authorization(allow => [
+            allow.guest(),
+            allow.publicApiKey(),
+            allow.authenticated()
+        ])
         .handler(a.handler.function(getResourceByShareTokenHandler))
 });
 
