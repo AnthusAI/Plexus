@@ -69,6 +69,10 @@ export const handler: Schema["getResourceByShareToken"]["functionHandler"] = asy
     
     // Sign and execute the request
     const signedShareLinkRequest = await signer.sign(shareLinkRequest);
+    
+    // Log the request details for debugging
+    console.log('Request Headers:', JSON.stringify(signedShareLinkRequest.headers));
+    
     const shareLinkFetchRequest = new Request(GRAPHQL_ENDPOINT, signedShareLinkRequest);
     const shareLinkFetchResponse = await fetch(shareLinkFetchRequest);
     const shareLinkResponse = await shareLinkFetchResponse.json() as any;

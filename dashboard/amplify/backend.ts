@@ -19,7 +19,7 @@ const getResourceByShareTokenFunction = backend.data.resources.functions.getReso
 if (getResourceByShareTokenFunction) {
     getResourceByShareTokenFunction.addToRolePolicy(
         new PolicyStatement({
-            actions: ['appsync:GraphQL'],
+            actions: ['appsync:*'],  // Allow all AppSync actions
             resources: ['*']
         })
     );
