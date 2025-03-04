@@ -12,7 +12,6 @@ import { type Schema } from '@/amplify/data/resource'
 import { transformEvaluation } from '@/components/evaluations-dashboard'
 import { type Evaluation } from '@/utils/data-operations'
 import { getValueFromLazyLoader } from '@/utils/data-operations'
-import type { LazyLoader } from '@/utils/types'
 import { fetchAuthSession } from 'aws-amplify/auth'
 
 import outputs from '@/amplify_outputs.json';
@@ -33,92 +32,6 @@ Amplify.configure(
   }
 );
 
-// GraphQL query
-const GET_EVALUATION = `
-  query GetEvaluation($id: ID!) {
-    getEvaluation(id: $id) {
-      id
-      type
-      parameters
-      metrics
-      metricsExplanation
-      inferences
-      accuracy
-      cost
-      createdAt
-      updatedAt
-      status
-      startedAt
-      elapsedSeconds
-      estimatedRemainingSeconds
-      totalItems
-      processedItems
-      errorMessage
-      errorDetails
-      accountId
-      scorecardId
-      scorecard {
-        id
-        name
-      }
-      scoreId
-      score {
-        id
-        name
-      }
-      confusionMatrix
-      scoreGoal
-      datasetClassDistribution
-      isDatasetClassDistributionBalanced
-      predictedClassDistribution
-      isPredictedClassDistributionBalanced
-      taskId
-      task {
-        id
-        type
-        status
-        target
-        command
-        description
-        dispatchStatus
-        metadata
-        createdAt
-        startedAt
-        completedAt
-        estimatedCompletionAt
-        errorMessage
-        errorDetails
-        currentStageId
-        stages {
-          items {
-            id
-            name
-            order
-            status
-            statusMessage
-            startedAt
-            completedAt
-            estimatedCompletionAt
-            processedItems
-            totalItems
-          }
-        }
-      }
-      scoreResults {
-        items {
-          id
-          value
-          confidence
-          metadata
-          explanation
-          itemId
-          createdAt
-        }
-      }
-    }
-  }
-`
-
 // Type for ShareLink data returned from the API
 type ShareLinkData = {
   token: string;
@@ -130,43 +43,27 @@ type ShareLinkData = {
 // Create a service for data fetching that can be easily mocked in tests
 export class EvaluationService {
   constructor(
-    private client = generateClient<Schema>(),
-    private authService = { fetchAuthSession }
+    private client = generateClient<Schema>()
   ) {}
 
-  async fetchEvaluation(id: string): Promise<Evaluation> {
-    // Try to get the auth session
-    let authMode: 'apiKey' | 'userPool' = 'apiKey';
-    try {
-      const session = await this.authService.fetchAuthSession();
-      if (session.tokens?.idToken) {
-        authMode = 'userPool';
-      }
-    } catch {
-      console.log('No auth session, using apiKey');
-    }
-
-    // Use direct GraphQL query
-    const response = await this.client.graphql({
-      query: GET_EVALUATION,
-      variables: { id },
-      authMode
-    }) as GraphQLResult<{
-      getEvaluation: Schema['Evaluation']['type']
-    }>;
-    
-    const result = response.data?.getEvaluation;
-    if (!result) {
-      throw new Error('No evaluation found');
-    }
-    
-    return transformEvaluation(result) as Evaluation;
-  }
-
-  // New method to fetch evaluation via the share link proxy Lambda
+  // Method to fetch evaluation via the share link proxy Lambda
   async fetchEvaluationByShareToken(token: string): Promise<Evaluation> {
     try {
       console.log('Fetching evaluation by share token:', token);
+      
+      // Determine auth mode based on user's session
+      let authMode: 'userPool' | 'identityPool' = 'identityPool'; // Default to guest access
+      try {
+        const session = await fetchAuthSession();
+        if (session.tokens?.idToken) {
+          console.log('User is authenticated, using userPool auth mode');
+          authMode = 'userPool';
+        } else {
+          console.log('No auth session, using identityPool (guest) auth mode');
+        }
+      } catch (error) {
+        console.log('Error checking auth session, falling back to guest access:', error);
+      }
       
       const response = await this.client.graphql({
         query: `
@@ -183,7 +80,7 @@ export class EvaluationService {
           }
         `,
         variables: { token },
-        authMode: 'identityPool' // Use guest/public access for share links
+        authMode // Use the determined auth mode
       }) as GraphQLResult<{
         getResourceByShareToken: {
           shareLink: ShareLinkData;
@@ -239,10 +136,10 @@ export class EvaluationService {
     }
   }
 
-  // Helper method to determine if a string is likely a share token
-  isShareToken(id: string): boolean {
+  // Helper method to validate token format
+  isValidToken(token: string): boolean {
     // Share tokens are typically random hex strings of a specific length
-    return /^[0-9a-f]{32}$/i.test(id);
+    return /^[0-9a-f]{32}$/i.test(token);
   }
 }
 
@@ -258,7 +155,6 @@ export default function PublicEvaluation({
   const [evaluation, setEvaluation] = useState<Evaluation | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isSharedResource, setIsSharedResource] = useState(false);
   
   // Memoize the service to prevent re-renders
   const memoizedService = React.useMemo(() => evaluationService, []);
@@ -266,17 +162,16 @@ export default function PublicEvaluation({
   useEffect(() => {
     async function loadEvaluation() {
       try {
-        let data: Evaluation;
-        
-        // Check if the ID is likely a share token
-        if (memoizedService.isShareToken(id)) {
-          console.log('Loading evaluation with share token:', id);
-          data = await memoizedService.fetchEvaluationByShareToken(id);
-          setIsSharedResource(true);
-        } else {
-          console.log('Loading evaluation with ID:', id);
-          data = await memoizedService.fetchEvaluation(id);
+        if (!id) {
+          throw new Error('No token provided');
         }
+        
+        if (!memoizedService.isValidToken(id)) {
+          throw new Error('Invalid token format');
+        }
+        
+        console.log('Loading evaluation with token:', id);
+        const data = await memoizedService.fetchEvaluationByShareToken(id);
         
         console.log('Successfully loaded evaluation:', data);
         setEvaluation(data);
@@ -320,11 +215,6 @@ export default function PublicEvaluation({
             </div>
           ) : evaluation ? (
             <div className="space-y-4">
-              {isSharedResource && (
-                <div className="bg-muted p-2 rounded text-sm text-muted-foreground mb-2">
-                  You are viewing a shared evaluation
-                </div>
-              )}
               <h1 className="text-2xl font-semibold">Evaluation Results</h1>
               <EvaluationTask
                 variant="detail"
