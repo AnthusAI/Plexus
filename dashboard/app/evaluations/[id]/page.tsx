@@ -9,7 +9,7 @@ import EvaluationTask from '@/components/EvaluationTask'
 import { generateClient } from 'aws-amplify/api'
 import { GraphQLResult } from '@aws-amplify/api-graphql'
 import { type Schema } from '@/amplify/data/resource'
-import { transformEvaluation } from '@/components/evaluations-dashboard'
+import { transformEvaluation, standardizeScoreResults } from '@/utils/data-operations'
 import { type Evaluation } from '@/utils/data-operations'
 import { getValueFromLazyLoader } from '@/utils/data-operations'
 import { fetchAuthSession } from 'aws-amplify/auth'
@@ -162,9 +162,15 @@ export default function PublicEvaluation({
   const [evaluation, setEvaluation] = useState<Evaluation | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedScoreResultId, setSelectedScoreResultId] = useState<string | null>(null);
   
   // Memoize the service to prevent re-renders
   const memoizedService = React.useMemo(() => evaluationService, []);
+
+  // Debug selected score result ID changes
+  useEffect(() => {
+    console.log('Selected score result ID changed in PublicEvaluation:', selectedScoreResultId);
+  }, [selectedScoreResultId]);
 
   useEffect(() => {
     async function loadEvaluation() {
@@ -180,7 +186,15 @@ export default function PublicEvaluation({
         console.log('Loading evaluation with token:', id);
         const data = await memoizedService.fetchEvaluationByShareToken(id);
         
-        console.log('Successfully loaded evaluation:', data);
+        console.log('Successfully loaded evaluation:', {
+          id: data.id,
+          hasScoreResults: !!data.scoreResults,
+          scoreResultsType: typeof data.scoreResults,
+          scoreResultsIsArray: Array.isArray(data.scoreResults),
+          scoreResultsHasItems: data.scoreResults && typeof data.scoreResults === 'object' && 'items' in data.scoreResults,
+          scoreResultsItemsCount: data.scoreResults && typeof data.scoreResults === 'object' && 'items' in data.scoreResults ? data.scoreResults.items?.length : 0,
+          scoreResultsRaw: data.scoreResults
+        });
         setEvaluation(data);
       } catch (err) {
         console.error('Error fetching evaluation:', err);
@@ -256,6 +270,7 @@ export default function PublicEvaluation({
               <h1 className="text-2xl font-semibold">Evaluation Results</h1>
               <EvaluationTask
                 variant="detail"
+                isFullWidth={true}
                 task={{
                   id: evaluation.id,
                   type: evaluation.type,
@@ -326,16 +341,7 @@ export default function PublicEvaluation({
                       JSON.parse(evaluation.predictedClassDistribution) :
                       evaluation.predictedClassDistribution,
                     isPredictedClassDistributionBalanced: evaluation.isPredictedClassDistributionBalanced,
-                    scoreResults: evaluation.scoreResults ? (
-                      evaluation.scoreResults.items?.map(result => ({
-                        id: result.id,
-                        value: result.value,
-                        confidence: result.confidence,
-                        explanation: null,
-                        metadata: result.metadata,
-                        itemId: result.itemId
-                      })) || []
-                    ) : [],
+                    scoreResults: standardizeScoreResults(evaluation.scoreResults),
                     task: evaluation.task ? {
                       id: evaluation.task.id,
                       accountId: (evaluation as any).accountId || '',
@@ -358,6 +364,11 @@ export default function PublicEvaluation({
                       }
                     } : null
                   }
+                }}
+                selectedScoreResultId={selectedScoreResultId}
+                onSelectScoreResult={(id) => {
+                  console.log('Score result selected in PublicEvaluation:', id);
+                  setSelectedScoreResultId(id);
                 }}
               />
             </div>
