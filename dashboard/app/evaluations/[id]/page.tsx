@@ -88,6 +88,13 @@ export class EvaluationService {
         }
       }>;
       
+      // Check for GraphQL errors
+      if (response.errors && response.errors.length > 0) {
+        const errorMessage = response.errors[0].message;
+        console.error('GraphQL error:', errorMessage);
+        throw new Error(errorMessage);
+      }
+      
       if (!response.data?.getResourceByShareToken) {
         throw new Error('Failed to load shared resource');
       }
@@ -177,14 +184,32 @@ export default function PublicEvaluation({
         setEvaluation(data);
       } catch (err) {
         console.error('Error fetching evaluation:', err);
+        
+        // Extract the error message
+        let errorMessage = 'Failed to load evaluation';
+        
         if (err instanceof Error) {
           console.error('Error details:', {
             message: err.message,
             stack: err.stack,
             name: err.name
           });
+          errorMessage = err.message;
+        } else if (typeof err === 'object' && err !== null) {
+          // Handle case where err is a GraphQL error object
+          if ('errors' in err && Array.isArray((err as any).errors) && (err as any).errors.length > 0) {
+            errorMessage = (err as any).errors[0].message;
+          }
         }
-        setError(err instanceof Error ? err.message : 'Failed to load evaluation');
+        
+        // Check for specific error messages
+        if (errorMessage.includes('Share link has expired')) {
+          setError('This evaluation share link has expired.');
+        } else if (errorMessage.includes('Share link has been revoked')) {
+          setError('This evaluation share link has been revoked.');
+        } else {
+          setError(errorMessage);
+        }
       } finally {
         setLoading(false);
       }
@@ -210,8 +235,21 @@ export default function PublicEvaluation({
               </div>
             </div>
           ) : error ? (
-            <div className="flex items-center justify-center min-h-[50vh] text-destructive">
-              {error}
+            <div className="flex flex-col items-center justify-center min-h-[50vh] text-center">
+              <div className="bg-destructive/10 p-6 rounded-lg max-w-md">
+                <h2 className="text-xl font-semibold text-destructive mb-2">Unable to Load Evaluation</h2>
+                <p className="text-destructive">{error}</p>
+                {error.includes('expired') && (
+                  <p className="mt-4 text-muted-foreground">
+                    Share links have a limited validity period. Please contact the person who shared this evaluation with you for a new link.
+                  </p>
+                )}
+                {error.includes('revoked') && (
+                  <p className="mt-4 text-muted-foreground">
+                    This share link has been manually revoked by its creator. Please contact them if you need access.
+                  </p>
+                )}
+              </div>
             </div>
           ) : evaluation ? (
             <div className="space-y-4">
