@@ -794,6 +794,8 @@ def info(scorecard: str):
             name
             key
             externalId
+            createdAt
+            updatedAt
             sections {{
                 items {{
                     id
@@ -807,14 +809,6 @@ def info(scorecard: str):
                             type
                             order
                             externalId
-                            options {{
-                                items {{
-                                    id
-                                    name
-                                    value
-                                    order
-                                }}
-                            }}
                         }}
                     }}
                 }}
@@ -861,6 +855,8 @@ def list_scores(scorecard: str, limit: int):
             name
             key
             externalId
+            createdAt
+            updatedAt
             sections {{
                 items {{
                     id
@@ -873,6 +869,7 @@ def list_scores(scorecard: str, limit: int):
                             description
                             type
                             order
+                            externalId
                         }}
                     }}
                 }}
@@ -1918,6 +1915,8 @@ def info(scorecard: str, score: str):
             name
             key
             externalId
+            createdAt
+            updatedAt
             sections {{
                 items {{
                     id
@@ -1931,7 +1930,6 @@ def info(scorecard: str, score: str):
                             type
                             order
                             externalId
-                            championVersionId
                         }}
                     }}
                 }}
