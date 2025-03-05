@@ -21,7 +21,7 @@ import boto3
 from botocore.config import Config
 from datetime import datetime, timezone, timedelta
 from collections import OrderedDict
-from typing import Optional
+from typing import Optional, Tuple, List, Dict, Any
 from sklearn.metrics import (
     confusion_matrix,
     accuracy_score
