@@ -1,4 +1,4 @@
-import { type ClientSchema, a, defineData } from "@aws-amplify/backend";
+import { type ClientSchema, a, defineData, defineFunction } from "@aws-amplify/backend";
 import * as aws_dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import { Construct } from 'constructs';
 
@@ -35,6 +35,11 @@ type DatasetVersionIndexFields = "datasetId";
 type DatasetProfileIndexFields = "datasetId" | "datasetVersionId";
 type ShareLinkIndexFields = "token" | "resourceType" | "resourceId" | "accountId";
 type ScoreVersionIndexFields = "scoreId" | "versionNumber" | "isFeatured";
+
+// Define the share token handler function
+const getResourceByShareTokenHandler = defineFunction({
+    entry: './resolvers/getResourceByShareToken.ts'
+});
 
 const schema = a.schema({
     Account: a
@@ -509,7 +514,28 @@ const schema = a.schema({
             idx("accountId"),
             idx("resourceType"),
             idx("resourceId")
+        ]),
+
+    ResourceByShareTokenResponse: a.customType({
+        shareLink: a.customType({
+            token: a.string(),
+            resourceType: a.string(),
+            resourceId: a.string(),
+            viewOptions: a.json()
+        }),
+        data: a.json()
+    }),
+    
+    getResourceByShareToken: a
+        .query()
+        .arguments({ token: a.string().required() })
+        .returns(a.ref('ResourceByShareTokenResponse'))
+        .authorization(allow => [
+            allow.guest(),
+            allow.publicApiKey(),
+            allow.authenticated()
         ])
+        .handler(a.handler.function(getResourceByShareTokenHandler))
 });
 
 export type Schema = ClientSchema<typeof schema>;

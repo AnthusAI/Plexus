@@ -6,7 +6,7 @@ import type { Schema } from "@/amplify/data/resource"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import { Square, RectangleVertical, X, ChevronDown, ChevronUp, Info, MessageCircleMore, Plus, ThumbsUp, ThumbsDown, Trash2, MoreHorizontal, Eye, RefreshCw } from "lucide-react"
+import { Square, RectangleVertical, X, ChevronDown, ChevronUp, Info, MessageCircleMore, Plus, ThumbsUp, ThumbsDown, Trash2, MoreHorizontal, Eye, RefreshCw, Share } from "lucide-react"
 import { format, formatDistanceToNow, parseISO } from "date-fns"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -60,6 +60,9 @@ import type { LazyLoader } from '@/utils/types'
 import { observeRecentEvaluations, observeTaskUpdates, observeTaskStageUpdates } from '@/utils/subscriptions'
 import { useEvaluationData } from '@/features/evaluations/hooks/useEvaluationData'
 import { toast } from "sonner"
+import { shareLinkClient, ShareLinkViewOptions } from "@/utils/share-link-client"
+import { fetchAuthSession } from 'aws-amplify/auth'
+import { ShareResourceModal } from "@/components/share-resource-modal"
 
 type TaskResponse = {
   items: Evaluation[]
@@ -380,6 +383,7 @@ export default function EvaluationsDashboard() {
     threshold: 0,
   })
   const [selectedScoreResultId, setSelectedScoreResultId] = useState<string | null>(null)
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false)
 
   // Fetch account ID
   useEffect(() => {
@@ -500,7 +504,7 @@ export default function EvaluationsDashboard() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={copyLinkToClipboard}>
-                <Eye className="mr-2 h-4 w-4" />
+                <Share className="mr-2 h-4 w-4" />
                 Share
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleDelete(evaluation.id)}>
@@ -538,19 +542,48 @@ export default function EvaluationsDashboard() {
   }, []);
 
   const copyLinkToClipboard = () => {
-    navigator.clipboard.writeText(window.location.href + '/' + selectedEvaluationId).then(
-      () => {
-        toast.success("Link copied to clipboard", {
-          description: "You can now share this evaluation with others"
-        });
-      },
-      () => {
-        toast.error("Failed to copy link", {
-          description: "Please try again"
-        });
-      }
-    );
-  };
+    if (!selectedEvaluationId || !accountId) return;
+    setIsShareModalOpen(true);
+  }
+
+  const handleCreateShareLink = async (expiresAt: string, viewOptions: ShareLinkViewOptions) => {
+    if (!selectedEvaluationId || !accountId) return;
+    
+    try {
+      // Create a share link for the evaluation using shareLinkClient
+      const { url } = await shareLinkClient.create({
+        resourceType: 'Evaluation',
+        resourceId: selectedEvaluationId,
+        accountId: accountId,
+        expiresAt,
+        viewOptions
+      });
+      
+      // Copy the URL to clipboard
+      navigator.clipboard.writeText(url).then(
+        () => {
+          toast.success("Share link created and copied to clipboard", {
+            description: "You can now share this evaluation with others"
+          });
+        },
+        () => {
+          toast.error("Failed to copy link", {
+            description: "The share link was created but couldn't be copied to clipboard"
+          });
+        }
+      );
+    } catch (error) {
+      console.error("Error creating share link:", error);
+      toast.error("Failed to create share link", {
+        description: "An error occurred while creating the share link"
+      });
+    }
+  }
+
+  // Update the modal close handler to be simpler since we're handling cleanup in the modal component
+  const handleCloseShareModal = useCallback(() => {
+    setIsShareModalOpen(false);
+  }, []);
 
   interface EvaluationsGridProps {
     evaluations: Evaluation[];
@@ -730,6 +763,12 @@ export default function EvaluationsDashboard() {
           </div>
         )}
       </div>
+      <ShareResourceModal 
+        isOpen={isShareModalOpen}
+        onClose={handleCloseShareModal}
+        onShare={handleCreateShareLink}
+        resourceType="Evaluation"
+      />
     </div>
   )
 }
