@@ -60,8 +60,9 @@ import type { LazyLoader } from '@/utils/types'
 import { observeRecentEvaluations, observeTaskUpdates, observeTaskStageUpdates } from '@/utils/subscriptions'
 import { useEvaluationData } from '@/features/evaluations/hooks/useEvaluationData'
 import { toast } from "sonner"
-import { shareLinkClient } from "@/utils/share-link-client"
+import { shareLinkClient, ShareLinkViewOptions } from "@/utils/share-link-client"
 import { fetchAuthSession } from 'aws-amplify/auth'
+import { ShareEvaluationModal } from "@/components/share-evaluation-modal"
 
 type TaskResponse = {
   items: Evaluation[]
@@ -382,6 +383,7 @@ export default function EvaluationsDashboard() {
     threshold: 0,
   })
   const [selectedScoreResultId, setSelectedScoreResultId] = useState<string | null>(null)
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false)
 
   // Fetch account ID
   useEffect(() => {
@@ -539,7 +541,12 @@ export default function EvaluationsDashboard() {
     setSelectedScoreResultId(id);
   }, []);
 
-  const copyLinkToClipboard = async () => {
+  const copyLinkToClipboard = () => {
+    if (!selectedEvaluationId || !accountId) return;
+    setIsShareModalOpen(true);
+  }
+
+  const handleCreateShareLink = async (expiresAt: string, viewOptions: ShareLinkViewOptions) => {
     if (!selectedEvaluationId || !accountId) return;
     
     try {
@@ -548,13 +555,8 @@ export default function EvaluationsDashboard() {
         resourceType: 'Evaluation',
         resourceId: selectedEvaluationId,
         accountId: accountId,
-        // Set expiration date (30 days from now)
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-        // Configure view options
-        viewOptions: {
-          displayMode: 'detailed',
-          includeMetrics: true
-        }
+        expiresAt,
+        viewOptions
       });
       
       // Copy the URL to clipboard
@@ -571,12 +573,17 @@ export default function EvaluationsDashboard() {
         }
       );
     } catch (error) {
-      console.error('Error creating share link:', error);
+      console.error("Error creating share link:", error);
       toast.error("Failed to create share link", {
-        description: "Please try again"
+        description: "An error occurred while creating the share link"
       });
     }
-  };
+  }
+
+  // Update the modal close handler to be simpler since we're handling cleanup in the modal component
+  const handleCloseShareModal = useCallback(() => {
+    setIsShareModalOpen(false);
+  }, []);
 
   interface EvaluationsGridProps {
     evaluations: Evaluation[];
@@ -756,6 +763,11 @@ export default function EvaluationsDashboard() {
           </div>
         )}
       </div>
+      <ShareEvaluationModal 
+        isOpen={isShareModalOpen}
+        onClose={handleCloseShareModal}
+        onShare={handleCreateShareLink}
+      />
     </div>
   )
 }
