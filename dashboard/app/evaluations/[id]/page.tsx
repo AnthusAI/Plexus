@@ -326,6 +326,16 @@ export default function PublicEvaluation({
                       JSON.parse(evaluation.predictedClassDistribution) :
                       evaluation.predictedClassDistribution,
                     isPredictedClassDistributionBalanced: evaluation.isPredictedClassDistributionBalanced,
+                    scoreResults: evaluation.scoreResults ? (
+                      evaluation.scoreResults.items?.map(result => ({
+                        id: result.id,
+                        value: result.value,
+                        confidence: result.confidence,
+                        explanation: null,
+                        metadata: result.metadata,
+                        itemId: result.itemId
+                      })) || []
+                    ) : [],
                     task: evaluation.task ? {
                       id: evaluation.task.id,
                       accountId: (evaluation as any).accountId || '',
