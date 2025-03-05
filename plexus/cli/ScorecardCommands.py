@@ -1344,7 +1344,8 @@ def fix(scorecard: str, skip_duplicate_check: bool, skip_external_id_check: bool
 @click.option('--skip-duplicate-check', is_flag=True, help='Skip checking for and removing duplicate scores')
 @click.option('--skip-external-id-check', is_flag=True, help='Skip checking for and fixing missing external IDs')
 @click.option('--file', help='Path to specific YAML file to push (if not provided, will search in scorecards/ directory)')
-def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external_id_check: bool, file: Optional[str] = None):
+@click.option('--note', help='Note to include when creating a new score version')
+def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external_id_check: bool, file: Optional[str] = None, note: Optional[str] = None):
     """Push scorecard configuration to the API.
     
     This command finds a scorecard by the provided identifier, loads its configuration from a YAML file,
@@ -1358,6 +1359,7 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
         plexus scorecards push --scorecard qa-v1 --skip-duplicate-check
         plexus scorecards push --scorecard 1234 --account acme
         plexus scorecards push --scorecard "QA Scorecard" --file ./my-scorecards/qa.yaml
+        plexus scorecards push --scorecard "QA Scorecard" --note "Updated scoring logic"
     """
     client = create_client()
     
@@ -1655,11 +1657,20 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
                         # and default_flow_style=False for better readability
                         yaml_config = yaml.dump(score_config_data, sort_keys=False, default_flow_style=False)
                         
+                        # Get version note - either from command line or prompt user
+                        version_note = note
+                        if version_note is None:
+                            console.print(f"[yellow]Creating new version for score: {score_name}[/yellow]")
+                            version_note = click.prompt("Enter a note for this version (press Enter for no note)", default="", show_default=False)
+                        
                         # Create new ScoreVersion
                         now = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
                         
                         # Handle parentVersionId - if null, don't include it in the mutation
                         parent_version_field = f'parentVersionId: "{parent_version_id}",' if parent_version_id else ""
+                        
+                        # Include note in mutation if provided
+                        note_field = f'note: {json.dumps(version_note)},' if version_note else ""
                         
                         create_version_mutation = f"""
                         mutation CreateScoreVersion {{
@@ -1670,6 +1681,7 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
                                 createdAt: "{now}"
                                 updatedAt: "{now}"
                                 {parent_version_field}
+                                {note_field}
                             }}) {{
                                 id
                                 scoreId
@@ -1678,6 +1690,7 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
                                 createdAt
                                 updatedAt
                                 parentVersionId
+                                note
                             }}
                         }}
                         """
@@ -1771,6 +1784,15 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
                     # and default_flow_style=False for better readability
                     yaml_config = yaml.dump(score_config_data, sort_keys=False, default_flow_style=False)
                     
+                    # Get version note - either from command line or prompt user
+                    version_note = note
+                    if version_note is None:
+                        console.print(f"[yellow]Creating initial version for new score: {score_name}[/yellow]")
+                        version_note = click.prompt("Enter a note for this version (press Enter for no note)", default="", show_default=False)
+                    
+                    # Include note in mutation if provided
+                    note_field = f'note: {json.dumps(version_note)},' if version_note else ""
+                    
                     create_version_mutation = f"""
                     mutation CreateScoreVersion {{
                         createScoreVersion(input: {{
@@ -1779,6 +1801,7 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
                             isFeatured: true
                             createdAt: "{now}"
                             updatedAt: "{now}"
+                            {note_field}
                         }}) {{
                             id
                             scoreId
@@ -1786,6 +1809,7 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
                             isFeatured
                             createdAt
                             updatedAt
+                            note
                         }}
                     }}
                     """
