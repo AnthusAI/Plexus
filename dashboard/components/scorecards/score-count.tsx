@@ -23,10 +23,17 @@ export const ScoreCount: React.FC<ScoreCountProps> = ({ scorecard }) => {
 
         // Iterate through each section to count the scores
         for (const section of sections) {
-          // With our optimized data structure, we can get all scores in one go
-          const scoresResult = await section.scores()
-          const scores = scoresResult.data || []
-          total += scores.length
+          let sectionTotal = 0
+          let nextToken: string | null = null
+          
+          do {
+            const scoresResult = await section.scores({ nextToken })
+            const scores = scoresResult.data || []
+            sectionTotal += scores.length
+            nextToken = scoresResult.nextToken ?? null
+          } while (nextToken)
+          
+          total += sectionTotal
         }
 
         setCount(total)

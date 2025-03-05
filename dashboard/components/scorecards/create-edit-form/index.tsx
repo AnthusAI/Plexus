@@ -152,67 +152,57 @@ export function ScorecardForm({
   }, [scorecard, accountId])
 
   useEffect(() => {
-    if (scorecard) {
-      console.log('ScorecardForm received scorecard:', scorecard)
-      
-      // Process the sections and scores that are already loaded
-      const processScorecard = async () => {
-        try {
-          const sectionsData = await scorecard.sections()
+    async function loadSections() {
+      if (scorecard) {
+        console.log('ScorecardForm received scorecard:', scorecard)
+        const sectionsResult = await scorecard.sections()
+        console.log('Loaded sections:', sectionsResult)
+        
+        if (sectionsResult.data) {
+          // Load sections with their scores
+          const sectionsWithScores = await Promise.all(
+            sectionsResult.data.map(async section => {
+              const scoresResult = await section.scores()
+              console.log(`Loaded scores for section ${section.id}:`, scoresResult)
+              
+              return {
+                id: section.id,
+                name: section.name,
+                order: section.order,
+                scores: scoresResult.data?.map(score => {
+                  return {
+                    id: score.id,
+                    name: score.name,
+                    type: score.type,
+                    order: score.order,
+                    sectionId: section.id,
+                    accuracy: score.accuracy ?? 0,
+                    version: score.version ?? Date.now().toString(),
+                    timestamp: new Date(score.createdAt ?? Date.now()),
+                    aiProvider: score.aiProvider ?? undefined,
+                    aiModel: score.aiModel ?? undefined,
+                    metadata: {
+                      configuration: {},
+                      distribution: [],
+                      versionHistory: [],
+                      isFineTuned: false
+                    }
+                  }
+                }) ?? []
+              }
+            })
+          )
           
-          if (sectionsData.data && sectionsData.data.length > 0) {
-            const sectionsWithScores = await Promise.all(
-              sectionsData.data.map(async section => {
-                const scoresData = await section.scores()
-                
-                return {
-                  id: section.id,
-                  name: section.name,
-                  order: section.order,
-                  scores: scoresData.data?.map(score => {
-                    // Access configuration through championVersion if available
-                    let metadataConfig: any = {};
-                    
-                    if (score.championVersion && typeof score.championVersion !== 'function') {
-                      metadataConfig = (score.championVersion as any).configuration || {};
-                    }
-                    
-                    return {
-                      id: score.id,
-                      name: score.name,
-                      type: score.type,
-                      order: score.order,
-                      sectionId: section.id,
-                      accuracy: score.accuracy ?? 0,
-                      version: score.version ?? Date.now().toString(),
-                      timestamp: new Date(score.createdAt ?? Date.now()),
-                      aiProvider: score.aiProvider ?? undefined,
-                      aiModel: score.aiModel ?? undefined,
-                      metadata: {
-                        configuration: metadataConfig.configuration ?? {},
-                        distribution: metadataConfig.distribution ?? [],
-                        versionHistory: metadataConfig.versionHistory ?? [],
-                        isFineTuned: metadataConfig.isFineTuned ?? false
-                      }
-                    }
-                  }) ?? []
-                }
-              })
-            )
-            
-            // Update formData with sections and their scores
-            setFormData(prevData => ({
-              ...prevData,
-              sections: sectionsWithScores
-            }))
-          }
-        } catch (error) {
-          console.error('Error processing scorecard data:', error)
+          // Update formData with sections and their scores
+          setFormData(prevData => ({
+            ...prevData,
+            sections: sectionsWithScores
+          }))
         }
       }
-      
-      processScorecard()
     }
+    
+    loadSections()
   }, [scorecard])
 
   function initializeFormData(scorecard: Schema['Scorecard']['type'] | null, accountId: string): FormData {

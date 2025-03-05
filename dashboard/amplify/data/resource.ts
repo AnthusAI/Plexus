@@ -81,17 +81,16 @@ const schema = a.schema({
             externalId: a.string(),
             itemId: a.string(),
             item: a.belongsTo('Item', 'itemId'),
-            updatedAt: a.datetime(),
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
             allow.authenticated()
         ])
-        .secondaryIndexes((idx) => [
-            idx("accountId").sortKeys(["updatedAt"]),
-            idx("key" as any),
-            idx("externalId" as any),
-            idx("name" as any)
+        .secondaryIndexes((idx: (field: ScorecardIndexFields) => any) => [
+            idx("accountId"),
+            idx("key"),
+            idx("externalId"),
+            idx("name")
         ]),
 
     ScorecardSection: a
