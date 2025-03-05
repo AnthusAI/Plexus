@@ -12,129 +12,141 @@ import { type Schema } from '@/amplify/data/resource'
 import { transformEvaluation } from '@/components/evaluations-dashboard'
 import { type Evaluation } from '@/utils/data-operations'
 import { getValueFromLazyLoader } from '@/utils/data-operations'
-import type { LazyLoader } from '@/utils/types'
 import { fetchAuthSession } from 'aws-amplify/auth'
 
-// GraphQL query
-const GET_EVALUATION = `
-  query GetEvaluation($id: ID!) {
-    getEvaluation(id: $id) {
-      id
-      type
-      parameters
-      metrics
-      metricsExplanation
-      inferences
-      accuracy
-      cost
-      createdAt
-      updatedAt
-      status
-      startedAt
-      elapsedSeconds
-      estimatedRemainingSeconds
-      totalItems
-      processedItems
-      errorMessage
-      errorDetails
-      accountId
-      scorecardId
-      scorecard {
-        id
-        name
-      }
-      scoreId
-      score {
-        id
-        name
-      }
-      confusionMatrix
-      scoreGoal
-      datasetClassDistribution
-      isDatasetClassDistributionBalanced
-      predictedClassDistribution
-      isPredictedClassDistributionBalanced
-      taskId
-      task {
-        id
-        type
-        status
-        target
-        command
-        description
-        dispatchStatus
-        metadata
-        createdAt
-        startedAt
-        completedAt
-        estimatedCompletionAt
-        errorMessage
-        errorDetails
-        currentStageId
-        stages {
-          items {
-            id
-            name
-            order
-            status
-            statusMessage
-            startedAt
-            completedAt
-            estimatedCompletionAt
-            processedItems
-            totalItems
-          }
-        }
-      }
-      scoreResults {
-        items {
-          id
-          value
-          confidence
-          metadata
-          explanation
-          itemId
-          createdAt
-        }
-      }
+import outputs from '@/amplify_outputs.json';
+import { Amplify } from 'aws-amplify';
+
+// Configure Amplify with explicit guest access enabled
+Amplify.configure(
+  {
+    ...outputs,
+    Auth: {
+      Cognito: {
+        identityPoolId: outputs.auth.identity_pool_id,
+        userPoolClientId: outputs.auth.user_pool_client_id,
+        userPoolId: outputs.auth.user_pool_id,
+        allowGuestAccess: true,
+      },
     }
   }
-`
+);
+
+// Type for ShareLink data returned from the API
+type ShareLinkData = {
+  token: string;
+  resourceType: string;
+  resourceId: string;
+  viewOptions: Record<string, any>;
+};
 
 // Create a service for data fetching that can be easily mocked in tests
 export class EvaluationService {
   constructor(
-    private client = generateClient<Schema>(),
-    private authService = { fetchAuthSession }
+    private client = generateClient<Schema>()
   ) {}
 
-  async fetchEvaluation(id: string): Promise<Evaluation> {
-    // Try to get the auth session
-    let authMode: 'apiKey' | 'userPool' = 'apiKey';
+  // Method to fetch evaluation via the share link proxy Lambda
+  async fetchEvaluationByShareToken(token: string): Promise<Evaluation> {
     try {
-      const session = await this.authService.fetchAuthSession();
-      if (session.tokens?.idToken) {
-        authMode = 'userPool';
+      console.log('Fetching evaluation by share token:', token);
+      
+      // Determine auth mode based on user's session
+      let authMode: 'userPool' | 'identityPool' = 'identityPool'; // Default to guest access
+      try {
+        const session = await fetchAuthSession();
+        if (session.tokens?.idToken) {
+          console.log('User is authenticated, using userPool auth mode');
+          authMode = 'userPool';
+        } else {
+          console.log('No auth session, using identityPool (guest) auth mode');
+        }
+      } catch (error) {
+        console.log('Error checking auth session, falling back to guest access:', error);
       }
-    } catch {
-      console.log('No auth session, using apiKey');
+      
+      const response = await this.client.graphql({
+        query: `
+          query GetResourceByShareToken($token: String!) {
+            getResourceByShareToken(token: $token) {
+              shareLink {
+                token
+                resourceType
+                resourceId
+                viewOptions
+              }
+              data
+            }
+          }
+        `,
+        variables: { token },
+        authMode // Use the determined auth mode
+      }) as GraphQLResult<{
+        getResourceByShareToken: {
+          shareLink: ShareLinkData;
+          data: any;
+        }
+      }>;
+      
+      // Check for GraphQL errors
+      if (response.errors && response.errors.length > 0) {
+        const errorMessage = response.errors[0].message;
+        console.error('GraphQL error:', errorMessage);
+        throw new Error(errorMessage);
+      }
+      
+      if (!response.data?.getResourceByShareToken) {
+        throw new Error('Failed to load shared resource');
+      }
+      
+      const result = response.data.getResourceByShareToken;
+      
+      if (!result.shareLink) {
+        throw new Error('Invalid share link data');
+      }
+      
+      const shareLink = result.shareLink;
+      
+      // Verify that this is an Evaluation resource
+      if (shareLink.resourceType !== 'Evaluation') {
+        throw new Error(`Invalid resource type: ${shareLink.resourceType}. Expected: Evaluation`);
+      }
+      
+      // Handle the data as a string that needs to be parsed
+      if (!result.data) {
+        throw new Error('No data returned from share link resolver');
+      }
+      
+      // Parse the string data to JSON
+      let evaluationData;
+      if (typeof result.data === 'string') {
+        try {
+          const parsedData = JSON.parse(result.data);
+          if (parsedData.getEvaluation) {
+            evaluationData = parsedData.getEvaluation;
+          } else {
+            throw new Error('Missing evaluation data in parsed result');
+          }
+        } catch (e) {
+          console.error('Error parsing result.data as JSON:', e);
+          throw new Error('Failed to parse evaluation data');
+        }
+      } else {
+        throw new Error('Unexpected data format returned from share link resolver');
+      }
+      
+      // Transform the evaluation data
+      return transformEvaluation(evaluationData) as Evaluation;
+    } catch (error) {
+      console.error('Error fetching evaluation by share token:', error);
+      throw error;
     }
+  }
 
-    // Use direct GraphQL query
-    const response = await this.client.graphql({
-      query: GET_EVALUATION,
-      variables: { id },
-      authMode
-    }) as GraphQLResult<{
-      getEvaluation: Schema['Evaluation']['type']
-    }>;
-    
-    const result = response.data?.getEvaluation;
-    if (!result) {
-      throw new Error('No evaluation found');
-    }
-    
-    return transformEvaluation(result) as Evaluation;
+  // Helper method to validate token format
+  isValidToken(token: string): boolean {
+    // Share tokens are typically random hex strings of a specific length
+    return /^[0-9a-f]{32}$/i.test(token);
   }
 }
 
@@ -157,11 +169,47 @@ export default function PublicEvaluation({
   useEffect(() => {
     async function loadEvaluation() {
       try {
-        const data = await memoizedService.fetchEvaluation(id);
+        if (!id) {
+          throw new Error('No token provided');
+        }
+        
+        if (!memoizedService.isValidToken(id)) {
+          throw new Error('Invalid token format');
+        }
+        
+        console.log('Loading evaluation with token:', id);
+        const data = await memoizedService.fetchEvaluationByShareToken(id);
+        
+        console.log('Successfully loaded evaluation:', data);
         setEvaluation(data);
       } catch (err) {
         console.error('Error fetching evaluation:', err);
-        setError('Failed to load evaluation');
+        
+        // Extract the error message
+        let errorMessage = 'Failed to load evaluation';
+        
+        if (err instanceof Error) {
+          console.error('Error details:', {
+            message: err.message,
+            stack: err.stack,
+            name: err.name
+          });
+          errorMessage = err.message;
+        } else if (typeof err === 'object' && err !== null) {
+          // Handle case where err is a GraphQL error object
+          if ('errors' in err && Array.isArray((err as any).errors) && (err as any).errors.length > 0) {
+            errorMessage = (err as any).errors[0].message;
+          }
+        }
+        
+        // Check for specific error messages
+        if (errorMessage.includes('Share link has expired')) {
+          setError('This evaluation share link has expired.');
+        } else if (errorMessage.includes('Share link has been revoked')) {
+          setError('This evaluation share link has been revoked.');
+        } else {
+          setError(errorMessage);
+        }
       } finally {
         setLoading(false);
       }
@@ -187,8 +235,21 @@ export default function PublicEvaluation({
               </div>
             </div>
           ) : error ? (
-            <div className="flex items-center justify-center min-h-[50vh] text-destructive">
-              {error}
+            <div className="flex flex-col items-center justify-center min-h-[50vh] text-center">
+              <div className="bg-destructive/10 p-6 rounded-lg max-w-md">
+                <h2 className="text-xl font-semibold text-destructive mb-2">Unable to Load Evaluation</h2>
+                <p className="text-destructive">{error}</p>
+                {error.includes('expired') && (
+                  <p className="mt-4 text-muted-foreground">
+                    Share links have a limited validity period. Please contact the person who shared this evaluation with you for a new link.
+                  </p>
+                )}
+                {error.includes('revoked') && (
+                  <p className="mt-4 text-muted-foreground">
+                    This share link has been manually revoked by its creator. Please contact them if you need access.
+                  </p>
+                )}
+              </div>
             </div>
           ) : evaluation ? (
             <div className="space-y-4">
@@ -248,7 +309,7 @@ export default function PublicEvaluation({
                     estimatedRemainingSeconds: evaluation.estimatedRemainingSeconds || null,
                     startedAt: evaluation.startedAt || undefined,
                     errorMessage: evaluation.errorMessage || undefined,
-                    errorDetails: evaluation.errorDetails || null,
+                    errorDetails: evaluation.errorDetails || undefined,
                     confusionMatrix: evaluation.confusionMatrix ? {
                       matrix: typeof evaluation.confusionMatrix === 'string' ? 
                         JSON.parse(evaluation.confusionMatrix).matrix : 
@@ -265,6 +326,16 @@ export default function PublicEvaluation({
                       JSON.parse(evaluation.predictedClassDistribution) :
                       evaluation.predictedClassDistribution,
                     isPredictedClassDistributionBalanced: evaluation.isPredictedClassDistributionBalanced,
+                    scoreResults: evaluation.scoreResults ? (
+                      evaluation.scoreResults.items?.map(result => ({
+                        id: result.id,
+                        value: result.value,
+                        confidence: result.confidence,
+                        explanation: null,
+                        metadata: result.metadata,
+                        itemId: result.itemId
+                      })) || []
+                    ) : [],
                     task: evaluation.task ? {
                       id: evaluation.task.id,
                       accountId: (evaluation as any).accountId || '',
