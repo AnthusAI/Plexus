@@ -128,7 +128,7 @@ def scorecards():
     pass
 
 @scorecards.command()
-@click.argument('account')
+@click.option('--account', required=True, help='Account name, key, or ID to scope the query')
 @click.option('--name', help='Filter by scorecard name')
 @click.option('--key', help='Filter by scorecard key')
 @click.option('--columns', type=int, default=1, help='Number of columns to display')
@@ -136,10 +136,7 @@ def scorecards():
 @click.option('--fast', is_flag=True, help='Skip fetching sections and scores for faster results')
 @click.option('--debug', is_flag=True, help='Show debug information')
 def list(account: str, name: Optional[str], key: Optional[str], columns: int, show_scores: bool, fast: bool, debug: bool):
-    """List dashboard scorecards with optional filtering.
-    
-    ACCOUNT: Account name, key, or ID to scope the query
-    """
+    """List dashboard scorecards with optional filtering."""
     client = create_client()
     console.print("[bold]Fetching scorecards...[/bold]")
     
@@ -266,8 +263,12 @@ def list(account: str, name: Optional[str], key: Optional[str], columns: int, sh
                                         order
                                         type
                                     }
+                                    # Add the count of scores
+                                    nextToken
                                 }
                             }
+                            # Add the count of sections
+                            nextToken
                         }
                     }
                 }
@@ -331,6 +332,42 @@ def list(account: str, name: Optional[str], key: Optional[str], columns: int, sh
                 
                 # Add score count
                 if not fast:
+                    # Check if we need to fetch the actual score count
+                    if score_count == 0 and hasattr(scorecard, 'id'):
+                        try:
+                            # Query to get the actual score count
+                            count_query = """
+                            query GetScoreCount($scorecardId: ID!) {
+                                getScorecard(id: $scorecardId) {
+                                    id
+                                    sections {
+                                        items {
+                                            scores {
+                                                items {
+                                                    id
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            """
+                            count_result = client.execute(count_query, {"scorecardId": scorecard.id})
+                            scorecard_data = count_result.get('getScorecard', {})
+                            
+                            # Calculate the actual score count
+                            actual_score_count = 0
+                            if 'sections' in scorecard_data and 'items' in scorecard_data['sections']:
+                                for section in scorecard_data['sections']['items']:
+                                    if 'scores' in section and 'items' in section['scores']:
+                                        actual_score_count += len(section['scores']['items'])
+                            
+                            if actual_score_count > 0:
+                                score_count = actual_score_count
+                        except Exception as e:
+                            if debug:
+                                console.print(f"[dim]DEBUG: Error fetching score count: {str(e)}[/dim]")
+                    
                     table.add_row("Score Count", f"[bold green]{score_count}[/bold green]")
                 else:
                     table.add_row("Score Count", "[dim](not fetched in fast mode)[/dim]")
@@ -1160,4 +1197,82 @@ def delete(task_id: Optional[str], account_id: Optional[str], status: Optional[s
 
 def main():
     """Entry point for the Plexus CLI."""
-    cli(standalone_mode=False)
+    try:
+        cli(standalone_mode=False)
+    except click.exceptions.MissingParameter as e:
+        from plexus.cli.console import console
+        
+        # Create a nicely formatted error panel
+        console.print("\n[bold red]Error:[/bold red] Missing required parameter", style="bold red")
+        
+        # Extract parameter name and command context
+        param_name = e.param.name if hasattr(e, 'param') and hasattr(e.param, 'name') else "unknown"
+        command_name = e.ctx.command.name if hasattr(e, 'ctx') and hasattr(e.ctx, 'command') and hasattr(e.ctx.command, 'name') else "unknown"
+        parent_name = e.ctx.parent.command.name if hasattr(e, 'ctx') and hasattr(e.ctx, 'parent') and hasattr(e.ctx.parent, 'command') and hasattr(e.ctx.parent.command, 'name') else ""
+        
+        # Show error details in a panel
+        from rich.panel import Panel
+        error_details = f"Command: [cyan]{command_name}[/cyan]\nMissing parameter: [yellow]{param_name}[/yellow]"
+        console.print(Panel(error_details, title="[bold red]Error Details[/bold red]", border_style="red"))
+        
+        # Show usage help if available
+        if hasattr(e, 'ctx') and hasattr(e.ctx, 'command') and hasattr(e.ctx.command, 'get_help'):
+            usage = e.ctx.command.get_help(e.ctx).split('\n')
+            usage_text = "\n".join(usage[:10])  # Show first few lines of help
+            console.print(Panel(f"[green]{usage_text}[/green]", title="[bold]Usage Help[/bold]", border_style="green"))
+        
+        # Add a suggestion for how to fix the error
+        if param_name == "account":
+            suggestion = f"Try specifying an account name or ID:\n[bold cyan]plexus {parent_name} {command_name} --account your-account-name[/bold cyan]"
+            console.print(Panel(suggestion, title="[bold yellow]Suggestion[/bold yellow]", border_style="yellow"))
+        else:
+            suggestion = f"Make sure to provide all required parameters shown in the usage help above."
+            console.print(Panel(suggestion, title="[bold yellow]Suggestion[/bold yellow]", border_style="yellow"))
+        
+        sys.exit(1)
+    except click.exceptions.ClickException as e:
+        from plexus.cli.console import console
+        from rich.panel import Panel
+        
+        # Create a nicely formatted error panel
+        error_type = type(e).__name__
+        console.print(f"\n[bold red]Error:[/bold red] {error_type}", style="bold red")
+        
+        # Show error details in a panel
+        error_message = e.format_message()
+        console.print(Panel(f"{error_message}", title="[bold red]Error Details[/bold red]", border_style="red"))
+        
+        # Add context-specific help based on the error type
+        if isinstance(e, click.exceptions.UsageError):
+            if hasattr(e, 'ctx') and hasattr(e.ctx, 'command') and hasattr(e.ctx.command, 'get_help'):
+                usage = e.ctx.command.get_help(e.ctx).split('\n')
+                usage_text = "\n".join(usage[:10])  # Show first few lines of help
+                console.print(Panel(f"[green]{usage_text}[/green]", title="[bold]Usage Help[/bold]", border_style="green"))
+        
+        # Add a general suggestion
+        suggestion = "Check the command syntax and try again. Use --help for more information."
+        console.print(Panel(suggestion, title="[bold yellow]Suggestion[/bold yellow]", border_style="yellow"))
+        
+        sys.exit(e.exit_code)
+    except Exception as e:
+        from plexus.cli.console import console
+        from rich.panel import Panel
+        from rich.traceback import Traceback
+        
+        # Create a nicely formatted error panel
+        error_type = type(e).__name__
+        console.print(f"\n[bold red]Unexpected Error:[/bold red] {error_type}", style="bold red")
+        
+        # Show error details in a panel
+        error_message = str(e)
+        console.print(Panel(f"{error_message}", title="[bold red]Error Details[/bold red]", border_style="red"))
+        
+        # Show a simplified traceback
+        console.print("[bold]Traceback:[/bold]")
+        console.print(Traceback(width=100, show_locals=False))
+        
+        # Add a general suggestion
+        suggestion = "This appears to be an unexpected error. Please report this issue with the error details above."
+        console.print(Panel(suggestion, title="[bold yellow]Suggestion[/bold yellow]", border_style="yellow"))
+        
+        sys.exit(1)
