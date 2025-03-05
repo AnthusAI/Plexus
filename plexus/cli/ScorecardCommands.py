@@ -1156,8 +1156,7 @@ def pull(scorecard: Optional[str], account: str, output: str):
                         'type': score.get('type'),
                         'externalId': score.get('externalId', ''),
                         'championVersionId': score.get('championVersion', {}).get('id', ''),
-                        'versions': [],
-                        'options': []
+                        'versions': []
                     }
                     
                     # Add configuration if available
@@ -1180,15 +1179,6 @@ def pull(scorecard: Optional[str], account: str, output: str):
                                     console.print(f"[yellow]Warning: Configuration for score {score.get('name')} is not a valid YAML dictionary[/yellow]")
                             except Exception as e:
                                 console.print(f"[yellow]Warning: Could not parse configuration for score {score.get('name')}: {e}[/yellow]")
-                    
-                    # Add options if available
-                    if 'options' in score and score['options'].get('items'):
-                        for option in score['options']['items']:
-                            score_data['options'].append({
-                                'name': option.get('name'),
-                                'value': option.get('value'),
-                                'order': option.get('order')
-                            })
                     
                     section_data['scores'].append(score_data)
                 
@@ -1414,14 +1404,6 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
                             type
                             order
                             externalId
-                            options {{
-                                items {{
-                                    id
-                                    name
-                                    value
-                                    order
-                                }}
-                            }}
                         }}
                     }}
                 }}
@@ -1711,12 +1693,6 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
                         if version_note is None:
                             console.print(f"[yellow]Creating new version for score: {score_name}[/yellow]")
                             version_note = click.prompt("Enter a note for this version (press Enter for no note)", default="", show_default=False)
-                        
-                        # Create new ScoreVersion
-                        now = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
-                        
-                        # Handle parentVersionId - if null, don't include it in the mutation
-                        parent_version_field = f'parentVersionId: "{parent_version_id}",' if parent_version_id else ""
                         
                         # Include note in mutation if provided
                         note_field = f'note: {json.dumps(version_note)},' if version_note else ""
@@ -2086,17 +2062,6 @@ def info(scorecard: str, score: str):
                 if i < len(versions) - 1:
                     content.append("")
         
-        # Add options if available
-        if 'options' in found_score and found_score['options'].get('items'):
-            content.append("")
-            content.append("[bold]Options[/bold]")
-            
-            # Sort options by order
-            sorted_options = sorted(found_score['options']['items'], key=lambda o: o.get('order', 0))
-            
-            for option in sorted_options:
-                content.append(f"- [blue]{option.get('name')}[/blue]: [magenta]{option.get('value')}[/magenta]")
-        
         # Create panel with the content
         panel = rich.panel.Panel(
             "\n".join(content),
@@ -2109,142 +2074,6 @@ def info(scorecard: str, score: str):
         
     except Exception as e:
         click.echo(f"Error getting score info: {e}")
-
-@scores.command()
-@click.option('--scorecard', required=True, help='Scorecard containing the score (accepts ID, name, key, or external ID)')
-@click.option('--score', required=True, help='Score to add versions to (accepts ID, name, key, or external ID)')
-@click.option('--count', default=2, help='Number of versions to create (default: 2)')
-def create_test_versions(scorecard: str, score: str, count: int):
-    """Create test versions for a score (for development/testing only)."""
-    client = create_client()
-    
-    # Resolve the scorecard ID
-    scorecard_id = resolve_scorecard_identifier(client, scorecard)
-    if not scorecard_id:
-        click.echo(f"Scorecard not found: {scorecard}")
-        return
-    
-    # Fetch the scorecard with sections and scores
-    query = f"""
-    query GetScorecard {{
-        getScorecard(id: "{scorecard_id}") {{
-            id
-            name
-            sections {{
-                items {{
-                    id
-                    name
-                    scores {{
-                        items {{
-                            id
-                            name
-                            key
-                            type
-                            order
-                            externalId
-                        }}
-                    }}
-                }}
-            }}
-        }}
-    }}
-    """
-    
-    try:
-        result = client.execute(query)
-        scorecard_data = result.get('getScorecard')
-        
-        if not scorecard_data:
-            click.echo(f"Scorecard not found: {scorecard}")
-            return
-        
-        # Find the score by ID, name, key, or externalId
-        found_score = None
-        for section in scorecard_data.get('sections', {}).get('items', []):
-            for s in section.get('scores', {}).get('items', []):
-                if (s.get('id') == score or 
-                    s.get('name') == score or 
-                    s.get('key') == score or 
-                    str(s.get('externalId')) == score):
-                    found_score = s
-                    section_name = section.get('name')
-                    break
-            if found_score:
-                break
-        
-        if not found_score:
-            click.echo(f"Score not found: {score}")
-            return
-        
-        score_id = found_score.get('id')
-        score_name = found_score.get('name')
-        
-        console = rich.console.Console()
-        console.print(f"Creating {count} test versions for score: [blue]{score_name}[/blue] (ID: {score_id})")
-        
-        # Create versions
-        for i in range(count):
-            # Create a sample configuration
-            sample_config = f"""name: {score_name}
-type: {found_score.get('type', 'LangGraphScore')}
-key: {found_score.get('key', 'test-score')}
-order: {found_score.get('order', 1)}
-description: This is a test version {i+1} created for development purposes
-model_provider: OpenAI
-model_name: gpt-4
-parameters:
-  temperature: 0.7
-  max_tokens: 1000
-  top_p: 0.95
-prompt: |
-  This is a sample prompt for version {i+1}.
-  It can contain multiple lines of text.
-  This is just for testing purposes.
-  The configuration would typically be much longer.
-"""
-            
-            # Create the version
-            create_version_mutation = f"""
-            mutation CreateScoreVersion {{
-                createScoreVersion(input: {{
-                    scoreId: "{score_id}"
-                    configuration: "{sample_config.replace('"', '\\"').replace('\n', '\\n')}"
-                    isFeatured: {str(i == 0).lower()}
-                    note: "Test version {i+1} created for development"
-                }}) {{
-                    id
-                    scoreId
-                    createdAt
-                }}
-            }}
-            """
-            
-            version_result = client.execute(create_version_mutation)
-            version_id = version_result.get('createScoreVersion', {}).get('id')
-            
-            console.print(f"Created version {i+1} with ID: [dim]{version_id}[/dim]")
-            
-            # Set the first version as the champion
-            if i == 0:
-                update_score_mutation = f"""
-                mutation UpdateScore {{
-                    updateScore(input: {{
-                        id: "{score_id}"
-                        championVersionId: "{version_id}"
-                    }}) {{
-                        id
-                        name
-                        championVersionId
-                    }}
-                }}
-                """
-                client.execute(update_score_mutation)
-                console.print(f"Set version {i+1} as the champion version")
-        
-        console.print("[green]Test versions created successfully[/green]")
-        
-    except Exception as e:
-        console.print(f"[red]Error creating test versions: {e}[/red]")
 
 # Add the same command to the score group as an alias
 score.add_command(info) 
