@@ -263,10 +263,20 @@ const DetailContent = React.memo(({
       const parsed = parseYaml(currentConfig);
       console.log('DetailContent parsed YAML:', parsed);
       
-      // Handle both external_id and externalId formats
+      // Handle all possible external ID formats: externalId, external_id, and id
+      // Important: Check for the presence of the field in the parsed object, not just in the string
       const externalIdValue = parsed.externalId !== undefined ? 
         parsed.externalId : 
-        (parsed.external_id !== undefined ? parsed.external_id : score.externalId);
+        (parsed.external_id !== undefined ? parsed.external_id : 
+         (parsed.id !== undefined ? parsed.id : score.externalId));
+      
+      console.log('Extracted external ID value:', externalIdValue, 'from formats:', {
+        externalId: parsed.externalId,
+        external_id: parsed.external_id,
+        id: parsed.id,
+        scoreExternalId: score.externalId,
+        parsedKeys: Object.keys(parsed)
+      });
       
       return {
         ...parsed,
@@ -297,24 +307,37 @@ const DetailContent = React.memo(({
     try {
       const parsed = parseYaml(currentConfig);
       
-      // Check if using external_id format
-      const usesUnderscoreFormat = currentConfig.includes('external_id:') && 
-        !currentConfig.includes('externalId:');
+      // Check which format is being used for external ID by examining the parsed object
+      // This is more reliable than string matching in the YAML
+      const hasExternalId = 'externalId' in parsed;
+      const hasExternalUnderscoreId = 'external_id' in parsed;
+      const hasSimpleId = 'id' in parsed && !hasExternalId && !hasExternalUnderscoreId;
+      
+      console.log('External ID format detection (from parsed object):', {
+        hasExternalId,
+        hasExternalUnderscoreId,
+        hasSimpleId,
+        parsedKeys: Object.keys(parsed)
+      });
       
       // Update the field
       if (field === 'externalId') {
-        if (usesUnderscoreFormat) {
+        if (hasExternalUnderscoreId) {
           parsed.external_id = value;
-          // Remove camelCase if exists
-          if ('externalId' in parsed) {
-            delete parsed.externalId;
-          }
+          // Remove other formats if they exist
+          if ('externalId' in parsed) delete parsed.externalId;
+          if ('id' in parsed) delete parsed.id;
+        } else if (hasSimpleId) {
+          parsed.id = value;
+          // Remove other formats if they exist
+          if ('externalId' in parsed) delete parsed.externalId;
+          if ('external_id' in parsed) delete parsed.external_id;
         } else {
+          // Default to externalId format if no format is detected
           parsed.externalId = value;
-          // Remove snake_case if exists
-          if ('external_id' in parsed) {
-            delete parsed.external_id;
-          }
+          // Remove other formats if they exist
+          if ('external_id' in parsed) delete parsed.external_id;
+          if ('id' in parsed) delete parsed.id;
         }
       } else {
         parsed[field] = value;
@@ -528,6 +551,25 @@ const DetailContent = React.memo(({
   // Add state for editor fullscreen mode
   const [isEditorFullscreen, setIsEditorFullscreen] = useState(false);
 
+  // Add state to detect if we're on an iPad/mobile device
+  const [isMobileDevice, setIsMobileDevice] = React.useState(false);
+  
+  // Detect mobile devices on component mount
+  React.useEffect(() => {
+    const checkMobileDevice = () => {
+      const userAgent = navigator.userAgent.toLowerCase();
+      const isIPad = /ipad/.test(userAgent) || 
+                    (/macintosh/.test(userAgent) && 'ontouchend' in document);
+      const isTablet = /tablet|ipad|playbook|silk|android(?!.*mobile)/i.test(userAgent);
+      const isMobile = /iphone|ipod|android|blackberry|opera mini|opera mobi|skyfire|maemo|windows phone|palm|iemobile|symbian|symbianos|fennec/i.test(userAgent);
+      
+      setIsMobileDevice(isIPad || isTablet || isMobile);
+      console.log('Device detection:', { isIPad, isTablet, isMobile });
+    };
+    
+    checkMobileDevice();
+  }, []);
+
   return (
     <div className={cn(
       "w-full flex flex-col min-h-0 overflow-y-auto",
@@ -678,39 +720,62 @@ const DetailContent = React.memo(({
               
               // Force immediate layout to ensure correct sizing
               editor.layout();
+              
+              // Add error handling for iPad-specific issues
+              window.addEventListener('error', (event) => {
+                if (event.message === 'Canceled: Canceled' || 
+                    event.error?.message === 'Canceled: Canceled') {
+                  console.log('Caught Monaco editor cancellation error (expected on iPad)');
+                  event.preventDefault();
+                  return true; // Prevent the error from propagating
+                }
+                return false;
+              });
             }}
             onChange={(value) => {
               if (!value) return;
               
-              // Set editing flag to prevent useEffect from overriding our changes
-              setIsEditing(true);
-              
               try {
+                // Set editing flag to prevent useEffect from overriding our changes
+                setIsEditing(true);
+                
                 // Parse YAML to validate it and get values for form
                 const parsed = parseYaml(value)
                 console.log('YAML editor onChange parsed:', parsed);
                 
-                // Extract external ID from either format
+                // Extract external ID from all possible formats
                 const externalIdValue = parsed.externalId !== undefined ? 
                   parsed.externalId : 
-                  (parsed.external_id !== undefined ? parsed.external_id : undefined);
+                  (parsed.external_id !== undefined ? parsed.external_id : 
+                   (parsed.id !== undefined ? parsed.id : undefined));
                 
-                console.log('YAML editor extracted externalId:', externalIdValue);
+                console.log('YAML editor extracted externalId:', externalIdValue, 'from formats:', {
+                  externalId: parsed.externalId,
+                  external_id: parsed.external_id,
+                  id: parsed.id,
+                  parsedKeys: Object.keys(parsed)
+                });
                 
                 // Update our local state
                 setCurrentConfig(value);
                 
-                // Ensure we're capturing all fields from the YAML
+                // Pass the updated configuration to the parent
                 onEditChange?.({
                   name: parsed.name,
-                  // Support both externalId and external_id formats
-                  externalId: externalIdValue,
+                  externalId: externalIdValue !== undefined ? String(externalIdValue) : undefined,
                   key: parsed.key,
                   description: parsed.description,
                   configuration: value // Store the original YAML string
-                })
+                });
               } catch (error) {
-                // Ignore parse errors while typing
+                // Handle cancellation errors gracefully
+                if (error instanceof Error && 
+                    (error.message === 'Canceled' || error.message === 'Canceled: Canceled')) {
+                  console.log('Caught Monaco editor cancellation error in onChange');
+                  return; // Just ignore the error
+                }
+                
+                // Ignore other parse errors while typing
                 console.log('YAML parse error (ignored):', error)
               }
             }}
@@ -729,7 +794,31 @@ const DetailContent = React.memo(({
               cursorSmoothCaretAnimation: 'on',
               smoothScrolling: true,
               renderLineHighlight: 'all',
-              colorDecorators: true
+              colorDecorators: true,
+              // iPad/mobile specific options
+              ...(isMobileDevice ? {
+                // Reduce features that might cause issues on mobile
+                quickSuggestions: false,
+                parameterHints: { enabled: false },
+                folding: false,
+                dragAndDrop: false,
+                links: false,
+                // Optimize touch handling
+                mouseWheelZoom: false,
+                scrollbar: {
+                  useShadows: false,
+                  verticalHasArrows: true,
+                  horizontalHasArrows: true,
+                  vertical: 'visible',
+                  horizontal: 'visible',
+                  verticalScrollbarSize: 20,
+                  horizontalScrollbarSize: 20,
+                },
+                // Improve performance
+                renderWhitespace: 'none',
+                renderControlCharacters: false,
+                renderIndentGuides: false,
+              } : {})
             }}
           />
         </ResizableEditorContainer>
@@ -1047,9 +1136,14 @@ export function ScoreComponent({
       // Extract external ID from either format
       const externalIdValue = config.externalId !== undefined ? 
         config.externalId : 
-        (config.external_id !== undefined ? config.external_id : undefined);
+        (config.external_id !== undefined ? config.external_id : 
+         (config.id !== undefined ? config.id : undefined));
       
-      console.log('Extracted externalId value:', externalIdValue);
+      console.log('Extracted externalId value:', externalIdValue, 'from formats:', {
+        externalId: config.externalId,
+        external_id: config.external_id,
+        id: config.id
+      });
       
       // Update the editedScore with values from the YAML configuration
       // This ensures we're using the YAML as the source of truth
@@ -1058,8 +1152,8 @@ export function ScoreComponent({
           ...prev,
           // Use values from YAML, falling back to previous values if not present
           name: config.name !== undefined ? config.name : prev.name,
-          // Support both externalId and external_id formats
-          externalId: externalIdValue,
+          // Support all three formats for external ID
+          externalId: externalIdValue !== undefined ? String(externalIdValue) : prev.externalId,
           key: config.key !== undefined ? config.key : prev.key,
           description: config.description !== undefined ? config.description : prev.description,
           // Store the complete configuration for the editor
@@ -1171,6 +1265,49 @@ export function ScoreComponent({
           key: editedScore.key,
           description: editedScore.description
         });
+      } else {
+        // Ensure the configuration has the latest values
+        try {
+          const parsed = parseYaml(configurationYaml);
+          
+          // Determine which format to use for external ID by examining the parsed object
+          const hasExternalId = 'externalId' in parsed;
+          const hasExternalUnderscoreId = 'external_id' in parsed;
+          const hasSimpleId = 'id' in parsed && !hasExternalId && !hasExternalUnderscoreId;
+          
+          console.log('Saving configuration - external ID format detection:', {
+            hasExternalId,
+            hasExternalUnderscoreId,
+            hasSimpleId,
+            parsedKeys: Object.keys(parsed),
+            externalId: editedScore.externalId
+          });
+          
+          // Update the external ID field using the same format that was in the original YAML
+          if (hasSimpleId) {
+            // Using simple id format
+            parsed.id = editedScore.externalId;
+            console.log('Using simple id format for external ID:', editedScore.externalId);
+          } else if (hasExternalUnderscoreId) {
+            // Using snake_case format
+            parsed.external_id = editedScore.externalId;
+            console.log('Using snake_case format for external ID:', editedScore.externalId);
+          } else {
+            // Using camelCase format (default)
+            parsed.externalId = editedScore.externalId;
+            console.log('Using camelCase format for external ID:', editedScore.externalId);
+          }
+          
+          // Update other fields
+          parsed.name = editedScore.name;
+          parsed.key = editedScore.key;
+          if (editedScore.description) parsed.description = editedScore.description;
+          
+          // Update the configuration
+          configurationYaml = stringifyYaml(parsed);
+        } catch (error) {
+          console.error('Error updating configuration YAML:', error);
+        }
       }
       
       // Log what we're doing
