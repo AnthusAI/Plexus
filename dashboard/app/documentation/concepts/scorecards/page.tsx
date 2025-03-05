@@ -62,6 +62,13 @@ export default function ScorecardsPage() {
             </div>
             
             <div>
+              <h3 className="text-xl font-medium mb-2">Sections</h3>
+              <p className="text-muted-foreground">
+                Logical groupings of related scores within a scorecard. Sections help organize
+                scores into categories for better management and understanding.
+              </p>
+            </div>
+            <div>
               <h3 className="text-xl font-medium mb-2">Weights</h3>
               <p className="text-muted-foreground mb-4">
                 Importance factors that determine how much each score contributes to the
@@ -69,162 +76,67 @@ export default function ScorecardsPage() {
                 over others based on their importance to your business objectives.
               </p>
             </div>
-            
             <div>
-              <h3 className="text-xl font-medium mb-2">Configuration</h3>
-              <p className="text-muted-foreground mb-4">
-                Each score has a configuration that defines how it evaluates content. This can include:
+              <h3 className="text-xl font-medium mb-2">Versions</h3>
+              <p className="text-muted-foreground">
+                Score configurations are versioned, allowing you to track changes over time,
+                compare different implementations, and promote specific versions to champion status.
               </p>
-              <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
-                <li>Evaluation method (rule-based, ML model, LLM prompt)</li>
-                <li>Thresholds for pass/fail determination</li>
-                <li>Custom parameters specific to the score type</li>
-                <li>Expected output format and validation rules</li>
-              </ul>
             </div>
           </div>
         </section>
 
         <section>
-          <h2 className="text-2xl font-semibold mb-4">Scorecard Identifiers</h2>
+          <h2 className="text-2xl font-semibold mb-4">CLI Management</h2>
           <p className="text-muted-foreground mb-4">
-            Scorecards in Plexus can be referenced using multiple types of identifiers, making them
-            easy to work with across different interfaces (UI, CLI, SDK). This flexible identifier
-            system is particularly useful when working with the CLI or SDK.
+            The Plexus CLI provides powerful commands for managing scorecards:
           </p>
-          
           <div className="space-y-4">
             <div>
-              <h3 className="text-xl font-medium mb-2">Types of Identifiers</h3>
-              <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
-                <li>
-                  <strong>DynamoDB ID</strong>: The unique database identifier 
-                  (e.g., <code>e51cd5ec-1940-4d8e-abcc-faa851390112</code>)
-                </li>
-                <li>
-                  <strong>Name</strong>: The human-readable name 
-                  (e.g., <code>"Quality Assurance"</code>)
-                </li>
-                <li>
-                  <strong>Key</strong>: The URL-friendly key 
-                  (e.g., <code>quality-assurance</code>)
-                </li>
-                <li>
-                  <strong>External ID</strong>: Your custom external identifier 
-                  (e.g., <code>qa-2023</code>)
-                </li>
-              </ul>
-            </div>
-            
-            <div>
-              <h3 className="text-xl font-medium mb-2">Using Identifiers</h3>
-              <p className="text-muted-foreground mb-4">
-                When working with the CLI or SDK, you can use any of these identifiers to reference a scorecard:
-              </p>
+              <h3 className="text-xl font-medium mb-2">Listing Scorecards</h3>
               <pre className="bg-muted p-4 rounded-lg mb-4">
-                <code>{`# CLI examples - all reference the same scorecard
-plexus scorecards info --scorecard e51cd5ec-1940-4d8e-abcc-faa851390112
-plexus scorecards info --scorecard "Quality Assurance"
-plexus scorecards info --scorecard quality-assurance
-plexus scorecards info --scorecard qa-2023
+                <code>{`# List all scorecards for an account
+plexus scorecards list "account-name"
 
-# SDK example
-scorecard = plexus.scorecards.get("Quality Assurance")  # Works with any identifier type`}</code>
+# List with filtering
+plexus scorecards list "account-name" --name "Scorecard Name"
+plexus scorecards list "account-name" --key "scorecard-key"
+
+# Performance options
+plexus scorecards list "account-name" --fast  # Skip fetching scores for faster results
+plexus scorecards list "account-name" --hide-scores  # Don't display scores in output`}</code>
+              </pre>
+              <p className="text-muted-foreground">
+                The list command uses an optimized single GraphQL query to fetch scorecards, sections, 
+                and scores in one request, providing significantly faster performance.
+              </p>
+            </div>
+            <div>
+              <h3 className="text-xl font-medium mb-2">Viewing Score Details</h3>
+              <pre className="bg-muted p-4 rounded-lg mb-4">
+                <code>{`# View a specific score by name, key, ID, or external ID
+plexus scorecards score "Score Name" --account "account-name"
+plexus scorecards score "score-key" --account "account-name"
+plexus scorecards score "score-id" --show-versions --show-config
+
+# Scope to a specific scorecard
+plexus scorecards score "Score Name" --scorecard "Scorecard Name"`}</code>
               </pre>
             </div>
-          </div>
-        </section>
-
-        <section>
-          <h2 className="text-2xl font-semibold mb-4">Working with Scorecards</h2>
-          <div className="space-y-4">
             <div>
-              <h3 className="text-xl font-medium mb-2">Creating Scorecards</h3>
-              <p className="text-muted-foreground mb-4">
-                Scorecards can be created through the dashboard UI, CLI, or SDK. The creation process
-                involves defining sections, adding scores, and configuring evaluation parameters.
-              </p>
-              <Link href="/documentation/methods/add-edit-scorecard">
-                <DocButton>Learn how to create scorecards</DocButton>
-              </Link>
-            </div>
-            
-            <div className="mt-6">
-              <h3 className="text-xl font-medium mb-2">Managing Scores</h3>
-              <p className="text-muted-foreground mb-4">
-                Once a scorecard is created, you can add, edit, or remove scores to refine your
-                evaluation criteria. Each score can be individually configured and weighted.
-              </p>
-              <Link href="/documentation/methods/add-edit-score">
-                <DocButton>Learn how to manage scores</DocButton>
-              </Link>
-            </div>
-            
-            <div className="mt-6">
-              <h3 className="text-xl font-medium mb-2">Running Evaluations</h3>
-              <p className="text-muted-foreground mb-4">
-                Scorecards are used to evaluate content by applying all their scores to your sources.
-                The evaluation process generates detailed results that can be analyzed and acted upon.
-              </p>
-              <Link href="/documentation/methods/evaluate-score">
-                <DocButton>Learn how to run evaluations</DocButton>
-              </Link>
-            </div>
-          </div>
-        </section>
-
-        <section>
-          <h2 className="text-2xl font-semibold mb-4">Scorecard Management</h2>
-          <p className="text-muted-foreground mb-4">
-            Plexus provides multiple interfaces for managing scorecards:
-          </p>
-          
-          <div className="space-y-4">
-            <div>
-              <h3 className="text-xl font-medium mb-2">Dashboard UI</h3>
-              <p className="text-muted-foreground mb-4">
-                The web-based dashboard provides a visual interface for creating and managing scorecards,
-                with intuitive forms and real-time feedback.
-              </p>
-            </div>
-            
-            <div>
-              <h3 className="text-xl font-medium mb-2">Command Line Interface (CLI)</h3>
-              <p className="text-muted-foreground mb-4">
-                The Plexus CLI offers powerful commands for scorecard management, ideal for automation
-                and scripting. The CLI supports the flexible identifier system for easy reference.
-              </p>
+              <h3 className="text-xl font-medium mb-2">Version Management</h3>
               <pre className="bg-muted p-4 rounded-lg mb-4">
-                <code>{`# List all scorecards
-plexus scorecards list
+                <code>{`# View version history (coming soon)
+plexus scorecards history --account-key "account-key" --score-key "score-key"
 
-# Get detailed information about a specific scorecard
-plexus scorecards info --scorecard "Content Quality"
+# Promote a version to champion (coming soon)
+plexus scorecards promote --account-key "account-key" --score-id "score-id" --version-id "version-id"
 
-# List all scores in a scorecard
-plexus scorecards list-scores --scorecard "Content Quality"`}</code>
-              </pre>
-              <Link href="/documentation/advanced/cli">
-                <DocButton>View CLI documentation</DocButton>
-              </Link>
-            </div>
-            
-            <div className="mt-6">
-              <h3 className="text-xl font-medium mb-2">Python SDK</h3>
-              <p className="text-muted-foreground mb-4">
-                The Python SDK provides programmatic access to scorecard management, allowing
-                integration with your existing systems and workflows.
-              </p>
-              <pre className="bg-muted p-4 rounded-lg mb-4">
-                <code>{`from plexus import Plexus
+# Pull latest champion versions (coming soon)
+plexus scorecards pull --account-key "account-key"
 
-plexus = Plexus(api_key="your-api-key")
-
-# Get a scorecard using any identifier
-scorecard = plexus.scorecards.get("Content Quality")
-
-# List all scores in a scorecard
-scores = scorecard.get_scores()`}</code>
+# Push local changes as new versions (coming soon)
+plexus scorecards push --account-key "account-key" --comment "Updated configuration"`}</code>
               </pre>
             </div>
           </div>
@@ -234,54 +146,40 @@ scores = scorecard.get_scores()`}</code>
           <h2 className="text-2xl font-semibold mb-4">Best Practices</h2>
           <div className="space-y-4">
             <div>
-              <h3 className="text-xl font-medium mb-2">Scorecard Design</h3>
-              <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
-                <li>Focus on measurable, objective criteria whenever possible</li>
-                <li>Group related scores into logical sections</li>
-                <li>Balance the number of scores (too few may not be comprehensive, too many may be unwieldy)</li>
-                <li>Use clear, descriptive names for scorecards and scores</li>
-                <li>Document the purpose and expected outcomes for each score</li>
-              </ul>
+              <h3 className="text-xl font-medium mb-2">Scorecard Organization</h3>
+              <p className="text-muted-foreground">
+                Group related scores into logical sections to improve clarity and maintainability.
+                Use consistent naming conventions for scorecards, sections, and scores.
+              </p>
             </div>
-            
             <div>
-              <h3 className="text-xl font-medium mb-2">Weight Distribution</h3>
-              <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
-                <li>Assign weights based on business impact and importance</li>
-                <li>Ensure weights sum to 1.0 (or 100%) for proper normalization</li>
-                <li>Periodically review and adjust weights based on changing priorities</li>
-                <li>Consider using section weights to balance different aspects of evaluation</li>
-              </ul>
+              <h3 className="text-xl font-medium mb-2">Version Management</h3>
+              <p className="text-muted-foreground">
+                Add descriptive notes to new versions to document changes. Test new versions
+                thoroughly before promoting them to champion status.
+              </p>
             </div>
-            
             <div>
-              <h3 className="text-xl font-medium mb-2">Versioning and Iteration</h3>
-              <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
-                <li>Use meaningful keys and external IDs for better tracking</li>
-                <li>Document changes when updating scorecard configurations</li>
-                <li>Test new scorecard versions on historical data before deployment</li>
-                <li>Consider creating specialized scorecards for different content types</li>
-              </ul>
+              <h3 className="text-xl font-medium mb-2">Performance Considerations</h3>
+              <p className="text-muted-foreground">
+                Use the <code>--fast</code> option when listing many scorecards to improve performance.
+                This skips fetching score details when you only need basic scorecard information.
+              </p>
             </div>
           </div>
         </section>
 
         <section>
-          <h2 className="text-2xl font-semibold mb-4">Next Steps</h2>
-          <p className="text-muted-foreground mb-4">
-            Ready to start working with scorecards? Explore these resources:
+          <h2 className="text-2xl font-semibold mb-4">Coming Soon</h2>
+          <p className="text-muted-foreground">
+            Additional scorecard features are being developed. Check back soon for:
           </p>
-          <div className="flex flex-wrap gap-4">
-            <Link href="/documentation/methods/add-edit-scorecard">
-              <DocButton>Create Your First Scorecard</DocButton>
-            </Link>
-            <Link href="/documentation/concepts/scores">
-              <DocButton variant="outline">Learn About Scores</DocButton>
-            </Link>
-            <Link href="/documentation/advanced/cli">
-              <DocButton variant="outline">Explore the CLI</DocButton>
-            </Link>
-          </div>
+          <ul className="list-disc pl-6 space-y-2 text-muted-foreground mt-4">
+            <li>Advanced score configuration options</li>
+            <li>Collaborative editing features</li>
+            <li>Performance analytics</li>
+            <li>Bulk operations for scorecard management</li>
+          </ul>
         </section>
       </div>
     </div>

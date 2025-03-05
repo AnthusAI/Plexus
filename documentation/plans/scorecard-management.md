@@ -222,53 +222,50 @@ mutation UpdateScore($input: UpdateScoreInput!) {
   - Optimized index structure for quick lookups:
     - `ScoreVersion`: `scoreId` + `createdAt` sort key for version history
     - `Evaluation`: `scoreVersionId` + `createdAt` sort key for latest results
+  - UI Features Implemented:
+    - Version history dropdown with timestamps and comments
+    - Champion version promotion workflow
+    - Featured version toggle
+    - Version notes/comments
+    - Version comparison
+    - New version creation on edit
 
-#### Example GraphQL Query for Dashboard
-This query efficiently fetches scores with their champion versions and latest evaluations:
-```graphql
-query GetScorecardScores($scorecardId: ID!) {
-  listScores(filter: { scorecardId: { eq: $scorecardId } }) {
-    items {
-      id
-      name
-      type
-      # ... other score fields ...
-      championVersion {
-        id
-        configuration
-        evaluations(
-          filter: { status: { eq: "COMPLETED" } }
-          sortDirection: DESC
-          limit: 1
-        ) {
-          items {
-            id
-            accuracy
-            createdAt
-            # ... other evaluation fields ...
-          }
-        }
-      }
-    }
-  }
-}
-```
+### Performance Improvements
+- Status: ✅ Completed
+- Implementation Details:
+  - Replaced multiple separate GraphQL queries with a single comprehensive query
+  - Eliminated the "N+1 query problem" in scorecard data fetching
+  - Added `--fast` option to skip fetching sections and scores for better performance
+  - Added `--hide-scores` option to exclude score details from output
+  - Improved error handling and debug output
+  - Updated documentation to reflect performance enhancements
+  - Added progress indicators for long-running operations
+  - Optimized score lookup with multiple identification methods (ID, key, name, external ID)
 
-This query structure enables:
-- Single-query loading of scorecard dashboard
-- Direct access to champion versions
-- Efficient retrieval of latest evaluation results
-- O(1) lookup time for most recent evaluations
+### Documentation Updates
+- Status: ✅ Completed
+- Implementation Details:
+  - Updated Scorecards concept page with comprehensive CLI management section
+  - Added Best Practices section with guidance on organization and performance
+  - Updated Add/Edit Scorecard page with performance considerations
+  - Added Score Version Management section to Add/Edit Score page
+  - Added YAML Configuration section with examples
+  - Updated CLI examples to reflect new commands and options
+  - Added Efficient Score Lookup section explaining multiple lookup methods
 
-### Phase 3-4: Future Phases
-- Visual editor and advanced features planned for future iterations
-- Will build on stable foundation from Phase 1 and 2
-- Features to consider:
-  - No-code visual block editor
-  - Advanced configuration options
-  - Enhanced validation rules
-  - Template system
-  - Bulk operations support
+### Phase 5: Visual Editor (Future)
+- Status: Planned
+- Goals:
+  - Implement no-code visual block editor
+  - Add advanced configuration options
+  - Enhance validation rules
+  - Create template system
+  - Support bulk operations
+- Next Steps:
+  - Design visual editor interface
+  - Implement block-based configuration
+  - Add validation and testing tools
+  - Create template library
 
 ## Component Architecture
 

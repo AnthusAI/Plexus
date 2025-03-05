@@ -845,7 +845,9 @@ export function transformEvaluation(evaluation: BaseEvaluation): ProcessedEvalua
     taskData: evaluation?.task,
     taskKeys: evaluation?.task ? Object.keys(evaluation.task) : [],
     status: evaluation?.status,
-    type: evaluation?.type
+    type: evaluation?.type,
+    hasScoreResults: !!evaluation?.scoreResults,
+    scoreResultsType: evaluation?.scoreResults ? typeof evaluation.scoreResults : 'undefined'
   });
 
   if (!evaluation) return null;
@@ -885,14 +887,37 @@ export function transformEvaluation(evaluation: BaseEvaluation): ProcessedEvalua
       getValueFromLazyLoader(evaluation.score)?.data :
       evaluation.score) : null;
 
-  // Get score results data
-  const scoreResultsData = evaluation.scoreResults ?
-    (typeof evaluation.scoreResults === 'function' ?
-      getValueFromLazyLoader(evaluation.scoreResults)?.data :
-      evaluation.scoreResults) : [];
+  // Get score results data - handle both function and object cases
+  let rawScoreResults: any = null;
+  if (evaluation.scoreResults) {
+    if (typeof evaluation.scoreResults === 'function') {
+      // If it's a function (LazyLoader), we need to get the raw value
+      const scoreResultsResponse = getValueFromLazyLoader(evaluation.scoreResults);
+      rawScoreResults = scoreResultsResponse?.data || scoreResultsResponse;
+    } else {
+      // If it's already an object, use it directly
+      rawScoreResults = evaluation.scoreResults;
+    }
+  }
+
+  console.debug('Score results after initial processing:', {
+    hasRawScoreResults: !!rawScoreResults,
+    rawScoreResultsType: typeof rawScoreResults,
+    isArray: Array.isArray(rawScoreResults),
+    hasItems: rawScoreResults && typeof rawScoreResults === 'object' && 'items' in rawScoreResults
+  });
+
+  // Standardize score results to ensure consistent format
+  const standardizedScoreResults = standardizeScoreResults(rawScoreResults);
+
+  console.debug('Score results after standardization:', {
+    count: standardizedScoreResults.length,
+    firstResult: standardizedScoreResults[0],
+    isArray: Array.isArray(standardizedScoreResults)
+  });
 
   // Transform score results into the expected format
-  const transformedScoreResults = Array.isArray(scoreResultsData) ? scoreResultsData.map(result => ({
+  const transformedScoreResults = standardizedScoreResults.map(result => ({
     id: result.id,
     value: result.value,
     confidence: result.confidence ?? null,
@@ -900,7 +925,7 @@ export function transformEvaluation(evaluation: BaseEvaluation): ProcessedEvalua
     explanation: result.explanation ?? null,
     itemId: result.itemId ?? null,
     createdAt: result.createdAt || new Date().toISOString()
-  })) : [];
+  }));
 
   // Transform the evaluation into the format expected by components
   const transformedEvaluation: ProcessedEvaluation = {
@@ -925,7 +950,8 @@ export function transformEvaluation(evaluation: BaseEvaluation): ProcessedEvalua
     taskType: typeof transformedEvaluation.task,
     taskKeys: transformedEvaluation.task ? Object.keys(transformedEvaluation.task) : [],
     taskStages: transformedEvaluation.task?.stages,
-    scoreResultsCount: transformedEvaluation.scoreResults?.length
+    scoreResultsCount: transformedEvaluation.scoreResults?.length,
+    firstScoreResult: transformedEvaluation.scoreResults?.[0]
   });
 
   return transformedEvaluation;
@@ -992,3 +1018,43 @@ export type TaskStageSubscriptionEvent = {
 
 // Export the base evaluation type for use in other files
 export type { BaseEvaluation };
+
+// Add a standardization function for score results
+export function standardizeScoreResults(scoreResults: any): Array<any> {
+  console.log('standardizeScoreResults input:', {
+    type: typeof scoreResults,
+    isNull: scoreResults === null,
+    isUndefined: scoreResults === undefined,
+    isArray: Array.isArray(scoreResults),
+    hasItems: scoreResults && typeof scoreResults === 'object' && 'items' in scoreResults,
+    raw: scoreResults
+  });
+
+  // Case 1: null or undefined
+  if (!scoreResults) {
+    console.log('standardizeScoreResults: input is null or undefined, returning empty array');
+    return [];
+  }
+
+  // Case 2: already an array
+  if (Array.isArray(scoreResults)) {
+    console.log('standardizeScoreResults: input is already an array with length', scoreResults.length);
+    return scoreResults;
+  }
+
+  // Case 3: object with items property that is an array
+  if (typeof scoreResults === 'object' && 'items' in scoreResults && Array.isArray(scoreResults.items)) {
+    console.log('standardizeScoreResults: input is an object with items array of length', scoreResults.items.length);
+    return scoreResults.items;
+  }
+
+  // Case 4: object with items property that is not an array
+  if (typeof scoreResults === 'object' && 'items' in scoreResults) {
+    console.log('standardizeScoreResults: input has items property but it is not an array:', scoreResults.items);
+    return [];
+  }
+
+  // Case 5: unknown format
+  console.log('standardizeScoreResults: unknown format, returning empty array');
+  return [];
+}

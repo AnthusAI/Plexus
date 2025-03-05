@@ -146,6 +146,8 @@ export const amplifyClient = {
     update: async (data: {
       id: string
       name?: string
+      externalId?: string
+      championVersionId?: string
       type?: string
       order?: number
       sectionId?: string
@@ -153,17 +155,100 @@ export const amplifyClient = {
       version?: string
       aiProvider?: string
       aiModel?: string
-      isFineTuned?: boolean
-      configuration?: any
-      distribution?: any[]
-      versionHistory?: any[]
     }) => {
-      const response = await (getClient().models.Score as any).update(data)
-      return { data: response.data as Schema['Score']['type'] }
+      const response = await graphqlRequest<{ updateScore: Schema['Score']['type'] }>(`
+        mutation UpdateScore($input: UpdateScoreInput!) {
+          updateScore(input: $input) {
+            id
+            name
+            externalId
+            championVersionId
+            type
+            order
+            sectionId
+            accuracy
+            version
+            aiProvider
+            aiModel
+            createdAt
+            updatedAt
+          }
+        }
+      `, { input: data });
+      return { data: response.data.updateScore };
     },
     delete: async (params: { id: string }) => {
       const response = await (getClient().models.Score as any).delete(params)
       return { data: response.data as Schema['Score']['type'] }
+    }
+  },
+  ScoreVersion: {
+    list: async (params: any) => {
+      const response = await graphqlRequest<{ listScoreVersions: AmplifyResponse<Schema['ScoreVersion']['type'][]> }>(`
+        query ListScoreVersions($filter: ScoreVersionFilterInput, $limit: Int, $nextToken: String) {
+          listScoreVersions(filter: $filter, limit: $limit, nextToken: $nextToken) {
+            items {
+              id
+              scoreId
+              configuration
+              isFeatured
+              comment
+              createdAt
+              updatedAt
+            }
+            nextToken
+          }
+        }
+      `, params);
+      return response.data.listScoreVersions;
+    },
+    create: async (data: {
+      scoreId: string
+      configuration: string
+      isFeatured: boolean
+      comment?: string
+      createdAt: string
+      updatedAt: string
+    }) => {
+      const response = await graphqlRequest<{ createScoreVersion: Schema['ScoreVersion']['type'] }>(`
+        mutation CreateScoreVersion($input: CreateScoreVersionInput!) {
+          createScoreVersion(input: $input) {
+            id
+            scoreId
+            configuration
+            isFeatured
+            comment
+            createdAt
+            updatedAt
+          }
+        }
+      `, { input: data });
+      return { data: response.data.createScoreVersion };
+    },
+    update: async (data: {
+      id: string
+      configuration?: any
+      isFeatured?: boolean
+      comment?: string
+    }) => {
+      const response = await graphqlRequest<{ updateScoreVersion: Schema['ScoreVersion']['type'] }>(`
+        mutation UpdateScoreVersion($input: UpdateScoreVersionInput!) {
+          updateScoreVersion(input: $input) {
+            id
+            scoreId
+            configuration
+            isFeatured
+            comment
+            createdAt
+            updatedAt
+          }
+        }
+      `, { input: data });
+      return { data: response.data.updateScoreVersion };
+    },
+    delete: async (params: { id: string }) => {
+      const response = await (getClient().models.ScoreVersion as any).delete(params)
+      return { data: response.data as Schema['ScoreVersion']['type'] }
     }
   },
   Evaluation: {
@@ -214,6 +299,84 @@ export const amplifyClient = {
     get: async (params: any) => {
       const response = await (getClient().models.ScoreResult as any).get(params)
       return { data: response.data as Schema['ScoreResult']['type'] | null }
+    }
+  },
+  ShareLink: {
+    create: async (data: {
+      token: string;
+      resourceType: string;
+      resourceId: string;
+      createdBy: string;
+      accountId: string;
+      expiresAt?: string;
+      viewOptions?: string;
+      accessCount?: number;
+      isRevoked?: boolean;
+    }) => {
+      try {
+        const client = getClient();
+        if (!client.models || !client.models.ShareLink) {
+          console.error('ShareLink model not found in client');
+          throw new Error('ShareLink model not available');
+        }
+        const response = await (client.models.ShareLink as any).create(data);
+        return { data: response.data as Schema['ShareLink']['type'] };
+      } catch (error) {
+        console.error('Error in amplifyClient.ShareLink.create:', error);
+        throw error;
+      }
+    },
+    get: async (params: { id: string }) => {
+      try {
+        const client = getClient();
+        if (!client.models || !client.models.ShareLink) {
+          console.error('ShareLink model not found in client');
+          throw new Error('ShareLink model not available');
+        }
+        const response = await (client.models.ShareLink as any).get(params);
+        return { data: response.data as Schema['ShareLink']['type'] | null };
+      } catch (error) {
+        console.error('Error in amplifyClient.ShareLink.get:', error);
+        throw error;
+      }
+    },
+    list: async (params: any) => {
+      try {
+        const client = getClient();
+        if (!client.models || !client.models.ShareLink) {
+          console.error('ShareLink model not found in client');
+          throw new Error('ShareLink model not available');
+        }
+        const response = await (client.models.ShareLink as any).list(params);
+        return response as AmplifyResponse<Schema['ShareLink']['type'][]>;
+      } catch (error) {
+        console.error('Error in amplifyClient.ShareLink.list:', error);
+        throw error;
+      }
+    },
+    update: async (data: {
+      id: string;
+      token?: string;
+      resourceType?: string;
+      resourceId?: string;
+      expiresAt?: string;
+      viewOptions?: string;
+      lastAccessedAt?: string;
+      accessCount?: number;
+      isRevoked?: boolean;
+    }) => {
+      try {
+        const client = getClient();
+        if (!client.models || !client.models.ShareLink) {
+          console.error('ShareLink model not found in client');
+          throw new Error('ShareLink model not available');
+        }
+        const response = await (client.models.ShareLink as any).update(data);
+        return { data: response.data as Schema['ShareLink']['type'] };
+      } catch (error) {
+        console.error('Error in amplifyClient.ShareLink.update:', error);
+        throw error;
+      }
     }
   }
 } 

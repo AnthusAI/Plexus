@@ -108,8 +108,18 @@ export default function AddEditScorecardPage() {
           </p>
           
           <pre className="bg-muted p-4 rounded-lg mb-4">
-            <code>{`# List all scorecards
-plexus scorecards list
+            <code>{`# List scorecards with optimized performance
+plexus scorecards list "account-name" --fast
+
+# View a specific scorecard by filtering
+plexus scorecards list "account-name" --name "Content Quality"
+
+# View detailed information about a score
+plexus scorecards score "score-name" --account "account-name" --show-versions
+
+# Coming soon:
+# Create a new scorecard
+plexus scorecards create --name "Content Quality" --description "Evaluates content quality"
 
 # Get detailed information about a specific scorecard
 plexus scorecards info --scorecard "Content Quality"
@@ -127,20 +137,26 @@ plexus scorecards push --file ./my-scorecard.yaml --update
 plexus scorecards delete --scorecard "Content Quality"`}</code>
           </pre>
           
-          <p className="text-muted-foreground mb-4">
-            The Plexus CLI uses a flexible identifier system that allows you to reference scorecards using different types of identifiers:
-          </p>
-          
-          <ul className="list-disc pl-6 space-y-2 text-muted-foreground mb-4">
-            <li>By name: <code>--scorecard "Content Quality"</code></li>
-            <li>By key: <code>--scorecard content-quality</code></li>
-            <li>By ID: <code>--scorecard e51cd5ec-1940-4d8e-abcc-faa851390112</code></li>
-            <li>By external ID: <code>--scorecard cq-2023</code></li>
-          </ul>
-          
-          <p className="text-muted-foreground">
-            For more details on using the CLI, see the <a href="/documentation/advanced/cli" className="text-primary hover:underline">CLI documentation</a>.
-          </p>
+          <div className="mt-4 space-y-4">
+            <div>
+              <h3 className="text-xl font-medium mb-2">Performance Considerations</h3>
+              <p className="text-muted-foreground">
+                The CLI now uses optimized GraphQL queries to fetch scorecard data efficiently:
+              </p>
+              <ul className="list-disc pl-6 mt-2 space-y-2 text-muted-foreground">
+                <li>
+                  <strong>Single Query Approach:</strong> Instead of making separate queries for each scorecard's sections and scores, 
+                  the system now fetches all data in a single comprehensive GraphQL query.
+                </li>
+                <li>
+                  <strong>Fast Mode:</strong> Use the <code>--fast</code> option to skip fetching sections and scores when you only need basic scorecard information.
+                </li>
+                <li>
+                  <strong>Hide Scores:</strong> Use <code>--hide-scores</code> to exclude score details from the output while still fetching basic scorecard data.
+                </li>
+              </ul>
+            </div>
+          </div>
         </section>
 
         <section>
@@ -190,6 +206,7 @@ new_scorecard = plexus.scorecards.from_yaml(yaml_content)`}</code>
             <li>Scorecard version control</li>
             <li>Collaborative editing features</li>
             <li>Performance analytics</li>
+            <li>YAML synchronization for offline editing</li>
           </ul>
         </section>
       </div>
