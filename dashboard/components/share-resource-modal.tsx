@@ -22,6 +22,20 @@ import {
 import { ShareLinkViewOptions } from "@/utils/share-link-client"
 import * as React from "react"
 import { createPortal } from "react-dom"
+import { format, addDays } from "date-fns"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { CalendarIcon } from "lucide-react"
+import { cn } from "@/lib/utils"
+
+// Define common expiration periods
+const EXPIRATION_PERIODS = [
+  { value: "7days", label: "7 days", days: 7 },
+  { value: "30days", label: "30 days", days: 30 },
+  { value: "90days", label: "90 days", days: 90 },
+  { value: "180days", label: "6 months", days: 180 },
+  { value: "365days", label: "1 year", days: 365 },
+  { value: "custom", label: "Custom date", days: null }
+];
 
 interface ShareResourceModalProps {
   isOpen: boolean
@@ -39,15 +53,18 @@ export function ShareResourceModal({
   resourceName 
 }: ShareResourceModalProps) {
   // Default expiration date (30 days from now)
-  const defaultExpirationDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+  const defaultExpirationDate = addDays(new Date(), 30)
   
   // State for form values
   const [expirationDate, setExpirationDate] = useState<Date>(defaultExpirationDate)
+  const [expirationPeriod, setExpirationPeriod] = useState<string>("30days")
+  const [isCustomDate, setIsCustomDate] = useState<boolean>(false)
   const [displayMode, setDisplayMode] = useState<"summary" | "detailed">("detailed")
   const [includeMetrics, setIncludeMetrics] = useState(true)
   const [includeCostInfo, setIncludeCostInfo] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isMounted, setIsMounted] = useState(false)
+  const [calendarOpen, setCalendarOpen] = useState(false)
   
   // Reference to track if we're in the process of closing
   const isClosingRef = useRef(false)
@@ -62,7 +79,9 @@ export function ShareResourceModal({
   useEffect(() => {
     if (isOpen) {
       // Reset form values when opening
-      setExpirationDate(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000))
+      setExpirationDate(defaultExpirationDate)
+      setExpirationPeriod("30days")
+      setIsCustomDate(false)
       setDisplayMode("detailed")
       setIncludeMetrics(true)
       setIncludeCostInfo(false)
@@ -85,6 +104,22 @@ export function ShareResourceModal({
       document.body.style.pointerEvents = ''
     }
   }, [])
+  
+  // Handle expiration period change
+  const handleExpirationPeriodChange = (value: string) => {
+    setExpirationPeriod(value);
+    
+    if (value === "custom") {
+      setIsCustomDate(true);
+    } else {
+      setIsCustomDate(false);
+      // Set the expiration date based on the selected period
+      const period = EXPIRATION_PERIODS.find(p => p.value === value);
+      if (period && period.days) {
+        setExpirationDate(addDays(new Date(), period.days));
+      }
+    }
+  };
   
   // Get title and description based on resource type
   const getModalTitle = () => {
@@ -177,16 +212,61 @@ export function ShareResourceModal({
           
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="expiration">Expiration Date</Label>
-              <div className="border rounded-md p-1">
-                <Calendar
-                  mode="single"
-                  selected={expirationDate}
-                  onSelect={(date) => date && setExpirationDate(date)}
-                  disabled={(date) => date < new Date()}
-                  initialFocus
-                />
-              </div>
+              <Label htmlFor="expirationPeriod">Expiration</Label>
+              <Select 
+                value={expirationPeriod} 
+                onValueChange={handleExpirationPeriodChange}
+              >
+                <SelectTrigger id="expirationPeriod">
+                  <SelectValue placeholder="Select expiration period" />
+                </SelectTrigger>
+                <SelectContent>
+                  {EXPIRATION_PERIODS.map((period) => (
+                    <SelectItem key={period.value} value={period.value}>
+                      {period.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              
+              {isCustomDate && (
+                <div className="mt-2">
+                  <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={cn(
+                          "w-full justify-start text-left font-normal",
+                          !expirationDate && "text-muted-foreground"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {expirationDate ? format(expirationDate, "PPP") : "Pick a date"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={expirationDate}
+                        onSelect={(date) => {
+                          if (date) {
+                            setExpirationDate(date);
+                            setCalendarOpen(false);
+                          }
+                        }}
+                        disabled={(date) => date < new Date()}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              )}
+              
+              {!isCustomDate && (
+                <p className="text-sm text-muted-foreground mt-1">
+                  Link expires on {format(expirationDate, "MMMM d, yyyy")}
+                </p>
+              )}
             </div>
             
             <div className="grid gap-2">
