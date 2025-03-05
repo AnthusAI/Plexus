@@ -23,13 +23,21 @@ import { ShareLinkViewOptions } from "@/utils/share-link-client"
 import * as React from "react"
 import { createPortal } from "react-dom"
 
-interface ShareEvaluationModalProps {
+interface ShareResourceModalProps {
   isOpen: boolean
   onClose: () => void
   onShare: (expiresAt: string, viewOptions: ShareLinkViewOptions) => Promise<void>
+  resourceType: 'Evaluation' | 'Scorecard' | 'Report' | string
+  resourceName?: string
 }
 
-export function ShareEvaluationModal({ isOpen, onClose, onShare }: ShareEvaluationModalProps) {
+export function ShareResourceModal({ 
+  isOpen, 
+  onClose, 
+  onShare, 
+  resourceType, 
+  resourceName 
+}: ShareResourceModalProps) {
   // Default expiration date (30 days from now)
   const defaultExpirationDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
   
@@ -78,6 +86,15 @@ export function ShareEvaluationModal({ isOpen, onClose, onShare }: ShareEvaluati
     }
   }, [])
   
+  // Get title and description based on resource type
+  const getModalTitle = () => {
+    return `Share ${resourceName || resourceType}`
+  }
+  
+  const getModalDescription = () => {
+    return `Configure sharing options for this ${resourceType.toLowerCase()}`
+  }
+  
   // Handle form submission
   const handleSubmit = async () => {
     if (isClosingRef.current) return
@@ -99,7 +116,7 @@ export function ShareEvaluationModal({ isOpen, onClose, onShare }: ShareEvaluati
       isClosingRef.current = true
       onClose()
     } catch (error) {
-      console.error("Error sharing evaluation:", error)
+      console.error(`Error sharing ${resourceType}:`, error)
     } finally {
       setIsSubmitting(false)
     }
@@ -139,7 +156,7 @@ export function ShareEvaluationModal({ isOpen, onClose, onShare }: ShareEvaluati
       >
         <div className="p-6">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-semibold">Share Evaluation</h2>
+            <h2 className="text-lg font-semibold">{getModalTitle()}</h2>
             <Button 
               variant="ghost" 
               size="icon" 
@@ -155,7 +172,7 @@ export function ShareEvaluationModal({ isOpen, onClose, onShare }: ShareEvaluati
           </div>
           
           <p className="text-sm text-muted-foreground mb-4">
-            Configure sharing options for this evaluation
+            {getModalDescription()}
           </p>
           
           <div className="grid gap-4 py-4">

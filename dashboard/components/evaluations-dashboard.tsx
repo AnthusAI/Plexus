@@ -62,7 +62,7 @@ import { useEvaluationData } from '@/features/evaluations/hooks/useEvaluationDat
 import { toast } from "sonner"
 import { shareLinkClient, ShareLinkViewOptions } from "@/utils/share-link-client"
 import { fetchAuthSession } from 'aws-amplify/auth'
-import { ShareEvaluationModal } from "@/components/share-evaluation-modal"
+import { ShareResourceModal } from "@/components/share-resource-modal"
 
 type TaskResponse = {
   items: Evaluation[]
@@ -763,10 +763,11 @@ export default function EvaluationsDashboard() {
           </div>
         )}
       </div>
-      <ShareEvaluationModal 
+      <ShareResourceModal 
         isOpen={isShareModalOpen}
         onClose={handleCloseShareModal}
         onShare={handleCreateShareLink}
+        resourceType="Evaluation"
       />
     </div>
   )
