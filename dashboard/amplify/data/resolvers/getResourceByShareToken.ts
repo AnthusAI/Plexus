@@ -322,6 +322,12 @@ function applyViewOptions(data: any, resourceType: string, viewOptions: any): an
           delete filteredEvaluation.scoreResults;
         }
         
+        // Handle displayMode option
+        if (options.displayMode === 'summary') {
+          // In summary mode, don't include score results
+          delete filteredEvaluation.scoreResults;
+        }
+        
         if (options.includeCostMetrics === false) {
           delete filteredEvaluation.cost;
         }

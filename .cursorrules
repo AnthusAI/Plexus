@@ -1,7 +1,3 @@
----
-description: Overall Project Structure
-globs: 
----
 # Plexus Overall Project Structure
 
 Plexus is a documentation and evaluation platform for AI/ML systems, with an Amplify Gen2 Next.js/React dashboard app, and with Python backend code for the AI/ML stuff.  We use Celery with AWS SQS and Dynamo DB for remote task dispatch from the dashboard to worker nodes running Python that send results back through the GraphQL API.
