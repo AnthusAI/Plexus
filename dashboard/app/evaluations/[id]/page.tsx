@@ -253,6 +253,16 @@ export default function PublicEvaluation({
           </div>
           <h1 className="text-2xl font-bold mb-2">Unable to Load Evaluation</h1>
           <p className="text-muted-foreground max-w-md">{error}</p>
+          {error === 'This evaluation share link has expired.' && (
+            <p className="text-muted-foreground max-w-md mt-2">
+              Share links have a limited validity period for security reasons. Please request a new share link from the evaluation owner.
+            </p>
+          )}
+          {error === 'This evaluation share link has been revoked.' && (
+            <p className="text-muted-foreground max-w-md mt-2">
+              This share link has been manually revoked by the evaluation owner and is no longer valid.
+            </p>
+          )}
         </div>
       ) : evaluation ? (
         <div className="h-full flex flex-col">
@@ -303,7 +313,7 @@ export default function PublicEvaluation({
                       evaluation.predictedClassDistribution) : undefined,
                   isPredictedClassDistributionBalanced: evaluation.isPredictedClassDistributionBalanced === null ? 
                     undefined : evaluation.isPredictedClassDistributionBalanced,
-                  scoreResults: standardizeScoreResults(evaluation.scoreResults),
+                  scoreResults: evaluation.scoreResults ? standardizeScoreResults(evaluation.scoreResults) : [],
                   task: evaluation.task ? {
                     id: evaluation.task.id,
                     accountId: (evaluation as any).accountId || '',
