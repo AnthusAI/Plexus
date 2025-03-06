@@ -384,6 +384,7 @@ export default function EvaluationsDashboard() {
   })
   const [selectedScoreResultId, setSelectedScoreResultId] = useState<string | null>(null)
   const [isShareModalOpen, setIsShareModalOpen] = useState(false)
+  const [shareUrl, setShareUrl] = useState<string | null>(null)
 
   // Fetch account ID
   useEffect(() => {
@@ -559,19 +560,47 @@ export default function EvaluationsDashboard() {
         viewOptions
       });
       
-      // Copy the URL to clipboard
-      navigator.clipboard.writeText(url).then(
-        () => {
-          toast.success("Share link created and copied to clipboard", {
-            description: "You can now share this evaluation with others"
-          });
-        },
-        () => {
-          toast.error("Failed to copy link", {
-            description: "The share link was created but couldn't be copied to clipboard"
-          });
+      // Ensure URL is valid before attempting to copy
+      if (!url) throw new Error("Generated URL is empty");
+      
+      // Store the URL in state
+      setShareUrl(url);
+      
+      try {
+        // Check for clipboard permissions first
+        if (navigator.permissions && navigator.permissions.query) {
+          const permissionStatus = await navigator.permissions.query({ name: 'clipboard-write' as PermissionName });
+          if (permissionStatus.state === 'denied') {
+            throw new Error("Clipboard permission denied");
+          }
         }
-      );
+        
+        // TEMPORARY: Force clipboard failure for testing
+        throw new Error("Simulated clipboard failure for testing");
+        
+        // Copy with proper await
+        await navigator.clipboard.writeText(url);
+        
+        toast.success("Share link created and copied to clipboard", {
+          description: "You can now share this evaluation with others"
+        });
+        
+        // Close the modal after successful copy
+        setIsShareModalOpen(false);
+        
+      } catch (clipboardError) {
+        console.error("Clipboard error:", clipboardError);
+        
+        // Keep the share modal open so user can see and copy the URL
+        toast.warning("Created share link, but couldn't copy to clipboard", {
+          description: "The link is available in the share dialog",
+          duration: 5000
+        });
+        
+        // Keep the share modal open so user can see and copy the URL
+        console.log("Setting modal to stay open after clipboard error");
+        setIsShareModalOpen(true);
+      }
     } catch (error) {
       console.error("Error creating share link:", error);
       toast.error("Failed to create share link", {
@@ -583,6 +612,7 @@ export default function EvaluationsDashboard() {
   // Update the modal close handler to be simpler since we're handling cleanup in the modal component
   const handleCloseShareModal = useCallback(() => {
     setIsShareModalOpen(false);
+    setShareUrl(null); // Clear the share URL when closing the modal
   }, []);
 
   interface EvaluationsGridProps {
@@ -768,6 +798,7 @@ export default function EvaluationsDashboard() {
         onClose={handleCloseShareModal}
         onShare={handleCreateShareLink}
         resourceType="Evaluation"
+        shareUrl={shareUrl}
       />
     </div>
   )
