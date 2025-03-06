@@ -3,19 +3,19 @@
 import React from 'react'
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
-import { Layout } from '@/components/landing/Layout'
 import { Footer } from '@/components/landing/Footer'
 import EvaluationTask from '@/components/EvaluationTask'
 import { generateClient } from 'aws-amplify/api'
 import { GraphQLResult } from '@aws-amplify/api-graphql'
 import { type Schema } from '@/amplify/data/resource'
-import { transformEvaluation } from '@/components/evaluations-dashboard'
+import { transformEvaluation, standardizeScoreResults } from '@/utils/data-operations'
 import { type Evaluation } from '@/utils/data-operations'
 import { getValueFromLazyLoader } from '@/utils/data-operations'
 import { fetchAuthSession } from 'aws-amplify/auth'
 
 import outputs from '@/amplify_outputs.json';
 import { Amplify } from 'aws-amplify';
+import { AlertCircle } from 'lucide-react';
 
 // Configure Amplify with explicit guest access enabled
 Amplify.configure(
@@ -88,6 +88,13 @@ export class EvaluationService {
         }
       }>;
       
+      // Check for GraphQL errors
+      if (response.errors && response.errors.length > 0) {
+        const errorMessage = response.errors[0].message;
+        console.error('GraphQL error:', errorMessage);
+        throw new Error(errorMessage);
+      }
+      
       if (!response.data?.getResourceByShareToken) {
         throw new Error('Failed to load shared resource');
       }
@@ -155,9 +162,15 @@ export default function PublicEvaluation({
   const [evaluation, setEvaluation] = useState<Evaluation | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedScoreResultId, setSelectedScoreResultId] = useState<string | null>(null);
   
   // Memoize the service to prevent re-renders
   const memoizedService = React.useMemo(() => evaluationService, []);
+
+  // Debug selected score result ID changes
+  useEffect(() => {
+    console.log('Selected score result ID changed in PublicEvaluation:', selectedScoreResultId);
+  }, [selectedScoreResultId]);
 
   useEffect(() => {
     async function loadEvaluation() {
@@ -173,18 +186,44 @@ export default function PublicEvaluation({
         console.log('Loading evaluation with token:', id);
         const data = await memoizedService.fetchEvaluationByShareToken(id);
         
-        console.log('Successfully loaded evaluation:', data);
+        console.log('Successfully loaded evaluation:', {
+          id: data.id,
+          hasScoreResults: !!data.scoreResults,
+          scoreResultsType: typeof data.scoreResults,
+          scoreResultsIsArray: Array.isArray(data.scoreResults),
+          scoreResultsHasItems: data.scoreResults && typeof data.scoreResults === 'object' && 'items' in data.scoreResults,
+          scoreResultsItemsCount: data.scoreResults && typeof data.scoreResults === 'object' && 'items' in data.scoreResults ? data.scoreResults.items?.length : 0,
+          scoreResultsRaw: data.scoreResults
+        });
         setEvaluation(data);
       } catch (err) {
         console.error('Error fetching evaluation:', err);
+        
+        // Extract the error message
+        let errorMessage = 'Failed to load evaluation';
+        
         if (err instanceof Error) {
           console.error('Error details:', {
             message: err.message,
             stack: err.stack,
             name: err.name
           });
+          errorMessage = err.message;
+        } else if (typeof err === 'object' && err !== null) {
+          // Handle case where err is a GraphQL error object
+          if ('errors' in err && Array.isArray((err as any).errors) && (err as any).errors.length > 0) {
+            errorMessage = (err as any).errors[0].message;
+          }
         }
-        setError(err instanceof Error ? err.message : 'Failed to load evaluation');
+        
+        // Check for specific error messages
+        if (errorMessage.includes('Share link has expired')) {
+          setError('This evaluation share link has expired.');
+        } else if (errorMessage.includes('Share link has been revoked')) {
+          setError('This evaluation share link has been revoked.');
+        } else {
+          setError(errorMessage);
+        }
       } finally {
         setLoading(false);
       }
@@ -196,131 +235,114 @@ export default function PublicEvaluation({
   }, [id, memoizedService]);
 
   return (
-    <Layout>
-      <div className="min-h-screen bg-background">
-        <div className="w-[calc(100vw-2rem)] max-w-7xl mx-auto py-8">
-          {loading ? (
-            <div className="flex items-center justify-center min-h-[50vh]">
-              <div 
-                role="status"
-                className="animate-spin rounded-full h-8 w-8 border-b-2 border-foreground"
-                aria-label="Loading"
-              >
-                <span className="sr-only">Loading...</span>
-              </div>
-            </div>
-          ) : error ? (
-            <div className="flex items-center justify-center min-h-[50vh] text-destructive">
-              {error}
-            </div>
-          ) : evaluation ? (
-            <div className="space-y-4">
-              <h1 className="text-2xl font-semibold">Evaluation Results</h1>
-              <EvaluationTask
-                variant="detail"
-                task={{
-                  id: evaluation.id,
-                  type: evaluation.type,
-                  scorecard: evaluation.scorecard?.name || '',
-                  score: evaluation.score?.name || '',
-                  time: evaluation.createdAt,
-                  data: {
-                    id: evaluation.id,
-                    title: evaluation.scorecard?.name || '',
-                    accuracy: evaluation.accuracy || null,
-                    metrics: [
-                      {
-                        name: 'Accuracy',
-                        value: evaluation.accuracy || 0,
-                        unit: '%',
-                        maximum: 100,
-                        priority: true
-                      },
-                      {
-                        name: 'Precision',
-                        value: Array.isArray(evaluation.metrics) ? 
-                          (evaluation.metrics.find(m => m.name === 'Precision')?.value || 0) : 0,
-                        unit: '%',
-                        maximum: 100,
-                        priority: true
-                      },
-                      {
-                        name: 'Sensitivity',
-                        value: Array.isArray(evaluation.metrics) ? 
-                          (evaluation.metrics.find(m => m.name === 'Sensitivity')?.value || 0) : 0,
-                        unit: '%',
-                        maximum: 100,
-                        priority: true
-                      },
-                      {
-                        name: 'Specificity',
-                        value: Array.isArray(evaluation.metrics) ? 
-                          (evaluation.metrics.find(m => m.name === 'Specificity')?.value || 0) : 0,
-                        unit: '%',
-                        maximum: 100,
-                        priority: true
-                      }
-                    ],
-                    processedItems: evaluation.processedItems || 0,
-                    totalItems: evaluation.totalItems || 0,
-                    progress: (evaluation.processedItems || 0) / (evaluation.totalItems || 1) * 100,
-                    inferences: evaluation.inferences || 0,
-                    cost: evaluation.cost || null,
-                    status: evaluation.status || 'COMPLETED',
-                    elapsedSeconds: evaluation.elapsedSeconds || null,
-                    estimatedRemainingSeconds: evaluation.estimatedRemainingSeconds || null,
-                    startedAt: evaluation.startedAt || undefined,
-                    errorMessage: evaluation.errorMessage || undefined,
-                    errorDetails: evaluation.errorDetails || undefined,
-                    confusionMatrix: evaluation.confusionMatrix ? {
-                      matrix: typeof evaluation.confusionMatrix === 'string' ? 
-                        JSON.parse(evaluation.confusionMatrix).matrix : 
-                        evaluation.confusionMatrix.matrix,
-                      labels: typeof evaluation.confusionMatrix === 'string' ? 
-                        JSON.parse(evaluation.confusionMatrix).labels : 
-                        evaluation.confusionMatrix.labels
-                    } : null,
-                    datasetClassDistribution: typeof evaluation.datasetClassDistribution === 'string' ?
-                      JSON.parse(evaluation.datasetClassDistribution) :
-                      evaluation.datasetClassDistribution,
-                    isDatasetClassDistributionBalanced: evaluation.isDatasetClassDistributionBalanced,
-                    predictedClassDistribution: typeof evaluation.predictedClassDistribution === 'string' ?
-                      JSON.parse(evaluation.predictedClassDistribution) :
-                      evaluation.predictedClassDistribution,
-                    isPredictedClassDistributionBalanced: evaluation.isPredictedClassDistributionBalanced,
-                    task: evaluation.task ? {
-                      id: evaluation.task.id,
-                      accountId: (evaluation as any).accountId || '',
-                      type: evaluation.task.type || 'No',
-                      status: evaluation.task.status,
-                      target: evaluation.task.target,
-                      command: evaluation.task.command,
-                      description: evaluation.task.description || undefined,
-                      metadata: evaluation.task.metadata,
-                      createdAt: evaluation.task.createdAt || undefined,
-                      startedAt: evaluation.task.startedAt || undefined,
-                      completedAt: evaluation.task.completedAt || undefined,
-                      estimatedCompletionAt: evaluation.task.estimatedCompletionAt || undefined,
-                      errorMessage: evaluation.task.errorMessage || undefined,
-                      errorDetails: evaluation.task.errorDetails || undefined,
-                      currentStageId: evaluation.task.currentStageId || undefined,
-                      stages: {
-                        items: getValueFromLazyLoader(evaluation.task.stages)?.data?.items || [],
-                        nextToken: null
-                      }
-                    } : null
-                  }
-                }}
-              />
-            </div>
-          ) : (
-            <div className="flex items-center justify-center min-h-[50vh] text-muted-foreground">
-              No evaluation found
-            </div>
+    <div className="w-full h-screen px-6 pt-3 pb-6 overflow-auto">
+      {loading ? (
+        <div className="flex items-center justify-center h-full">
+          <div 
+            role="status"
+            className="animate-spin rounded-full h-8 w-8 border-b-2 border-foreground"
+            aria-label="Loading"
+          >
+            <span className="sr-only">Loading...</span>
+          </div>
+        </div>
+      ) : error ? (
+        <div className="flex flex-col items-center justify-center h-full text-center px-4">
+          <div className="mb-4 text-destructive">
+            <AlertCircle className="h-12 w-12 mx-auto" />
+          </div>
+          <h1 className="text-2xl font-bold mb-2">Unable to Load Evaluation</h1>
+          <p className="text-muted-foreground max-w-md">{error}</p>
+          {error === 'This evaluation share link has expired.' && (
+            <p className="text-muted-foreground max-w-md mt-2">
+              Share links have a limited validity period for security reasons. Please request a new share link from the evaluation owner.
+            </p>
+          )}
+          {error === 'This evaluation share link has been revoked.' && (
+            <p className="text-muted-foreground max-w-md mt-2">
+              This share link has been manually revoked by the evaluation owner and is no longer valid.
+            </p>
           )}
         </div>
-        <Footer />
-      </div>
-    </Layout>
+      ) : evaluation ? (
+        <div className="h-full flex flex-col">
+          <h1 className="text-xl font-bold mb-2">Evaluation Results</h1>
+          <div className="flex-1 overflow-auto">
+            <EvaluationTask 
+              variant="detail"
+              isFullWidth={true}
+              task={{
+                id: evaluation.id,
+                type: evaluation.type,
+                scorecard: evaluation.scorecard?.name || '',
+                score: evaluation.score?.name || '',
+                time: evaluation.createdAt,
+                data: {
+                  id: evaluation.id,
+                  title: evaluation.scorecard?.name || '',
+                  accuracy: evaluation.accuracy || null,
+                  metrics: evaluation.metrics || [],
+                  processedItems: evaluation.processedItems || 0,
+                  totalItems: evaluation.totalItems || 0,
+                  progress: (evaluation.processedItems || 0) / (evaluation.totalItems || 1) * 100,
+                  inferences: evaluation.inferences || 0,
+                  cost: evaluation.cost || null,
+                  status: evaluation.status || 'COMPLETED',
+                  elapsedSeconds: evaluation.elapsedSeconds || null,
+                  estimatedRemainingSeconds: evaluation.estimatedRemainingSeconds || null,
+                  startedAt: evaluation.startedAt ? evaluation.startedAt : undefined,
+                  errorMessage: evaluation.errorMessage ? evaluation.errorMessage : undefined,
+                  errorDetails: evaluation.errorDetails ? evaluation.errorDetails : undefined,
+                  confusionMatrix: evaluation.confusionMatrix ? {
+                    matrix: typeof evaluation.confusionMatrix === 'string' ? 
+                      JSON.parse(evaluation.confusionMatrix).matrix : 
+                      evaluation.confusionMatrix.matrix,
+                    labels: typeof evaluation.confusionMatrix === 'string' ? 
+                      JSON.parse(evaluation.confusionMatrix).labels : 
+                      evaluation.confusionMatrix.labels
+                  } : undefined,
+                  datasetClassDistribution: evaluation.datasetClassDistribution ? 
+                    (typeof evaluation.datasetClassDistribution === 'string' ?
+                      JSON.parse(evaluation.datasetClassDistribution) :
+                      evaluation.datasetClassDistribution) : undefined,
+                  isDatasetClassDistributionBalanced: evaluation.isDatasetClassDistributionBalanced === null ? 
+                    undefined : evaluation.isDatasetClassDistributionBalanced,
+                  predictedClassDistribution: evaluation.predictedClassDistribution ? 
+                    (typeof evaluation.predictedClassDistribution === 'string' ?
+                      JSON.parse(evaluation.predictedClassDistribution) :
+                      evaluation.predictedClassDistribution) : undefined,
+                  isPredictedClassDistributionBalanced: evaluation.isPredictedClassDistributionBalanced === null ? 
+                    undefined : evaluation.isPredictedClassDistributionBalanced,
+                  scoreResults: evaluation.scoreResults ? standardizeScoreResults(evaluation.scoreResults) : [],
+                  task: evaluation.task ? {
+                    id: evaluation.task.id,
+                    accountId: (evaluation as any).accountId || '',
+                    type: evaluation.task.type || 'EVALUATION',
+                    status: evaluation.task.status,
+                    target: evaluation.task.target,
+                    command: evaluation.task.command,
+                    description: evaluation.task.description || undefined,
+                    metadata: evaluation.task.metadata || {},
+                    createdAt: evaluation.task.createdAt || undefined,
+                    startedAt: evaluation.task.startedAt || undefined,
+                    completedAt: evaluation.task.completedAt || undefined,
+                    estimatedCompletionAt: evaluation.task.estimatedCompletionAt || undefined,
+                    errorMessage: evaluation.task.errorMessage || undefined,
+                    errorDetails: evaluation.task.errorDetails || undefined,
+                    currentStageId: evaluation.task.currentStageId || undefined,
+                    stages: {
+                      items: evaluation.task.stages ? getValueFromLazyLoader(evaluation.task.stages)?.data?.items || [] : [],
+                      nextToken: null
+                    }
+                  } : null
+                }
+              }}
+              selectedScoreResultId={selectedScoreResultId}
+              onSelectScoreResult={setSelectedScoreResultId}
+            />
+          </div>
+        </div>
+      ) : null}
+    </div>
   )
 } 

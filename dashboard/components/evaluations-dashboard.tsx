@@ -6,7 +6,7 @@ import type { Schema } from "@/amplify/data/resource"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import { Square, RectangleVertical, X, ChevronDown, ChevronUp, Info, MessageCircleMore, Plus, ThumbsUp, ThumbsDown, Trash2, MoreHorizontal, Eye, RefreshCw } from "lucide-react"
+import { Square, RectangleVertical, X, ChevronDown, ChevronUp, Info, MessageCircleMore, Plus, ThumbsUp, ThumbsDown, Trash2, MoreHorizontal, Eye, RefreshCw, Share } from "lucide-react"
 import { format, formatDistanceToNow, parseISO } from "date-fns"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -60,8 +60,9 @@ import type { LazyLoader } from '@/utils/types'
 import { observeRecentEvaluations, observeTaskUpdates, observeTaskStageUpdates } from '@/utils/subscriptions'
 import { useEvaluationData } from '@/features/evaluations/hooks/useEvaluationData'
 import { toast } from "sonner"
-import { shareLinkClient } from "@/utils/share-link-client"
+import { shareLinkClient, ShareLinkViewOptions } from "@/utils/share-link-client"
 import { fetchAuthSession } from 'aws-amplify/auth'
+import { ShareResourceModal } from "@/components/share-resource-modal"
 
 type TaskResponse = {
   items: Evaluation[]
@@ -382,6 +383,8 @@ export default function EvaluationsDashboard() {
     threshold: 0,
   })
   const [selectedScoreResultId, setSelectedScoreResultId] = useState<string | null>(null)
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false)
+  const [shareUrl, setShareUrl] = useState<string | null>(null)
 
   // Fetch account ID
   useEffect(() => {
@@ -502,7 +505,7 @@ export default function EvaluationsDashboard() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={copyLinkToClipboard}>
-                <Eye className="mr-2 h-4 w-4" />
+                <Share className="mr-2 h-4 w-4" />
                 Share
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleDelete(evaluation.id)}>
@@ -539,7 +542,12 @@ export default function EvaluationsDashboard() {
     setSelectedScoreResultId(id);
   }, []);
 
-  const copyLinkToClipboard = async () => {
+  const copyLinkToClipboard = () => {
+    if (!selectedEvaluationId || !accountId) return;
+    setIsShareModalOpen(true);
+  }
+
+  const handleCreateShareLink = async (expiresAt: string, viewOptions: ShareLinkViewOptions) => {
     if (!selectedEvaluationId || !accountId) return;
     
     try {
@@ -548,35 +556,61 @@ export default function EvaluationsDashboard() {
         resourceType: 'Evaluation',
         resourceId: selectedEvaluationId,
         accountId: accountId,
-        // Set expiration date (30 days from now)
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-        // Configure view options
-        viewOptions: {
-          displayMode: 'detailed',
-          includeMetrics: true
-        }
+        expiresAt,
+        viewOptions
       });
       
-      // Copy the URL to clipboard
-      navigator.clipboard.writeText(url).then(
-        () => {
-          toast.success("Share link created and copied to clipboard", {
-            description: "You can now share this evaluation with others"
-          });
-        },
-        () => {
-          toast.error("Failed to copy link", {
-            description: "The share link was created but couldn't be copied to clipboard"
-          });
+      // Ensure URL is valid before attempting to copy
+      if (!url) throw new Error("Generated URL is empty");
+      
+      // Store the URL in state
+      setShareUrl(url);
+      
+      try {
+        // Check for clipboard permissions first
+        if (navigator.permissions && navigator.permissions.query) {
+          const permissionStatus = await navigator.permissions.query({ name: 'clipboard-write' as PermissionName });
+          if (permissionStatus.state === 'denied') {
+            throw new Error("Clipboard permission denied");
+          }
         }
-      );
+        
+        // Copy with proper await
+        await navigator.clipboard.writeText(url);
+        
+        toast.success("Share link created and copied to clipboard", {
+          description: "You can now share this evaluation with others"
+        });
+        
+        // Close the modal after successful copy
+        setIsShareModalOpen(false);
+        
+      } catch (clipboardError) {
+        console.error("Clipboard error:", clipboardError);
+        
+        // Keep the share modal open so user can see and copy the URL
+        toast.warning("Created share link, but couldn't copy to clipboard", {
+          description: "The link is available in the share dialog",
+          duration: 5000
+        });
+        
+        // Keep the share modal open so user can see and copy the URL
+        console.log("Setting modal to stay open after clipboard error");
+        setIsShareModalOpen(true);
+      }
     } catch (error) {
-      console.error('Error creating share link:', error);
+      console.error("Error creating share link:", error);
       toast.error("Failed to create share link", {
-        description: "Please try again"
+        description: "An error occurred while creating the share link"
       });
     }
-  };
+  }
+
+  // Update the modal close handler to be simpler since we're handling cleanup in the modal component
+  const handleCloseShareModal = useCallback(() => {
+    setIsShareModalOpen(false);
+    setShareUrl(null); // Clear the share URL when closing the modal
+  }, []);
 
   interface EvaluationsGridProps {
     evaluations: Evaluation[];
@@ -756,6 +790,13 @@ export default function EvaluationsDashboard() {
           </div>
         )}
       </div>
+      <ShareResourceModal 
+        isOpen={isShareModalOpen}
+        onClose={handleCloseShareModal}
+        onShare={handleCreateShareLink}
+        resourceType="Evaluation"
+        shareUrl={shareUrl}
+      />
     </div>
   )
 }
