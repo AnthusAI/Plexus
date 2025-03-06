@@ -559,19 +559,104 @@ export default function EvaluationsDashboard() {
         viewOptions
       });
       
+      // Function to attempt copying with fallback method
+      const fallbackCopyTextToClipboard = (text: string): boolean => {
+        try {
+          const textArea = document.createElement("textarea");
+          textArea.value = text;
+          
+          // Make the textarea out of viewport
+          textArea.style.position = "fixed";
+          textArea.style.left = "-999999px";
+          textArea.style.top = "-999999px";
+          document.body.appendChild(textArea);
+          textArea.focus();
+          textArea.select();
+          
+          const successful = document.execCommand('copy');
+          document.body.removeChild(textArea);
+          return successful;
+        } catch (err) {
+          console.error('Fallback clipboard copy failed:', err);
+          return false;
+        }
+      };
+      
       // Copy the URL to clipboard
-      navigator.clipboard.writeText(url).then(
-        () => {
+      if (!navigator.clipboard) {
+        console.warn("Clipboard API not available in this browser");
+        
+        // Try fallback method
+        const fallbackSuccess = fallbackCopyTextToClipboard(url);
+        
+        if (fallbackSuccess) {
           toast.success("Share link created and copied to clipboard", {
             description: "You can now share this evaluation with others"
           });
-        },
-        () => {
-          toast.error("Failed to copy link", {
-            description: "The share link was created but couldn't be copied to clipboard"
+        } else {
+          toast.warning("Clipboard API not available", {
+            description: (
+              <div>
+                <p>Your browser doesn't support automatic copying.</p>
+                <p className="mt-2 font-medium">URL: <span className="select-all break-all">{url}</span></p>
+              </div>
+            )
           });
         }
-      );
+        return;
+      }
+      
+      try {
+        await navigator.clipboard.writeText(url);
+        toast.success("Share link created and copied to clipboard", {
+          description: "You can now share this evaluation with others"
+        });
+      } catch (error: unknown) {
+        console.error("Clipboard error details:", error);
+        
+        // Check if it's a permission error
+        let errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        let isPermissionError = false;
+        
+        if (error instanceof DOMException) {
+          if (error.name === 'NotAllowedError' || error.name === 'SecurityError') {
+            isPermissionError = true;
+            errorMessage = 'Permission to access clipboard was denied';
+          }
+        }
+        
+        // Try fallback method if it's a permission error
+        if (isPermissionError) {
+          const fallbackSuccess = fallbackCopyTextToClipboard(url);
+          if (fallbackSuccess) {
+            toast.success("Share link created and copied to clipboard", {
+              description: "You can now share this evaluation with others"
+            });
+            return;
+          }
+        }
+        
+        // Show the URL in the toast so users can manually copy it
+        toast.error("Failed to copy link", {
+          description: (
+            <div>
+              <p>The share link was created but couldn't be copied to clipboard. Error: {errorMessage}</p>
+              <p className="mt-2 font-medium">URL: <span className="select-all break-all">{url}</span></p>
+              <button 
+                className="mt-2 px-3 py-1 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 text-sm"
+                onClick={() => {
+                  const success = fallbackCopyTextToClipboard(url);
+                  if (success) {
+                    toast.success("Link copied to clipboard");
+                  }
+                }}
+              >
+                Try Copy Again
+              </button>
+            </div>
+          )
+        });
+      }
     } catch (error) {
       console.error("Error creating share link:", error);
       toast.error("Failed to create share link", {
