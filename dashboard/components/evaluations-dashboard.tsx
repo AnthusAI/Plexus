@@ -384,6 +384,7 @@ export default function EvaluationsDashboard() {
   })
   const [selectedScoreResultId, setSelectedScoreResultId] = useState<string | null>(null)
   const [isShareModalOpen, setIsShareModalOpen] = useState(false)
+  const [shareUrl, setShareUrl] = useState<string | null>(null)
 
   // Fetch account ID
   useEffect(() => {
@@ -559,103 +560,43 @@ export default function EvaluationsDashboard() {
         viewOptions
       });
       
-      // Function to attempt copying with fallback method
-      const fallbackCopyTextToClipboard = (text: string): boolean => {
-        try {
-          const textArea = document.createElement("textarea");
-          textArea.value = text;
-          
-          // Make the textarea out of viewport
-          textArea.style.position = "fixed";
-          textArea.style.left = "-999999px";
-          textArea.style.top = "-999999px";
-          document.body.appendChild(textArea);
-          textArea.focus();
-          textArea.select();
-          
-          const successful = document.execCommand('copy');
-          document.body.removeChild(textArea);
-          return successful;
-        } catch (err) {
-          console.error('Fallback clipboard copy failed:', err);
-          return false;
-        }
-      };
+      // Ensure URL is valid before attempting to copy
+      if (!url) throw new Error("Generated URL is empty");
       
-      // Copy the URL to clipboard
-      if (!navigator.clipboard) {
-        console.warn("Clipboard API not available in this browser");
-        
-        // Try fallback method
-        const fallbackSuccess = fallbackCopyTextToClipboard(url);
-        
-        if (fallbackSuccess) {
-          toast.success("Share link created and copied to clipboard", {
-            description: "You can now share this evaluation with others"
-          });
-        } else {
-          toast.warning("Clipboard API not available", {
-            description: (
-              <div>
-                <p>Your browser doesn't support automatic copying.</p>
-                <p className="mt-2 font-medium">URL: <span className="select-all break-all">{url}</span></p>
-              </div>
-            )
-          });
-        }
-        return;
-      }
+      // Store the URL in state
+      setShareUrl(url);
       
       try {
+        // Check for clipboard permissions first
+        if (navigator.permissions && navigator.permissions.query) {
+          const permissionStatus = await navigator.permissions.query({ name: 'clipboard-write' as PermissionName });
+          if (permissionStatus.state === 'denied') {
+            throw new Error("Clipboard permission denied");
+          }
+        }
+        
+        // Copy with proper await
         await navigator.clipboard.writeText(url);
+        
         toast.success("Share link created and copied to clipboard", {
           description: "You can now share this evaluation with others"
         });
-      } catch (error: unknown) {
-        console.error("Clipboard error details:", error);
         
-        // Check if it's a permission error
-        let errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        let isPermissionError = false;
+        // Close the modal after successful copy
+        setIsShareModalOpen(false);
         
-        if (error instanceof DOMException) {
-          if (error.name === 'NotAllowedError' || error.name === 'SecurityError') {
-            isPermissionError = true;
-            errorMessage = 'Permission to access clipboard was denied';
-          }
-        }
+      } catch (clipboardError) {
+        console.error("Clipboard error:", clipboardError);
         
-        // Try fallback method if it's a permission error
-        if (isPermissionError) {
-          const fallbackSuccess = fallbackCopyTextToClipboard(url);
-          if (fallbackSuccess) {
-            toast.success("Share link created and copied to clipboard", {
-              description: "You can now share this evaluation with others"
-            });
-            return;
-          }
-        }
-        
-        // Show the URL in the toast so users can manually copy it
-        toast.error("Failed to copy link", {
-          description: (
-            <div>
-              <p>The share link was created but couldn't be copied to clipboard. Error: {errorMessage}</p>
-              <p className="mt-2 font-medium">URL: <span className="select-all break-all">{url}</span></p>
-              <button 
-                className="mt-2 px-3 py-1 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 text-sm"
-                onClick={() => {
-                  const success = fallbackCopyTextToClipboard(url);
-                  if (success) {
-                    toast.success("Link copied to clipboard");
-                  }
-                }}
-              >
-                Try Copy Again
-              </button>
-            </div>
-          )
+        // Keep the share modal open so user can see and copy the URL
+        toast.warning("Created share link, but couldn't copy to clipboard", {
+          description: "The link is available in the share dialog",
+          duration: 5000
         });
+        
+        // Keep the share modal open so user can see and copy the URL
+        console.log("Setting modal to stay open after clipboard error");
+        setIsShareModalOpen(true);
       }
     } catch (error) {
       console.error("Error creating share link:", error);
@@ -668,6 +609,7 @@ export default function EvaluationsDashboard() {
   // Update the modal close handler to be simpler since we're handling cleanup in the modal component
   const handleCloseShareModal = useCallback(() => {
     setIsShareModalOpen(false);
+    setShareUrl(null); // Clear the share URL when closing the modal
   }, []);
 
   interface EvaluationsGridProps {
@@ -853,6 +795,7 @@ export default function EvaluationsDashboard() {
         onClose={handleCloseShareModal}
         onShare={handleCreateShareLink}
         resourceType="Evaluation"
+        shareUrl={shareUrl}
       />
     </div>
   )

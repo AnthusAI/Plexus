@@ -44,6 +44,7 @@ interface ShareResourceModalProps {
   onShare: (expiresAt: string, viewOptions: ShareLinkViewOptions) => Promise<void>
   resourceType: 'Evaluation' | 'Scorecard' | 'Report' | string
   resourceName?: string
+  shareUrl?: string | null
 }
 
 export function ShareResourceModal({ 
@@ -51,7 +52,8 @@ export function ShareResourceModal({
   onClose, 
   onShare, 
   resourceType, 
-  resourceName 
+  resourceName,
+  shareUrl
 }: ShareResourceModalProps) {
   // Default expiration date (30 days from now)
   const defaultExpirationDate = addDays(new Date(), 30)
@@ -156,9 +158,8 @@ export function ShareResourceModal({
       const expiresAt = expirationDate ? expirationDate.toISOString() : undefined;
       await onShare(expiresAt as string, viewOptions)
       
-      // Mark as closing and close the modal
-      isClosingRef.current = true
-      onClose()
+      // Don't automatically close the modal - let the parent component decide
+      // The parent will close it if the clipboard operation succeeds
     } catch (error) {
       console.error(`Error sharing ${resourceType}:`, error)
     } finally {
@@ -218,6 +219,47 @@ export function ShareResourceModal({
           <p className="text-sm text-muted-foreground mb-4">
             {getModalDescription()}
           </p>
+          
+          {/* Display share URL if available */}
+          {shareUrl && (
+            <div className="mb-4 p-3 bg-muted rounded-md">
+              <Label htmlFor="shareUrl" className="text-sm font-medium mb-1 block">Share Link</Label>
+              <div className="flex gap-2">
+                <input
+                  id="shareUrl"
+                  type="text"
+                  value={shareUrl}
+                  readOnly
+                  className="flex-1 px-3 py-2 text-sm border rounded-md bg-background"
+                  onClick={(e) => e.currentTarget.select()}
+                />
+                <Button 
+                  size="sm" 
+                  onClick={() => {
+                    navigator.clipboard.writeText(shareUrl)
+                      .then(() => {
+                        // Show success message
+                        const successMsg = document.createElement('div');
+                        successMsg.className = 'text-xs text-green-500 mt-1';
+                        successMsg.textContent = 'Copied!';
+                        
+                        const container = document.getElementById('shareUrlContainer');
+                        if (container) {
+                          container.appendChild(successMsg);
+                          setTimeout(() => {
+                            container.removeChild(successMsg);
+                          }, 2000);
+                        }
+                      })
+                      .catch(err => console.error('Failed to copy:', err));
+                  }}
+                >
+                  Copy
+                </Button>
+              </div>
+              <div id="shareUrlContainer" className="h-5"></div>
+            </div>
+          )}
           
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
