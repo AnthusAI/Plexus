@@ -1697,6 +1697,12 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
                         # Include note in mutation if provided
                         note_field = f'note: {json.dumps(version_note)},' if version_note else ""
                         
+                        # Define timestamp for version creation
+                        now = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
+                        
+                        # Define parent version field if parent_version_id exists
+                        parent_version_field = f'parentVersionId: "{parent_version_id}",' if parent_version_id else ""
+                        
                         create_version_mutation = f"""
                         mutation CreateScoreVersion {{
                             createScoreVersion(input: {{
