@@ -27,6 +27,9 @@ jobs:
     - name: Run Python Tests
       run: |
         echo "Current directory: $(pwd)"
+        echo "GITHUB_WORKSPACE: $GITHUB_WORKSPACE"
+        cd $GITHUB_WORKSPACE
+        echo "Changed to directory: $(pwd)"
         PYTHONPATH=$GITHUB_WORKSPACE invoke ci
 
     - name: Setup Node.js
