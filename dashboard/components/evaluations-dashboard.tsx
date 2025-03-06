@@ -575,9 +575,6 @@ export default function EvaluationsDashboard() {
           }
         }
         
-        // TEMPORARY: Force clipboard failure for testing
-        throw new Error("Simulated clipboard failure for testing");
-        
         // Copy with proper await
         await navigator.clipboard.writeText(url);
         
