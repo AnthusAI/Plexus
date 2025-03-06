@@ -844,10 +844,6 @@ const DetailContent = React.memo(({
 
           {versions && (
             <div className="mt-6 overflow-hidden">
-              <div className="flex items-center gap-2 mb-2">
-                <FileStack className="h-4 w-4 text-foreground" />
-                <span className="text-sm font-medium">Version History</span>
-              </div>
               <ScoreVersionHistory
                 versions={versions}
                 championVersionId={championVersionId}
