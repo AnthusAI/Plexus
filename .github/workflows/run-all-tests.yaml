@@ -20,13 +20,15 @@ jobs:
         
     - name: Install Python dependencies
       run: |
-        python -m pip install --upgrade pip
-        pip install invoke
-        pip install -e .
-        
+        PYTHONPATH=$GITHUB_WORKSPACE python -m pip install --upgrade pip
+        PYTHONPATH=$GITHUB_WORKSPACE pip install invoke
+        PYTHONPATH=$GITHUB_WORKSPACE pip install -e .
+
     - name: Run Python Tests
-      run: invoke ci
-        
+      run: |
+        echo "Current directory: $(pwd)"
+        PYTHONPATH=$GITHUB_WORKSPACE invoke ci
+
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
