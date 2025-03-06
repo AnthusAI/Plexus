@@ -34,6 +34,7 @@ const EXPIRATION_PERIODS = [
   { value: "90days", label: "90 days", days: 90 },
   { value: "180days", label: "6 months", days: 180 },
   { value: "365days", label: "1 year", days: 365 },
+  { value: "never", label: "Never", days: null },
   { value: "custom", label: "Custom date", days: null }
 ];
 
@@ -56,7 +57,7 @@ export function ShareResourceModal({
   const defaultExpirationDate = addDays(new Date(), 30)
   
   // State for form values
-  const [expirationDate, setExpirationDate] = useState<Date>(defaultExpirationDate)
+  const [expirationDate, setExpirationDate] = useState<Date | null>(defaultExpirationDate)
   const [expirationPeriod, setExpirationPeriod] = useState<string>("30days")
   const [isCustomDate, setIsCustomDate] = useState<boolean>(false)
   const [displayMode, setDisplayMode] = useState<"summary" | "detailed">("detailed")
@@ -113,10 +114,16 @@ export function ShareResourceModal({
       setIsCustomDate(true);
     } else {
       setIsCustomDate(false);
-      // Set the expiration date based on the selected period
-      const period = EXPIRATION_PERIODS.find(p => p.value === value);
-      if (period && period.days) {
-        setExpirationDate(addDays(new Date(), period.days));
+      
+      if (value === "never") {
+        // For "never expires", set expirationDate to null
+        setExpirationDate(null);
+      } else {
+        // Set the expiration date based on the selected period
+        const period = EXPIRATION_PERIODS.find(p => p.value === value);
+        if (period && period.days) {
+          setExpirationDate(addDays(new Date(), period.days));
+        }
       }
     }
   };
@@ -145,7 +152,9 @@ export function ShareResourceModal({
       }
       
       // Call the onShare callback with the configured values
-      await onShare(expirationDate.toISOString(), viewOptions)
+      // If expirationDate is null (never expires), pass undefined for expiresAt
+      const expiresAt = expirationDate ? expirationDate.toISOString() : undefined;
+      await onShare(expiresAt as string, viewOptions)
       
       // Mark as closing and close the modal
       isClosingRef.current = true
@@ -247,7 +256,7 @@ export function ShareResourceModal({
                     <PopoverContent className="w-auto p-0" align="start">
                       <Calendar
                         mode="single"
-                        selected={expirationDate}
+                        selected={expirationDate || undefined}
                         onSelect={(date) => {
                           if (date) {
                             setExpirationDate(date);
@@ -262,9 +271,14 @@ export function ShareResourceModal({
                 </div>
               )}
               
-              {!isCustomDate && (
+              {!isCustomDate && expirationDate && (
                 <p className="text-sm text-muted-foreground mt-1">
                   Link expires on {format(expirationDate, "MMMM d, yyyy")}
+                </p>
+              )}
+              {!isCustomDate && !expirationDate && expirationPeriod === "never" && (
+                <p className="text-sm text-muted-foreground mt-1">
+                  Link will never expire
                 </p>
               )}
             </div>
