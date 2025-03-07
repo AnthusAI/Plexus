@@ -1,5 +1,21 @@
 # Plexus Scorecard Management System
 
+## Important File Locations
+
+### CLI and Backend Files
+- CLI Implementation: `plexus/cli/ScorecardCommands.py` - Contains all scorecard CLI commands including push, pull, fix, etc.
+- CLI Entry Point: `plexus/cli/CommandLineInterface.py` - Main CLI entry point that imports and registers commands
+- Dashboard API Client: `plexus/dashboard/api/client.py` - Client for interacting with the GraphQL API
+- GraphQL Schema: `plexus/dashboard/api/schema.graphql` - GraphQL schema defining the API
+
+### Frontend Files
+- Scorecard Components: `dashboard/components/scorecard/` - React components for scorecard UI
+- Scorecard Pages: `dashboard/app/scorecards/` - Next.js pages for scorecard management
+
+### Running the CLI
+- Use the conda environment: `conda run -n py39 python -m plexus.cli.CommandLineInterface [command]`
+- Example: `conda run -n py39 python -m plexus.cli.CommandLineInterface scorecard push --scorecard "My Scorecard"`
+
 ## Overview
 
 This document outlines the implementation of Plexus's scorecard management system, which will provide a modern, user-friendly interface for managing scorecards and their configurations. The system will evolve from basic YAML editing to a sophisticated no-code visual block editor.
@@ -57,96 +73,149 @@ This document outlines the implementation of Plexus's scorecard management syste
 
 ### Phase 2: Schema Updates
 - Status: ✅ Completed
+- Achievements:
+  - Created new `ScoreVersion` model to store versioned score configurations
+  - Moved score configuration from `Score` model to `ScoreVersion`
+  - Added `championVersion` reference in `Score` to track current version
+  - Updated GraphQL schema and resolvers
+  - Updated front-end types and components to match new schema
+  - Successfully migrated existing configurations to new structure
+
+### Phase 3: Front-End UI Updates (Current Focus)
+- Status: 🔄 In Progress
 - Goals:
   - Update UI to support score version management
   - Add version history view for scores
   - Implement version comparison interface
   - Add ability to promote versions to champion
   - Show version metadata in evaluation results
-  - Add version indicator with timestamp in ScoreComponent
-  - Add version history dropdown in ScoreComponent
-  - Support creating new versions through name editing
-- Progress:
-  ✅ Basic version history UI implemented in ScoreComponent
-  ✅ Version comment field added when editing scores
-  ✅ Version list fetching from API working
-  ✅ Creating new versions with comments working
-  ✅ Version history expandable/collapsible view
-  ✅ Basic version metadata display (timestamp, comment)
-  ✅ Version promotion to champion
-  ✅ Version comparison interface
-  ✅ Version metadata in evaluation results
-  ✅ Version indicator with timestamp to ScoreComponent
-  ✅ Version history dropdown menu
-  ✅ Name editing and new version creation flow
-  ✅ Featured version indicator and toggle functionality
+- Current Progress:
+  - Testing the front-end for version management
+  - Using new CLI commands to create versions by pushing updates
+- Next Steps:
+  - Complete testing of version creation workflow
+  - Finalize version history view
+  - Complete version promotion workflow
+  - Update evaluation display to show version info
 
-### Phase 3: CLI API Integration (Current Focus)
+### Phase 3.5: Data Integrity Issues
 - Status: ✅ Completed
-- Goals:
+- Problems Resolved:
+  - Fixed incorrect scorecard external IDs causing reference issues
+  - Resolved duplicate scores within scorecards
+  - Fixed YAML synchronization issues between local files and API
+  - Implemented validation to prevent future duplicates
+  - Ensured data consistency between API and CLI tools
+  - Enhanced YAML synchronization to properly handle external IDs
+- Achievements:
+  - Successfully audited and corrected external IDs across all scorecards
+  - Implemented score deduplication process
+  - Added validation rules to prevent creation of duplicate scores
+  - Updated CLI tools to handle and report data integrity issues
+  - Enhanced `push` command to load YAML from scorecards directory
+  - Ensured proper external ID handling during YAML sync
+
+#### Example YAML Structure
+```yaml
+name: Prime - EDU 3rd Party
+id: 97
+key: primeedu
+
+scores:
+  - name: Good Call
+    id: 0
+    class: LangGraphScore
+    model_provider: ChatOpenAI
+    model_name: gpt-4o-mini-2024-07-18
+    graph:
+      - name: yes_or_no_classifier
+        class: Classifier
+        valid_classes: ["Yes", "No"]
+        system_message: |-
+          Task: You are an expert at classifying phone call transcripts...
+```
+
+### ScoreVersion Management in Push Command
+- Status: ✅ Completed
+- Implementation Details:
+  - Successfully implemented the `push` command with ScoreVersion creation and management
+  - Each Score now has multiple ScoreVersions, with each version storing the complete configuration
+  - The `configuration` field in ScoreVersion stores the YAML snippet for that specific score
+  - Process for handling ScoreVersions during push works as designed:
+    1. For each score in the YAML file:
+       - Identifies the Score by name, key, or externalId
+       - Finds the appropriate parent ScoreVersion
+       - Compares the YAML configuration with the parent ScoreVersion
+       - Creates a new ScoreVersion when configurations differ
+       - Reports to user when scores are up-to-date
+    2. Updates the Score's `championVersionId` to point to the latest version
+  - Benefits:
+    - Maintains version history of score configurations
+    - Allows rollback to previous versions if needed
+    - Provides audit trail of configuration changes
+    - Supports comparison between versions
+
+#### Example GraphQL Mutations for ScoreVersion Management
+```graphql
+# Create a new ScoreVersion
+mutation CreateScoreVersion($input: CreateScoreVersionInput!) {
+  createScoreVersion(input: $input) {
+    id
+    scoreId
+    configuration
+    isFeatured
+    createdAt
+    updatedAt
+    parentVersionId
+  }
+}
+
+# Update Score to point to new champion version
+mutation UpdateScore($input: UpdateScoreInput!) {
+  updateScore(input: $input) {
+    id
+    name
+    championVersionId
+  }
+}
+```
+
+### Phase 4: CLI API Integration
+- Status: ✅ Partially Completed
+- Achievements:
+  - Successfully implemented `scorecards push --scorecard ...` command
+  - Successfully implemented `scorecards info` command
+  - Both commands are working as expected
+- Remaining Goals:
   - Update `plexus evaluate accuracy` to use API
   - Remove dependency on local YAML files for evaluation
   - Support fetching score configuration from cloud
   - Add version selection for evaluations
-  - Improve CLI scorecard display
-- Progress:
-  ✅ Enhanced scorecard display in CLI with improved layout
-  ✅ Added "Scores" header to tree view with proper alignment
-  ✅ Implemented full-width tree view for better readability
-  ✅ Ensured proper display in both single and multiple column modes
-  ✅ Added new `plexus scorecards score` command to view detailed information about a single score
-  ✅ Implemented lookup by score ID, key, or external ID
-  ✅ Added support for viewing score version history and configuration
-  ✅ Optimized scorecard data fetching with single comprehensive GraphQL query
-  ✅ Added `--fast` option to skip fetching sections and scores for better performance
-  ✅ Added progress indicators for API operations
-  ✅ Updated documentation to reflect new commands and performance improvements
+- Next Steps:
+  - Update CLI evaluation command
+  - Add API client for score version fetching
+  - Implement version selection logic
+  - Add progress indicators for API operations
 
-### Phase 4: YAML Mode Support
-- Status: In Progress
-- Goals:
-  - Add commands for syncing score configuration YAML
-  - Support `plexus scorecard pull` for downloading configs
-  - Support `plexus scorecard push` for uploading configs
-  - Maintain backward compatibility with YAML workflow
-- Implementation Plan:
-  1. CLI Consolidation:
-     - Remove redundant `plexus-dashboard scorecard sync` command
-     - Consolidate all scorecard management functionality in the main `plexus` CLI
-     - Ensure any unique functionality from dashboard CLI is preserved
-  
-  2. Handle duplicate records:
-     - When synchronizing a score, check for multiple implementations of the same score ID in API
-     - Reduce to maximum of one implementation
-  
-  3. Implement version-based upsert:
-     - Perform upsert into score version record instead of score record
-     - Find version corresponding to local YAML code
-     - Create new child record from matching version
-  
-  4. Optimization:
-     - Perform string comparison before creating new score version
-     - Only create new version if YAML code differs
-     - Otherwise just update timestamp on existing version
-     - Add appropriate version metadata (user, timestamp, comment)
-  
-  5. New CLI Commands:
-     - `plexus scorecard pull`: Download latest champion version of scores to local YAML files
-     - `plexus scorecard push`: Upload local YAML changes as new versions
-     - `plexus scorecard history`: View version history for scores
-     - `plexus scorecard promote`: Promote specific version to champion
-  
-  6. Implementation Details:
-     - Pull command will fetch champion versions of scores and save to local YAML files
-     - Push command will create new versions of scores from local YAML files
-     - History command will display version history with timestamps, comments, and status
-     - Promote command will set a specific version as the champion
-     - All commands will support filtering by scorecard, score name, or score key
+### Phase 5: YAML Mode Support
+- Status: 🔄 In Progress
+- Achievements:
+  - Successfully implemented `scorecards push` for uploading configs
+  - Maintained backward compatibility with YAML workflow
+- Current Focus:
+  - Implementing `scorecards pull` command
+  - This command will need to merge score configuration YAML from the API into existing scorecard YAML files
+- Next Steps:
+  - Design merge algorithm to combine API data with local YAML
+  - Handle potential conflicts between local and remote versions
+  - Ensure proper preservation of non-configuration data in local files
+  - Document the complete push/pull workflow
+  - Add troubleshooting guidance for common issues
 
 ### Score Version Management
 - Status: ✅ Completed
 - Implementation Details:
-  - Score configurations are versioned in new `ScoreVersion` model
+  - Score configurations are now versioned in the `ScoreVersion` model
   - Each `Score` has a `championVersion` reference to its current champion
   - `ScoreResult` has optional `scoreVersion` reference for backward compatibility
   - Evaluations track which version they evaluated via `scoreVersion` reference
@@ -255,103 +324,3 @@ Card (Base)
 │   └── Grid<ScoreCard>
 └── ScoreCard
 ```
-
-### Layout Patterns
-1. Dashboard Layout
-   - Left panel: Grid of ScorecardCards
-   - Right panel: Selected ScorecardCard in detail mode
-
-2. Scorecard Detail Layout
-   - Header: Scorecard metadata
-   - Content: Grid of ScoreCards
-   - Right panel (when score selected): ScoreCard detail
-
-3. Common Features
-   - All cards support selection
-   - Detail views support full-width toggle
-   - Consistent grid/detail transitions
-   - Uniform styling and spacing
-
-### UI/UX Guidelines
-- Consistent card sizing in grids
-- Smooth transitions between states
-- Clear selection indicators
-- Uniform padding and spacing
-- Responsive grid layouts
-- Match existing dashboard patterns (Evaluations, Activity)
-- Clear feedback for user actions
-- Simple YAML editing interface
-- Consistent styling with other components
-
-### Data Flow
-1. Dashboard loads scorecard list using existing GraphQL queries
-2. Selection updates detail view
-3. YAML edits update Score configuration
-4. Changes saved through existing mutations
-
-### Development Guidelines
-
-#### Story Development
-1. Create stories alongside component development
-2. Cover all component variants and states
-3. Document props and usage in story files
-4. Include interactive examples
-5. Test responsive behavior
-6. Ensure accessibility in all states
-
-#### Testing Requirements
-- Visual regression tests for stories
-- Interaction testing for interactive states
-- Accessibility testing in Storybook
-- Responsive testing across breakpoints
-
-### Score Version Management UI
-- Status: ✅ Completed
-- Implementation Details:
-  - Each ScoreComponent displays:
-    ✅ Basic header structure matching ScorecardComponent:
-      - Editable title field with consistent styling
-      - Editable external ID field with monospace font
-      - Save/Cancel buttons appearing on changes
-      - Action buttons in top-right (more, full width, close)
-    - Current version indicator showing:
-      - Relative timestamp using standard Timestamp component
-      - "Champion" pill for champion version
-      - Star icon for featured versions (clickable in detail mode)
-      - Left-aligned placement under header section
-    - Version history dropdown showing:
-      - 12 most recent versions in reverse chronological order
-      - Champion status via pill
-      - Featured status via star icon
-      - Relative timestamp for each version
-  - Version Creation Flow:
-    ✅ Name editing matches ScorecardCard UX:
-      - In-place editing with same styling
-      - Save/Cancel buttons appear on edit
-      - Only name field editable initially
-      - Name is required, no other validation
-    - New version behavior:
-      - Inherits configuration from current version
-      - Does not automatically become champion
-      - Timestamp set to creation time
-  - UI Layout:
-    ✅ Top-right corner reserved for action buttons (X, square, "...")
-    ✅ Basic header layout established
-    - Version selector positioned left-aligned under header
-    - Version controls placed above YAML editor section
-  - UI Components Needed:
-    ✅ Editable name field
-    ✅ Save/Cancel action buttons
-    - Version indicator with timestamp
-    - Champion status pill
-    - Featured status star icon (interactive)
-    - Version history dropdown
-
-- Data Access Patterns
-  - To achieve fast lookups in production, the Score record will store denormalized fields from the champion ScoreVersion:
-    - Name and externalId are duplicated in the Score record.
-    - A Global Secondary Index (GSI) will be applied on externalId (and optionally on name) to allow rapid querying of the current champion score.
-    - This approach ensures that even while a full history is maintained in ScoreVersion records, the primary Score record remains the single source of truth for fast access.
-
-- Overall Benefit
-  - A single GraphQL query can quickly retrieve the current champion score using the denormalized fields, and then access the full version history via the associated ScoreVersion content.

@@ -162,11 +162,11 @@ plexus scorecards promote --account-key "account-key" --score-id "score-id" --ve
 # Add a new score to a scorecard
 plexus scores add --scorecard-id "card-id" --name "Quality Score" --type quality --weight 0.5
 
-# Update an existing score
-plexus scores update score-id --weight 0.6 --threshold 0.8
+# List all scores in a scorecard
+plexus scores list --scorecard "Quality Assurance"
 
-# Remove a score
-plexus scores delete score-id`}</code>
+# View score configuration
+plexus scores info --score "Grammar Check"`}</code>
           </pre>
           
           <div className="mt-4 space-y-4">
@@ -199,25 +199,25 @@ plexus scores delete score-id`}</code>
 
 plexus = Plexus(api_key="your-api-key")
 
-# Add a new score to a scorecard
-scorecard = plexus.scorecards.get("card-id")
-score = scorecard.add_score(
-    name="Quality Score",
-    type="quality",
-    weight=0.5,
-    threshold=0.8,
-    parameters={
-        "check_grammar": True,
-        "check_style": True
-    }
-)
+# Get a scorecard using any identifier (name, key, ID, or external ID)
+scorecard = plexus.scorecards.get("Quality Assurance")
 
-# Update a score
-score.update(weight=0.6, threshold=0.85)
+# Get a score using any identifier
+score = plexus.scores.get("Grammar Check")
 
-# Remove a score
-score.delete()`}</code>
+# Get all scores in a scorecard
+scores = scorecard.get_scores()
+
+# Get score configuration
+config = score.get_configuration()
+
+# Get score evaluation results
+results = score.get_results(limit=10)`}</code>
           </pre>
+          
+          <p className="text-muted-foreground mb-4">
+            Like the CLI, the Python SDK also supports the flexible identifier system, allowing you to reference resources using different types of identifiers.
+          </p>
         </section>
 
         <section>

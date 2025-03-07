@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { MoreHorizontal, X, Square, RectangleVertical, FileStack, ChevronDown, ChevronUp, Award, FileCode } from 'lucide-react'
+import { MoreHorizontal, X, Square, RectangleVertical, FileStack, ChevronDown, ChevronUp, Award, FileCode, Minimize, Maximize, ArrowDownWideNarrow, Expand, Shrink } from 'lucide-react'
 import { CardButton } from '@/components/CardButton'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Popover from '@radix-ui/react-popover'
@@ -132,6 +132,67 @@ const GridContent = React.memo(({
   )
 })
 
+// Enhance ResizableEditorContainer with better drag handle
+const ResizableEditorContainer = ({ 
+  height,
+  onHeightChange,
+  children,
+  isFullscreen = false
+}: { 
+  height: number,
+  onHeightChange: (newHeight: number) => void,
+  children: React.ReactNode,
+  isFullscreen?: boolean
+}) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [isResizing, setIsResizing] = useState(false);
+  
+  // Double-click handler to toggle between compact and expanded sizes
+  const handleDoubleClick = () => {
+    const newHeight = height < 500 ? 500 : 200;
+    if (containerRef.current) {
+      containerRef.current.style.height = `${newHeight}px`;
+      onHeightChange(newHeight);
+    }
+  };
+  
+  return (
+    <div 
+      ref={containerRef}
+      className={cn(
+        "relative border bg-background rounded-md",
+        isResizing && "border-accent",
+        isFullscreen ? "h-full" : "resize-y overflow-auto"
+      )}
+      style={!isFullscreen ? { 
+        height: `${height}px`,
+        minHeight: '150px',
+        maxHeight: '80vh'
+      } : { 
+        height: isFullscreen ? 'calc(100% - 40px)' : `${height}px` 
+      }}
+      onMouseDown={() => setIsResizing(true)}
+      onMouseUp={() => setIsResizing(false)}
+      onMouseLeave={() => setIsResizing(false)}
+    >
+      {children}
+      {!isFullscreen && (
+        <div 
+          className={cn(
+            "absolute bottom-0 left-0 right-0 h-4 cursor-ns-resize hover:bg-accent/30",
+            isResizing && "bg-accent/30"
+          )}
+          onDoubleClick={handleDoubleClick}
+        >
+          <div className="flex justify-center items-center h-full">
+            <div className="w-10 h-1.5 rounded-full bg-muted-foreground/50"></div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const DetailContent = React.memo(({
   score,
   isFullWidth,
@@ -202,10 +263,20 @@ const DetailContent = React.memo(({
       const parsed = parseYaml(currentConfig);
       console.log('DetailContent parsed YAML:', parsed);
       
-      // Handle both external_id and externalId formats
+      // Handle all possible external ID formats: externalId, external_id, and id
+      // Important: Check for the presence of the field in the parsed object, not just in the string
       const externalIdValue = parsed.externalId !== undefined ? 
         parsed.externalId : 
-        (parsed.external_id !== undefined ? parsed.external_id : score.externalId);
+        (parsed.external_id !== undefined ? parsed.external_id : 
+         (parsed.id !== undefined ? parsed.id : score.externalId));
+      
+      console.log('Extracted external ID value:', externalIdValue, 'from formats:', {
+        externalId: parsed.externalId,
+        external_id: parsed.external_id,
+        id: parsed.id,
+        scoreExternalId: score.externalId,
+        parsedKeys: Object.keys(parsed)
+      });
       
       return {
         ...parsed,
@@ -236,24 +307,37 @@ const DetailContent = React.memo(({
     try {
       const parsed = parseYaml(currentConfig);
       
-      // Check if using external_id format
-      const usesUnderscoreFormat = currentConfig.includes('external_id:') && 
-        !currentConfig.includes('externalId:');
+      // Check which format is being used for external ID by examining the parsed object
+      // This is more reliable than string matching in the YAML
+      const hasExternalId = 'externalId' in parsed;
+      const hasExternalUnderscoreId = 'external_id' in parsed;
+      const hasSimpleId = 'id' in parsed && !hasExternalId && !hasExternalUnderscoreId;
+      
+      console.log('External ID format detection (from parsed object):', {
+        hasExternalId,
+        hasExternalUnderscoreId,
+        hasSimpleId,
+        parsedKeys: Object.keys(parsed)
+      });
       
       // Update the field
       if (field === 'externalId') {
-        if (usesUnderscoreFormat) {
+        if (hasExternalUnderscoreId) {
           parsed.external_id = value;
-          // Remove camelCase if exists
-          if ('externalId' in parsed) {
-            delete parsed.externalId;
-          }
+          // Remove other formats if they exist
+          if ('externalId' in parsed) delete parsed.externalId;
+          if ('id' in parsed) delete parsed.id;
+        } else if (hasSimpleId) {
+          parsed.id = value;
+          // Remove other formats if they exist
+          if ('externalId' in parsed) delete parsed.externalId;
+          if ('external_id' in parsed) delete parsed.external_id;
         } else {
+          // Default to externalId format if no format is detected
           parsed.externalId = value;
-          // Remove snake_case if exists
-          if ('external_id' in parsed) {
-            delete parsed.external_id;
-          }
+          // Remove other formats if they exist
+          if ('external_id' in parsed) delete parsed.external_id;
+          if ('id' in parsed) delete parsed.id;
         }
       } else {
         parsed[field] = value;
@@ -429,202 +513,350 @@ const DetailContent = React.memo(({
     };
   }, [defineCustomTheme]);
 
+  // Add state for editor height with localStorage persistence
+  const [editorHeight, setEditorHeight] = useState(() => {
+    // Try to get saved height from localStorage
+    if (typeof window !== 'undefined') {
+      const savedHeight = localStorage.getItem('monaco-editor-height');
+      if (savedHeight) {
+        const parsed = parseInt(savedHeight, 10);
+        if (!isNaN(parsed) && parsed >= 150) {
+          return parsed;
+        }
+      }
+    }
+    return 350; // Default to medium height
+  });
+  
+  // Save height to localStorage when it changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('monaco-editor-height', editorHeight.toString());
+    }
+  }, [editorHeight]);
+  
+  // Add editor instance ref
+  const editorInstanceRef = useRef<editor.IStandaloneCodeEditor | null>(null);
+  
+  // Handle height change
+  const handleHeightChange = useCallback((newHeight: number) => {
+    setEditorHeight(newHeight);
+    
+    // Update editor layout immediately
+    if (editorInstanceRef.current) {
+      editorInstanceRef.current.layout();
+    }
+  }, []);
+
+  // Add state for editor fullscreen mode
+  const [isEditorFullscreen, setIsEditorFullscreen] = useState(false);
+
+  // Add state to detect if we're on an iPad/mobile device
+  const [isMobileDevice, setIsMobileDevice] = React.useState(false);
+  
+  // Detect mobile devices on component mount
+  React.useEffect(() => {
+    const checkMobileDevice = () => {
+      const userAgent = navigator.userAgent.toLowerCase();
+      const isIPad = /ipad/.test(userAgent) || 
+                    (/macintosh/.test(userAgent) && 'ontouchend' in document);
+      const isTablet = /tablet|ipad|playbook|silk|android(?!.*mobile)/i.test(userAgent);
+      const isMobile = /iphone|ipod|android|blackberry|opera mini|opera mobi|skyfire|maemo|windows phone|palm|iemobile|symbian|symbianos|fennec/i.test(userAgent);
+      
+      setIsMobileDevice(isIPad || isTablet || isMobile);
+      console.log('Device detection:', { isIPad, isTablet, isMobile });
+    };
+    
+    checkMobileDevice();
+  }, []);
+
   return (
-    <div className="w-full flex flex-col min-h-0 overflow-y-auto">
-      <div className="flex justify-between items-start w-full">
-        <div className="space-y-2 flex-1">
-          <Input
-            value={parsedConfig.name || ''}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => 
-              handleFormChange('name', e.target.value)
-            }
-            onFocus={() => setIsEditing(true)}
-            className="text-lg font-semibold bg-background border-0 px-2 h-auto w-full
-                     focus-visible:ring-0 focus-visible:ring-offset-0 
-                     placeholder:text-muted-foreground rounded-md"
-            placeholder="Score Name"
-          />
-          <div className="flex gap-2 w-full">
+    <div className={cn(
+      "w-full flex flex-col min-h-0 overflow-y-auto",
+      isEditorFullscreen && "absolute inset-0 z-10 bg-background p-4 rounded-lg"
+    )}>
+      {/* Hide the header section when in fullscreen mode */}
+      {!isEditorFullscreen && (
+        <div className="flex justify-between items-start w-full">
+          <div className="space-y-2 flex-1">
             <Input
-              value={parsedConfig.key || ''}
+              value={parsedConfig.name || ''}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => 
-                handleFormChange('key', e.target.value)
+                handleFormChange('name', e.target.value)
               }
               onFocus={() => setIsEditing(true)}
-              className="font-mono bg-background border-0 px-2 h-auto flex-1
+              className="text-lg font-semibold bg-background border-0 px-2 h-auto w-full
                        focus-visible:ring-0 focus-visible:ring-offset-0 
                        placeholder:text-muted-foreground rounded-md"
-              placeholder="score-key"
+              placeholder="Score Name"
             />
-            <Input
-              value={parsedConfig.externalId || ''}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => 
-                handleFormChange('externalId', e.target.value)
-              }
-              onFocus={() => setIsEditing(true)}
-              className="font-mono bg-background border-0 px-2 h-auto flex-1
+            <div className="flex gap-2 w-full">
+              <Input
+                value={parsedConfig.key || ''}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => 
+                  handleFormChange('key', e.target.value)
+                }
+                onFocus={() => setIsEditing(true)}
+                className="font-mono bg-background border-0 px-2 h-auto flex-1
+                         focus-visible:ring-0 focus-visible:ring-offset-0 
+                         placeholder:text-muted-foreground rounded-md"
+                placeholder="score-key"
+              />
+              <Input
+                value={parsedConfig.externalId || ''}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => 
+                  handleFormChange('externalId', e.target.value)
+                }
+                onFocus={() => setIsEditing(true)}
+                className="font-mono bg-background border-0 px-2 h-auto flex-1
+                         focus-visible:ring-0 focus-visible:ring-offset-0 
+                         placeholder:text-muted-foreground rounded-md"
+                placeholder="External ID"
+              />
+            </div>
+            <textarea
+              value={versionNote}
+              onChange={handleNoteChange}
+              placeholder="Add a note about this version..."
+              className="w-full px-2 py-1.5 rounded-md bg-background border-0 text-sm resize-none
                        focus-visible:ring-0 focus-visible:ring-offset-0 
-                       placeholder:text-muted-foreground rounded-md"
-              placeholder="External ID"
+                       placeholder:text-muted-foreground"
+              rows={2}
             />
           </div>
-          <textarea
-            value={versionNote}
-            onChange={handleNoteChange}
-            placeholder="Add a note about this version..."
-            className="w-full px-2 py-1.5 rounded-md bg-background border-0 text-sm resize-none
-                     focus-visible:ring-0 focus-visible:ring-offset-0 
-                     placeholder:text-muted-foreground"
-            rows={2}
-          />
-        </div>
-        <div className="flex gap-2 ml-4">
-          <DropdownMenu.Root>
-            <DropdownMenu.Trigger asChild>
+          <div className="flex gap-2 ml-4">
+            <DropdownMenu.Root>
+              <DropdownMenu.Trigger asChild>
+                <CardButton
+                  icon={MoreHorizontal}
+                  onClick={() => {}}
+                  aria-label="More options"
+                />
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Portal>
+                <DropdownMenu.Content align="end" className="min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md">
+                </DropdownMenu.Content>
+              </DropdownMenu.Portal>
+            </DropdownMenu.Root>
+            {onToggleFullWidth && (
               <CardButton
-                icon={MoreHorizontal}
-                onClick={() => {}}
-                aria-label="More options"
+                icon={isFullWidth ? RectangleVertical : Square}
+                onClick={onToggleFullWidth}
+                aria-label={isFullWidth ? 'Exit full width' : 'Full width'}
               />
-            </DropdownMenu.Trigger>
-            <DropdownMenu.Portal>
-              <DropdownMenu.Content align="end" className="min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md">
-              </DropdownMenu.Content>
-            </DropdownMenu.Portal>
-          </DropdownMenu.Root>
-          {onToggleFullWidth && (
-            <CardButton
-              icon={isFullWidth ? RectangleVertical : Square}
-              onClick={onToggleFullWidth}
-              aria-label={isFullWidth ? 'Exit full width' : 'Full width'}
-            />
-          )}
-          {onClose && (
-            <CardButton
-              icon={X}
-              onClick={onClose}
-              aria-label="Close"
-            />
-          )}
-        </div>
-      </div>
-
-      {/* Configuration Label */}
-      <div className="mt-6 flex items-center gap-2">
-        <FileCode className="h-4 w-4 text-foreground" />
-        <span className="text-sm font-medium">Configuration</span>
-      </div>
-
-      {/* YAML Editor */}
-      <div className="mt-2 rounded-md border bg-background">
-        <Editor
-          height="300px"
-          defaultLanguage="yaml"
-          value={currentConfig}
-          key={`editor-${selectedVersionId || championVersionId}`}
-          onMount={(editor, monaco) => {
-            console.log('Editor mounted');
-            // Store the Monaco instance
-            monacoRef.current = monaco;
-            
-            // Apply our custom theme when the editor mounts
-            defineCustomTheme(monaco);
-            
-            // Set the initial theme based on current mode
-            const isDarkMode = document.documentElement.classList.contains('dark');
-            console.log('Editor mounted, isDarkMode:', isDarkMode);
-            
-            // Force a refresh of CSS variables before applying theme
-            const background = getComputedStyle(document.documentElement).getPropertyValue('--background').trim();
-            const foreground = getComputedStyle(document.documentElement).getPropertyValue('--foreground').trim();
-            console.log('Current CSS variables - background:', background, 'foreground:', foreground);
-            
-            // Apply the appropriate theme
-            monaco.editor.setTheme(isDarkMode ? 'plexusDarkTheme' : 'plexusLightTheme');
-          }}
-          onChange={(value) => {
-            if (!value) return;
-            
-            // Set editing flag to prevent useEffect from overriding our changes
-            setIsEditing(true);
-            
-            try {
-              // Parse YAML to validate it and get values for form
-              const parsed = parseYaml(value)
-              console.log('YAML editor onChange parsed:', parsed);
-              
-              // Extract external ID from either format
-              const externalIdValue = parsed.externalId !== undefined ? 
-                parsed.externalId : 
-                (parsed.external_id !== undefined ? parsed.external_id : undefined);
-              
-              console.log('YAML editor extracted externalId:', externalIdValue);
-              
-              // Update our local state
-              setCurrentConfig(value);
-              
-              // Ensure we're capturing all fields from the YAML
-              onEditChange?.({
-                name: parsed.name,
-                // Support both externalId and external_id formats
-                externalId: externalIdValue,
-                key: parsed.key,
-                description: parsed.description,
-                configuration: value // Store the original YAML string
-              })
-            } catch (error) {
-              // Ignore parse errors while typing
-              console.log('YAML parse error (ignored):', error)
-            }
-          }}
-          options={{
-            minimap: { enabled: false },
-            fontSize: 14,
-            lineNumbers: 'on',
-            scrollBeyondLastLine: false,
-            wordWrap: 'on',
-            wrappingIndent: 'indent',
-            automaticLayout: true,
-            fontFamily: 'monospace',
-            fontLigatures: true,
-            contextmenu: true,
-            cursorBlinking: 'smooth',
-            cursorSmoothCaretAnimation: 'on',
-            smoothScrolling: true,
-            renderLineHighlight: 'all',
-            colorDecorators: true
-          }}
-        />
-      </div>
-
-      {hasChanges && (
-        <div className="mt-4 space-y-4">
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => {
-              setIsEditing(false); // Reset editing flag
-              onCancel?.();
-            }}>Cancel</Button>
-            <Button onClick={() => {
-              setIsEditing(false); // Reset editing flag
-              onSave?.();
-            }}>Save Changes</Button>
+            )}
+            {onClose && (
+              <CardButton
+                icon={X}
+                onClick={onClose}
+                aria-label="Close"
+              />
+            )}
           </div>
         </div>
       )}
 
-      {versions && (
-        <div className="mt-6 overflow-hidden">
-          <ScoreVersionHistory
-            versions={versions}
-            championVersionId={championVersionId}
-            selectedVersionId={selectedVersionId}
-            onVersionSelect={onVersionSelect}
-            onToggleFeature={onToggleFeature}
-            onPromoteToChampion={onPromoteToChampion}
-            showOnlyFeatured={showOnlyFeatured}
-            onToggleShowOnlyFeatured={() => setShowOnlyFeatured(prev => !prev)}
+      {/* Configuration Label with Fullscreen Toggle */}
+      <div className={cn(
+        "mt-6 flex items-center justify-between",
+        isEditorFullscreen && "mt-0 mb-2"
+      )}>
+        <div className="flex items-center gap-2">
+          {!isEditorFullscreen && (
+            <>
+              <FileCode className="h-4 w-4 text-foreground" />
+              <span className="text-sm font-medium">Configuration</span>
+            </>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <CardButton
+            icon={isEditorFullscreen ? Shrink : Expand}
+            onClick={() => setIsEditorFullscreen(!isEditorFullscreen)}
+            aria-label={isEditorFullscreen ? 'Exit fullscreen' : 'Fullscreen editor'}
           />
         </div>
+      </div>
+
+      {/* YAML Editor */}
+      <div className={cn(
+        "mt-2",
+        isEditorFullscreen && "flex-1"
+      )} style={{ transition: 'none' }}>
+        <ResizableEditorContainer 
+          height={isEditorFullscreen ? 
+            // Use a percentage of the container height instead of window height
+            800 : editorHeight}
+          onHeightChange={handleHeightChange}
+          isFullscreen={isEditorFullscreen}
+        >
+          <Editor
+            height="100%"
+            defaultLanguage="yaml"
+            value={currentConfig}
+            key={`editor-${selectedVersionId || championVersionId}`}
+            onMount={(editor, monaco) => {
+              console.log('Editor mounted');
+              // Store the editor instance
+              editorInstanceRef.current = editor;
+              
+              // Store the Monaco instance
+              monacoRef.current = monaco;
+              
+              // Apply our custom theme when the editor mounts
+              defineCustomTheme(monaco);
+              
+              // Set the initial theme based on current mode
+              const isDarkMode = document.documentElement.classList.contains('dark');
+              console.log('Editor mounted, isDarkMode:', isDarkMode);
+              
+              // Force a refresh of CSS variables before applying theme
+              const background = getComputedStyle(document.documentElement).getPropertyValue('--background').trim();
+              const foreground = getComputedStyle(document.documentElement).getPropertyValue('--foreground').trim();
+              console.log('Current CSS variables - background:', background, 'foreground:', foreground);
+              
+              // Apply the appropriate theme
+              monaco.editor.setTheme(isDarkMode ? 'plexusDarkTheme' : 'plexusLightTheme');
+              
+              // Force immediate layout to ensure correct sizing
+              editor.layout();
+              
+              // Add error handling for iPad-specific issues
+              window.addEventListener('error', (event) => {
+                if (event.message === 'Canceled: Canceled' || 
+                    event.error?.message === 'Canceled: Canceled') {
+                  console.log('Caught Monaco editor cancellation error (expected on iPad)');
+                  event.preventDefault();
+                  return true; // Prevent the error from propagating
+                }
+                return false;
+              });
+            }}
+            onChange={(value) => {
+              if (!value) return;
+              
+              try {
+                // Set editing flag to prevent useEffect from overriding our changes
+                setIsEditing(true);
+                
+                // Parse YAML to validate it and get values for form
+                const parsed = parseYaml(value)
+                console.log('YAML editor onChange parsed:', parsed);
+                
+                // Extract external ID from all possible formats
+                const externalIdValue = parsed.externalId !== undefined ? 
+                  parsed.externalId : 
+                  (parsed.external_id !== undefined ? parsed.external_id : 
+                   (parsed.id !== undefined ? parsed.id : undefined));
+                
+                console.log('YAML editor extracted externalId:', externalIdValue, 'from formats:', {
+                  externalId: parsed.externalId,
+                  external_id: parsed.external_id,
+                  id: parsed.id,
+                  parsedKeys: Object.keys(parsed)
+                });
+                
+                // Update our local state
+                setCurrentConfig(value);
+                
+                // Pass the updated configuration to the parent
+                onEditChange?.({
+                  name: parsed.name,
+                  externalId: externalIdValue !== undefined ? String(externalIdValue) : undefined,
+                  key: parsed.key,
+                  description: parsed.description,
+                  configuration: value // Store the original YAML string
+                });
+              } catch (error) {
+                // Handle cancellation errors gracefully
+                if (error instanceof Error && 
+                    (error.message === 'Canceled' || error.message === 'Canceled: Canceled')) {
+                  console.log('Caught Monaco editor cancellation error in onChange');
+                  return; // Just ignore the error
+                }
+                
+                // Ignore other parse errors while typing
+                console.log('YAML parse error (ignored):', error)
+              }
+            }}
+            options={{
+              minimap: { enabled: false },
+              fontSize: 14,
+              lineNumbers: 'on',
+              scrollBeyondLastLine: false,
+              wordWrap: 'on',
+              wrappingIndent: 'indent',
+              automaticLayout: true,
+              fontFamily: 'monospace',
+              fontLigatures: true,
+              contextmenu: true,
+              cursorBlinking: 'smooth',
+              cursorSmoothCaretAnimation: 'on',
+              smoothScrolling: true,
+              renderLineHighlight: 'all',
+              colorDecorators: true,
+              // iPad/mobile specific options
+              ...(isMobileDevice ? {
+                // Reduce features that might cause issues on mobile
+                quickSuggestions: false,
+                parameterHints: { enabled: false },
+                folding: false,
+                dragAndDrop: false,
+                links: false,
+                // Optimize touch handling
+                mouseWheelZoom: false,
+                scrollbar: {
+                  useShadows: false,
+                  verticalHasArrows: true,
+                  horizontalHasArrows: true,
+                  vertical: 'visible',
+                  horizontal: 'visible',
+                  verticalScrollbarSize: 20,
+                  horizontalScrollbarSize: 20,
+                },
+                // Improve performance
+                renderWhitespace: 'none',
+                renderControlCharacters: false,
+                renderIndentGuides: false,
+              } : {})
+            }}
+          />
+        </ResizableEditorContainer>
+      </div>
+
+      {/* Hide the action buttons and version history when in fullscreen mode */}
+      {!isEditorFullscreen && (
+        <>
+          {hasChanges && (
+            <div className="mt-4 space-y-4">
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => {
+                  setIsEditing(false); // Reset editing flag
+                  onCancel?.();
+                }}>Cancel</Button>
+                <Button onClick={() => {
+                  setIsEditing(false); // Reset editing flag
+                  onSave?.();
+                }}>Save Changes</Button>
+              </div>
+            </div>
+          )}
+
+          {versions && (
+            <div className="mt-6 overflow-hidden">
+              <ScoreVersionHistory
+                versions={versions}
+                championVersionId={championVersionId}
+                selectedVersionId={selectedVersionId}
+                onVersionSelect={onVersionSelect}
+                onToggleFeature={onToggleFeature}
+                onPromoteToChampion={onPromoteToChampion}
+                showOnlyFeatured={showOnlyFeatured}
+                onToggleShowOnlyFeatured={() => setShowOnlyFeatured(prev => !prev)}
+              />
+            </div>
+          )}
+        </>
       )}
     </div>
   )
@@ -673,7 +905,7 @@ export function ScoreComponent({
         // First, get the score details to get the championVersionId
         const scoreResponse = await client.graphql({
           query: `
-            query GetScore($id: String!) {
+            query GetScore($id: ID!) {
               getScore(id: $id) {
                 id
                 name
@@ -683,7 +915,7 @@ export function ScoreComponent({
             }
           `,
           variables: {
-            id: score.id
+            id: String(score.id)
           }
         }) as GraphQLResult<GetScoreResponse>;
         
@@ -900,9 +1132,14 @@ export function ScoreComponent({
       // Extract external ID from either format
       const externalIdValue = config.externalId !== undefined ? 
         config.externalId : 
-        (config.external_id !== undefined ? config.external_id : undefined);
+        (config.external_id !== undefined ? config.external_id : 
+         (config.id !== undefined ? config.id : undefined));
       
-      console.log('Extracted externalId value:', externalIdValue);
+      console.log('Extracted externalId value:', externalIdValue, 'from formats:', {
+        externalId: config.externalId,
+        external_id: config.external_id,
+        id: config.id
+      });
       
       // Update the editedScore with values from the YAML configuration
       // This ensures we're using the YAML as the source of truth
@@ -911,8 +1148,8 @@ export function ScoreComponent({
           ...prev,
           // Use values from YAML, falling back to previous values if not present
           name: config.name !== undefined ? config.name : prev.name,
-          // Support both externalId and external_id formats
-          externalId: externalIdValue,
+          // Support all three formats for external ID
+          externalId: externalIdValue !== undefined ? String(externalIdValue) : prev.externalId,
           key: config.key !== undefined ? config.key : prev.key,
           description: config.description !== undefined ? config.description : prev.description,
           // Store the complete configuration for the editor
@@ -1024,6 +1261,49 @@ export function ScoreComponent({
           key: editedScore.key,
           description: editedScore.description
         });
+      } else {
+        // Ensure the configuration has the latest values
+        try {
+          const parsed = parseYaml(configurationYaml);
+          
+          // Determine which format to use for external ID by examining the parsed object
+          const hasExternalId = 'externalId' in parsed;
+          const hasExternalUnderscoreId = 'external_id' in parsed;
+          const hasSimpleId = 'id' in parsed && !hasExternalId && !hasExternalUnderscoreId;
+          
+          console.log('Saving configuration - external ID format detection:', {
+            hasExternalId,
+            hasExternalUnderscoreId,
+            hasSimpleId,
+            parsedKeys: Object.keys(parsed),
+            externalId: editedScore.externalId
+          });
+          
+          // Update the external ID field using the same format that was in the original YAML
+          if (hasSimpleId) {
+            // Using simple id format
+            parsed.id = editedScore.externalId;
+            console.log('Using simple id format for external ID:', editedScore.externalId);
+          } else if (hasExternalUnderscoreId) {
+            // Using snake_case format
+            parsed.external_id = editedScore.externalId;
+            console.log('Using snake_case format for external ID:', editedScore.externalId);
+          } else {
+            // Using camelCase format (default)
+            parsed.externalId = editedScore.externalId;
+            console.log('Using camelCase format for external ID:', editedScore.externalId);
+          }
+          
+          // Update other fields
+          parsed.name = editedScore.name;
+          parsed.key = editedScore.key;
+          if (editedScore.description) parsed.description = editedScore.description;
+          
+          // Update the configuration
+          configurationYaml = stringifyYaml(parsed);
+        } catch (error) {
+          console.error('Error updating configuration YAML:', error);
+        }
       }
       
       // Log what we're doing

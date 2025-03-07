@@ -1,3 +1,12 @@
+import { Button as DocButton } from "@/components/ui/button"
+import Link from "next/link"
+import { Metadata } from "next"
+
+export const metadata: Metadata = {
+  title: "Scorecards - Plexus Documentation",
+  description: "Learn about Scorecards in Plexus - the framework for evaluating content quality and performance"
+}
+
 export default function ScorecardsPage() {
   return (
     <div className="max-w-4xl mx-auto py-8 px-6">
@@ -11,20 +20,47 @@ export default function ScorecardsPage() {
           <h2 className="text-2xl font-semibold mb-4">What are Scorecards?</h2>
           <p className="text-muted-foreground mb-4">
             Scorecards are collections of evaluation criteria that define how your content
-            should be analyzed. They help ensure consistent evaluation across all your sources.
+            should be analyzed. They help ensure consistent evaluation across all your sources
+            by providing a structured framework for assessment.
+          </p>
+          <p className="text-muted-foreground mb-4">
+            Think of a scorecard as a comprehensive evaluation template that contains all the 
+            metrics and criteria you want to measure for a specific type of content. Scorecards 
+            can be tailored to different content types, business objectives, or quality standards.
           </p>
         </section>
 
         <section>
-          <h2 className="text-2xl font-semibold mb-4">Key Components</h2>
+          <h2 className="text-2xl font-semibold mb-4">Scorecard Structure</h2>
           <div className="space-y-4">
             <div>
-              <h3 className="text-xl font-medium mb-2">Scores</h3>
-              <p className="text-muted-foreground">
-                Individual evaluation criteria that assess specific aspects of your content.
-                Each score can be customized with its own evaluation logic and requirements.
+              <h3 className="text-xl font-medium mb-2">Sections</h3>
+              <p className="text-muted-foreground mb-4">
+                Scorecards are organized into logical sections that group related evaluation criteria.
+                For example, a customer service scorecard might have sections for "Greeting", "Problem Resolution",
+                and "Closing".
               </p>
             </div>
+            
+            <div>
+              <h3 className="text-xl font-medium mb-2">Scores</h3>
+              <p className="text-muted-foreground mb-4">
+                Individual evaluation criteria that assess specific aspects of your content.
+                Each score can be customized with its own evaluation logic and requirements.
+                Scores are the building blocks of your evaluation framework.
+              </p>
+              <p className="text-muted-foreground mb-4">
+                Examples of scores include:
+              </p>
+              <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
+                <li>Grammar and spelling accuracy</li>
+                <li>Sentiment analysis (positive/negative/neutral)</li>
+                <li>Compliance with specific regulations</li>
+                <li>Presence of required information</li>
+                <li>Custom business-specific metrics</li>
+              </ul>
+            </div>
+            
             <div>
               <h3 className="text-xl font-medium mb-2">Sections</h3>
               <p className="text-muted-foreground">
@@ -34,9 +70,10 @@ export default function ScorecardsPage() {
             </div>
             <div>
               <h3 className="text-xl font-medium mb-2">Weights</h3>
-              <p className="text-muted-foreground">
+              <p className="text-muted-foreground mb-4">
                 Importance factors that determine how much each score contributes to the
-                overall evaluation result.
+                overall evaluation result. Weights allow you to prioritize certain criteria
+                over others based on their importance to your business objectives.
               </p>
             </div>
             <div>

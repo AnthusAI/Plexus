@@ -75,7 +75,7 @@ export function ScoreVersionHistory({
         key={version.id}
         className={cn(
           "flex flex-col p-3 rounded-md cursor-pointer transition-colors",
-          isSelected ? "bg-secondary" : "bg-background hover:bg-accent/10"
+          isSelected ? "bg-card-selected" : "bg-card hover:bg-accent/10"
         )}
         onClick={() => onVersionSelect?.(version)}
         role="button"
@@ -149,65 +149,72 @@ export function ScoreVersionHistory({
 
   return (
     <div className={cn("space-y-4 w-full", className)} {...props}>
-      <div className="space-y-4">
-        {/* Header with appropriate icon and toggle control */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-sm font-medium">
-            {championVersion ? (
-              <>
-                <Award className="h-4 w-4 text-foreground" />
-                <span>Champion Version</span>
-              </>
-            ) : (
-              <>
+      <div className="bg-background rounded-lg p-4 shadow-sm space-y-4">
+        <div className="space-y-4">
+          {/* Header with appropriate icon and toggle control */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              {championVersion ? (
+                <>
+                  <Award className="h-4 w-4 text-foreground" />
+                  <span>Champion Version</span>
+                </>
+              ) : (
+                <>
+                  <FileStack className="h-4 w-4" />
+                  <span>Version History</span>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Always show champion version at the top if it exists */}
+          {championVersion && renderVersion(championVersion, true)}
+          
+          {/* Show expand/collapse button if there are more versions */}
+          {otherVersions.length > 0 && (
+            <Button
+              variant="ghost"
+              className="w-full flex items-center justify-between gap-2 h-auto py-2 px-0 font-medium hover:bg-transparent"
+              onClick={() => setIsHistoryExpanded(!isHistoryExpanded)}
+            >
+              <div className="flex items-center gap-2">
                 <FileStack className="h-4 w-4" />
                 <span>Version History</span>
-              </>
-            )}
-          </div>
+              </div>
+              
+              {onToggleShowOnlyFeatured && (
+                <div className="flex items-center gap-2">
+                  <Switch 
+                    id="show-featured-history" 
+                    checked={showOnlyFeatured}
+                    onCheckedChange={onToggleShowOnlyFeatured}
+                  />
+                  <Label htmlFor="show-featured-history" className="text-xs">
+                    Featured
+                  </Label>
+                </div>
+              )}
+              
+              <div>
+                {isHistoryExpanded ? (
+                  <ChevronUp className="h-4 w-4" />
+                ) : (
+                  <ChevronDown className="h-4 w-4" />
+                )}
+              </div>
+            </Button>
+          )}
           
-          {onToggleShowOnlyFeatured && (
-            <div className="flex items-center gap-2">
-              <Switch 
-                id="show-featured" 
-                checked={showOnlyFeatured}
-                onCheckedChange={onToggleShowOnlyFeatured}
-              />
-              <Label htmlFor="show-featured" className="text-xs">
-                Featured
-              </Label>
+          {/* Show other versions when expanded with proper scrolling */}
+          {isHistoryExpanded && otherVersions.length > 0 && (
+            <div className="max-h-[300px] overflow-y-auto pr-1">
+              <div className="space-y-2">
+                {otherVersions.map(version => renderVersion(version, false))}
+              </div>
             </div>
           )}
         </div>
-
-        {/* Always show champion version at the top if it exists */}
-        {championVersion && renderVersion(championVersion, true)}
-        
-        {/* Show expand/collapse button if there are more versions */}
-        {otherVersions.length > 0 && (
-          <Button
-            variant="ghost"
-            className="w-full flex items-center justify-start gap-2 h-auto py-2 px-0 font-medium hover:bg-transparent"
-            onClick={() => setIsHistoryExpanded(!isHistoryExpanded)}
-          >
-            <FileStack className="h-4 w-4" />
-            <span>History</span>
-            {isHistoryExpanded ? (
-              <ChevronUp className="h-4 w-4 ml-1" />
-            ) : (
-              <ChevronDown className="h-4 w-4 ml-1" />
-            )}
-          </Button>
-        )}
-        
-        {/* Show other versions when expanded with proper scrolling */}
-        {isHistoryExpanded && otherVersions.length > 0 && (
-          <div className="max-h-[300px] overflow-y-auto pr-1">
-            <div className="space-y-2">
-              {otherVersions.map(version => renderVersion(version, false))}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   )
