@@ -317,6 +317,7 @@ const schema = a.schema({
             explanation: a.string(),
             confidence: a.float(),
             metadata: a.json(),
+            trace: a.json(),
             correct: a.boolean(),
             itemId: a.string().required(),
             item: a.belongsTo('Item', 'itemId'),
