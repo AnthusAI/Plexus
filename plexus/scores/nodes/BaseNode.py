@@ -43,6 +43,67 @@ class BaseNode(ABC, LangChainUser):
             raise ValueError("Node name is required but not provided in parameters")
         return self.parameters.name
 
+    def log_state(self, state, input_state=None, output_state=None, node_suffix=""):
+        """
+        Log the current state to the node_results list in the state.
+        
+        Parameters
+        ----------
+        state : GraphState
+            The current state object
+        input_state : dict, optional
+            The input state to log
+        output_state : dict, optional
+            The output state to log
+        node_suffix : str, optional
+            A suffix to add to the node name for more specific logging
+            
+        Returns
+        -------
+        GraphState
+            A new state object with the updated node_results
+        """
+        # Use empty dicts if input_state or output_state not provided
+        input_state = input_state or {}
+        output_state = output_state or {}
+            
+        # Create the node name with optional suffix
+        full_node_name = self.node_name
+        if node_suffix:
+            full_node_name = f"{full_node_name}.{node_suffix}"
+            
+        # Create the node result
+        node_result = {
+            "node_name": full_node_name,
+            "input": input_state,
+            "output": output_state
+        }
+        
+        # Get the state as a dictionary
+        if hasattr(state, 'dict'):
+            state_dict = state.dict()
+        elif hasattr(state, 'model_dump'):
+            state_dict = state.model_dump()
+        else:
+            state_dict = dict(state)
+            
+        # Get existing node_results or create empty list
+        node_results = state_dict.get('node_results', [])
+        if node_results is None:
+            node_results = []
+            
+        # Add the new node result
+        node_results.append(node_result)
+        
+        # Log for debugging
+        logging.info(f"=== LOGGING STATE FOR {full_node_name} ===")
+        
+        # Create a new state with updated node_results
+        new_state_dict = {**state_dict, 'node_results': node_results}
+        
+        # Create and return a new state object
+        return self.GraphState(**new_state_dict)
+
     def get_prompt_templates(self):
         """
         Get a list of prompt templates for the node, by looking for the "system_message" parameter for
