@@ -121,11 +121,20 @@ plexus scorecards score "score-name" --account "account-name" --show-versions
 # Create a new scorecard
 plexus scorecards create --name "Content Quality" --description "Evaluates content quality"
 
-# Add a score to the scorecard
-plexus scorecards add-score scorecard-id --type sentiment --weight 0.5
+# Get detailed information about a specific scorecard
+plexus scorecards info --scorecard "Content Quality"
 
-# Update a scorecard
-plexus scorecards update scorecard-id --name "Updated Name"`}</code>
+# List all scores in a scorecard
+plexus scorecards list-scores --scorecard "Content Quality"
+
+# Pull scorecard configuration to YAML
+plexus scorecards pull --scorecard "Content Quality" --output ./my-scorecards
+
+# Push scorecard configuration from YAML
+plexus scorecards push --file ./my-scorecard.yaml --update
+
+# Delete a scorecard
+plexus scorecards delete --scorecard "Content Quality"`}</code>
           </pre>
           
           <div className="mt-4 space-y-4">
@@ -161,22 +170,30 @@ plexus scorecards update scorecard-id --name "Updated Name"`}</code>
 
 plexus = Plexus(api_key="your-api-key")
 
-# Create a new scorecard
-scorecard = plexus.scorecards.create(
-    name="Content Quality",
-    description="Evaluates content quality"
-)
+# Get a scorecard using any identifier (name, key, ID, or external ID)
+scorecard = plexus.scorecards.get("Content Quality")
 
-# Add a score
-scorecard.add_score(
-    type="sentiment",
-    weight=0.5,
-    threshold=0.7
-)
+# List all scorecards
+scorecards = plexus.scorecards.list()
 
-# Update a scorecard
-scorecard.update(name="Updated Name")`}</code>
+# Get all scores in a scorecard
+scores = scorecard.get_scores()
+
+# Export scorecard to YAML
+yaml_config = scorecard.to_yaml()
+with open("scorecard.yaml", "w") as f:
+    f.write(yaml_config)
+
+# Import scorecard from YAML
+with open("scorecard.yaml", "r") as f:
+    yaml_content = f.read()
+    
+new_scorecard = plexus.scorecards.from_yaml(yaml_content)`}</code>
           </pre>
+          
+          <p className="text-muted-foreground mb-4">
+            Like the CLI, the Python SDK also supports the flexible identifier system, allowing you to reference scorecards using different types of identifiers.
+          </p>
         </section>
 
         <section>

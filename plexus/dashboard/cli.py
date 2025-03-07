@@ -1012,13 +1012,13 @@ def create(evaluation_id: str, value: str):
         click.echo(f"Error: {str(e)}", err=True)
 
 @cli.group()
-def scorecard():
+def scorecards():
     """Manage scorecards"""
     click.echo("WARNING: The 'plexus-dashboard scorecard' commands are deprecated.", err=True)
     click.echo("Please use the main 'plexus scorecards' commands instead.", err=True)
     pass
 
-@scorecard.command()
+@scorecards.command()
 @click.option('--account-key', help='Filter by account key')
 @click.option('--name', help='Filter by name')
 @click.option('--key', help='Filter by key')
@@ -1026,45 +1026,140 @@ def list(account_key: Optional[str], name: Optional[str], key: Optional[str]):
     """List scorecards with optional filtering.
     
     Examples:
-        plexus-dashboard scorecard list
-        plexus-dashboard scorecard list --account-key my-account
-        plexus-dashboard scorecard list --name "QA Scorecard"
-        plexus-dashboard scorecard list --key qa-v1
+        plexus-dashboard scorecards list
+        plexus-dashboard scorecards list --account-key my-account
+        plexus-dashboard scorecards list --name "QA Scorecard"
+        plexus-dashboard scorecards list --key qa-v1
     """
     click.echo("WARNING: This command is deprecated. Please use 'plexus scorecards list-scorecards' instead.", err=True)
     # Forward to the main CLI command
     os.system(f"plexus scorecards list-scorecards {' --account-key ' + account_key if account_key else ''} {' --name ' + name if name else ''} {' --key ' + key if key else ''}")
 
-@scorecard.command()
+@scorecards.command()
 @click.option('--account-key', default='call-criteria', help='Account key identifier')
 @click.option('--directory', default='scorecards', help='Directory containing YAML scorecard files')
 def sync(account_key: str, directory: str):
     """Sync YAML scorecards to the API.
     
     Examples:
-        plexus-dashboard scorecard sync
-        plexus-dashboard scorecard sync --account-key my-account
-        plexus-dashboard scorecard sync --directory path/to/scorecards
+        plexus-dashboard scorecards sync
+        plexus-dashboard scorecards sync --account-key my-account
+        plexus-dashboard scorecards sync --directory path/to/scorecards
     """
     click.echo("WARNING: This command is deprecated. Please use 'plexus scorecards sync' instead.", err=True)
     # Forward to the main CLI command
     os.system(f"plexus scorecards sync --account-key {account_key} --directory {directory}")
 
-@scorecard.command()
+@scorecards.command()
 @click.option('--account-key', required=True, help='Account key')
 @click.option('--fix', is_flag=True, help='Fix duplicates by removing newer copies')
 def find_duplicates(account_key: str, fix: bool):
-    """Find and optionally fix duplicate scores based on name+order+section combination."""
-    click.echo("WARNING: This command is deprecated. Please use 'plexus scorecards find-duplicates' instead.", err=True)
-    # Forward to the main CLI command
-    os.system(f"plexus scorecards find-duplicates --account-key {account_key}{' --fix' if fix else ''}")
+    """Find duplicate scorecards and scores.
+    
+    Examples:
+        plexus-dashboard scorecards find-duplicates --account-key my-account
+        plexus-dashboard scorecards find-duplicates --account-key my-account --fix
+    """
+    client = create_client()
+    account = Account.get_by_key(account_key, client)
 
-@scorecard.command()
+    # Get all scores with their sections
+    all_scores = []
+    next_token = None
+    
+    while True:
+        query = """
+            query ListAllScores($nextToken: String) {
+                listScores(limit: 100, nextToken: $nextToken) {
+                    items {
+                        id
+                        name
+                        sectionId
+                        order
+                        type
+                        createdAt
+                        updatedAt
+                    }
+                    nextToken
+                }
+            }
+        """
+        try:
+            result = client.execute(query, {'nextToken': next_token})
+            items = result['listScores']['items']
+            all_scores.extend(items)
+            
+            next_token = result['listScores'].get('nextToken')
+            if not next_token:
+                break
+        except Exception as e:
+            logging.error(f"Error fetching scores: {str(e)}")
+            break
+
+    # Group scores by name+order+sectionId
+    scores_by_key = {}
+    for score in all_scores:
+        key = f"{score['name']}|{score['order']}|{score['sectionId']}"
+        if key not in scores_by_key:
+            scores_by_key[key] = []
+        scores_by_key[key].append(score)
+
+    # Find duplicates
+    duplicates = {k: v for k, v in scores_by_key.items() if len(v) > 1}
+    
+    if duplicates:
+        logging.info(f"Found {len(duplicates)} sets of duplicate scores:")
+        for key, scores in duplicates.items():
+            name, order, section = key.split('|')
+            # Sort by createdAt to identify oldest (keep) vs newer (delete)
+            sorted_scores = sorted(scores, key=lambda s: s['createdAt'])
+            oldest = sorted_scores[0]
+            to_delete = sorted_scores[1:]
+            
+            logging.info(f"\nDuplicate score found:")
+            logging.info(f"  Name: {name}")
+            logging.info(f"  Order: {order}")
+            logging.info(f"  Section: {section}")
+            logging.info(f"  Keeping oldest:")
+            logging.info(f"    - id: {oldest['id']}, created: {oldest['createdAt']}")
+            logging.info(f"  Duplicates to remove:")
+            for score in to_delete:
+                logging.info(f"    - id: {score['id']}, created: {score['createdAt']}")
+            
+            if fix:
+                for score in to_delete:
+                    try:
+                        logging.info(f"Deleting duplicate score {score['id']}")
+                        mutation = """
+                        mutation DeleteScore($input: DeleteScoreInput!) {
+                            deleteScore(input: $input) {
+                                id
+                            }
+                        }
+                        """
+                        client.execute(mutation, {
+                            'input': {
+                                'id': score['id']
+                            }
+                        })
+                        logging.info(f"Successfully deleted score {score['id']}")
+                    except Exception as e:
+                        logging.error(f"Failed to delete score {score['id']}: {str(e)}")
+    else:
+        logging.info("No duplicate scores found")
+
+@scorecards.command()
 @click.option('--scorecard-id', help='Scorecard ID')
 @click.option('--scorecard-key', help='Scorecard key')
 @click.option('--scorecard-name', help='Scorecard name')
 def list_scores(scorecard_id: Optional[str], scorecard_key: Optional[str], scorecard_name: Optional[str]):
-    """List all scores for a specific scorecard."""
+    """List all scores for a specific scorecard.
+    
+    Examples:
+        plexus-dashboard scorecards list-scores --scorecard-id 1234
+        plexus-dashboard scorecards list-scores --scorecard-key qa-v1
+        plexus-dashboard scorecards list-scores --scorecard-name "QA Scorecard"
+    """
     client = create_client()
     
     try:

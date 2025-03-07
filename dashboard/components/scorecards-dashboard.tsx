@@ -122,14 +122,15 @@ export default function ScorecardsComponent() {
             const sectionsResult = await scorecard.sections();
             const sections = sectionsResult.data || [];
             
-            // Load all scores for each section in parallel
+            // Load all scores for each section in parallel using fetchAllScoresForSection
             const sectionsWithScores = await Promise.all(
               sections.map(async section => {
-                const scoresResult = await section.scores();
+                // Use fetchAllScoresForSection instead of section.scores() to ensure all scores are fetched
+                const allScores = await fetchAllScoresForSection(section.id);
                 return {
                   id: section.id,
                   scores: {
-                    data: scoresResult.data || []
+                    data: allScores
                   }
                 };
               })
@@ -159,7 +160,7 @@ export default function ScorecardsComponent() {
       setScorecards(scorecardsWithCounts);
       setIsLoading(false)
     } catch (error) {
-      console.error('Error loading initial data:', error)
+      console.error('Error fetching scorecards:', error)
       setError(error as Error)
       setIsLoading(false)
     }
@@ -182,15 +183,15 @@ export default function ScorecardsComponent() {
         
         const transformedSections = {
           items: await Promise.all(sections.map(async section => {
-            const scoresResult = await section.scores()
-            const scores = scoresResult.data || []
+            // Use fetchAllScoresForSection instead of section.scores() to ensure all scores are fetched
+            const allScores = await fetchAllScoresForSection(section.id);
             
             return {
               id: section.id,
               name: section.name,
               order: section.order,
               scores: {
-                items: scores.map(score => ({
+                items: allScores.map(score => ({
                   id: score.id,
                   name: score.name,
                   key: score.key || '',
@@ -215,7 +216,6 @@ export default function ScorecardsComponent() {
 
   // Helper function to fetch all scores for a section
   const fetchAllScoresForSection = async (sectionId: string) => {
-    console.log('fetchAllScoresForSection: Starting to fetch all scores for section:', sectionId)
     let allScores: Schema['Score']['type'][] = []
     let nextToken: string | null = null
     
@@ -224,12 +224,11 @@ export default function ScorecardsComponent() {
         filter: { sectionId: { eq: sectionId } },
         ...(nextToken ? { nextToken } : {})
       })
-      console.log('fetchAllScoresForSection: Got page of scores:', scoresResult)
+      
       allScores = [...allScores, ...(scoresResult.data || [])]
       nextToken = scoresResult.nextToken
     } while (nextToken)
     
-    console.log('fetchAllScoresForSection: Total scores found:', allScores.length)
     return allScores
   }
 
@@ -241,22 +240,27 @@ export default function ScorecardsComponent() {
     
     const sortedSections = sectionsResult.data.sort((a, b) => a.order - b.order)
     
-    return Promise.all(sortedSections.map(async (section) => ({
-      id: section.id,
-      name: section.name,
-      order: section.order,
-      scorecardId,
-      createdAt: section.createdAt,
-      updatedAt: section.updatedAt,
-      scorecard: async () => amplifyClient.Scorecard.get({ id: scorecardId }),
-      scores: async () => {
-        const allScores = await fetchAllScoresForSection(section.id)
-        return {
-          data: allScores.sort((a, b) => a.order - b.order),
-          nextToken: null
+    const sectionsWithScores = await Promise.all(sortedSections.map(async (section) => {
+      const allScores = await fetchAllScoresForSection(section.id)
+      
+      return {
+        id: section.id,
+        name: section.name,
+        order: section.order,
+        scorecardId,
+        createdAt: section.createdAt,
+        updatedAt: section.updatedAt,
+        scorecard: async () => amplifyClient.Scorecard.get({ id: scorecardId }),
+        scores: async () => {
+          return {
+            data: allScores.sort((a, b) => a.order - b.order),
+            nextToken: null
+          }
         }
       }
-    })))
+    }))
+    
+    return sectionsWithScores
   }
 
   // Handle creating a new scorecard
@@ -299,32 +303,24 @@ export default function ScorecardsComponent() {
   // Handle editing an existing scorecard
   const handleEdit = async (scorecard: Schema['Scorecard']['type']) => {
     try {
-      console.log('handleEdit: Starting to edit scorecard:', scorecard.id)
-      
       const fullScorecard = await amplifyClient.Scorecard.get({ id: scorecard.id })
-      console.log('handleEdit: Full scorecard data:', fullScorecard.data)
 
       const scorecardData = fullScorecard.data
       if (!scorecardData) {
-        throw new Error('Scorecard not found')
+        setError(new Error(`Could not find scorecard with ID ${scorecard.id}`))
+        return
       }
 
       // Get all sections for this scorecard
-      console.log('handleEdit: Fetching sections for scorecard:', scorecard.id)
       const sectionsResult = await amplifyClient.ScorecardSection.list({
         filter: { scorecardId: { eq: scorecard.id } }
       })
-      console.log('handleEdit: Sections result:', sectionsResult)
       
       const sortedSections = sectionsResult.data.sort((a, b) => a.order - b.order)
-      console.log('handleEdit: Sorted sections:', sortedSections)
 
       // Get scores for each section
-      console.log('handleEdit: Starting to fetch scores for each section')
       const sectionsWithScores = await Promise.all(sortedSections.map(async section => {
-        console.log('handleEdit: Fetching scores for section:', section.id)
         const allScores = await fetchAllScoresForSection(section.id)
-        console.log('handleEdit: All scores for section:', section.id, allScores)
         return {
           ...section,
           scores: async () => ({
@@ -333,7 +329,6 @@ export default function ScorecardsComponent() {
           })
         }
       }))
-      console.log('handleEdit: All sections with scores:', sectionsWithScores)
 
       const accountResult = await amplifyClient.Account.get({ 
         id: scorecardData.accountId 
@@ -341,7 +336,7 @@ export default function ScorecardsComponent() {
       if (!accountResult.data) {
         throw new Error('Account not found')
       }
-      
+
       const fullScorecardData = {
         ...scorecardData,
         account: async () => amplifyClient.Account.get({ id: scorecardData.accountId }),
@@ -373,10 +368,10 @@ export default function ScorecardsComponent() {
         }
       } as Schema['Scorecard']['type']
       
-      console.log('Setting selected scorecard with data:', fullScorecardData)
       setSelectedScorecard(fullScorecardData)
     } catch (error) {
-      console.error('Error fetching scorecard details:', error)
+      console.error('Error editing scorecard:', error)
+      setError(error as Error)
     }
   }
 
