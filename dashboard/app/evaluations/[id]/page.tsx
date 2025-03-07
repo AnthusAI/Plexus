@@ -12,25 +12,7 @@ import { transformEvaluation, standardizeScoreResults } from '@/utils/data-opera
 import { type Evaluation } from '@/utils/data-operations'
 import { getValueFromLazyLoader } from '@/utils/data-operations'
 import { fetchAuthSession } from 'aws-amplify/auth'
-
-import outputs from '@/amplify_outputs.json';
-import { Amplify } from 'aws-amplify';
 import { AlertCircle } from 'lucide-react';
-
-// Configure Amplify with explicit guest access enabled
-Amplify.configure(
-  {
-    ...outputs,
-    Auth: {
-      Cognito: {
-        identityPoolId: outputs.auth.identity_pool_id,
-        userPoolClientId: outputs.auth.user_pool_client_id,
-        userPoolId: outputs.auth.user_pool_id,
-        allowGuestAccess: true,
-      },
-    }
-  }
-);
 
 // Type for ShareLink data returned from the API
 type ShareLinkData = {
