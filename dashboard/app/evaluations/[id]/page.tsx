@@ -235,7 +235,7 @@ export default function PublicEvaluation({
   }, [id, memoizedService]);
 
   return (
-    <div className="w-full h-screen px-6 pt-3 pb-6 overflow-auto">
+    <div className="w-full h-full px-6 pt-3 pb-6 overflow-auto">
       {loading ? (
         <div className="flex items-center justify-center h-full">
           <div 
