@@ -441,6 +441,42 @@ export default function BatchesDashboard({
   const pathname = usePathname()
   // Use a ref to track if this is the initial render for URL updates
   const isInitialUrlUpdateRef = useRef(true)
+  // Add back the dragStateRef
+  const dragStateRef = useRef<{
+    isDragging: boolean
+    startX: number
+    startWidth: number
+  }>({
+    isDragging: false,
+    startX: 0,
+    startWidth: 50
+  })
+
+  // Define handleDragMove and handleDragEnd with useCallback but without dependencies first
+  const handleDragMoveRef = useRef<(e: MouseEvent) => void>()
+  const handleDragEndRef = useRef<() => void>()
+
+  // Set up the actual functions
+  useEffect(() => {
+    handleDragMoveRef.current = (e: MouseEvent) => {
+      if (!dragStateRef.current.isDragging || !containerRef.current) return
+
+      const element = containerRef.current
+      const containerWidth = element.getBoundingClientRect().width
+      const deltaX = e.clientX - dragStateRef.current.startX
+      const newWidthPercent = (dragStateRef.current.startWidth * 
+        containerWidth / 100 + deltaX) / containerWidth * 100
+
+      const constrainedWidth = Math.min(Math.max(newWidthPercent, 20), 80)
+      setLeftPanelWidth(constrainedWidth)
+    }
+
+    handleDragEndRef.current = () => {
+      dragStateRef.current.isDragging = false
+      document.removeEventListener('mousemove', handleDragMoveRef.current!)
+      document.removeEventListener('mouseup', handleDragEndRef.current!)
+    }
+  }, [])
 
   const handleDragStart = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     e.preventDefault()
@@ -449,28 +485,9 @@ export default function BatchesDashboard({
       startX: e.clientX,
       startWidth: leftPanelWidth
     }
-    document.addEventListener('mousemove', handleDragMove)
-    document.addEventListener('mouseup', handleDragEnd)
+    document.addEventListener('mousemove', handleDragMoveRef.current!)
+    document.addEventListener('mouseup', handleDragEndRef.current!)
   }, [leftPanelWidth])
-
-  const handleDragMove = useCallback((e: MouseEvent) => {
-    if (!dragStateRef.current.isDragging || !containerRef.current) return
-
-    const element = containerRef.current
-    const containerWidth = element.getBoundingClientRect().width
-    const deltaX = e.clientX - dragStateRef.current.startX
-    const newWidthPercent = (dragStateRef.current.startWidth * 
-      containerWidth / 100 + deltaX) / containerWidth * 100
-
-    const constrainedWidth = Math.min(Math.max(newWidthPercent, 20), 80)
-    setLeftPanelWidth(constrainedWidth)
-  }, [])
-
-  const handleDragEnd = useCallback(() => {
-    dragStateRef.current.isDragging = false
-    document.removeEventListener('mousemove', handleDragMove)
-    document.removeEventListener('mouseup', handleDragEnd)
-  }, [])
 
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
     if (selectedBatchJob && event.key === 'Escape') {

@@ -47,7 +47,7 @@ const originalConsoleError = console.error;
 const originalConsoleLog = console.log;
 
 // Now import the component and its dependencies
-import PublicEvaluation, { EvaluationService } from '../page';
+import EvaluationPage, { PublicEvaluation, EvaluationService } from '../page';
 
 describe('PublicEvaluation Component', () => {
   // Create mock evaluation service
