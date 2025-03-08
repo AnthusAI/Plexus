@@ -36,6 +36,7 @@ import { Badge } from "@/components/ui/badge"
 import { SegmentedProgressBar } from "@/components/ui/segmented-progress-bar"
 import { BatchJobProgressBar, BatchJobStatus } from "@/components/ui/batch-job-progress-bar"
 import { DualPhaseProgressBar } from "@/components/ui/dual-phase-progress-bar"
+import { useParams, usePathname } from 'next/navigation'
 
 const ACCOUNT_KEY = 'call-criteria'
 
@@ -421,26 +422,25 @@ const BATCH_JOB_CONFIG = {
 
 const FIRST_PHASE_STATES = ['OPEN', 'CLOSED'] as const;
 
-export default function BatchesDashboard() {
-  const [batchJobs, setBatchJobs] = useState<BatchJobWithCount[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+export default function BatchesDashboard({ 
+  initialSelectedBatchJobId = null 
+}: { 
+  initialSelectedBatchJobId?: string | null 
+} = {}) {
   const [accountId, setAccountId] = useState<string | null>(null)
-  const [error, setError] = useState<Error | null>(null)
+  const [batchJobs, setBatchJobs] = useState<BatchJobWithCount[]>([])
   const [selectedBatchJob, setSelectedBatchJob] = useState<BatchJobWithCount | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<Error | null>(null)
   const [isFullWidth, setIsFullWidth] = useState(false)
   const [leftPanelWidth, setLeftPanelWidth] = useState(50)
-  const isNarrowViewport = useMediaQuery('(max-width: 768px)')
-  const subscriptionsRef = useRef<{ unsubscribe: () => void }[]>([])
+  const isNarrowViewport = useMediaQuery("(max-width: 768px)")
   const containerRef = useRef<HTMLDivElement>(null)
-  const dragStateRef = useRef<{
-    isDragging: boolean
-    startX: number
-    startWidth: number
-  }>({
-    isDragging: false,
-    startX: 0,
-    startWidth: 50
-  })
+  const subscriptionsRef = useRef<Subscription[]>([])
+  const params = useParams()
+  const pathname = usePathname()
+  // Use a ref to track if this is the initial render for URL updates
+  const isInitialUrlUpdateRef = useRef(true)
 
   const handleDragStart = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     e.preventDefault()
@@ -545,13 +545,76 @@ export default function BatchesDashboard() {
     };
   }, [accountId]); // Keep only accountId in dependencies
 
+  // Handle deep linking - check if we're on a specific batch job page
+  useEffect(() => {
+    // If we have an ID in the URL and we're on the main batches page
+    if (params && 'id' in params && pathname === `/lab/batches/${params.id}`) {
+      const batchJobId = params.id as string;
+      // We'll set the ID, but the actual batch job will be loaded in the loadInitialData function
+      if (batchJobId && batchJobs.length > 0) {
+        const batchJob = batchJobs.find(job => job.id === batchJobId);
+        if (batchJob) {
+          setSelectedBatchJob(batchJob);
+          if (isNarrowViewport) {
+            setIsFullWidth(true);
+          }
+        }
+      }
+    }
+  }, [params, pathname, batchJobs, isNarrowViewport]);
+
+  // Handle browser back/forward navigation with popstate event
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      // Extract batch job ID from URL if present
+      const match = window.location.pathname.match(/\/lab\/batches\/([^\/]+)$/);
+      const idFromUrl = match ? match[1] : null;
+      
+      if (idFromUrl) {
+        // Find the batch job with this ID
+        const batchJob = batchJobs.find(job => job.id === idFromUrl);
+        if (batchJob) {
+          setSelectedBatchJob(batchJob);
+          if (isNarrowViewport) {
+            setIsFullWidth(true);
+          }
+        }
+      } else {
+        // If no ID in URL, clear selection
+        setSelectedBatchJob(null);
+        setIsFullWidth(false);
+      }
+    };
+
+    // Add event listener for popstate (browser back/forward)
+    window.addEventListener('popstate', handlePopState);
+    
+    // Clean up event listener on unmount
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [batchJobs, isNarrowViewport]);
+
+  // Handle batch job click with URL update
   const handleBatchJobClick = (job: BatchJobWithCount) => {
-    setSelectedBatchJob(job)
+    setSelectedBatchJob(job);
+    
+    // Update URL without triggering a navigation/re-render
+    const newPathname = `/lab/batches/${job.id}`;
+    window.history.pushState(null, '', newPathname);
+    
+    if (isNarrowViewport) {
+      setIsFullWidth(true);
+    }
   }
 
+  // Handle batch job close with URL update
   const handleBatchJobClose = () => {
-    setSelectedBatchJob(null)
-    setIsFullWidth(false)
+    setSelectedBatchJob(null);
+    setIsFullWidth(false);
+    
+    // Update URL without triggering a navigation/re-render
+    window.history.pushState(null, '', '/lab/batches');
   }
 
   useEffect(() => {
@@ -580,6 +643,18 @@ export default function BatchesDashboard() {
 
         const transformedJobs = await loadRelatedData(transformedBatchJobs);
         setBatchJobs(transformedJobs);
+        
+        // If we have an initialSelectedBatchJobId, select that batch job
+        if (initialSelectedBatchJobId) {
+          const selectedJob = transformedJobs.find(job => job.id === initialSelectedBatchJobId);
+          if (selectedJob) {
+            setSelectedBatchJob(selectedJob);
+            if (isNarrowViewport) {
+              setIsFullWidth(true);
+            }
+          }
+        }
+        
         setIsLoading(false);
 
       } catch (error) {
@@ -590,7 +665,7 @@ export default function BatchesDashboard() {
     };
 
     loadInitialData();
-  }, []); // Run once on mount
+  }, [initialSelectedBatchJobId, isNarrowViewport]); // Add initialSelectedBatchJobId to dependencies
 
   useEffect(() => {
     if (selectedBatchJob) {
