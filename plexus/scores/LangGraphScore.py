@@ -179,7 +179,6 @@ class LangGraphScore(Score, LangChainUser):
         good_call_explanation: Optional[str] = Field(default=None)
         non_qualifying_reason: Optional[str] = Field(default=None)
         non_qualifying_explanation: Optional[str] = Field(default=None)
-        node_results: List[Dict[str, Any]] = Field(default_factory=list, description="Track node execution results")
 
         model_config = ConfigDict(
             arbitrary_types_allowed=True,
@@ -958,7 +957,6 @@ class LangGraphScore(Score, LangChainUser):
             results=initial_results,
             retry_count=0,
             at_llm_breakpoint=False,
-            node_results=[]
         ).model_dump()
 
         if batch_data:
@@ -976,7 +974,7 @@ class LangGraphScore(Score, LangChainUser):
             )
             
             # Convert graph result to Score.Result
-            return Score.Result(
+            result = Score.Result(
                 parameters=self.parameters,
                 value=graph_result.get('value', 'Error'),
                 metadata={
@@ -990,6 +988,13 @@ class LangGraphScore(Score, LangChainUser):
                     'source': graph_result.get('source')
                 }
             )
+            
+            # If metadata with trace exists in graph_result, add it to the result metadata
+            if 'metadata' in graph_result and graph_result['metadata'] is not None:
+                # Merge the existing metadata with the graph_result metadata
+                result.metadata.update(graph_result['metadata'])
+            
+            return result
         except BatchProcessingPause:
             # Let BatchProcessingPause propagate up
             raise

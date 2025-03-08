@@ -45,7 +45,7 @@ class BaseNode(ABC, LangChainUser):
 
     def log_state(self, state, input_state=None, output_state=None, node_suffix=""):
         """
-        Log the current state to the node_results list in the state.
+        Log the current state to the trace.node_results list in the state's metadata.
         
         Parameters
         ----------
@@ -61,7 +61,7 @@ class BaseNode(ABC, LangChainUser):
         Returns
         -------
         GraphState
-            A new state object with the updated node_results
+            A new state object with the updated trace information
         """
         # Use empty dicts if input_state or output_state not provided
         input_state = input_state or {}
@@ -87,22 +87,26 @@ class BaseNode(ABC, LangChainUser):
         else:
             state_dict = dict(state)
             
-        # Get existing node_results or create empty list
-        node_results = state_dict.get('node_results', [])
-        if node_results is None:
-            node_results = []
+        # Initialize metadata if it doesn't exist
+        if 'metadata' not in state_dict or state_dict['metadata'] is None:
+            state_dict['metadata'] = {}
+            
+        # Initialize trace if it doesn't exist
+        if 'trace' not in state_dict['metadata']:
+            state_dict['metadata']['trace'] = {}
+            
+        # Initialize node_results if it doesn't exist
+        if 'node_results' not in state_dict['metadata']['trace']:
+            state_dict['metadata']['trace']['node_results'] = []
             
         # Add the new node result
-        node_results.append(node_result)
+        state_dict['metadata']['trace']['node_results'].append(node_result)
         
         # Log for debugging
         logging.info(f"=== LOGGING STATE FOR {full_node_name} ===")
         
-        # Create a new state with updated node_results
-        new_state_dict = {**state_dict, 'node_results': node_results}
-        
         # Create and return a new state object
-        return self.GraphState(**new_state_dict)
+        return self.GraphState(**state_dict)
 
     def get_prompt_templates(self):
         """

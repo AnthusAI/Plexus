@@ -1638,6 +1638,15 @@ Total cost:       ${expenses['total_cost']:.6f}
                 'metadata': json.dumps(metadata_dict)  # Ensure metadata is a JSON string
             }
 
+            # Add trace data if available
+            logging.info("Checking for trace data to add to score result...")            
+            if score_result.metadata and 'trace' in score_result.metadata:
+                logging.info(f"trace content: {score_result.metadata['trace']}")
+                data['trace'] = json.dumps(score_result.metadata['trace'])
+                logging.info("Added metadata trace to trace data")
+            else:
+                logging.info("No trace data found to add")
+
             # Log the data being sent
             self.logging.info("Preparing to create score result with data:")
             for key, value in data.items():
@@ -1661,6 +1670,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                     scorecardId
                     value
                     metadata
+                    trace
                 }
             }
             """
