@@ -51,13 +51,12 @@ function AuthWrapper({ children }: { children: React.ReactNode }) {
     '/documentation/methods/add-edit-scorecard',
     '/documentation/methods/add-edit-score',
     '/documentation/methods/evaluate-score',
-    '/documentation/methods/monitor-tasks',
-    '/items'
+    '/documentation/methods/monitor-tasks'
   ];
   
   // Only allow dynamic evaluation pages (with an ID) to be public
   const isPublicPath = publicPaths.includes(pathname) || 
-    (pathname.startsWith('/evaluations/') && pathname.split('/').length === 3);
+    (pathname.startsWith('/evaluations/') && pathname.split('/').length === 3 && !pathname.startsWith('/evaluations/lab'));
   
   useEffect(() => {
     if (!authStatus) {
@@ -70,7 +69,7 @@ function AuthWrapper({ children }: { children: React.ReactNode }) {
     if (authStatus === 'unauthenticated' && !isPublicPath) {
       router.push('/');
     } else if (authStatus === 'authenticated' && pathname === '/') {
-      router.push('/activity');
+      router.push('/lab/activity');
     }
   }, [authStatus, router, pathname]);
 

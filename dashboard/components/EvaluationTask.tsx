@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect, useMemo } from 'react'
+import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react'
 import { Task, TaskHeader, TaskContent, BaseTaskProps } from '@/components/Task'
 import { FlaskConical, Square, X, Split, ChevronLeft } from 'lucide-react'
 import MetricsGauges from '@/components/MetricsGauges'
@@ -842,7 +842,8 @@ const DetailContent = React.memo(({
   return !shouldUpdate;
 });
 
-export default function EvaluationTask({ 
+// Wrap the component with React.memo to prevent unnecessary re-renders
+const EvaluationTask = React.memo(function EvaluationTaskComponent({ 
   variant = 'grid',
   task,
   onClick,
@@ -1079,7 +1080,20 @@ export default function EvaluationTask({
       }}
     />
   )
-}
+}, (prevProps, nextProps) => {
+  // Custom comparison function to prevent unnecessary re-renders
+  // Only re-render if these specific props change
+  return (
+    prevProps.variant === nextProps.variant &&
+    prevProps.task.id === nextProps.task.id &&
+    prevProps.task.status === nextProps.task.status &&
+    prevProps.isSelected === nextProps.isSelected &&
+    prevProps.selectedScoreResultId === nextProps.selectedScoreResultId &&
+    prevProps.isFullWidth === nextProps.isFullWidth
+  );
+});
+
+export default EvaluationTask;
 
 function getMetricInformation(metricName: string): string {
   const descriptions: Record<string, string> = {

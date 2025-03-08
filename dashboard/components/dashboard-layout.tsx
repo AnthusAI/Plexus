@@ -93,15 +93,15 @@ const client = generateClient<Schema>()
 type Account = Schema['Account']['type']
 
 export const menuItems = [
-  { name: "Activity", icon: Activity, path: "/activity" },
-  { name: "Scorecards", icon: ListTodo, path: "/scorecards" },
-  { name: "Datasets", icon: Database, path: "/datasets" },
-  { name: "Evaluations", icon: FlaskConical, path: "/evaluations" },
-  { name: "Items", icon: StickyNote, path: "/items" },
-  { name: "Batches", icon: Layers3, path: "/batches" },
-  { name: "Feedback", icon: MessageCircleMore, path: "/feedback-queues" },
-  { name: "Reports", icon: FileBarChart, path: "/reports" },
-  { name: "Alerts", icon: Siren, path: "/alerts" },
+  { name: "Activity", icon: Activity, path: "/lab/activity" },
+  { name: "Scorecards", icon: ListTodo, path: "/lab/scorecards" },
+  { name: "Datasets", icon: Database, path: "/lab/datasets" },
+  { name: "Evaluations", icon: FlaskConical, path: "/lab/evaluations" },
+  { name: "Items", icon: StickyNote, path: "/lab/items" },
+  { name: "Batches", icon: Layers3, path: "/lab/batches" },
+  { name: "Feedback", icon: MessageCircleMore, path: "/lab/feedback-queues" },
+  { name: "Reports", icon: FileBarChart, path: "/lab/reports" },
+  { name: "Alerts", icon: Siren, path: "/lab/alerts" },
   { name: "Help", icon: CircleHelp, path: "/documentation" },
 ]
 
