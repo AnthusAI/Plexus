@@ -665,7 +665,7 @@ export default function DatasetsDashboard() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => router.push('/evaluations')}>
+            <DropdownMenuItem onClick={() => router.push('/lab/evaluations')}>
               <FlaskConical className="mr-2 h-4 w-4" />
               <span>Run Evaluation</span>
             </DropdownMenuItem>
