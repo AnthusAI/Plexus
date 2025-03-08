@@ -66,7 +66,8 @@ function calculateProgress(processedItems?: number | null, totalItems?: number |
   return Math.round((processedItems / totalItems) * 100)
 }
 
-export function TaskDisplay({
+// Wrap the component with React.memo to prevent unnecessary re-renders
+export const TaskDisplay = React.memo(function TaskDisplayComponent({
   variant = 'grid',
   task,
   evaluationData,
@@ -293,4 +294,17 @@ export function TaskDisplay({
   } as EvaluationTaskProps
 
   return <EvaluationTask {...taskProps} variant={variant} />
-} 
+}, (prevProps, nextProps) => {
+  // Custom comparison function to prevent unnecessary re-renders
+  // Only re-render if these specific props change
+  return (
+    prevProps.variant === nextProps.variant &&
+    prevProps.task?.id === nextProps.task?.id &&
+    prevProps.task?.status === nextProps.task?.status &&
+    prevProps.evaluationData.id === nextProps.evaluationData.id &&
+    prevProps.evaluationData.status === nextProps.evaluationData.status &&
+    prevProps.isSelected === nextProps.isSelected &&
+    prevProps.selectedScoreResultId === nextProps.selectedScoreResultId &&
+    prevProps.isFullWidth === nextProps.isFullWidth
+  );
+}); 

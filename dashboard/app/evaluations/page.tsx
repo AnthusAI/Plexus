@@ -1,26 +1,7 @@
-"use client";
-
-import { useAuthenticator } from '@aws-amplify/ui-react';
-import DashboardLayout from '@/components/dashboard-layout';
-import EvaluationsDashboard from '@/components/evaluations-dashboard';
-import { useRouter } from 'next/navigation';
-import { signOut as amplifySignOut } from 'aws-amplify/auth';
+import { redirect } from 'next/navigation'
 
 export default function Evaluations() {
-  const router = useRouter();
-
-  const handleSignOut = async () => {
-    try {
-      await amplifySignOut();
-      router.push('/');
-    } catch (error) {
-      console.error('Error signing out:', error);
-    }
-  };
-
-  return (
-    <DashboardLayout signOut={handleSignOut}>
-      <EvaluationsDashboard />
-    </DashboardLayout>
-  );
+  // Add a permanent redirect to /lab/evaluations
+  // This is a server-side redirect that will be cached by browsers
+  redirect('/lab/evaluations', 'push')
 }
