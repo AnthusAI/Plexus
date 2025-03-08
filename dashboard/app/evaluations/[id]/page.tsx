@@ -6,38 +6,8 @@ import { AlertCircle } from 'lucide-react'
 import { generateClient } from 'aws-amplify/api'
 import { Schema } from '@/amplify/data/resource'
 import EvaluationTask from '@/components/EvaluationTask'
-import { getValueFromLazyLoader } from '@/utils/amplify-helpers'
-import { Evaluation } from '@/types/evaluation'
+import { getValueFromLazyLoader, transformEvaluation, standardizeScoreResults, Evaluation } from '@/utils/data-operations'
 import EvaluationsDashboard from '@/components/evaluations-dashboard'
-
-// Utility function to standardize score results
-function standardizeScoreResults(scoreResults: any): any[] {
-  if (!scoreResults) return [];
-  
-  // If it's already an array, return it
-  if (Array.isArray(scoreResults)) {
-    return scoreResults;
-  }
-  
-  // If it has an items property that's an array, return that
-  if (scoreResults && typeof scoreResults === 'object' && 'items' in scoreResults && Array.isArray(scoreResults.items)) {
-    return scoreResults.items;
-  }
-  
-  // If it's a string (JSON), try to parse it
-  if (typeof scoreResults === 'string') {
-    try {
-      const parsed = JSON.parse(scoreResults);
-      return Array.isArray(parsed) ? parsed : 
-             (parsed && 'items' in parsed && Array.isArray(parsed.items)) ? parsed.items : [];
-    } catch (e) {
-      console.error('Error parsing score results:', e);
-      return [];
-    }
-  }
-  
-  return [];
-}
 
 // Share link data type
 type ShareLinkData = {
@@ -49,18 +19,41 @@ type ShareLinkData = {
 
 // Service class for evaluation operations
 export class EvaluationService {
-  constructor(
-    private client = generateClient<Schema>()
-  ) {}
+  private client;
+
+  constructor() {
+    this.client = generateClient<Schema>();
+  }
+
+  // Helper method to safely get data from Amplify
+  private async safeGet<T>(modelName: string, id: string): Promise<T | null> {
+    try {
+      // @ts-ignore - Bypass TypeScript's type checking for this specific call
+      const response = await this.client.models[modelName].get({ id });
+      return response.data as T;
+    } catch (error) {
+      console.error(`Error fetching ${modelName} with ID ${id}:`, error);
+      return null;
+    }
+  }
 
   // Fetch evaluation by ID (for dashboard deep links)
   async fetchEvaluationById(id: string): Promise<Evaluation> {
     try {
-      const response = await this.client.models.Evaluation.get({
-        id
-      });
+      const evaluationData = await this.safeGet<Schema['Evaluation']['type']>('Evaluation', id);
       
-      return response.data as Evaluation;
+      if (!evaluationData) {
+        throw new Error('Evaluation not found');
+      }
+      
+      // Transform the data to the expected Evaluation type
+      const transformedData = transformEvaluation(evaluationData);
+      
+      if (!transformedData) {
+        throw new Error('Failed to transform evaluation data');
+      }
+      
+      return transformedData as Evaluation;
     } catch (error) {
       console.error('Error fetching evaluation by ID:', error);
       throw error;
@@ -71,15 +64,11 @@ export class EvaluationService {
   async fetchEvaluationByShareToken(token: string): Promise<Evaluation> {
     try {
       // First, get the share link data
-      const shareLinkResponse = await this.client.models.ShareLink.get({
-        id: token
-      });
+      const shareLink = await this.safeGet<Schema['ShareLink']['type']>('ShareLink', token);
       
-      if (!shareLinkResponse.data) {
+      if (!shareLink) {
         throw new Error('Share link not found');
       }
-      
-      const shareLink = shareLinkResponse.data;
       
       // Check if the share link has expired
       if (shareLink.expiresAt && new Date(shareLink.expiresAt) < new Date()) {
@@ -87,7 +76,7 @@ export class EvaluationService {
       }
       
       // Check if the share link has been revoked
-      if (shareLink.revoked) {
+      if (shareLink.isRevoked) {
         throw new Error('Share link has been revoked');
       }
       
@@ -97,15 +86,20 @@ export class EvaluationService {
       }
       
       // Get the evaluation data
-      const evaluationResponse = await this.client.models.Evaluation.get({
-        id: shareLink.resourceId
-      });
+      const evaluationData = await this.safeGet<Schema['Evaluation']['type']>('Evaluation', shareLink.resourceId);
       
-      if (!evaluationResponse.data) {
+      if (!evaluationData) {
         throw new Error('Evaluation not found');
       }
       
-      return evaluationResponse.data as Evaluation;
+      // Transform the data to the expected Evaluation type
+      const transformedData = transformEvaluation(evaluationData);
+      
+      if (!transformedData) {
+        throw new Error('Failed to transform evaluation data');
+      }
+      
+      return transformedData as Evaluation;
     } catch (error) {
       console.error('Error fetching evaluation by share token:', error);
       throw error;
