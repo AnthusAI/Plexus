@@ -39,10 +39,17 @@ import ScorecardComponent from "./scorecards/ScorecardComponent"
 import { cn } from "@/lib/utils"
 import { ScoreComponent } from "./ui/score-component"
 import ScorecardDetailView from "./scorecards/ScorecardDetailView"
+import { useRouter, usePathname, useParams } from "next/navigation"
 
 const ACCOUNT_KEY = 'call-criteria'
 
-export default function ScorecardsComponent() {
+export default function ScorecardsComponent({
+  initialSelectedScorecardId = null,
+  initialSelectedScoreId = null
+}: {
+  initialSelectedScorecardId?: string | null,
+  initialSelectedScoreId?: string | null
+} = {}) {
   const [scorecards, setScorecards] = useState<Schema['Scorecard']['type'][]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [selectedScorecard, setSelectedScorecard] = useState<Schema['Scorecard']['type'] | null>(null)
@@ -74,7 +81,7 @@ export default function ScorecardsComponent() {
   } | null>(null)
   const [accountId, setAccountId] = useState<string | null>(null)
   const [error, setError] = useState<Error | null>(null)
-  const [isFullWidth, setIsFullWidth] = useState(false)
+  const [isFullWidth, setIsFullWidth] = useState(!!initialSelectedScorecardId)
   const [isNarrowViewport, setIsNarrowViewport] = useState(false)
   const [showDatasetConfig, setShowDatasetConfig] = useState(false)
   const [selectedScorecardForDataset, setSelectedScorecardForDataset] = useState<string>("")
@@ -82,6 +89,134 @@ export default function ScorecardsComponent() {
   const [scorecardScoreCounts, setScorecardScoreCounts] = useState<Record<string, number>>({})
   const [scorecardDetailWidth, setScorecardDetailWidth] = useState(50)
   const [maximizedScoreId, setMaximizedScoreId] = useState<string | null>(null)
+  const router = useRouter()
+  const pathname = usePathname()
+  const params = useParams()
+
+  // Handle deep linking - check if we're on a specific scorecard or score page
+  useEffect(() => {
+    if (initialSelectedScorecardId) {
+      // Find the scorecard in the list
+      const scorecard = scorecards.find(sc => sc.id === initialSelectedScorecardId);
+      if (scorecard) {
+        handleSelectScorecard(scorecard);
+        
+        // If we also have a score ID, select that score
+        if (initialSelectedScoreId) {
+          // We need to wait for sections to load before selecting the score
+          fetchSectionsWithScores(initialSelectedScorecardId).then(() => {
+            // Find the score in the sections
+            if (selectedScorecardSections) {
+              for (const section of selectedScorecardSections.items) {
+                const score = section.scores.items.find(s => s.id === initialSelectedScoreId);
+                if (score) {
+                  handleScoreSelect({...score, sectionId: section.id}, section.id);
+                  break;
+                }
+              }
+            }
+          });
+        }
+      }
+    }
+  }, [initialSelectedScorecardId, initialSelectedScoreId, scorecards, selectedScorecardSections]);
+
+  // Handle browser back/forward navigation with popstate event
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      // Extract scorecard ID from URL if present
+      const scorecardMatch = window.location.pathname.match(/\/lab\/scorecards\/([^\/]+)(?:\/|$)/);
+      const scorecardIdFromUrl = scorecardMatch ? scorecardMatch[1] : null;
+      
+      // Extract score ID from URL if present
+      const scoreMatch = window.location.pathname.match(/\/lab\/scorecards\/[^\/]+\/scores\/([^\/]+)$/);
+      const scoreIdFromUrl = scoreMatch ? scoreMatch[1] : null;
+      
+      if (scorecardIdFromUrl) {
+        // Find the scorecard in the list
+        const scorecard = scorecards.find(sc => sc.id === scorecardIdFromUrl);
+        if (scorecard) {
+          setSelectedScorecard(scorecard);
+          if (isNarrowViewport) {
+            setIsFullWidth(true);
+          }
+          
+          // If we also have a score ID, select that score
+          if (scoreIdFromUrl && selectedScorecardSections) {
+            for (const section of selectedScorecardSections.items) {
+              const score = section.scores.items.find(s => s.id === scoreIdFromUrl);
+              if (score) {
+                setSelectedScore({...score, sectionId: section.id});
+                break;
+              }
+            }
+          } else {
+            setSelectedScore(null);
+          }
+        }
+      } else {
+        setSelectedScorecard(null);
+        setSelectedScore(null);
+        if (isNarrowViewport) {
+          setIsFullWidth(false);
+        }
+      }
+    };
+
+    // Add event listener for popstate (browser back/forward)
+    window.addEventListener('popstate', handlePopState);
+    
+    // Clean up event listener on unmount
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [scorecards, selectedScorecardSections, isNarrowViewport]);
+
+  // Custom setter for selectedScorecard that handles both state and URL
+  const handleSelectScorecard = (scorecard: Schema['Scorecard']['type'] | null) => {
+    // Only update state if the selected scorecard has changed
+    if (scorecard?.id !== selectedScorecard?.id) {
+      setSelectedScorecard(scorecard);
+      setSelectedScore(null); // Reset selected score when changing scorecard
+      
+      // Update URL without triggering a navigation/re-render
+      const newPathname = scorecard ? `/lab/scorecards/${scorecard.id}` : '/lab/scorecards';
+      window.history.pushState(null, '', newPathname);
+      
+      if (scorecard && isNarrowViewport) {
+        setIsFullWidth(true);
+      }
+      
+      // Load sections for the selected scorecard
+      if (scorecard) {
+        fetchSectionsWithScores(scorecard.id);
+      }
+    }
+  };
+
+  // Custom setter for selectedScore that handles both state and URL
+  const handleScoreSelect = (score: any, sectionId: string) => {
+    // Only update state if the selected score has changed
+    if (score?.id !== selectedScore?.id) {
+      setSelectedScore({...score, sectionId});
+      
+      // Update URL without triggering a navigation/re-render
+      if (selectedScorecard) {
+        const newPathname = `/lab/scorecards/${selectedScorecard.id}/scores/${score.id}`;
+        window.history.pushState(null, '', newPathname);
+      }
+    }
+  };
+
+  // Handle closing the selected scorecard
+  const handleCloseScorecard = () => {
+    setSelectedScorecard(null);
+    setSelectedScore(null);
+    setIsFullWidth(false);
+    
+    // Update URL without triggering a navigation/re-render
+    window.history.pushState(null, '', '/lab/scorecards');
+  };
 
   // Initial data load
   const fetchScorecards = async () => {
@@ -296,8 +431,8 @@ export default function ScorecardsComponent() {
       }
     } as Schema['Scorecard']['type']
 
-    setSelectedScorecard(blankScorecard)
-    setSelectedScorecardSections({ items: [] })
+    handleSelectScorecard(blankScorecard);
+    setSelectedScorecardSections({ items: [] });
   }
 
   // Handle editing an existing scorecard
@@ -368,17 +503,34 @@ export default function ScorecardsComponent() {
         }
       } as Schema['Scorecard']['type']
       
-      setSelectedScorecard(fullScorecardData)
+      handleSelectScorecard(fullScorecardData);
     } catch (error) {
       console.error('Error editing scorecard:', error)
       setError(error as Error)
     }
   }
 
-  const handleScoreSelect = (score: any, sectionId: string) => {
-    setSelectedScore({ ...score, sectionId })
+  const handleDragStart = (e: React.MouseEvent) => {
+    e.preventDefault()
+    const startX = e.pageX
+    const startWidth = leftPanelWidth
+
+    const handleDrag = (e: MouseEvent) => {
+      const delta = e.pageX - startX
+      const newWidth = Math.min(Math.max(startWidth + (delta / window.innerWidth) * 100, 30), 70)
+      setLeftPanelWidth(newWidth)
+    }
+
+    const handleDragEnd = () => {
+      document.removeEventListener('mousemove', handleDrag)
+      document.removeEventListener('mouseup', handleDragEnd)
+    }
+
+    document.addEventListener('mousemove', handleDrag)
+    document.addEventListener('mouseup', handleDragEnd)
   }
 
+  // Add back the renderSelectedScorecard function
   const renderSelectedScorecard = () => {
     if (!selectedScorecard || !selectedScorecardSections) return null;
 
@@ -412,11 +564,7 @@ export default function ScorecardsComponent() {
           }}
           isFullWidth={isFullWidth}
           onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
-          onClose={() => {
-            setSelectedScorecard(null)
-            setSelectedScore(null)
-            setIsFullWidth(false)
-          }}
+          onClose={handleCloseScorecard}
           onSave={async () => {
             await fetchScorecards()
           }}
@@ -427,6 +575,7 @@ export default function ScorecardsComponent() {
     );
   };
 
+  // Add back the renderSelectedScore function
   const renderSelectedScore = () => {
     if (!selectedScore) return null;
 
@@ -451,26 +600,6 @@ export default function ScorecardsComponent() {
       </div>
     );
   };
-
-  const handleDragStart = (e: React.MouseEvent) => {
-    e.preventDefault()
-    const startX = e.pageX
-    const startWidth = leftPanelWidth
-
-    const handleDrag = (e: MouseEvent) => {
-      const delta = e.pageX - startX
-      const newWidth = Math.min(Math.max(startWidth + (delta / window.innerWidth) * 100, 30), 70)
-      setLeftPanelWidth(newWidth)
-    }
-
-    const handleDragEnd = () => {
-      document.removeEventListener('mousemove', handleDrag)
-      document.removeEventListener('mouseup', handleDragEnd)
-    }
-
-    document.addEventListener('mousemove', handleDrag)
-    document.addEventListener('mouseup', handleDragEnd)
-  }
 
   if (isLoading) {
     return <div>Loading scorecards...</div>
@@ -533,10 +662,7 @@ export default function ScorecardsComponent() {
                         variant="grid"
                         score={scorecardData}
                         isSelected={selectedScorecard?.id === scorecard.id}
-                        onClick={() => {
-                          setSelectedScorecard(scorecard)
-                          setSelectedScore(null)
-                        }}
+                        onClick={() => handleSelectScorecard(scorecard)}
                         onEdit={() => handleEdit(scorecard)}
                       />
                     )
