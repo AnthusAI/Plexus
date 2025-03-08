@@ -1,20 +1,45 @@
 'use client'
 
-import React from 'react'
-import { useEffect, useState } from 'react'
-import { useParams } from 'next/navigation'
-import { Footer } from '@/components/landing/Footer'
-import EvaluationTask from '@/components/EvaluationTask'
+import React, { useState, useEffect } from 'react'
+import { useParams, usePathname } from 'next/navigation'
+import { AlertCircle } from 'lucide-react'
 import { generateClient } from 'aws-amplify/api'
-import { GraphQLResult } from '@aws-amplify/api-graphql'
-import { type Schema } from '@/amplify/data/resource'
-import { transformEvaluation, standardizeScoreResults } from '@/utils/data-operations'
-import { type Evaluation } from '@/utils/data-operations'
-import { getValueFromLazyLoader } from '@/utils/data-operations'
-import { fetchAuthSession } from 'aws-amplify/auth'
-import { AlertCircle } from 'lucide-react';
+import { Schema } from '@/amplify/data/resource'
+import EvaluationTask from '@/components/EvaluationTask'
+import { getValueFromLazyLoader } from '@/utils/amplify-helpers'
+import { Evaluation } from '@/types/evaluation'
+import EvaluationsDashboard from '@/components/evaluations-dashboard'
 
-// Type for ShareLink data returned from the API
+// Utility function to standardize score results
+function standardizeScoreResults(scoreResults: any): any[] {
+  if (!scoreResults) return [];
+  
+  // If it's already an array, return it
+  if (Array.isArray(scoreResults)) {
+    return scoreResults;
+  }
+  
+  // If it has an items property that's an array, return that
+  if (scoreResults && typeof scoreResults === 'object' && 'items' in scoreResults && Array.isArray(scoreResults.items)) {
+    return scoreResults.items;
+  }
+  
+  // If it's a string (JSON), try to parse it
+  if (typeof scoreResults === 'string') {
+    try {
+      const parsed = JSON.parse(scoreResults);
+      return Array.isArray(parsed) ? parsed : 
+             (parsed && 'items' in parsed && Array.isArray(parsed.items)) ? parsed.items : [];
+    } catch (e) {
+      console.error('Error parsing score results:', e);
+      return [];
+    }
+  }
+  
+  return [];
+}
+
+// Share link data type
 type ShareLinkData = {
   token: string;
   resourceType: string;
@@ -22,123 +47,92 @@ type ShareLinkData = {
   viewOptions: Record<string, any>;
 };
 
-// Create a service for data fetching that can be easily mocked in tests
+// Service class for evaluation operations
 export class EvaluationService {
   constructor(
     private client = generateClient<Schema>()
   ) {}
 
-  // Method to fetch evaluation via the share link proxy Lambda
+  // Fetch evaluation by ID (for dashboard deep links)
+  async fetchEvaluationById(id: string): Promise<Evaluation> {
+    try {
+      const response = await this.client.models.Evaluation.get({
+        id
+      });
+      
+      return response.data as Evaluation;
+    } catch (error) {
+      console.error('Error fetching evaluation by ID:', error);
+      throw error;
+    }
+  }
+  
+  // Fetch evaluation by share token
   async fetchEvaluationByShareToken(token: string): Promise<Evaluation> {
     try {
-      console.log('Fetching evaluation by share token:', token);
+      // First, get the share link data
+      const shareLinkResponse = await this.client.models.ShareLink.get({
+        id: token
+      });
       
-      // Determine auth mode based on user's session
-      let authMode: 'userPool' | 'identityPool' = 'identityPool'; // Default to guest access
-      try {
-        const session = await fetchAuthSession();
-        if (session.tokens?.idToken) {
-          console.log('User is authenticated, using userPool auth mode');
-          authMode = 'userPool';
-        } else {
-          console.log('No auth session, using identityPool (guest) auth mode');
-        }
-      } catch (error) {
-        console.log('Error checking auth session, falling back to guest access:', error);
+      if (!shareLinkResponse.data) {
+        throw new Error('Share link not found');
       }
       
-      const response = await this.client.graphql({
-        query: `
-          query GetResourceByShareToken($token: String!) {
-            getResourceByShareToken(token: $token) {
-              shareLink {
-                token
-                resourceType
-                resourceId
-                viewOptions
-              }
-              data
-            }
-          }
-        `,
-        variables: { token },
-        authMode // Use the determined auth mode
-      }) as GraphQLResult<{
-        getResourceByShareToken: {
-          shareLink: ShareLinkData;
-          data: any;
-        }
-      }>;
+      const shareLink = shareLinkResponse.data;
       
-      // Check for GraphQL errors
-      if (response.errors && response.errors.length > 0) {
-        const errorMessage = response.errors[0].message;
-        console.error('GraphQL error:', errorMessage);
-        throw new Error(errorMessage);
+      // Check if the share link has expired
+      if (shareLink.expiresAt && new Date(shareLink.expiresAt) < new Date()) {
+        throw new Error('Share link has expired');
       }
       
-      if (!response.data?.getResourceByShareToken) {
-        throw new Error('Failed to load shared resource');
+      // Check if the share link has been revoked
+      if (shareLink.revoked) {
+        throw new Error('Share link has been revoked');
       }
       
-      const result = response.data.getResourceByShareToken;
-      
-      if (!result.shareLink) {
-        throw new Error('Invalid share link data');
+      // Check if the resource type is evaluation
+      if (shareLink.resourceType !== 'EVALUATION') {
+        throw new Error('Invalid resource type');
       }
       
-      const shareLink = result.shareLink;
+      // Get the evaluation data
+      const evaluationResponse = await this.client.models.Evaluation.get({
+        id: shareLink.resourceId
+      });
       
-      // Verify that this is an Evaluation resource
-      if (shareLink.resourceType !== 'Evaluation') {
-        throw new Error(`Invalid resource type: ${shareLink.resourceType}. Expected: Evaluation`);
+      if (!evaluationResponse.data) {
+        throw new Error('Evaluation not found');
       }
       
-      // Handle the data as a string that needs to be parsed
-      if (!result.data) {
-        throw new Error('No data returned from share link resolver');
-      }
-      
-      // Parse the string data to JSON
-      let evaluationData;
-      if (typeof result.data === 'string') {
-        try {
-          const parsedData = JSON.parse(result.data);
-          if (parsedData.getEvaluation) {
-            evaluationData = parsedData.getEvaluation;
-          } else {
-            throw new Error('Missing evaluation data in parsed result');
-          }
-        } catch (e) {
-          console.error('Error parsing result.data as JSON:', e);
-          throw new Error('Failed to parse evaluation data');
-        }
-      } else {
-        throw new Error('Unexpected data format returned from share link resolver');
-      }
-      
-      // Transform the evaluation data
-      return transformEvaluation(evaluationData) as Evaluation;
+      return evaluationResponse.data as Evaluation;
     } catch (error) {
       console.error('Error fetching evaluation by share token:', error);
       throw error;
     }
   }
 
-  // Helper method to validate token format
+  // Check if a string is a valid share token
   isValidToken(token: string): boolean {
-    // Share tokens are typically random hex strings of a specific length
-    return /^[0-9a-f]{32}$/i.test(token);
+    // Simple validation - share tokens are UUIDs (32 hex chars with optional hyphens)
+    return /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i.test(token);
   }
 }
 
 // Props interface for the component
 interface PublicEvaluationProps {
   evaluationService?: EvaluationService;
+  isDashboardView?: boolean;
 }
 
-export default function PublicEvaluation({ 
-  evaluationService = new EvaluationService() 
+export default function EvaluationPage() {
+  // For share views, render the public evaluation component
+  return <PublicEvaluation />;
+}
+
+export function PublicEvaluation({ 
+  evaluationService = new EvaluationService(),
+  isDashboardView = false
 }: PublicEvaluationProps = {}) {
   const { id } = useParams() as { id: string };
   const [evaluation, setEvaluation] = useState<Evaluation | null>(null);
@@ -158,15 +152,20 @@ export default function PublicEvaluation({
     async function loadEvaluation() {
       try {
         if (!id) {
-          throw new Error('No token provided');
+          throw new Error('No ID or token provided');
         }
         
-        if (!memoizedService.isValidToken(id)) {
-          throw new Error('Invalid token format');
-        }
+        let data: Evaluation;
         
-        console.log('Loading evaluation with token:', id);
-        const data = await memoizedService.fetchEvaluationByShareToken(id);
+        // If this is a share token, fetch by token
+        if (memoizedService.isValidToken(id) && !isDashboardView) {
+          console.log('Loading evaluation with token:', id);
+          data = await memoizedService.fetchEvaluationByShareToken(id);
+        } else {
+          // Otherwise, fetch by ID (for dashboard deep links)
+          console.log('Loading evaluation with ID:', id);
+          data = await memoizedService.fetchEvaluationById(id);
+        }
         
         console.log('Successfully loaded evaluation:', {
           id: data.id,
@@ -214,7 +213,13 @@ export default function PublicEvaluation({
     if (id) {
       loadEvaluation();
     }
-  }, [id, memoizedService]);
+  }, [id, memoizedService, isDashboardView]);
+
+  // If this is a dashboard view, we don't need to render anything
+  // The parent component (EvaluationsDashboard) will handle rendering
+  if (isDashboardView) {
+    return null;
+  }
 
   return (
     <div className="w-full h-full px-6 pt-3 pb-6 overflow-auto">

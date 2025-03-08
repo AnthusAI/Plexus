@@ -37,7 +37,7 @@ import { EvaluationDashboardSkeleton } from "@/components/loading-skeleton"
 import { ModelListResult, AmplifyListResult, AmplifyGetResult } from '@/types/shared'
 import { listFromModel, observeQueryFromModel, getFromModel, observeScoreResults } from "@/utils/amplify-helpers"
 import { useAuthenticator } from '@aws-amplify/ui-react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useParams, usePathname } from 'next/navigation'
 import { Observable } from 'rxjs'
 import { getClient } from '@/utils/amplify-client'
 import type { GraphQLResult, GraphQLSubscription } from '@aws-amplify/api'
@@ -368,16 +368,23 @@ export function transformEvaluation(evaluation: Schema['Evaluation']['type']) {
   return transformedEvaluation;
 }
 
-export default function EvaluationsDashboard() {
+export default function EvaluationsDashboard({ 
+  initialSelectedEvaluationId = null 
+}: { 
+  initialSelectedEvaluationId?: string | null 
+} = {}) {
   const { user } = useAuthenticator()
   const router = useRouter()
+  const pathname = usePathname()
+  const params = useParams()
   const [accountId, setAccountId] = useState<string | null>(null)
-  const [selectedEvaluationId, setSelectedEvaluationId] = useState<string | null>(null)
+  const [selectedEvaluationId, setSelectedEvaluationId] = useState<string | null>(initialSelectedEvaluationId)
   const [isFullWidth, setIsFullWidth] = useState(false)
   const [leftPanelWidth, setLeftPanelWidth] = useState(50)
   const [selectedScorecard, setSelectedScorecard] = useState<string | null>(null)
   const [selectedScore, setSelectedScore] = useState<string | null>(null)
   const [accountError, setAccountError] = useState<string | null>(null)
+  const [dataHasLoadedOnce, setDataHasLoadedOnce] = useState(false)
   const isNarrowViewport = useMediaQuery("(max-width: 768px)")
   const { ref, inView } = useInView({
     threshold: 0,
@@ -385,6 +392,67 @@ export default function EvaluationsDashboard() {
   const [selectedScoreResultId, setSelectedScoreResultId] = useState<string | null>(null)
   const [isShareModalOpen, setIsShareModalOpen] = useState(false)
   const [shareUrl, setShareUrl] = useState<string | null>(null)
+  // Use a ref to track if this is the initial render for URL updates
+  const isInitialUrlUpdateRef = useRef(true);
+
+  // Add this handler
+  const handleScoreResultSelect = useCallback((id: string | null) => {
+    setSelectedScoreResultId(id);
+  }, []);
+
+  const copyLinkToClipboard = () => {
+    if (!selectedEvaluationId || !accountId) return;
+    setIsShareModalOpen(true);
+  }
+
+  // Handle deep linking - check if we're on the main evaluations page or a specific evaluation page
+  useEffect(() => {
+    // If we have an ID in the URL and we're on the main evaluations page
+    if (params && 'id' in params && pathname === `/evaluations/${params.id}`) {
+      setSelectedEvaluationId(params.id as string);
+    }
+  }, [params, pathname]);
+
+  // Handle browser back/forward navigation with popstate event
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      // Extract evaluation ID from URL if present
+      const match = window.location.pathname.match(/\/lab\/evaluations\/([^\/]+)$/);
+      const idFromUrl = match ? match[1] : null;
+      
+      // Update the selected evaluation ID based on the URL
+      setSelectedEvaluationId(idFromUrl);
+    };
+
+    // Add event listener for popstate (browser back/forward)
+    window.addEventListener('popstate', handlePopState);
+    
+    // Clean up event listener on unmount
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, []);
+
+  // Custom setter for selectedEvaluationId that handles both state and URL
+  const handleSelectEvaluation = (id: string | null) => {
+    // Only update state if the selected evaluation has changed
+    if (id !== selectedEvaluationId) {
+      setSelectedEvaluationId(id);
+      
+      // Update URL without triggering a navigation/re-render
+      const newPathname = id ? `/lab/evaluations/${id}` : '/lab/evaluations';
+      window.history.pushState(null, '', newPathname);
+    }
+  };
+
+  // Handle closing the selected evaluation
+  const handleCloseEvaluation = () => {
+    setSelectedEvaluationId(null);
+    setIsFullWidth(false);
+    
+    // Update URL without triggering a navigation/re-render
+    window.history.pushState(null, '', '/lab/evaluations');
+  };
 
   // Fetch account ID
   useEffect(() => {
@@ -416,6 +484,16 @@ export default function EvaluationsDashboard() {
 
   // Use the new hook for evaluation data
   const { evaluations, isLoading, error } = useEvaluationData({ accountId });
+
+  // Set dataHasLoadedOnce to true once data has loaded
+  useEffect(() => {
+    if (!isLoading && evaluations.length > 0 && !dataHasLoadedOnce) {
+      setDataHasLoadedOnce(true);
+    }
+  }, [isLoading, evaluations, dataHasLoadedOnce]);
+
+  // Show loading state only on initial load, not when selecting evaluations
+  const showLoading = isLoading && !dataHasLoadedOnce;
 
   // Combine errors from account fetching and evaluation data
   const combinedError = accountError || error;
@@ -467,10 +545,11 @@ export default function EvaluationsDashboard() {
     document.addEventListener('mouseup', handleDragEnd)
   }
 
-  const renderSelectedTask = () => {
-    if (!selectedEvaluationId) return null
-    const evaluation = evaluations.find((e: { id: string }) => e.id === selectedEvaluationId)
-    if (!evaluation) return null
+  // Memoize the renderSelectedTask function to prevent unnecessary re-renders
+  const renderSelectedTask = useMemo(() => {
+    if (!selectedEvaluationId) return null;
+    const evaluation = evaluations.find((e: { id: string }) => e.id === selectedEvaluationId);
+    if (!evaluation) return null;
 
     console.log('Rendering selected task:', {
       evaluationId: evaluation.id,
@@ -506,26 +585,23 @@ export default function EvaluationsDashboard() {
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={copyLinkToClipboard}>
                 <Share className="mr-2 h-4 w-4" />
-                Share
+                <span>Share</span>
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleDelete(evaluation.id)}>
                 <Trash2 className="mr-2 h-4 w-4" />
-                Delete
+                <span>Delete</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         }
         isFullWidth={isFullWidth}
         onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
-        onClose={() => {
-          setSelectedEvaluationId(null)
-          setIsFullWidth(false)
-        }}
+        onClose={handleCloseEvaluation}
         selectedScoreResultId={selectedScoreResultId}
-        onSelectScoreResult={(id) => setSelectedScoreResultId(id)}
+        onSelectScoreResult={handleScoreResultSelect}
       />
-    )
-  }
+    );
+  }, [selectedEvaluationId, evaluations, isFullWidth, selectedScoreResultId, handleScoreResultSelect, copyLinkToClipboard, handleDelete, handleCloseEvaluation]);
 
   // Add filtering logic for evaluations based on selected scorecard and score
   const filteredEvaluations = useMemo(() => {
@@ -536,16 +612,6 @@ export default function EvaluationsDashboard() {
       return true;
     });
   }, [evaluations, selectedScorecard, selectedScore]);
-
-  // Add this handler
-  const handleScoreResultSelect = useCallback((id: string | null) => {
-    setSelectedScoreResultId(id);
-  }, []);
-
-  const copyLinkToClipboard = () => {
-    if (!selectedEvaluationId || !accountId) return;
-    setIsShareModalOpen(true);
-  }
 
   const handleCreateShareLink = async (expiresAt: string, viewOptions: ShareLinkViewOptions) => {
     if (!selectedEvaluationId || !accountId) return;
@@ -675,7 +741,30 @@ export default function EvaluationsDashboard() {
     );
   });
 
-  if (isLoading) {
+  // Memoize the click handler for each evaluation to prevent unnecessary re-renders
+  const getEvaluationClickHandler = useCallback((evaluationId: string) => {
+    return (e?: React.MouseEvent | React.SyntheticEvent | any) => {
+      // Prevent default if it's an event object
+      if (e && typeof e.preventDefault === 'function') {
+        e.preventDefault();
+      }
+      
+      if (evaluationId !== selectedEvaluationId) {
+        // Update state first
+        setSelectedEvaluationId(evaluationId);
+        
+        // Then update URL without triggering a navigation/re-render
+        const newPathname = `/lab/evaluations/${evaluationId}`;
+        window.history.pushState(null, '', newPathname);
+        
+        if (isNarrowViewport) {
+          setIsFullWidth(true);
+        }
+      }
+    };
+  }, [selectedEvaluationId, isNarrowViewport]);
+
+  if (showLoading) {
     return (
       <div>
         <div className="mb-4 text-sm text-muted-foreground">
@@ -728,15 +817,11 @@ export default function EvaluationsDashboard() {
               ${selectedEvaluationId && !isNarrowViewport && !isFullWidth ? 'grid-cols-1' : 'grid-cols-1 @[640px]:grid-cols-2'}
             `}>
               {filteredEvaluations.map((evaluation: any) => {
+                const clickHandler = getEvaluationClickHandler(evaluation.id);
                 return (
                   <div 
                     key={evaluation.id} 
-                    onClick={() => {
-                      setSelectedEvaluationId(evaluation.id)
-                      if (isNarrowViewport) {
-                        setIsFullWidth(true)
-                      }
-                    }}
+                    onClick={clickHandler}
                   >
                     <TaskDisplay
                       variant="grid"
@@ -747,12 +832,7 @@ export default function EvaluationsDashboard() {
                         scoreResults: evaluation.scoreResults
                       }}
                       isSelected={evaluation.id === selectedEvaluationId}
-                      onClick={() => {
-                        setSelectedEvaluationId(evaluation.id)
-                        if (isNarrowViewport) {
-                          setIsFullWidth(true)
-                        }
-                      }}
+                      onClick={clickHandler}
                       extra={true}
                       selectedScoreResultId={selectedScoreResultId}
                       onSelectScoreResult={handleScoreResultSelect}
@@ -780,13 +860,13 @@ export default function EvaluationsDashboard() {
             className="h-full overflow-hidden"
             style={{ width: `${100 - leftPanelWidth}%` }}
           >
-            {renderSelectedTask()}
+            {renderSelectedTask}
           </div>
         )}
 
         {selectedEvaluationId && (isNarrowViewport || isFullWidth) && (
           <div className="fixed inset-0 z-50">
-            {renderSelectedTask()}
+            {renderSelectedTask}
           </div>
         )}
       </div>
