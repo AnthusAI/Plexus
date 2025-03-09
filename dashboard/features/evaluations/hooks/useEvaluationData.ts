@@ -666,7 +666,7 @@ export function useEvaluationData({
                             human_explanation: scoreResult?.metadata?.human_explanation ?? parsedMetadata.human_explanation ?? (typeof item.metadata === 'object' ? (item.metadata as any).human_explanation : null) ?? null,
                             text: scoreResult?.metadata?.text ?? parsedMetadata.text ?? (typeof item.metadata === 'object' ? (item.metadata as any).text : null) ?? null
                           },
-                          itemId: item.itemId ?? parsedMetadata.item_id?.toString() ?? null,
+                          itemId: parsedMetadata.item_id?.toString() ?? null,
                           createdAt: item.createdAt || new Date().toISOString(),
                           trace: item.trace ?? null
                         };

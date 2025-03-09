@@ -25,7 +25,6 @@ interface ScoringJobData {
   startedAt?: string | null
   completedAt?: string | null
   errorMessage?: string | null
-  itemId: string
   accountId: string
   scorecardId: string
   evaluationId?: string | null
@@ -153,7 +152,6 @@ export default function BatchJobTask({
               startedAt: (job.startedAt as string) || null,
               completedAt: (job.completedAt as string) || null,
               errorMessage: (job.errorMessage as string) || null,
-              itemId: job.itemId as string,
               accountId: job.accountId as string,
               scorecardId: job.scorecardId as string,
               evaluationId: (job.evaluationId as string) || null,
@@ -169,7 +167,6 @@ export default function BatchJobTask({
           sampleJobs: validJobs.slice(0, 3).map((job: ScoringJobData) => ({
             id: job.id,
             status: job.status,
-            itemId: job.itemId
           }))
         });
 
@@ -195,7 +192,6 @@ export default function BatchJobTask({
                     startedAt: scoringJob.startedAt || null,
                     completedAt: scoringJob.completedAt || null,
                     errorMessage: scoringJob.errorMessage || null,
-                    itemId: scoringJob.itemId,
                     accountId: scoringJob.accountId,
                     scorecardId: scoringJob.scorecardId,
                     evaluationId: scoringJob.evaluationId || null,
@@ -389,7 +385,7 @@ export default function BatchJobTask({
                         <div className="flex justify-between items-start">
                           <div className="space-y-1">
                             <div className="text-sm text-muted-foreground">
-                              Item: {job.itemId}
+                              <span className="font-medium">ID:</span> {job.id}
                             </div>
                             <div className="text-xs text-muted-foreground">
                               {formatTimeAgo(job.createdAt)}

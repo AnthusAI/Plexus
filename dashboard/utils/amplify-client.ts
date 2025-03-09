@@ -271,16 +271,6 @@ export const amplifyClient = {
       return { data: response.data as Schema['BatchJob']['type'] | null }
     }
   },
-  Item: {
-    list: async (params: any) => {
-      const response = await (getClient().models.Item as any).list(params)
-      return response as AmplifyResponse<Schema['Item']['type'][]>
-    },
-    get: async (params: any) => {
-      const response = await (getClient().models.Item as any).get(params)
-      return { data: response.data as Schema['Item']['type'] | null }
-    }
-  },
   ScoringJob: {
     list: async (params: any) => {
       const response = await (getClient().models.ScoringJob as any).list(params)
