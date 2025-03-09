@@ -11,7 +11,7 @@ type AuthorizationCallback = {
 // Define model-specific index types
 type AccountIndexFields = "name" | "key" | "description";
 type ScorecardIndexFields = "name" | "key" | "description" | "accountId" | 
-    "externalId" | "itemId";
+    "externalId";
 type ScorecardSectionIndexFields = "name" | "scorecardId" | "order";
 type ScoreIndexFields = "name" | "order" | "sectionId" | "type" | "accuracy" | 
     "version" | "aiProvider" | "aiModel" | "externalId" | "key";
@@ -24,7 +24,7 @@ type BatchJobIndexFields = "accountId" | "scorecardId" | "type" | "scoreId" |
 type ItemIndexFields = "description" | "accountId" | "evaluationId" | "updatedAt" | "createdAt" | "isEvaluation" | "externalId" | "scorecardId" | "scoreId";
 type ScoringJobIndexFields = "accountId" | "scorecardId" | "itemId" | "status" | 
     "scoreId" | "evaluationId" | "startedAt" | "completedAt" | "errorMessage" | "updatedAt" | "createdAt";
-type ScoreResultIndexFields = "accountId" | "scorecardId" | "itemId" | 
+type ScoreResultIndexFields = "accountId" | "scorecardId" | 
     "scoringJobId" | "evaluationId" | "scoreVersionId" | "updatedAt" | "createdAt";
 type BatchJobScoringJobIndexFields = "batchJobId" | "scoringJobId";
 type TaskIndexFields = "accountId" | "type" | "status" | "target" | 
