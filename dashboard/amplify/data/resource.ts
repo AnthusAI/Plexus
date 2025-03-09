@@ -78,6 +78,7 @@ const schema = a.schema({
             scoreResults: a.hasMany('ScoreResult', 'scorecardId'),
             tasks: a.hasMany('Task', 'scorecardId'),
             datasets: a.hasMany('Dataset', 'scorecardId'),
+            items: a.hasMany('Item', 'scorecardId'),
             externalId: a.string(),
             itemId: a.string(),
             item: a.belongsTo('Item', 'itemId'),
