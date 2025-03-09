@@ -460,7 +460,7 @@ export const TaskStatus = React.memo(({
     <div className="[&>*+*]:mt-2">
       <StyleTag />
       <div className={cn(
-        "rounded-lg px-1 py-1 space-y-1 -mx-1",
+        "rounded-lg px-1 py-1 space-y-1 -mx-1 px-2",
         variant === 'detail' ? "bg-gauge-background" : "bg-background"
       )}>
         {command && commandDisplay !== 'hide' && (
