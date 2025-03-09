@@ -1,6 +1,24 @@
 # CHANGELOG
 
 
+## v0.10.1 (2025-03-08)
+
+### Bug Fixes
+
+- **share-links**: Restore evaluation share functionality
+  ([`71b1189`](https://github.com/AnthusAI/Plexus/commit/71b11892d8fdb11b5bb9d8db27918c0382e6a762))
+
+The recent URL restructuring broke the share evaluation functionality due to: 1. Authentication
+  issues when fetching share links 2. Resource type case sensitivity mismatch ('Evaluation' vs
+  'EVALUATION')
+
+This fix: - Reverts to using the custom GraphQL resolver for share links with proper auth - Makes
+  resource type checking case-insensitive - Adds detailed logging for better debugging
+
+Resolves the "NoValidAuthTokens" and "Invalid resource type" errors when accessing shared
+  evaluations.
+
+
 ## v0.10.0 (2025-03-06)
 
 ### Bug Fixes
@@ -184,22 +202,6 @@ Adjust the entry point for the share token resolver to use the correct relative 
 
 ## v0.9.0 (2025-02-26)
 
-### Features
-
-- **dashboard**: Add Monaco Editor
-  ([`eefbb98`](https://github.com/AnthusAI/Plexus/commit/eefbb98c13606d192e341593f18fc41f9f0b7d5a))
-
-- **share-links**: Implement share link functionality for evaluations
-  ([`089b113`](https://github.com/AnthusAI/Plexus/commit/089b113d1490c2c1a576c3142d8e1397be30e74f))
-
-Add comprehensive share link support for evaluations, including: - GraphQL custom resolver for
-  fetching shared resources - Client-side share link generation and management - Enhanced public
-  evaluation page to support share token access - IAM-based client for secure share link operations
-  - View options and access tracking for shared evaluations
-
-
-## v0.8.0 (2025-02-22)
-
 ### Bug Fixes
 
 - **evaluation**: Handle metrics array in public evaluation page
@@ -218,12 +220,8 @@ Create CLAUDE.md with detailed documentation covering build commands, test comma
 
 ### Features
 
-- Add foreground-selected color for enhanced UI contrast
-  ([`0dfa243`](https://github.com/AnthusAI/Plexus/commit/0dfa24325f94cc835245f286eec6f393924dc768))
-
-- Introduce new `--foreground-selected` CSS variable in global styles - Update Tailwind config to
-  support the new color token - Modify confusion matrix cell text color to use foreground-selected
-  for high-value cells - Adjust text color threshold from 70% to 90% of max value
+- **dashboard**: Add Monaco Editor
+  ([`eefbb98`](https://github.com/AnthusAI/Plexus/commit/eefbb98c13606d192e341593f18fc41f9f0b7d5a))
 
 - **share-evaluation**: Implement public evaluation route with comprehensive testing
   ([`73e8c15`](https://github.com/AnthusAI/Plexus/commit/73e8c15bc38cde6a64f0698264a0266bd957a9eb))
@@ -231,6 +229,14 @@ Create CLAUDE.md with detailed documentation covering build commands, test comma
 - Add route files for public evaluation page and layout - Implement data fetching, transformation,
   and rendering - Create unit and end-to-end tests for route functionality - Add public link copy
   feature to evaluations dashboard - Enhance error handling and responsive design
+
+- **share-links**: Implement share link functionality for evaluations
+  ([`089b113`](https://github.com/AnthusAI/Plexus/commit/089b113d1490c2c1a576c3142d8e1397be30e74f))
+
+Add comprehensive share link support for evaluations, including: - GraphQL custom resolver for
+  fetching shared resources - Client-side share link generation and management - Enhanced public
+  evaluation page to support share token access - IAM-based client for secure share link operations
+  - View options and access tracking for shared evaluations
 
 ### Refactoring
 
@@ -268,6 +274,18 @@ Implement ShareLink model with comprehensive indexing and authorization, support
 - Create test utilities for responsive design testing - Add comprehensive responsive screen size
   tests for PublicEvaluation component - Remove redundant Cypress end-to-end responsiveness test -
   Implement mockMatchMedia and resizeWindow utility functions
+
+
+## v0.8.0 (2025-02-22)
+
+### Features
+
+- Add foreground-selected color for enhanced UI contrast
+  ([`0dfa243`](https://github.com/AnthusAI/Plexus/commit/0dfa24325f94cc835245f286eec6f393924dc768))
+
+- Introduce new `--foreground-selected` CSS variable in global styles - Update Tailwind config to
+  support the new color token - Modify confusion matrix cell text color to use foreground-selected
+  for high-value cells - Adjust text color threshold from 70% to 90% of max value
 
 
 ## v0.7.0 (2025-02-21)
