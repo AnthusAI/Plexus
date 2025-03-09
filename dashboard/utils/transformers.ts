@@ -193,6 +193,7 @@ export async function processTask(task: AmplifyTask): Promise<ProcessedTask> {
             explanation?: string | null;
             itemId?: string | null;
             createdAt: string;
+            trace?: any | null;
           }) => ({
             id: item.id,
             value: item.value,
@@ -200,7 +201,8 @@ export async function processTask(task: AmplifyTask): Promise<ProcessedTask> {
             metadata: item.metadata,
             explanation: item.explanation ?? null,
             itemId: item.itemId ?? null,
-            createdAt: item.createdAt
+            createdAt: item.createdAt,
+            trace: item.trace ?? null
           }));
         }
       }
