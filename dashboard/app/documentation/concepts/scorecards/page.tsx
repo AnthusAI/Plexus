@@ -124,6 +124,22 @@ plexus scorecards score "Score Name" --scorecard "Scorecard Name"`}</code>
               </pre>
             </div>
             <div>
+              <h3 className="text-xl font-medium mb-2">Listing Scores in a Scorecard</h3>
+              <p className="text-muted-foreground mb-4">
+                To list all scores within a scorecard, use the <code>scores list</code> command:
+              </p>
+              <pre className="bg-muted p-4 rounded-lg mb-4">
+                <code>{`# List all scores in a scorecard
+plexus scores list --scorecard "Scorecard Name"
+
+# You can also use the singular form
+plexus score list --scorecard "Scorecard Name"`}</code>
+              </pre>
+              <p className="text-muted-foreground">
+                This command displays all scores organized by section, including their IDs, keys, and external IDs.
+              </p>
+            </div>
+            <div>
               <h3 className="text-xl font-medium mb-2">Version Management</h3>
               <pre className="bg-muted p-4 rounded-lg mb-4">
                 <code>{`# View version history (coming soon)

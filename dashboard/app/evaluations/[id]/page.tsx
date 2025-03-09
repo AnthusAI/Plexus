@@ -4,10 +4,12 @@ import React, { useState, useEffect } from 'react'
 import { useParams, usePathname } from 'next/navigation'
 import { AlertCircle } from 'lucide-react'
 import { generateClient } from 'aws-amplify/api'
+import { fetchAuthSession } from 'aws-amplify/auth'
 import { Schema } from '@/amplify/data/resource'
 import EvaluationTask from '@/components/EvaluationTask'
 import { getValueFromLazyLoader, transformEvaluation, standardizeScoreResults, Evaluation } from '@/utils/data-operations'
 import EvaluationsDashboard from '@/components/evaluations-dashboard'
+import { GraphQLResult } from '@aws-amplify/api'
 
 // Share link data type
 type ShareLinkData = {
@@ -63,36 +65,107 @@ export class EvaluationService {
   // Fetch evaluation by share token
   async fetchEvaluationByShareToken(token: string): Promise<Evaluation> {
     try {
-      // First, get the share link data
-      const shareLink = await this.safeGet<Schema['ShareLink']['type']>('ShareLink', token);
+      console.log('Fetching evaluation by share token:', token);
       
-      if (!shareLink) {
-        throw new Error('Share link not found');
+      // Determine auth mode based on user's session
+      let authMode: 'userPool' | 'identityPool' = 'identityPool'; // Default to guest access
+      try {
+        const session = await fetchAuthSession();
+        if (session.tokens?.idToken) {
+          console.log('User is authenticated, using userPool auth mode');
+          authMode = 'userPool';
+        } else {
+          console.log('No auth session, using identityPool (guest) auth mode');
+        }
+      } catch (error) {
+        console.log('Error checking auth session, falling back to guest access:', error);
       }
       
-      // Check if the share link has expired
-      if (shareLink.expiresAt && new Date(shareLink.expiresAt) < new Date()) {
-        throw new Error('Share link has expired');
+      const response = await this.client.graphql({
+        query: `
+          query GetResourceByShareToken($token: String!) {
+            getResourceByShareToken(token: $token) {
+              shareLink {
+                token
+                resourceType
+                resourceId
+                viewOptions
+              }
+              data
+            }
+          }
+        `,
+        variables: { token },
+        authMode // Use the determined auth mode
+      }) as GraphQLResult<{
+        getResourceByShareToken: {
+          shareLink: ShareLinkData;
+          data: any;
+        }
+      }>;
+      
+      // Check for GraphQL errors
+      if (response.errors && response.errors.length > 0) {
+        const errorMessage = response.errors[0].message;
+        console.error('GraphQL error:', errorMessage);
+        throw new Error(errorMessage);
       }
       
-      // Check if the share link has been revoked
-      if (shareLink.isRevoked) {
-        throw new Error('Share link has been revoked');
+      if (!response.data?.getResourceByShareToken) {
+        throw new Error('Failed to load shared resource');
       }
       
-      // Check if the resource type is evaluation
-      if (shareLink.resourceType !== 'EVALUATION') {
-        throw new Error('Invalid resource type');
+      const result = response.data.getResourceByShareToken;
+      
+      console.log('Share link data received:', {
+        shareLink: result.shareLink,
+        dataType: typeof result.data,
+        dataLength: typeof result.data === 'string' ? result.data.length : 'N/A'
+      });
+      
+      if (!result.shareLink) {
+        throw new Error('Invalid share link data');
       }
       
-      // Get the evaluation data
-      const evaluationData = await this.safeGet<Schema['Evaluation']['type']>('Evaluation', shareLink.resourceId);
+      const shareLink = result.shareLink;
       
-      if (!evaluationData) {
-        throw new Error('Evaluation not found');
+      console.log('Resource type check:', {
+        receivedType: shareLink.resourceType,
+        upperCase: shareLink.resourceType.toUpperCase(),
+        isEvaluation: shareLink.resourceType === 'Evaluation',
+        isEVALUATION: shareLink.resourceType.toUpperCase() === 'EVALUATION'
+      });
+      
+      // Verify that this is an Evaluation resource (case insensitive check)
+      if (shareLink.resourceType.toUpperCase() !== 'EVALUATION' && 
+          shareLink.resourceType !== 'Evaluation') {
+        throw new Error(`Invalid resource type: ${shareLink.resourceType}. Expected: Evaluation`);
       }
       
-      // Transform the data to the expected Evaluation type
+      // Handle the data as a string that needs to be parsed
+      if (!result.data) {
+        throw new Error('No data returned from share link resolver');
+      }
+      
+      // Parse the string data to JSON if needed
+      let evaluationData;
+      if (typeof result.data === 'string') {
+        try {
+          const parsedData = JSON.parse(result.data);
+          if (parsedData.getEvaluation) {
+            evaluationData = parsedData.getEvaluation;
+          } else {
+            evaluationData = parsedData;
+          }
+        } catch (e) {
+          console.error('Error parsing result.data as JSON:', e);
+          evaluationData = result.data; // Use as is if not JSON
+        }
+      } else {
+        evaluationData = result.data;
+      }
+      
+      // Transform the evaluation data
       const transformedData = transformEvaluation(evaluationData);
       
       if (!transformedData) {
@@ -108,8 +181,9 @@ export class EvaluationService {
 
   // Check if a string is a valid share token
   isValidToken(token: string): boolean {
-    // Simple validation - share tokens are UUIDs (32 hex chars with optional hyphens)
-    return /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i.test(token);
+    // Support both UUID format and MD5/hex string format
+    return /^[0-9a-f]{32}$/i.test(token) || // MD5/hex string format (32 chars)
+           /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i.test(token); // UUID format
   }
 }
 
