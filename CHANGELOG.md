@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.13.0 (2025-03-09)
+
+### Features
+
+- **evaluations**: Filter evaluations by scorecard or score, using a server-side index.
+  ([`03463c4`](https://github.com/AnthusAI/Plexus/commit/03463c435cda9e953a8d4aefe70b0bd126261432))
+
+
 ## v0.12.0 (2025-03-09)
 
 ### Bug Fixes
