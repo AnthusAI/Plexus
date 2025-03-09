@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { CardButton } from '@/components/CardButton'
 import { LabelBadgeComparison } from '@/components/LabelBadgeComparison'
 import { Button } from '@/components/ui/button'
+import { ScoreResultNode } from './score-result-node'
 
 export interface ScoreResultData {
   id: string
@@ -30,6 +31,14 @@ export interface ScoreResultComponentProps {
   navigationControls?: React.ReactNode
 }
 
+// Define interfaces for trace data structures
+interface TraceNode {
+  name: string;
+  inputs: Record<string, any>;
+  outputs: Record<string, any>;
+  [key: string]: any;
+}
+
 export function ScoreResultComponent({ 
   result,
   variant = 'list',
@@ -40,26 +49,85 @@ export function ScoreResultComponent({
 }: ScoreResultComponentProps) {
   const [isTextExpanded, setIsTextExpanded] = useState(false);
   
-  // Format trace data for display if it exists
-  const formattedTrace = React.useMemo(() => {
+  // Parse trace data if it exists and normalize to node format
+  const parsedTraceNodes = React.useMemo<TraceNode[] | null>(() => {
     if (!result.trace) return null;
     
     try {
-      // If trace is a string, try to parse it as JSON
+      // Parse string trace if needed
+      let traceData = result.trace;
       if (typeof result.trace === 'string') {
         try {
-          const parsedTrace = JSON.parse(result.trace);
-          return JSON.stringify(parsedTrace, null, 2);
+          traceData = JSON.parse(result.trace);
         } catch (e) {
-          // If it's not valid JSON, just return the string
-          return result.trace;
+          console.error('Error parsing trace data:', e);
+          return null;
         }
       }
       
-      // If trace is already an object, stringify it with pretty formatting
-      return JSON.stringify(result.trace, null, 2);
+      // Handle different trace formats
+      
+      // Format 1: node_results format (from example)
+      if (traceData && typeof traceData === 'object' && Array.isArray(traceData.node_results)) {
+        return traceData.node_results.map((node: any) => ({
+          name: node.node_name || 'Unnamed Node',
+          inputs: node.input || {},
+          outputs: node.output || {}
+        }));
+      }
+      
+      // Format 2: Array of nodes with inputs/outputs already defined
+      if (Array.isArray(traceData)) {
+        return traceData.map((node: any) => ({
+          name: node.name || 'Unnamed Node',
+          inputs: node.inputs || {},
+          outputs: node.outputs || {}
+        }));
+      }
+      
+      // Format 3: Object with 'steps' array
+      if (traceData && typeof traceData === 'object' && Array.isArray(traceData.steps)) {
+        return traceData.steps.map((step: any) => ({
+          name: step.name || 'Unnamed Step',
+          inputs: step.input || step.inputs || {},
+          outputs: step.output || step.outputs || {}
+        }));
+      }
+      
+      // Format 4: Object with nodes/steps under a different key
+      const possibleStepKeys = ['nodes', 'steps', 'traces', 'operations', 'executions'];
+      for (const key of possibleStepKeys) {
+        if (traceData && typeof traceData === 'object' && Array.isArray(traceData[key])) {
+          return traceData[key].map((item: any) => ({
+            name: item.name || `Unnamed ${key.slice(0, -1)}`,
+            inputs: item.input || item.inputs || {},
+            outputs: item.output || item.outputs || {}
+          }));
+        }
+      }
+      
+      // If we can't determine the format, return the raw data for fallback display
+      return null;
     } catch (e) {
-      console.error('Error formatting trace data:', e);
+      console.error('Error processing trace data:', e);
+      return null;
+    }
+  }, [result.trace]);
+
+  // Get the raw trace data for fallback display
+  const rawTraceData = React.useMemo(() => {
+    if (!result.trace) return null;
+    
+    try {
+      if (typeof result.trace === 'string') {
+        try {
+          return JSON.parse(result.trace);
+        } catch (e) {
+          return result.trace;
+        }
+      }
+      return result.trace;
+    } catch (e) {
       return String(result.trace);
     }
   }, [result.trace]);
@@ -128,6 +196,32 @@ export function ScoreResultComponent({
       </Card>
     )
   }
+
+  // Render trace nodes
+  const renderTraceNodes = () => {
+    if (!parsedTraceNodes || parsedTraceNodes.length === 0) return null;
+    
+    return (
+      <div>
+        <div className="flex items-center mb-1">
+          <View className="w-4 h-4 mr-1 text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">Trace</p>
+        </div>
+        <div className="bg-background rounded-lg p-3 border border-border">
+          <div className="space-y-3">
+            {parsedTraceNodes.map((node, index) => (
+              <ScoreResultNode
+                key={`${node.name || 'node'}-${index}`}
+                name={node.name}
+                inputs={node.inputs}
+                outputs={node.outputs}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   // Detail variant (full view)
   return (
@@ -262,15 +356,21 @@ export function ScoreResultComponent({
               </div>
             )}
 
-            {formattedTrace && (
+            {/* Trace section with nodes */}
+            {renderTraceNodes()}
+
+            {/* Fallback for raw trace data */}
+            {!parsedTraceNodes && rawTraceData && (
               <div>
                 <div className="flex items-center mb-1">
                   <View className="w-4 h-4 mr-1 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">Trace</p>
+                  <p className="text-sm text-muted-foreground">Trace (Raw Data)</p>
                 </div>
-                <div className="bg-background rounded-md p-3">
+                <div className="bg-background rounded-lg p-3 border border-border">
                   <pre className="text-xs whitespace-pre-wrap overflow-x-auto max-h-[400px] overflow-y-auto">
-                    {formattedTrace}
+                    {typeof rawTraceData === 'string' 
+                      ? rawTraceData 
+                      : JSON.stringify(rawTraceData, null, 2)}
                   </pre>
                 </div>
               </div>
