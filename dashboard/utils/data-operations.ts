@@ -235,9 +235,97 @@ type SubscriptionHandler<T> = {
 };
 
 // Add a type guard for GraphQL results
-function isGraphQLResult<T>(response: GraphQLResult<T> | GraphQLSubscription<T>): response is GraphQLResult<T> {
-  return !('subscribe' in response);
+function isGraphQLResult(response: any): response is GraphQLResult<any> {
+  return response && typeof response === 'object' && ('data' in response || 'errors' in response);
 }
+
+// Define the evaluation fields to use in GraphQL queries
+const EVALUATION_FIELDS = `
+  id
+  type
+  parameters
+  metrics
+  metricsExplanation
+  inferences
+  accuracy
+  cost
+  createdAt
+  updatedAt
+  status
+  startedAt
+  elapsedSeconds
+  estimatedRemainingSeconds
+  totalItems
+  processedItems
+  errorMessage
+  errorDetails
+  accountId
+  scorecardId
+  scorecard {
+    id
+    name
+  }
+  scoreId
+  score {
+    id
+    name
+  }
+  confusionMatrix
+  scoreGoal
+  datasetClassDistribution
+  isDatasetClassDistributionBalanced
+  predictedClassDistribution
+  isPredictedClassDistributionBalanced
+  taskId
+  task {
+    id
+    type
+    status
+    target
+    command
+    description
+    dispatchStatus
+    metadata
+    createdAt
+    startedAt
+    completedAt
+    estimatedCompletionAt
+    errorMessage
+    errorDetails
+    currentStageId
+    stages {
+      items {
+        id
+        name
+        order
+        status
+        statusMessage
+        startedAt
+        completedAt
+        estimatedCompletionAt
+        processedItems
+        totalItems
+      }
+    }
+  }
+  scoreResults {
+    items {
+      id
+      value
+      confidence
+      metadata
+      explanation
+      trace
+      itemId
+      createdAt
+      scoringJob {
+        id
+        status
+        metadata
+      }
+    }
+  }
+`;
 
 export async function listFromModel<T>(
   modelName: keyof AmplifyClient['models'],
@@ -352,28 +440,82 @@ export async function updateTask(
   }
 }
 
-export async function listRecentEvaluations(limit: number = 100): Promise<any[]> {
-  console.debug('listRecentEvaluations called with limit:', limit);
+export async function listRecentEvaluations(
+  limit: number = 100,
+  accountId: string | null = null,
+  selectedScorecard: string | null = null,
+  selectedScore: string | null = null
+): Promise<any[]> {
+  console.debug('listRecentEvaluations called with limit:', limit, 'filters:', { accountId, selectedScorecard, selectedScore });
   try {
-    const currentClient = getClient();
-
-    // Get the account ID by key
-    const ACCOUNT_KEY = 'call-criteria';
-    const accountResponse = await listFromModel<Schema['Account']['type']>(
-      'Account',
-      { filter: { key: { eq: ACCOUNT_KEY } } }
-    );
-
-    if (!accountResponse.data?.length) {
-      console.error('No account found with key:', ACCOUNT_KEY);
-      return [];
+    const client = getClient();
+    
+    // Get the account ID if not provided
+    if (!accountId) {
+      const ACCOUNT_KEY = 'call-criteria';
+      const accountResponse = await (client.models.Account as any).list({ 
+        filter: { key: { eq: ACCOUNT_KEY } } 
+      });
+      
+      if (!accountResponse.data?.length) {
+        throw new Error(`No account found with key: ${ACCOUNT_KEY}`);
+      }
+      
+      accountId = accountResponse.data[0].id;
     }
-
-    const accountId = accountResponse.data[0].id;
-    console.debug('Fetching evaluations for account:', accountId);
-
-    const response = await currentClient.graphql({
-      query: `
+    
+    let query = '';
+    let variables: any = {
+      sortDirection: 'DESC',
+      limit: limit || 100
+    };
+    
+    // Determine which GSI to use based on the filters
+    if (selectedScorecard && selectedScore) {
+      // If both scorecard and score are selected, use the scoreId GSI directly
+      query = `
+        query ListEvaluationByScoreIdAndUpdatedAt(
+          $scoreId: String!
+          $sortDirection: ModelSortDirection!
+          $limit: Int
+        ) {
+          listEvaluationByScoreIdAndUpdatedAt(
+            scoreId: $scoreId
+            sortDirection: $sortDirection
+            limit: $limit
+          ) {
+            items {
+              ${EVALUATION_FIELDS}
+            }
+            nextToken
+          }
+        }
+      `;
+      variables.scoreId = selectedScore;
+    } else if (selectedScorecard) {
+      // If only scorecard is selected, use the scorecardId GSI
+      query = `
+        query ListEvaluationByScorecardIdAndUpdatedAt(
+          $scorecardId: String!
+          $sortDirection: ModelSortDirection!
+          $limit: Int
+        ) {
+          listEvaluationByScorecardIdAndUpdatedAt(
+            scorecardId: $scorecardId
+            sortDirection: $sortDirection
+            limit: $limit
+          ) {
+            items {
+              ${EVALUATION_FIELDS}
+            }
+            nextToken
+          }
+        }
+      `;
+      variables.scorecardId = selectedScorecard;
+    } else {
+      // Default to accountId GSI
+      query = `
         query ListEvaluationByAccountIdAndUpdatedAt(
           $accountId: String!
           $sortDirection: ModelSortDirection!
@@ -385,150 +527,55 @@ export async function listRecentEvaluations(limit: number = 100): Promise<any[]>
             limit: $limit
           ) {
             items {
-              id
-              type
-              parameters
-              metrics
-              metricsExplanation
-              inferences
-              accuracy
-              cost
-              createdAt
-              updatedAt
-              status
-              startedAt
-              elapsedSeconds
-              estimatedRemainingSeconds
-              totalItems
-              processedItems
-              errorMessage
-              errorDetails
-              accountId
-              scorecardId
-              scorecard {
-                id
-                name
-              }
-              scoreId
-              score {
-                id
-                name
-              }
-              confusionMatrix
-              scoreGoal
-              datasetClassDistribution
-              isDatasetClassDistributionBalanced
-              predictedClassDistribution
-              isPredictedClassDistributionBalanced
-              taskId
-              task {
-                id
-                type
-                status
-                target
-                command
-                description
-                dispatchStatus
-                metadata
-                createdAt
-                startedAt
-                completedAt
-                estimatedCompletionAt
-                errorMessage
-                errorDetails
-                currentStageId
-                stages {
-                  items {
-                    id
-                    name
-                    order
-                    status
-                    statusMessage
-                    startedAt
-                    completedAt
-                    estimatedCompletionAt
-                    processedItems
-                    totalItems
-                  }
-                }
-              }
-              scoreResults {
-                items {
-                  id
-                  value
-                  confidence
-                  metadata
-                  explanation
-                  trace
-                  itemId
-                  createdAt
-                  scoringJob {
-                    id
-                    status
-                    metadata
-                  }
-                }
-              }
+              ${EVALUATION_FIELDS}
             }
             nextToken
           }
         }
-      `,
-      variables: {
-        accountId: accountId.trim(),
-        sortDirection: 'DESC',
-        limit: limit || 100
-      }
+      `;
+      variables.accountId = accountId;
+    }
+    
+    const response = await client.graphql({
+      query,
+      variables
+    }) as GraphQLResult<any>;
+    
+    // Extract data from the response
+    const responseData = response?.data || {};
+    
+    console.debug('Evaluations response:', {
+      itemCount: 
+        responseData?.listEvaluationByAccountIdAndUpdatedAt?.items?.length || 
+        responseData?.listEvaluationByScorecardIdAndUpdatedAt?.items?.length || 
+        responseData?.listEvaluationByScoreIdAndUpdatedAt?.items?.length || 0,
+      filters: { accountId, selectedScorecard, selectedScore }
     });
-
-    console.debug('GraphQL response:', {
-      hasData: isGraphQLResult(response) && !!response.data,
-      hasErrors: isGraphQLResult(response) && !!response.errors,
-      itemCount: isGraphQLResult(response) ? response.data?.listEvaluationByAccountIdAndUpdatedAt?.items?.length : 0,
-      firstItem: isGraphQLResult(response) && response.data?.listEvaluationByAccountIdAndUpdatedAt?.items?.[0] ? {
-        id: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].id,
-        type: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].type,
-        metrics: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].metrics,
-        task: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].task,
-        taskCompletedAt: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].task?.completedAt,
-        taskStartedAt: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].task?.startedAt,
-        taskStatus: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].task?.status,
-        rawTask: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].task,
-        taskKeys: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].task ? Object.keys(response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].task) : [],
-        taskType: typeof response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].task,
-        scoreResults: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].scoreResults
-      } : null
-    });
-
-    if (!isGraphQLResult(response)) {
-      console.error('Unexpected response type');
+    
+    // Extract items from the response based on which query was used
+    const result = 
+      responseData?.listEvaluationByAccountIdAndUpdatedAt || 
+      responseData?.listEvaluationByScorecardIdAndUpdatedAt || 
+      responseData?.listEvaluationByScoreIdAndUpdatedAt;
+    
+    if (!result?.items) {
+      console.warn('No items found in evaluation response');
       return [];
     }
-
-    if (response.errors?.length) {
-      console.error('GraphQL errors:', response.errors);
-      throw new Error(`GraphQL errors: ${response.errors.map(e => e.message).join(', ')}`);
-    }
-
-    if (!response.data) {
-      console.error('No data returned from GraphQL query');
-      return [];
-    }
-
-    const result = response.data;
-    if (!result?.listEvaluationByAccountIdAndUpdatedAt?.items) {
-      console.error('No items found in GraphQL response');
-      return [];
-    }
-
-    return result.listEvaluationByAccountIdAndUpdatedAt.items;
+    
+    return result.items;
   } catch (error) {
-    console.error('Error listing recent evaluations:', error);
+    console.error('Error in listRecentEvaluations:', error);
     return [];
   }
 }
 
-export function observeRecentEvaluations(limit: number = 100): Observable<{ items: any[], isSynced: boolean }> {
+export function observeRecentEvaluations(
+  limit: number = 100,
+  accountId: string | null = null,
+  selectedScorecard: string | null = null,
+  selectedScore: string | null = null
+): Observable<{ items: any[], isSynced: boolean }> {
   return new Observable(subscriber => {
     let evaluations: any[] = [];
     let subscriptionCleanup: { unsubscribe: () => void }[] = [];
@@ -536,7 +583,7 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
     // Load initial data
     async function loadInitialEvaluations() {
       try {
-        const response = await listRecentEvaluations(limit);
+        const response = await listRecentEvaluations(limit, accountId, selectedScorecard, selectedScore);
         console.debug('Initial evaluations response:', {
           count: response.length,
           firstEvaluation: response[0] ? {
@@ -551,7 +598,12 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
             taskKeys: response[0].task ? Object.keys(response[0].task) : [],
             taskType: typeof response[0].task,
             scoreResults: response[0].scoreResults
-          } : null
+          } : null,
+          filters: {
+            accountId,
+            selectedScorecard,
+            selectedScore
+          }
         });
         
         evaluations = response;
