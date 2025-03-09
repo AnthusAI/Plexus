@@ -129,6 +129,7 @@ const schema = a.schema({
             datasets: a.hasMany('Dataset', 'scoreId'),
             tasks: a.hasMany('Task', 'scoreId'),
             versions: a.hasMany('ScoreVersion', 'scoreId'),
+            items: a.hasMany('Item', 'scoreId'),
             championVersionId: a.string(),
             championVersion: a.belongsTo('ScoreVersion', 'championVersionId'),
             externalId: a.string().required()
