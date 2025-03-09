@@ -185,6 +185,7 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
           human_explanation: scoreResult?.metadata?.human_explanation ?? parsedMetadata.human_explanation ?? result.metadata?.human_explanation ?? null,
           text: scoreResult?.metadata?.text ?? parsedMetadata.text ?? result.metadata?.text ?? null
         },
+        trace: result.trace ?? scoreResult?.trace ?? null,
         itemId: result.itemId ?? parsedMetadata.item_id?.toString() ?? null,
         createdAt: result.createdAt
       };

@@ -240,6 +240,7 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
                       confidence
                       metadata
                       explanation
+                      trace
                       itemId
                       createdAt
                       scoringJob {
@@ -408,6 +409,7 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
                   confidence
                   metadata
                   explanation
+                  trace
                   itemId
                   createdAt
                 }
@@ -508,6 +510,7 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
                   confidence
                   metadata
                   explanation
+                  trace
                   itemId
                   createdAt
                 }
@@ -620,6 +623,7 @@ export function observeScoreResults(evaluationId: string) {
                 'confidence',
                 'metadata',
                 'explanation',
+                'trace',
                 'correct',
                 'itemId',
                 'accountId',
