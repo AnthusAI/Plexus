@@ -161,7 +161,7 @@ plexus scorecards list
 plexus scorecards info --scorecard example1
 
 # List all scores in a scorecard
-plexus scorecards list-scores --scorecard example1
+plexus scores list --scorecard example1
 
 # Pull scorecard configuration to YAML
 plexus scorecards pull --scorecard example1 --output ./my-scorecards
@@ -279,6 +279,42 @@ Score Versions (3 of 3 total versions, newest first):
     }`}</code>
                 </div>
               </pre>
+              <p className="text-muted-foreground">
+                This command displays up to 10 versions in reverse chronological order (newest first), showing which 
+                version is the champion and which versions are featured.
+              </p>
+            </div>
+
+            <div>
+              <h3 className="text-xl font-medium mb-2">Listing Scores in a Scorecard</h3>
+              <p className="text-muted-foreground mb-4">
+                The <code>scores list</code> command displays all scores within a scorecard:
+              </p>
+              <pre className="bg-muted rounded-lg mb-4">
+                <div className="code-container p-4">
+                  <code>{`plexus scores list --scorecard "Example Scorecard"
+
+# You can also use the score alias (singular form)
+plexus score list --scorecard "Example Scorecard"`}</code>
+                </div>
+              </pre>
+              <p className="text-muted-foreground mb-4">
+                This command provides a detailed view of all scores organized by section, including:
+              </p>
+              <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
+                <li>
+                  <strong>Score Names</strong>: The human-readable names of each score
+                </li>
+                <li>
+                  <strong>Score IDs</strong>: The unique identifiers for each score
+                </li>
+                <li>
+                  <strong>Score Keys</strong>: The machine-friendly keys for each score
+                </li>
+                <li>
+                  <strong>External IDs</strong>: Any external identifiers associated with the scores
+                </li>
+              </ul>
             </div>
           </div>
         </section>
@@ -338,6 +374,83 @@ plexus \\
             The results include accuracy metrics, individual predictions, and any visualizations that were generated
             during the evaluation.
           </p>
+        </section>
+
+        <section>
+          <h2 className="text-2xl font-semibold mb-4">Score Result Commands</h2>
+          <p className="text-muted-foreground mb-4">
+            The CLI provides commands for viewing and analyzing individual score results:
+          </p>
+
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-xl font-medium mb-2">Listing Score Results</h3>
+              <p className="text-muted-foreground mb-4">
+                The <code>results list</code> command displays recent score results with optional filtering:
+              </p>
+              <pre className="bg-muted rounded-lg mb-4">
+                <div className="code-container p-4">
+                  <code>{`# List score results for a specific scorecard
+plexus results list --scorecard "Example Scorecard" --limit 20
+
+# List score results for a specific account
+plexus results list --account "Example Account" --limit 20`}</code>
+                </div>
+              </pre>
+              <p className="text-muted-foreground mb-4">
+                This command requires either a scorecard or account identifier and provides:
+              </p>
+              <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
+                <li>
+                  <strong>Basic Information</strong>: ID, value, confidence, correct status, and related IDs
+                </li>
+                <li>
+                  <strong>Timestamps</strong>: When the result was created and last updated
+                </li>
+                <li>
+                  <strong>Metadata</strong>: Pretty-printed JSON showing input data and context
+                </li>
+                <li>
+                  <strong>Trace</strong>: Detailed record of the evaluation process (when available)
+                </li>
+                <li>
+                  <strong>Explanation</strong>: The reasoning behind the result (when available)
+                </li>
+              </ul>
+            </div>
+
+            <div>
+              <h3 className="text-xl font-medium mb-2">Viewing Detailed Score Result Information</h3>
+              <p className="text-muted-foreground mb-4">
+                The <code>results info</code> command displays detailed information about a specific score result:
+              </p>
+              <pre className="bg-muted rounded-lg mb-4">
+                <div className="code-container p-4">
+                  <code>{`plexus results info --id "result-id-here"`}</code>
+                </div>
+              </pre>
+              <p className="text-muted-foreground mb-4">
+                This command provides a comprehensive view of a single score result, including:
+              </p>
+              <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
+                <li>
+                  <strong>Complete Result Data</strong>: All fields and values associated with the result
+                </li>
+                <li>
+                  <strong>Formatted Metadata</strong>: Nicely formatted JSON for easy reading
+                </li>
+                <li>
+                  <strong>Formatted Trace</strong>: Detailed execution trace with clear visual separation
+                </li>
+                <li>
+                  <strong>Relationship Information</strong>: Links to related entities like items, scorecards, and evaluations
+                </li>
+              </ul>
+              <p className="text-muted-foreground mt-4">
+                This command is particularly useful for debugging evaluation issues or understanding exactly how a specific result was determined.
+              </p>
+            </div>
+          </div>
         </section>
 
         <section>
