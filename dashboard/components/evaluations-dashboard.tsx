@@ -6,7 +6,7 @@ import type { Schema } from "@/amplify/data/resource"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import { Square, RectangleVertical, X, ChevronDown, ChevronUp, Info, MessageCircleMore, Plus, ThumbsUp, ThumbsDown, Trash2, MoreHorizontal, Eye, RefreshCw, Share } from "lucide-react"
+import { Square, Columns2, X, ChevronDown, ChevronUp, Info, MessageCircleMore, Plus, ThumbsUp, ThumbsDown, Trash2, MoreHorizontal, Eye, RefreshCw, Share } from "lucide-react"
 import { format, formatDistanceToNow, parseISO } from "date-fns"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -74,7 +74,10 @@ type ScoreResultItem = {
   value: string | number;
   confidence: number | null;
   metadata: any;
+  explanation?: string | null;
+  trace?: any | null;
   itemId: string | null;
+  createdAt?: string;
 };
 
 interface TaskStagesResponse {
@@ -215,6 +218,7 @@ const LIST_EVALUATIONS = `
             confidence
             metadata
             explanation
+            trace
             itemId
             createdAt
           }
@@ -307,6 +311,29 @@ export function transformEvaluation(evaluation: Schema['Evaluation']['type']) {
     };
   };
 
+  // Transform score results to include trace field
+  const transformScoreResults = (scoreResults: any) => {
+    if (!scoreResults) return null;
+    
+    // Handle items array
+    if (typeof scoreResults === 'object' && 'items' in scoreResults && Array.isArray(scoreResults.items)) {
+      return {
+        items: scoreResults.items.map((item: any) => ({
+          id: item.id,
+          value: item.value,
+          confidence: item.confidence,
+          metadata: item.metadata,
+          explanation: item.explanation,
+          trace: item.trace,
+          itemId: item.itemId,
+          createdAt: item.createdAt
+        }))
+      };
+    }
+    
+    return scoreResults;
+  };
+
   // Get stages from task data
   const rawStages = taskData?.stages;
   const transformedStages = transformStages(rawStages);
@@ -354,7 +381,7 @@ export function transformEvaluation(evaluation: Schema['Evaluation']['type']) {
       ...taskData,
       stages: transformedStages
     } as AmplifyTask) : null,
-    scoreResults: scoreResults
+    scoreResults: transformScoreResults(scoreResults)
   };
 
   console.debug('Final transformed evaluation:', {
@@ -369,9 +396,11 @@ export function transformEvaluation(evaluation: Schema['Evaluation']['type']) {
 }
 
 export default function EvaluationsDashboard({ 
-  initialSelectedEvaluationId = null 
+  initialSelectedEvaluationId = null,
+  initialSelectedScoreResultId = null
 }: { 
-  initialSelectedEvaluationId?: string | null 
+  initialSelectedEvaluationId?: string | null,
+  initialSelectedScoreResultId?: string | null
 } = {}) {
   const { user } = useAuthenticator()
   const router = useRouter()
@@ -389,7 +418,7 @@ export default function EvaluationsDashboard({
   const { ref, inView } = useInView({
     threshold: 0,
   })
-  const [selectedScoreResultId, setSelectedScoreResultId] = useState<string | null>(null)
+  const [selectedScoreResultId, setSelectedScoreResultId] = useState<string | null>(initialSelectedScoreResultId)
   const [isShareModalOpen, setIsShareModalOpen] = useState(false)
   const [shareUrl, setShareUrl] = useState<string | null>(null)
   // Use a ref to track if this is the initial render for URL updates
@@ -398,7 +427,15 @@ export default function EvaluationsDashboard({
   // Add this handler
   const handleScoreResultSelect = useCallback((id: string | null) => {
     setSelectedScoreResultId(id);
-  }, []);
+    
+    // Update URL without triggering a navigation/re-render
+    if (selectedEvaluationId) {
+      const newPathname = id 
+        ? `/lab/evaluations/${selectedEvaluationId}/score-results/${id}` 
+        : `/lab/evaluations/${selectedEvaluationId}`;
+      window.history.pushState(null, '', newPathname);
+    }
+  }, [selectedEvaluationId]);
 
   const copyLinkToClipboard = () => {
     if (!selectedEvaluationId || !accountId) return;
@@ -408,20 +445,33 @@ export default function EvaluationsDashboard({
   // Handle deep linking - check if we're on the main evaluations page or a specific evaluation page
   useEffect(() => {
     // If we have an ID in the URL and we're on the main evaluations page
-    if (params && 'id' in params && pathname === `/evaluations/${params.id}`) {
+    if (params && 'id' in params) {
+      // Set the evaluation ID
       setSelectedEvaluationId(params.id as string);
+      
+      // If we also have a score result ID, set that too
+      if ('scoreResultId' in params) {
+        setSelectedScoreResultId(params.scoreResultId as string);
+      }
     }
-  }, [params, pathname]);
+  }, [params]);
 
   // Handle browser back/forward navigation with popstate event
   useEffect(() => {
     const handlePopState = (event: PopStateEvent) => {
       // Extract evaluation ID from URL if present
-      const match = window.location.pathname.match(/\/lab\/evaluations\/([^\/]+)$/);
-      const idFromUrl = match ? match[1] : null;
+      const evalMatch = window.location.pathname.match(/\/lab\/evaluations\/([^\/]+)/);
+      const idFromUrl = evalMatch ? evalMatch[1] : null;
+      
+      // Extract score result ID from URL if present
+      const scoreResultMatch = window.location.pathname.match(/\/lab\/evaluations\/[^\/]+\/score-results\/([^\/]+)/);
+      const scoreResultIdFromUrl = scoreResultMatch ? scoreResultMatch[1] : null;
       
       // Update the selected evaluation ID based on the URL
       setSelectedEvaluationId(idFromUrl);
+      
+      // Update the selected score result ID based on the URL
+      setSelectedScoreResultId(scoreResultIdFromUrl);
     };
 
     // Add event listener for popstate (browser back/forward)
@@ -439,6 +489,9 @@ export default function EvaluationsDashboard({
     if (id !== selectedEvaluationId) {
       setSelectedEvaluationId(id);
       
+      // Clear the selected score result when changing evaluations
+      setSelectedScoreResultId(null);
+      
       // Update URL without triggering a navigation/re-render
       const newPathname = id ? `/lab/evaluations/${id}` : '/lab/evaluations';
       window.history.pushState(null, '', newPathname);
@@ -447,7 +500,9 @@ export default function EvaluationsDashboard({
 
   // Handle closing the selected evaluation
   const handleCloseEvaluation = () => {
+    console.log('handleCloseEvaluation called, clearing selectedEvaluationId:', selectedEvaluationId);
     setSelectedEvaluationId(null);
+    setSelectedScoreResultId(null);
     setIsFullWidth(false);
     
     // Update URL without triggering a navigation/re-render
@@ -753,6 +808,9 @@ export default function EvaluationsDashboard({
         // Update state first
         setSelectedEvaluationId(evaluationId);
         
+        // Clear the selected score result when changing evaluations
+        setSelectedScoreResultId(null);
+        
         // Then update URL without triggering a navigation/re-render
         const newPathname = `/lab/evaluations/${evaluationId}`;
         window.history.pushState(null, '', newPathname);
@@ -787,18 +845,20 @@ export default function EvaluationsDashboard({
   }
 
   return (
-    <div className="flex flex-col h-full p-1.5">
-      <div className="flex justify-between items-start mb-3">
-        <ScorecardContext 
-          selectedScorecard={selectedScorecard}
-          setSelectedScorecard={setSelectedScorecard}
-          selectedScore={selectedScore}
-          setSelectedScore={setSelectedScore}
-        />
-        <TaskDispatchButton config={evaluationsConfig} />
+    <div className="flex flex-col h-full">
+      <div className="flex-none p-1.5">
+        <div className="flex justify-between items-start mb-3">
+          <ScorecardContext 
+            selectedScorecard={selectedScorecard}
+            setSelectedScorecard={setSelectedScorecard}
+            selectedScore={selectedScore}
+            setSelectedScore={setSelectedScore}
+          />
+          <TaskDispatchButton config={evaluationsConfig} />
+        </div>
       </div>
       
-      <div className="flex h-full">
+      <div className="flex-1 flex min-h-0 p-1.5">
         <div 
           className={`
             ${selectedEvaluationId && !isNarrowViewport && !isFullWidth ? '' : 'w-full'}
@@ -857,7 +917,7 @@ export default function EvaluationsDashboard({
 
         {selectedEvaluationId && !isNarrowViewport && !isFullWidth && (
           <div 
-            className="h-full overflow-hidden"
+            className="h-full overflow-hidden flex-shrink-0"
             style={{ width: `${100 - leftPanelWidth}%` }}
           >
             {renderSelectedTask}
@@ -865,7 +925,7 @@ export default function EvaluationsDashboard({
         )}
 
         {selectedEvaluationId && (isNarrowViewport || isFullWidth) && (
-          <div className="fixed inset-0 z-50">
+          <div className="fixed inset-0 z-50 overflow-y-auto">
             {renderSelectedTask}
           </div>
         )}
@@ -887,7 +947,10 @@ interface ScoreResult {
   value: string | number;
   confidence: number | null;
   metadata: any;
+  explanation?: string | null;
+  trace?: any | null;
   itemId: string | null;
+  createdAt?: string;
 }
 
 // Add TaskStageSubscriptionEvent type

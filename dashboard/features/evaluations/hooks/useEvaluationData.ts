@@ -26,6 +26,7 @@ type ScoreResult = {
   confidence: number | null;
   metadata: any;
   itemId: string | null;
+  trace: any | null;
 };
 
 // Add type for subscription
@@ -588,7 +589,8 @@ export function useEvaluationData({ accountId, limit = 24 }: UseEvaluationDataPr
                             text: scoreResult?.metadata?.text ?? parsedMetadata.text ?? (typeof item.metadata === 'object' ? (item.metadata as any).text : null) ?? null
                           },
                           itemId: item.itemId ?? parsedMetadata.item_id?.toString() ?? null,
-                          createdAt: item.createdAt || new Date().toISOString()
+                          createdAt: item.createdAt || new Date().toISOString(),
+                          trace: item.trace ?? null
                         };
 
                         console.log('Transformed score result in useEvaluationData:', {

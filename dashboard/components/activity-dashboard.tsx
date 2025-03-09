@@ -290,8 +290,9 @@ function transformTaskToActivity(task: ProcessedTask) {
           value: result.value,
           confidence: result.confidence,
           metadata: result.metadata,
+          explanation: result.explanation,
           itemId: result.itemId,
-          explanation: result.explanation
+          trace: null
         })) || [],
         task: {
           id: task.id,
