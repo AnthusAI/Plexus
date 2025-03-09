@@ -377,6 +377,83 @@ plexus \\
         </section>
 
         <section>
+          <h2 className="text-2xl font-semibold mb-4">Score Result Commands</h2>
+          <p className="text-muted-foreground mb-4">
+            The CLI provides commands for viewing and analyzing individual score results:
+          </p>
+
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-xl font-medium mb-2">Listing Score Results</h3>
+              <p className="text-muted-foreground mb-4">
+                The <code>results list</code> command displays recent score results with optional filtering:
+              </p>
+              <pre className="bg-muted rounded-lg mb-4">
+                <div className="code-container p-4">
+                  <code>{`# List score results for a specific scorecard
+plexus results list --scorecard "Example Scorecard" --limit 20
+
+# List score results for a specific account
+plexus results list --account "Example Account" --limit 20`}</code>
+                </div>
+              </pre>
+              <p className="text-muted-foreground mb-4">
+                This command requires either a scorecard or account identifier and provides:
+              </p>
+              <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
+                <li>
+                  <strong>Basic Information</strong>: ID, value, confidence, correct status, and related IDs
+                </li>
+                <li>
+                  <strong>Timestamps</strong>: When the result was created and last updated
+                </li>
+                <li>
+                  <strong>Metadata</strong>: Pretty-printed JSON showing input data and context
+                </li>
+                <li>
+                  <strong>Trace</strong>: Detailed record of the evaluation process (when available)
+                </li>
+                <li>
+                  <strong>Explanation</strong>: The reasoning behind the result (when available)
+                </li>
+              </ul>
+            </div>
+
+            <div>
+              <h3 className="text-xl font-medium mb-2">Viewing Detailed Score Result Information</h3>
+              <p className="text-muted-foreground mb-4">
+                The <code>results info</code> command displays detailed information about a specific score result:
+              </p>
+              <pre className="bg-muted rounded-lg mb-4">
+                <div className="code-container p-4">
+                  <code>{`plexus results info --id "result-id-here"`}</code>
+                </div>
+              </pre>
+              <p className="text-muted-foreground mb-4">
+                This command provides a comprehensive view of a single score result, including:
+              </p>
+              <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
+                <li>
+                  <strong>Complete Result Data</strong>: All fields and values associated with the result
+                </li>
+                <li>
+                  <strong>Formatted Metadata</strong>: Nicely formatted JSON for easy reading
+                </li>
+                <li>
+                  <strong>Formatted Trace</strong>: Detailed execution trace with clear visual separation
+                </li>
+                <li>
+                  <strong>Relationship Information</strong>: Links to related entities like items, scorecards, and evaluations
+                </li>
+              </ul>
+              <p className="text-muted-foreground mt-4">
+                This command is particularly useful for debugging evaluation issues or understanding exactly how a specific result was determined.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section>
           <h2 className="text-2xl font-semibold mb-4">Additional Resources</h2>
           <p className="text-muted-foreground">
             For more detailed information about specific features:

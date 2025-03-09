@@ -41,6 +41,7 @@ from .CommandDispatch import command
 from .TaskCommands import tasks
 from .ScorecardCommands import scorecards
 from .ScoreCommands import scores, score
+from .ResultCommands import results
 
 # Import dashboard-specific modules
 from plexus.dashboard.api.client import PlexusDashboardClient
@@ -110,6 +111,7 @@ cli.add_command(tasks)
 cli.add_command(scorecards)
 cli.add_command(scores)
 cli.add_command(score)
+cli.add_command(results)
 
 # Helper functions
 def format_scorecard_panel(scorecard, include_sections=False, detailed_scores=False):
