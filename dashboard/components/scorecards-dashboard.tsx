@@ -418,7 +418,7 @@ export default function ScorecardsComponent({
       }),
       evaluations: async () => ({ data: [], nextToken: null }),
       batchJobs: async () => ({ data: [], nextToken: null }),
-      item: async () => Promise.resolve({ data: null }),
+      item: async () => ({ data: null }),
       scoringJobs: async () => ({ data: [], nextToken: null }),
       scoreResults: async () => ({ data: [], nextToken: null }),
       actions: [],
@@ -474,39 +474,34 @@ export default function ScorecardsComponent({
 
       const fullScorecardData = {
         ...scorecardData,
-        sections: async () => {
-          const sectionsResponse = await amplifyClient.ScorecardSection.list({
-            filter: { scorecardId: { eq: scorecardData.id } }
-          });
-          
-          return {
-            data: await Promise.all(sectionsResponse.data.map(async (section) => {
-              const scoresResponse = await amplifyClient.Score.list({
-                filter: { sectionId: { eq: section.id } }
-              });
-              
-              return {
-                ...section,
-                scores: async () => scoresResponse
-              };
-            }))
-          };
-        },
         account: async () => amplifyClient.Account.get({ id: scorecardData.accountId }),
+        sections: async () => ({
+          data: sectionsWithScores,
+          nextToken: null
+        }),
         evaluations: async () => amplifyClient.Evaluation.list({
           filter: { scorecardId: { eq: scorecardData.id } }
         }),
         batchJobs: async () => amplifyClient.BatchJob.list({
           filter: { scorecardId: { eq: scorecardData.id } }
         }),
-        item: null,
+        item: async () => scorecardData.itemId ? 
+          amplifyClient.Item.get({ id: scorecardData.itemId }) :
+          Promise.resolve({ data: null }),
         scoringJobs: async () => amplifyClient.ScoringJob.list({
           filter: { scorecardId: { eq: scorecardData.id } }
         }),
         scoreResults: async () => amplifyClient.ScoreResult.list({
           filter: { scorecardId: { eq: scorecardData.id } }
-        })
-      } as unknown as Schema['Scorecard']['type'];
+        }),
+        actions: [],
+        tasks: async (): Promise<AmplifyListResult<Schema['Task']['type']>> => {
+          return listFromModel<Schema['Task']['type']>(
+            client.models.Task,
+            { scorecardId: { eq: scorecardData.id } }
+          );
+        }
+      } as Schema['Scorecard']['type']
       
       handleSelectScorecard(fullScorecardData);
     } catch (error) {
