@@ -207,7 +207,7 @@ export function ScoreResultComponent({
           <View className="w-4 h-4 mr-1 text-muted-foreground" />
           <p className="text-sm text-muted-foreground">Trace</p>
         </div>
-        <div className="bg-background rounded-lg p-3 border border-border">
+        <div className="bg-background rounded-lg p-3">
           <div className="space-y-3">
             {parsedTraceNodes.map((node, index) => (
               <ScoreResultNode
@@ -366,7 +366,7 @@ export function ScoreResultComponent({
                   <View className="w-4 h-4 mr-1 text-muted-foreground" />
                   <p className="text-sm text-muted-foreground">Trace (Raw Data)</p>
                 </div>
-                <div className="bg-background rounded-lg p-3 border border-border">
+                <div className="bg-background rounded-lg p-3">
                   <pre className="text-xs whitespace-pre-wrap overflow-x-auto max-h-[400px] overflow-y-auto">
                     {typeof rawTraceData === 'string' 
                       ? rawTraceData 

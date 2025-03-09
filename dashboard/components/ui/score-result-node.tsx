@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { ChevronDown, ChevronUp } from 'lucide-react'
+import { ChevronDown, ChevronUp, Scale } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 export interface ScoreResultNodeProps {
@@ -60,7 +60,16 @@ export function ScoreResultNode({ name, inputs, outputs }: ScoreResultNodeProps)
 
   return (
     <div className="bg-card rounded-lg p-4 mb-3 last:mb-0">
-      <div className="font-mono text-sm font-medium mb-2">{name}</div>
+      <div className="flex items-center justify-between mb-2">
+        <div className="font-mono text-sm font-medium">{name}</div>
+        <div className="flex items-start gap-2">
+          <div className="text-sm text-muted-foreground text-right">
+            Decision<br />
+            Node
+          </div>
+          <Scale className="h-[2.25rem] w-[2.25rem] text-muted-foreground" strokeWidth={1.25} />
+        </div>
+      </div>
       
       {/* Inputs Section */}
       <div className="mb-3">
