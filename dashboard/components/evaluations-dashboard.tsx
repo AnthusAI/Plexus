@@ -538,7 +538,20 @@ export default function EvaluationsDashboard({
   }, [])
 
   // Use the new hook for evaluation data
-  const { evaluations, isLoading, error } = useEvaluationData({ accountId });
+  const { evaluations, isLoading, error, refetch } = useEvaluationData({ 
+    accountId,
+    selectedScorecard,
+    selectedScore
+  });
+
+  // Debug logging for scorecard and score selection
+  useEffect(() => {
+    console.debug('Evaluations dashboard filters:', {
+      selectedScorecard,
+      selectedScore,
+      evaluationsCount: evaluations.length
+    });
+  }, [selectedScorecard, selectedScore, evaluations.length]);
 
   // Set dataHasLoadedOnce to true once data has loaded
   useEffect(() => {
@@ -546,6 +559,13 @@ export default function EvaluationsDashboard({
       setDataHasLoadedOnce(true);
     }
   }, [isLoading, evaluations, dataHasLoadedOnce]);
+
+  // Refetch evaluations when filters change
+  useEffect(() => {
+    if (accountId) {
+      refetch();
+    }
+  }, [accountId, selectedScorecard, selectedScore, refetch]);
 
   // Show loading state only on initial load, not when selecting evaluations
   const showLoading = isLoading && !dataHasLoadedOnce;
@@ -658,15 +678,8 @@ export default function EvaluationsDashboard({
     );
   }, [selectedEvaluationId, evaluations, isFullWidth, selectedScoreResultId, handleScoreResultSelect, copyLinkToClipboard, handleDelete, handleCloseEvaluation]);
 
-  // Add filtering logic for evaluations based on selected scorecard and score
-  const filteredEvaluations = useMemo(() => {
-    return evaluations.filter((evaluation: any) => {
-      if (!selectedScorecard && !selectedScore) return true;
-      if (selectedScorecard && evaluation.scorecard?.name !== selectedScorecard) return false;
-      if (selectedScore && evaluation.score?.name !== selectedScore) return false;
-      return true;
-    });
-  }, [evaluations, selectedScorecard, selectedScore]);
+  // Remove client-side filtering logic and use the filtered evaluations directly
+  const filteredEvaluations = evaluations;
 
   const handleCreateShareLink = async (expiresAt: string, viewOptions: ShareLinkViewOptions) => {
     if (!selectedEvaluationId || !accountId) return;
