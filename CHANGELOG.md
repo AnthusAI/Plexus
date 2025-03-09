@@ -1,6 +1,33 @@
 # CHANGELOG
 
 
+## v0.12.0 (2025-03-09)
+
+### Bug Fixes
+
+- **core**: Enhance dynamic class loading with plexus_extensions fallback
+  ([`f93e274`](https://github.com/AnthusAI/Plexus/commit/f93e2748febe3597269be52ff841594758216af4))
+
+- Add fallback mechanism to load classes from plexus_extensions namespace - Improve logging for
+  class loading attempts - Provide more informative error messages when class resolution fails
+
+### Features
+
+- **langgraph**: Add node results tracking
+  ([`8474e71`](https://github.com/AnthusAI/Plexus/commit/8474e71ec3dd704fa88056a3094263bff4ebf0e6))
+
+- Introduce `node_results` field in LangGraphScore to track node execution details - Implement
+  `log_state` method in BaseNode for comprehensive state logging - Update Classifier node to use new
+  state logging mechanism
+
+- **trace**: Enhance trace data handling and logging
+  ([`a4ed51f`](https://github.com/AnthusAI/Plexus/commit/a4ed51f2fee06a0f38fe7101eef910c8420cf714))
+
+- Update Evaluation.py to add trace data to score results - Modify LangGraphScore to support trace
+  metadata merging - Implement comprehensive BaseNode_test.py with trace logging tests - Refactor
+  BaseNode.py to improve trace metadata management
+
+
 ## v0.11.0 (2025-03-09)
 
 ### Features
