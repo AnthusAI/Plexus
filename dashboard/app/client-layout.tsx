@@ -46,6 +46,7 @@ function AuthWrapper({ children }: { children: React.ReactNode }) {
     '/documentation/concepts/evaluations',
     '/documentation/concepts/tasks',
     '/documentation/concepts/items',
+    '/documentation/concepts/score-results',
     '/documentation/methods/add-edit-source',
     '/documentation/methods/profile-source',
     '/documentation/methods/add-edit-scorecard',
