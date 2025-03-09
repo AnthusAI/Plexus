@@ -40,6 +40,7 @@ interface ScoreResult {
     human_label: string | null
     correct: boolean
   }
+  trace: any | null
   itemId: string | null
 }
 
@@ -424,6 +425,7 @@ interface ParsedScoreResult {
     human_explanation: string | null
     text: string | null
   }
+  trace: any | null
   itemId: string | null
 }
 
@@ -435,7 +437,8 @@ function parseScoreResult(result: any): ParsedScoreResult {
     resultId: result?.id,
     resultValue: result?.value,
     resultMetadataType: result?.metadata ? typeof result.metadata : 'undefined',
-    resultExplanation: result?.explanation
+    resultExplanation: result?.explanation,
+    resultTrace: result?.trace ? typeof result.trace : 'undefined'
   });
 
   if (!result) {
@@ -451,6 +454,7 @@ function parseScoreResult(result: any): ParsedScoreResult {
         human_explanation: null,
         text: null
       },
+      trace: null,
       itemId: null
     };
   }
@@ -491,6 +495,7 @@ function parseScoreResult(result: any): ParsedScoreResult {
   const value = String(result.value || scoreResult?.value || '');
   const confidence = result.confidence ?? scoreResult?.confidence ?? null;
   const explanation = result.explanation ?? scoreResult?.explanation ?? null;
+  const trace = result.trace ?? scoreResult?.trace ?? null;
   const humanLabel = scoreResult?.metadata?.human_label ?? parsedMetadata.human_label ?? null;
   const correct = Boolean(scoreResult?.metadata?.correct ?? parsedMetadata.correct);
   const humanExplanation = scoreResult?.metadata?.human_explanation ?? parsedMetadata.human_explanation ?? null;
@@ -517,6 +522,7 @@ function parseScoreResult(result: any): ParsedScoreResult {
       human_explanation: humanExplanation,
       text
     },
+    trace,
     itemId
   };
 }

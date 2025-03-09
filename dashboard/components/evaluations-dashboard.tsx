@@ -74,7 +74,10 @@ type ScoreResultItem = {
   value: string | number;
   confidence: number | null;
   metadata: any;
+  explanation?: string | null;
+  trace?: any | null;
   itemId: string | null;
+  createdAt?: string;
 };
 
 interface TaskStagesResponse {
@@ -215,6 +218,7 @@ const LIST_EVALUATIONS = `
             confidence
             metadata
             explanation
+            trace
             itemId
             createdAt
           }
@@ -307,6 +311,29 @@ export function transformEvaluation(evaluation: Schema['Evaluation']['type']) {
     };
   };
 
+  // Transform score results to include trace field
+  const transformScoreResults = (scoreResults: any) => {
+    if (!scoreResults) return null;
+    
+    // Handle items array
+    if (typeof scoreResults === 'object' && 'items' in scoreResults && Array.isArray(scoreResults.items)) {
+      return {
+        items: scoreResults.items.map((item: any) => ({
+          id: item.id,
+          value: item.value,
+          confidence: item.confidence,
+          metadata: item.metadata,
+          explanation: item.explanation,
+          trace: item.trace,
+          itemId: item.itemId,
+          createdAt: item.createdAt
+        }))
+      };
+    }
+    
+    return scoreResults;
+  };
+
   // Get stages from task data
   const rawStages = taskData?.stages;
   const transformedStages = transformStages(rawStages);
@@ -354,7 +381,7 @@ export function transformEvaluation(evaluation: Schema['Evaluation']['type']) {
       ...taskData,
       stages: transformedStages
     } as AmplifyTask) : null,
-    scoreResults: scoreResults
+    scoreResults: transformScoreResults(scoreResults)
   };
 
   console.debug('Final transformed evaluation:', {
@@ -887,7 +914,10 @@ interface ScoreResult {
   value: string | number;
   confidence: number | null;
   metadata: any;
+  explanation?: string | null;
+  trace?: any | null;
   itemId: string | null;
+  createdAt?: string;
 }
 
 // Add TaskStageSubscriptionEvent type

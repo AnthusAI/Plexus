@@ -58,6 +58,7 @@ export type ProcessedEvaluation = Omit<BaseEvaluation, 'task' | 'scorecard' | 's
     confidence: number | null;
     metadata: any;
     explanation: string | null;
+    trace: any | null;
     itemId: string | null;
     createdAt: string;
   }>;
@@ -458,6 +459,7 @@ export async function listRecentEvaluations(limit: number = 100): Promise<any[]>
                   confidence
                   metadata
                   explanation
+                  trace
                   itemId
                   createdAt
                   scoringJob {
@@ -673,6 +675,7 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
                 confidence
                 metadata
                 explanation
+                trace
                 itemId
                 createdAt
               }
@@ -732,6 +735,7 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
                 confidence
                 metadata
                 explanation
+                trace
                 itemId
                 createdAt
               }
@@ -923,6 +927,7 @@ export function transformEvaluation(evaluation: BaseEvaluation): ProcessedEvalua
     confidence: result.confidence ?? null,
     metadata: result.metadata ?? null,
     explanation: result.explanation ?? null,
+    trace: result.trace ?? null,
     itemId: result.itemId ?? null,
     createdAt: result.createdAt || new Date().toISOString()
   }));
@@ -990,6 +995,7 @@ export type Evaluation = {
       value: string | number;
       confidence: number | null;
       metadata: any;
+      trace: any | null;
       itemId: string | null;
     }>;
   } | null;
