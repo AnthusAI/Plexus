@@ -24,7 +24,7 @@ import {
   MoreHorizontal,
   Plus,
   Database,
-  RectangleVertical,
+  Columns2,
   Square,
   X
 } from "lucide-react"

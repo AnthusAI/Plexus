@@ -5,7 +5,7 @@ import { useState, useMemo, useEffect, useRef } from "react"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import { MoreHorizontal, Sparkles, MessageCircleMore, X, Square, RectangleVertical, ChevronDown, ChevronUp, Info, SmileIcon, FrownIcon, FlaskConical } from "lucide-react"
+import { MoreHorizontal, Sparkles, MessageCircleMore, X, Square, Columns2, ChevronDown, ChevronUp, Info, SmileIcon, FrownIcon, FlaskConical } from "lucide-react"
 import { format, formatDistanceToNow, parseISO, subMinutes, subHours, subDays } from "date-fns"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -397,9 +397,9 @@ export default function DatasetsDashboard() {
                         {item.result.answer}
                       </Badge>
                       {item.result.isCorrect ? (
-                        <SmileIcon className="h-4 w-4 text-true" />
+                        <SmileIcon className="h-4 w-4 text-foreground-true" />
                       ) : (
-                        <FrownIcon className="h-4 w-4 text-false" />
+                        <FrownIcon className="h-4 w-4 text-foreground-false" />
                       )}
                     </div>
                   )}
@@ -421,9 +421,9 @@ export default function DatasetsDashboard() {
                     {item.result.answer}
                   </Badge>
                   {item.result.isCorrect ? (
-                    <SmileIcon className="h-4 w-4 text-true" />
+                    <SmileIcon className="h-4 w-4 text-foreground-true" />
                   ) : (
-                    <FrownIcon className="h-4 w-4 text-false" />
+                    <FrownIcon className="h-4 w-4 text-foreground-false" />
                   )}
                 </div>
               </TableCell>
@@ -484,7 +484,7 @@ export default function DatasetsDashboard() {
           <div className="flex items-center space-x-2">
             {!isNarrowViewport && (
               <CardButton
-                icon={isFullWidth ? RectangleVertical : Square}
+                icon={isFullWidth ? Columns2 : Square}
                 onClick={() => setIsFullWidth(!isFullWidth)}
               />
             )}
@@ -782,9 +782,9 @@ export default function DatasetsDashboard() {
                                   {item.result.answer}
                                 </Badge>
                                 {item.result.isCorrect ? (
-                                  <SmileIcon className="h-4 w-4 text-true" />
+                                  <SmileIcon className="h-4 w-4 text-foreground-true" />
                                 ) : (
-                                  <FrownIcon className="h-4 w-4 text-false" />
+                                  <FrownIcon className="h-4 w-4 text-foreground-false" />
                                 )}
                               </div>
                             )}
@@ -806,9 +806,9 @@ export default function DatasetsDashboard() {
                               {item.result.answer}
                             </Badge>
                             {item.result.isCorrect ? (
-                              <SmileIcon className="h-4 w-4 text-true" />
+                              <SmileIcon className="h-4 w-4 text-foreground-true" />
                             ) : (
-                              <FrownIcon className="h-4 w-4 text-false" />
+                              <FrownIcon className="h-4 w-4 text-foreground-false" />
                             )}
                           </div>
                         </TableCell>

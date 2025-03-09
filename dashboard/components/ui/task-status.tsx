@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react'
 import { SegmentedProgressBar, SegmentConfig } from './segmented-progress-bar'
 import { ProgressBar } from './progress-bar'
 import { ProgressBarTiming } from './progress-bar-timing'
-import { Radio, Hand, ConciergeBell, Square, RectangleVertical, X, AlertTriangle, MessageSquareText, SquareChevronRight } from 'lucide-react'
+import { Radio, Hand, ConciergeBell, Square, Columns2, X, AlertTriangle, MessageSquareText, SquareChevronRight } from 'lucide-react'
 import { cn } from "@/lib/utils"
 import { StyleTag } from './style-tag'
 import { CardButton } from '@/components/CardButton'
@@ -460,7 +460,7 @@ export const TaskStatus = React.memo(({
     <div className="[&>*+*]:mt-2">
       <StyleTag />
       <div className={cn(
-        "rounded-lg px-1 py-1 space-y-1 -mx-1",
+        "rounded-lg px-1 py-1 space-y-1 -mx-1 px-2",
         variant === 'detail' ? "bg-gauge-background" : "bg-background"
       )}>
         {command && commandDisplay !== 'hide' && (

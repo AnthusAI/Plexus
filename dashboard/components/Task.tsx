@@ -1,7 +1,7 @@
 import React from 'react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Square, RectangleVertical, X, Activity, FlaskConical, FlaskRound, TestTubes } from 'lucide-react'
+import { Square, Columns2, X, Activity, FlaskConical, FlaskRound, TestTubes } from 'lucide-react'
 import { CardButton } from '@/components/CardButton'
 import { TaskStatus, TaskStageConfig } from './ui/task-status'
 import { BaseTaskData } from '@/types/base'
@@ -105,6 +105,14 @@ const Task = <TData extends BaseTaskData = BaseTaskData>({
   // Force isSelected to true in detail mode
   const effectiveIsSelected = variant === 'detail' ? true : isSelected;
 
+  // Add debug logging for onClose prop
+  console.log('Task component received props:', {
+    variant,
+    taskId: task.id,
+    hasOnClose: !!onClose,
+    hasRenderHeader: !!renderHeader
+  });
+
   const childProps: TaskChildProps<TData> = {
     variant,
     task,
@@ -190,6 +198,14 @@ const TaskHeader = <TData extends BaseTaskData = BaseTaskData>({
 }: TaskChildProps<TData>) => {
   const taskIcon = getTaskIcon(task.type);
 
+  // Add a console log to debug the onClose function
+  const handleClose = () => {
+    console.log('TaskHeader: Close button clicked, onClose function:', !!onClose);
+    if (onClose) {
+      onClose();
+    }
+  };
+
   return (
     <CardHeader className={cn(
       "space-y-1.5 p-0 flex flex-col items-start",
@@ -226,7 +242,7 @@ const TaskHeader = <TData extends BaseTaskData = BaseTaskData>({
                 {controlButtons}
                 {onToggleFullWidth && (
                   <CardButton
-                    icon={isFullWidth ? RectangleVertical : Square}
+                    icon={isFullWidth ? Columns2 : Square}
                     onClick={onToggleFullWidth}
                     disabled={isLoading}
                     aria-label={isFullWidth ? 'Exit full width' : 'Full width'}
@@ -235,7 +251,7 @@ const TaskHeader = <TData extends BaseTaskData = BaseTaskData>({
                 {onClose && (
                   <CardButton
                     icon={X}
-                    onClick={onClose}
+                    onClick={handleClose}
                     disabled={isLoading}
                     aria-label="Close"
                   />

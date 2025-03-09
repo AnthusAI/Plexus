@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { Card } from '@/components/ui/card'
-import { MoreHorizontal, Pencil, Database, ListTodo, X, Square, RectangleVertical, Plus, ChevronUp, ChevronDown, CheckSquare } from 'lucide-react'
+import { MoreHorizontal, Pencil, Database, ListTodo, X, Square, Columns2, Plus, ChevronUp, ChevronDown, CheckSquare } from 'lucide-react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { cn } from '@/lib/utils'
 import { CardButton } from '@/components/CardButton'
@@ -248,7 +248,7 @@ const DetailContent = React.memo(({
           </DropdownMenu.Root>
           {onToggleFullWidth && (
             <CardButton
-              icon={isFullWidth ? RectangleVertical : Square}
+              icon={isFullWidth ? Columns2 : Square}
               onClick={onToggleFullWidth}
               aria-label={isFullWidth ? 'Exit full width' : 'Full width'}
             />

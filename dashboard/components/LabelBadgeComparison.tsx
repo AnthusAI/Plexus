@@ -28,7 +28,7 @@ export function LabelBadgeComparison({
       <Badge 
         variant="secondary"
         className={`text-sm px-2 py-0.5 rounded-md ${textColor} ${
-          isCorrect ? "bg-true" : "bg-false"
+          isCorrect ? "bg-true-selected" : "bg-false-selected"
         }`}
       >
         {predictedLabel}
@@ -47,11 +47,11 @@ export function LabelBadgeComparison({
       {showStatus && (
         <div className="flex items-center ml-2">
           {isCorrect ? (
-            <CheckCircle className="w-4 h-4 text-true mr-1" />
+            <CheckCircle className="w-4 h-4 text-foreground-true mr-1" />
           ) : (
-            <AlertTriangle className="w-4 h-4 text-false mr-1" />
+            <AlertTriangle className="w-4 h-4 text-foreground-false mr-1" />
           )}
-          <span className={`text-sm ${isCorrect ? "text-true" : "text-false"}`}>
+          <span className={`text-sm font-medium ${isCorrect ? "text-foreground-true" : "text-foreground-false"}`}>
             {isCorrect ? "Correct" : "Incorrect"}
           </span>
         </div>

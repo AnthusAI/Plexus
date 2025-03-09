@@ -82,8 +82,16 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
   isSelected,
   commandDisplay: initialCommandDisplay = 'show'
 }: TaskDisplayProps) {
+  // Add debug logging for onClose prop
+  console.log('TaskDisplay component received props:', {
+    variant,
+    taskId: evaluationData.id,
+    hasOnClose: !!onClose,
+    hasOnToggleFullWidth: !!onToggleFullWidth
+  });
 
   const [processedTask, setProcessedTask] = useState<ProcessedTask | null>(null)
+  const [commandDisplay, setCommandDisplay] = useState(initialCommandDisplay)
 
   // Add detailed logging for evaluationData
   console.log('TaskDisplay received evaluationData:', {
@@ -185,6 +193,7 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
           human_explanation: scoreResult?.metadata?.human_explanation ?? parsedMetadata.human_explanation ?? result.metadata?.human_explanation ?? null,
           text: scoreResult?.metadata?.text ?? parsedMetadata.text ?? result.metadata?.text ?? null
         },
+        trace: result.trace ?? scoreResult?.trace ?? null,
         itemId: result.itemId ?? parsedMetadata.item_id?.toString() ?? null,
         createdAt: result.createdAt
       };
