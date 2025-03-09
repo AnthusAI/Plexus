@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.11.0 (2025-03-09)
+
+### Features
+
+- **CLI**: Added `plexus results list` and `info` CLI commands for examining recent score results.
+  ([`1b2d786`](https://github.com/AnthusAI/Plexus/commit/1b2d7869ea44ecf21faf2b8190ea26338544797b))
+
+
 ## v0.10.1 (2025-03-08)
 
 ### Bug Fixes
