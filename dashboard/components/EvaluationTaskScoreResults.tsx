@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react'
 import { Split, Filter, Download } from 'lucide-react'
-import { EvaluationTaskScoreResult } from './EvaluationTaskScoreResult'
 import { AccuracyBar } from '@/components/ui/accuracy-bar'
 import { CardButton } from '@/components/CardButton'
 import {
@@ -11,6 +10,7 @@ import {
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
 import type { Schema } from "@/amplify/data/resource"
+import { ScoreResultComponent, ScoreResultData } from '@/components/ui/score-result'
 
 interface FilterState {
   showCorrect: boolean | null  // null means show all
@@ -19,17 +19,7 @@ interface FilterState {
 }
 
 export interface EvaluationTaskScoreResultsProps {
-  results: {
-    id: string
-    value: string | number
-    confidence: number | null
-    explanation: string | null
-    metadata: {
-      human_label: string | null
-      correct: boolean
-    }
-    itemId: string | null
-  }[]
+  results: ScoreResultData[]
   accuracy: number | null
   selectedPredictedValue?: string | null
   selectedActualValue?: string | null
@@ -166,30 +156,28 @@ export function EvaluationTaskScoreResults({
     }))
   }, [])
 
+  const isFiltered = filters.showCorrect !== null || 
+                     filters.predictedValue !== null || 
+                     filters.actualValue !== null
+
   return (
     <div className="flex flex-col h-full">
-      <div className="flex-none relative mb-1">
-        <div className="flex items-start">
+      <div className="flex justify-between items-center mb-2 flex-shrink-0">
+        <div className="flex items-center">
           <Split className="w-4 h-4 mr-1 text-foreground shrink-0" />
-          <span className="text-sm text-foreground">
-            {filteredResults.length} Predictions
-          </span>
+          <span className="text-sm text-foreground">Predictions ({filteredResults.length})</span>
         </div>
-        <div className="absolute bottom-1 right-0 flex items-center gap-2">
+        <div className="flex items-center gap-2">
           {navigationControls}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <div>
-                <CardButton
-                  icon={Filter}
-                  active={filters.showCorrect !== null || 
-                         filters.predictedValue !== null || 
-                         filters.actualValue !== null}
-                  onClick={() => {}}
-                />
-              </div>
+              <CardButton
+                icon={Filter}
+                active={isFiltered}
+                onClick={() => {}}
+              />
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuContent align="end">
               <DropdownMenuCheckboxItem
                 checked={filters.showCorrect === true}
                 onCheckedChange={() => handleCorrectFilterChange(true)}
@@ -234,29 +222,26 @@ export function EvaluationTaskScoreResults({
           />
         </div>
       </div>
-      <div className="flex-none mb-4">
+      <div className="flex-none z-10 mb-4">
         <AccuracyBar 
           accuracy={filters.showCorrect !== null ? filteredAccuracy : accuracy} 
           onSegmentClick={handleAccuracySegmentClick}
         />
       </div>
-      <div className="flex-1 min-h-0 overflow-y-auto">
-        <div className="space-y-2">
-          {filteredResults.map((result) => (
-            <div
-              key={result.id}
-              onClick={() => onResultSelect?.(result)}
-              className="cursor-pointer"
-            >
-              <EvaluationTaskScoreResult
-                {...{
-                  ...result,
-                  value: String(result.value)
-                }}
-                isFocused={selectedScoreResult?.id === result.id}
-              />
-            </div>
-          ))}
+      <div className="flex-1 min-h-0 overflow-hidden">
+        <div className="h-full overflow-y-auto">
+          <div className="space-y-2 pb-4">
+            {filteredResults.map((result) => (
+              <div key={result.id}>
+                <ScoreResultComponent
+                  result={result}
+                  variant="list"
+                  isFocused={selectedScoreResult?.id === result.id}
+                  onSelect={() => onResultSelect?.(result)}
+                />
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div>

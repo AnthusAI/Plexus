@@ -397,9 +397,9 @@ export default function DatasetsDashboard() {
                         {item.result.answer}
                       </Badge>
                       {item.result.isCorrect ? (
-                        <SmileIcon className="h-4 w-4 text-true" />
+                        <SmileIcon className="h-4 w-4 text-foreground-true" />
                       ) : (
-                        <FrownIcon className="h-4 w-4 text-false" />
+                        <FrownIcon className="h-4 w-4 text-foreground-false" />
                       )}
                     </div>
                   )}
@@ -421,9 +421,9 @@ export default function DatasetsDashboard() {
                     {item.result.answer}
                   </Badge>
                   {item.result.isCorrect ? (
-                    <SmileIcon className="h-4 w-4 text-true" />
+                    <SmileIcon className="h-4 w-4 text-foreground-true" />
                   ) : (
-                    <FrownIcon className="h-4 w-4 text-false" />
+                    <FrownIcon className="h-4 w-4 text-foreground-false" />
                   )}
                 </div>
               </TableCell>
@@ -782,9 +782,9 @@ export default function DatasetsDashboard() {
                                   {item.result.answer}
                                 </Badge>
                                 {item.result.isCorrect ? (
-                                  <SmileIcon className="h-4 w-4 text-true" />
+                                  <SmileIcon className="h-4 w-4 text-foreground-true" />
                                 ) : (
-                                  <FrownIcon className="h-4 w-4 text-false" />
+                                  <FrownIcon className="h-4 w-4 text-foreground-false" />
                                 )}
                               </div>
                             )}
@@ -806,9 +806,9 @@ export default function DatasetsDashboard() {
                               {item.result.answer}
                             </Badge>
                             {item.result.isCorrect ? (
-                              <SmileIcon className="h-4 w-4 text-true" />
+                              <SmileIcon className="h-4 w-4 text-foreground-true" />
                             ) : (
-                              <FrownIcon className="h-4 w-4 text-false" />
+                              <FrownIcon className="h-4 w-4 text-foreground-false" />
                             )}
                           </div>
                         </TableCell>

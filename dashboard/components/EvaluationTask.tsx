@@ -7,16 +7,15 @@ import { ConfusionMatrix } from '@/components/confusion-matrix'
 import { CardButton } from '@/components/CardButton'
 import ClassDistributionVisualizer from '@/components/ClassDistributionVisualizer'
 import PredictedClassDistributionVisualizer from '@/components/PredictedClassDistributionVisualizer'
-import { EvaluationTaskScoreResult } from '@/components/EvaluationTaskScoreResult'
+import { EvaluationTaskScoreResults } from './EvaluationTaskScoreResults'
 import type { Schema } from "@/amplify/data/resource"
 import MetricsGaugesExplanation from '@/components/MetricsGaugesExplanation'
-import { EvaluationTaskScoreResults } from '@/components/EvaluationTaskScoreResults'
-import { EvaluationTaskScoreResultDetail } from '@/components/EvaluationTaskScoreResultDetail'
 import { useResizeObserver } from '@/hooks/use-resize-observer'
 import { BaseTaskData } from '@/types/base'
 import { EvaluationListAccuracyBar } from '@/components/EvaluationListAccuracyBar'
 import isEqual from 'lodash/isEqual'
 import { standardizeScoreResults } from '@/utils/data-operations'
+import { ScoreResultComponent, ScoreResultData } from '@/components/ui/score-result'
 
 export interface EvaluationMetric {
   name: string
@@ -414,20 +413,7 @@ const GridContent = React.memo(({ data, extra, isSelected }: {
   return true;
 });
 
-interface ParsedScoreResult {
-  id: string
-  value: string
-  confidence: number | null
-  explanation: string | null
-  metadata: {
-    human_label: string | null
-    correct: boolean
-    human_explanation: string | null
-    text: string | null
-  }
-  trace: any | null
-  itemId: string | null
-}
+interface ParsedScoreResult extends ScoreResultData {}
 
 function parseScoreResult(result: any): ParsedScoreResult {
   console.log('parseScoreResult called with:', {
@@ -508,7 +494,8 @@ function parseScoreResult(result: any): ParsedScoreResult {
     confidence,
     explanation,
     humanLabel,
-    correct
+    correct,
+    hasTrace: !!trace
   });
 
   return {
@@ -637,16 +624,29 @@ const DetailContent = React.memo(({
   const isWideEnoughForTwo = containerWidth >= 800
   const isWideEnoughForThree = containerWidth >= 1180 && isFullWidth
   const showAsColumns = isWideEnoughForTwo
-  const showMainPanel = true
-  const showResultsList = parsedScoreResults.length > 0
+  
+  // Modify the panel visibility logic to prioritize the selected score result
   const showResultDetail = selectedScoreResult !== null
+  const showResultsList = parsedScoreResults.length > 0
+  
+  // In narrow view with a selected result, ONLY show the score result detail
+  const showScoreResultInNarrowView = !isWideEnoughForTwo && showResultDetail
+  
+  // Only show main panel if we're not in narrow view with a selected result
+  const showMainPanel = isWideEnoughForThree || 
+                        (isWideEnoughForTwo && (!showResultDetail || !showResultsList)) || 
+                        (!isWideEnoughForTwo && !showResultDetail) // Only show main panel in narrow view if no result selected
 
   console.log('DetailContent render conditions:', {
+    containerWidth,
+    isWideEnoughForTwo,
+    isWideEnoughForThree,
     hasScoreResults: !!data.scoreResults?.length,
     parsedResultCount: parsedScoreResults.length,
     showMainPanel,
     showResultsList,
     showResultDetail,
+    showScoreResultInNarrowView,
     showAsColumns,
     selectedScoreResult: selectedScoreResult?.id
   });
@@ -664,23 +664,35 @@ const DetailContent = React.memo(({
   return (
     <div 
       ref={containerRef}
-      className="w-full min-w-[300px] h-full"
+      className="w-full min-w-[300px] h-full overflow-y-auto"
     >
-      <div className={`${showAsColumns ? 'grid gap-4' : 'space-y-4'} h-full`} 
+      <div className={`${showAsColumns ? 'grid gap-4' : 'space-y-4'} ${showAsColumns ? 'h-full' : 'h-auto'}`} 
         style={{
-          gridTemplateColumns: isWideEnoughForThree && selectedScoreResult 
-            ? '1fr 1fr 1fr' 
-            : isWideEnoughForTwo && parsedScoreResults.length > 0
-              ? selectedScoreResult 
-                ? '1fr 1fr'  // Show results list and detail only
-                : '1fr 1fr'  // Show main and results list
-              : '1fr'
+          gridTemplateColumns: isWideEnoughForThree 
+            ? selectedScoreResult ? '1fr 1fr 1fr' : '1fr 1fr'
+            : isWideEnoughForTwo
+              ? '1fr 1fr'    // Always equal width for two panels
+              : '1fr'          // Show only one panel
         }}
       >
+        {/* When in narrow view and a score result is selected, ONLY show the score result detail */}
+        {showScoreResultInNarrowView && (
+          <div className="w-full h-full flex flex-col overflow-hidden">
+            <div className="flex-1 overflow-hidden">
+              <ScoreResultComponent
+                result={parseScoreResult(selectedScoreResult)}
+                variant="detail"
+                onClose={handleScoreResultClose}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Only show main panel if not showing score result in narrow view */}
         {showMainPanel && (
-          <div className="w-full h-full flex flex-col">
-            <div className="flex-1 overflow-y-auto">
-              <div className="px-1">
+          <div className={`w-full ${showAsColumns ? 'h-full' : 'h-auto'} flex flex-col overflow-hidden`}>
+            <div className={`${showAsColumns ? 'flex-1' : ''} overflow-y-auto max-h-full`}>
+              <div className="space-y-3 p-1">
                 <div className="mb-3">
                   <TaskStatus
                     variant="detail"
@@ -779,27 +791,15 @@ const DetailContent = React.memo(({
                     />
                   </div>
                 )}
-
-                {!showAsColumns && parsedScoreResults.length > 0 && (
-                  <div className="mt-6">
-                    <EvaluationTaskScoreResults 
-                      results={parsedScoreResults} 
-                      accuracy={data.accuracy ?? 0}
-                      selectedPredictedValue={selectedPredictedActual.predicted}
-                      selectedActualValue={selectedPredictedActual.actual}
-                      onResultSelect={handleScoreResultSelect}
-                      selectedScoreResult={selectedScoreResult}
-                    />
-                  </div>
-                )}
               </div>
             </div>
           </div>
         )}
 
-        {showAsColumns && parsedScoreResults.length > 0 && (
-          <div className="w-full h-full relative">
-            <div className="absolute inset-0 pr-0">
+        {/* Only show score results list if not showing score result in narrow view */}
+        {showResultsList && !showScoreResultInNarrowView && (
+          <div className={`w-full ${showAsColumns ? 'h-full' : 'h-[500px] mt-6'} flex flex-col overflow-hidden`}>
+            <div className="h-full overflow-y-auto">
               <EvaluationTaskScoreResults 
                 results={parsedScoreResults} 
                 accuracy={data.accuracy ?? 0}
@@ -812,11 +812,13 @@ const DetailContent = React.memo(({
           </div>
         )}
 
-        {showResultDetail && selectedScoreResult && (
-          <div className="w-full h-full relative">
-            <div className="absolute inset-0 pr-0">
-              <EvaluationTaskScoreResultDetail
+        {/* Only show the score result detail in column layout if not already showing it in narrow view */}
+        {showResultDetail && !showScoreResultInNarrowView && (
+          <div className={`w-full ${showAsColumns ? 'h-full' : 'h-full'} flex flex-col overflow-hidden`}>
+            <div className="flex-1 overflow-hidden">
+              <ScoreResultComponent
                 result={parseScoreResult(selectedScoreResult)}
+                variant="detail"
                 onClose={handleScoreResultClose}
               />
             </div>
@@ -920,7 +922,10 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
         {typeof onClose === 'function' && (
           <CardButton
             icon={X}
-            onClick={onClose}
+            onClick={() => {
+              console.log('EvaluationTask: X button clicked, calling onClose function');
+              onClose();
+            }}
           />
         )}
       </div>

@@ -20,6 +20,8 @@
   :root {
     --background: hsl(var(--mauve-1));
     --foreground: hsl(var(--mauve-11));
+    --foreground-true: hsl(var(--green-11));
+    --foreground-false: hsl(var(--red-11));
     --focus: hsl(var(--mauve-12));
     --attention: hsl(0, 0%, 0%);
     --foreground-selected: hsl(var(--mauve-12));
@@ -88,6 +90,8 @@
   .dark {
     --background: hsl(var(--mauve-1));
     --foreground: hsl(var(--mauve-11));
+    --foreground-true: hsl(var(--green-11));
+    --foreground-false: hsl(var(--red-11));
     --focus: hsl(var(--mauve-12));
     --attention: hsl(0, 0%, 100%);
     --foreground-selected: hsl(var(--mauve-12));
