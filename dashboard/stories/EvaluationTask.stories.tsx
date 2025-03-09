@@ -62,7 +62,8 @@ const createSampleData = () => {
         human_label: null,
         correct: true
       },
-      itemId: `item-${i}`
+      itemId: `item-${i}`,
+      trace: null
     }))
   }
 }
