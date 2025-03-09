@@ -161,7 +161,7 @@ plexus scorecards list
 plexus scorecards info --scorecard example1
 
 # List all scores in a scorecard
-plexus scorecards list-scores --scorecard example1
+plexus scores list --scorecard example1
 
 # Pull scorecard configuration to YAML
 plexus scorecards pull --scorecard example1 --output ./my-scorecards
@@ -279,6 +279,42 @@ Score Versions (3 of 3 total versions, newest first):
     }`}</code>
                 </div>
               </pre>
+              <p className="text-muted-foreground">
+                This command displays up to 10 versions in reverse chronological order (newest first), showing which 
+                version is the champion and which versions are featured.
+              </p>
+            </div>
+
+            <div>
+              <h3 className="text-xl font-medium mb-2">Listing Scores in a Scorecard</h3>
+              <p className="text-muted-foreground mb-4">
+                The <code>scores list</code> command displays all scores within a scorecard:
+              </p>
+              <pre className="bg-muted rounded-lg mb-4">
+                <div className="code-container p-4">
+                  <code>{`plexus scores list --scorecard "Example Scorecard"
+
+# You can also use the score alias (singular form)
+plexus score list --scorecard "Example Scorecard"`}</code>
+                </div>
+              </pre>
+              <p className="text-muted-foreground mb-4">
+                This command provides a detailed view of all scores organized by section, including:
+              </p>
+              <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
+                <li>
+                  <strong>Score Names</strong>: The human-readable names of each score
+                </li>
+                <li>
+                  <strong>Score IDs</strong>: The unique identifiers for each score
+                </li>
+                <li>
+                  <strong>Score Keys</strong>: The machine-friendly keys for each score
+                </li>
+                <li>
+                  <strong>External IDs</strong>: Any external identifiers associated with the scores
+                </li>
+              </ul>
             </div>
           </div>
         </section>

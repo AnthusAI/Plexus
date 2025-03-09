@@ -9,21 +9,12 @@ from plexus.dashboard.api.client import PlexusDashboardClient
 from typing import Optional
 import rich
 import datetime
+from plexus.cli.ScoreCommands import scores, score
 
 # Define the main command groups that will be exported
 @click.group()
 def scorecards():
     """Manage scorecards"""
-    pass
-
-@click.group()
-def scores():
-    """Commands for managing scores."""
-    pass
-
-@click.group()
-def score():
-    """Manage individual scores (alias for 'scores')"""
     pass
 
 # Helper functions for resolving identifiers
@@ -50,28 +41,57 @@ def resolve_scorecard_identifier(client, identifier):
     except:
         pass
     
-    # Try by name, key, or externalId
-    query = f"""
-    query FindScorecard {{
-        listScorecards(filter: {{ 
-            or: [
-                {{ name: {{ eq: "{identifier}" }} }},
-                {{ key: {{ eq: "{identifier}" }} }},
-                {{ externalId: {{ eq: "{identifier}" }} }}
-            ]
-        }}) {{
-            items {{
-                id
+    # Try lookup by key
+    try:
+        query = f"""
+        query ListScorecards {{
+            listScorecards(filter: {{ key: {{ eq: "{identifier}" }} }}, limit: 1) {{
+                items {{
+                    id
+                }}
             }}
         }}
-    }}
-    """
-    
-    try:
+        """
         result = client.execute(query)
-        scorecards = result.get('listScorecards', {}).get('items', [])
-        if scorecards:
-            return scorecards[0].get('id')
+        items = result.get('listScorecards', {}).get('items', [])
+        if items and len(items) > 0:
+            return items[0]['id']
+    except:
+        pass
+    
+    # Try lookup by name
+    try:
+        query = f"""
+        query ListScorecards {{
+            listScorecards(filter: {{ name: {{ eq: "{identifier}" }} }}, limit: 1) {{
+                items {{
+                    id
+                }}
+            }}
+        }}
+        """
+        result = client.execute(query)
+        items = result.get('listScorecards', {}).get('items', [])
+        if items and len(items) > 0:
+            return items[0]['id']
+    except:
+        pass
+    
+    # Try lookup by externalId
+    try:
+        query = f"""
+        query ListScorecards {{
+            listScorecards(filter: {{ externalId: {{ eq: "{identifier}" }} }}, limit: 1) {{
+                items {{
+                    id
+                }}
+            }}
+        }}
+        """
+        result = client.execute(query)
+        items = result.get('listScorecards', {}).get('items', [])
+        if items and len(items) > 0:
+            return items[0]['id']
     except:
         pass
     
@@ -94,11 +114,11 @@ def resolve_account_identifier(client, identifier):
     except:
         pass
     
-    # Try by name
+    # Try lookup by key
     try:
         query = f"""
-        query FindAccountByName {{
-            listAccounts(filter: {{ name: {{ eq: "{identifier}" }} }}) {{
+        query ListAccounts {{
+            listAccounts(filter: {{ key: {{ eq: "{identifier}" }} }}, limit: 1) {{
                 items {{
                     id
                 }}
@@ -106,17 +126,17 @@ def resolve_account_identifier(client, identifier):
         }}
         """
         result = client.execute(query)
-        accounts = result.get('listAccounts', {}).get('items', [])
-        if accounts:
-            return accounts[0].get('id')
+        items = result.get('listAccounts', {}).get('items', [])
+        if items and len(items) > 0:
+            return items[0]['id']
     except:
         pass
     
-    # Try by key
+    # Try lookup by name
     try:
         query = f"""
-        query FindAccountByKey {{
-            listAccounts(filter: {{ key: {{ eq: "{identifier}" }} }}) {{
+        query ListAccounts {{
+            listAccounts(filter: {{ name: {{ eq: "{identifier}" }} }}, limit: 1) {{
                 items {{
                     id
                 }}
@@ -124,84 +144,25 @@ def resolve_account_identifier(client, identifier):
         }}
         """
         result = client.execute(query)
-        accounts = result.get('listAccounts', {}).get('items', [])
-        if accounts:
-            return accounts[0].get('id')
-    except:
-        pass
-    
-    return None
-
-def resolve_score_identifier(client, identifier: str) -> Optional[str]:
-    """
-    Resolves a score identifier (ID, name, key, or externalId) to a score ID.
-    
-    Args:
-        client: GraphQL client
-        identifier: Score identifier (ID, name, key, or externalId)
-        
-    Returns:
-        Score ID if found, None otherwise
-    """
-    # Try direct ID lookup first
-    query = f"""
-    query GetScoreById {{
-        getScore(id: "{identifier}") {{
-            id
-        }}
-    }}
-    """
-    
-    try:
-        result = client.execute(query)
-        if result.get('getScore'):
-            return identifier
-    except:
-        pass
-    
-    # Try other identifiers
-    query = f"""
-    query FindScore {{
-        listScores(filter: {{ 
-            or: [
-                {{ name: {{ eq: "{identifier}" }} }},
-                {{ key: {{ eq: "{identifier}" }} }},
-                {{ externalId: {{ eq: "{identifier}" }} }}
-            ]
-        }}) {{
-            items {{
-                id
-            }}
-        }}
-    }}
-    """
-    
-    try:
-        result = client.execute(query)
-        scores = result.get('listScores', {}).get('items', [])
-        if scores:
-            return scores[0].get('id')
+        items = result.get('listAccounts', {}).get('items', [])
+        if items and len(items) > 0:
+            return items[0]['id']
     except:
         pass
     
     return None
 
 def generate_key(name: str) -> str:
-    """Generate a URL-safe key from a name."""
+    """Generate a key from a name by converting to lowercase and replacing spaces with hyphens."""
     return name.lower().replace(' ', '-')
 
 def detect_and_clean_duplicates(client, scorecard_id: str) -> int:
     """
-    Detect and clean up duplicate scores within a scorecard.
-    
-    Duplicates are identified by either:
-    1. Identical score names within the same section
-    2. Identical score names across different sections
-    3. Identical externalIds within the scorecard
+    Detect and clean duplicate scores in a scorecard.
     
     Args:
         client: GraphQL client
-        scorecard_id: ID of the scorecard to check
+        scorecard_id: Scorecard ID
         
     Returns:
         Number of duplicates removed
@@ -481,15 +442,12 @@ def ensure_valid_external_ids(client, scorecard_id: str) -> int:
     """
     Ensure all scores in a scorecard have valid external IDs.
     
-    If a score has a missing or empty external ID, this function will generate
-    a new one based on the scorecard key and score key.
-    
     Args:
         client: GraphQL client
-        scorecard_id: ID of the scorecard to check
+        scorecard_id: Scorecard ID
         
     Returns:
-        Number of scores updated with new external IDs
+        Number of scores updated
     """
     console.print("[bold]Checking for missing or invalid external IDs...[/bold]")
     
@@ -686,8 +644,6 @@ def format_scorecard_panel(scorecard, include_sections=False, detailed_scores=Fa
     
     return panel 
 
-# Scorecard commands
-
 @scorecards.command()
 @click.option('--account', help='Filter by account (accepts ID, name, or key)')
 @click.option('--name', help='Filter by scorecard name')
@@ -835,88 +791,10 @@ def info(scorecard: str):
         click.echo(f"Error getting scorecard info: {e}")
 
 @scorecards.command()
-@click.option('--scorecard', required=True, help='Scorecard to list scores for (accepts ID, name, key, or external ID)')
-@click.option('--limit', default=50, help='Maximum number of scores to return')
-def list_scores(scorecard: str, limit: int):
-    """List all scores for a specific scorecard, organized by section."""
-    client = create_client()
-    
-    # Resolve the scorecard ID
-    scorecard_id = resolve_scorecard_identifier(client, scorecard)
-    if not scorecard_id:
-        click.echo(f"Scorecard not found: {scorecard}")
-        return
-    
-    # Fetch the scorecard with sections and scores
-    query = f"""
-    query GetScorecard {{
-        getScorecard(id: "{scorecard_id}") {{
-            id
-            name
-            key
-            externalId
-            createdAt
-            updatedAt
-            sections {{
-                items {{
-                    id
-                    name
-                    scores {{
-                        items {{
-                            id
-                            name
-                            key
-                            description
-                            type
-                            order
-                            externalId
-                        }}
-                    }}
-                }}
-            }}
-        }}
-    }}
-    """
-    
-    try:
-        response = client.execute(query)
-        scorecard_data = response.get('getScorecard')
-        
-        if not scorecard_data:
-            click.echo(f"Scorecard not found: {scorecard}")
-            return
-        
-        console = rich.console.Console()
-        
-        # Use the shared formatting function with sections and detailed scores included
-        panel = format_scorecard_panel(scorecard_data, include_sections=True, detailed_scores=True)
-        
-        # Override the panel title to indicate this is a scores listing
-        panel.title = f"[bold magenta]Scores for {scorecard_data.get('name', 'Scorecard')}[/bold magenta]"
-        
-        console.print(panel)
-        
-    except Exception as e:
-        click.echo(f"Error listing scores: {e}")
-
-@scorecards.command()
 @click.option('--scorecard', required=True, help='Scorecard to delete (accepts ID, name, key, or external ID)')
 @click.option('--force', is_flag=True, help='Skip confirmation prompt')
 def delete(scorecard: str, force: bool):
-    """Delete a scorecard and all its sections and scores.
-    
-    Permanently removes a scorecard and all its associated sections and scores from the system.
-    This operation cannot be undone. The command will show a confirmation prompt unless --force
-    is specified.
-    
-    The --scorecard option accepts an ID, name, key, or external ID - the system will
-    automatically determine which type of identifier was provided.
-    
-    Examples:
-        plexus scorecards delete --scorecard "QA Scorecard"  # Delete by name
-        plexus scorecards delete --scorecard qa-v1           # Delete by key
-        plexus scorecards delete --scorecard 1234 --force    # Delete by ID without confirmation
-    """
+    """Delete a scorecard."""
     client = create_client()
     
     # First, resolve the scorecard identifier to an ID
@@ -1019,21 +897,7 @@ def delete(scorecard: str, force: bool):
 @click.option('--account', default='call-criteria', help='Account to pull scorecards from (accepts ID, name, or key)')
 @click.option('--output', default='scorecards', help='Directory to save YAML files')
 def pull(scorecard: Optional[str], account: str, output: str):
-    """Pull scorecard configurations from the API to local YAML files.
-    
-    Downloads scorecard configurations from the API and saves them as YAML files in the
-    specified output directory. If a specific scorecard is provided, only that scorecard
-    will be pulled. Otherwise, all scorecards for the specified account will be pulled.
-    
-    Both the --scorecard and --account options accept flexible identifiers - the system will
-    automatically determine which type of identifier was provided.
-    
-    Examples:
-        plexus scorecards pull                           # Pull all scorecards for default account
-        plexus scorecards pull --scorecard "QA Cards"    # Pull specific scorecard by name
-        plexus scorecards pull --account acme            # Pull all scorecards for specified account
-        plexus scorecards pull --output ./my-scorecards  # Save to custom directory
-    """
+    """Pull scorecards from the dashboard and save as YAML files."""
     client = create_client()
     
     # First, get the account ID from the provided identifier
@@ -1219,17 +1083,7 @@ def pull(scorecard: Optional[str], account: str, output: str):
 @click.option('--skip-duplicate-check', is_flag=True, help='Skip checking for and removing duplicate scores')
 @click.option('--skip-external-id-check', is_flag=True, help='Skip checking for and fixing missing external IDs')
 def fix(scorecard: str, skip_duplicate_check: bool, skip_external_id_check: bool):
-    """Fix data integrity issues in an existing scorecard.
-    
-    This command finds a scorecard by the provided identifier, checks for duplicates,
-    and allows the user to interactively remove them. It also checks for and fixes
-    missing external IDs.
-    
-    Examples:
-        plexus scorecards fix --scorecard "QA Scorecard"
-        plexus scorecards fix --scorecard qa-v1 --skip-duplicate-check
-        plexus scorecards fix --scorecard 1234 --skip-external-id-check
-    """
+    """Fix common issues with a scorecard."""
     client = create_client()
     
     # First, resolve the scorecard identifier to an ID
@@ -1360,21 +1214,7 @@ def fix(scorecard: str, skip_duplicate_check: bool, skip_external_id_check: bool
 @click.option('--file', help='Path to specific YAML file to push (if not provided, will search in scorecards/ directory)')
 @click.option('--note', help='Note to include when creating a new score version')
 def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external_id_check: bool, file: Optional[str] = None, note: Optional[str] = None):
-    """Push scorecard configuration to the API.
-    
-    This command finds a scorecard by the provided identifier, loads its configuration from a YAML file,
-    checks for duplicates, and allows the user to interactively remove them before proceeding.
-    
-    If no --file parameter is provided, the command will search for a matching YAML file in the scorecards/ directory
-    based on the scorecard ID, key, or name.
-    
-    Examples:
-        plexus scorecards push --scorecard "QA Scorecard"
-        plexus scorecards push --scorecard qa-v1 --skip-duplicate-check
-        plexus scorecards push --scorecard 1234 --account acme
-        plexus scorecards push --scorecard "QA Scorecard" --file ./my-scorecards/qa.yaml
-        plexus scorecards push --scorecard "QA Scorecard" --note "Updated scoring logic"
-    """
+    """Push a scorecard to the dashboard."""
     client = create_client()
     
     # First, resolve the scorecard identifier to an ID
@@ -1898,188 +1738,4 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
         console.print("\n[green]Push operation completed successfully[/green]")
         
     except Exception as e:
-        console.print(f"[red]Error during push operation: {e}[/red]")
-
-@scores.command()
-@click.option('--scorecard', required=True, help='Scorecard containing the score (accepts ID, name, key, or external ID)')
-@click.option('--score', required=True, help='Score to get info about (accepts ID, name, key, or external ID)')
-def info(scorecard: str, score: str):
-    """Get detailed information about a specific score within a scorecard."""
-    client = create_client()
-    
-    # Resolve the scorecard ID
-    scorecard_id = resolve_scorecard_identifier(client, scorecard)
-    if not scorecard_id:
-        click.echo(f"Scorecard not found: {scorecard}")
-        return
-    
-    # Fetch the scorecard with sections and scores
-    query = f"""
-    query GetScorecard {{
-        getScorecard(id: "{scorecard_id}") {{
-            id
-            name
-            key
-            externalId
-            createdAt
-            updatedAt
-            sections {{
-                items {{
-                    id
-                    name
-                    scores {{
-                        items {{
-                            id
-                            name
-                            key
-                            description
-                            type
-                            order
-                            externalId
-                        }}
-                    }}
-                }}
-            }}
-        }}
-    }}
-    """
-    
-    try:
-        result = client.execute(query)
-        scorecard_data = result.get('getScorecard')
-        
-        if not scorecard_data:
-            click.echo(f"Scorecard not found: {scorecard}")
-            return
-        
-        # Find the score by ID, name, key, or externalId
-        found_score = None
-        for section in scorecard_data.get('sections', {}).get('items', []):
-            for s in section.get('scores', {}).get('items', []):
-                if (s.get('id') == score or 
-                    s.get('name') == score or 
-                    s.get('key') == score or 
-                    str(s.get('externalId')) == score):
-                    found_score = s
-                    section_name = section.get('name')
-                    break
-            if found_score:
-                break
-        
-        if not found_score:
-            click.echo(f"Score not found: {score}")
-            return
-        
-        # Fetch score details including versions
-        score_id = found_score.get('id')
-        
-        # Get the score with versions included
-        score_query = f"""
-        query GetScoreWithVersions {{
-            getScore(id: "{score_id}") {{
-                id
-                name
-                key
-                externalId
-                type
-                order
-                championVersionId
-                versions {{
-                    items {{
-                        id
-                        configuration
-                        isFeatured
-                        createdAt
-                        updatedAt
-                        note
-                    }}
-                }}
-            }}
-        }}
-        """
-        
-        score_result = client.execute(score_query)
-        
-        # Update found_score with the more detailed version
-        if score_result and 'getScore' in score_result:
-            found_score = score_result['getScore']
-        
-        # Get versions from the score result
-        versions = found_score.get('versions', {}).get('items', [])
-        
-        # Sort versions by createdAt in descending order (newest first)
-        versions.sort(key=lambda v: v.get('createdAt', ''), reverse=True)
-        
-        # Limit to 10 versions
-        versions = versions[:10]
-        
-        # Format and display the score information
-        console = rich.console.Console()
-        
-        # Create a panel for the score
-        content = []
-        
-        # Score Information
-        content.append(f"[bold]Score Information[/bold]")
-        content.append(f"Name:        [blue]{found_score.get('name', 'N/A')}[/blue]")
-        content.append(f"Key:         [blue]{found_score.get('key', 'N/A')}[/blue]")
-        content.append(f"External ID: [magenta]{found_score.get('externalId', 'N/A')}[/magenta]")
-        content.append(f"Type:        [blue]{found_score.get('type', 'N/A')}[/blue]")
-        content.append(f"Order:       [blue]{found_score.get('order', 'N/A')}[/blue]")
-        
-        if found_score.get('description'):
-            content.append(f"Description: [blue]{found_score.get('description')}[/blue]")
-        
-        content.append("")
-        content.append(f"[bold]Scorecard Information[/bold]")
-        content.append(f"Name:        [blue]{scorecard_data.get('name', 'N/A')}[/blue]")
-        content.append(f"Key:         [blue]{scorecard_data.get('key', 'N/A')}[/blue]")
-        content.append(f"External ID: [magenta]{scorecard_data.get('externalId', 'N/A')}[/magenta]")
-        content.append(f"Section:     [blue]{section_name}[/blue]")
-        
-        # Add versions if available
-        if versions:
-            total_versions = len(found_score.get('versions', {}).get('items', []))
-            content.append("")
-            content.append(f"[bold]Score Versions[/bold] ({len(versions)} of {total_versions} total versions, newest first)")
-            
-            for i, version in enumerate(versions):
-                is_champion = found_score.get('championVersionId') == version.get('id')
-                champion_indicator = " [gold1](Champion)[/gold1]" if is_champion else ""
-                featured_indicator = " [green](Featured)[/green]" if version.get('isFeatured') else ""
-                
-                content.append(f"[bold cyan]Version {i+1}{champion_indicator}{featured_indicator}[/bold cyan]")
-                content.append(f"ID:         [dim]{version.get('id')}[/dim]")
-                content.append(f"Created:    [blue]{version.get('createdAt', 'N/A')}[/blue]")
-                
-                if version.get('note'):
-                    content.append(f"Note:       [blue]{version.get('note')}[/blue]")
-                
-                # Truncate configuration to first 4 lines
-                if version.get('configuration'):
-                    content.append(f"Configuration (truncated to 4 lines):")
-                    config_lines = version.get('configuration', '').split('\n')
-                    for j in range(min(4, len(config_lines))):
-                        content.append(f"  [dim]{config_lines[j]}[/dim]")
-                    if len(config_lines) > 4:
-                        content.append(f"  [dim]... ({len(config_lines) - 4} more lines)[/dim]")
-                
-                # Add a separator between versions
-                if i < len(versions) - 1:
-                    content.append("")
-        
-        # Create panel with the content
-        panel = rich.panel.Panel(
-            "\n".join(content),
-            title=f"[bold magenta]{found_score.get('id')}[/bold magenta]",
-            expand=True,
-            padding=(1, 2)
-        )
-        
-        console.print(panel)
-        
-    except Exception as e:
-        click.echo(f"Error getting score info: {e}")
-
-# Add the same command to the score group as an alias
-score.add_command(info) 
+        console.print(f"[red]Error during push operation: {e}[/red]") 

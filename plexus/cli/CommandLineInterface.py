@@ -39,7 +39,8 @@ from .console import console
 from .BatchCommands import batch
 from .CommandDispatch import command
 from .TaskCommands import tasks
-from .ScorecardCommands import scorecards, scores, score
+from .ScorecardCommands import scorecards
+from .ScoreCommands import scores, score
 
 # Import dashboard-specific modules
 from plexus.dashboard.api.client import PlexusDashboardClient
