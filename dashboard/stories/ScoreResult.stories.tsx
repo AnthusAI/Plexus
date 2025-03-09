@@ -33,48 +33,24 @@ const meta: Meta<typeof ScoreResultComponent> = {
 export default meta
 type Story = StoryObj<typeof ScoreResultComponent>
 
-// Sample trace data
-const sampleTrace = {
-  steps: [
+// Realistic trace data in the format provided in the example
+const realisticTraceData = {
+  "node_results": [
     {
-      name: "parse_input",
-      timestamp: "2023-09-01T12:00:00Z",
-      duration_ms: 15,
-      input: { text: "Customer inquiry about product availability" },
-      output: { intent: "product_inquiry", entities: ["availability"] }
-    },
-    {
-      name: "retrieve_context",
-      timestamp: "2023-09-01T12:00:01Z",
-      duration_ms: 120,
-      input: { query: "product availability" },
-      output: { 
-        documents: [
-          { id: "doc1", title: "Product Inventory Guide", relevance: 0.92 },
-          { id: "doc2", title: "Customer Service Protocol", relevance: 0.78 }
-        ]
-      }
-    },
-    {
-      name: "generate_response",
-      timestamp: "2023-09-01T12:00:02Z",
-      duration_ms: 350,
-      input: { 
-        query: "product availability",
-        context: "Products are typically available within 2-3 business days..."
+      "output": {
+        "explanation": "1. The 2-party commitment question occurs in the transcript at the following point: \n   \"Agent: ...we also ask to meet with all owners of the property, and that could include other family members, partners, significant others, or spouses. Fair enough?\"\n\n2. Analyzing what the customer said before this point, the customer did not mention having a spouse, co-owner, or any family members involved in property decisions. The customer only stated that they own the property and did not provide any information about other owners or decision-makers.\n\n3. Since the customer did not mention any spouse or co-owners before the 2-party commitment question, no relevant text meets the conditions.\n\n4. Therefore, none of the conditions were met before the 2-party commitment question.\n\nFinal Answer: No"
       },
-      output: { 
-        response: "Our products are typically available within 2-3 business days. Would you like me to check specific item availability for you?",
-        confidence: 0.89
-      }
+      "input": {},
+      "node_name": "na_classifier"
+    },
+    {
+      "output": {
+        "explanation": "Required Phrases Present: \n1. \"Besides yourself\" - Present\n2. \"else owns, helps make decisions on\" - Present\n3. \"property or that you would like to have present\" - Present\n4. \"when we visit\" - Present\n5. \"Thank you - I'll go ahead\" - Not applicable (customer did not indicate sole ownership)\n6. \"and notate the account to reflect that\" - Not applicable (customer did not indicate sole ownership)\n\nName Collection: The agent obtained the name of the spouse, Renata, as she was identified as a decision-maker.\n\nSpecial Circumstances: The customer did not interrupt claiming sole ownership; instead, they provided the name of their wife when asked.\n\nFinal Answer: Yes"
+      },
+      "input": {},
+      "node_name": "multi_class_classifier"
     }
-  ],
-  metadata: {
-    model: "gpt-4",
-    version: "20230801",
-    total_tokens: 487,
-    total_duration_ms: 485
-  }
+  ]
 };
 
 // Sample long text for collapsible text feature
@@ -101,7 +77,7 @@ const baseResult = {
     human_explanation: "Proactively stated the name of the customer's wife.",
     text: longText
   },
-  trace: sampleTrace,
+  trace: realisticTraceData,
   itemId: '49445947'
 };
 
@@ -173,11 +149,11 @@ export const DetailVariantIncorrect: Story = {
   },
 };
 
-export const DetailVariantStringTrace: Story = {
+export const DetailVariantWithStringTrace: Story = {
   args: {
     result: {
       ...baseResult,
-      trace: JSON.stringify(sampleTrace)
+      trace: JSON.stringify(realisticTraceData)
     },
     variant: 'detail'
   },
