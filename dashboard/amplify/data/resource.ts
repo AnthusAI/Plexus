@@ -51,7 +51,6 @@ const schema = a.schema({
             scorecards: a.hasMany('Scorecard', 'accountId'),
             evaluations: a.hasMany('Evaluation', 'accountId'),
             batchJobs: a.hasMany('BatchJob', 'accountId'),
-            items: a.hasMany('Item', 'accountId'),
             scoringJobs: a.hasMany('ScoringJob', 'accountId'),
             scoreResults: a.hasMany('ScoreResult', 'accountId'),
             tasks: a.hasMany('Task', 'accountId'),
@@ -79,8 +78,6 @@ const schema = a.schema({
             tasks: a.hasMany('Task', 'scorecardId'),
             datasets: a.hasMany('Dataset', 'scorecardId'),
             externalId: a.string(),
-            itemId: a.string(),
-            item: a.belongsTo('Item', 'itemId'),
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
@@ -196,7 +193,6 @@ const schema = a.schema({
             scoreVersionId: a.string(),
             scoreVersion: a.belongsTo('ScoreVersion', 'scoreVersionId'),
             confusionMatrix: a.json(),
-            items: a.hasMany('Item', 'evaluationId'),
             scoreResults: a.hasMany('ScoreResult', 'evaluationId'),
             scoringJobs: a.hasMany('ScoringJob', 'evaluationId'),
             scoreGoal: a.string(),
@@ -253,8 +249,6 @@ const schema = a.schema({
             idx("batchId" as BatchJobIndexFields)
         ]),
 
-
-
     ScoringJob: a
         .model({
             status: a.string().required(),
@@ -263,8 +257,6 @@ const schema = a.schema({
             errorMessage: a.string(),
             errorDetails: a.json(),
             metadata: a.json(),
-            itemId: a.string().required(),
-            item: a.belongsTo('Item', 'itemId'),
             accountId: a.string().required(),
             account: a.belongsTo('Account', 'accountId'),
             scorecardId: a.string().required(),
@@ -284,7 +276,6 @@ const schema = a.schema({
         ])
         .secondaryIndexes((idx) => [
             idx("accountId"),
-            idx("itemId"),
             idx("scorecardId"),
             idx("scoreId"),
             idx("evaluationId")
@@ -298,8 +289,6 @@ const schema = a.schema({
             metadata: a.json(),
             trace: a.json(),
             correct: a.boolean(),
-            itemId: a.string().required(),
-            item: a.belongsTo('Item', 'itemId'),
             accountId: a.string().required(),
             account: a.belongsTo('Account', 'accountId'),
             scoringJobId: a.string(),
@@ -319,7 +308,6 @@ const schema = a.schema({
         ])
         .secondaryIndexes((idx: (field: ScoreResultIndexFields) => any) => [
             idx("accountId").sortKeys(["updatedAt"]),
-            idx("itemId"),
             idx("scoringJobId"),
             idx("scorecardId"),
             idx("evaluationId"),
