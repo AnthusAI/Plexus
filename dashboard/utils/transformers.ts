@@ -9,7 +9,7 @@
  */
 
 import type { Schema } from '../amplify/data/resource';
-import type { AmplifyTask, ProcessedTask, ProcessedTaskStage, TaskStageType, ProcessedEvaluation } from './data-operations';
+import type { AmplifyTask, ProcessedTask, ProcessedTaskStage, TaskStageType } from './data-operations';
 
 export function convertToAmplifyTask(rawData: any): AmplifyTask {
   // Create a lazy loader for stages only if stages exist
@@ -209,28 +209,29 @@ export async function processTask(task: AmplifyTask): Promise<ProcessedTask> {
 
       evaluation = {
         id: evaluationData.data?.id || '',
-        type: evaluationData.data?.type || '',
-        metrics: evaluationData.data?.metrics,
+        type: evaluationData.data?.type || 'unknown',
+        metrics,
         metricsExplanation: evaluationData.data?.metricsExplanation,
-        inferences: evaluationData.data?.inferences || 0,
-        accuracy: evaluationData.data?.accuracy || 0,
-        cost: evaluationData.data?.cost || 0,
+        inferences: Number(evaluationData.data?.inferences) || 0,
+        accuracy: typeof evaluationData.data?.accuracy === 'number' ? evaluationData.data.accuracy : 0,
+        cost: evaluationData.data?.cost ?? null,
         status: evaluationData.data?.status || 'PENDING',
         startedAt: evaluationData.data?.startedAt,
-        elapsedSeconds: evaluationData.data?.elapsedSeconds || 0,
-        estimatedRemainingSeconds: evaluationData.data?.estimatedRemainingSeconds || 0,
-        totalItems: evaluationData.data?.totalItems || 0,
-        processedItems: evaluationData.data?.processedItems || 0,
+        elapsedSeconds: evaluationData.data?.elapsedSeconds ?? null,
+        estimatedRemainingSeconds: evaluationData.data?.estimatedRemainingSeconds ?? null,
+        totalItems: Number(evaluationData.data?.totalItems) || 0,
+        processedItems: Number(evaluationData.data?.processedItems) || 0,
         errorMessage: evaluationData.data?.errorMessage,
         errorDetails: evaluationData.data?.errorDetails,
-        scoreGoal: evaluationData.data?.scoreGoal,
         confusionMatrix,
+        scoreGoal: evaluationData.data?.scoreGoal,
         datasetClassDistribution,
         isDatasetClassDistributionBalanced: evaluationData.data?.isDatasetClassDistributionBalanced,
         predictedClassDistribution,
         isPredictedClassDistributionBalanced: evaluationData.data?.isPredictedClassDistributionBalanced,
         scoreResults,
         accountId: evaluationData.data?.accountId || '',
+        items: evaluationData.data?.items || (() => Promise.resolve({ data: [] })),
         scoringJobs: evaluationData.data?.scoringJobs || (() => Promise.resolve({ data: [] })),
         account: evaluationData.data?.account || (() => Promise.resolve({ data: null })),
         createdAt: evaluationData.data?.createdAt || new Date().toISOString(),
@@ -238,9 +239,8 @@ export async function processTask(task: AmplifyTask): Promise<ProcessedTask> {
         task: null,
         scorecard: null,
         score: null,
-        scoreVersionId: evaluationData.data?.scoreVersionId,
-        scoreVersion: null
-      } as unknown as ProcessedEvaluation;
+        scoreVersion: evaluationData.data?.scoreVersion || (() => Promise.resolve({ data: null }))
+      };
     } catch (error) {
       console.error('Error transforming evaluation data:', error);
     }

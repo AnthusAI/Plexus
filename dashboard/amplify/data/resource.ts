@@ -11,7 +11,7 @@ type AuthorizationCallback = {
 // Define model-specific index types
 type AccountIndexFields = "name" | "key" | "description";
 type ScorecardIndexFields = "name" | "key" | "description" | "accountId" | 
-    "externalId";
+    "externalId" | "itemId";
 type ScorecardSectionIndexFields = "name" | "scorecardId" | "order";
 type ScoreIndexFields = "name" | "order" | "sectionId" | "type" | "accuracy" | 
     "version" | "aiProvider" | "aiModel" | "externalId" | "key";
@@ -21,9 +21,10 @@ type EvaluationIndexFields = "accountId" | "scorecardId" | "type" | "accuracy" |
     "scoreGoal" | "metricsExplanation" | "inferences" | "cost";
 type BatchJobIndexFields = "accountId" | "scorecardId" | "type" | "scoreId" | 
     "status" | "modelProvider" | "modelName" | "batchId";
-type ScoringJobIndexFields = "accountId" | "scorecardId" | "status" | 
+type ItemIndexFields = "name" | "description" | "accountId" | "evaluationId" | "updatedAt" | "createdAt" | "isEvaluation";
+type ScoringJobIndexFields = "accountId" | "scorecardId" | "itemId" | "status" | 
     "scoreId" | "evaluationId" | "startedAt" | "completedAt" | "errorMessage" | "updatedAt" | "createdAt";
-type ScoreResultIndexFields = "accountId" | "scorecardId" | 
+type ScoreResultIndexFields = "accountId" | "scorecardId" | "itemId" | 
     "scoringJobId" | "evaluationId" | "scoreVersionId" | "updatedAt" | "createdAt";
 type BatchJobScoringJobIndexFields = "batchJobId" | "scoringJobId";
 type TaskIndexFields = "accountId" | "type" | "status" | "target" | 
@@ -50,6 +51,7 @@ const schema = a.schema({
             scorecards: a.hasMany('Scorecard', 'accountId'),
             evaluations: a.hasMany('Evaluation', 'accountId'),
             batchJobs: a.hasMany('BatchJob', 'accountId'),
+            items: a.hasMany('Item', 'accountId'),
             scoringJobs: a.hasMany('ScoringJob', 'accountId'),
             scoreResults: a.hasMany('ScoreResult', 'accountId'),
             tasks: a.hasMany('Task', 'accountId'),
@@ -76,7 +78,10 @@ const schema = a.schema({
             scoreResults: a.hasMany('ScoreResult', 'scorecardId'),
             tasks: a.hasMany('Task', 'scorecardId'),
             datasets: a.hasMany('Dataset', 'scorecardId'),
+            items: a.hasMany('Item', 'scorecardId'),
             externalId: a.string(),
+            itemId: a.string(),
+            item: a.belongsTo('Item', 'itemId'),
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
@@ -124,6 +129,7 @@ const schema = a.schema({
             datasets: a.hasMany('Dataset', 'scoreId'),
             tasks: a.hasMany('Task', 'scoreId'),
             versions: a.hasMany('ScoreVersion', 'scoreId'),
+            items: a.hasMany('Item', 'scoreId'),
             championVersionId: a.string(),
             championVersion: a.belongsTo('ScoreVersion', 'championVersionId'),
             externalId: a.string().required()
@@ -192,6 +198,7 @@ const schema = a.schema({
             scoreVersionId: a.string(),
             scoreVersion: a.belongsTo('ScoreVersion', 'scoreVersionId'),
             confusionMatrix: a.json(),
+            items: a.hasMany('Item', 'evaluationId'),
             scoreResults: a.hasMany('ScoreResult', 'evaluationId'),
             scoringJobs: a.hasMany('ScoringJob', 'evaluationId'),
             scoreGoal: a.string(),
@@ -248,6 +255,38 @@ const schema = a.schema({
             idx("batchId" as BatchJobIndexFields)
         ]),
 
+    Item: a
+        .model({
+            externalId: a.string(),
+            description: a.string(),
+            accountId: a.string().required(),
+            account: a.belongsTo('Account', 'accountId'),
+            scoringJobs: a.hasMany('ScoringJob', 'itemId'),
+            scoreResults: a.hasMany('ScoreResult', 'itemId'),
+            scorecards: a.hasMany('Scorecard', 'itemId'),
+            evaluationId: a.string(),
+            evaluation: a.belongsTo('Evaluation', 'evaluationId'),
+            scorecardId: a.string(),
+            scorecard: a.belongsTo('Scorecard', 'scorecardId'),
+            scoreId: a.string(),
+            score: a.belongsTo('Score', 'scoreId'),
+            updatedAt: a.datetime(),
+            createdAt: a.datetime(),
+            isEvaluation: a.boolean().required(),
+        })
+        .authorization((allow: AuthorizationCallback) => [
+            allow.publicApiKey(),
+            allow.authenticated()
+        ])
+        .secondaryIndexes((idx) => [
+            idx("accountId").sortKeys(["updatedAt"]),
+            idx("externalId"),
+            idx("scorecardId").sortKeys(["updatedAt"]),
+            idx("scoreId").sortKeys(["updatedAt"]),
+            // Composite GSI for accountId+externalId to enforce uniqueness within an account
+            idx("accountId").sortKeys(["externalId"]).name("byAccountAndExternalId")
+        ]),
+
     ScoringJob: a
         .model({
             status: a.string().required(),
@@ -256,6 +295,8 @@ const schema = a.schema({
             errorMessage: a.string(),
             errorDetails: a.json(),
             metadata: a.json(),
+            itemId: a.string().required(),
+            item: a.belongsTo('Item', 'itemId'),
             accountId: a.string().required(),
             account: a.belongsTo('Account', 'accountId'),
             scorecardId: a.string().required(),
@@ -275,6 +316,7 @@ const schema = a.schema({
         ])
         .secondaryIndexes((idx) => [
             idx("accountId"),
+            idx("itemId"),
             idx("scorecardId"),
             idx("scoreId"),
             idx("evaluationId")
@@ -288,6 +330,8 @@ const schema = a.schema({
             metadata: a.json(),
             trace: a.json(),
             correct: a.boolean(),
+            itemId: a.string().required(),
+            item: a.belongsTo('Item', 'itemId'),
             accountId: a.string().required(),
             account: a.belongsTo('Account', 'accountId'),
             scoringJobId: a.string(),
@@ -307,6 +351,7 @@ const schema = a.schema({
         ])
         .secondaryIndexes((idx: (field: ScoreResultIndexFields) => any) => [
             idx("accountId").sortKeys(["updatedAt"]),
+            idx("itemId"),
             idx("scoringJobId"),
             idx("scorecardId"),
             idx("evaluationId"),
