@@ -53,6 +53,14 @@ export const amplifyClient = {
     get: async (params: any) => {
       const response = await (getClient().models.Account as any).get(params)
       return { data: response.data as Schema['Account']['type'] | null }
+    },
+    create: async (data: {
+      name: string;
+      key: string;
+      description?: string;
+    }) => {
+      const response = await (getClient().models.Account as any).create(data)
+      return { data: response.data as Schema['Account']['type'] }
     }
   },
   Scorecard: {
