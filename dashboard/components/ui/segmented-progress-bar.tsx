@@ -44,11 +44,15 @@ export function SegmentedProgressBar({
           const isRunning = segment.status === 'RUNNING'
 
           // Determine color based on completion state first, then position
-          const segmentColor = isCompleted ? segment.color ?? "bg-primary" :
-                             isRunning ? segment.color ?? "bg-secondary" :
-                             isBeforeCurrent ? segment.color ?? "bg-secondary" :
-                             isCurrent ? error ? "bg-false" : segment.color ?? "bg-secondary" :
-                             "bg-progress-background";
+          const baseColor = isCompleted ? segment.color ?? "bg-primary" :
+                         isRunning ? segment.color ?? "bg-secondary" :
+                         isBeforeCurrent ? segment.color ?? "bg-secondary" :
+                         isCurrent ? error ? "bg-false" : segment.color ?? "bg-secondary" :
+                         "bg-progress-background";
+
+          // Add -selected suffix if selected
+          const segmentColor = isSelected && baseColor !== "bg-progress-background" ? 
+            `${baseColor}-selected` : baseColor;
 
           return (
             <div
@@ -60,8 +64,9 @@ export function SegmentedProgressBar({
               )}
             >
               <span className={cn(
-                "text-sm font-medium truncate px-1 text-primary-foreground min-w-0 max-w-full",
-                !isCurrent && "text-muted-foreground"
+                "text-sm font-medium truncate px-1 min-w-0 max-w-full",
+                !isCurrent && "text-muted-foreground",
+                isCurrent && isSelected ? "text-primary-selected-foreground" : "text-primary-foreground"
               )}>
                 {isCurrent && error ? errorLabel : segment.label}
               </span>

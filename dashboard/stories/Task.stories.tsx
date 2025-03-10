@@ -2,6 +2,16 @@ import React from 'react'
 import type { Meta, StoryObj } from '@storybook/react'
 import { Task, TaskHeader, TaskContent, TaskComponentProps, BaseTaskProps } from '../components/Task'
 import { Activity } from 'lucide-react'
+import { BaseTaskData } from '@/types/base'
+
+interface TaskStoryData extends BaseTaskData {
+  id: string
+  title: string
+  description?: string
+  command?: string
+  elapsedTime?: string
+  estimatedTimeRemaining?: string
+}
 
 const meta = {
   title: 'Tasks/Task',
@@ -26,7 +36,7 @@ const meta = {
 } satisfies Meta<typeof Task>
 
 export default meta
-type Story = StoryObj<TaskComponentProps<unknown>>
+type Story = StoryObj<TaskComponentProps<TaskStoryData>>
 
 const createTask = (id: string, overrides = {}) => ({
   id,
@@ -36,10 +46,16 @@ const createTask = (id: string, overrides = {}) => ({
   time: '2 hours ago',
   description: 'Task Description',
   command: 'python process_data.py --input data.csv --output results.json',
+  data: {
+    id,
+    title: 'Sample Task',
+    description: 'Task Description',
+    command: 'python process_data.py --input data.csv --output results.json'
+  },
   ...overrides
 })
 
-const TaskStoryHeader = (props: BaseTaskProps<unknown>) => (
+const TaskStoryHeader = (props: BaseTaskProps<TaskStoryData>) => (
   <TaskHeader {...props}>
     <div className="flex justify-end w-full">
       <Activity className="h-6 w-6" />
@@ -47,11 +63,11 @@ const TaskStoryHeader = (props: BaseTaskProps<unknown>) => (
   </TaskHeader>
 )
 
-const TaskStoryContent = (props: BaseTaskProps<unknown>) => (
+const TaskStoryContent = (props: BaseTaskProps<TaskStoryData>) => (
   <TaskContent {...props} />
 )
 
-const baseArgs: Omit<TaskComponentProps<unknown>, 'task'> = {
+const baseArgs: Omit<TaskComponentProps<TaskStoryData>, 'task'> = {
   variant: 'grid',
   renderHeader: TaskStoryHeader,
   renderContent: TaskStoryContent,
@@ -353,7 +369,7 @@ export const Detail: Story = {
   ]
 }
 
-export const DetailFullWidth = {
+export const DetailFullWidth: Story = {
   args: {
     ...Detail.args,
     isFullWidth: true,
@@ -362,7 +378,7 @@ export const DetailFullWidth = {
     layout: 'fullscreen',
   },
   decorators: [
-    (Story) => (
+    (Story: React.ComponentType) => (
       <div className="w-full h-screen p-4">
         <Story />
       </div>
@@ -405,7 +421,7 @@ export const Command: Story = {
     
     const variants: Array<{
       title: string;
-      args: TaskComponentProps<unknown>;
+      args: TaskComponentProps<TaskStoryData>;
     }> = [
       {
         title: 'Hidden Command',

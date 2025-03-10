@@ -11,7 +11,7 @@ import { useMediaQuery } from '@/hooks/use-media-query'
 import { Task, TaskHeader, TaskContent, type BaseTaskProps } from '@/components/Task'
 import { Activity, Square, X, MoreHorizontal, RefreshCw, FlaskConical, FlaskRound, TestTubes } from 'lucide-react'
 import { useAuthenticator } from '@aws-amplify/ui-react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname, useParams } from 'next/navigation'
 import ScorecardContext from "@/components/ScorecardContext"
 import { TaskDispatchButton, activityConfig } from "@/components/task-dispatch"
 import { CardButton } from "@/components/CardButton"
@@ -136,29 +136,6 @@ function transformTaskToActivity(task: ProcessedTask) {
     throw new Error('Invalid task: task or task.id is null')
   }
 
-  // Add detailed logging of the raw task data
-  console.debug('transformTaskToActivity - Raw task data:', {
-    taskId: task.id,
-    type: task.type,
-    rawEvaluation: task.evaluation,
-    hasEvaluation: !!task.evaluation,
-    evaluationFields: task.evaluation ? {
-      id: task.evaluation.id,
-      type: task.evaluation.type,
-      metrics: task.evaluation.metrics,
-      accuracy: task.evaluation.accuracy,
-      processedItems: task.evaluation.processedItems,
-      totalItems: task.evaluation.totalItems,
-      scoreResults: task.evaluation.scoreResults,
-      confusionMatrix: task.evaluation.confusionMatrix,
-      scoreGoal: task.evaluation.scoreGoal,
-      datasetClassDistribution: task.evaluation.datasetClassDistribution,
-      predictedClassDistribution: task.evaluation.predictedClassDistribution
-    } : null,
-    rawStages: task.stages,
-    rawMetadata: task.metadata
-  });
-
   // Parse metadata for task info - ensure we have a default empty object
   let metadata: Record<string, unknown> = {}
   try {
@@ -227,21 +204,6 @@ function transformTaskToActivity(task: ProcessedTask) {
   
   if (evaluation) {
     try {
-      // Log raw evaluation data before transformation
-      console.debug('Raw evaluation data before transformation:', {
-        taskId: task.id,
-        evaluation: {
-          id: evaluation.id,
-          type: evaluation.type,
-          metrics: evaluation.metrics,
-          accuracy: evaluation.accuracy,
-          processedItems: evaluation.processedItems,
-          totalItems: evaluation.totalItems,
-          scoreResults: evaluation.scoreResults,
-          confusionMatrix: evaluation.confusionMatrix,
-          scoreGoal: evaluation.scoreGoal
-        }
-      });
 
       // Parse metrics if it's a string
       let parsedMetrics = [];
@@ -316,13 +278,21 @@ function transformTaskToActivity(task: ProcessedTask) {
         isDatasetClassDistributionBalanced: evaluation.isDatasetClassDistributionBalanced,
         predictedClassDistribution: parsedPredictedClassDistribution,
         isPredictedClassDistributionBalanced: evaluation.isPredictedClassDistributionBalanced,
-        scoreResults: evaluation.scoreResults?.items?.map(result => ({
+        scoreResults: evaluation.scoreResults?.map((result: {
+          id: string;
+          value: string | number;
+          confidence: number | null;
+          metadata: any;
+          explanation: string | null;
+          itemId: string | null;
+        }) => ({
           id: result.id,
           value: result.value,
           confidence: result.confidence,
+          metadata: result.metadata,
           explanation: result.explanation,
-          metadata: typeof result.metadata === 'string' ? JSON.parse(result.metadata) : result.metadata,
-          itemId: result.itemId
+          itemId: result.itemId,
+          trace: null
         })) || [],
         task: {
           id: task.id,
@@ -353,21 +323,6 @@ function transformTaskToActivity(task: ProcessedTask) {
         }
       }
 
-      // Log the transformed evaluation data
-      if (evaluationData) {
-        console.debug('Transformed evaluation data:', {
-          taskId: task.id,
-          evaluationData: {
-            metrics: evaluationData.metrics,
-            accuracy: evaluationData.accuracy,
-            processedItems: evaluationData.processedItems,
-            totalItems: evaluationData.totalItems,
-            scoreResults: evaluationData.scoreResults?.length,
-            confusionMatrix: evaluationData.confusionMatrix,
-            scoreGoal: evaluationData.scoreGoal
-          }
-        });
-      }
     } catch (error) {
       console.error('Error transforming evaluation data:', error, {
         evaluationId: evaluation.id,
@@ -457,16 +412,22 @@ function transformTaskToActivity(task: ProcessedTask) {
   return result
 }
 
-export default function ActivityDashboard() {
+export default function ActivityDashboard({ 
+  initialSelectedTaskId = null 
+}: { 
+  initialSelectedTaskId?: string | null 
+} = {}) {
   const { authStatus, user } = useAuthenticator(context => [context.authStatus]);
   const router = useRouter();
+  const pathname = usePathname();
+  const params = useParams();
   
   // State hooks
   const [displayedTasks, setDisplayedTasks] = useState<ReturnType<typeof transformTaskToActivity>[]>([])
   const [isInitialLoading, setIsInitialLoading] = useState(true)
   const [recentTasks, setRecentTasks] = useState<ProcessedTask[]>([])
-  const [selectedTask, setSelectedTask] = useState<string | null>(null)
-  const [isFullWidth, setIsFullWidth] = useState(false)
+  const [selectedTask, setSelectedTask] = useState<string | null>(initialSelectedTaskId)
+  const [isFullWidth, setIsFullWidth] = useState(!!initialSelectedTaskId)
   const [leftPanelWidth, setLeftPanelWidth] = useState(50)
   const [selectedScorecard, setSelectedScorecard] = useState<string | null>(null)
   const [selectedScore, setSelectedScore] = useState<string | null>(null)
@@ -474,6 +435,67 @@ export default function ActivityDashboard() {
   const { ref, inView } = useInView({
     threshold: 0,
   })
+
+  // Handle deep linking - check if we're on a specific task page
+  useEffect(() => {
+    // If we have an ID in the URL and we're on the task detail page
+    if (params && 'id' in params && pathname === `/lab/tasks/${params.id}`) {
+      setSelectedTask(params.id as string);
+      if (isNarrowViewport) {
+        setIsFullWidth(true);
+      }
+    }
+  }, [params, pathname, isNarrowViewport]);
+
+  // Handle browser back/forward navigation with popstate event
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      // Extract task ID from URL if present
+      const match = window.location.pathname.match(/\/lab\/tasks\/([^\/]+)$/);
+      const idFromUrl = match ? match[1] : null;
+      
+      // Update the selected task ID based on the URL
+      setSelectedTask(idFromUrl);
+      if (idFromUrl && isNarrowViewport) {
+        setIsFullWidth(true);
+      } else if (!idFromUrl && isNarrowViewport) {
+        setIsFullWidth(false);
+      }
+    };
+
+    // Add event listener for popstate (browser back/forward)
+    window.addEventListener('popstate', handlePopState);
+    
+    // Clean up event listener on unmount
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [isNarrowViewport]);
+
+  // Custom setter for selectedTask that handles both state and URL
+  const handleSelectTask = (id: string | null) => {
+    // Only update state if the selected task has changed
+    if (id !== selectedTask) {
+      setSelectedTask(id);
+      
+      // Update URL without triggering a navigation/re-render
+      const newPathname = id ? `/lab/tasks/${id}` : '/lab/activity';
+      window.history.pushState(null, '', newPathname);
+      
+      if (id && isNarrowViewport) {
+        setIsFullWidth(true);
+      }
+    }
+  };
+
+  // Handle closing the selected task
+  const handleCloseTask = () => {
+    setSelectedTask(null);
+    setIsFullWidth(false);
+    
+    // Update URL without triggering a navigation/re-render
+    window.history.pushState(null, '', '/lab/activity');
+  };
 
   // Add authentication check
   useEffect(() => {
@@ -539,21 +561,6 @@ export default function ActivityDashboard() {
 
   // Handle task updates
   useEffect(() => {
-    console.debug('Processing recentTasks for display:', {
-      count: recentTasks.length,
-      taskIds: recentTasks.map(task => task.id),
-      taskDetails: recentTasks.map(task => ({
-        id: task.id,
-        status: task.status,
-        stages: task.stages?.map(s => ({
-          name: s.name,
-          status: s.status,
-          processedItems: s.processedItems,
-          totalItems: s.totalItems
-        }))
-      }))
-    });
-
     const transformed = recentTasks.map(transformTaskToActivity);
     
     // Sort tasks: use createdAt for in-progress tasks, updatedAt for completed ones
@@ -724,10 +731,7 @@ export default function ActivityDashboard() {
           controlButtons={controlButtons}
           isFullWidth={isFullWidth}
           onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
-          onClose={() => {
-            setSelectedTask(null)
-            setIsFullWidth(false)
-          }}
+          onClose={handleCloseTask}
           commandDisplay="full"
         />
       )
@@ -740,10 +744,7 @@ export default function ActivityDashboard() {
         controlButtons={controlButtons}
         isFullWidth={isFullWidth}
         onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
-        onClose={() => {
-          setSelectedTask(null)
-          setIsFullWidth(false)
-        }}
+        onClose={handleCloseTask}
         renderHeader={TaskHeader}
         renderContent={(props) => <TaskContent {...props} />}
         commandDisplay="full"
@@ -786,10 +787,7 @@ export default function ActivityDashboard() {
               <div 
                 key={task.id} 
                 onClick={() => {
-                  setSelectedTask(task.id)
-                  if (isNarrowViewport) {
-                    setIsFullWidth(true)
-                  }
+                  handleSelectTask(task.id)
                 }}
               >
                 {task.type.toLowerCase().includes('evaluation') ? (
@@ -798,10 +796,7 @@ export default function ActivityDashboard() {
                     task={task}
                     isSelected={task.id === selectedTask}
                     onClick={() => {
-                      setSelectedTask(task.id)
-                      if (isNarrowViewport) {
-                        setIsFullWidth(true)
-                      }
+                      handleSelectTask(task.id)
                     }}
                   />
                 ) : (
@@ -810,10 +805,7 @@ export default function ActivityDashboard() {
                     task={task}
                     isSelected={task.id === selectedTask}
                     onClick={() => {
-                      setSelectedTask(task.id)
-                      if (isNarrowViewport) {
-                        setIsFullWidth(true)
-                      }
+                      handleSelectTask(task.id)
                     }}
                     renderHeader={TaskHeader}
                     renderContent={(props) => <TaskContent {...props} />}

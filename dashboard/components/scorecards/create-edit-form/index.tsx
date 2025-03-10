@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Plus, X, Square, RectangleVertical, ChevronUp, ChevronDown, Pencil } from "lucide-react"
+import { Plus, X, Square, Columns2, ChevronUp, ChevronDown, Pencil } from "lucide-react"
 import { amplifyClient } from "@/utils/amplify-client"
 import { generateClient } from '@aws-amplify/api'
 import type { Schema } from "@/amplify/data/resource"
@@ -170,7 +170,6 @@ export function ScorecardForm({
                 name: section.name,
                 order: section.order,
                 scores: scoresResult.data?.map(score => {
-                  const metadata = score.configuration as any ?? {}
                   return {
                     id: score.id,
                     name: score.name,
@@ -183,10 +182,10 @@ export function ScorecardForm({
                     aiProvider: score.aiProvider ?? undefined,
                     aiModel: score.aiModel ?? undefined,
                     metadata: {
-                      configuration: metadata.configuration ?? {},
-                      distribution: metadata.distribution ?? [],
-                      versionHistory: metadata.versionHistory ?? [],
-                      isFineTuned: metadata.isFineTuned ?? false
+                      configuration: {},
+                      distribution: [],
+                      versionHistory: [],
+                      isFineTuned: false
                     }
                   }
                 }) ?? []
@@ -541,7 +540,7 @@ export function ScorecardForm({
           <div className="flex items-center space-x-2">
             {!isNarrowViewport && onToggleWidth && (
               <CardButton
-                icon={isFullWidth ? RectangleVertical : Square}
+                icon={isFullWidth ? Columns2 : Square}
                 onClick={onToggleWidth}
               />
             )}

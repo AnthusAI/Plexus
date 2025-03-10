@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect } from "react"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import { Square, RectangleVertical, X, Settings } from "lucide-react"
+import { Square, Columns2, X, Settings } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import {
   Table,
@@ -288,7 +288,7 @@ function renderSelectedAlert({
         <div className="flex items-center space-x-2">
           {!isNarrowViewport && (
             <CardButton
-              icon={isFullWidth ? RectangleVertical : Square}
+              icon={isFullWidth ? Columns2 : Square}
               onClick={() => setIsFullWidth(!isFullWidth)}
             />
           )}

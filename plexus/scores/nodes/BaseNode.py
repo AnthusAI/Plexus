@@ -43,6 +43,71 @@ class BaseNode(ABC, LangChainUser):
             raise ValueError("Node name is required but not provided in parameters")
         return self.parameters.name
 
+    def log_state(self, state, input_state=None, output_state=None, node_suffix=""):
+        """
+        Log the current state to the trace.node_results list in the state's metadata.
+        
+        Parameters
+        ----------
+        state : GraphState
+            The current state object
+        input_state : dict, optional
+            The input state to log
+        output_state : dict, optional
+            The output state to log
+        node_suffix : str, optional
+            A suffix to add to the node name for more specific logging
+            
+        Returns
+        -------
+        GraphState
+            A new state object with the updated trace information
+        """
+        # Use empty dicts if input_state or output_state not provided
+        input_state = input_state or {}
+        output_state = output_state or {}
+            
+        # Create the node name with optional suffix
+        full_node_name = self.node_name
+        if node_suffix:
+            full_node_name = f"{full_node_name}.{node_suffix}"
+            
+        # Create the node result
+        node_result = {
+            "node_name": full_node_name,
+            "input": input_state,
+            "output": output_state
+        }
+        
+        # Get the state as a dictionary
+        if hasattr(state, 'dict'):
+            state_dict = state.dict()
+        elif hasattr(state, 'model_dump'):
+            state_dict = state.model_dump()
+        else:
+            state_dict = dict(state)
+            
+        # Initialize metadata if it doesn't exist
+        if 'metadata' not in state_dict or state_dict['metadata'] is None:
+            state_dict['metadata'] = {}
+            
+        # Initialize trace if it doesn't exist
+        if 'trace' not in state_dict['metadata']:
+            state_dict['metadata']['trace'] = {}
+            
+        # Initialize node_results if it doesn't exist
+        if 'node_results' not in state_dict['metadata']['trace']:
+            state_dict['metadata']['trace']['node_results'] = []
+            
+        # Add the new node result
+        state_dict['metadata']['trace']['node_results'].append(node_result)
+        
+        # Log for debugging
+        logging.info(f"=== LOGGING STATE FOR {full_node_name} ===")
+        
+        # Create and return a new state object
+        return self.GraphState(**state_dict)
+
     def get_prompt_templates(self):
         """
         Get a list of prompt templates for the node, by looking for the "system_message" parameter for

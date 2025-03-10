@@ -27,7 +27,7 @@ interface FeedbackTaskStoryProps extends Omit<BaseTaskProps, 'task'> {
   }
 }
 
-const createTask = (id: number, processedItems: number, totalItems: number): FeedbackTaskStoryProps => ({
+const createTask = (id: string, processedItems: number, totalItems: number): FeedbackTaskStoryProps => ({
   variant: 'grid',
   task: {
     id,
@@ -37,6 +37,8 @@ const createTask = (id: number, processedItems: number, totalItems: number): Fee
     time: '2 hours ago',
     description: 'Feedback Description',
     data: {
+      id,
+      title: 'Feedback Task',
       progress: (processedItems / totalItems) * 100,
       elapsedTime: '01:30:00',
       processedItems,
@@ -48,12 +50,12 @@ const createTask = (id: number, processedItems: number, totalItems: number): Fee
 });
 
 export const Grid: Story = {
-  args: createTask(1, 75, 100),
+  args: createTask('1', 75, 100),
 };
 
 export const Detail: Story = {
   args: {
-    ...createTask(2, 90, 100),
+    ...createTask('2', 90, 100),
     variant: 'detail',
     isFullWidth: false,
     onToggleFullWidth: () => console.log('Toggle full width'),
@@ -74,10 +76,10 @@ export const DetailFullWidth: Story = {
 export const GridWithMany = {
   render: () => (
     <div className="grid grid-cols-2 gap-4">
-      <FeedbackTask {...createTask(1, 25, 100)} />
-      <FeedbackTask {...createTask(2, 50, 100)} />
-      <FeedbackTask {...createTask(3, 75, 100)} />
-      <FeedbackTask {...createTask(4, 100, 100)} />
+      <FeedbackTask {...createTask('1', 25, 100)} />
+      <FeedbackTask {...createTask('2', 50, 100)} />
+      <FeedbackTask {...createTask('3', 75, 100)} />
+      <FeedbackTask {...createTask('4', 100, 100)} />
     </div>
   ),
 };

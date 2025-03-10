@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect, useRef, useCallback } from "react"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import { Square, RectangleVertical, X, ChevronDown, ChevronUp, Info, MessageCircleMore, Plus, ThumbsUp, ThumbsDown } from "lucide-react"
+import { Square, Columns2, X, ChevronDown, ChevronUp, Info, MessageCircleMore, Plus, ThumbsUp, ThumbsDown, Loader2 } from "lucide-react"
 import { format, formatDistanceToNow, parseISO } from "date-fns"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -28,6 +28,9 @@ import ItemContext from "@/components/ItemContext"
 import ItemDetail from './ItemDetail'
 import { formatTimeAgo } from '@/utils/format-time'
 import type { FeedbackItem } from '@/components/feedback-dashboard'
+import ItemCard, { ItemData } from './items/ItemCard'
+import { amplifyClient, graphqlRequest } from '@/utils/amplify-client'
+import { useAuthenticator } from '@aws-amplify/ui-react'
 
 // Get the current date and time
 const now = new Date();
@@ -42,53 +45,26 @@ const relativeDate = (days: number, hours: number, minutes: number) => {
 
 // First, let's define an interface for the item
 interface Item {
-  id: number;
-  scorecard: string;
-  score: number;
-  date: string;
-  status: string;
-  results: number;
-  inferences: number;
-  cost: string;
-  scoreResults?: typeof sampleScoreResults;  // Make this optional
+  id: string;
+  externalId?: string;
+  description?: string;
+  accountId: string;
+  scorecardId?: string;
+  scoreId?: string;
+  evaluationId?: string;
+  updatedAt?: string;
+  createdAt?: string;
+  isEvaluation: boolean;
+  
+  // Fields for UI compatibility with existing code
+  scorecard?: string;
+  score?: number;
+  date?: string;
+  status?: string;
+  results?: number;
+  inferences?: number;
+  cost?: string;
 }
-
-// Rename this to initialItems
-const initialItems: Item[] = [
-  { id: 30, scorecard: "CS3 Services v2", score: 80, date: relativeDate(0, 0, 5), status: "New", results: 0, inferences: 0, cost: "$0.000" },
-  { id: 29, scorecard: "CS3 Audigy", score: 89, date: relativeDate(0, 0, 15), status: "New", results: 0, inferences: 0, cost: "$0.000" },
-  { id: 28, scorecard: "AW IB Sales", score: 96, date: relativeDate(0, 0, 30), status: "New", results: 0, inferences: 0, cost: "$0.000" },
-  { id: 27, scorecard: "CS3 Nexstar v1", score: 88, date: relativeDate(0, 1, 0), status: "Error", results: 2, inferences: 4, cost: "$0.005" },
-  { id: 26, scorecard: "SelectQuote Term Life v1", score: 83, date: relativeDate(0, 1, 30), status: "Scoring", results: 6, inferences: 24, cost: "$0.031" },
-  { id: 25, scorecard: "AW IB Sales", score: 94, date: relativeDate(0, 2, 0), status: "Done", results: 19, inferences: 152, cost: "$0.199" },
-  { id: 24, scorecard: "CS3 Audigy", score: 86, date: relativeDate(0, 3, 0), status: "Done", results: 17, inferences: 68, cost: "$0.089" },
-  { id: 23, scorecard: "CS3 Services v2", score: 79, date: relativeDate(0, 4, 0), status: "Done", results: 16, inferences: 32, cost: "$0.042" },
-  { id: 22, scorecard: "CS3 Nexstar v1", score: 91, date: relativeDate(0, 5, 0), status: "Done", results: 17, inferences: 68, cost: "$0.089" },
-  { id: 21, scorecard: "SelectQuote Term Life v1", score: 89, date: relativeDate(0, 6, 0), status: "Done", results: 13, inferences: 52, cost: "$0.068" },
-  { id: 20, scorecard: "CS3 Services v2", score: 82, date: relativeDate(1, 0, 0), status: "Done", results: 15, inferences: 30, cost: "$0.039" },
-  { id: 19, scorecard: "AW IB Sales", score: 93, date: relativeDate(1, 2, 0), status: "Done", results: 18, inferences: 144, cost: "$0.188" },
-  { id: 18, scorecard: "CS3 Audigy", score: 87, date: relativeDate(1, 4, 0), status: "Done", results: 16, inferences: 64, cost: "$0.084" },
-  { id: 17, scorecard: "SelectQuote Term Life v1", score: 85, date: relativeDate(1, 6, 0), status: "Done", results: 14, inferences: 56, cost: "$0.073" },
-  { id: 16, scorecard: "CS3 Nexstar v1", score: 90, date: relativeDate(1, 8, 0), status: "Done", results: 18, inferences: 72, cost: "$0.094" },
-  { id: 15, scorecard: "CS3 Services v2", score: 81, date: relativeDate(1, 10, 0), status: "Done", results: 17, inferences: 34, cost: "$0.044" },
-  { id: 14, scorecard: "AW IB Sales", score: 95, date: relativeDate(1, 12, 0), status: "Done", results: 20, inferences: 160, cost: "$0.209" },
-  { id: 13, scorecard: "CS3 Audigy", score: 88, date: relativeDate(1, 14, 0), status: "Done", results: 18, inferences: 72, cost: "$0.094" },
-  { id: 12, scorecard: "SelectQuote Term Life v1", score: 84, date: relativeDate(1, 16, 0), status: "Done", results: 15, inferences: 60, cost: "$0.078" },
-  { id: 11, scorecard: "CS3 Nexstar v1", score: 92, date: relativeDate(1, 18, 0), status: "Done", results: 19, inferences: 76, cost: "$0.099" },
-  { id: 10, scorecard: "CS3 Services v2", score: 83, date: relativeDate(1, 20, 0), status: "Done", results: 18, inferences: 36, cost: "$0.047" },
-  { id: 9, scorecard: "AW IB Sales", score: 97, date: relativeDate(1, 22, 0), status: "Done", results: 21, inferences: 168, cost: "$0.219" },
-  { id: 8, scorecard: "CS3 Audigy", score: 89, date: relativeDate(2, 0, 0), status: "Done", results: 19, inferences: 76, cost: "$0.099" },
-  { id: 7, scorecard: "SelectQuote Term Life v1", score: 86, date: relativeDate(2, 2, 0), status: "Done", results: 16, inferences: 64, cost: "$0.084" },
-  { id: 6, scorecard: "CS3 Nexstar v1", score: 93, date: relativeDate(2, 4, 0), status: "Done", results: 20, inferences: 80, cost: "$0.104" },
-  { id: 5, scorecard: "CS3 Services v2", score: 84, date: relativeDate(2, 6, 0), status: "Done", results: 19, inferences: 38, cost: "$0.050" },
-  { id: 4, scorecard: "AW IB Sales", score: 98, date: relativeDate(2, 8, 0), status: "Done", results: 22, inferences: 176, cost: "$0.230" },
-  { id: 3, scorecard: "CS3 Audigy", score: 90, date: relativeDate(2, 10, 0), status: "Done", results: 20, inferences: 80, cost: "$0.104" },
-  { id: 2, scorecard: "SelectQuote Term Life v1", score: 87, date: relativeDate(2, 12, 0), status: "Done", results: 17, inferences: 68, cost: "$0.089" },
-  { id: 1, scorecard: "CS3 Nexstar v1", score: 94, date: relativeDate(2, 14, 0), status: "Done", results: 21, inferences: 84, cost: "$0.110" },
-];
-
-// Sort items by date, newest first
-initialItems.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
 // Sample metadata and data for all items
 const sampleMetadata = [
@@ -322,7 +298,7 @@ const getRelativeTime = (dateString: string | undefined): string => {
 };
 
 export default function ItemsDashboard() {
-  const [selectedItem, setSelectedItem] = useState<number | null>(null)
+  const [selectedItem, setSelectedItem] = useState<string | null>(null)
   const [isFullWidth, setIsFullWidth] = useState(false)
   const [selectedScorecard, setSelectedScorecard] = useState<string | null>(null)
   const [isNarrowViewport, setIsNarrowViewport] = useState(false)
@@ -354,10 +330,194 @@ export default function ItemsDashboard() {
   const textRef = useRef<Record<string, HTMLDivElement | null>>({})
   const [thumbedUpScores, setThumbedUpScores] = useState<Set<string>>(new Set());
   const [feedbackItems, setFeedbackItems] = useState<Record<string, any[]>>({});
-  const [items, setItems] = useState<Item[]>(initialItems);
+  const [items, setItems] = useState<Item[]>([]);
   const [sampleMethod, setSampleMethod] = useState("All");
   const [sampleCount, setSampleCount] = useState(100);
   const [scoreResults, setScoreResults] = useState(sampleScoreResults);
+  const [leftPanelWidth, setLeftPanelWidth] = useState(50);
+  const [isLoading, setIsLoading] = useState(false);
+  const [nextToken, setNextToken] = useState<string | null>(null);
+  const { user } = useAuthenticator();
+  const [accountId, setAccountId] = useState<string | null>(null);
+  
+  // Constants
+  const ACCOUNT_KEY = 'call-criteria';
+
+  // Fetch items from the API
+  useEffect(() => {
+    const fetchItems = async () => {
+      if (!user) return;
+      
+      setIsLoading(true);
+      try {
+        // Get the user's account ID by querying for the account with the key 'call-criteria'
+        const accountResult = await amplifyClient.Account.list({
+          filter: { key: { eq: ACCOUNT_KEY } }
+        });
+        
+        console.log(`Found ${accountResult.data.length} accounts with key ${ACCOUNT_KEY}`);
+        
+        if (accountResult.data.length === 0) {
+          console.warn('No account found with key:', ACCOUNT_KEY);
+          
+          // For development purposes, you might want to create a test account
+          // Uncomment the following code to create a test account
+          /*
+          try {
+            console.log('Creating a test account...');
+            const createAccountResponse = await amplifyClient.Account.create({
+              name: 'Test Account',
+              key: ACCOUNT_KEY,
+              description: 'Test account created automatically'
+            });
+            
+            if (createAccountResponse.data) {
+              console.log('Test account created:', createAccountResponse.data);
+              setAccountId(createAccountResponse.data.id);
+              // Continue with empty items for now
+              setItems([]);
+            }
+          } catch (createError) {
+            console.error('Error creating test account:', createError);
+          }
+          */
+          
+          setIsLoading(false);
+          return;
+        }
+        
+        const foundAccountId = accountResult.data[0].id;
+        setAccountId(foundAccountId);
+        
+        // Use the GSI for accountId with updatedAt as sort key
+        const response = await amplifyClient.Item.list({
+          filter: { accountId: { eq: foundAccountId } },
+          sort: { field: 'updatedAt', direction: 'desc' },
+          limit: 20
+        });
+        
+        console.log(`Found ${response.data.length} items for account ID ${foundAccountId}`);
+        console.log('API response:', JSON.stringify(response, null, 2));
+        
+        // Try a direct GraphQL query as well
+        let itemsFromDirectQuery: any[] = [];
+        let nextTokenFromDirectQuery: string | null = null;
+        
+        try {
+          const directQuery = await graphqlRequest<{ listItems: { items: any[], nextToken: string | null } }>(`
+            query ListItemsDirect {
+              listItems(filter: {accountId: {eq: "${foundAccountId}"}}, limit: 20) {
+                items {
+                  id
+                  externalId
+                  description
+                  accountId
+                  scorecardId
+                  scoreId
+                  evaluationId
+                  updatedAt
+                  createdAt
+                  isEvaluation
+                }
+                nextToken
+              }
+            }
+          `);
+          console.log('Direct GraphQL query response:', JSON.stringify(directQuery, null, 2));
+          
+          if (directQuery.data?.listItems?.items) {
+            itemsFromDirectQuery = directQuery.data.listItems.items;
+            nextTokenFromDirectQuery = directQuery.data.listItems.nextToken;
+          }
+        } catch (graphqlError) {
+          console.error('Error with direct GraphQL query:', graphqlError);
+        }
+        
+        // Use the items from the direct query if available, otherwise use the response from amplifyClient
+        const itemsToUse = itemsFromDirectQuery.length > 0 ? itemsFromDirectQuery : response.data;
+        const nextTokenToUse = itemsFromDirectQuery.length > 0 ? nextTokenFromDirectQuery : response.nextToken;
+        
+        // If no items are found, we'll log this information
+        if (itemsToUse.length === 0) {
+          console.log('No items found for this account. You may need to create some items first.');
+        }
+        
+        // Get unique scorecard IDs to fetch their names
+        const scorecardIds = [...new Set(
+          itemsToUse
+            .filter(item => item.scorecardId)
+            .map(item => item.scorecardId)
+        )];
+        
+        // Fetch scorecard names if there are any scorecard IDs
+        const scorecardMap: Record<string, string> = {};
+        if (scorecardIds.length > 0) {
+          try {
+            // Fetch scorecards in parallel
+            const scorecardPromises = scorecardIds.map(async (id) => {
+              if (!id) return null;
+              const result = await amplifyClient.Scorecard.get({ id });
+              return result.data;
+            });
+            
+            const scorecards = await Promise.all(scorecardPromises);
+            
+            // Create a map of scorecard ID to name
+            scorecards.forEach(scorecard => {
+              if (scorecard && scorecard.id) {
+                scorecardMap[scorecard.id] = scorecard.name || 'Unnamed Scorecard';
+              }
+            });
+          } catch (error) {
+            console.error("Error fetching scorecards:", error);
+          }
+        }
+        
+        // Transform the data to match the expected format
+        const transformedItems = itemsToUse.map(item => {
+          // Get the scorecard name if scorecardId is available
+          let scorecardName = "Unknown Scorecard";
+          if (item.scorecardId && scorecardMap[item.scorecardId]) {
+            scorecardName = scorecardMap[item.scorecardId];
+          } else if (item.scorecardId) {
+            scorecardName = `Scorecard ${item.scorecardId.substring(0, 8)}`;
+          }
+          
+          return {
+            id: item.id,
+            accountId: item.accountId,
+            externalId: item.externalId,
+            description: item.description,
+            scorecardId: item.scorecardId,
+            scoreId: item.scoreId,
+            evaluationId: item.evaluationId,
+            updatedAt: item.updatedAt,
+            createdAt: item.createdAt,
+            isEvaluation: item.isEvaluation,
+            // UI compatibility fields
+            scorecard: scorecardName,
+            date: item.updatedAt || item.createdAt,
+            status: "Done", // Default status
+            results: 0,
+            inferences: 0,
+            cost: "$0.000",
+            score: 0
+          } as Item;
+        });
+        
+        setItems(transformedItems);
+        setNextToken(nextTokenToUse);
+      } catch (error) {
+        console.error("Error fetching items:", error);
+        // Don't keep the mock data if there's an error
+        setItems([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    fetchItems();
+  }, [user]);
 
   useEffect(() => {
     const checkViewportWidth = () => {
@@ -417,6 +577,13 @@ export default function ItemsDashboard() {
   }, [])
 
   const filteredItems = useMemo(() => {
+    // For debugging
+    console.log("Filtering items:", {
+      itemsCount: items.length,
+      selectedScorecard,
+      filterConfigLength: filterConfig.length
+    });
+    
     return items.filter(item => {
       if (!selectedScorecard && filterConfig.length === 0) return true
       
@@ -426,7 +593,7 @@ export default function ItemsDashboard() {
 
       return scorecardMatch && filterConfig.some(group => {
         return group.conditions.every(condition => {
-          const itemValue = String(item[condition.field as keyof typeof item])
+          const itemValue = String(item[condition.field as keyof typeof item] || '')
           switch (condition.operator) {
             case 'equals':
               return itemValue === condition.value
@@ -553,38 +720,54 @@ export default function ItemsDashboard() {
     if (!selectedItemData) return null
 
     return (
-      <ItemDetail
-        item={selectedItemData as unknown as FeedbackItem}
-        getBadgeVariant={getBadgeVariant}
-        getRelativeTime={getRelativeTime}
-        isMetadataExpanded={isMetadataExpanded}
-        setIsMetadataExpanded={setIsMetadataExpanded}
-        isDataExpanded={isDataExpanded}
-        setIsDataExpanded={setIsDataExpanded}
-        isErrorExpanded={isErrorExpanded}
-        setIsErrorExpanded={setIsErrorExpanded}
-        sampleMetadata={sampleMetadata}
-        sampleTranscript={sampleTranscript}
-        sampleScoreResults={scoreResults}
-        handleThumbsUp={handleThumbsUp}
-        handleThumbsDown={handleThumbsDown}
-        handleNewAnnotationSubmit={handleNewAnnotationSubmit}
-        toggleAnnotations={toggleAnnotations}
-        showNewAnnotationForm={showNewAnnotationForm}
-        setShowNewAnnotationForm={setShowNewAnnotationForm}
-        newAnnotation={newAnnotation}
-        setNewAnnotation={setNewAnnotation}
-        expandedAnnotations={expandedAnnotations}
-        thumbedUpScores={thumbedUpScores}
-        setThumbedUpScores={setThumbedUpScores}
-        isFullWidth={isFullWidth}
-        isFeedbackMode={false}
-        onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
-        onClose={() => {
-          setSelectedItem(null);
-          setIsFullWidth(false);
-        }}
-      />
+      <div className="h-full flex flex-col">
+        <ItemCard
+          variant="detail"
+          item={selectedItemData as ItemData}
+          isFullWidth={isFullWidth}
+          onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
+          onClose={() => {
+            setSelectedItem(null);
+            setIsFullWidth(false);
+          }}
+          getBadgeVariant={getBadgeVariant}
+        />
+        
+        <div className="flex-1 overflow-auto">
+          <ItemDetail
+            item={selectedItemData as unknown as FeedbackItem}
+            getBadgeVariant={getBadgeVariant}
+            getRelativeTime={getRelativeTime}
+            isMetadataExpanded={isMetadataExpanded}
+            setIsMetadataExpanded={setIsMetadataExpanded}
+            isDataExpanded={isDataExpanded}
+            setIsDataExpanded={setIsDataExpanded}
+            isErrorExpanded={isErrorExpanded}
+            setIsErrorExpanded={setIsErrorExpanded}
+            sampleMetadata={sampleMetadata}
+            sampleTranscript={sampleTranscript}
+            sampleScoreResults={scoreResults}
+            handleThumbsUp={handleThumbsUp}
+            handleThumbsDown={handleThumbsDown}
+            handleNewAnnotationSubmit={handleNewAnnotationSubmit}
+            toggleAnnotations={toggleAnnotations}
+            showNewAnnotationForm={showNewAnnotationForm}
+            setShowNewAnnotationForm={setShowNewAnnotationForm}
+            newAnnotation={newAnnotation}
+            setNewAnnotation={setNewAnnotation}
+            expandedAnnotations={expandedAnnotations}
+            thumbedUpScores={thumbedUpScores}
+            setThumbedUpScores={setThumbedUpScores}
+            isFullWidth={isFullWidth}
+            isFeedbackMode={false}
+            onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
+            onClose={() => {
+              setSelectedItem(null);
+              setIsFullWidth(false);
+            }}
+          />
+        </div>
+      </div>
     )
   }
 
@@ -798,16 +981,185 @@ export default function ItemsDashboard() {
     );
   }
 
-  const handleItemClick = (itemId: number) => {
+  const handleItemClick = (itemId: string) => {
     setSelectedItem(itemId)
     if (isNarrowViewport) {
       setIsFullWidth(true)
     }
   }
 
+  const handleDragStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    
+    // Get the initial mouse position and panel width
+    const startX = e.clientX;
+    const startWidth = leftPanelWidth;
+    
+    // Get the container element for width calculations
+    const container = e.currentTarget.parentElement;
+    if (!container) return;
+    
+    // Create the drag handler
+    const handleDrag = (e: MouseEvent) => {
+      // Calculate how far the mouse has moved
+      const deltaX = e.clientX - startX;
+      
+      // Calculate the container width for percentage calculation
+      const containerWidth = container.getBoundingClientRect().width;
+      
+      // Calculate the new width as a percentage of the container
+      const deltaPercentage = (deltaX / containerWidth) * 100;
+      const newWidth = Math.min(Math.max(startWidth + deltaPercentage, 20), 80);
+      
+      // Update the state with the new width
+      requestAnimationFrame(() => {
+        setLeftPanelWidth(newWidth);
+      });
+    };
+    
+    // Create the cleanup function
+    const handleDragEnd = () => {
+      document.removeEventListener('mousemove', handleDrag);
+      document.removeEventListener('mouseup', handleDragEnd);
+      document.body.style.cursor = '';
+    };
+    
+    // Set the cursor for the entire document during dragging
+    document.body.style.cursor = 'col-resize';
+    
+    // Add the event listeners
+    document.addEventListener('mousemove', handleDrag);
+    document.addEventListener('mouseup', handleDragEnd);
+  };
+
+  const handleLoadMore = async () => {
+    if (!user || !nextToken || isLoading || !accountId) return;
+    
+    setIsLoading(true);
+    try {
+      // Use the stored account ID
+      
+      // Use the GSI for accountId with updatedAt as sort key
+      const response = await amplifyClient.Item.list({
+        filter: { accountId: { eq: accountId } },
+        sort: { field: 'updatedAt', direction: 'desc' },
+        limit: 20,
+        nextToken
+      });
+      
+      // Try a direct GraphQL query as well
+      let itemsFromDirectQuery: any[] = [];
+      let nextTokenFromDirectQuery: string | null = null;
+      
+      try {
+        const directQuery = await graphqlRequest<{ listItems: { items: any[], nextToken: string | null } }>(`
+          query ListItemsDirect {
+            listItems(filter: {accountId: {eq: "${accountId}"}}, limit: 20, nextToken: "${nextToken}") {
+              items {
+                id
+                externalId
+                description
+                accountId
+                scorecardId
+                scoreId
+                evaluationId
+                updatedAt
+                createdAt
+                isEvaluation
+              }
+              nextToken
+            }
+          }
+        `);
+        
+        if (directQuery.data?.listItems?.items) {
+          itemsFromDirectQuery = directQuery.data.listItems.items;
+          nextTokenFromDirectQuery = directQuery.data.listItems.nextToken;
+        }
+      } catch (graphqlError) {
+        console.error('Error with direct GraphQL query in load more:', graphqlError);
+      }
+      
+      // Use the items from the direct query if available, otherwise use the response from amplifyClient
+      const itemsToUse = itemsFromDirectQuery.length > 0 ? itemsFromDirectQuery : response.data;
+      const nextTokenToUse = itemsFromDirectQuery.length > 0 ? nextTokenFromDirectQuery : response.nextToken;
+      
+      // Get unique scorecard IDs to fetch their names
+      const scorecardIds = [...new Set(
+        itemsToUse
+          .filter(item => item.scorecardId)
+          .map(item => item.scorecardId)
+      )];
+      
+      // Fetch scorecard names if there are any scorecard IDs
+      const scorecardMap: Record<string, string> = {};
+      if (scorecardIds.length > 0) {
+        try {
+          // Fetch scorecards in parallel
+          const scorecardPromises = scorecardIds.map(async (id) => {
+            if (!id) return null;
+            const result = await amplifyClient.Scorecard.get({ id });
+            return result.data;
+          });
+          
+          const scorecards = await Promise.all(scorecardPromises);
+          
+          // Create a map of scorecard ID to name
+          scorecards.forEach(scorecard => {
+            if (scorecard && scorecard.id) {
+              scorecardMap[scorecard.id] = scorecard.name || 'Unnamed Scorecard';
+            }
+          });
+        } catch (error) {
+          console.error("Error fetching scorecards:", error);
+        }
+      }
+      
+      // Transform the data to match the expected format
+      const transformedItems = itemsToUse.map(item => {
+        // Get the scorecard name if scorecardId is available
+        let scorecardName = "Unknown Scorecard";
+        if (item.scorecardId && scorecardMap[item.scorecardId]) {
+          scorecardName = scorecardMap[item.scorecardId];
+        } else if (item.scorecardId) {
+          scorecardName = `Scorecard ${item.scorecardId.substring(0, 8)}`;
+        }
+        
+        return {
+          id: item.id,
+          accountId: item.accountId,
+          externalId: item.externalId,
+          description: item.description,
+          scorecardId: item.scorecardId,
+          scoreId: item.scoreId,
+          evaluationId: item.evaluationId,
+          updatedAt: item.updatedAt,
+          createdAt: item.createdAt,
+          isEvaluation: item.isEvaluation,
+          // UI compatibility fields
+          scorecard: scorecardName,
+          date: item.updatedAt || item.createdAt,
+          status: "Done", // Default status
+          results: 0,
+          inferences: 0,
+          cost: "$0.000",
+          score: 0
+        } as Item;
+      });
+      
+      // Append the new items to the existing items
+      setItems(prevItems => [...prevItems, ...transformedItems]);
+      setNextToken(nextTokenToUse);
+    } catch (error) {
+      console.error("Error fetching more items:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
-    <div className="space-y-4 h-full flex flex-col">
-      <div className="flex flex-wrap justify-between items-start gap-4">
+    <div className="flex flex-col h-full p-1.5">
+      <div className="flex flex-wrap justify-between items-start gap-4 mb-3">
         <div className="flex-shrink-0">
           <ScorecardContext 
             selectedScorecard={selectedScorecard}
@@ -829,81 +1181,92 @@ export default function ItemsDashboard() {
         </div>
       </div>
 
-      <div className="flex-grow flex flex-col overflow-hidden pb-2">
+      <div className="flex-grow flex flex-col overflow-hidden">
         {selectedItem && (isNarrowViewport || isFullWidth) ? (
           <div className="flex-grow overflow-hidden">
             {renderSelectedItem()}
           </div>
         ) : (
-          <div className={`flex ${isNarrowViewport ? 'flex-col' : 'space-x-6'} h-full`}>
-            <div className={`${isFullWidth ? 'hidden' : 'flex-1'} @container overflow-auto`}>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[40%]">Item</TableHead>
-                    <TableHead className="w-[15%] @[630px]:table-cell hidden text-right">Inferences</TableHead>
-                    <TableHead className="w-[15%] @[630px]:table-cell hidden text-right">Results</TableHead>
-                    <TableHead className="w-[15%] @[630px]:table-cell hidden text-right">Cost</TableHead>
-                    <TableHead className="w-[15%] @[630px]:table-cell hidden text-right">Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredItems.map((item) => (
-                    <TableRow 
-                      key={item.id} 
-                      onClick={() => handleItemClick(item.id)} 
-                      className="cursor-pointer transition-colors duration-200 hover:bg-muted"
-                    >
-                      <TableCell className="font-medium pr-4">
-                        <div>
-                          {/* Narrow variant - visible below 630px */}
-                          <div className="block @[630px]:hidden">
-                            <div className="flex justify-between items-start mb-2">
-                              <div className="font-semibold">{item.scorecard}</div>
-                              <Badge 
-                                className={`w-24 justify-center ${getBadgeVariant(item.status)}`}
-                              >
-                                {item.status}
-                              </Badge>
-                            </div>
-                            <div className="text-sm text-muted-foreground mb-2">
-                              {formatTimeAgo(item.date, true)}
-                            </div>
-                            <div className="flex justify-between items-end">
-                              <div className="text-sm text-muted-foreground">
-                                {item.inferences} inferences<br />
-                                {item.results} results
-                              </div>
-                              <div className="font-semibold">{item.cost}</div>
-                            </div>
-                          </div>
-                          {/* Wide variant - visible at 630px and above */}
-                          <div className="hidden @[630px]:block">
-                            {item.scorecard}
-                            <div className="text-sm text-muted-foreground">
-                              {formatTimeAgo(item.date)}
-                            </div>
-                          </div>
+          <div className={`flex ${isNarrowViewport ? 'flex-col' : ''} h-full`}>
+            <div 
+              className={`${isFullWidth ? 'hidden' : 'flex-1'} overflow-auto`}
+              style={selectedItem && !isNarrowViewport && !isFullWidth ? {
+                width: `${leftPanelWidth}%`
+              } : undefined}
+            >
+              <div>
+                <div className="@container h-full">
+                  {isLoading && items.length === 0 ? (
+                    <div className="flex justify-center items-center h-40">
+                      <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                      <span className="ml-2 text-lg">Loading items...</span>
+                    </div>
+                  ) : (
+                    <>
+                      {filteredItems.length === 0 ? (
+                        <div className="flex flex-col justify-center items-center h-40 text-center">
+                          <Info className="h-8 w-8 text-muted-foreground mb-2" />
+                          <h3 className="text-lg font-medium">No items found</h3>
+                          <p className="text-muted-foreground mt-1">
+                            {filterConfig.length > 0 || selectedScorecard 
+                              ? "Try adjusting your filters" 
+                              : "Create your first item to get started"}
+                          </p>
                         </div>
-                      </TableCell>
-                      <TableCell className="hidden @[630px]:table-cell text-right">{item.inferences}</TableCell>
-                      <TableCell className="hidden @[630px]:table-cell text-right">{item.results}</TableCell>
-                      <TableCell className="hidden @[630px]:table-cell text-right">{item.cost}</TableCell>
-                      <TableCell className="hidden @[630px]:table-cell text-right">
-                        <Badge 
-                          className={`w-24 justify-center ${getBadgeVariant(item.status)}`}
-                        >
-                          {item.status}
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                      ) : (
+                        <div className="grid grid-cols-2 @[500px]:grid-cols-3 @[700px]:grid-cols-4 @[900px]:grid-cols-5 @[1100px]:grid-cols-6 gap-3">
+                          {filteredItems.map((item) => (
+                            <ItemCard
+                              key={item.id}
+                              variant="grid"
+                              item={item as ItemData}
+                              isSelected={selectedItem === item.id}
+                              onClick={() => handleItemClick(item.id)}
+                              getBadgeVariant={getBadgeVariant}
+                            />
+                          ))}
+                        </div>
+                      )}
+                      
+                      {nextToken && filteredItems.length > 0 && (
+                        <div className="flex justify-center mt-6">
+                          <Button 
+                            variant="outline" 
+                            onClick={handleLoadMore}
+                            disabled={isLoading}
+                          >
+                            {isLoading ? (
+                              <>
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                Loading...
+                              </>
+                            ) : (
+                              'Load More'
+                            )}
+                          </Button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
             </div>
 
             {selectedItem && !isNarrowViewport && !isFullWidth && (
-              <div className="flex-1 overflow-hidden">
+              <div
+                className="w-[12px] relative cursor-col-resize flex-shrink-0 group"
+                onMouseDown={handleDragStart}
+              >
+                <div className="absolute inset-0 rounded-full transition-colors duration-150 
+                  group-hover:bg-accent" />
+              </div>
+            )}
+
+            {selectedItem && !isNarrowViewport && !isFullWidth && (
+              <div 
+                className="overflow-hidden"
+                style={{ width: `${100 - leftPanelWidth}%` }}
+              >
                 {renderSelectedItem()}
               </div>
             )}

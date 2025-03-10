@@ -48,6 +48,16 @@ const ScorecardContext: React.FC<ScorecardContextProps> = ({
   const [scores, setScores] = useState<Array<{ value: string; label: string }>>([])
   const [isLoading, setIsLoading] = useState(!useMockData)
 
+  // Debug logging
+  useEffect(() => {
+    console.debug('ScorecardContext state:', { 
+      selectedScorecard, 
+      selectedScore, 
+      scoresCount: scores.length,
+      scores: scores.map(s => ({ id: s.value, name: s.label }))
+    });
+  }, [selectedScorecard, selectedScore, scores]);
+
   useEffect(() => {
     if (useMockData) return
 
@@ -70,6 +80,13 @@ const ScorecardContext: React.FC<ScorecardContextProps> = ({
     fetchScorecards()
   }, [useMockData])
 
+  // Reset score selection when scorecard changes
+  useEffect(() => {
+    if (selectedScore) {
+      setSelectedScore(null);
+    }
+  }, [selectedScorecard, setSelectedScore]);
+
   useEffect(() => {
     if (useMockData || !selectedScorecard) return
 
@@ -85,17 +102,18 @@ const ScorecardContext: React.FC<ScorecardContextProps> = ({
         })
 
         const scoreResults = await Promise.all(scorePromises)
-        const uniqueScores = new Set<string>()
+        const allScores = scoreResults.flat();
         
-        scoreResults.flat().forEach(score => {
-          if (score?.name) {
-            uniqueScores.add(score.name)
-          }
-        })
-
-        setScores(Array.from(uniqueScores).map(name => ({
-          value: name,
-          label: name
+        console.debug('Fetched scores for scorecard:', {
+          scorecardId: selectedScorecard,
+          scoresCount: allScores.length,
+          scores: allScores.map(s => ({ id: s.id, name: s.name }))
+        });
+        
+        // Use score IDs instead of names for values
+        setScores(allScores.map(score => ({
+          value: score.id,
+          label: score.name
         })))
       } catch (error) {
         console.error('Error fetching scores:', error)
@@ -109,11 +127,22 @@ const ScorecardContext: React.FC<ScorecardContextProps> = ({
     return <div>Loading scorecards...</div>
   }
 
+  const handleScoreChange = (value: string) => {
+    console.debug('Score selection changed:', { 
+      newValue: value, 
+      previousValue: selectedScore 
+    });
+    setSelectedScore(value === "all" ? null : value);
+  };
+
   return (
     <div className="flex flex-wrap gap-2">
-      <Select onValueChange={value => {
-        setSelectedScorecard(value === "all" ? null : value)
-      }}>
+      <Select 
+        onValueChange={value => {
+          setSelectedScorecard(value === "all" ? null : value)
+        }}
+        value={selectedScorecard || "all"}
+      >
         <SelectTrigger className="w-[200px] h-8 bg-card border-none">
           <SelectValue placeholder="Scorecard" />
         </SelectTrigger>
@@ -127,7 +156,7 @@ const ScorecardContext: React.FC<ScorecardContextProps> = ({
         </SelectContent>
       </Select>
       <Select 
-        onValueChange={value => setSelectedScore(value === "all" ? null : value)}
+        onValueChange={handleScoreChange}
         disabled={!selectedScorecard}
         value={selectedScore || "all"}
       >

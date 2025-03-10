@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { HelpCircle, X, Square, RectangleVertical } from "lucide-react"
+import { HelpCircle, X, Square, Columns2 } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Textarea } from "@/components/ui/textarea"
 import { ChevronDownIcon, ChevronUpIcon } from "@radix-ui/react-icons"
@@ -92,7 +92,7 @@ WHERE
           <div className="flex items-center space-x-2">
             {!isNarrowViewport && onToggleWidth && (
               <CardButton
-                icon={isFullWidth ? RectangleVertical : Square}
+                icon={isFullWidth ? Columns2 : Square}
                 onClick={onToggleWidth}
               />
             )}

@@ -6,7 +6,7 @@ import type { Schema } from "@/amplify/data/resource"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import { Square, RectangleVertical, X, ChevronDown, ChevronUp, Info, MessageCircleMore, Plus, ThumbsUp, ThumbsDown, Trash2, MoreHorizontal, Eye, RefreshCw } from "lucide-react"
+import { Square, Columns2, X, ChevronDown, ChevronUp, Info, MessageCircleMore, Plus, ThumbsUp, ThumbsDown, Trash2, MoreHorizontal, Eye, RefreshCw, Share } from "lucide-react"
 import { format, formatDistanceToNow, parseISO } from "date-fns"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -37,7 +37,7 @@ import { EvaluationDashboardSkeleton } from "@/components/loading-skeleton"
 import { ModelListResult, AmplifyListResult, AmplifyGetResult } from '@/types/shared'
 import { listFromModel, observeQueryFromModel, getFromModel, observeScoreResults } from "@/utils/amplify-helpers"
 import { useAuthenticator } from '@aws-amplify/ui-react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useParams, usePathname } from 'next/navigation'
 import { Observable } from 'rxjs'
 import { getClient } from '@/utils/amplify-client'
 import type { GraphQLResult, GraphQLSubscription } from '@aws-amplify/api'
@@ -53,12 +53,16 @@ import type { EvaluationTaskProps } from '@/components/EvaluationTask'
 import type { TaskData } from '@/types/evaluation'
 import { transformAmplifyTask } from '@/utils/data-operations'
 import { AmplifyTask, ProcessedTask, Evaluation, TaskStageType, TaskSubscriptionEvent } from '@/utils/data-operations'
-import { listRecentEvaluations, transformAmplifyTask as transformEvaluationData } from '@/utils/data-operations'
+import { listRecentEvaluations, transformAmplifyTask as transformEvaluationData, standardizeScoreResults } from '@/utils/data-operations'
 import { TaskDisplay } from "@/components/TaskDisplay"
 import { getValueFromLazyLoader, unwrapLazyLoader } from '@/utils/data-operations'
 import type { LazyLoader } from '@/utils/types'
 import { observeRecentEvaluations, observeTaskUpdates, observeTaskStageUpdates } from '@/utils/subscriptions'
 import { useEvaluationData } from '@/features/evaluations/hooks/useEvaluationData'
+import { toast } from "sonner"
+import { shareLinkClient, ShareLinkViewOptions } from "@/utils/share-link-client"
+import { fetchAuthSession } from 'aws-amplify/auth'
+import { ShareResourceModal } from "@/components/share-resource-modal"
 
 type TaskResponse = {
   items: Evaluation[]
@@ -70,7 +74,10 @@ type ScoreResultItem = {
   value: string | number;
   confidence: number | null;
   metadata: any;
+  explanation?: string | null;
+  trace?: any | null;
   itemId: string | null;
+  createdAt?: string;
 };
 
 interface TaskStagesResponse {
@@ -211,6 +218,7 @@ const LIST_EVALUATIONS = `
             confidence
             metadata
             explanation
+            trace
             itemId
             createdAt
           }
@@ -303,6 +311,29 @@ export function transformEvaluation(evaluation: Schema['Evaluation']['type']) {
     };
   };
 
+  // Transform score results to include trace field
+  const transformScoreResults = (scoreResults: any) => {
+    if (!scoreResults) return null;
+    
+    // Handle items array
+    if (typeof scoreResults === 'object' && 'items' in scoreResults && Array.isArray(scoreResults.items)) {
+      return {
+        items: scoreResults.items.map((item: any) => ({
+          id: item.id,
+          value: item.value,
+          confidence: item.confidence,
+          metadata: item.metadata,
+          explanation: item.explanation,
+          trace: item.trace,
+          itemId: item.itemId,
+          createdAt: item.createdAt
+        }))
+      };
+    }
+    
+    return scoreResults;
+  };
+
   // Get stages from task data
   const rawStages = taskData?.stages;
   const transformedStages = transformStages(rawStages);
@@ -350,7 +381,7 @@ export function transformEvaluation(evaluation: Schema['Evaluation']['type']) {
       ...taskData,
       stages: transformedStages
     } as AmplifyTask) : null,
-    scoreResults: scoreResults
+    scoreResults: transformScoreResults(scoreResults)
   };
 
   console.debug('Final transformed evaluation:', {
@@ -364,21 +395,119 @@ export function transformEvaluation(evaluation: Schema['Evaluation']['type']) {
   return transformedEvaluation;
 }
 
-export default function EvaluationsDashboard() {
+export default function EvaluationsDashboard({ 
+  initialSelectedEvaluationId = null,
+  initialSelectedScoreResultId = null
+}: { 
+  initialSelectedEvaluationId?: string | null,
+  initialSelectedScoreResultId?: string | null
+} = {}) {
   const { user } = useAuthenticator()
   const router = useRouter()
+  const pathname = usePathname()
+  const params = useParams()
   const [accountId, setAccountId] = useState<string | null>(null)
-  const [selectedEvaluationId, setSelectedEvaluationId] = useState<string | null>(null)
+  const [selectedEvaluationId, setSelectedEvaluationId] = useState<string | null>(initialSelectedEvaluationId)
   const [isFullWidth, setIsFullWidth] = useState(false)
   const [leftPanelWidth, setLeftPanelWidth] = useState(50)
   const [selectedScorecard, setSelectedScorecard] = useState<string | null>(null)
   const [selectedScore, setSelectedScore] = useState<string | null>(null)
   const [accountError, setAccountError] = useState<string | null>(null)
+  const [dataHasLoadedOnce, setDataHasLoadedOnce] = useState(false)
   const isNarrowViewport = useMediaQuery("(max-width: 768px)")
   const { ref, inView } = useInView({
     threshold: 0,
   })
-  const [selectedScoreResultId, setSelectedScoreResultId] = useState<string | null>(null)
+  const [selectedScoreResultId, setSelectedScoreResultId] = useState<string | null>(initialSelectedScoreResultId)
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false)
+  const [shareUrl, setShareUrl] = useState<string | null>(null)
+  // Use a ref to track if this is the initial render for URL updates
+  const isInitialUrlUpdateRef = useRef(true);
+
+  // Add this handler
+  const handleScoreResultSelect = useCallback((id: string | null) => {
+    setSelectedScoreResultId(id);
+    
+    // Update URL without triggering a navigation/re-render
+    if (selectedEvaluationId) {
+      const newPathname = id 
+        ? `/lab/evaluations/${selectedEvaluationId}/score-results/${id}` 
+        : `/lab/evaluations/${selectedEvaluationId}`;
+      window.history.pushState(null, '', newPathname);
+    }
+  }, [selectedEvaluationId]);
+
+  const copyLinkToClipboard = () => {
+    if (!selectedEvaluationId || !accountId) return;
+    setIsShareModalOpen(true);
+  }
+
+  // Handle deep linking - check if we're on the main evaluations page or a specific evaluation page
+  useEffect(() => {
+    // If we have an ID in the URL and we're on the main evaluations page
+    if (params && 'id' in params) {
+      // Set the evaluation ID
+      setSelectedEvaluationId(params.id as string);
+      
+      // If we also have a score result ID, set that too
+      if ('scoreResultId' in params) {
+        setSelectedScoreResultId(params.scoreResultId as string);
+      }
+    }
+  }, [params]);
+
+  // Handle browser back/forward navigation with popstate event
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      // Extract evaluation ID from URL if present
+      const evalMatch = window.location.pathname.match(/\/lab\/evaluations\/([^\/]+)/);
+      const idFromUrl = evalMatch ? evalMatch[1] : null;
+      
+      // Extract score result ID from URL if present
+      const scoreResultMatch = window.location.pathname.match(/\/lab\/evaluations\/[^\/]+\/score-results\/([^\/]+)/);
+      const scoreResultIdFromUrl = scoreResultMatch ? scoreResultMatch[1] : null;
+      
+      // Update the selected evaluation ID based on the URL
+      setSelectedEvaluationId(idFromUrl);
+      
+      // Update the selected score result ID based on the URL
+      setSelectedScoreResultId(scoreResultIdFromUrl);
+    };
+
+    // Add event listener for popstate (browser back/forward)
+    window.addEventListener('popstate', handlePopState);
+    
+    // Clean up event listener on unmount
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, []);
+
+  // Custom setter for selectedEvaluationId that handles both state and URL
+  const handleSelectEvaluation = (id: string | null) => {
+    // Only update state if the selected evaluation has changed
+    if (id !== selectedEvaluationId) {
+      setSelectedEvaluationId(id);
+      
+      // Clear the selected score result when changing evaluations
+      setSelectedScoreResultId(null);
+      
+      // Update URL without triggering a navigation/re-render
+      const newPathname = id ? `/lab/evaluations/${id}` : '/lab/evaluations';
+      window.history.pushState(null, '', newPathname);
+    }
+  };
+
+  // Handle closing the selected evaluation
+  const handleCloseEvaluation = () => {
+    console.log('handleCloseEvaluation called, clearing selectedEvaluationId:', selectedEvaluationId);
+    setSelectedEvaluationId(null);
+    setSelectedScoreResultId(null);
+    setIsFullWidth(false);
+    
+    // Update URL without triggering a navigation/re-render
+    window.history.pushState(null, '', '/lab/evaluations');
+  };
 
   // Fetch account ID
   useEffect(() => {
@@ -409,7 +538,37 @@ export default function EvaluationsDashboard() {
   }, [])
 
   // Use the new hook for evaluation data
-  const { evaluations, isLoading, error } = useEvaluationData({ accountId });
+  const { evaluations, isLoading, error, refetch } = useEvaluationData({ 
+    accountId,
+    selectedScorecard,
+    selectedScore
+  });
+
+  // Debug logging for scorecard and score selection
+  useEffect(() => {
+    console.debug('Evaluations dashboard filters:', {
+      selectedScorecard,
+      selectedScore,
+      evaluationsCount: evaluations.length
+    });
+  }, [selectedScorecard, selectedScore, evaluations.length]);
+
+  // Set dataHasLoadedOnce to true once data has loaded
+  useEffect(() => {
+    if (!isLoading && evaluations.length > 0 && !dataHasLoadedOnce) {
+      setDataHasLoadedOnce(true);
+    }
+  }, [isLoading, evaluations, dataHasLoadedOnce]);
+
+  // Refetch evaluations when filters change
+  useEffect(() => {
+    if (accountId) {
+      refetch();
+    }
+  }, [accountId, selectedScorecard, selectedScore, refetch]);
+
+  // Show loading state only on initial load, not when selecting evaluations
+  const showLoading = isLoading && !dataHasLoadedOnce;
 
   // Combine errors from account fetching and evaluation data
   const combinedError = accountError || error;
@@ -419,13 +578,17 @@ export default function EvaluationsDashboard() {
       const currentClient = getClient()
       await currentClient.graphql({
         query: `
-          mutation DeleteEvaluation($id: ID!) {
-            deleteEvaluation(id: $id) {
+          mutation DeleteEvaluation($input: DeleteEvaluationInput!) {
+            deleteEvaluation(input: $input) {
               id
             }
           }
         `,
-        variables: { id: evaluationId }
+        variables: { 
+          input: {
+            id: evaluationId
+          }
+        }
       })
       if (selectedEvaluationId === evaluationId) {
         setSelectedEvaluationId(null)
@@ -457,29 +620,34 @@ export default function EvaluationsDashboard() {
     document.addEventListener('mouseup', handleDragEnd)
   }
 
-  const renderSelectedTask = () => {
-    if (!selectedEvaluationId) return null
-    const evaluation = evaluations.find(e => e.id === selectedEvaluationId)
-    if (!evaluation) return null
+  // Memoize the renderSelectedTask function to prevent unnecessary re-renders
+  const renderSelectedTask = useMemo(() => {
+    if (!selectedEvaluationId) return null;
+    const evaluation = evaluations.find((e: { id: string }) => e.id === selectedEvaluationId);
+    if (!evaluation) return null;
 
-    console.log('Rendering task for evaluation:', {
+    console.log('Rendering selected task:', {
       evaluationId: evaluation.id,
-      evaluationData: {
-        type: evaluation.type,
-        metrics: evaluation.metrics,
-        accuracy: evaluation.accuracy,
-        scorecard: evaluation.scorecard,
-        score: evaluation.score,
-        task: evaluation.task,
-        scoreResults: evaluation.scoreResults
-      }
+      hasScoreResults: !!evaluation.scoreResults,
+      scoreResultsType: typeof evaluation.scoreResults,
+      scoreResultsIsArray: Array.isArray(evaluation.scoreResults),
+      scoreResultsCount: Array.isArray(evaluation.scoreResults) ? evaluation.scoreResults.length : 
+                        (evaluation.scoreResults && typeof evaluation.scoreResults === 'object' && 'items' in evaluation.scoreResults ? 
+                         (evaluation.scoreResults as any).items.length : 0),
+      firstScoreResult: Array.isArray(evaluation.scoreResults) ? evaluation.scoreResults[0] : 
+                       (evaluation.scoreResults && typeof evaluation.scoreResults === 'object' && 'items' in evaluation.scoreResults ? 
+                        (evaluation.scoreResults as any).items[0] : undefined)
     });
 
     return (
       <TaskDisplay
         variant="detail"
         task={evaluation.task}
-        evaluationData={evaluation}
+        evaluationData={{
+          ...evaluation,
+          // Pass the raw score results - they will be standardized in the components
+          scoreResults: evaluation.scoreResults
+        }}
         controlButtons={
           <DropdownMenu>
             <DropdownMenuTrigger>
@@ -490,41 +658,184 @@ export default function EvaluationsDashboard() {
               />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={copyLinkToClipboard}>
+                <Share className="mr-2 h-4 w-4" />
+                <span>Share</span>
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleDelete(evaluation.id)}>
                 <Trash2 className="mr-2 h-4 w-4" />
-                Delete
+                <span>Delete</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         }
         isFullWidth={isFullWidth}
         onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
-        onClose={() => {
-          setSelectedEvaluationId(null)
-          setIsFullWidth(false)
-        }}
+        onClose={handleCloseEvaluation}
         selectedScoreResultId={selectedScoreResultId}
-        onSelectScoreResult={(id) => setSelectedScoreResultId(id)}
+        onSelectScoreResult={handleScoreResultSelect}
       />
-    )
+    );
+  }, [selectedEvaluationId, evaluations, isFullWidth, selectedScoreResultId, handleScoreResultSelect, copyLinkToClipboard, handleDelete, handleCloseEvaluation]);
+
+  // Remove client-side filtering logic and use the filtered evaluations directly
+  const filteredEvaluations = evaluations;
+
+  const handleCreateShareLink = async (expiresAt: string, viewOptions: ShareLinkViewOptions) => {
+    if (!selectedEvaluationId || !accountId) return;
+    
+    try {
+      // Create a share link for the evaluation using shareLinkClient
+      const { url } = await shareLinkClient.create({
+        resourceType: 'Evaluation',
+        resourceId: selectedEvaluationId,
+        accountId: accountId,
+        expiresAt,
+        viewOptions
+      });
+      
+      // Ensure URL is valid before attempting to copy
+      if (!url) throw new Error("Generated URL is empty");
+      
+      // Store the URL in state
+      setShareUrl(url);
+      
+      try {
+        // Check for clipboard permissions first
+        if (navigator.permissions && navigator.permissions.query) {
+          const permissionStatus = await navigator.permissions.query({ name: 'clipboard-write' as PermissionName });
+          if (permissionStatus.state === 'denied') {
+            throw new Error("Clipboard permission denied");
+          }
+        }
+        
+        // Copy with proper await
+        await navigator.clipboard.writeText(url);
+        
+        toast.success("Share link created and copied to clipboard", {
+          description: "You can now share this evaluation with others"
+        });
+        
+        // Close the modal after successful copy
+        setIsShareModalOpen(false);
+        
+      } catch (clipboardError) {
+        console.error("Clipboard error:", clipboardError);
+        
+        // Keep the share modal open so user can see and copy the URL
+        toast.warning("Created share link, but couldn't copy to clipboard", {
+          description: "The link is available in the share dialog",
+          duration: 5000
+        });
+        
+        // Keep the share modal open so user can see and copy the URL
+        console.log("Setting modal to stay open after clipboard error");
+        setIsShareModalOpen(true);
+      }
+    } catch (error) {
+      console.error("Error creating share link:", error);
+      toast.error("Failed to create share link", {
+        description: "An error occurred while creating the share link"
+      });
+    }
   }
 
-  // Add filtering logic for evaluations based on selected scorecard and score
-  const filteredEvaluations = useMemo(() => {
-    return evaluations.filter(evaluation => {
-      if (!selectedScorecard && !selectedScore) return true;
-      if (selectedScorecard && evaluation.scorecard?.name !== selectedScorecard) return false;
-      if (selectedScore && evaluation.score?.name !== selectedScore) return false;
-      return true;
-    });
-  }, [evaluations, selectedScorecard, selectedScore]);
-
-  // Add this handler
-  const handleScoreResultSelect = useCallback((id: string | null) => {
-    setSelectedScoreResultId(id);
+  // Update the modal close handler to be simpler since we're handling cleanup in the modal component
+  const handleCloseShareModal = useCallback(() => {
+    setIsShareModalOpen(false);
+    setShareUrl(null); // Clear the share URL when closing the modal
   }, []);
 
-  if (isLoading) {
+  interface EvaluationsGridProps {
+    evaluations: Evaluation[];
+    selectedEvaluationId: string | null;
+    setSelectedEvaluationId: (id: string | null) => void;
+    isNarrowViewport: boolean;
+    setIsFullWidth: (isFullWidth: boolean) => void;
+    selectedScoreResultId: string | null;
+    onSelectScoreResult: (id: string | null) => void;
+  }
+
+  const EvaluationsGrid: React.FC<EvaluationsGridProps> = React.memo(({ 
+    evaluations, 
+    selectedEvaluationId, 
+    setSelectedEvaluationId, 
+    isNarrowViewport, 
+    setIsFullWidth,
+    selectedScoreResultId,
+    onSelectScoreResult
+  }) => {
+    return (
+      <div className={`
+        grid gap-3
+        ${selectedEvaluationId && !isNarrowViewport && !isFullWidth ? 'grid-cols-1' : 'grid-cols-1 @[640px]:grid-cols-2'}
+      `}>
+        {evaluations.map((evaluation) => (
+          <div 
+            key={evaluation.id} 
+            onClick={() => {
+              setSelectedEvaluationId(evaluation.id)
+              if (isNarrowViewport) {
+                setIsFullWidth(true)
+              }
+            }}
+          >
+            <TaskDisplay
+              variant="grid"
+              task={evaluation.task}
+              evaluationData={evaluation}
+              isSelected={evaluation.id === selectedEvaluationId}
+              onClick={() => {
+                setSelectedEvaluationId(evaluation.id)
+                if (isNarrowViewport) {
+                  setIsFullWidth(true)
+                }
+              }}
+              extra={true}
+              selectedScoreResultId={selectedScoreResultId}
+              onSelectScoreResult={onSelectScoreResult}
+            />
+          </div>
+        ))}
+      </div>
+    );
+  }, (prevProps, nextProps) => {
+    // Custom comparison to prevent unnecessary re-renders
+    return (
+      prevProps.evaluations === nextProps.evaluations &&
+      prevProps.selectedEvaluationId === nextProps.selectedEvaluationId &&
+      prevProps.isNarrowViewport === nextProps.isNarrowViewport &&
+      prevProps.selectedScoreResultId === nextProps.selectedScoreResultId
+    );
+  });
+
+  // Memoize the click handler for each evaluation to prevent unnecessary re-renders
+  const getEvaluationClickHandler = useCallback((evaluationId: string) => {
+    return (e?: React.MouseEvent | React.SyntheticEvent | any) => {
+      // Prevent default if it's an event object
+      if (e && typeof e.preventDefault === 'function') {
+        e.preventDefault();
+      }
+      
+      if (evaluationId !== selectedEvaluationId) {
+        // Update state first
+        setSelectedEvaluationId(evaluationId);
+        
+        // Clear the selected score result when changing evaluations
+        setSelectedScoreResultId(null);
+        
+        // Then update URL without triggering a navigation/re-render
+        const newPathname = `/lab/evaluations/${evaluationId}`;
+        window.history.pushState(null, '', newPathname);
+        
+        if (isNarrowViewport) {
+          setIsFullWidth(true);
+        }
+      }
+    };
+  }, [selectedEvaluationId, isNarrowViewport]);
+
+  if (showLoading) {
     return (
       <div>
         <div className="mb-4 text-sm text-muted-foreground">
@@ -547,18 +858,20 @@ export default function EvaluationsDashboard() {
   }
 
   return (
-    <div className="flex flex-col h-full p-1.5">
-      <div className="flex justify-between items-start mb-3">
-        <ScorecardContext 
-          selectedScorecard={selectedScorecard}
-          setSelectedScorecard={setSelectedScorecard}
-          selectedScore={selectedScore}
-          setSelectedScore={setSelectedScore}
-        />
-        <TaskDispatchButton config={evaluationsConfig} />
+    <div className="flex flex-col h-full">
+      <div className="flex-none p-1.5">
+        <div className="flex justify-between items-start mb-3">
+          <ScorecardContext 
+            selectedScorecard={selectedScorecard}
+            setSelectedScorecard={setSelectedScorecard}
+            selectedScore={selectedScore}
+            setSelectedScore={setSelectedScore}
+          />
+          <TaskDispatchButton config={evaluationsConfig} />
+        </div>
       </div>
       
-      <div className="flex h-full">
+      <div className="flex-1 flex min-h-0 p-1.5">
         <div 
           className={`
             ${selectedEvaluationId && !isNarrowViewport && !isFullWidth ? '' : 'w-full'}
@@ -576,28 +889,23 @@ export default function EvaluationsDashboard() {
               grid gap-3
               ${selectedEvaluationId && !isNarrowViewport && !isFullWidth ? 'grid-cols-1' : 'grid-cols-1 @[640px]:grid-cols-2'}
             `}>
-              {filteredEvaluations.map((evaluation) => {
+              {filteredEvaluations.map((evaluation: any) => {
+                const clickHandler = getEvaluationClickHandler(evaluation.id);
                 return (
                   <div 
                     key={evaluation.id} 
-                    onClick={() => {
-                      setSelectedEvaluationId(evaluation.id)
-                      if (isNarrowViewport) {
-                        setIsFullWidth(true)
-                      }
-                    }}
+                    onClick={clickHandler}
                   >
                     <TaskDisplay
                       variant="grid"
                       task={evaluation.task}
-                      evaluationData={evaluation}
-                      isSelected={evaluation.id === selectedEvaluationId}
-                      onClick={() => {
-                        setSelectedEvaluationId(evaluation.id)
-                        if (isNarrowViewport) {
-                          setIsFullWidth(true)
-                        }
+                      evaluationData={{
+                        ...evaluation,
+                        // Pass the raw score results - they will be standardized in the components
+                        scoreResults: evaluation.scoreResults
                       }}
+                      isSelected={evaluation.id === selectedEvaluationId}
+                      onClick={clickHandler}
                       extra={true}
                       selectedScoreResultId={selectedScoreResultId}
                       onSelectScoreResult={handleScoreResultSelect}
@@ -605,7 +913,7 @@ export default function EvaluationsDashboard() {
                   </div>
                 );
               })}
-              <div ref={ref} />
+              <div ref={ref} className="h-4" />
             </div>
           )}
         </div>
@@ -622,19 +930,26 @@ export default function EvaluationsDashboard() {
 
         {selectedEvaluationId && !isNarrowViewport && !isFullWidth && (
           <div 
-            className="h-full overflow-hidden"
+            className="h-full overflow-hidden flex-shrink-0"
             style={{ width: `${100 - leftPanelWidth}%` }}
           >
-            {renderSelectedTask()}
+            {renderSelectedTask}
           </div>
         )}
 
         {selectedEvaluationId && (isNarrowViewport || isFullWidth) && (
-          <div className="fixed inset-0 z-50">
-            {renderSelectedTask()}
+          <div className="fixed inset-0 z-50 overflow-y-auto">
+            {renderSelectedTask}
           </div>
         )}
       </div>
+      <ShareResourceModal 
+        isOpen={isShareModalOpen}
+        onClose={handleCloseShareModal}
+        onShare={handleCreateShareLink}
+        resourceType="Evaluation"
+        shareUrl={shareUrl}
+      />
     </div>
   )
 }
@@ -645,7 +960,10 @@ interface ScoreResult {
   value: string | number;
   confidence: number | null;
   metadata: any;
+  explanation?: string | null;
+  trace?: any | null;
   itemId: string | null;
+  createdAt?: string;
 }
 
 // Add TaskStageSubscriptionEvent type
@@ -683,7 +1001,7 @@ function mergeTaskUpdate(evaluations: Evaluation[], taskData: TaskSubscriptionEv
       return evaluation;
     }
 
-    // Create updated task with new data
+    // Create updated task with new data, preserving all existing fields
     const updatedTask = {
       ...task,
       status: taskData.status,
@@ -692,9 +1010,12 @@ function mergeTaskUpdate(evaluations: Evaluation[], taskData: TaskSubscriptionEv
       stages: taskData.stages
     };
 
+    // Return updated evaluation while preserving all other fields
     return {
       ...evaluation,
-      task: updatedTask as AmplifyTask
+      task: updatedTask as AmplifyTask,
+      // Explicitly preserve score results
+      scoreResults: evaluation.scoreResults
     };
   });
 }
@@ -739,9 +1060,12 @@ function mergeTaskStageUpdate(
         stages: updatedStages
       };
 
+      // Return updated evaluation while preserving all other fields
       return {
         ...evaluation,
-        task: updatedTask as AmplifyTask
+        task: updatedTask as AmplifyTask,
+        // Explicitly preserve score results
+        scoreResults: evaluation.scoreResults
       };
     }
 
@@ -766,9 +1090,12 @@ function mergeTaskStageUpdate(
       stages: updatedStages
     };
 
+    // Return updated evaluation while preserving all other fields
     return {
       ...evaluation,
-      task: updatedTask as AmplifyTask
+      task: updatedTask as AmplifyTask,
+      // Explicitly preserve score results
+      scoreResults: evaluation.scoreResults
     };
   });
 }

@@ -4,7 +4,7 @@ import { Sparkles } from 'lucide-react'
 import BeforeAfterGauges from './BeforeAfterGauges'
 import { ProgressBar } from '@/components/ui/progress-bar'
 
-interface OptimizationTaskData {
+export interface OptimizationTaskData {
   id: string
   title: string
   progress: number

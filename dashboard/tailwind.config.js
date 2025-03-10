@@ -23,6 +23,9 @@ module.exports = {
             colors: {
                 background: 'var(--background)',
                 foreground: 'var(--foreground)',
+                'foreground-selected': 'var(--foreground-selected)',
+                'foreground-true': 'var(--foreground-true)',
+                'foreground-false': 'var(--foreground-false)',
                 focus: 'var(--focus)',
                 attention: 'var(--attention)',
                 card: {

@@ -67,6 +67,7 @@ export const EVALUATION_UPDATE_SUBSCRIPTION = `
           confidence
           metadata
           explanation
+          trace
           itemId
           createdAt
         }

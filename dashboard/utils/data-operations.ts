@@ -19,6 +19,7 @@ export { convertToAmplifyTask as transformAmplifyTask, processTask };
 // Define base types for nested objects
 export type TaskStageType = {
   id: string;
+  taskId: string;
   name: string;
   order: number;
   status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
@@ -28,6 +29,8 @@ export type TaskStageType = {
   completedAt?: string;
   estimatedCompletionAt?: string;
   statusMessage?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 interface RawStages {
@@ -36,42 +39,32 @@ interface RawStages {
   };
 }
 
-type EvaluationType = {
-  id: string;
-  type: string;
-  metrics: any;
-  metricsExplanation?: string;
-  inferences: number;
-  accuracy: number;
-  cost: number | null;
-  status: string;
-  startedAt?: string;
-  elapsedSeconds: number | null;
-  estimatedRemainingSeconds: number | null;
-  totalItems: number;
-  processedItems: number;
-  errorMessage?: string;
-  errorDetails?: any;
-  confusionMatrix?: any;
-  scoreGoal?: string;
-  datasetClassDistribution?: any;
-  isDatasetClassDistributionBalanced?: boolean;
-  predictedClassDistribution?: any;
-  isPredictedClassDistributionBalanced?: boolean;
-  scoreResults?: {
-    items?: Array<{
-      id: string;
-      value: string | number;
-      confidence: number | null;
-      metadata: any;
-      explanation: string | null;
-      itemId: string | null;
-      createdAt: string;
-    }>;
-  };
+// Define base evaluation type from Schema
+type BaseEvaluation = Schema['Evaluation']['type'];
+
+// Define processed evaluation type that extends base evaluation
+export type ProcessedEvaluation = Omit<BaseEvaluation, 'task' | 'scorecard' | 'score' | 'metrics' | 'confusionMatrix' | 'datasetClassDistribution' | 'predictedClassDistribution' | 'scoreResults'> & {
+  // Override fields that need processing
+  task: AmplifyTask | null;
+  scorecard: { name: string } | null;
+  score: { name: string } | null;
+  metrics: any;  // Allow any for processed metrics since we parse JSON
+  confusionMatrix: any;  // Allow any for processed matrix since we parse JSON
+  datasetClassDistribution: any;  // Allow any for processed distribution since we parse JSON
+  predictedClassDistribution: any;  // Allow any for processed distribution since we parse JSON
+  scoreResults?: Array<{
+    id: string;
+    value: string | number;
+    confidence: number | null;
+    metadata: any;
+    explanation: string | null;
+    trace: any | null;
+    itemId: string | null;
+    createdAt: string;
+  }>;
 };
 
-// Update AmplifyTask type to properly handle lazy-loaded properties
+// Update AmplifyTask type to use BaseEvaluation
 export type AmplifyTask = {
   id: string;
   command: string;
@@ -113,42 +106,7 @@ export type AmplifyTask = {
     } | null;
   }>;
   evaluation?: LazyLoader<{
-    data?: {
-      id: string;
-      type: string;
-      metrics: any;
-      metricsExplanation?: string;
-      inferences: number;
-      accuracy: number;
-      cost: number | null;
-      status: string;
-      startedAt?: string;
-      elapsedSeconds: number | null;
-      estimatedRemainingSeconds: number | null;
-      totalItems: number;
-      processedItems: number;
-      errorMessage?: string;
-      errorDetails?: any;
-      confusionMatrix?: any;
-      scoreGoal?: string;
-      datasetClassDistribution?: any;
-      isDatasetClassDistributionBalanced?: boolean;
-      predictedClassDistribution?: any;
-      isPredictedClassDistributionBalanced?: boolean;
-      scoreResults?: {
-        data?: {
-          items?: Array<{
-            id: string;
-            value: string | number;
-            confidence: number | null;
-            metadata: any;
-            explanation: string | null;
-            itemId: string | null;
-            createdAt: string;
-          }>;
-        } | null;
-      };
-    } | null;
+    data?: BaseEvaluation | null;
   }>;
 };
 
@@ -184,40 +142,7 @@ export type ProcessedTask = {
     id: string;
     name: string;
   };
-  evaluation?: {
-    id: string;
-    type: string;
-    metrics: any;
-    metricsExplanation?: string | null;
-    inferences: number;
-    accuracy: number | null;
-    cost: number | null;
-    status: string;
-    startedAt?: string;
-    elapsedSeconds: number | null;
-    estimatedRemainingSeconds: number | null;
-    totalItems: number;
-    processedItems: number;
-    errorMessage?: string;
-    errorDetails?: any;
-    confusionMatrix?: any;
-    scoreGoal?: string;
-    datasetClassDistribution?: any;
-    isDatasetClassDistributionBalanced?: boolean;
-    predictedClassDistribution?: any;
-    isPredictedClassDistributionBalanced?: boolean;
-    scoreResults?: {
-      items?: Array<{
-        id: string;
-        value: string | number;
-        confidence: number | null;
-        metadata: any;
-        explanation: string | null;
-        itemId: string | null;
-        createdAt: string;
-      }>;
-    };
-  };
+  evaluation?: ProcessedEvaluation;
 };
 
 export type ProcessedTaskStage = {
@@ -310,9 +235,97 @@ type SubscriptionHandler<T> = {
 };
 
 // Add a type guard for GraphQL results
-function isGraphQLResult<T>(response: GraphQLResult<T> | GraphQLSubscription<T>): response is GraphQLResult<T> {
-  return !('subscribe' in response);
+function isGraphQLResult(response: any): response is GraphQLResult<any> {
+  return response && typeof response === 'object' && ('data' in response || 'errors' in response);
 }
+
+// Define the evaluation fields to use in GraphQL queries
+const EVALUATION_FIELDS = `
+  id
+  type
+  parameters
+  metrics
+  metricsExplanation
+  inferences
+  accuracy
+  cost
+  createdAt
+  updatedAt
+  status
+  startedAt
+  elapsedSeconds
+  estimatedRemainingSeconds
+  totalItems
+  processedItems
+  errorMessage
+  errorDetails
+  accountId
+  scorecardId
+  scorecard {
+    id
+    name
+  }
+  scoreId
+  score {
+    id
+    name
+  }
+  confusionMatrix
+  scoreGoal
+  datasetClassDistribution
+  isDatasetClassDistributionBalanced
+  predictedClassDistribution
+  isPredictedClassDistributionBalanced
+  taskId
+  task {
+    id
+    type
+    status
+    target
+    command
+    description
+    dispatchStatus
+    metadata
+    createdAt
+    startedAt
+    completedAt
+    estimatedCompletionAt
+    errorMessage
+    errorDetails
+    currentStageId
+    stages {
+      items {
+        id
+        name
+        order
+        status
+        statusMessage
+        startedAt
+        completedAt
+        estimatedCompletionAt
+        processedItems
+        totalItems
+      }
+    }
+  }
+  scoreResults {
+    items {
+      id
+      value
+      confidence
+      metadata
+      explanation
+      trace
+      itemId
+      createdAt
+      scoringJob {
+        id
+        status
+        metadata
+      }
+    }
+  }
+`;
 
 export async function listFromModel<T>(
   modelName: keyof AmplifyClient['models'],
@@ -427,28 +440,82 @@ export async function updateTask(
   }
 }
 
-export async function listRecentEvaluations(limit: number = 100): Promise<any[]> {
-  console.debug('listRecentEvaluations called with limit:', limit);
+export async function listRecentEvaluations(
+  limit: number = 100,
+  accountId: string | null = null,
+  selectedScorecard: string | null = null,
+  selectedScore: string | null = null
+): Promise<any[]> {
+  console.debug('listRecentEvaluations called with limit:', limit, 'filters:', { accountId, selectedScorecard, selectedScore });
   try {
-    const currentClient = getClient();
-
-    // Get the account ID by key
-    const ACCOUNT_KEY = 'call-criteria';
-    const accountResponse = await listFromModel<Schema['Account']['type']>(
-      'Account',
-      { filter: { key: { eq: ACCOUNT_KEY } } }
-    );
-
-    if (!accountResponse.data?.length) {
-      console.error('No account found with key:', ACCOUNT_KEY);
-      return [];
+    const client = getClient();
+    
+    // Get the account ID if not provided
+    if (!accountId) {
+      const ACCOUNT_KEY = 'call-criteria';
+      const accountResponse = await (client.models.Account as any).list({ 
+        filter: { key: { eq: ACCOUNT_KEY } } 
+      });
+      
+      if (!accountResponse.data?.length) {
+        throw new Error(`No account found with key: ${ACCOUNT_KEY}`);
+      }
+      
+      accountId = accountResponse.data[0].id;
     }
-
-    const accountId = accountResponse.data[0].id;
-    console.debug('Fetching evaluations for account:', accountId);
-
-    const response = await currentClient.graphql({
-      query: `
+    
+    let query = '';
+    let variables: any = {
+      sortDirection: 'DESC',
+      limit: limit || 100
+    };
+    
+    // Determine which GSI to use based on the filters
+    if (selectedScorecard && selectedScore) {
+      // If both scorecard and score are selected, use the scoreId GSI directly
+      query = `
+        query ListEvaluationByScoreIdAndUpdatedAt(
+          $scoreId: String!
+          $sortDirection: ModelSortDirection!
+          $limit: Int
+        ) {
+          listEvaluationByScoreIdAndUpdatedAt(
+            scoreId: $scoreId
+            sortDirection: $sortDirection
+            limit: $limit
+          ) {
+            items {
+              ${EVALUATION_FIELDS}
+            }
+            nextToken
+          }
+        }
+      `;
+      variables.scoreId = selectedScore;
+    } else if (selectedScorecard) {
+      // If only scorecard is selected, use the scorecardId GSI
+      query = `
+        query ListEvaluationByScorecardIdAndUpdatedAt(
+          $scorecardId: String!
+          $sortDirection: ModelSortDirection!
+          $limit: Int
+        ) {
+          listEvaluationByScorecardIdAndUpdatedAt(
+            scorecardId: $scorecardId
+            sortDirection: $sortDirection
+            limit: $limit
+          ) {
+            items {
+              ${EVALUATION_FIELDS}
+            }
+            nextToken
+          }
+        }
+      `;
+      variables.scorecardId = selectedScorecard;
+    } else {
+      // Default to accountId GSI
+      query = `
         query ListEvaluationByAccountIdAndUpdatedAt(
           $accountId: String!
           $sortDirection: ModelSortDirection!
@@ -460,149 +527,55 @@ export async function listRecentEvaluations(limit: number = 100): Promise<any[]>
             limit: $limit
           ) {
             items {
-              id
-              type
-              parameters
-              metrics
-              metricsExplanation
-              inferences
-              accuracy
-              cost
-              createdAt
-              updatedAt
-              status
-              startedAt
-              elapsedSeconds
-              estimatedRemainingSeconds
-              totalItems
-              processedItems
-              errorMessage
-              errorDetails
-              accountId
-              scorecardId
-              scorecard {
-                id
-                name
-              }
-              scoreId
-              score {
-                id
-                name
-              }
-              confusionMatrix
-              scoreGoal
-              datasetClassDistribution
-              isDatasetClassDistributionBalanced
-              predictedClassDistribution
-              isPredictedClassDistributionBalanced
-              taskId
-              task {
-                id
-                type
-                status
-                target
-                command
-                description
-                dispatchStatus
-                metadata
-                createdAt
-                startedAt
-                completedAt
-                estimatedCompletionAt
-                errorMessage
-                errorDetails
-                currentStageId
-                stages {
-                  items {
-                    id
-                    name
-                    order
-                    status
-                    statusMessage
-                    startedAt
-                    completedAt
-                    estimatedCompletionAt
-                    processedItems
-                    totalItems
-                  }
-                }
-              }
-              scoreResults {
-                items {
-                  id
-                  value
-                  confidence
-                  metadata
-                  explanation
-                  itemId
-                  createdAt
-                  scoringJob {
-                    id
-                    status
-                    metadata
-                  }
-                }
-              }
+              ${EVALUATION_FIELDS}
             }
             nextToken
           }
         }
-      `,
-      variables: {
-        accountId: accountId.trim(),
-        sortDirection: 'DESC',
-        limit: limit || 100
-      }
+      `;
+      variables.accountId = accountId;
+    }
+    
+    const response = await client.graphql({
+      query,
+      variables
+    }) as GraphQLResult<any>;
+    
+    // Extract data from the response
+    const responseData = response?.data || {};
+    
+    console.debug('Evaluations response:', {
+      itemCount: 
+        responseData?.listEvaluationByAccountIdAndUpdatedAt?.items?.length || 
+        responseData?.listEvaluationByScorecardIdAndUpdatedAt?.items?.length || 
+        responseData?.listEvaluationByScoreIdAndUpdatedAt?.items?.length || 0,
+      filters: { accountId, selectedScorecard, selectedScore }
     });
-
-    console.debug('GraphQL response:', {
-      hasData: isGraphQLResult(response) && !!response.data,
-      hasErrors: isGraphQLResult(response) && !!response.errors,
-      itemCount: isGraphQLResult(response) ? response.data?.listEvaluationByAccountIdAndUpdatedAt?.items?.length : 0,
-      firstItem: isGraphQLResult(response) && response.data?.listEvaluationByAccountIdAndUpdatedAt?.items?.[0] ? {
-        id: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].id,
-        type: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].type,
-        metrics: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].metrics,
-        task: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].task,
-        taskCompletedAt: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].task?.completedAt,
-        taskStartedAt: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].task?.startedAt,
-        taskStatus: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].task?.status,
-        rawTask: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].task,
-        taskKeys: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].task ? Object.keys(response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].task) : [],
-        taskType: typeof response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].task,
-        scoreResults: response.data.listEvaluationByAccountIdAndUpdatedAt.items[0].scoreResults
-      } : null
-    });
-
-    if (!isGraphQLResult(response)) {
-      console.error('Unexpected response type');
+    
+    // Extract items from the response based on which query was used
+    const result = 
+      responseData?.listEvaluationByAccountIdAndUpdatedAt || 
+      responseData?.listEvaluationByScorecardIdAndUpdatedAt || 
+      responseData?.listEvaluationByScoreIdAndUpdatedAt;
+    
+    if (!result?.items) {
+      console.warn('No items found in evaluation response');
       return [];
     }
-
-    if (response.errors?.length) {
-      console.error('GraphQL errors:', response.errors);
-      throw new Error(`GraphQL errors: ${response.errors.map(e => e.message).join(', ')}`);
-    }
-
-    if (!response.data) {
-      console.error('No data returned from GraphQL query');
-      return [];
-    }
-
-    const result = response.data;
-    if (!result?.listEvaluationByAccountIdAndUpdatedAt?.items) {
-      console.error('No items found in GraphQL response');
-      return [];
-    }
-
-    return result.listEvaluationByAccountIdAndUpdatedAt.items;
+    
+    return result.items;
   } catch (error) {
-    console.error('Error listing recent evaluations:', error);
+    console.error('Error in listRecentEvaluations:', error);
     return [];
   }
 }
 
-export function observeRecentEvaluations(limit: number = 100): Observable<{ items: any[], isSynced: boolean }> {
+export function observeRecentEvaluations(
+  limit: number = 100,
+  accountId: string | null = null,
+  selectedScorecard: string | null = null,
+  selectedScore: string | null = null
+): Observable<{ items: any[], isSynced: boolean }> {
   return new Observable(subscriber => {
     let evaluations: any[] = [];
     let subscriptionCleanup: { unsubscribe: () => void }[] = [];
@@ -610,7 +583,7 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
     // Load initial data
     async function loadInitialEvaluations() {
       try {
-        const response = await listRecentEvaluations(limit);
+        const response = await listRecentEvaluations(limit, accountId, selectedScorecard, selectedScore);
         console.debug('Initial evaluations response:', {
           count: response.length,
           firstEvaluation: response[0] ? {
@@ -625,7 +598,12 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
             taskKeys: response[0].task ? Object.keys(response[0].task) : [],
             taskType: typeof response[0].task,
             scoreResults: response[0].scoreResults
-          } : null
+          } : null,
+          filters: {
+            accountId,
+            selectedScorecard,
+            selectedScore
+          }
         });
         
         evaluations = response;
@@ -749,6 +727,7 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
                 confidence
                 metadata
                 explanation
+                trace
                 itemId
                 createdAt
               }
@@ -808,6 +787,7 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
                 confidence
                 metadata
                 explanation
+                trace
                 itemId
                 createdAt
               }
@@ -913,7 +893,7 @@ type RawScoreResults = {
 };
 
 // Update the transformEvaluation function's score results handling
-export function transformEvaluation(evaluation: Schema['Evaluation']['type']) {
+export function transformEvaluation(evaluation: BaseEvaluation): ProcessedEvaluation | null {
   console.debug('transformEvaluation input:', {
     evaluationId: evaluation?.id,
     hasTask: !!evaluation?.task,
@@ -921,7 +901,9 @@ export function transformEvaluation(evaluation: Schema['Evaluation']['type']) {
     taskData: evaluation?.task,
     taskKeys: evaluation?.task ? Object.keys(evaluation.task) : [],
     status: evaluation?.status,
-    type: evaluation?.type
+    type: evaluation?.type,
+    hasScoreResults: !!evaluation?.scoreResults,
+    scoreResultsType: evaluation?.scoreResults ? typeof evaluation.scoreResults : 'undefined'
   });
 
   if (!evaluation) return null;
@@ -950,80 +932,73 @@ export function transformEvaluation(evaluation: Schema['Evaluation']['type']) {
     taskStages: taskData?.stages
   });
 
-  // Get the score results
-  const scoreResults = evaluation.scoreResults as unknown as {
-    items?: Array<{
-      id: string;
-      value: string | number;
-      confidence: number | null;
-      metadata: any;
-      itemId: string | null;
-    }>;
-  } | null;
+  // Get scorecard and score data
+  const scorecardData = evaluation.scorecard ? 
+    (typeof evaluation.scorecard === 'function' ? 
+      getValueFromLazyLoader(evaluation.scorecard)?.data : 
+      evaluation.scorecard) : null;
 
-  // Helper function to transform stages
-  const transformStages = (stages: any): { items: TaskStageType[] } | undefined => {
-    if (!stages) return undefined;
+  const scoreData = evaluation.score ?
+    (typeof evaluation.score === 'function' ?
+      getValueFromLazyLoader(evaluation.score)?.data :
+      evaluation.score) : null;
 
-    // Get the items array from either format
-    const stageItems = (stages.data && Array.isArray(stages.data.items)) ? stages.data.items : 
-                      (Array.isArray(stages.items) ? stages.items : []);
+  // Get score results data - handle both function and object cases
+  let rawScoreResults: any = null;
+  if (evaluation.scoreResults) {
+    if (typeof evaluation.scoreResults === 'function') {
+      // If it's a function (LazyLoader), we need to get the raw value
+      const scoreResultsResponse = getValueFromLazyLoader(evaluation.scoreResults);
+      rawScoreResults = scoreResultsResponse?.data || scoreResultsResponse;
+    } else {
+      // If it's already an object, use it directly
+      rawScoreResults = evaluation.scoreResults;
+    }
+  }
 
-    // Transform the stages without an extra nesting level
-    return {
-      items: stageItems.map((stage: any) => ({
-        id: stage.id,
-        name: stage.name,
-        order: stage.order,
-        status: stage.status,
-        processedItems: stage.processedItems,
-        totalItems: stage.totalItems,
-        startedAt: stage.startedAt,
-        completedAt: stage.completedAt,
-        estimatedCompletionAt: stage.estimatedCompletionAt,
-        statusMessage: stage.statusMessage
-      }))
-    };
-  };
+  console.debug('Score results after initial processing:', {
+    hasRawScoreResults: !!rawScoreResults,
+    rawScoreResultsType: typeof rawScoreResults,
+    isArray: Array.isArray(rawScoreResults),
+    hasItems: rawScoreResults && typeof rawScoreResults === 'object' && 'items' in rawScoreResults
+  });
 
-  // Get stages from task data
-  const rawStages = taskData?.stages;
-  const transformedStages = transformStages(rawStages);
+  // Standardize score results to ensure consistent format
+  const standardizedScoreResults = standardizeScoreResults(rawScoreResults);
+
+  console.debug('Score results after standardization:', {
+    count: standardizedScoreResults.length,
+    firstResult: standardizedScoreResults[0],
+    isArray: Array.isArray(standardizedScoreResults)
+  });
+
+  // Transform score results into the expected format
+  const transformedScoreResults = standardizedScoreResults.map(result => ({
+    id: result.id,
+    value: result.value,
+    confidence: result.confidence ?? null,
+    metadata: result.metadata ?? null,
+    explanation: result.explanation ?? null,
+    trace: result.trace ?? null,
+    itemId: result.itemId ?? null,
+    createdAt: result.createdAt || new Date().toISOString()
+  }));
 
   // Transform the evaluation into the format expected by components
-  const transformedEvaluation: Evaluation = {
-    id: evaluation.id,
-    type: evaluation.type,
-    scorecard: evaluation.scorecard,
-    score: evaluation.score,
-    createdAt: evaluation.createdAt,
+  const transformedEvaluation: ProcessedEvaluation = {
+    ...evaluation, // Include all base evaluation fields
+    task: taskData,
+    scorecard: scorecardData ? { name: scorecardData.name } : null,
+    score: scoreData ? { name: scoreData.name } : null,
     metrics: typeof evaluation.metrics === 'string' ? 
       JSON.parse(evaluation.metrics) : evaluation.metrics,
-    metricsExplanation: evaluation.metricsExplanation,
-    accuracy: evaluation.accuracy,
-    processedItems: evaluation.processedItems,
-    totalItems: evaluation.totalItems,
-    inferences: evaluation.inferences,
-    cost: evaluation.cost,
-    status: evaluation.status,
-    elapsedSeconds: evaluation.elapsedSeconds,
-    estimatedRemainingSeconds: evaluation.estimatedRemainingSeconds,
-    startedAt: evaluation.startedAt,
-    errorMessage: evaluation.errorMessage,
-    errorDetails: evaluation.errorDetails,
     confusionMatrix: typeof evaluation.confusionMatrix === 'string' ? 
       JSON.parse(evaluation.confusionMatrix) : evaluation.confusionMatrix,
     datasetClassDistribution: typeof evaluation.datasetClassDistribution === 'string' ?
       JSON.parse(evaluation.datasetClassDistribution) : evaluation.datasetClassDistribution,
-    isDatasetClassDistributionBalanced: evaluation.isDatasetClassDistributionBalanced,
     predictedClassDistribution: typeof evaluation.predictedClassDistribution === 'string' ?
       JSON.parse(evaluation.predictedClassDistribution) : evaluation.predictedClassDistribution,
-    isPredictedClassDistributionBalanced: evaluation.isPredictedClassDistributionBalanced,
-    task: taskData ? ({
-      ...taskData,
-      stages: transformedStages
-    } as AmplifyTask) : null,
-    scoreResults: scoreResults
+    scoreResults: transformedScoreResults
   };
 
   console.debug('Final transformed evaluation:', {
@@ -1032,7 +1007,8 @@ export function transformEvaluation(evaluation: Schema['Evaluation']['type']) {
     taskType: typeof transformedEvaluation.task,
     taskKeys: transformedEvaluation.task ? Object.keys(transformedEvaluation.task) : [],
     taskStages: transformedEvaluation.task?.stages,
-    scoreResultsCount: scoreResults?.items?.length
+    scoreResultsCount: transformedEvaluation.scoreResults?.length,
+    firstScoreResult: transformedEvaluation.scoreResults?.[0]
   });
 
   return transformedEvaluation;
@@ -1071,6 +1047,7 @@ export type Evaluation = {
       value: string | number;
       confidence: number | null;
       metadata: any;
+      trace: any | null;
       itemId: string | null;
     }>;
   } | null;
@@ -1096,3 +1073,46 @@ export type TaskStageSubscriptionEvent = {
   type: 'create' | 'update';
   data: TaskStageType;
 };
+
+// Export the base evaluation type for use in other files
+export type { BaseEvaluation };
+
+// Add a standardization function for score results
+export function standardizeScoreResults(scoreResults: any): Array<any> {
+  console.log('standardizeScoreResults input:', {
+    type: typeof scoreResults,
+    isNull: scoreResults === null,
+    isUndefined: scoreResults === undefined,
+    isArray: Array.isArray(scoreResults),
+    hasItems: scoreResults && typeof scoreResults === 'object' && 'items' in scoreResults,
+    raw: scoreResults
+  });
+
+  // Case 1: null or undefined
+  if (!scoreResults) {
+    console.log('standardizeScoreResults: input is null or undefined, returning empty array');
+    return [];
+  }
+
+  // Case 2: already an array
+  if (Array.isArray(scoreResults)) {
+    console.log('standardizeScoreResults: input is already an array with length', scoreResults.length);
+    return scoreResults;
+  }
+
+  // Case 3: object with items property that is an array
+  if (typeof scoreResults === 'object' && 'items' in scoreResults && Array.isArray(scoreResults.items)) {
+    console.log('standardizeScoreResults: input is an object with items array of length', scoreResults.items.length);
+    return scoreResults.items;
+  }
+
+  // Case 4: object with items property that is not an array
+  if (typeof scoreResults === 'object' && 'items' in scoreResults) {
+    console.log('standardizeScoreResults: input has items property but it is not an array:', scoreResults.items);
+    return [];
+  }
+
+  // Case 5: unknown format
+  console.log('standardizeScoreResults: unknown format, returning empty array');
+  return [];
+}

@@ -240,6 +240,7 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
                       confidence
                       metadata
                       explanation
+                      trace
                       itemId
                       createdAt
                       scoringJob {
@@ -408,6 +409,7 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
                   confidence
                   metadata
                   explanation
+                  trace
                   itemId
                   createdAt
                 }
@@ -508,6 +510,7 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
                   confidence
                   metadata
                   explanation
+                  trace
                   itemId
                   createdAt
                 }
@@ -620,6 +623,7 @@ export function observeScoreResults(evaluationId: string) {
                 'confidence',
                 'metadata',
                 'explanation',
+                'trace',
                 'correct',
                 'itemId',
                 'accountId',
@@ -638,9 +642,11 @@ export function observeScoreResults(evaluationId: string) {
           } while (nextToken);
 
           // Sort all results in memory
-          const sortedData = [...allData].sort((a, b) => 
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-          );
+          const sortedData = [...allData].sort((a, b) => {
+            const bDate = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            const aDate = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+            return bDate - aDate;
+          });
 
           handlers.next({
             items: sortedData,

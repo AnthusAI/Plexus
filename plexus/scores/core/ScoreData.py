@@ -67,13 +67,19 @@ class ScoreData:
             module = importlib.import_module(module_name)
             data_cache_class = getattr(module, class_name)
         except (ImportError, AttributeError):
-            # Fallback to check in `builtins`
-            if hasattr(builtins, class_name):
-                data_cache_class = getattr(builtins, class_name)
-                print(f"Loaded {class_name} from builtins namespace")
-            else:
-                # Raise an error if the class is not found anywhere
-                raise ImportError(f"Cannot find class {class_name} in module {module_name} or builtins namespace")
+            # Fallback to check in `plexus_extensions`
+            try:
+                module = importlib.import_module(f'plexus_extensions.{class_name}')
+                data_cache_class = getattr(module, class_name)
+                logging.info(f"Loaded {class_name} from plexus_extensions.{class_name}")
+            except (ImportError, AttributeError):
+                # Fallback to check in `builtins`
+                if hasattr(builtins, class_name):
+                    data_cache_class = getattr(builtins, class_name)
+                    logging.info(f"Loaded {class_name} from builtins namespace")
+                else:
+                    # Raise an error if the class is not found anywhere
+                    raise ImportError(f"Cannot find class {class_name} in module {module_name}, plexus_extensions.{class_name}, or builtins namespace")
         
         # Return an instance of the loaded class
         return data_cache_class(**self.parameters.data)

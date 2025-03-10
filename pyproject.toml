@@ -48,7 +48,7 @@ dependencies = [
     "langchain>=0.2.11",
     "langchain-core>=0.2.38",
     "langchain-community>=0.2.6",
-    "langgraph>=0.2.53",
+    "langgraph==0.2.60",
     "langchain-aws>=0.1.9",
     "langchain-openai>=0.1.14",
     "langchain-google-vertexai>=1.0.6",

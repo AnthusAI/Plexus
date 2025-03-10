@@ -29,7 +29,11 @@ const defaultTask = {
     completedRequests: 50,
     failedRequests: 0,
     startedAt: new Date().toISOString(),
-    scoringJobs: []
+    scoringJobs: [],
+    id: '1',
+    title: 'Scoring Job Task',
+    totalItems: 100,
+    completedItems: 50
   }
 }
 
@@ -49,6 +53,8 @@ export const WithError: Story = {
         errorMessage: 'Failed to connect to scoring service',
         totalItems: 300,
         completedItems: 145,
+        id: '1',
+        title: 'Failed Scoring Job',
         batchJobs: [
           {
             id: '1',
@@ -86,6 +92,8 @@ export const Complete: Story = {
         status: 'done',
         totalItems: 300,
         completedItems: 300,
+        id: '1',
+        title: 'Completed Scoring Job',
         batchJobs: [
           {
             id: '1',

@@ -956,7 +956,7 @@ class LangGraphScore(Score, LangChainUser):
             metadata=model_input.metadata,
             results=initial_results,
             retry_count=0,
-            at_llm_breakpoint=False
+            at_llm_breakpoint=False,
         ).model_dump()
 
         if batch_data:
@@ -974,7 +974,7 @@ class LangGraphScore(Score, LangChainUser):
             )
             
             # Convert graph result to Score.Result
-            return Score.Result(
+            result = Score.Result(
                 parameters=self.parameters,
                 value=graph_result.get('value', 'Error'),
                 metadata={
@@ -988,6 +988,13 @@ class LangGraphScore(Score, LangChainUser):
                     'source': graph_result.get('source')
                 }
             )
+            
+            # If metadata with trace exists in graph_result, add it to the result metadata
+            if 'metadata' in graph_result and graph_result['metadata'] is not None:
+                # Merge the existing metadata with the graph_result metadata
+                result.metadata.update(graph_result['metadata'])
+            
+            return result
         except BatchProcessingPause:
             # Let BatchProcessingPause propagate up
             raise

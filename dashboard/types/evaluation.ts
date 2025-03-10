@@ -58,6 +58,7 @@ export interface ScoreResult {
     human_explanation?: string | null;
     text?: string | null;
   };
+  trace?: any | null;
   itemId: string | null;
 }
 

@@ -413,9 +413,11 @@ export function observeScoreResults(client: any, evaluationId: string) {
           } while (nextToken)
 
           // Sort all results in memory
-          const sortedData = [...allData].sort((a, b) => 
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-          )
+          const sortedData = [...allData].sort((a, b) => {
+            const bDate = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            const aDate = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+            return bDate - aDate;
+          })
 
           console.log('Completed fetching all ScoreResults:', {
             totalPages: pageCount,
