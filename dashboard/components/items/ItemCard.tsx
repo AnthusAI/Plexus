@@ -9,14 +9,25 @@ import { formatTimeAgo } from '@/utils/format-time'
 
 export interface ItemData {
   id: number | string
-  scorecard: string
-  score: number
-  date: string
-  status: string
-  results: number
-  inferences: number
-  cost: string
+  scorecard?: string
+  score?: number
+  date?: string
+  status?: string
+  results?: number
+  inferences?: number
+  cost?: string
   icon?: React.ReactNode
+  
+  // New fields from the Amplify model
+  externalId?: string
+  description?: string
+  accountId?: string
+  scorecardId?: string
+  scoreId?: string
+  evaluationId?: string
+  updatedAt?: string
+  createdAt?: string
+  isEvaluation?: boolean
 }
 
 interface ItemCardProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -44,18 +55,19 @@ const GridContent = React.memo(({
   return (
     <div className="flex justify-between items-start w-full">
       <div className="space-y-1 max-w-[70%]">
-        <div className="font-medium text-sm truncate" title={item.scorecard}>{item.scorecard}</div>
-        <div className="text-xs text-muted-foreground">{formatTimeAgo(item.date)}</div>
+        <div className="font-medium text-sm truncate" title={item.scorecard}>{item.scorecard || 'Untitled Item'}</div>
+        <div className="text-xs text-muted-foreground">{item.date ? formatTimeAgo(item.date) : 'No date'}</div>
       </div>
       <div className="flex flex-col items-end space-y-1">
-        <div className="text-muted-foreground">
-          {item.icon || <AudioLines className="h-[1.75rem] w-[1.75rem]" strokeWidth={1.25} />}
-        </div>
-        <Badge 
-          className={`${getBadgeVariant(item.status)} text-xs px-2 py-0 h-5`}
-        >
-          {item.status}
-        </Badge>
+        {item.icon || <AudioLines className="h-[1.75rem] w-[1.75rem]" strokeWidth={1.25} />}
+        {item.status && (
+          <Badge 
+            className={`${getBadgeVariant(item.status)} text-xs px-2 py-0 h-5`}
+            variant="outline"
+          >
+            {item.status}
+          </Badge>
+        )}
       </div>
     </div>
   )
@@ -84,9 +96,9 @@ const DetailContent = React.memo(({
     <div className="w-full flex flex-col min-h-0">
       <div className="flex justify-between items-start w-full">
         <div className="space-y-2 flex-1">
-          <h2 className="text-xl font-semibold">{item.scorecard}</h2>
+          <h2 className="text-xl font-semibold">{item.scorecard || 'Untitled Item'}</h2>
           <p className="text-sm text-muted-foreground">
-            {formatTimeAgo(item.date)}
+            {item.date ? formatTimeAgo(item.date) : 'No date'}
           </p>
         </div>
         <div className="flex gap-2 ml-4">
@@ -132,23 +144,24 @@ const DetailContent = React.memo(({
       <div className="grid grid-cols-2 gap-4 mt-4">
         <div>
           <p className="text-sm font-medium">Inferences</p>
-          <p>{item.inferences}</p>
+          <p>{item.inferences || 0}</p>
         </div>
         <div className="text-right">
           <p className="text-sm font-medium">Status</p>
           <Badge 
-            className={`w-24 justify-center ${getBadgeVariant(item.status)}`}
+            className={`w-24 justify-center ${item.status ? getBadgeVariant(item.status) : ''}`}
+            variant="outline"
           >
-            {item.status}
+            {item.status || 'Unknown'}
           </Badge>
         </div>
         <div>
           <p className="text-sm font-medium">Results</p>
-          <p>{item.results}</p>
+          <p>{item.results || 0}</p>
         </div>
         <div className="text-right">
           <p className="text-sm font-medium">Cost</p>
-          <p>{item.cost}</p>
+          <p>{item.cost || '$0.000'}</p>
         </div>
       </div>
     </div>
