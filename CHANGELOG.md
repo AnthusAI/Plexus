@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.14.0 (2025-03-10)
+
+### Features
+
+- **items**: Implemented items dashboard using real data.
+  ([`9a29577`](https://github.com/AnthusAI/Plexus/commit/9a29577ba7703e94cadae406251e35c3ab3739e6))
+
+
 ## v0.13.0 (2025-03-09)
 
 ### Features
