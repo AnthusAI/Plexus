@@ -25,7 +25,7 @@ type ItemIndexFields = "name" | "description" | "accountId" | "evaluationId" | "
 type ScoringJobIndexFields = "accountId" | "scorecardId" | "itemId" | "status" | 
     "scoreId" | "evaluationId" | "startedAt" | "completedAt" | "errorMessage" | "updatedAt" | "createdAt";
 type ScoreResultIndexFields = "accountId" | "scorecardId" | "itemId" | 
-    "scoringJobId" | "evaluationId" | "scoreVersionId" | "updatedAt" | "createdAt";
+    "scoringJobId" | "evaluationId" | "scoreVersionId" | "updatedAt" | "createdAt" | "scoreId";
 type BatchJobScoringJobIndexFields = "batchJobId" | "scoringJobId";
 type TaskIndexFields = "accountId" | "type" | "status" | "target" | 
     "currentStageId" | "updatedAt" | "scorecardId" | "scoreId";
@@ -130,6 +130,7 @@ const schema = a.schema({
             tasks: a.hasMany('Task', 'scoreId'),
             versions: a.hasMany('ScoreVersion', 'scoreId'),
             items: a.hasMany('Item', 'scoreId'),
+            scoreResults: a.hasMany('ScoreResult', 'scoreId'),
             championVersionId: a.string(),
             championVersion: a.belongsTo('ScoreVersion', 'championVersionId'),
             externalId: a.string().required()
@@ -342,6 +343,8 @@ const schema = a.schema({
             scorecard: a.belongsTo('Scorecard', 'scorecardId'),
             scoreVersionId: a.string(),
             scoreVersion: a.belongsTo('ScoreVersion', 'scoreVersionId'),
+            scoreId: a.string(),
+            score: a.belongsTo('Score', 'scoreId'),
             updatedAt: a.datetime(),
             createdAt: a.datetime(),
         })
@@ -355,7 +358,8 @@ const schema = a.schema({
             idx("scoringJobId"),
             idx("scorecardId"),
             idx("evaluationId"),
-            idx("scoreVersionId")
+            idx("scoreVersionId"),
+            idx("scoreId")
         ]),
 
     BatchJobScoringJob: a
