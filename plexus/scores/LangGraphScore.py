@@ -21,7 +21,6 @@ from plexus.utils.dict_utils import truncate_dict_strings
 from langchain_community.callbacks import OpenAICallbackHandler
 
 from langgraph.graph import StateGraph, END
-from langgraph.prebuilt import ToolExecutor
 
 from openai_cost_calculator.openai_cost_calculator import calculate_cost
 
