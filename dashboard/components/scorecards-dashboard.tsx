@@ -429,7 +429,7 @@ export default function ScorecardsComponent({
           { scorecardId: { eq: '' } }
         );
       }
-    } as Schema['Scorecard']['type']
+    } as unknown as Schema['Scorecard']['type']
 
     handleSelectScorecard(blankScorecard);
     setSelectedScorecardSections({ items: [] });
