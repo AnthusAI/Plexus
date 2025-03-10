@@ -13,6 +13,7 @@ export const transformEvaluation = (rawEvaluation: any): Schema['Evaluation']['t
       status: 'PENDING',
       accountId: '',
       task: async () => ({ data: null }),
+      items: async () => ({ data: [], nextToken: null }),
       scoreResults: async () => ({ data: [], nextToken: null }),
       scoringJobs: async () => ({ data: [], nextToken: null }),
       account: async () => ({ data: null }),
@@ -53,6 +54,7 @@ export const transformEvaluation = (rawEvaluation: any): Schema['Evaluation']['t
       }
       return taskFn
     })() : async () => ({ data: null }),
+    items: async () => ({ data: [], nextToken: null }),
     scoreResults: async () => ({ data: [], nextToken: null }),
     scoringJobs: async () => ({ data: [], nextToken: null }),
     account: async () => ({
@@ -63,6 +65,7 @@ export const transformEvaluation = (rawEvaluation: any): Schema['Evaluation']['t
         scorecards: async () => ({ data: [], nextToken: null }),
         evaluations: async () => ({ data: [], nextToken: null }),
         batchJobs: async () => ({ data: [], nextToken: null }),
+        items: async () => ({ data: [], nextToken: null }),
         scoringJobs: async () => ({ data: [], nextToken: null }),
         scoreResults: async () => ({ data: [], nextToken: null }),
         actions: async () => ({ data: [], nextToken: null }),
