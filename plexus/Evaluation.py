@@ -1721,7 +1721,7 @@ Total cost:       ${expenses['total_cost']:.6f}
         try:
             # First, check if an item with this externalId already exists for this account
             query = """
-            query GetItemByAccountAndExternalId($accountId: ID!, $externalId: String!) {
+            query GetItemByAccountAndExternalId($accountId: String!, $externalId: String!) {
                 listItems(filter: {accountId: {eq: $accountId}, externalId: {eq: $externalId}}, limit: 1) {
                     items {
                         id
