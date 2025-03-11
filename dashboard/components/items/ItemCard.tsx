@@ -5,12 +5,13 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { cn } from '@/lib/utils'
 import { CardButton } from '@/components/CardButton'
 import { Badge } from '@/components/ui/badge'
-import { formatTimeAgo } from '@/utils/format-time'
+import { Timestamp } from '@/components/ui/timestamp'
+import { motion } from 'framer-motion'
 
 export interface ItemData {
   id: number | string
   scorecard?: string
-  score?: number
+  score?: string | number | null
   date?: string
   status?: string
   results?: number
@@ -28,6 +29,7 @@ export interface ItemData {
   updatedAt?: string
   createdAt?: string
   isEvaluation?: boolean
+  isNew?: boolean
 }
 
 interface ItemCardProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -56,7 +58,26 @@ const GridContent = React.memo(({
     <div className="flex justify-between items-start w-full">
       <div className="space-y-1 max-w-[70%]">
         <div className="font-medium text-sm truncate" title={item.scorecard}>{item.scorecard || 'Untitled Item'}</div>
-        <div className="text-xs text-muted-foreground">{item.date ? formatTimeAgo(item.date) : 'No date'}</div>
+        {item.score && (
+          <div className="text-xs text-muted-foreground truncate" title={`Score: ${item.score}`}>
+            {item.score}
+          </div>
+        )}
+        {item.externalId && (
+          <div className="text-xs text-muted-foreground truncate" title={`ID: ${item.externalId}`}>
+            {item.externalId}
+          </div>
+        )}
+        {item.date ? (
+          <Timestamp 
+            time={item.date} 
+            variant="relative" 
+            showIcon={false} 
+            className="text-xs"
+          />
+        ) : (
+          <div className="text-xs text-muted-foreground">No date</div>
+        )}
       </div>
       <div className="flex flex-col items-end space-y-1">
         {item.icon || <AudioLines className="h-[1.75rem] w-[1.75rem]" strokeWidth={1.25} />}
@@ -97,9 +118,15 @@ const DetailContent = React.memo(({
       <div className="flex justify-between items-start w-full">
         <div className="space-y-2 flex-1">
           <h2 className="text-xl font-semibold">{item.scorecard || 'Untitled Item'}</h2>
-          <p className="text-sm text-muted-foreground">
-            {item.date ? formatTimeAgo(item.date) : 'No date'}
-          </p>
+          {item.date ? (
+            <Timestamp 
+              time={item.date} 
+              variant="relative" 
+              className="text-sm"
+            />
+          ) : (
+            <p className="text-sm text-muted-foreground">No date</p>
+          )}
         </div>
         <div className="flex gap-2 ml-4">
           <DropdownMenu.Root>
@@ -182,17 +209,26 @@ export default function ItemCard({
   className, 
   ...props 
 }: ItemCardProps) {
+  // Extract HTML props that might conflict with motion props
+  const { onDrag, ...htmlProps } = props as any;
+  
   return (
-    <div
+    <motion.div
+      initial={item.isNew ? { opacity: 0 } : { opacity: 1 }}
+      animate={{ opacity: 1 }}
+      transition={{ 
+        duration: 1.0,
+        ease: "easeOut"
+      }}
       className={cn(
-        "w-full rounded-lg text-card-foreground hover:bg-accent/50 transition-colors",
+        "w-full rounded-lg text-card-foreground hover:bg-accent/50 relative",
         variant === 'grid' ? (
           isSelected ? "bg-card-selected" : "bg-card"
         ) : "bg-card-selected",
         variant === 'detail' && "h-full flex flex-col",
         className
       )}
-      {...props}
+      {...htmlProps}
     >
       <div className={cn(
         variant === 'grid' ? "p-3" : "p-4",
@@ -225,10 +261,11 @@ export default function ItemCard({
               onToggleFullWidth={onToggleFullWidth}
               onClose={onClose}
               onViewData={onViewData}
+              onEdit={onEdit}
             />
           )}
         </div>
       </div>
-    </div>
+    </motion.div>
   )
 } 
