@@ -26,6 +26,8 @@ def create_client() -> PlexusDashboardClient:
 
 def resolve_scorecard_identifier(client, identifier):
     """Resolve a scorecard identifier to its ID."""
+    console.print(f"[dim]Resolving scorecard identifier: {identifier}[/dim]")
+    
     # First try direct ID lookup
     try:
         query = f"""
@@ -37,63 +39,153 @@ def resolve_scorecard_identifier(client, identifier):
         """
         result = client.execute(query)
         if result.get('getScorecard'):
+            console.print(f"[dim]Found scorecard by ID: {identifier}[/dim]")
             return identifier
-    except:
-        pass
+    except Exception as e:
+        console.print(f"[dim]Error looking up by ID: {str(e)}[/dim]")
     
     # Try lookup by key
     try:
         query = f"""
         query ListScorecards {{
-            listScorecards(filter: {{ key: {{ eq: "{identifier}" }} }}, limit: 1) {{
+            listScorecards(filter: {{ key: {{ eq: "{identifier}" }} }}, limit: 10) {{
                 items {{
                     id
+                    key
+                    name
                 }}
             }}
         }}
         """
+        console.print(f"[dim]Looking up by key: {identifier}[/dim]")
         result = client.execute(query)
+        console.print(f"[dim]Key lookup result: {result}[/dim]")
         items = result.get('listScorecards', {}).get('items', [])
         if items and len(items) > 0:
+            if len(items) > 1:
+                console.print(f"[yellow]Warning: Found multiple scorecards with key '{identifier}':[/yellow]")
+                for i, item in enumerate(items):
+                    console.print(f"[yellow]{i+1}. {item.get('name')} (ID: {item.get('id')}, Key: {item.get('key')})[/yellow]")
+                console.print(f"[yellow]Using the first match: {items[0].get('name')} (ID: {items[0].get('id')})[/yellow]")
+            else:
+                console.print(f"[dim]Found scorecard by key: {items[0]['id']} (key: {items[0].get('key')})[/dim]")
             return items[0]['id']
-    except:
-        pass
+    except Exception as e:
+        console.print(f"[dim]Error looking up by key: {str(e)}[/dim]")
     
     # Try lookup by name
     try:
         query = f"""
         query ListScorecards {{
-            listScorecards(filter: {{ name: {{ eq: "{identifier}" }} }}, limit: 1) {{
+            listScorecards(filter: {{ name: {{ eq: "{identifier}" }} }}, limit: 10) {{
                 items {{
                     id
+                    name
+                    key
                 }}
             }}
         }}
         """
+        console.print(f"[dim]Looking up by name: {identifier}[/dim]")
         result = client.execute(query)
+        console.print(f"[dim]Name lookup result: {result}[/dim]")
         items = result.get('listScorecards', {}).get('items', [])
         if items and len(items) > 0:
+            if len(items) > 1:
+                console.print(f"[yellow]Warning: Found multiple scorecards with name '{identifier}':[/yellow]")
+                for i, item in enumerate(items):
+                    console.print(f"[yellow]{i+1}. {item.get('name')} (ID: {item.get('id')}, Key: {item.get('key')})[/yellow]")
+                console.print(f"[yellow]Using the first match: {items[0].get('name')} (ID: {items[0].get('id')})[/yellow]")
+            else:
+                console.print(f"[dim]Found scorecard by name: {items[0]['id']} (name: {items[0].get('name')})[/dim]")
             return items[0]['id']
-    except:
-        pass
+    except Exception as e:
+        console.print(f"[dim]Error looking up by name: {str(e)}[/dim]")
     
     # Try lookup by externalId
     try:
         query = f"""
         query ListScorecards {{
-            listScorecards(filter: {{ externalId: {{ eq: "{identifier}" }} }}, limit: 1) {{
+            listScorecards(filter: {{ externalId: {{ eq: "{identifier}" }} }}, limit: 10) {{
                 items {{
                     id
+                    externalId
+                    name
+                    key
+                }}
+            }}
+        }}
+        """
+        console.print(f"[dim]Looking up by externalId: {identifier}[/dim]")
+        result = client.execute(query)
+        console.print(f"[dim]ExternalId lookup result: {result}[/dim]")
+        items = result.get('listScorecards', {}).get('items', [])
+        if items and len(items) > 0:
+            if len(items) > 1:
+                console.print(f"[yellow]Warning: Found multiple scorecards with externalId '{identifier}':[/yellow]")
+                for i, item in enumerate(items):
+                    console.print(f"[yellow]{i+1}. {item.get('name')} (ID: {item.get('id')}, Key: {item.get('key')})[/yellow]")
+                console.print(f"[yellow]Using the first match: {items[0].get('name')} (ID: {items[0].get('id')})[/yellow]")
+            else:
+                console.print(f"[dim]Found scorecard by externalId: {items[0]['id']} (externalId: {items[0].get('externalId')})[/dim]")
+            return items[0]['id']
+    except Exception as e:
+        console.print(f"[dim]Error looking up by externalId: {str(e)}[/dim]")
+    
+    # If we get here, try a more flexible search for the key
+    try:
+        query = f"""
+        query ListScorecards {{
+            listScorecards(limit: 100) {{
+                items {{
+                    id
+                    key
+                    name
+                    externalId
                 }}
             }}
         }}
         """
         result = client.execute(query)
         items = result.get('listScorecards', {}).get('items', [])
-        if items and len(items) > 0:
-            return items[0]['id']
-    except:
-        pass
+        
+        # First try exact match on key
+        key_matches = [item for item in items if item.get('key') == identifier]
+        if key_matches:
+            if len(key_matches) > 1:
+                console.print(f"[yellow]Warning: Found multiple scorecards with key '{identifier}':[/yellow]")
+                for i, item in enumerate(key_matches):
+                    console.print(f"[yellow]{i+1}. {item.get('name')} (ID: {item.get('id')}, Key: {item.get('key')})[/yellow]")
+                console.print(f"[yellow]Using the first match: {key_matches[0].get('name')} (ID: {key_matches[0].get('id')})[/yellow]")
+            else:
+                console.print(f"[dim]Found scorecard by exact key match: {key_matches[0]['id']} (key: {key_matches[0].get('key')})[/dim]")
+            return key_matches[0]['id']
+        
+        # Then try exact match on externalId
+        ext_id_matches = [item for item in items if item.get('externalId') == identifier]
+        if ext_id_matches:
+            if len(ext_id_matches) > 1:
+                console.print(f"[yellow]Warning: Found multiple scorecards with externalId '{identifier}':[/yellow]")
+                for i, item in enumerate(ext_id_matches):
+                    console.print(f"[yellow]{i+1}. {item.get('name')} (ID: {item.get('id')}, Key: {item.get('key')})[/yellow]")
+                console.print(f"[yellow]Using the first match: {ext_id_matches[0].get('name')} (ID: {ext_id_matches[0].get('id')})[/yellow]")
+            else:
+                console.print(f"[dim]Found scorecard by exact externalId match: {ext_id_matches[0]['id']} (externalId: {ext_id_matches[0].get('externalId')})[/dim]")
+            return ext_id_matches[0]['id']
+        
+        # Then try exact match on name
+        name_matches = [item for item in items if item.get('name') == identifier]
+        if name_matches:
+            if len(name_matches) > 1:
+                console.print(f"[yellow]Warning: Found multiple scorecards with name '{identifier}':[/yellow]")
+                for i, item in enumerate(name_matches):
+                    console.print(f"[yellow]{i+1}. {item.get('name')} (ID: {item.get('id')}, Key: {item.get('key')})[/yellow]")
+                console.print(f"[yellow]Using the first match: {name_matches[0].get('name')} (ID: {name_matches[0].get('id')})[/yellow]")
+            else:
+                console.print(f"[dim]Found scorecard by exact name match: {name_matches[0]['id']} (name: {name_matches[0].get('name')})[/dim]")
+            return name_matches[0]['id']
+    except Exception as e:
+        console.print(f"[dim]Error during flexible search: {str(e)}[/dim]")
     
     return None
 
@@ -1213,14 +1305,155 @@ def fix(scorecard: str, skip_duplicate_check: bool, skip_external_id_check: bool
 @click.option('--skip-external-id-check', is_flag=True, help='Skip checking for and fixing missing external IDs')
 @click.option('--file', help='Path to specific YAML file to push (if not provided, will search in scorecards/ directory)')
 @click.option('--note', help='Note to include when creating a new score version')
-def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external_id_check: bool, file: Optional[str] = None, note: Optional[str] = None):
+@click.option('--create-if-missing', is_flag=True, help='Create the scorecard if it does not exist')
+def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external_id_check: bool, file: Optional[str] = None, note: Optional[str] = None, create_if_missing: bool = False):
     """Push a scorecard to the dashboard."""
     client = create_client()
     
-    # First, resolve the scorecard identifier to an ID
-    scorecard_id = resolve_scorecard_identifier(client, scorecard)
+    # Initialize variables
+    yaml_data = None
+    scorecard_id = None
+    
+    # Load YAML configuration first
+    if file:
+        # Load from specified file
+        if not os.path.exists(file):
+            console.print(f"[red]File not found: {file}[/red]")
+            return
+        
+        try:
+            with open(file, 'r') as f:
+                yaml_data = yaml.safe_load(f)
+            console.print(f"[green]Loaded configuration from {file}[/green]")
+        except Exception as e:
+            console.print(f"[red]Error loading YAML from {file}: {e}[/red]")
+            return
+    else:
+        # Search for matching YAML file in scorecards/ directory
+        if not os.path.exists('scorecards'):
+            console.print("[red]scorecards/ directory not found[/red]")
+            return
+        
+        yaml_files = [f for f in os.listdir('scorecards') if f.endswith('.yaml')]
+        if not yaml_files:
+            console.print("[red]No YAML files found in scorecards/ directory[/red]")
+            return
+        
+        # First try to resolve the scorecard identifier to an ID to check if it exists
+        scorecard_id = resolve_scorecard_identifier(client, scorecard)
+        
+        if scorecard_id:
+            # Scorecard exists, get its details
+            query = f"""
+            query GetScorecard {{
+                getScorecard(id: "{scorecard_id}") {{
+                    id
+                    name
+                    key
+                    externalId
+                }}
+            }}
+            """
+            result = client.execute(query)
+            scorecard_data = result.get('getScorecard', {})
+            scorecard_name = scorecard_data.get('name', 'Unknown')
+            scorecard_key = scorecard_data.get('key', 'Unknown')
+            
+            # Try to find a matching file by ID, key, or name
+            matching_file = None
+            for yaml_file in yaml_files:
+                try:
+                    with open(os.path.join('scorecards', yaml_file), 'r') as f:
+                        data = yaml.safe_load(f)
+                        if (data.get('id') == scorecard_id or 
+                            data.get('key') == scorecard_key or 
+                            data.get('name') == scorecard_name or
+                            data.get('key') == scorecard or
+                            data.get('name') == scorecard):
+                            matching_file = os.path.join('scorecards', yaml_file)
+                            yaml_data = data
+                            break
+                except Exception:
+                    continue
+        else:
+            # Scorecard doesn't exist, try to find a file that matches the provided identifier
+            matching_file = None
+            for yaml_file in yaml_files:
+                try:
+                    with open(os.path.join('scorecards', yaml_file), 'r') as f:
+                        data = yaml.safe_load(f)
+                        # For new scorecards, match by filename (without extension), key, or name
+                        filename_without_ext = os.path.splitext(yaml_file)[0].lower()
+                        if (filename_without_ext == scorecard.lower() or
+                            data.get('key') == scorecard or
+                            data.get('name') == scorecard):
+                            matching_file = os.path.join('scorecards', yaml_file)
+                            yaml_data = data
+                            break
+                except Exception:
+                    continue
+        
+        if not matching_file:
+            console.print(f"[red]Could not find matching YAML file for scorecard: {scorecard}[/red]")
+            return
+        
+        console.print(f"[green]Found and loaded configuration from {matching_file}[/green]")
+    
+    # Now try to resolve the scorecard identifier to an ID (if we haven't already)
     if not scorecard_id:
+        scorecard_id = resolve_scorecard_identifier(client, scorecard)
+    
+    # If scorecard doesn't exist and create_if_missing is True, create it
+    if not scorecard_id and create_if_missing:
+        # First, resolve the account identifier to an ID
+        account_id = resolve_account_identifier(client, account)
+        if not account_id:
+            console.print(f"[red]Could not find account: {account}[/red]")
+            return
+        
+        # Extract required fields from YAML
+        scorecard_name = yaml_data.get('name')
+        scorecard_key = yaml_data.get('key')
+        scorecard_external_id = str(yaml_data.get('id', ''))
+        scorecard_description = yaml_data.get('description', '')
+        
+        if not scorecard_name or not scorecard_key:
+            console.print("[red]YAML file must contain 'name' and 'key' fields to create a new scorecard[/red]")
+            return
+        
+        # Create the scorecard
+        try:
+            create_mutation = f"""
+            mutation CreateScorecard {{
+                createScorecard(input: {{
+                    name: "{scorecard_name}"
+                    key: "{scorecard_key}"
+                    externalId: "{scorecard_external_id}"
+                    accountId: "{account_id}"
+                    description: "{scorecard_description}"
+                }}) {{
+                    id
+                    name
+                    key
+                    externalId
+                }}
+            }}
+            """
+            result = client.execute(create_mutation)
+            new_scorecard = result.get('createScorecard', {})
+            scorecard_id = new_scorecard.get('id')
+            
+            if not scorecard_id:
+                console.print("[red]Failed to create new scorecard[/red]")
+                return
+            
+            console.print(f"[green]Created new scorecard: {scorecard_name} (ID: {scorecard_id}, Key: {scorecard_key})[/green]")
+        except Exception as e:
+            console.print(f"[red]Error creating scorecard: {e}[/red]")
+            return
+    elif not scorecard_id:
         console.print(f"[red]Could not find scorecard: {scorecard}[/red]")
+        console.print("[yellow]Use --create-if-missing flag to create a new scorecard if it doesn't exist[/yellow]")
         return
     
     # Get scorecard details for display
@@ -1260,52 +1493,6 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
         scorecard_external_id = scorecard_data.get('externalId', 'None')
         
         console.print(f"[green]Found scorecard: {scorecard_name} (ID: {scorecard_id}, Key: {scorecard_key}, External ID: {scorecard_external_id})[/green]")
-        
-        # Load YAML configuration
-        yaml_data = None
-        
-        if file:
-            # Load from specified file
-            if not os.path.exists(file):
-                console.print(f"[red]File not found: {file}[/red]")
-                return
-            
-            try:
-                with open(file, 'r') as f:
-                    yaml_data = yaml.safe_load(f)
-                console.print(f"[green]Loaded configuration from {file}[/green]")
-            except Exception as e:
-                console.print(f"[red]Error loading YAML from {file}: {e}[/red]")
-                return
-        else:
-            # Search for matching YAML file in scorecards/ directory
-            if not os.path.exists('scorecards'):
-                console.print("[red]scorecards/ directory not found[/red]")
-                return
-            
-            yaml_files = [f for f in os.listdir('scorecards') if f.endswith('.yaml')]
-            if not yaml_files:
-                console.print("[red]No YAML files found in scorecards/ directory[/red]")
-                return
-            
-            # Try to find a matching file by ID, key, or name
-            matching_file = None
-            for yaml_file in yaml_files:
-                try:
-                    with open(os.path.join('scorecards', yaml_file), 'r') as f:
-                        data = yaml.safe_load(f)
-                        if data.get('id') == scorecard_id or data.get('key') == scorecard_key or data.get('name') == scorecard_name:
-                            matching_file = os.path.join('scorecards', yaml_file)
-                            yaml_data = data
-                            break
-                except Exception:
-                    continue
-            
-            if not matching_file:
-                console.print(f"[red]Could not find matching YAML file for scorecard: {scorecard_name}[/red]")
-                return
-            
-            console.print(f"[green]Found and loaded configuration from {matching_file}[/green]")
         
         # Update scorecard metadata if necessary
         if yaml_data.get('name') != scorecard_name or yaml_data.get('key') != scorecard_key or yaml_data.get('externalId') != scorecard_external_id:
