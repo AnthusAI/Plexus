@@ -1,5 +1,5 @@
 "use client"
-import React, { useContext, useEffect, useMemo, useRef, useState } from "react"
+import React, { useContext, useEffect, useMemo, useRef, useState, useCallback } from "react"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
@@ -341,8 +341,262 @@ export default function ItemsDashboard() {
   const { user } = useAuthenticator();
   const [accountId, setAccountId] = useState<string | null>(null);
   
+  // Add a ref for the intersection observer
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  
   // Constants
   const ACCOUNT_KEY = 'call-criteria';
+
+  // Add back the ITEMS_TIME_RANGE_OPTIONS constant
+  const ITEMS_TIME_RANGE_OPTIONS = [
+    { value: "recent", label: "Recent" },
+    { value: "review", label: "With Feedback" },
+    { value: "custom", label: "Custom" },
+  ]
+
+  // Define handleLoadMore with useCallback to ensure it's stable across renders
+  const handleLoadMore = useCallback(async () => {
+    if (isLoadingMore || !nextToken) return;
+    
+    setIsLoadingMore(true);
+    console.log('Loading more items with nextToken:', nextToken);
+    
+    try {
+      // Use the stored accountId instead of user?.username
+      if (!accountId) {
+        console.error('No accountId found in state');
+        setIsLoadingMore(false);
+        return;
+      }
+      
+      let itemsFromDirectQuery: any[] = [];
+      let nextTokenFromDirectQuery: string | null = null;
+      
+      try {
+        // Determine if we should filter by scorecard, score, or account
+        const useScorecard = selectedScorecard !== null && selectedScorecard !== undefined;
+        const useScore = selectedScore !== null && selectedScore !== undefined;
+        
+        console.log('Filter settings for load more:', {
+          useScorecard,
+          useScore,
+          scorecardId: selectedScorecard,
+          scoreId: selectedScore
+        });
+        
+        if (useScore) {
+          // If a score is selected, filter by scoreId
+          console.log('Attempting direct GraphQL query for more items with scoreId:', selectedScore);
+          const directQuery = await graphqlRequest<{ listItemByScoreIdAndUpdatedAt: { items: any[], nextToken: string | null } }>(`
+            query ListItemsMoreDirect($scoreId: String!, $limit: Int!, $nextToken: String) {
+              listItemByScoreIdAndUpdatedAt(
+                scoreId: $scoreId, 
+                sortDirection: DESC,
+                limit: $limit,
+                nextToken: $nextToken
+              ) {
+                items {
+                  id
+                  externalId
+                  description
+                  accountId
+                  scorecardId
+                  scoreId
+                  evaluationId
+                  updatedAt
+                  createdAt
+                  isEvaluation
+                }
+                nextToken
+              }
+            }
+          `, {
+            scoreId: selectedScore,
+            limit: 20,
+            nextToken: nextToken
+          });
+          
+          console.log('Direct GraphQL query response for more items:', JSON.stringify(directQuery, null, 2));
+          
+          if (directQuery.data?.listItemByScoreIdAndUpdatedAt?.items) {
+            console.log(`Found ${directQuery.data.listItemByScoreIdAndUpdatedAt.items.length} more items via direct GraphQL query`);
+            // No need to sort as the GSI already returns items sorted by updatedAt
+            itemsFromDirectQuery = directQuery.data.listItemByScoreIdAndUpdatedAt.items;
+            nextTokenFromDirectQuery = directQuery.data.listItemByScoreIdAndUpdatedAt.nextToken;
+          } else {
+            console.warn('No more items found in direct GraphQL query response');
+          }
+        } else if (useScorecard) {
+          // If only a scorecard is selected, filter by scorecardId
+          console.log('Attempting direct GraphQL query for more items with scorecardId:', selectedScorecard);
+          const directQuery = await graphqlRequest<{ listItemByScorecardIdAndUpdatedAt: { items: any[], nextToken: string | null } }>(`
+            query ListItemsMoreDirect($scorecardId: String!, $limit: Int!, $nextToken: String) {
+              listItemByScorecardIdAndUpdatedAt(
+                scorecardId: $scorecardId, 
+                sortDirection: DESC,
+                limit: $limit,
+                nextToken: $nextToken
+              ) {
+                items {
+                  id
+                  externalId
+                  description
+                  accountId
+                  scorecardId
+                  scoreId
+                  evaluationId
+                  updatedAt
+                  createdAt
+                  isEvaluation
+                }
+                nextToken
+              }
+            }
+          `, {
+            scorecardId: selectedScorecard,
+            limit: 20,
+            nextToken: nextToken
+          });
+          
+          console.log('Direct GraphQL query response for more items:', JSON.stringify(directQuery, null, 2));
+          
+          if (directQuery.data?.listItemByScorecardIdAndUpdatedAt?.items) {
+            console.log(`Found ${directQuery.data.listItemByScorecardIdAndUpdatedAt.items.length} more items via direct GraphQL query`);
+            // No need to sort as the GSI already returns items sorted by updatedAt
+            itemsFromDirectQuery = directQuery.data.listItemByScorecardIdAndUpdatedAt.items;
+            nextTokenFromDirectQuery = directQuery.data.listItemByScorecardIdAndUpdatedAt.nextToken;
+          } else {
+            console.warn('No more items found in direct GraphQL query response');
+          }
+        } else {
+          // If neither scorecard nor score is selected, filter by accountId
+          console.log('Attempting direct GraphQL query for more items with accountId:', accountId);
+          const directQuery = await graphqlRequest<{ listItemByAccountIdAndUpdatedAt: { items: any[], nextToken: string | null } }>(`
+            query ListItemsMoreDirect($accountId: String!, $limit: Int!, $nextToken: String) {
+              listItemByAccountIdAndUpdatedAt(
+                accountId: $accountId, 
+                sortDirection: DESC,
+                limit: $limit,
+                nextToken: $nextToken
+              ) {
+                items {
+                  id
+                  externalId
+                  description
+                  accountId
+                  scorecardId
+                  scoreId
+                  evaluationId
+                  updatedAt
+                  createdAt
+                  isEvaluation
+                }
+                nextToken
+              }
+            }
+          `, {
+            accountId: accountId,
+            limit: 20,
+            nextToken: nextToken
+          });
+          
+          console.log('Direct GraphQL query response for more items:', JSON.stringify(directQuery, null, 2));
+          
+          if (directQuery.data?.listItemByAccountIdAndUpdatedAt?.items) {
+            console.log(`Found ${directQuery.data.listItemByAccountIdAndUpdatedAt.items.length} more items via direct GraphQL query`);
+            // No need to sort as the GSI already returns items sorted by updatedAt
+            itemsFromDirectQuery = directQuery.data.listItemByAccountIdAndUpdatedAt.items;
+            nextTokenFromDirectQuery = directQuery.data.listItemByAccountIdAndUpdatedAt.nextToken;
+          } else {
+            console.warn('No more items found in direct GraphQL query response');
+          }
+        }
+      } catch (error) {
+        console.error('Error in direct GraphQL query for more items:', error);
+      }
+      
+      // Use the items from the direct query
+      const itemsToUse = itemsFromDirectQuery;
+      const nextTokenToUse = nextTokenFromDirectQuery;
+      
+      // If no items are found, we'll log this information
+      if (itemsToUse.length === 0) {
+        console.log('No items found for this account. You may need to create some items first.');
+      }
+      
+      // Get unique scorecard IDs to fetch their names
+      const scorecardIds = [...new Set(
+        itemsToUse
+          .filter(item => item.scorecardId)
+          .map(item => item.scorecardId)
+      )];
+      
+      // Fetch scorecard names if there are any scorecard IDs
+      const scorecardMap: Record<string, string> = {};
+      if (scorecardIds.length > 0) {
+        try {
+          // Fetch scorecards in parallel
+          const scorecardPromises = scorecardIds.map(async (id) => {
+            if (!id) return null;
+            const result = await amplifyClient.Scorecard.get({ id });
+            return result.data;
+          });
+          
+          const scorecards = await Promise.all(scorecardPromises);
+          
+          // Create a map of scorecard ID to name
+          scorecards.forEach(scorecard => {
+            if (scorecard && scorecard.id) {
+              scorecardMap[scorecard.id] = scorecard.name || 'Unnamed Scorecard';
+            }
+          });
+        } catch (error) {
+          console.error("Error fetching scorecards:", error);
+        }
+      }
+      
+      // Transform the data to match the expected format
+      const transformedItems = itemsToUse.map(item => {
+        // Get the scorecard name if scorecardId is available
+        let scorecardName = "Unknown Scorecard";
+        if (item.scorecardId && scorecardMap[item.scorecardId]) {
+          scorecardName = scorecardMap[item.scorecardId];
+        } else if (item.scorecardId) {
+          scorecardName = `Scorecard ${item.scorecardId.substring(0, 8)}`;
+        }
+        
+        return {
+          id: item.id,
+          accountId: item.accountId,
+          externalId: item.externalId,
+          description: item.description,
+          scorecardId: item.scorecardId,
+          scoreId: item.scoreId,
+          evaluationId: item.evaluationId,
+          updatedAt: item.updatedAt,
+          createdAt: item.createdAt,
+          isEvaluation: item.isEvaluation,
+          // UI compatibility fields
+          scorecard: scorecardName,
+          date: item.updatedAt || item.createdAt,
+          status: "Done", // Default status
+          results: 0,
+          inferences: 0,
+          cost: "$0.000",
+          score: 0
+        } as Item;
+      });
+      
+      // Append the new items to the existing items
+      setItems(prevItems => [...prevItems, ...transformedItems]);
+      setNextToken(nextTokenToUse);
+    } catch (error) {
+      console.error("Error fetching more items:", error);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [isLoadingMore, nextToken, accountId, selectedScorecard, selectedScore, setItems, setNextToken, setIsLoadingMore, graphqlRequest, amplifyClient.Scorecard.get]);
 
   // Fetch items from the API
   useEffect(() => {
@@ -500,11 +754,12 @@ export default function ItemsDashboard() {
           if (useScore) {
             // If a score is selected, filter by scoreId
             console.log('Attempting direct GraphQL query for items with scoreId:', selectedScore);
-            const directQuery = await graphqlRequest<{ listItems: { items: any[], nextToken: string | null } }>(`
-              query ListItemsDirect {
-                listItems(
-                  filter: {scoreId: {eq: "${selectedScore}"}}, 
-                  limit: 20
+            const directQuery = await graphqlRequest<{ listItemByScoreIdAndUpdatedAt: { items: any[], nextToken: string | null } }>(`
+              query ListItemsDirect($scoreId: String!, $limit: Int!) {
+                listItemByScoreIdAndUpdatedAt(
+                  scoreId: $scoreId, 
+                  sortDirection: DESC,
+                  limit: $limit
                 ) {
                   items {
                     id
@@ -521,29 +776,30 @@ export default function ItemsDashboard() {
                   nextToken
                 }
               }
-            `);
+            `, {
+              scoreId: selectedScore,
+              limit: 20
+            });
             
-            console.log('Direct GraphQL query response:', JSON.stringify(directQuery, null, 2));
+            console.log('Direct GraphQL query response for more items:', JSON.stringify(directQuery, null, 2));
             
-            if (directQuery.data?.listItems?.items) {
-              console.log(`Found ${directQuery.data.listItems.items.length} items via direct GraphQL query`);
-              // Sort items by updatedAt in descending order
-              itemsFromDirectQuery = directQuery.data.listItems.items.sort((a, b) => {
-                if (!a.updatedAt || !b.updatedAt) return 0;
-                return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
-              });
-              nextTokenFromDirectQuery = directQuery.data.listItems.nextToken;
+            if (directQuery.data?.listItemByScoreIdAndUpdatedAt?.items) {
+              console.log(`Found ${directQuery.data.listItemByScoreIdAndUpdatedAt.items.length} more items via direct GraphQL query`);
+              // No need to sort as the GSI already returns items sorted by updatedAt
+              itemsFromDirectQuery = directQuery.data.listItemByScoreIdAndUpdatedAt.items;
+              nextTokenFromDirectQuery = directQuery.data.listItemByScoreIdAndUpdatedAt.nextToken;
             } else {
-              console.warn('No items found in direct GraphQL query response');
+              console.warn('No more items found in direct GraphQL query response');
             }
           } else if (useScorecard) {
             // If only a scorecard is selected, filter by scorecardId
             console.log('Attempting direct GraphQL query for items with scorecardId:', selectedScorecard);
-            const directQuery = await graphqlRequest<{ listItems: { items: any[], nextToken: string | null } }>(`
-              query ListItemsDirect {
-                listItems(
-                  filter: {scorecardId: {eq: "${selectedScorecard}"}}, 
-                  limit: 20
+            const directQuery = await graphqlRequest<{ listItemByScorecardIdAndUpdatedAt: { items: any[], nextToken: string | null } }>(`
+              query ListItemsDirect($scorecardId: String!, $limit: Int!) {
+                listItemByScorecardIdAndUpdatedAt(
+                  scorecardId: $scorecardId, 
+                  sortDirection: DESC,
+                  limit: $limit
                 ) {
                   items {
                     id
@@ -560,29 +816,30 @@ export default function ItemsDashboard() {
                   nextToken
                 }
               }
-            `);
+            `, {
+              scorecardId: selectedScorecard,
+              limit: 20
+            });
             
-            console.log('Direct GraphQL query response:', JSON.stringify(directQuery, null, 2));
+            console.log('Direct GraphQL query response for more items:', JSON.stringify(directQuery, null, 2));
             
-            if (directQuery.data?.listItems?.items) {
-              console.log(`Found ${directQuery.data.listItems.items.length} items via direct GraphQL query`);
-              // Sort items by updatedAt in descending order
-              itemsFromDirectQuery = directQuery.data.listItems.items.sort((a, b) => {
-                if (!a.updatedAt || !b.updatedAt) return 0;
-                return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
-              });
-              nextTokenFromDirectQuery = directQuery.data.listItems.nextToken;
+            if (directQuery.data?.listItemByScorecardIdAndUpdatedAt?.items) {
+              console.log(`Found ${directQuery.data.listItemByScorecardIdAndUpdatedAt.items.length} more items via direct GraphQL query`);
+              // No need to sort as the GSI already returns items sorted by updatedAt
+              itemsFromDirectQuery = directQuery.data.listItemByScorecardIdAndUpdatedAt.items;
+              nextTokenFromDirectQuery = directQuery.data.listItemByScorecardIdAndUpdatedAt.nextToken;
             } else {
-              console.warn('No items found in direct GraphQL query response');
+              console.warn('No more items found in direct GraphQL query response');
             }
           } else {
             // If neither scorecard nor score is selected, filter by accountId
             console.log('Attempting direct GraphQL query for items with accountId:', foundAccountId);
-            const directQuery = await graphqlRequest<{ listItems: { items: any[], nextToken: string | null } }>(`
-              query ListItemsDirect {
-                listItems(
-                  filter: {accountId: {eq: "${foundAccountId}"}}, 
-                  limit: 20
+            const directQuery = await graphqlRequest<{ listItemByAccountIdAndUpdatedAt: { items: any[], nextToken: string | null } }>(`
+              query ListItemsDirect($accountId: String!, $limit: Int!) {
+                listItemByAccountIdAndUpdatedAt(
+                  accountId: $accountId, 
+                  sortDirection: DESC,
+                  limit: $limit
                 ) {
                   items {
                     id
@@ -599,20 +856,20 @@ export default function ItemsDashboard() {
                   nextToken
                 }
               }
-            `);
+            `, {
+              accountId: foundAccountId,
+              limit: 20
+            });
             
-            console.log('Direct GraphQL query response:', JSON.stringify(directQuery, null, 2));
+            console.log('Direct GraphQL query response for more items:', JSON.stringify(directQuery, null, 2));
             
-            if (directQuery.data?.listItems?.items) {
-              console.log(`Found ${directQuery.data.listItems.items.length} items via direct GraphQL query`);
-              // Sort items by updatedAt in descending order
-              itemsFromDirectQuery = directQuery.data.listItems.items.sort((a, b) => {
-                if (!a.updatedAt || !b.updatedAt) return 0;
-                return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
-              });
-              nextTokenFromDirectQuery = directQuery.data.listItems.nextToken;
+            if (directQuery.data?.listItemByAccountIdAndUpdatedAt?.items) {
+              console.log(`Found ${directQuery.data.listItemByAccountIdAndUpdatedAt.items.length} more items via direct GraphQL query`);
+              // No need to sort as the GSI already returns items sorted by updatedAt
+              itemsFromDirectQuery = directQuery.data.listItemByAccountIdAndUpdatedAt.items;
+              nextTokenFromDirectQuery = directQuery.data.listItemByAccountIdAndUpdatedAt.nextToken;
             } else {
-              console.warn('No items found in direct GraphQL query response');
+              console.warn('No more items found in direct GraphQL query response');
             }
           }
         } catch (error) {
@@ -693,12 +950,11 @@ export default function ItemsDashboard() {
         
         setItems(transformedItems);
         setNextToken(nextTokenToUse);
+        setIsLoading(false);
       } catch (error) {
         console.error("Error fetching items:", error);
         // Don't keep the mock data if there's an error
         setItems([]);
-      } finally {
-        setIsLoading(false);
       }
     };
     
@@ -837,12 +1093,6 @@ export default function ItemsDashboard() {
       // Fetch or filter items for the custom date range
     }
   }
-
-  const ITEMS_TIME_RANGE_OPTIONS = [
-    { value: "recent", label: "Recent" },
-    { value: "review", label: "With Feedback" },
-    { value: "custom", label: "Custom" },
-  ]
 
   const availableFields = [
     { value: 'SelectQuote Term Life v1', label: 'SelectQuote Term Life v1' },
@@ -1220,241 +1470,37 @@ export default function ItemsDashboard() {
     document.addEventListener('mouseup', handleDragEnd);
   };
 
-  const handleLoadMore = async () => {
-    if (isLoadingMore || !nextToken) return;
+  // Add a useEffect for the intersection observer
+  useEffect(() => {
+    // Create the intersection observer
+    const options = {
+      root: null, // Use the viewport as the root
+      rootMargin: '0px 0px 200px 0px', // Start loading when user is 200px from the bottom
+      threshold: 0.1 // Trigger when 10% of the target is visible
+    };
+
+    const handleObserver = (entries: IntersectionObserverEntry[]) => {
+      const [entry] = entries;
+      if (entry.isIntersecting && nextToken && !isLoadingMore) {
+        handleLoadMore();
+      }
+    };
+
+    // Initialize the observer
+    observerRef.current = new IntersectionObserver(handleObserver, options);
     
-    setIsLoadingMore(true);
-    console.log('Loading more items with nextToken:', nextToken);
-    
-    try {
-      const accountId = user?.username;
-      if (!accountId) {
-        console.error('No accountId found in user attributes');
-        setIsLoadingMore(false);
-        return;
-      }
-      
-      let itemsFromDirectQuery: any[] = [];
-      let nextTokenFromDirectQuery: string | null = null;
-      
-      try {
-        // Determine if we should filter by scorecard, score, or account
-        const useScorecard = selectedScorecard !== null && selectedScorecard !== undefined;
-        const useScore = selectedScore !== null && selectedScore !== undefined;
-        
-        console.log('Filter settings for load more:', {
-          useScorecard,
-          useScore,
-          scorecardId: selectedScorecard,
-          scoreId: selectedScore
-        });
-        
-        if (useScore) {
-          // If a score is selected, filter by scoreId
-          console.log('Attempting direct GraphQL query for more items with scoreId:', selectedScore);
-          const directQuery = await graphqlRequest<{ listItems: { items: any[], nextToken: string | null } }>(`
-            query ListItemsDirect {
-              listItems(
-                filter: {scoreId: {eq: "${selectedScore}"}}, 
-                limit: 20,
-                nextToken: "${nextToken}"
-              ) {
-                items {
-                  id
-                  externalId
-                  description
-                  accountId
-                  scorecardId
-                  scoreId
-                  evaluationId
-                  updatedAt
-                  createdAt
-                  isEvaluation
-                }
-                nextToken
-              }
-            }
-          `);
-          
-          console.log('Direct GraphQL query response for more items:', JSON.stringify(directQuery, null, 2));
-          
-          if (directQuery.data?.listItems?.items) {
-            console.log(`Found ${directQuery.data.listItems.items.length} more items via direct GraphQL query`);
-            // Sort items by updatedAt in descending order
-            itemsFromDirectQuery = directQuery.data.listItems.items.sort((a, b) => {
-              if (!a.updatedAt || !b.updatedAt) return 0;
-              return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
-            });
-            nextTokenFromDirectQuery = directQuery.data.listItems.nextToken;
-          } else {
-            console.warn('No more items found in direct GraphQL query response');
-          }
-        } else if (useScorecard) {
-          // If only a scorecard is selected, filter by scorecardId
-          console.log('Attempting direct GraphQL query for more items with scorecardId:', selectedScorecard);
-          const directQuery = await graphqlRequest<{ listItems: { items: any[], nextToken: string | null } }>(`
-            query ListItemsDirect {
-              listItems(
-                filter: {scorecardId: {eq: "${selectedScorecard}"}}, 
-                limit: 20,
-                nextToken: "${nextToken}"
-              ) {
-                items {
-                  id
-                  externalId
-                  description
-                  accountId
-                  scorecardId
-                  scoreId
-                  evaluationId
-                  updatedAt
-                  createdAt
-                  isEvaluation
-                }
-                nextToken
-              }
-            }
-          `);
-          
-          console.log('Direct GraphQL query response for more items:', JSON.stringify(directQuery, null, 2));
-          
-          if (directQuery.data?.listItems?.items) {
-            console.log(`Found ${directQuery.data.listItems.items.length} more items via direct GraphQL query`);
-            // Sort items by updatedAt in descending order
-            itemsFromDirectQuery = directQuery.data.listItems.items.sort((a, b) => {
-              if (!a.updatedAt || !b.updatedAt) return 0;
-              return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
-            });
-            nextTokenFromDirectQuery = directQuery.data.listItems.nextToken;
-          } else {
-            console.warn('No more items found in direct GraphQL query response');
-          }
-        } else {
-          // If neither scorecard nor score is selected, filter by accountId
-          console.log('Attempting direct GraphQL query for more items with accountId:', accountId);
-          const directQuery = await graphqlRequest<{ listItems: { items: any[], nextToken: string | null } }>(`
-            query ListItemsDirect {
-              listItems(
-                filter: {accountId: {eq: "${accountId}"}}, 
-                limit: 20,
-                nextToken: "${nextToken}"
-              ) {
-                items {
-                  id
-                  externalId
-                  description
-                  accountId
-                  scorecardId
-                  scoreId
-                  evaluationId
-                  updatedAt
-                  createdAt
-                  isEvaluation
-                }
-                nextToken
-              }
-            }
-          `);
-          
-          console.log('Direct GraphQL query response for more items:', JSON.stringify(directQuery, null, 2));
-          
-          if (directQuery.data?.listItems?.items) {
-            console.log(`Found ${directQuery.data.listItems.items.length} more items via direct GraphQL query`);
-            // Sort items by updatedAt in descending order
-            itemsFromDirectQuery = directQuery.data.listItems.items.sort((a, b) => {
-              if (!a.updatedAt || !b.updatedAt) return 0;
-              return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
-            });
-            nextTokenFromDirectQuery = directQuery.data.listItems.nextToken;
-          } else {
-            console.warn('No more items found in direct GraphQL query response');
-          }
-        }
-      } catch (error) {
-        console.error('Error in direct GraphQL query for more items:', error);
-      }
-      
-      // Use the items from the direct query
-      const itemsToUse = itemsFromDirectQuery;
-      const nextTokenToUse = nextTokenFromDirectQuery;
-      
-      // If no items are found, we'll log this information
-      if (itemsToUse.length === 0) {
-        console.log('No items found for this account. You may need to create some items first.');
-      }
-      
-      // Get unique scorecard IDs to fetch their names
-      const scorecardIds = [...new Set(
-        itemsToUse
-          .filter(item => item.scorecardId)
-          .map(item => item.scorecardId)
-      )];
-      
-      // Fetch scorecard names if there are any scorecard IDs
-      const scorecardMap: Record<string, string> = {};
-      if (scorecardIds.length > 0) {
-        try {
-          // Fetch scorecards in parallel
-          const scorecardPromises = scorecardIds.map(async (id) => {
-            if (!id) return null;
-            const result = await amplifyClient.Scorecard.get({ id });
-            return result.data;
-          });
-          
-          const scorecards = await Promise.all(scorecardPromises);
-          
-          // Create a map of scorecard ID to name
-          scorecards.forEach(scorecard => {
-            if (scorecard && scorecard.id) {
-              scorecardMap[scorecard.id] = scorecard.name || 'Unnamed Scorecard';
-            }
-          });
-        } catch (error) {
-          console.error("Error fetching scorecards:", error);
-        }
-      }
-      
-      // Transform the data to match the expected format
-      const transformedItems = itemsToUse.map(item => {
-        // Get the scorecard name if scorecardId is available
-        let scorecardName = "Unknown Scorecard";
-        if (item.scorecardId && scorecardMap[item.scorecardId]) {
-          scorecardName = scorecardMap[item.scorecardId];
-        } else if (item.scorecardId) {
-          scorecardName = `Scorecard ${item.scorecardId.substring(0, 8)}`;
-        }
-        
-        return {
-          id: item.id,
-          accountId: item.accountId,
-          externalId: item.externalId,
-          description: item.description,
-          scorecardId: item.scorecardId,
-          scoreId: item.scoreId,
-          evaluationId: item.evaluationId,
-          updatedAt: item.updatedAt,
-          createdAt: item.createdAt,
-          isEvaluation: item.isEvaluation,
-          // UI compatibility fields
-          scorecard: scorecardName,
-          date: item.updatedAt || item.createdAt,
-          status: "Done", // Default status
-          results: 0,
-          inferences: 0,
-          cost: "$0.000",
-          score: 0
-        } as Item;
-      });
-      
-      // Append the new items to the existing items
-      setItems(prevItems => [...prevItems, ...transformedItems]);
-      setNextToken(nextTokenToUse);
-    } catch (error) {
-      console.error("Error fetching more items:", error);
-    } finally {
-      setIsLoadingMore(false);
+    // Observe the load more element if it exists
+    if (loadMoreRef.current) {
+      observerRef.current.observe(loadMoreRef.current);
     }
-  };
+
+    // Cleanup
+    return () => {
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+      }
+    };
+  }, [nextToken, isLoadingMore, handleLoadMore]); // Add handleLoadMore to dependencies
 
   return (
     <div className="flex flex-col h-full p-1.5">
@@ -1527,22 +1573,18 @@ export default function ItemsDashboard() {
                         </div>
                       )}
                       
+                      {/* Replace the Load More button with an invisible loading indicator */}
                       {nextToken && filteredItems.length > 0 && (
-                        <div className="flex justify-center mt-6">
-                          <Button 
-                            variant="outline" 
-                            onClick={handleLoadMore}
-                            disabled={isLoadingMore}
-                          >
-                            {isLoadingMore ? (
-                              <>
-                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                Loading...
-                              </>
-                            ) : (
-                              'Load More'
-                            )}
-                          </Button>
+                        <div 
+                          ref={loadMoreRef} 
+                          className="flex justify-center py-6"
+                        >
+                          {isLoadingMore && (
+                            <div className="flex items-center">
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              <span>Loading more items...</span>
+                            </div>
+                          )}
                         </div>
                       )}
                     </>
@@ -1573,5 +1615,5 @@ export default function ItemsDashboard() {
         )}
       </div>
     </div>
-  )
+  );
 }
