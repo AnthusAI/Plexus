@@ -134,6 +134,10 @@ export const amplifyClient = {
       const response = await (getClient().models.Score as any).list(params)
       return response as AmplifyResponse<Schema['Score']['type'][]>
     },
+    get: async (params: any) => {
+      const response = await (getClient().models.Score as any).get(params)
+      return { data: response.data as Schema['Score']['type'] | null }
+    },
     create: async (data: {
       name: string
       type: string
@@ -287,6 +291,18 @@ export const amplifyClient = {
     get: async (params: any) => {
       const response = await (getClient().models.Item as any).get(params)
       return { data: response.data as Schema['Item']['type'] | null }
+    },
+    create: async (data: {
+      externalId?: string;
+      description?: string;
+      accountId: string;
+      scorecardId?: string;
+      scoreId?: string;
+      evaluationId?: string;
+      isEvaluation: boolean;
+    }) => {
+      const response = await (getClient().models.Item as any).create(data)
+      return { data: response.data as Schema['Item']['type'] }
     }
   },
   ScoringJob: {

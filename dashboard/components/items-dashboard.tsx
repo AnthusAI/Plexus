@@ -31,6 +31,9 @@ import ItemCard, { ItemData } from './items/ItemCard'
 import { amplifyClient, graphqlRequest } from '@/utils/amplify-client'
 import { useAuthenticator } from '@aws-amplify/ui-react'
 import { ScorecardContextProps } from "./ScorecardContext"
+import { observeItemCreations } from '@/utils/subscriptions'
+import { toast } from 'sonner'
+import { useAccount } from '@/app/contexts/AccountContext'
 
 // Get the current date and time
 const now = new Date();
@@ -58,12 +61,13 @@ interface Item {
   
   // Fields for UI compatibility with existing code
   scorecard?: string;
-  score?: number;
+  score?: string | number | null;
   date?: string;
   status?: string;
   results?: number;
   inferences?: number;
   cost?: string;
+  isNew?: boolean; // Add this field to track new items
 }
 
 // Sample metadata and data for all items
@@ -339,22 +343,14 @@ export default function ItemsDashboard() {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [nextToken, setNextToken] = useState<string | null>(null);
   const { user } = useAuthenticator();
-  const [accountId, setAccountId] = useState<string | null>(null);
+  // Use the account context instead of local state
+  const { selectedAccount } = useAccount();
+  const itemSubscriptionRef = useRef<{ unsubscribe: () => void } | null>(null);
   
   // Add a ref for the intersection observer
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   
-  // Constants
-  const ACCOUNT_KEY = 'call-criteria';
-
-  // Add back the ITEMS_TIME_RANGE_OPTIONS constant
-  const ITEMS_TIME_RANGE_OPTIONS = [
-    { value: "recent", label: "Recent" },
-    { value: "review", label: "With Feedback" },
-    { value: "custom", label: "Custom" },
-  ]
-
   // Define handleLoadMore with useCallback to ensure it's stable across renders
   const handleLoadMore = useCallback(async () => {
     if (isLoadingMore || !nextToken) return;
@@ -363,9 +359,9 @@ export default function ItemsDashboard() {
     console.log('Loading more items with nextToken:', nextToken);
     
     try {
-      // Use the stored accountId instead of user?.username
-      if (!accountId) {
-        console.error('No accountId found in state');
+      // Use the selectedAccount from context
+      if (!selectedAccount) {
+        console.error('No account selected in context');
         setIsLoadingMore(false);
         return;
       }
@@ -471,7 +467,7 @@ export default function ItemsDashboard() {
           }
         } else {
           // If neither scorecard nor score is selected, filter by accountId
-          console.log('Attempting direct GraphQL query for more items with accountId:', accountId);
+          console.log('Attempting direct GraphQL query for more items with accountId:', selectedAccount.id);
           const directQuery = await graphqlRequest<{ listItemByAccountIdAndUpdatedAt: { items: any[], nextToken: string | null } }>(`
             query ListItemsMoreDirect($accountId: String!, $limit: Int!, $nextToken: String) {
               listItemByAccountIdAndUpdatedAt(
@@ -496,7 +492,7 @@ export default function ItemsDashboard() {
               }
             }
           `, {
-            accountId: accountId,
+            accountId: selectedAccount.id,
             limit: 20,
             nextToken: nextToken
           });
@@ -532,6 +528,13 @@ export default function ItemsDashboard() {
           .map(item => item.scorecardId)
       )];
       
+      // Get unique score IDs to fetch their names
+      const scoreIds = [...new Set(
+        itemsToUse
+          .filter(item => item.scoreId)
+          .map(item => item.scoreId)
+      )];
+      
       // Fetch scorecard names if there are any scorecard IDs
       const scorecardMap: Record<string, string> = {};
       if (scorecardIds.length > 0) {
@@ -556,6 +559,30 @@ export default function ItemsDashboard() {
         }
       }
       
+      // Fetch score names if there are any score IDs
+      const scoreMap: Record<string, string> = {};
+      if (scoreIds.length > 0) {
+        try {
+          // Fetch scores in parallel
+          const scorePromises = scoreIds.map(async (id) => {
+            if (!id) return null;
+            const result = await amplifyClient.Score.get({ id });
+            return result.data;
+          });
+          
+          const scores = await Promise.all(scorePromises);
+          
+          // Create a map of score ID to name
+          scores.forEach((score: any) => {
+            if (score && score.id) {
+              scoreMap[score.id] = score.name || 'Unnamed Score';
+            }
+          });
+        } catch (error) {
+          console.error("Error fetching scores:", error);
+        }
+      }
+      
       // Transform the data to match the expected format
       const transformedItems = itemsToUse.map(item => {
         // Get the scorecard name if scorecardId is available
@@ -564,6 +591,14 @@ export default function ItemsDashboard() {
           scorecardName = scorecardMap[item.scorecardId];
         } else if (item.scorecardId) {
           scorecardName = `Scorecard ${item.scorecardId.substring(0, 8)}`;
+        }
+        
+        // Get the score name if scoreId is available
+        let scoreName = null;
+        if (item.scoreId && scoreMap[item.scoreId]) {
+          scoreName = scoreMap[item.scoreId];
+        } else if (item.scoreId) {
+          scoreName = `Score ${item.scoreId.substring(0, 8)}`;
         }
         
         return {
@@ -579,387 +614,562 @@ export default function ItemsDashboard() {
           isEvaluation: item.isEvaluation,
           // UI compatibility fields
           scorecard: scorecardName,
+          score: scoreName,
           date: item.updatedAt || item.createdAt,
           status: "Done", // Default status
           results: 0,
           inferences: 0,
           cost: "$0.000",
-          score: 0
+          isNew: true // Mark as new for animation
         } as Item;
       });
       
       // Append the new items to the existing items
       setItems(prevItems => [...prevItems, ...transformedItems]);
       setNextToken(nextTokenToUse);
+      
+      // After a delay, remove the "isNew" flag with a staggered effect
+      transformedItems.forEach((item, index) => {
+        setTimeout(() => {
+          setItems(prevItems => 
+            prevItems.map(prevItem => 
+              prevItem.id === item.id 
+                ? { ...prevItem, isNew: false } 
+                : prevItem
+            )
+          );
+        }, 100 + (index * 100)); // Stagger the removal of the isNew flag
+      });
     } catch (error) {
       console.error("Error fetching more items:", error);
     } finally {
       setIsLoadingMore(false);
     }
-  }, [isLoadingMore, nextToken, accountId, selectedScorecard, selectedScore, setItems, setNextToken, setIsLoadingMore, graphqlRequest, amplifyClient.Scorecard.get]);
+  }, [isLoadingMore, nextToken, selectedAccount, selectedScorecard, selectedScore, setItems, setNextToken, setIsLoadingMore, graphqlRequest]);
 
   // Fetch items from the API
-  useEffect(() => {
-    const fetchItems = async () => {
-      if (!user) {
-        console.log('User not authenticated, skipping item fetch');
-        return;
-      }
+  const fetchItems = useCallback(async () => {
+    if (!user) {
+      console.log('User not authenticated, skipping item fetch');
+      return;
+    }
+    
+    if (!selectedAccount) {
+      console.log('No account selected in context, skipping item fetch');
+      return;
+    }
+    
+    console.log('User authenticated, fetching items for account:', selectedAccount.id);
+    setIsLoading(true);
+    
+    try {
+      // Use the account ID from the context
+      const accountId = selectedAccount.id;
       
-      console.log('User authenticated, fetching items');
-      setIsLoading(true);
+      // Try using the Amplify client first
       try {
-        // Get the user's account ID by querying for the account with the key 'call-criteria'
-        console.log('Fetching account with key:', ACCOUNT_KEY);
-        const accountResult = await amplifyClient.Account.list({
-          filter: { key: { eq: ACCOUNT_KEY } }
+        const itemsResult = await amplifyClient.Item.list({
+          filter: { accountId: { eq: accountId } },
+          limit: 20,
+          sort: { field: 'updatedAt', direction: 'DESC' }
         });
         
-        console.log(`Found ${accountResult.data.length} accounts with key ${ACCOUNT_KEY}`);
+        console.log(`Found ${itemsResult.data.length} items using Amplify client`);
         
-        if (accountResult.data.length === 0) {
-          console.warn('No account found with key:', ACCOUNT_KEY);
+        if (itemsResult.data.length > 0) {
+          // No need to sort manually as the server will return items sorted by updatedAt
           
-          // For development purposes, create a test account
-          try {
-            console.log('Creating a test account...');
-            const createAccountResponse = await amplifyClient.Account.create({
-              name: 'Test Account',
-              key: ACCOUNT_KEY,
-              description: 'Test account created automatically'
-            });
-            
-            if (createAccountResponse.data) {
-              console.log('Test account created:', createAccountResponse.data);
-              setAccountId(createAccountResponse.data.id);
-              // Continue with empty items for now
-              setItems([]);
-              setIsLoading(false);
-              return;
+          // Get unique scorecard IDs to fetch their names
+          const scorecardIds = [...new Set(
+            itemsResult.data
+              .filter(item => item.scorecardId)
+              .map(item => item.scorecardId)
+          )];
+          
+          // Get unique score IDs to fetch their names
+          const scoreIds = [...new Set(
+            itemsResult.data
+              .filter(item => item.scoreId)
+              .map(item => item.scoreId)
+          )];
+          
+          // Fetch scorecard names if there are any scorecard IDs
+          const scorecardMap: Record<string, string> = {};
+          if (scorecardIds.length > 0) {
+            try {
+              // Fetch scorecards in parallel
+              const scorecardPromises = scorecardIds.map(async (id) => {
+                if (!id) return null;
+                const result = await amplifyClient.Scorecard.get({ id });
+                return result.data;
+              });
+              
+              const scorecards = await Promise.all(scorecardPromises);
+              
+              // Create a map of scorecard ID to name
+              scorecards.forEach(scorecard => {
+                if (scorecard && scorecard.id) {
+                  scorecardMap[scorecard.id] = scorecard.name || 'Unnamed Scorecard';
+                }
+              });
+            } catch (error) {
+              console.error("Error fetching scorecards:", error);
             }
-          } catch (createError) {
-            console.error('Error creating test account:', createError);
           }
+          
+          // Fetch score names if there are any score IDs
+          const scoreMap: Record<string, string> = {};
+          if (scoreIds.length > 0) {
+            try {
+              // Fetch scores in parallel
+              const scorePromises = scoreIds.map(async (id) => {
+                if (!id) return null;
+                const result = await amplifyClient.Score.get({ id });
+                return result.data;
+              });
+              
+              const scores = await Promise.all(scorePromises);
+              
+              // Create a map of score ID to name
+              scores.forEach((score: any) => {
+                if (score && score.id) {
+                  scoreMap[score.id] = score.name || 'Unnamed Score';
+                }
+              });
+            } catch (error) {
+              console.error("Error fetching scores:", error);
+            }
+          }
+          
+          // Transform the data to match the expected format
+          const transformedItems = itemsResult.data.map(item => {
+            // Get the scorecard name if scorecardId is available
+            let scorecardName = "Unknown Scorecard";
+            if (item.scorecardId && scorecardMap[item.scorecardId]) {
+              scorecardName = scorecardMap[item.scorecardId];
+            } else if (item.scorecardId) {
+              scorecardName = `Scorecard ${item.scorecardId.substring(0, 8)}`;
+            }
+            
+            // Get the score name if scoreId is available
+            let scoreName = null;
+            if (item.scoreId && scoreMap[item.scoreId]) {
+              scoreName = scoreMap[item.scoreId];
+            } else if (item.scoreId) {
+              scoreName = `Score ${item.scoreId.substring(0, 8)}`;
+            }
+            
+            return {
+              id: item.id,
+              accountId: item.accountId,
+              externalId: item.externalId,
+              description: item.description,
+              scorecardId: item.scorecardId,
+              scoreId: item.scoreId,
+              evaluationId: item.evaluationId,
+              updatedAt: item.updatedAt,
+              createdAt: item.createdAt,
+              isEvaluation: item.isEvaluation,
+              // UI compatibility fields
+              scorecard: scorecardName,
+              score: scoreName,
+              date: item.updatedAt || item.createdAt,
+              status: "Done", // Default status
+              results: 0,
+              inferences: 0,
+              cost: "$0.000",
+              isNew: true // Mark all items as new for animation
+            } as Item;
+          });
+          
+          setItems(transformedItems);
+          setNextToken(itemsResult.nextToken);
+          
+          // After a delay, remove the "isNew" flag
+          setTimeout(() => {
+            setItems(prevItems => 
+              prevItems.map(item => 
+                item.isNew ? { ...item, isNew: false } : item
+              )
+            );
+          }, 3000); // Remove the flag after 3 seconds
           
           setIsLoading(false);
           return;
         }
+      } catch (error) {
+        console.error("Error using Amplify client to fetch items:", error);
+        // Continue with the direct GraphQL query approach
+      }
+      
+      // Skip the amplifyClient.Item.list() call that's causing the error
+      // and only use the direct GraphQL query approach
+      let itemsFromDirectQuery: any[] = [];
+      let nextTokenFromDirectQuery: string | null = null;
+      
+      try {
+        // Determine if we should filter by scorecard, score, or account
+        const useScorecard = selectedScorecard !== null && selectedScorecard !== undefined;
+        const useScore = selectedScore !== null && selectedScore !== undefined;
         
-        const foundAccountId = accountResult.data[0].id;
-        setAccountId(foundAccountId);
+        console.log('Filter settings:', {
+          useScorecard,
+          useScore,
+          scorecardId: selectedScorecard,
+          scoreId: selectedScore
+        });
         
-        // Try using the Amplify client first
-        try {
-          const itemsResult = await amplifyClient.Item.list({
-            filter: { accountId: { eq: foundAccountId } },
-            limit: 20,
-            sort: { field: 'updatedAt', direction: 'DESC' }
-          });
-          
-          console.log(`Found ${itemsResult.data.length} items using Amplify client`);
-          
-          if (itemsResult.data.length > 0) {
-            // No need to sort manually as the server will return items sorted by updatedAt
-            
-            // Get unique scorecard IDs to fetch their names
-            const scorecardIds = [...new Set(
-              itemsResult.data
-                .filter(item => item.scorecardId)
-                .map(item => item.scorecardId)
-            )];
-            
-            // Fetch scorecard names if there are any scorecard IDs
-            const scorecardMap: Record<string, string> = {};
-            if (scorecardIds.length > 0) {
-              try {
-                // Fetch scorecards in parallel
-                const scorecardPromises = scorecardIds.map(async (id) => {
-                  if (!id) return null;
-                  const result = await amplifyClient.Scorecard.get({ id });
-                  return result.data;
-                });
-                
-                const scorecards = await Promise.all(scorecardPromises);
-                
-                // Create a map of scorecard ID to name
-                scorecards.forEach(scorecard => {
-                  if (scorecard && scorecard.id) {
-                    scorecardMap[scorecard.id] = scorecard.name || 'Unnamed Scorecard';
-                  }
-                });
-              } catch (error) {
-                console.error("Error fetching scorecards:", error);
+        if (useScore) {
+          // If a score is selected, filter by scoreId
+          console.log('Attempting direct GraphQL query for items with scoreId:', selectedScore);
+          const directQuery = await graphqlRequest<{ listItemByScoreIdAndUpdatedAt: { items: any[], nextToken: string | null } }>(`
+            query ListItemsDirect($scoreId: String!, $limit: Int!) {
+              listItemByScoreIdAndUpdatedAt(
+                scoreId: $scoreId, 
+                sortDirection: DESC,
+                limit: $limit
+              ) {
+                items {
+                  id
+                  externalId
+                  description
+                  accountId
+                  scorecardId
+                  scoreId
+                  evaluationId
+                  updatedAt
+                  createdAt
+                  isEvaluation
+                }
+                nextToken
               }
             }
+          `, {
+            scoreId: selectedScore,
+            limit: 20
+          });
+          
+          console.log('Direct GraphQL query response for items:', JSON.stringify(directQuery, null, 2));
+          
+          if (directQuery.data?.listItemByScoreIdAndUpdatedAt?.items) {
+            console.log(`Found ${directQuery.data.listItemByScoreIdAndUpdatedAt.items.length} items via direct GraphQL query`);
+            // No need to sort as the GSI already returns items sorted by updatedAt
+            itemsFromDirectQuery = directQuery.data.listItemByScoreIdAndUpdatedAt.items;
+            nextTokenFromDirectQuery = directQuery.data.listItemByScoreIdAndUpdatedAt.nextToken;
+          } else {
+            console.warn('No items found in direct GraphQL query response');
+          }
+        } else if (useScorecard) {
+          // If only a scorecard is selected, filter by scorecardId
+          console.log('Attempting direct GraphQL query for items with scorecardId:', selectedScorecard);
+          const directQuery = await graphqlRequest<{ listItemByScorecardIdAndUpdatedAt: { items: any[], nextToken: string | null } }>(`
+            query ListItemsDirect($scorecardId: String!, $limit: Int!) {
+              listItemByScorecardIdAndUpdatedAt(
+                scorecardId: $scorecardId, 
+                sortDirection: DESC,
+                limit: $limit
+              ) {
+                items {
+                  id
+                  externalId
+                  description
+                  accountId
+                  scorecardId
+                  scoreId
+                  evaluationId
+                  updatedAt
+                  createdAt
+                  isEvaluation
+                }
+                nextToken
+              }
+            }
+          `, {
+            scorecardId: selectedScorecard,
+            limit: 20
+          });
+          
+          console.log('Direct GraphQL query response for items:', JSON.stringify(directQuery, null, 2));
+          
+          if (directQuery.data?.listItemByScorecardIdAndUpdatedAt?.items) {
+            console.log(`Found ${directQuery.data.listItemByScorecardIdAndUpdatedAt.items.length} items via direct GraphQL query`);
+            // No need to sort as the GSI already returns items sorted by updatedAt
+            itemsFromDirectQuery = directQuery.data.listItemByScorecardIdAndUpdatedAt.items;
+            nextTokenFromDirectQuery = directQuery.data.listItemByScorecardIdAndUpdatedAt.nextToken;
+          } else {
+            console.warn('No items found in direct GraphQL query response');
+          }
+        } else {
+          // If neither scorecard nor score is selected, filter by accountId
+          console.log('Attempting direct GraphQL query for items with accountId:', accountId);
+          const directQuery = await graphqlRequest<{ listItemByAccountIdAndUpdatedAt: { items: any[], nextToken: string | null } }>(`
+            query ListItemsDirect($accountId: String!, $limit: Int!) {
+              listItemByAccountIdAndUpdatedAt(
+                accountId: $accountId, 
+                sortDirection: DESC,
+                limit: $limit
+              ) {
+                items {
+                  id
+                  externalId
+                  description
+                  accountId
+                  scorecardId
+                  scoreId
+                  evaluationId
+                  updatedAt
+                  createdAt
+                  isEvaluation
+                }
+                nextToken
+              }
+            }
+          `, {
+            accountId: accountId,
+            limit: 20
+          });
+          
+          console.log('Direct GraphQL query response for items:', JSON.stringify(directQuery, null, 2));
+          
+          if (directQuery.data?.listItemByAccountIdAndUpdatedAt?.items) {
+            console.log(`Found ${directQuery.data.listItemByAccountIdAndUpdatedAt.items.length} items via direct GraphQL query`);
+            // No need to sort as the GSI already returns items sorted by updatedAt
+            itemsFromDirectQuery = directQuery.data.listItemByAccountIdAndUpdatedAt.items;
+            nextTokenFromDirectQuery = directQuery.data.listItemByAccountIdAndUpdatedAt.nextToken;
+          } else {
+            console.warn('No items found in direct GraphQL query response');
+          }
+        }
+      } catch (error) {
+        console.error('Error in direct GraphQL query:', error);
+      }
+      
+      // Use the items from the direct query
+      const itemsToUse = itemsFromDirectQuery;
+      const nextTokenToUse = nextTokenFromDirectQuery;
+      
+      // If no items are found, we'll log this information
+      if (itemsToUse.length === 0) {
+        console.log('No items found for this account. You may need to create some items first.');
+      }
+      
+      // Get unique scorecard IDs to fetch their names
+      const scorecardIds = [...new Set(
+        itemsToUse
+          .filter(item => item.scorecardId)
+          .map(item => item.scorecardId)
+      )];
+      
+      // Get unique score IDs to fetch their names
+      const scoreIds = [...new Set(
+        itemsToUse
+          .filter(item => item.scoreId)
+          .map(item => item.scoreId)
+      )];
+      
+      // Fetch scorecard names if there are any scorecard IDs
+      const scorecardMap: Record<string, string> = {};
+      if (scorecardIds.length > 0) {
+        try {
+          // Fetch scorecards in parallel
+          const scorecardPromises = scorecardIds.map(async (id) => {
+            if (!id) return null;
+            const result = await amplifyClient.Scorecard.get({ id });
+            return result.data;
+          });
+          
+          const scorecards = await Promise.all(scorecardPromises);
+          
+          // Create a map of scorecard ID to name
+          scorecards.forEach(scorecard => {
+            if (scorecard && scorecard.id) {
+              scorecardMap[scorecard.id] = scorecard.name || 'Unnamed Scorecard';
+            }
+          });
+        } catch (error) {
+          console.error('Error fetching scorecards:', error);
+        }
+      }
+      
+      // Fetch score names if there are any score IDs
+      const scoreMap: Record<string, string> = {};
+      if (scoreIds.length > 0) {
+        try {
+          // Fetch scores in parallel
+          const scorePromises = scoreIds.map(async (id) => {
+            if (!id) return null;
+            const result = await amplifyClient.Score.get({ id });
+            return result.data;
+          });
+          
+          const scores = await Promise.all(scorePromises);
+          
+          // Create a map of score ID to name
+          scores.forEach(score => {
+            if (score && score.id) {
+              scoreMap[score.id] = score.name || 'Unnamed Score';
+            }
+          });
+        } catch (error) {
+          console.error('Error fetching scores:', error);
+        }
+      }
+      
+      // Transform the data to match the expected format
+      const transformedItems = itemsToUse.map(item => {
+        // Get the scorecard name if scorecardId is available
+        let scorecardName = null;
+        if (item.scorecardId && scorecardMap[item.scorecardId]) {
+          scorecardName = scorecardMap[item.scorecardId];
+        } else if (item.scorecardId) {
+          scorecardName = `Scorecard ${item.scorecardId.substring(0, 8)}`;
+        }
+        
+        // Get the score name if scoreId is available
+        let scoreName = null;
+        if (item.scoreId && scoreMap[item.scoreId]) {
+          scoreName = scoreMap[item.scoreId];
+        } else if (item.scoreId) {
+          scoreName = `Score ${item.scoreId.substring(0, 8)}`;
+        }
+        
+        return {
+          id: item.id,
+          accountId: item.accountId,
+          externalId: item.externalId,
+          description: item.description,
+          scorecardId: item.scorecardId,
+          scoreId: item.scoreId,
+          evaluationId: item.evaluationId,
+          updatedAt: item.updatedAt,
+          createdAt: item.createdAt,
+          isEvaluation: item.isEvaluation,
+          // UI compatibility fields
+          scorecard: scorecardName,
+          score: scoreName,
+          date: item.updatedAt || item.createdAt,
+          status: "Done", // Default status
+          results: 0,
+          inferences: 0,
+          cost: "$0.000",
+          isNew: true // Mark all items as new for animation
+        } as Item;
+      });
+      
+      setItems(transformedItems);
+      setNextToken(nextTokenToUse);
+      
+      // After a delay, remove the "isNew" flag
+      setTimeout(() => {
+        setItems(prevItems => 
+          prevItems.map(item => 
+            item.isNew ? { ...item, isNew: false } : item
+          )
+        );
+      }, 3000); // Remove the flag after 3 seconds
+      
+      setIsLoading(false);
+    } catch (error) {
+      console.error('Error fetching items:', error);
+      setIsLoading(false);
+    }
+  }, [user, amplifyClient, selectedAccount, setItems, setIsLoading, setNextToken, selectedScorecard, selectedScore]);
+  
+  // Initial data load
+  useEffect(() => {
+    fetchItems();
+  }, [user, fetchItems, selectedAccount, selectedScorecard, selectedScore]);
+  
+  // Set up subscription for item creations
+  useEffect(() => {
+    if (!selectedAccount) return;
+    
+    console.log('Setting up item creation subscription for account:', selectedAccount.id);
+    
+    const subscription = observeItemCreations().subscribe({
+      next: async ({ data: newItem }) => {
+        // Skip if we received null data (common with Amplify Gen2)
+        if (!newItem) {
+          console.log('Received null item data from subscription - ignoring');
+          return;
+        }
+        
+        console.log('New item created notification received:', newItem);
+        
+        if (newItem.accountId === selectedAccount.id) {
+          // Set loading state while we fetch
+          setIsLoading(true);
+          
+          try {
+            // Immediately fetch updated items list
+            await fetchItems();
+            console.log('Successfully fetched updated items after new item creation');
+          } catch (error) {
+            console.error('Error fetching updated items:', error);
             
-            // Transform the data to match the expected format
-            const transformedItems = itemsResult.data.map(item => {
-              // Get the scorecard name if scorecardId is available
-              let scorecardName = "Unknown Scorecard";
-              if (item.scorecardId && scorecardMap[item.scorecardId]) {
-                scorecardName = scorecardMap[item.scorecardId];
-              } else if (item.scorecardId) {
-                scorecardName = `Scorecard ${item.scorecardId.substring(0, 8)}`;
+            // As a fallback, manually add the new item to the state
+            setItems(prevItems => {
+              // Check if the item already exists in the list
+              const exists = prevItems.some(item => item.id === newItem.id);
+              if (exists) {
+                return prevItems;
               }
               
-              return {
-                id: item.id,
-                accountId: item.accountId,
-                externalId: item.externalId,
-                description: item.description,
-                scorecardId: item.scorecardId,
-                scoreId: item.scoreId,
-                evaluationId: item.evaluationId,
-                updatedAt: item.updatedAt,
-                createdAt: item.createdAt,
-                isEvaluation: item.isEvaluation,
+              // Create a new item with the UI compatibility fields
+              const newItemWithUIFields: Item = {
+                id: newItem.id,
+                accountId: newItem.accountId,
+                externalId: newItem.externalId || undefined,
+                description: newItem.description || undefined,
+                scorecardId: newItem.scorecardId || undefined,
+                scoreId: newItem.scoreId || undefined,
+                evaluationId: newItem.evaluationId || undefined,
+                updatedAt: newItem.updatedAt || undefined,
+                createdAt: newItem.createdAt || undefined,
+                isEvaluation: newItem.isEvaluation,
                 // UI compatibility fields
-                scorecard: scorecardName,
-                date: item.updatedAt || item.createdAt,
-                status: "Done", // Default status
+                scorecard: newItem.scorecardId ? `Scorecard ${newItem.scorecardId.substring(0, 8)}` : undefined,
+                score: newItem.scoreId ? `Score ${newItem.scoreId.substring(0, 8)}` : undefined,
+                date: (newItem.updatedAt || newItem.createdAt) || undefined,
+                status: "Done",
                 results: 0,
                 inferences: 0,
                 cost: "$0.000",
-                score: 0
-              } as Item;
+                isNew: true // Mark as new for animation
+              };
+              
+              // Add the new item to the beginning of the list
+              return [newItemWithUIFields, ...prevItems];
             });
             
-            setItems(transformedItems);
-            setNextToken(itemsResult.nextToken);
+            // After a delay, remove the "isNew" flag from the newly added item
+            setTimeout(() => {
+              setItems(prevItems => 
+                prevItems.map(item => 
+                  item.id === newItem.id ? { ...item, isNew: false } : item
+                )
+              );
+            }, 3000); // Remove the flag after 3 seconds
+          } finally {
             setIsLoading(false);
-            return;
-          }
-        } catch (error) {
-          console.error("Error using Amplify client to fetch items:", error);
-          // Continue with the direct GraphQL query approach
-        }
-        
-        // Skip the amplifyClient.Item.list() call that's causing the error
-        // and only use the direct GraphQL query approach
-        let itemsFromDirectQuery: any[] = [];
-        let nextTokenFromDirectQuery: string | null = null;
-        
-        try {
-          // Determine if we should filter by scorecard, score, or account
-          const useScorecard = selectedScorecard !== null && selectedScorecard !== undefined;
-          const useScore = selectedScore !== null && selectedScore !== undefined;
-          
-          console.log('Filter settings:', {
-            useScorecard,
-            useScore,
-            scorecardId: selectedScorecard,
-            scoreId: selectedScore
-          });
-          
-          if (useScore) {
-            // If a score is selected, filter by scoreId
-            console.log('Attempting direct GraphQL query for items with scoreId:', selectedScore);
-            const directQuery = await graphqlRequest<{ listItemByScoreIdAndUpdatedAt: { items: any[], nextToken: string | null } }>(`
-              query ListItemsDirect($scoreId: String!, $limit: Int!) {
-                listItemByScoreIdAndUpdatedAt(
-                  scoreId: $scoreId, 
-                  sortDirection: DESC,
-                  limit: $limit
-                ) {
-                  items {
-                    id
-                    externalId
-                    description
-                    accountId
-                    scorecardId
-                    scoreId
-                    evaluationId
-                    updatedAt
-                    createdAt
-                    isEvaluation
-                  }
-                  nextToken
-                }
-              }
-            `, {
-              scoreId: selectedScore,
-              limit: 20
-            });
-            
-            console.log('Direct GraphQL query response for more items:', JSON.stringify(directQuery, null, 2));
-            
-            if (directQuery.data?.listItemByScoreIdAndUpdatedAt?.items) {
-              console.log(`Found ${directQuery.data.listItemByScoreIdAndUpdatedAt.items.length} more items via direct GraphQL query`);
-              // No need to sort as the GSI already returns items sorted by updatedAt
-              itemsFromDirectQuery = directQuery.data.listItemByScoreIdAndUpdatedAt.items;
-              nextTokenFromDirectQuery = directQuery.data.listItemByScoreIdAndUpdatedAt.nextToken;
-            } else {
-              console.warn('No more items found in direct GraphQL query response');
-            }
-          } else if (useScorecard) {
-            // If only a scorecard is selected, filter by scorecardId
-            console.log('Attempting direct GraphQL query for items with scorecardId:', selectedScorecard);
-            const directQuery = await graphqlRequest<{ listItemByScorecardIdAndUpdatedAt: { items: any[], nextToken: string | null } }>(`
-              query ListItemsDirect($scorecardId: String!, $limit: Int!) {
-                listItemByScorecardIdAndUpdatedAt(
-                  scorecardId: $scorecardId, 
-                  sortDirection: DESC,
-                  limit: $limit
-                ) {
-                  items {
-                    id
-                    externalId
-                    description
-                    accountId
-                    scorecardId
-                    scoreId
-                    evaluationId
-                    updatedAt
-                    createdAt
-                    isEvaluation
-                  }
-                  nextToken
-                }
-              }
-            `, {
-              scorecardId: selectedScorecard,
-              limit: 20
-            });
-            
-            console.log('Direct GraphQL query response for more items:', JSON.stringify(directQuery, null, 2));
-            
-            if (directQuery.data?.listItemByScorecardIdAndUpdatedAt?.items) {
-              console.log(`Found ${directQuery.data.listItemByScorecardIdAndUpdatedAt.items.length} more items via direct GraphQL query`);
-              // No need to sort as the GSI already returns items sorted by updatedAt
-              itemsFromDirectQuery = directQuery.data.listItemByScorecardIdAndUpdatedAt.items;
-              nextTokenFromDirectQuery = directQuery.data.listItemByScorecardIdAndUpdatedAt.nextToken;
-            } else {
-              console.warn('No more items found in direct GraphQL query response');
-            }
-          } else {
-            // If neither scorecard nor score is selected, filter by accountId
-            console.log('Attempting direct GraphQL query for items with accountId:', foundAccountId);
-            const directQuery = await graphqlRequest<{ listItemByAccountIdAndUpdatedAt: { items: any[], nextToken: string | null } }>(`
-              query ListItemsDirect($accountId: String!, $limit: Int!) {
-                listItemByAccountIdAndUpdatedAt(
-                  accountId: $accountId, 
-                  sortDirection: DESC,
-                  limit: $limit
-                ) {
-                  items {
-                    id
-                    externalId
-                    description
-                    accountId
-                    scorecardId
-                    scoreId
-                    evaluationId
-                    updatedAt
-                    createdAt
-                    isEvaluation
-                  }
-                  nextToken
-                }
-              }
-            `, {
-              accountId: foundAccountId,
-              limit: 20
-            });
-            
-            console.log('Direct GraphQL query response for more items:', JSON.stringify(directQuery, null, 2));
-            
-            if (directQuery.data?.listItemByAccountIdAndUpdatedAt?.items) {
-              console.log(`Found ${directQuery.data.listItemByAccountIdAndUpdatedAt.items.length} more items via direct GraphQL query`);
-              // No need to sort as the GSI already returns items sorted by updatedAt
-              itemsFromDirectQuery = directQuery.data.listItemByAccountIdAndUpdatedAt.items;
-              nextTokenFromDirectQuery = directQuery.data.listItemByAccountIdAndUpdatedAt.nextToken;
-            } else {
-              console.warn('No more items found in direct GraphQL query response');
-            }
-          }
-        } catch (error) {
-          console.error('Error in direct GraphQL query:', error);
-        }
-        
-        // Use the items from the direct query
-        const itemsToUse = itemsFromDirectQuery;
-        const nextTokenToUse = nextTokenFromDirectQuery;
-        
-        // If no items are found, we'll log this information
-        if (itemsToUse.length === 0) {
-          console.log('No items found for this account. You may need to create some items first.');
-        }
-        
-        // Get unique scorecard IDs to fetch their names
-        const scorecardIds = [...new Set(
-          itemsToUse
-            .filter(item => item.scorecardId)
-            .map(item => item.scorecardId)
-        )];
-        
-        // Fetch scorecard names if there are any scorecard IDs
-        const scorecardMap: Record<string, string> = {};
-        if (scorecardIds.length > 0) {
-          try {
-            // Fetch scorecards in parallel
-            const scorecardPromises = scorecardIds.map(async (id) => {
-              if (!id) return null;
-              const result = await amplifyClient.Scorecard.get({ id });
-              return result.data;
-            });
-            
-            const scorecards = await Promise.all(scorecardPromises);
-            
-            // Create a map of scorecard ID to name
-            scorecards.forEach(scorecard => {
-              if (scorecard && scorecard.id) {
-                scorecardMap[scorecard.id] = scorecard.name || 'Unnamed Scorecard';
-              }
-            });
-          } catch (error) {
-            console.error("Error fetching scorecards:", error);
           }
         }
-        
-        // Transform the data to match the expected format
-        const transformedItems = itemsToUse.map(item => {
-          // Get the scorecard name if scorecardId is available
-          let scorecardName = "Unknown Scorecard";
-          if (item.scorecardId && scorecardMap[item.scorecardId]) {
-            scorecardName = scorecardMap[item.scorecardId];
-          } else if (item.scorecardId) {
-            scorecardName = `Scorecard ${item.scorecardId.substring(0, 8)}`;
-          }
-          
-          return {
-            id: item.id,
-            accountId: item.accountId,
-            externalId: item.externalId,
-            description: item.description,
-            scorecardId: item.scorecardId,
-            scoreId: item.scoreId,
-            evaluationId: item.evaluationId,
-            updatedAt: item.updatedAt,
-            createdAt: item.createdAt,
-            isEvaluation: item.isEvaluation,
-            // UI compatibility fields
-            scorecard: scorecardName,
-            date: item.updatedAt || item.createdAt,
-            status: "Done", // Default status
-            results: 0,
-            inferences: 0,
-            cost: "$0.000",
-            score: 0
-          } as Item;
-        });
-        
-        setItems(transformedItems);
-        setNextToken(nextTokenToUse);
-        setIsLoading(false);
-      } catch (error) {
-        console.error("Error fetching items:", error);
-        // Don't keep the mock data if there's an error
-        setItems([]);
+      },
+      error: (error) => {
+        console.error('Error in item creation subscription:', error);
+      }
+    });
+    
+    itemSubscriptionRef.current = subscription;
+    
+    return () => {
+      console.log('Cleaning up item creation subscription');
+      if (itemSubscriptionRef.current) {
+        itemSubscriptionRef.current.unsubscribe();
+        itemSubscriptionRef.current = null;
       }
     };
-    
-    fetchItems();
-  }, [user, selectedScorecard, selectedScore]);
+  }, [selectedAccount, fetchItems]);
 
   useEffect(() => {
     const checkViewportWidth = () => {
@@ -1411,10 +1621,8 @@ export default function ItemsDashboard() {
                 <Badge className={getValueBadgeClass(score.value)}>{score.value}</Badge>
               </div>
             </div>
-            {/* Rest of the non-annotation rendering code... */}
           </>
         )}
-        {/* Rest of the function remains the same... */}
       </div>
     );
   }
@@ -1504,28 +1712,21 @@ export default function ItemsDashboard() {
 
   return (
     <div className="flex flex-col h-full p-1.5">
-      <div className="flex flex-wrap justify-between items-start gap-4 mb-3">
-        <div className="flex-shrink-0">
-          <ScorecardContext 
-            selectedScorecard={selectedScorecard}
-            setSelectedScorecard={setSelectedScorecard}
-            selectedScore={selectedScore}
-            setSelectedScore={setSelectedScore}
-            availableFields={availableFields}
-            timeRangeOptions={scoreOptions}
-          />
-        </div>
-        <div className="flex-shrink-0 ml-auto">
-          <ItemContext
-            handleFilterChange={handleFilterChange}
-            handleSampleChange={handleSampleChange}
-            handleTimeRangeChange={handleTimeRangeChange}
-            availableFields={availableFields}
-            timeRangeOptions={ITEMS_TIME_RANGE_OPTIONS}
-          />
+      <div className="flex items-center justify-between pb-3">
+        <div className="flex items-center space-x-4">
+          <div className="flex-grow">
+            <ScorecardContext 
+              selectedScorecard={selectedScorecard}
+              setSelectedScorecard={setSelectedScorecard}
+              selectedScore={selectedScore}
+              setSelectedScore={setSelectedScore}
+              availableFields={availableFields}
+              timeRangeOptions={scoreOptions}
+            />
+          </div>
         </div>
       </div>
-
+      
       <div className="flex-grow flex flex-col overflow-hidden">
         {selectedItem && (isNarrowViewport || isFullWidth) ? (
           <div className="flex-grow overflow-hidden">
@@ -1617,3 +1818,4 @@ export default function ItemsDashboard() {
     </div>
   );
 }
+
