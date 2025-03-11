@@ -10,6 +10,8 @@ from typing import Optional
 import rich
 import datetime
 from plexus.cli.ScoreCommands import scores, score
+from ruamel.yaml import YAML
+import io
 
 # Define the main command groups that will be exported
 @click.group()
@@ -247,6 +249,15 @@ def resolve_account_identifier(client, identifier):
 def generate_key(name: str) -> str:
     """Generate a key from a name by converting to lowercase and replacing spaces with hyphens."""
     return name.lower().replace(' ', '-')
+
+# Configure ruamel.yaml for better multi-line string handling
+def get_yaml_handler():
+    """Returns a configured YAML handler that preserves multi-line strings."""
+    yaml_handler = YAML()
+    yaml_handler.preserve_quotes = True
+    yaml_handler.width = 4096  # Prevent line wrapping
+    yaml_handler.indent(mapping=2, sequence=4, offset=2)
+    return yaml_handler
 
 def detect_and_clean_duplicates(client, scorecard_id: str) -> int:
     """
@@ -1122,7 +1133,9 @@ def pull(scorecard: Optional[str], account: str, output: str):
                         if config_yaml:
                             try:
                                 # Parse the configuration YAML
-                                config_data = yaml.safe_load(config_yaml)
+                                yaml_handler = get_yaml_handler()
+                                config_yaml_stream = io.StringIO(config_yaml)
+                                config_data = yaml_handler.load(config_yaml_stream)
                                 if isinstance(config_data, dict):
                                     # Merge the configuration with the score data
                                     # This preserves the full YAML structure
@@ -1161,7 +1174,9 @@ def pull(scorecard: Optional[str], account: str, output: str):
             }
             
             with open(file_path, 'w') as f:
-                yaml.dump(final_yaml, f, default_flow_style=False, sort_keys=False)
+                # Use ruamel.yaml for better handling of multi-line strings
+                yaml_handler = get_yaml_handler()
+                yaml_handler.dump(final_yaml, f)
             
             console.print(f"[green]Saved scorecard to {file_path}[/green]")
         
@@ -1322,8 +1337,10 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
             return
         
         try:
+            # Use ruamel.yaml for better handling of multi-line strings
+            yaml_handler = get_yaml_handler()
             with open(file, 'r') as f:
-                yaml_data = yaml.safe_load(f)
+                yaml_data = yaml_handler.load(f)
             console.print(f"[green]Loaded configuration from {file}[/green]")
         except Exception as e:
             console.print(f"[red]Error loading YAML from {file}: {e}[/red]")
@@ -1364,7 +1381,8 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
             for yaml_file in yaml_files:
                 try:
                     with open(os.path.join('scorecards', yaml_file), 'r') as f:
-                        data = yaml.safe_load(f)
+                        yaml_handler = get_yaml_handler()
+                        data = yaml_handler.load(f)
                         if (data.get('id') == scorecard_id or 
                             data.get('key') == scorecard_key or 
                             data.get('name') == scorecard_name or
@@ -1381,7 +1399,8 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
             for yaml_file in yaml_files:
                 try:
                     with open(os.path.join('scorecards', yaml_file), 'r') as f:
-                        data = yaml.safe_load(f)
+                        yaml_handler = get_yaml_handler()
+                        data = yaml_handler.load(f)
                         # For new scorecards, match by filename (without extension), key, or name
                         filename_without_ext = os.path.splitext(yaml_file)[0].lower()
                         if (filename_without_ext == scorecard.lower() or
@@ -1647,7 +1666,9 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
                         
                         try:
                             # Try to parse the parent configuration as YAML
-                            parent_config_obj = yaml.safe_load(parent_config)
+                            yaml_handler = get_yaml_handler()
+                            parent_config_stream = io.StringIO(parent_config)
+                            parent_config_obj = yaml_handler.load(parent_config_stream)
                         except:
                             # If parsing fails, try JSON as fallback
                             try:
@@ -1665,11 +1686,16 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
                             del parent_config_obj['parent']
                         
                         # Compare the configurations
-                        # Use sort_keys=False for both to preserve field order in the comparison
-                        # We're comparing the full score_data object, not just a subset
-                        # Convert to YAML strings for comparison to ensure consistent formatting
-                        yaml_str1 = yaml.dump(score_data_for_comparison, sort_keys=False, default_flow_style=False)
-                        yaml_str2 = yaml.dump(parent_config_obj, sort_keys=False, default_flow_style=False)
+                        # Use ruamel.yaml for better handling of multi-line strings
+                        yaml_handler = get_yaml_handler()
+                        
+                        yaml_str1 = io.StringIO()
+                        yaml_handler.dump(score_data_for_comparison, yaml_str1)
+                        yaml_str1 = yaml_str1.getvalue()
+                        
+                        yaml_str2 = io.StringIO()
+                        yaml_handler.dump(parent_config_obj, yaml_str2)
+                        yaml_str2 = yaml_str2.getvalue()
                         
                         # Log the comparison for debugging
                         console.print(f"[dim]Comparing configurations for score: {score_name}[/dim]")
@@ -1711,9 +1737,11 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
                             score_config_data['parent'] = parent_version_id
                         
                         # Convert score_data to YAML string for configuration
-                        # Use yaml.dump with sort_keys=False to preserve field order
-                        # and default_flow_style=False for better readability
-                        yaml_config = yaml.dump(score_config_data, sort_keys=False, default_flow_style=False)
+                        # Use ruamel.yaml for better handling of multi-line strings
+                        yaml_handler = get_yaml_handler()
+                        yaml_str = io.StringIO()
+                        yaml_handler.dump(score_config_data, yaml_str)
+                        yaml_config = yaml_str.getvalue()
                         
                         # Get version note - either from command line or prompt user
                         version_note = note
@@ -1838,9 +1866,11 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
                     now = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
                     
                     # Convert score_data to YAML string for configuration
-                    # Use yaml.dump with sort_keys=False to preserve field order
-                    # and default_flow_style=False for better readability
-                    yaml_config = yaml.dump(score_config_data, sort_keys=False, default_flow_style=False)
+                    # Use ruamel.yaml for better handling of multi-line strings
+                    yaml_handler = get_yaml_handler()
+                    yaml_str = io.StringIO()
+                    yaml_handler.dump(score_config_data, yaml_str)
+                    yaml_config = yaml_str.getvalue()
                     
                     # Get version note - either from command line or prompt user
                     version_note = note
