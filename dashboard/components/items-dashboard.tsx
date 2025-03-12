@@ -1808,8 +1808,18 @@ export default function ItemsDashboard() {
                 <div className="@container h-full">
                   {isLoading && items.length === 0 ? (
                     <div className="flex justify-center items-center h-40">
-                      <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                      <span className="ml-2 text-lg">Loading items...</span>
+                      <div className="flex flex-col items-center">
+                        <div 
+                          role="status"
+                          className="animate-spin rounded-full h-8 w-8 border-b-2 border-secondary"
+                          aria-label="Loading"
+                        >
+                          <span className="sr-only">Loading...</span>
+                        </div>
+                        <div className="mt-4 text-sm text-muted-foreground">
+                          Loading items...
+                        </div>
+                      </div>
                     </div>
                   ) : (
                     <>
@@ -1845,9 +1855,17 @@ export default function ItemsDashboard() {
                           className="flex justify-center py-6"
                         >
                           {isLoadingMore && (
-                            <div className="flex items-center">
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                              <span>Loading more items...</span>
+                            <div className="flex flex-col items-center">
+                              <div 
+                                role="status"
+                                className="animate-spin rounded-full h-4 w-4 border-b-2 border-secondary"
+                                aria-label="Loading more"
+                              >
+                                <span className="sr-only">Loading more items...</span>
+                              </div>
+                              <div className="mt-2 text-sm text-muted-foreground">
+                                Loading more items...
+                              </div>
                             </div>
                           )}
                         </div>
