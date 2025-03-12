@@ -601,10 +601,6 @@ export default function ScorecardsComponent({
     );
   };
 
-  if (isLoading) {
-    return <div>Loading scorecards...</div>
-  }
-
   if (error) {
     return (
       <div className="p-4">
