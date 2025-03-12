@@ -505,7 +505,7 @@ export default function ItemsDashboard() {
             itemsFromDirectQuery = directQuery.data.listItemByAccountIdAndUpdatedAt.items;
             nextTokenFromDirectQuery = directQuery.data.listItemByAccountIdAndUpdatedAt.nextToken;
           } else {
-            console.warn('No more items found in direct GraphQL query response');
+            console.warn('No items found in direct GraphQL query response');
           }
         }
       } catch (error) {
@@ -563,19 +563,25 @@ export default function ItemsDashboard() {
       const scoreMap: Record<string, string> = {};
       if (scoreIds.length > 0) {
         try {
+          console.log(`Fetching scores for IDs: ${JSON.stringify(scoreIds)}`);
+          
           // Fetch scores in parallel
           const scorePromises = scoreIds.map(async (id) => {
             if (!id) return null;
+            console.log(`Fetching score with ID: ${id}`);
             const result = await amplifyClient.Score.get({ id });
+            console.log(`Score fetch result for ID ${id}:`, result.data);
             return result.data;
           });
           
           const scores = await Promise.all(scorePromises);
+          console.log(`Fetched ${scores.length} scores:`, scores);
           
           // Create a map of score ID to name
           scores.forEach((score: any) => {
             if (score && score.id) {
               scoreMap[score.id] = score.name || 'Unnamed Score';
+              console.log(`Mapped score ID ${score.id} to name: ${scoreMap[score.id]}`);
             }
           });
         } catch (error) {
@@ -586,7 +592,7 @@ export default function ItemsDashboard() {
       // Transform the data to match the expected format
       const transformedItems = itemsToUse.map(item => {
         // Get the scorecard name if scorecardId is available
-        let scorecardName = "Unknown Scorecard";
+        let scorecardName = null;
         if (item.scorecardId && scorecardMap[item.scorecardId]) {
           scorecardName = scorecardMap[item.scorecardId];
         } else if (item.scorecardId) {
@@ -595,13 +601,28 @@ export default function ItemsDashboard() {
         
         // Get the score name if scoreId is available
         let scoreName = null;
-        if (item.scoreId && scoreMap[item.scoreId]) {
+        
+        // Check if the score object is directly available from the GraphQL response
+        if (item.score && item.score.name) {
+          scoreName = item.score.name;
+          console.log(`Using score name directly from GraphQL response: ${scoreName}`);
+        } else if (item.scoreId && scoreMap[item.scoreId]) {
           scoreName = scoreMap[item.scoreId];
+          console.log(`Found score name for ID ${item.scoreId}: ${scoreName}`);
         } else if (item.scoreId) {
           scoreName = `Score ${item.scoreId.substring(0, 8)}`;
+          console.log(`Using fallback score name for ID ${item.scoreId}: ${scoreName}`);
+        } else {
+          console.log(`No scoreId found for item ${item.id}`);
+          // If this is an evaluation item, set a default value
+          if (item.isEvaluation) {
+            scoreName = "Evaluation";
+            console.log(`Setting default 'Evaluation' for evaluation item ${item.id}`);
+          }
         }
         
-        return {
+        // Create the transformed item with all required fields
+        const transformedItem = {
           id: item.id,
           accountId: item.accountId,
           externalId: item.externalId,
@@ -614,14 +635,17 @@ export default function ItemsDashboard() {
           isEvaluation: item.isEvaluation,
           // UI compatibility fields
           scorecard: scorecardName,
-          score: scoreName,
+          score: scoreName, // Ensure this is set correctly
           date: item.updatedAt || item.createdAt,
           status: "Done", // Default status
           results: 0,
           inferences: 0,
           cost: "$0.000",
-          isNew: true // Mark as new for animation
+          isNew: true // Mark all items as new for animation
         } as Item;
+        
+        console.log(`Transformed item score field: ${transformedItem.score}`);
+        return transformedItem;
       });
       
       // Append the new items to the existing items
@@ -744,7 +768,7 @@ export default function ItemsDashboard() {
           // Transform the data to match the expected format
           const transformedItems = itemsResult.data.map(item => {
             // Get the scorecard name if scorecardId is available
-            let scorecardName = "Unknown Scorecard";
+            let scorecardName = null;
             if (item.scorecardId && scorecardMap[item.scorecardId]) {
               scorecardName = scorecardMap[item.scorecardId];
             } else if (item.scorecardId) {
@@ -753,10 +777,22 @@ export default function ItemsDashboard() {
             
             // Get the score name if scoreId is available
             let scoreName = null;
-            if (item.scoreId && scoreMap[item.scoreId]) {
+            if (item.score && item.score.name) {
+              scoreName = item.score.name;
+              console.log(`Using score name directly from GraphQL response: ${scoreName}`);
+            } else if (item.scoreId && scoreMap[item.scoreId]) {
               scoreName = scoreMap[item.scoreId];
+              console.log(`Found score name for ID ${item.scoreId}: ${scoreName}`);
             } else if (item.scoreId) {
               scoreName = `Score ${item.scoreId.substring(0, 8)}`;
+              console.log(`Using fallback score name for ID ${item.scoreId}: ${scoreName}`);
+            } else {
+              console.log(`No scoreId found for item ${item.id}`);
+              // If this is an evaluation item, set a default value
+              if (item.isEvaluation) {
+                scoreName = "Evaluation";
+                console.log(`Setting default 'Evaluation' for evaluation item ${item.id}`);
+              }
             }
             
             return {
@@ -840,6 +876,10 @@ export default function ItemsDashboard() {
                   updatedAt
                   createdAt
                   isEvaluation
+                  score {
+                    id
+                    name
+                  }
                 }
                 nextToken
               }
@@ -880,6 +920,10 @@ export default function ItemsDashboard() {
                   updatedAt
                   createdAt
                   isEvaluation
+                  score {
+                    id
+                    name
+                  }
                 }
                 nextToken
               }
@@ -920,6 +964,10 @@ export default function ItemsDashboard() {
                   updatedAt
                   createdAt
                   isEvaluation
+                  score {
+                    id
+                    name
+                  }
                 }
                 nextToken
               }
@@ -1005,7 +1053,7 @@ export default function ItemsDashboard() {
           const scores = await Promise.all(scorePromises);
           
           // Create a map of score ID to name
-          scores.forEach(score => {
+          scores.forEach((score: any) => {
             if (score && score.id) {
               scoreMap[score.id] = score.name || 'Unnamed Score';
             }
@@ -1027,13 +1075,26 @@ export default function ItemsDashboard() {
         
         // Get the score name if scoreId is available
         let scoreName = null;
-        if (item.scoreId && scoreMap[item.scoreId]) {
+        if (item.score && item.score.name) {
+          scoreName = item.score.name;
+          console.log(`Using score name directly from GraphQL response: ${scoreName}`);
+        } else if (item.scoreId && scoreMap[item.scoreId]) {
           scoreName = scoreMap[item.scoreId];
+          console.log(`Found score name for ID ${item.scoreId}: ${scoreName}`);
         } else if (item.scoreId) {
           scoreName = `Score ${item.scoreId.substring(0, 8)}`;
+          console.log(`Using fallback score name for ID ${item.scoreId}: ${scoreName}`);
+        } else {
+          console.log(`No scoreId found for item ${item.id}`);
+          // If this is an evaluation item, set a default value
+          if (item.isEvaluation) {
+            scoreName = "Evaluation";
+            console.log(`Setting default 'Evaluation' for evaluation item ${item.id}`);
+          }
         }
         
-        return {
+        // Create the transformed item with all required fields
+        const transformedItem = {
           id: item.id,
           accountId: item.accountId,
           externalId: item.externalId,
@@ -1046,7 +1107,7 @@ export default function ItemsDashboard() {
           isEvaluation: item.isEvaluation,
           // UI compatibility fields
           scorecard: scorecardName,
-          score: scoreName,
+          score: scoreName, // Ensure this is set correctly
           date: item.updatedAt || item.createdAt,
           status: "Done", // Default status
           results: 0,
@@ -1054,6 +1115,9 @@ export default function ItemsDashboard() {
           cost: "$0.000",
           isNew: true // Mark all items as new for animation
         } as Item;
+        
+        console.log(`Transformed item score field: ${transformedItem.score}`);
+        return transformedItem;
       });
       
       setItems(transformedItems);

@@ -54,15 +54,32 @@ const GridContent = React.memo(({
   getBadgeVariant: (status: string) => string
   isSelected?: boolean
 }) => {
+  // Add debugging for the score property
+  React.useEffect(() => {
+    console.log(`ItemCard rendering with score: ${item.score}`, item);
+  }, [item]);
+
+  // Determine what to display in the score field
+  const getScoreDisplay = () => {
+    if (item.score) {
+      return item.score;
+    } else if (item.isEvaluation) {
+      return "Evaluation";
+    } else {
+      return "No score";
+    }
+  };
+
   return (
     <div className="flex justify-between items-start w-full">
       <div className="space-y-1 max-w-[70%]">
-        <div className="font-medium text-sm truncate" title={item.scorecard}>{item.scorecard || 'Untitled Item'}</div>
-        {item.score && (
-          <div className="text-xs text-muted-foreground truncate" title={`Score: ${item.score}`}>
-            {item.score}
-          </div>
-        )}
+        <div className="font-semibold text-sm truncate" title={item.scorecard}>{item.scorecard || 'Untitled Item'}</div>
+        
+        {/* Always show some information in the score line */}
+        <div className="font-semibold text-sm truncate" title={`Score: ${getScoreDisplay()}`}>
+          {getScoreDisplay()}
+        </div>
+        
         {item.externalId && (
           <div className="text-xs text-muted-foreground truncate" title={`ID: ${item.externalId}`}>
             {item.externalId}
@@ -113,6 +130,17 @@ const DetailContent = React.memo(({
   onEdit,
   onViewData,
 }: DetailContentProps) => {
+  // Determine what to display in the score field
+  const getScoreDisplay = () => {
+    if (item.score) {
+      return item.score;
+    } else if (item.isEvaluation) {
+      return "Evaluation";
+    } else {
+      return "No score";
+    }
+  };
+
   return (
     <div className="w-full flex flex-col min-h-0">
       <div className="flex justify-between items-start w-full">
@@ -127,6 +155,7 @@ const DetailContent = React.memo(({
           ) : (
             <p className="text-sm text-muted-foreground">No date</p>
           )}
+          <p className="text-sm text-muted-foreground">{getScoreDisplay()}</p>
         </div>
         <div className="flex gap-2 ml-4">
           <DropdownMenu.Root>
