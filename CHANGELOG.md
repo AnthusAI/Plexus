@@ -1,6 +1,19 @@
 # CHANGELOG
 
 
+## v0.15.0 (2025-03-11)
+
+### Chores
+
+- Remove unused LangGraph ToolExecutor import
+  ([`739df25`](https://github.com/AnthusAI/Plexus/commit/739df253542c246d6a672ae47c53cf41ae5184a6))
+
+### Features
+
+- **items**: Realtime subscription for new Items.
+  ([`75d9d5f`](https://github.com/AnthusAI/Plexus/commit/75d9d5f8b31b2b13f3ff9f7e084007c4f08cb4f0))
+
+
 ## v0.14.0 (2025-03-10)
 
 ### Features
