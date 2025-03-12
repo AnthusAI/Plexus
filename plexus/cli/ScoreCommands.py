@@ -340,4 +340,104 @@ def list(scorecard: str, limit: int):
 # Add an alias for the list command to the score group
 score.add_command(list)
 
-# Add more score-related commands here 
+@score.command()
+@click.option('--id', required=True, help='Score ID to list versions for')
+def versions(id: str):
+    """List all versions for a specific score."""
+    client = create_client()
+    
+    # First, get the score details to check if it exists and get the champion version ID
+    query = f"""
+    query GetScore {{
+        getScore(id: "{id}") {{
+            id
+            name
+            key
+            externalId
+            championVersionId
+            section {{
+                id
+                name
+            }}
+            versions {{
+                items {{
+                    id
+                    createdAt
+                    updatedAt
+                    isFeatured
+                    parentVersionId
+                    note
+                }}
+            }}
+        }}
+    }}
+    """
+    
+    try:
+        result = client.execute(query)
+        score_data = result.get('getScore')
+        
+        if not score_data:
+            console.print(f"[red]Score not found with ID: {id}[/red]")
+            return
+        
+        score_name = score_data.get('name')
+        champion_version_id = score_data.get('championVersionId')
+        section_name = score_data.get('section', {}).get('name', 'Unknown Section')
+        
+        console.print(f"[bold]Versions for score: {score_name} (ID: {id})[/bold]")
+        console.print(f"[dim]Section: {section_name}[/dim]")
+        console.print(f"[yellow]Current champion version ID: {champion_version_id}[/yellow]")
+        
+        # Get all versions
+        versions = score_data.get('versions', {}).get('items', [])
+        
+        if not versions:
+            console.print("[yellow]No versions found for this score.[/yellow]")
+            return
+        
+        # Sort versions by creation date (newest first)
+        versions.sort(key=lambda v: v.get('createdAt', ''), reverse=True)
+        
+        # Create a table to display the versions
+        table = Table(title=f"Score Versions ({len(versions)} total)")
+        table.add_column("ID", style="cyan")
+        table.add_column("Created", style="green")
+        table.add_column("Updated", style="green")
+        table.add_column("Parent ID", style="blue")
+        table.add_column("Champion", style="magenta")
+        table.add_column("Note", style="yellow")
+        
+        for version in versions:
+            version_id = version.get('id')
+            created_at = version.get('createdAt')
+            updated_at = version.get('updatedAt')
+            parent_id = version.get('parentVersionId', 'None')
+            is_champion = "✓" if version_id == champion_version_id else ""
+            note = version.get('note', '')
+            
+            # Truncate note if it's too long
+            if note and len(note) > 40:
+                note = note[:37] + "..."
+            
+            table.add_row(
+                version_id,
+                created_at,
+                updated_at,
+                parent_id,
+                is_champion,
+                note
+            )
+        
+        console.print(table)
+        
+        # Check if champion version exists in the versions list
+        if champion_version_id:
+            champion_exists = any(v.get('id') == champion_version_id for v in versions)
+            if not champion_exists:
+                console.print(f"[red]WARNING: Champion version ID {champion_version_id} does not exist in the versions list![/red]")
+        
+    except Exception as e:
+        console.print(f"[red]Error listing score versions: {e}[/red]")
+
+score.add_command(versions)
