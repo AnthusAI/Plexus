@@ -853,8 +853,7 @@ export default function EvaluationsDashboard({
           <div className="flex flex-col items-center">
             <div 
               role="status"
-              className="rounded-full h-8 w-8 border-b-2 border-secondary"
-              style={{ animation: 'spin 1s linear infinite' }}
+              className="animate-spin rounded-full h-8 w-8 border-b-2 border-secondary"
               aria-label="Loading"
             >
               <span className="sr-only">Loading...</span>
