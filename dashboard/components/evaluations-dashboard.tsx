@@ -839,7 +839,7 @@ export default function EvaluationsDashboard({
     return (
       <div>
         <div className="mb-4 text-sm text-muted-foreground">
-          {combinedError ? `Error: ${combinedError}` : 'Loading evaluations...'}
+          {combinedError ? `Error: ${combinedError}` : ''}
         </div>
         <EvaluationDashboardSkeleton />
       </div>
@@ -860,7 +860,7 @@ export default function EvaluationsDashboard({
   return (
     <div className="flex flex-col h-full">
       <div className="flex-none p-1.5">
-        <div className="flex justify-between items-start mb-3">
+        <div className="flex justify-between items-start">
           <ScorecardContext 
             selectedScorecard={selectedScorecard}
             setSelectedScorecard={setSelectedScorecard}
