@@ -33,6 +33,7 @@ import Link from 'next/link'
 import { FilterControl, FilterConfig } from "@/components/filter-control"
 import { Progress } from "@/components/ui/progress"
 import ScorecardContext from "@/components/ScorecardContext"
+import { EvaluationDashboardSkeleton } from "@/components/loading-skeleton"
 import { ModelListResult, AmplifyListResult, AmplifyGetResult } from '@/types/shared'
 import { listFromModel, observeQueryFromModel, getFromModel, observeScoreResults } from "@/utils/amplify-helpers"
 import { useAuthenticator } from '@aws-amplify/ui-react'
@@ -836,33 +837,11 @@ export default function EvaluationsDashboard({
 
   if (showLoading) {
     return (
-      <div className="flex flex-col h-full">
-        <div className="flex-none p-1.5">
-          <div className="flex justify-between items-start">
-            <ScorecardContext 
-              selectedScorecard={selectedScorecard}
-              setSelectedScorecard={setSelectedScorecard}
-              selectedScore={selectedScore}
-              setSelectedScore={setSelectedScore}
-            />
-            <TaskDispatchButton config={evaluationsConfig} />
-          </div>
+      <div>
+        <div className="mb-4 text-sm text-muted-foreground">
+          {combinedError ? `Error: ${combinedError}` : ''}
         </div>
-        
-        <div className="flex-1 flex items-center justify-center">
-          <div className="flex flex-col items-center">
-            <div 
-              role="status"
-              className="animate-spin rounded-full h-8 w-8 border-b-2 border-secondary"
-              aria-label="Loading"
-            >
-              <span className="sr-only">Loading...</span>
-            </div>
-            <div className="mt-4 text-sm text-muted-foreground">
-              {combinedError ? `Error: ${combinedError}` : 'Loading evaluations...'}
-            </div>
-          </div>
-        </div>
+        <EvaluationDashboardSkeleton />
       </div>
     )
   }

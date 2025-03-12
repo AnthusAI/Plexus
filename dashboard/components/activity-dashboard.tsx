@@ -757,38 +757,6 @@ export default function ActivityDashboard({
     return null;
   }
 
-  // Show loading state with ScorecardContext visible
-  if (isInitialLoading) {
-    return (
-      <div className="flex flex-col h-full p-1.5">
-        <div className="mb-3 flex justify-between items-start">
-          <ScorecardContext 
-            selectedScorecard={selectedScorecard}
-            setSelectedScorecard={setSelectedScorecard}
-            selectedScore={selectedScore}
-            setSelectedScore={setSelectedScore}
-          />
-          <TaskDispatchButton config={activityConfig} />
-        </div>
-        
-        <div className="flex-1 flex items-center justify-center">
-          <div className="flex flex-col items-center">
-            <div 
-              role="status"
-              className="animate-spin rounded-full h-8 w-8 border-b-2 border-secondary"
-              aria-label="Loading"
-            >
-              <span className="sr-only">Loading...</span>
-            </div>
-            <div className="mt-4 text-sm text-muted-foreground">
-              Loading activity...
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="flex flex-col h-full p-1.5">
       <div className="mb-3 flex justify-between items-start">
