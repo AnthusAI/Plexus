@@ -180,3 +180,13 @@
   --amplify-components-tabs-item-active-color: hsl(var(--pink-8));
   --amplify-components-button-link-color: hsl(var(--violet-11));
 }
+
+/* Custom keyframes for Safari-compatible spinner */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
