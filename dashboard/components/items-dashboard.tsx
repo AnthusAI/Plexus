@@ -1811,7 +1811,8 @@ export default function ItemsDashboard() {
                       <div className="flex flex-col items-center">
                         <div 
                           role="status"
-                          className="animate-spin rounded-full h-8 w-8 border-b-2 border-secondary"
+                          className="rounded-full h-8 w-8 border-b-2 border-secondary"
+                          style={{ animation: 'spin 1s linear infinite' }}
                           aria-label="Loading"
                         >
                           <span className="sr-only">Loading...</span>
@@ -1858,7 +1859,8 @@ export default function ItemsDashboard() {
                             <div className="flex flex-col items-center">
                               <div 
                                 role="status"
-                                className="animate-spin rounded-full h-4 w-4 border-b-2 border-secondary"
+                                className="rounded-full h-4 w-4 border-b-2 border-secondary"
+                                style={{ animation: 'spin 1s linear infinite' }}
                                 aria-label="Loading more"
                               >
                                 <span className="sr-only">Loading more items...</span>
