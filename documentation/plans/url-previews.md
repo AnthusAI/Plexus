@@ -63,49 +63,67 @@ The following files are relevant to implementing dynamic URL previews:
    - `dashboard/app/evaluations/[id]/layout.tsx` - Layout for public evaluation pages
 4. **Lab Evaluation Routes**: Various routes under `dashboard/app/lab/evaluations/` for internal evaluation management
 
+## Updated Approach: Text-Only Evaluation Summaries
+
+### Evaluation Summary Format
+For evaluation share URLs, we will implement a text-only approach that focuses on providing a concise summary of the evaluation results in the description field. The format will be:
+
+```
+"Evaluation results for {scorecard name} - {score name}: {accuracy percentage}% accuracy, {precision percentage}% precision, ..."
+```
+
+### Dynamic Metrics Extraction
+Since metrics are not predefined and come from JSON data in the Evaluation records, we will:
+
+1. Create a reusable utility function `formatEvaluationSummary` that:
+   - Takes an Evaluation record as input
+   - Extracts the scorecard name, score name, and metrics from the JSON data
+   - Formats the metrics into a human-readable string
+   - Returns a complete summary string
+
+2. This utility function will be:
+   - Placed in a shared utilities directory for reuse across the codebase
+   - Used for both URL preview generation and other use cases requiring evaluation summaries
+   - Designed to handle various metric formats and missing data gracefully
+
 ## Implementation Strategy
 
 ### 1. Dynamic Metadata Generation
-We will implement dynamic metadata generation using Next.js's `generateMetadata` function for routes that need customized previews. This function allows us to generate metadata based on route parameters and fetched data.
+We will implement dynamic metadata generation using Next.js's `generateMetadata` function for routes that need customized previews, with a focus on text-based descriptions for evaluations.
 
 ### 2. Priority Routes for Implementation
 
 #### Evaluation Share URLs (Priority)
 For `/evaluations/[id]` routes, we will:
 - Generate dynamic titles based on evaluation name/ID
-- Create descriptions that include scorecard name and key metrics
-- Generate or select appropriate preview images based on evaluation content
-- Include evaluation creation date and status in the metadata
+- Create text-only descriptions using the `formatEvaluationSummary` utility function
+- Use a standard Plexus logo image rather than dynamic images
+- Include evaluation creation date in the metadata
 
 #### Lab Evaluation URLs (Secondary)
 For `/lab/evaluations/...` routes, we will:
 - Generate titles that reflect the specific evaluation context within the lab
-- Create descriptions that summarize the evaluation purpose and scope
-- Use appropriate images that represent the evaluation type
-- Include metadata about the evaluation context and related resources
+- Create descriptions using the same `formatEvaluationSummary` utility function
+- Use the standard Plexus logo image
+- Include metadata about the evaluation context
 
 ### 3. Metadata Policies by Route Type
 
 | Route Type | Title Format | Description Format | Image Strategy | Additional Metadata |
 |------------|--------------|-------------------|----------------|---------------------|
-| Evaluation Share URL | "Evaluation: {name}" | "View results of {scorecard} evaluation with {score_count} scores" | Dynamic chart or scorecard icon | Creation date, status |
-| Lab Evaluation URL | "Lab Evaluation: {name}" | "Plexus Lab evaluation of {topic} with {score_count} scores" | Topic-specific imagery | Experience type, duration |
+| Evaluation Share URL | "Evaluation: {name}" | "Evaluation results for {scorecard} - {score}: {metric1}%, {metric2}%, ..." | Standard Plexus logo | Creation date, status |
+| Lab Evaluation URL | "Lab Evaluation: {name}" | "Evaluation results for {scorecard} - {score}: {metric1}%, {metric2}%, ..." | Standard Plexus logo | Experience type, duration |
 | Dashboard | "Plexus Dashboard" | "Access your AI evaluation dashboard" | Dashboard screenshot | N/A |
 | Documentation | "{topic} - Plexus Documentation" | "Learn about {topic} in Plexus" | Documentation icon | Topic category |
-
-### 4. Image Generation Strategy
-For routes that benefit from dynamic images (like evaluations with charts):
-- Consider server-side chart generation for evaluation results
-- Implement a library of default images for different content types
-- Ensure all images meet the recommended dimensions (1200x630px for optimal display)
 
 ## Implementation Plan
 
 ### Phase 1: Foundation
 1. Create utility functions for metadata generation
    - Create a shared utility file for metadata generation
-   - Implement helper functions for common metadata patterns
-   - Add type definitions for metadata objects
+   - Implement the `formatEvaluationSummary` function for extracting and formatting metrics
+   - Add type definitions for evaluation data structures
+   - Add tests for the utility function with various metric formats
 
 2. Update root layout with improved default metadata
    - Enhance the default image with better branding
@@ -115,19 +133,19 @@ For routes that benefit from dynamic images (like evaluations with charts):
 ### Phase 2: Evaluation Share URL Implementation (Priority)
 1. Implement `generateMetadata` for evaluation share routes
    - Add data fetching in the metadata generation function
-   - Create dynamic title and description based on evaluation data
-   - Select appropriate images based on evaluation type
+   - Use the `formatEvaluationSummary` function to generate the description
+   - Set the title based on evaluation name
 
 2. Test evaluation share URL preview rendering
    - Test across multiple platforms (Slack, Discord, Twitter, etc.)
-   - Verify image rendering and dimensions
+   - Verify text summary displays correctly
    - Ensure data is appropriately truncated for preview limits
 
 ### Phase 3: Lab Evaluation URL Implementation
 1. Implement `generateMetadata` for lab evaluation routes
    - Add data fetching for lab evaluation metadata
-   - Create dynamic titles and descriptions
-   - Select appropriate images
+   - Use the same `formatEvaluationSummary` function for consistency
+   - Set appropriate titles
 
 2. Test lab evaluation URL preview rendering
    - Test across multiple platforms
@@ -137,14 +155,15 @@ For routes that benefit from dynamic images (like evaluations with charts):
 1. Document the metadata implementation
    - Update this plan with implementation details
    - Create developer documentation for adding metadata to new routes
+   - Document the `formatEvaluationSummary` function for reuse
 
 2. Refine based on testing feedback
-   - Adjust metadata generation based on how previews render
-   - Optimize image selection and generation
+   - Adjust summary format based on user feedback
+   - Optimize for readability across platforms
 
 ## Testing Strategy
 1. **Manual Testing**: Test URL sharing on each target platform
-2. **Automated Testing**: Create tests for metadata generation functions
+2. **Automated Testing**: Create tests for the `formatEvaluationSummary` function with various input formats
 3. **Validation Tools**: Use Open Graph validators to verify metadata correctness
 
 ## Resources
@@ -156,7 +175,7 @@ For routes that benefit from dynamic images (like evaluations with charts):
 - [Twitter Card Validator](https://cards-dev.twitter.com/validator)
 
 ## Next Steps
-1. Begin implementation of Phase 1 foundation work
-2. Create utility functions for metadata generation
+1. Begin implementation of the `formatEvaluationSummary` utility function
+2. Create tests for the utility function with various metric formats
 3. Implement evaluation share URL metadata generation (priority)
 4. Test on target platforms and refine as needed 
