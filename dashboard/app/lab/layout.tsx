@@ -5,6 +5,9 @@ import DashboardLayout from '@/components/dashboard-layout'
 import { signOut as amplifySignOut } from 'aws-amplify/auth'
 import { useRouter } from 'next/navigation'
 
+// Note: We can't add metadata here because this is a client component
+// Metadata is defined in individual route layouts
+
 export default function LabLayout({
   children,
 }: {
