@@ -1,4 +1,4 @@
-import { type ClientSchema, a, defineData } from "@aws-amplify/backend";
+import { type ClientSchema, a, defineData, defineFunction } from "@aws-amplify/backend";
 import * as aws_dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import { Construct } from 'constructs';
 
@@ -25,7 +25,7 @@ type ItemIndexFields = "name" | "description" | "accountId" | "evaluationId" | "
 type ScoringJobIndexFields = "accountId" | "scorecardId" | "itemId" | "status" | 
     "scoreId" | "evaluationId" | "startedAt" | "completedAt" | "errorMessage" | "updatedAt" | "createdAt";
 type ScoreResultIndexFields = "accountId" | "scorecardId" | "itemId" | 
-    "scoringJobId" | "evaluationId" | "scoreVersionId" | "updatedAt" | "createdAt";
+    "scoringJobId" | "evaluationId" | "scoreVersionId" | "updatedAt" | "createdAt" | "scoreId";
 type BatchJobScoringJobIndexFields = "batchJobId" | "scoringJobId";
 type TaskIndexFields = "accountId" | "type" | "status" | "target" | 
     "currentStageId" | "updatedAt" | "scorecardId" | "scoreId";
@@ -35,6 +35,11 @@ type DatasetVersionIndexFields = "datasetId";
 type DatasetProfileIndexFields = "datasetId" | "datasetVersionId";
 type ShareLinkIndexFields = "token" | "resourceType" | "resourceId" | "accountId";
 type ScoreVersionIndexFields = "scoreId" | "versionNumber" | "isFeatured";
+
+// Define the share token handler function
+const getResourceByShareTokenHandler = defineFunction({
+    entry: './resolvers/getResourceByShareToken.ts'
+});
 
 const schema = a.schema({
     Account: a
@@ -73,18 +78,20 @@ const schema = a.schema({
             scoreResults: a.hasMany('ScoreResult', 'scorecardId'),
             tasks: a.hasMany('Task', 'scorecardId'),
             datasets: a.hasMany('Dataset', 'scorecardId'),
+            items: a.hasMany('Item', 'scorecardId'),
             externalId: a.string(),
-            updatedAt: a.datetime(),
+            itemId: a.string(),
+            item: a.belongsTo('Item', 'itemId'),
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
             allow.authenticated()
         ])
-        .secondaryIndexes((idx) => [
-            idx("accountId").sortKeys(["updatedAt"]),
-            idx("key" as any),
-            idx("externalId" as any),
-            idx("name" as any)
+        .secondaryIndexes((idx: (field: ScorecardIndexFields) => any) => [
+            idx("accountId"),
+            idx("key"),
+            idx("externalId"),
+            idx("name")
         ]),
 
     ScorecardSection: a
@@ -122,6 +129,8 @@ const schema = a.schema({
             datasets: a.hasMany('Dataset', 'scoreId'),
             tasks: a.hasMany('Task', 'scoreId'),
             versions: a.hasMany('ScoreVersion', 'scoreId'),
+            items: a.hasMany('Item', 'scoreId'),
+            scoreResults: a.hasMany('ScoreResult', 'scoreId'),
             championVersionId: a.string(),
             championVersion: a.belongsTo('ScoreVersion', 'championVersionId'),
             externalId: a.string().required()
@@ -249,7 +258,7 @@ const schema = a.schema({
 
     Item: a
         .model({
-            name: a.string().required(),
+            externalId: a.string(),
             description: a.string(),
             accountId: a.string().required(),
             account: a.belongsTo('Account', 'accountId'),
@@ -258,6 +267,8 @@ const schema = a.schema({
             scorecards: a.hasMany('Scorecard', 'itemId'),
             evaluationId: a.string(),
             evaluation: a.belongsTo('Evaluation', 'evaluationId'),
+            scoreId: a.string(),
+            score: a.belongsTo('Score', 'scoreId'),
             updatedAt: a.datetime(),
             createdAt: a.datetime(),
             isEvaluation: a.boolean().required(),
@@ -267,7 +278,11 @@ const schema = a.schema({
             allow.authenticated()
         ])
         .secondaryIndexes((idx) => [
-            idx("accountId").sortKeys(["updatedAt"])
+            idx("accountId").sortKeys(["updatedAt"]),
+            idx("externalId"),
+            idx("scoreId").sortKeys(["updatedAt"]),
+            // Composite GSI for accountId+externalId to enforce uniqueness within an account
+            idx("accountId").sortKeys(["externalId"]).name("byAccountAndExternalId")
         ]),
 
     ScoringJob: a
@@ -311,6 +326,7 @@ const schema = a.schema({
             explanation: a.string(),
             confidence: a.float(),
             metadata: a.json(),
+            trace: a.json(),
             correct: a.boolean(),
             itemId: a.string().required(),
             item: a.belongsTo('Item', 'itemId'),
@@ -324,6 +340,8 @@ const schema = a.schema({
             scorecard: a.belongsTo('Scorecard', 'scorecardId'),
             scoreVersionId: a.string(),
             scoreVersion: a.belongsTo('ScoreVersion', 'scoreVersionId'),
+            scoreId: a.string(),
+            score: a.belongsTo('Score', 'scoreId'),
             updatedAt: a.datetime(),
             createdAt: a.datetime(),
         })
@@ -335,9 +353,10 @@ const schema = a.schema({
             idx("accountId").sortKeys(["updatedAt"]),
             idx("itemId"),
             idx("scoringJobId"),
-            idx("scorecardId"),
+            idx("scorecardId").sortKeys(["updatedAt"]),
             idx("evaluationId"),
-            idx("scoreVersionId")
+            idx("scoreVersionId"),
+            idx("scoreId")
         ]),
 
     BatchJobScoringJob: a
@@ -507,7 +526,28 @@ const schema = a.schema({
             idx("accountId"),
             idx("resourceType"),
             idx("resourceId")
+        ]),
+
+    ResourceByShareTokenResponse: a.customType({
+        shareLink: a.customType({
+            token: a.string(),
+            resourceType: a.string(),
+            resourceId: a.string(),
+            viewOptions: a.json()
+        }),
+        data: a.json()
+    }),
+    
+    getResourceByShareToken: a
+        .query()
+        .arguments({ token: a.string().required() })
+        .returns(a.ref('ResourceByShareTokenResponse'))
+        .authorization(allow => [
+            allow.guest(),
+            allow.publicApiKey(),
+            allow.authenticated()
         ])
+        .handler(a.handler.function(getResourceByShareTokenHandler))
 });
 
 export type Schema = ClientSchema<typeof schema>;
