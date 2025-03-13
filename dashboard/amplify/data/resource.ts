@@ -267,8 +267,6 @@ const schema = a.schema({
             scorecards: a.hasMany('Scorecard', 'itemId'),
             evaluationId: a.string(),
             evaluation: a.belongsTo('Evaluation', 'evaluationId'),
-            scorecardId: a.string(),
-            scorecard: a.belongsTo('Scorecard', 'scorecardId'),
             scoreId: a.string(),
             score: a.belongsTo('Score', 'scoreId'),
             updatedAt: a.datetime(),
@@ -282,7 +280,6 @@ const schema = a.schema({
         .secondaryIndexes((idx) => [
             idx("accountId").sortKeys(["updatedAt"]),
             idx("externalId"),
-            idx("scorecardId").sortKeys(["updatedAt"]),
             idx("scoreId").sortKeys(["updatedAt"]),
             // Composite GSI for accountId+externalId to enforce uniqueness within an account
             idx("accountId").sortKeys(["externalId"]).name("byAccountAndExternalId")
@@ -356,7 +353,7 @@ const schema = a.schema({
             idx("accountId").sortKeys(["updatedAt"]),
             idx("itemId"),
             idx("scoringJobId"),
-            idx("scorecardId"),
+            idx("scorecardId").sortKeys(["updatedAt"]),
             idx("evaluationId"),
             idx("scoreVersionId"),
             idx("scoreId")
