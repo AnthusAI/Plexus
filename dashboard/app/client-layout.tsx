@@ -70,7 +70,7 @@ function AuthWrapper({ children }: { children: React.ReactNode }) {
     if (authStatus === 'unauthenticated' && !isPublicPath) {
       router.push('/');
     } else if (authStatus === 'authenticated' && pathname === '/') {
-      router.push('/lab/activity');
+      router.push('/lab/items');
     }
   }, [authStatus, router, pathname]);
 
