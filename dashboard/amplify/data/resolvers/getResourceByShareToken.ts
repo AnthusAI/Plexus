@@ -225,6 +225,7 @@ export const handler: Schema["getResourceByShareToken"]["functionHandler"] = asy
                   confidence
                   metadata
                   explanation
+                  trace
                   itemId
                   createdAt
                 }
