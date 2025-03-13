@@ -296,7 +296,7 @@ class LangGraphScore(Score, LangChainUser):
 
                             def create_routing_function(conditions, value_setters, next_node):
                                 def routing_function(state):
-                                    if hasattr(state, 'classification'):
+                                    if hasattr(state, 'classification') and state.classification is not None:
                                         state_value = state.classification.lower()
                                         # Check if we have a value setter for this classification
                                         if state_value in value_setters:
