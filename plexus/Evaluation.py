@@ -1640,6 +1640,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                 'itemId': content_id,  # Use content_id as the itemId
                 'accountId': self.account_id,
                 'scorecardId': self.scorecard_id,
+                'scoreId': self.score_id,
                 'value': value,
                 'metadata': json.dumps(metadata_dict)  # Ensure metadata is a JSON string
             }
@@ -1766,8 +1767,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                         "id": item_id,
                         "updatedAt": datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
                         "description": description,
-                        "evaluationId": self.experiment_id,
-                        "scorecardId": self.scorecard_id
+                        "evaluationId": self.experiment_id
                     }
                 }
                 
@@ -1805,10 +1805,6 @@ Total cost:       ${expenses['total_cost']:.6f}
                         "description": description,
                         "accountId": self.account_id,
                         "evaluationId": self.experiment_id,
-                        "scorecardId": self.scorecard_id,
-                        "scoreId": getattr(self, 'score_id', None),
-                        "updatedAt": datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
-                        "createdAt": datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
                         "isEvaluation": is_evaluation
                     }
                 }
