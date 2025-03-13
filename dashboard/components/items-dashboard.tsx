@@ -68,6 +68,9 @@ interface Item {
   inferences?: number;
   cost?: string;
   isNew?: boolean; // Add this field to track new items
+  
+  // New field to store scoreResults grouped by scorecard
+  groupedScoreResults?: GroupedScoreResults;
 }
 
 // Sample metadata and data for all items
@@ -301,6 +304,39 @@ const getRelativeTime = (dateString: string | undefined): string => {
   return formatTimeAgo(dateString);
 };
 
+// First, add a ScoreResult interface
+interface ScoreResult {
+  id: string;
+  value: string;
+  explanation?: string;
+  confidence?: number | null;
+  itemId: string;
+  accountId: string;
+  scorecardId: string;
+  scoreId: string;
+  scorecard?: {
+    id: string;
+    name: string;
+  };
+  score?: {
+    id: string;
+    name: string;
+  };
+  updatedAt?: string;
+  createdAt?: string;
+}
+
+// Add a GroupedScoreResults interface for organizing results by scorecard
+interface GroupedScoreResults {
+  [scorecardId: string]: {
+    scorecardName: string;
+    scores: {
+      scoreId: string;
+      scoreName: string;
+    }[];
+  }
+}
+
 export default function ItemsDashboard() {
   const [selectedItem, setSelectedItem] = useState<string | null>(null)
   const [isFullWidth, setIsFullWidth] = useState(false)
@@ -403,6 +439,26 @@ export default function ItemsDashboard() {
                   updatedAt
                   createdAt
                   isEvaluation
+                  scoreResults {
+                    items {
+                      id
+                      value
+                      explanation
+                      confidence
+                      scorecardId
+                      scoreId
+                      scorecard {
+                        id
+                        name
+                      }
+                      score {
+                        id
+                        name
+                      }
+                      updatedAt
+                      createdAt
+                    }
+                  }
                 }
                 nextToken
               }
@@ -445,6 +501,26 @@ export default function ItemsDashboard() {
                   updatedAt
                   createdAt
                   isEvaluation
+                  scoreResults {
+                    items {
+                      id
+                      value
+                      explanation
+                      confidence
+                      scorecardId
+                      scoreId
+                      scorecard {
+                        id
+                        name
+                      }
+                      score {
+                        id
+                        name
+                      }
+                      updatedAt
+                      createdAt
+                    }
+                  }
                 }
                 nextToken
               }
@@ -487,6 +563,26 @@ export default function ItemsDashboard() {
                   updatedAt
                   createdAt
                   isEvaluation
+                  scoreResults {
+                    items {
+                      id
+                      value
+                      explanation
+                      confidence
+                      scorecardId
+                      scoreId
+                      scorecard {
+                        id
+                        name
+                      }
+                      score {
+                        id
+                        name
+                      }
+                      updatedAt
+                      createdAt
+                    }
+                  }
                 }
                 nextToken
               }
@@ -521,103 +617,83 @@ export default function ItemsDashboard() {
         console.log('No items found for this account. You may need to create some items first.');
       }
       
-      // Get unique scorecard IDs to fetch their names
-      const scorecardIds = [...new Set(
-        itemsToUse
-          .filter(item => item.scorecardId)
-          .map(item => item.scorecardId)
-      )];
-      
-      // Get unique score IDs to fetch their names
-      const scoreIds = [...new Set(
-        itemsToUse
-          .filter(item => item.scoreId)
-          .map(item => item.scoreId)
-      )];
-      
-      // Fetch scorecard names if there are any scorecard IDs
-      const scorecardMap: Record<string, string> = {};
-      if (scorecardIds.length > 0) {
-        try {
-          // Fetch scorecards in parallel
-          const scorecardPromises = scorecardIds.map(async (id) => {
-            if (!id) return null;
-            const result = await amplifyClient.Scorecard.get({ id });
-            return result.data;
-          });
-          
-          const scorecards = await Promise.all(scorecardPromises);
-          
-          // Create a map of scorecard ID to name
-          scorecards.forEach(scorecard => {
-            if (scorecard && scorecard.id) {
-              scorecardMap[scorecard.id] = scorecard.name || 'Unnamed Scorecard';
-            }
-          });
-        } catch (error) {
-          console.error("Error fetching scorecards:", error);
-        }
-      }
-      
-      // Fetch score names if there are any score IDs
-      const scoreMap: Record<string, string> = {};
-      if (scoreIds.length > 0) {
-        try {
-          console.log(`Fetching scores for IDs: ${JSON.stringify(scoreIds)}`);
-          
-          // Fetch scores in parallel
-          const scorePromises = scoreIds.map(async (id) => {
-            if (!id) return null;
-            console.log(`Fetching score with ID: ${id}`);
-            const result = await amplifyClient.Score.get({ id });
-            console.log(`Score fetch result for ID ${id}:`, result.data);
-            return result.data;
-          });
-          
-          const scores = await Promise.all(scorePromises);
-          console.log(`Fetched ${scores.length} scores:`, scores);
-          
-          // Create a map of score ID to name
-          scores.forEach((score: any) => {
-            if (score && score.id) {
-              scoreMap[score.id] = score.name || 'Unnamed Score';
-              console.log(`Mapped score ID ${score.id} to name: ${scoreMap[score.id]}`);
-            }
-          });
-        } catch (error) {
-          console.error("Error fetching scores:", error);
-        }
-      }
-      
       // Transform the data to match the expected format
       const transformedItems = itemsToUse.map(item => {
-        // Get the scorecard name if scorecardId is available
-        let scorecardName = null;
-        if (item.scorecardId && scorecardMap[item.scorecardId]) {
-          scorecardName = scorecardMap[item.scorecardId];
-        } else if (item.scorecardId) {
-          scorecardName = `Scorecard ${item.scorecardId.substring(0, 8)}`;
+        // Group scoreResults by scorecard
+        const groupedScoreResults: GroupedScoreResults = {};
+        
+        console.log('Raw item before transformation:', {
+          id: item.id,
+          externalId: item.externalId,
+          accountId: item.accountId,
+          scorecardId: item.scorecardId,
+          scoreId: item.scoreId,
+          hasScoreResults: !!item.scoreResults,
+          scoreResultsItemsCount: item.scoreResults?.items?.length,
+          firstScoreResult: item.scoreResults?.items?.[0] 
+        });
+        
+        if (item.scoreResults && item.scoreResults.items) {
+          item.scoreResults.items.forEach((result: any) => {
+            if (result.scorecardId) {
+              // Create scorecard entry if it doesn't exist
+              if (!groupedScoreResults[result.scorecardId]) {
+                groupedScoreResults[result.scorecardId] = {
+                  scorecardName: result.scorecard?.name || `Scorecard ${result.scorecardId.substring(0, 8)}`,
+                  scores: []
+                };
+              }
+              
+              // Add score to the scorecard's scores if not already present
+              const scoreExists = groupedScoreResults[result.scorecardId].scores.some(
+                s => s.scoreId === result.scoreId
+              );
+              
+              if (!scoreExists && result.scoreId) {
+                groupedScoreResults[result.scorecardId].scores.push({
+                  scoreId: result.scoreId,
+                  scoreName: result.score?.name || `Score ${result.scoreId.substring(0, 8)}`
+                });
+              }
+            }
+          });
+        } else if (item.scorecardId && !Object.keys(groupedScoreResults).length) {
+          // If item has a scorecardId but no scoreResults, create a placeholder entry
+          console.log('Item has scorecardId but no scoreResults:', item.scorecardId);
+          
+          // Try to add a placeholder entry using the scorecardId
+          groupedScoreResults[item.scorecardId] = {
+            scorecardName: `Scorecard ${item.scorecardId.substring(0, 8)}`,
+            scores: []
+          };
+          
+          // Add score if available
+          if (item.scoreId) {
+            groupedScoreResults[item.scorecardId].scores.push({
+              scoreId: item.scoreId,
+              scoreName: `Score ${item.scoreId.substring(0, 8)}`
+            });
+          }
         }
         
-        // Get the score name if scoreId is available
-        let scoreName = null;
+        console.log('Generated groupedScoreResults:', groupedScoreResults);
         
-        // Check if the score object is directly available from the GraphQL response
-        if (item.score && item.score.name) {
-          scoreName = item.score.name;
-          console.log(`Using score name directly from GraphQL response: ${scoreName}`);
-        } else if (item.scoreId && scoreMap[item.scoreId]) {
-          scoreName = scoreMap[item.scoreId];
-          console.log(`Found score name for ID ${item.scoreId}: ${scoreName}`);
-        } else if (item.scoreId) {
-          scoreName = `Score ${item.scoreId.substring(0, 8)}`;
-          console.log(`Using fallback score name for ID ${item.scoreId}: ${scoreName}`);
-        } else {
-          console.log(`No scoreId found for item ${item.id}`);
-          // If this is an evaluation item, set a default value
-          if (item.isEvaluation) {
-            scoreName = "Evaluation";
-            console.log(`Setting default 'Evaluation' for evaluation item ${item.id}`);
+        // Get the primary scorecard and score name to display
+        let primaryScorecardName = null;
+        let primaryScoreName = null;
+        
+        // Logic to determine primary scorecard (first one with scores, or just first one)
+        const scorecardIds = Object.keys(groupedScoreResults);
+        if (scorecardIds.length > 0) {
+          const firstScorecardWithScores = scorecardIds.find(
+            id => groupedScoreResults[id].scores.length > 0
+          ) || scorecardIds[0];
+          
+          primaryScorecardName = groupedScoreResults[firstScorecardWithScores].scorecardName;
+          
+          // Get first score if any exist
+          if (groupedScoreResults[firstScorecardWithScores].scores.length > 0) {
+            primaryScoreName = groupedScoreResults[firstScorecardWithScores].scores[0].scoreName;
           }
         }
         
@@ -634,17 +710,27 @@ export default function ItemsDashboard() {
           createdAt: item.createdAt,
           isEvaluation: item.isEvaluation,
           // UI compatibility fields
-          scorecard: scorecardName,
-          score: scoreName, // Ensure this is set correctly
+          scorecard: primaryScorecardName,
+          score: primaryScoreName, 
           date: item.updatedAt || item.createdAt,
           status: "Done", // Default status
           results: 0,
           inferences: 0,
           cost: "$0.000",
-          isNew: true // Mark all items as new for animation
+          isNew: true, // Mark all items as new for animation
+          // Add grouped scoreResults
+          groupedScoreResults: groupedScoreResults
         } as Item;
         
-        console.log(`Transformed item score field: ${transformedItem.score}`);
+        console.log('Final transformed item:', {
+          id: transformedItem.id,
+          primaryScorecard: transformedItem.scorecard,
+          primaryScore: transformedItem.score,
+          scorecardId: transformedItem.scorecardId,
+          scoreId: transformedItem.scoreId,
+          groupedScoreResultsKeys: Object.keys(transformedItem.groupedScoreResults || {})
+        });
+        
         return transformedItem;
       });
       
@@ -695,143 +781,16 @@ export default function ItemsDashboard() {
         const itemsResult = await amplifyClient.Item.list({
           filter: { accountId: { eq: accountId } },
           limit: 20,
-          sort: { field: 'updatedAt', direction: 'DESC' }
+          sort: { field: 'updatedAt', direction: 'DESC' },
+          // Unfortunately, adding scoreResults here doesn't work well with Amplify Gen2
+          // so we'll fall back to the direct GraphQL query
         });
         
         console.log(`Found ${itemsResult.data.length} items using Amplify client`);
         
-        if (itemsResult.data.length > 0) {
-          // No need to sort manually as the server will return items sorted by updatedAt
-          
-          // Get unique scorecard IDs to fetch their names
-          const scorecardIds = [...new Set(
-            itemsResult.data
-              .filter(item => item.scorecardId)
-              .map(item => item.scorecardId)
-          )];
-          
-          // Get unique score IDs to fetch their names
-          const scoreIds = [...new Set(
-            itemsResult.data
-              .filter(item => item.scoreId)
-              .map(item => item.scoreId)
-          )];
-          
-          // Fetch scorecard names if there are any scorecard IDs
-          const scorecardMap: Record<string, string> = {};
-          if (scorecardIds.length > 0) {
-            try {
-              // Fetch scorecards in parallel
-              const scorecardPromises = scorecardIds.map(async (id) => {
-                if (!id) return null;
-                const result = await amplifyClient.Scorecard.get({ id });
-                return result.data;
-              });
-              
-              const scorecards = await Promise.all(scorecardPromises);
-              
-              // Create a map of scorecard ID to name
-              scorecards.forEach(scorecard => {
-                if (scorecard && scorecard.id) {
-                  scorecardMap[scorecard.id] = scorecard.name || 'Unnamed Scorecard';
-                }
-              });
-            } catch (error) {
-              console.error("Error fetching scorecards:", error);
-            }
-          }
-          
-          // Fetch score names if there are any score IDs
-          const scoreMap: Record<string, string> = {};
-          if (scoreIds.length > 0) {
-            try {
-              // Fetch scores in parallel
-              const scorePromises = scoreIds.map(async (id) => {
-                if (!id) return null;
-                const result = await amplifyClient.Score.get({ id });
-                return result.data;
-              });
-              
-              const scores = await Promise.all(scorePromises);
-              
-              // Create a map of score ID to name
-              scores.forEach((score: any) => {
-                if (score && score.id) {
-                  scoreMap[score.id] = score.name || 'Unnamed Score';
-                }
-              });
-            } catch (error) {
-              console.error("Error fetching scores:", error);
-            }
-          }
-          
-          // Transform the data to match the expected format
-          const transformedItems = itemsResult.data.map(item => {
-            // Get the scorecard name if scorecardId is available
-            let scorecardName = null;
-            if (item.scorecardId && scorecardMap[item.scorecardId]) {
-              scorecardName = scorecardMap[item.scorecardId];
-            } else if (item.scorecardId) {
-              scorecardName = `Scorecard ${item.scorecardId.substring(0, 8)}`;
-            }
-            
-            // Get the score name if scoreId is available
-            let scoreName = null;
-            if (item.score && item.score.name) {
-              scoreName = item.score.name;
-              console.log(`Using score name directly from GraphQL response: ${scoreName}`);
-            } else if (item.scoreId && scoreMap[item.scoreId]) {
-              scoreName = scoreMap[item.scoreId];
-              console.log(`Found score name for ID ${item.scoreId}: ${scoreName}`);
-            } else if (item.scoreId) {
-              scoreName = `Score ${item.scoreId.substring(0, 8)}`;
-              console.log(`Using fallback score name for ID ${item.scoreId}: ${scoreName}`);
-            } else {
-              console.log(`No scoreId found for item ${item.id}`);
-              // If this is an evaluation item, set a default value
-              if (item.isEvaluation) {
-                scoreName = "Evaluation";
-                console.log(`Setting default 'Evaluation' for evaluation item ${item.id}`);
-              }
-            }
-            
-            return {
-              id: item.id,
-              accountId: item.accountId,
-              externalId: item.externalId,
-              description: item.description,
-              scorecardId: item.scorecardId,
-              scoreId: item.scoreId,
-              evaluationId: item.evaluationId,
-              updatedAt: item.updatedAt,
-              createdAt: item.createdAt,
-              isEvaluation: item.isEvaluation,
-              // UI compatibility fields
-              scorecard: scorecardName,
-              score: scoreName,
-              date: item.updatedAt || item.createdAt,
-              status: "Done", // Default status
-              results: 0,
-              inferences: 0,
-              cost: "$0.000",
-              isNew: true // Mark all items as new for animation
-            } as Item;
-          });
-          
-          setItems(transformedItems);
-          setNextToken(itemsResult.nextToken);
-          
-          // After a delay, remove the "isNew" flag
-          setTimeout(() => {
-            setItems(prevItems => 
-              prevItems.map(item => 
-                item.isNew ? { ...item, isNew: false } : item
-              )
-            );
-          }, 3000); // Remove the flag after 3 seconds
-          
-          setIsLoading(false);
-          return;
+        // Skip this approach to make this change complete
+        if (false && itemsResult.data.length > 0) {
+          // The Amplify client approach is disabled because we need scoreResults
         }
       } catch (error) {
         console.error("Error using Amplify client to fetch items:", error);
@@ -876,9 +835,25 @@ export default function ItemsDashboard() {
                   updatedAt
                   createdAt
                   isEvaluation
-                  score {
-                    id
-                    name
+                  scoreResults {
+                    items {
+                      id
+                      value
+                      explanation
+                      confidence
+                      scorecardId
+                      scoreId
+                      scorecard {
+                        id
+                        name
+                      }
+                      score {
+                        id
+                        name
+                      }
+                      updatedAt
+                      createdAt
+                    }
                   }
                 }
                 nextToken
@@ -920,9 +895,25 @@ export default function ItemsDashboard() {
                   updatedAt
                   createdAt
                   isEvaluation
-                  score {
-                    id
-                    name
+                  scoreResults {
+                    items {
+                      id
+                      value
+                      explanation
+                      confidence
+                      scorecardId
+                      scoreId
+                      scorecard {
+                        id
+                        name
+                      }
+                      score {
+                        id
+                        name
+                      }
+                      updatedAt
+                      createdAt
+                    }
                   }
                 }
                 nextToken
@@ -964,9 +955,25 @@ export default function ItemsDashboard() {
                   updatedAt
                   createdAt
                   isEvaluation
-                  score {
-                    id
-                    name
+                  scoreResults {
+                    items {
+                      id
+                      value
+                      explanation
+                      confidence
+                      scorecardId
+                      scoreId
+                      scorecard {
+                        id
+                        name
+                      }
+                      score {
+                        id
+                        name
+                      }
+                      updatedAt
+                      createdAt
+                    }
                   }
                 }
                 nextToken
@@ -1001,95 +1008,83 @@ export default function ItemsDashboard() {
         console.log('No items found for this account. You may need to create some items first.');
       }
       
-      // Get unique scorecard IDs to fetch their names
-      const scorecardIds = [...new Set(
-        itemsToUse
-          .filter(item => item.scorecardId)
-          .map(item => item.scorecardId)
-      )];
-      
-      // Get unique score IDs to fetch their names
-      const scoreIds = [...new Set(
-        itemsToUse
-          .filter(item => item.scoreId)
-          .map(item => item.scoreId)
-      )];
-      
-      // Fetch scorecard names if there are any scorecard IDs
-      const scorecardMap: Record<string, string> = {};
-      if (scorecardIds.length > 0) {
-        try {
-          // Fetch scorecards in parallel
-          const scorecardPromises = scorecardIds.map(async (id) => {
-            if (!id) return null;
-            const result = await amplifyClient.Scorecard.get({ id });
-            return result.data;
-          });
-          
-          const scorecards = await Promise.all(scorecardPromises);
-          
-          // Create a map of scorecard ID to name
-          scorecards.forEach(scorecard => {
-            if (scorecard && scorecard.id) {
-              scorecardMap[scorecard.id] = scorecard.name || 'Unnamed Scorecard';
-            }
-          });
-        } catch (error) {
-          console.error('Error fetching scorecards:', error);
-        }
-      }
-      
-      // Fetch score names if there are any score IDs
-      const scoreMap: Record<string, string> = {};
-      if (scoreIds.length > 0) {
-        try {
-          // Fetch scores in parallel
-          const scorePromises = scoreIds.map(async (id) => {
-            if (!id) return null;
-            const result = await amplifyClient.Score.get({ id });
-            return result.data;
-          });
-          
-          const scores = await Promise.all(scorePromises);
-          
-          // Create a map of score ID to name
-          scores.forEach((score: any) => {
-            if (score && score.id) {
-              scoreMap[score.id] = score.name || 'Unnamed Score';
-            }
-          });
-        } catch (error) {
-          console.error('Error fetching scores:', error);
-        }
-      }
-      
       // Transform the data to match the expected format
       const transformedItems = itemsToUse.map(item => {
-        // Get the scorecard name if scorecardId is available
-        let scorecardName = null;
-        if (item.scorecardId && scorecardMap[item.scorecardId]) {
-          scorecardName = scorecardMap[item.scorecardId];
-        } else if (item.scorecardId) {
-          scorecardName = `Scorecard ${item.scorecardId.substring(0, 8)}`;
+        // Group scoreResults by scorecard
+        const groupedScoreResults: GroupedScoreResults = {};
+        
+        console.log('Raw item before transformation:', {
+          id: item.id,
+          externalId: item.externalId,
+          accountId: item.accountId,
+          scorecardId: item.scorecardId,
+          scoreId: item.scoreId,
+          hasScoreResults: !!item.scoreResults,
+          scoreResultsItemsCount: item.scoreResults?.items?.length,
+          firstScoreResult: item.scoreResults?.items?.[0] 
+        });
+        
+        if (item.scoreResults && item.scoreResults.items) {
+          item.scoreResults.items.forEach((result: any) => {
+            if (result.scorecardId) {
+              // Create scorecard entry if it doesn't exist
+              if (!groupedScoreResults[result.scorecardId]) {
+                groupedScoreResults[result.scorecardId] = {
+                  scorecardName: result.scorecard?.name || `Scorecard ${result.scorecardId.substring(0, 8)}`,
+                  scores: []
+                };
+              }
+              
+              // Add score to the scorecard's scores if not already present
+              const scoreExists = groupedScoreResults[result.scorecardId].scores.some(
+                s => s.scoreId === result.scoreId
+              );
+              
+              if (!scoreExists && result.scoreId) {
+                groupedScoreResults[result.scorecardId].scores.push({
+                  scoreId: result.scoreId,
+                  scoreName: result.score?.name || `Score ${result.scoreId.substring(0, 8)}`
+                });
+              }
+            }
+          });
+        } else if (item.scorecardId && !Object.keys(groupedScoreResults).length) {
+          // If item has a scorecardId but no scoreResults, create a placeholder entry
+          console.log('Item has scorecardId but no scoreResults:', item.scorecardId);
+          
+          // Try to add a placeholder entry using the scorecardId
+          groupedScoreResults[item.scorecardId] = {
+            scorecardName: `Scorecard ${item.scorecardId.substring(0, 8)}`,
+            scores: []
+          };
+          
+          // Add score if available
+          if (item.scoreId) {
+            groupedScoreResults[item.scorecardId].scores.push({
+              scoreId: item.scoreId,
+              scoreName: `Score ${item.scoreId.substring(0, 8)}`
+            });
+          }
         }
         
-        // Get the score name if scoreId is available
-        let scoreName = null;
-        if (item.score && item.score.name) {
-          scoreName = item.score.name;
-          console.log(`Using score name directly from GraphQL response: ${scoreName}`);
-        } else if (item.scoreId && scoreMap[item.scoreId]) {
-          scoreName = scoreMap[item.scoreId];
-          console.log(`Found score name for ID ${item.scoreId}: ${scoreName}`);
-        } else if (item.scoreId) {
-          scoreName = `Score ${item.scoreId.substring(0, 8)}`;
-          console.log(`Using fallback score name for ID ${item.scoreId}: ${scoreName}`);
-        } else {
-          console.log(`No scoreId found for item ${item.id}`);
-          // If this is an evaluation item, set a default value
-          if (item.isEvaluation) {
-            scoreName = "Evaluation";
-            console.log(`Setting default 'Evaluation' for evaluation item ${item.id}`);
+        console.log('Generated groupedScoreResults:', groupedScoreResults);
+        
+        // Get the primary scorecard and score name to display
+        let primaryScorecardName = null;
+        let primaryScoreName = null;
+        
+        // Logic to determine primary scorecard (first one with scores, or just first one)
+        const scorecardIds = Object.keys(groupedScoreResults);
+        if (scorecardIds.length > 0) {
+          const firstScorecardWithScores = scorecardIds.find(
+            id => groupedScoreResults[id].scores.length > 0
+          ) || scorecardIds[0];
+          
+          primaryScorecardName = groupedScoreResults[firstScorecardWithScores].scorecardName;
+          
+          // Get first score if any exist
+          if (groupedScoreResults[firstScorecardWithScores].scores.length > 0) {
+            primaryScoreName = groupedScoreResults[firstScorecardWithScores].scores[0].scoreName;
           }
         }
         
@@ -1106,17 +1101,27 @@ export default function ItemsDashboard() {
           createdAt: item.createdAt,
           isEvaluation: item.isEvaluation,
           // UI compatibility fields
-          scorecard: scorecardName,
-          score: scoreName, // Ensure this is set correctly
+          scorecard: primaryScorecardName,
+          score: primaryScoreName,
           date: item.updatedAt || item.createdAt,
           status: "Done", // Default status
           results: 0,
           inferences: 0,
           cost: "$0.000",
-          isNew: true // Mark all items as new for animation
+          isNew: true, // Mark all items as new for animation
+          // Add grouped scoreResults
+          groupedScoreResults: groupedScoreResults
         } as Item;
         
-        console.log(`Transformed item score field: ${transformedItem.score}`);
+        console.log('Final transformed item:', {
+          id: transformedItem.id,
+          primaryScorecard: transformedItem.scorecard,
+          primaryScore: transformedItem.score,
+          scorecardId: transformedItem.scorecardId,
+          scoreId: transformedItem.scoreId,
+          groupedScoreResultsKeys: Object.keys(transformedItem.groupedScoreResults || {})
+        });
+        
         return transformedItem;
       });
       
