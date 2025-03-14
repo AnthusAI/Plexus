@@ -694,6 +694,47 @@ class LangGraphScore(Score, LangChainUser):
                 for alias, original in instance.parameters.output.items():
                     base_annotations[alias] = Optional[str]
                     logging.info(f"Added node output alias {alias} with type Optional[str]")
+                    
+            # Check for edge configuration with output mappings
+            if hasattr(instance.parameters, 'edge') and instance.parameters.edge is not None:
+                edge_config = instance.parameters.edge
+                if isinstance(edge_config, dict) and 'output' in edge_config:
+                    logging.info(f"Adding edge output fields from node {instance.__class__.__name__}: {edge_config['output']}")
+                    for alias, original in edge_config['output'].items():
+                        base_annotations[alias] = Optional[str]
+                        logging.info(f"Added edge output alias {alias} with type Optional[str]")
+
+            # Check for conditions configuration with output mappings
+            if hasattr(instance.parameters, 'conditions') and instance.parameters.conditions is not None:
+                conditions = instance.parameters.conditions
+                if isinstance(conditions, list):
+                    for condition in conditions:
+                        if isinstance(condition, dict) and 'output' in condition:
+                            logging.info(f"Adding condition output fields from node {instance.__class__.__name__}: {condition['output']}")
+                            for alias, original in condition['output'].items():
+                                base_annotations[alias] = Optional[str]
+                                logging.info(f"Added condition output alias {alias} with type Optional[str]")
+
+        # Also check the graph configuration directly from the YAML
+        if hasattr(self.parameters, 'graph') and isinstance(self.parameters.graph, list):
+            for node_config in self.parameters.graph:
+                # Check for edge output mappings
+                if 'edge' in node_config and isinstance(node_config['edge'], dict) and 'output' in node_config['edge']:
+                    node_name = node_config.get('name', 'unknown')
+                    logging.info(f"Adding edge output fields from graph config node {node_name}: {node_config['edge']['output']}")
+                    for alias, original in node_config['edge']['output'].items():
+                        base_annotations[alias] = Optional[str]
+                        logging.info(f"Added edge output alias {alias} from graph config")
+                
+                # Check for conditions output mappings
+                if 'conditions' in node_config and isinstance(node_config['conditions'], list):
+                    node_name = node_config.get('name', 'unknown')
+                    for condition in node_config['conditions']:
+                        if isinstance(condition, dict) and 'output' in condition:
+                            logging.info(f"Adding condition output fields from graph config node {node_name}: {condition['output']}")
+                            for alias, original in condition['output'].items():
+                                base_annotations[alias] = Optional[str]
+                                logging.info(f"Added condition output alias {alias} from graph config")
 
         # Handle output aliases from main parameters
         if hasattr(self.parameters, 'output') and self.parameters.output is not None:
