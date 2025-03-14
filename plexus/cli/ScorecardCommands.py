@@ -262,6 +262,7 @@ def get_yaml_handler():
 def detect_and_clean_duplicates(client, scorecard_id: str) -> int:
     """
     Detect and clean duplicate scores in a scorecard.
+    Also checks for duplicate scorecards by key.
     
     Args:
         client: GraphQL client
@@ -270,7 +271,216 @@ def detect_and_clean_duplicates(client, scorecard_id: str) -> int:
     Returns:
         Number of duplicates removed
     """
-    console.print("[bold]Checking for duplicate scores...[/bold]")
+    # First, check for duplicate scorecards by key
+    console.print("[bold]Checking for duplicate scorecards by key...[/bold]")
+    
+    # Get the current scorecard to find its key
+    scorecard_query = f"""
+    query GetScorecard {{
+        getScorecard(id: "{scorecard_id}") {{
+            id
+            name
+            key
+            accountId
+        }}
+    }}
+    """
+    
+    try:
+        scorecard_result = client.execute(scorecard_query)
+        scorecard = scorecard_result.get('getScorecard', {})
+        scorecard_key = scorecard.get('key')
+        account_id = scorecard.get('accountId')
+        
+        if not scorecard_key:
+            console.print("[yellow]Current scorecard has no key, skipping duplicate scorecard check[/yellow]")
+        else:
+            # Find all scorecards with the same key
+            duplicate_query = f"""
+            query FindDuplicateScorecards {{
+                listScorecardByKey(key: "{scorecard_key}") {{
+                    items {{
+                        id
+                        name
+                        key
+                        accountId
+                        createdAt
+                        updatedAt
+                    }}
+                }}
+            }}
+            """
+            
+            duplicate_result = client.execute(duplicate_query)
+            duplicate_scorecards = duplicate_result.get('listScorecardByKey', {}).get('items', [])
+            
+            if len(duplicate_scorecards) > 1:
+                console.print(f"[yellow]Found {len(duplicate_scorecards)} scorecards with key '{scorecard_key}':[/yellow]")
+                
+                # Create a table to display the duplicates
+                table = Table(title=f"Duplicate Scorecards with Key: {scorecard_key}")
+                table.add_column("#", style="dim")
+                table.add_column("ID", style="magenta")
+                table.add_column("Name", style="blue")
+                table.add_column("Account ID", style="cyan")
+                table.add_column("Created At", style="dim")
+                table.add_column("Updated At", style="dim")
+                table.add_column("Current", style="green")
+                
+                # Add index number for selection
+                for i, dup in enumerate(duplicate_scorecards):
+                    is_current = dup.get('id') == scorecard_id
+                    table.add_row(
+                        str(i + 1),
+                        dup.get('id'),
+                        dup.get('name'),
+                        dup.get('accountId'),
+                        dup.get('createdAt'),
+                        dup.get('updatedAt'),
+                        "✓" if is_current else ""
+                    )
+                
+                console.print(table)
+                console.print("[yellow]Warning: Multiple scorecards with the same key can cause confusion and issues.[/yellow]")
+                
+                # Prompt user to choose which scorecard to delete
+                if click.confirm("Do you want to delete one of these duplicate scorecards?"):
+                    # Get user choice
+                    max_choice = len(duplicate_scorecards)
+                    choice_str = click.prompt(
+                        f"Enter the number of the scorecard to delete (1-{max_choice})",
+                        type=str
+                    )
+                    
+                    try:
+                        choice = int(choice_str)
+                        if choice < 1 or choice > max_choice:
+                            console.print(f"[red]Invalid choice: {choice}. Must be between 1 and {max_choice}.[/red]")
+                            return 0
+                    except ValueError:
+                        console.print(f"[red]Invalid input: {choice_str}. Please enter a number.[/red]")
+                        return 0
+                    
+                    # Get the selected scorecard
+                    selected_scorecard = duplicate_scorecards[choice - 1]
+                    selected_id = selected_scorecard.get('id')
+                    selected_name = selected_scorecard.get('name')
+                    
+                    # Confirm deletion
+                    console.print(f"[bold red]You are about to delete scorecard: {selected_name} (ID: {selected_id})[/bold red]")
+                    console.print("[red]This will permanently delete the scorecard and all its scores and versions.[/red]")
+                    
+                    if click.confirm("Are you sure you want to proceed?", default=False):
+                        # Get all sections and scores for this scorecard
+                        detailed_query = f"""
+                        query GetScorecardDetails {{
+                            getScorecard(id: "{selected_id}") {{
+                                id
+                                name
+                                key
+                                sections {{
+                                    items {{
+                                        id
+                                        name
+                                        scores {{
+                                            items {{
+                                                id
+                                                name
+                                                versions {{
+                                                    items {{
+                                                        id
+                                                    }}
+                                                }}
+                                            }}
+                                        }}
+                                    }}
+                                }}
+                            }}
+                        }}
+                        """
+                        
+                        try:
+                            detailed_result = client.execute(detailed_query)
+                            detailed_scorecard = detailed_result.get('getScorecard', {})
+                            sections = detailed_scorecard.get('sections', {}).get('items', [])
+                            
+                            total_sections = len(sections)
+                            total_scores = 0
+                            total_versions = 0
+                            
+                            # First, delete all versions for each score
+                            for section in sections:
+                                section_id = section.get('id')
+                                section_name = section.get('name')
+                                scores = section.get('scores', {}).get('items', [])
+                                
+                                for score in scores:
+                                    score_id = score.get('id')
+                                    score_name = score.get('name')
+                                    versions = score.get('versions', {}).get('items', [])
+                                    
+                                    total_scores += 1
+                                    total_versions += len(versions)
+                                    
+                                    # Delete each version
+                                    for version in versions:
+                                        version_id = version.get('id')
+                                        delete_version_mutation = f"""
+                                        mutation DeleteScoreVersion {{
+                                            deleteScoreVersion(input: {{ id: "{version_id}" }}) {{
+                                                id
+                                            }}
+                                        }}
+                                        """
+                                        client.execute(delete_version_mutation)
+                                    
+                                    # Delete the score
+                                    delete_score_mutation = f"""
+                                    mutation DeleteScore {{
+                                        deleteScore(input: {{ id: "{score_id}" }}) {{
+                                            id
+                                        }}
+                                    }}
+                                    """
+                                    client.execute(delete_score_mutation)
+                                
+                                # Delete the section
+                                delete_section_mutation = f"""
+                                mutation DeleteScorecardSection {{
+                                    deleteScorecardSection(input: {{ id: "{section_id}" }}) {{
+                                        id
+                                    }}
+                                }}
+                                """
+                                client.execute(delete_section_mutation)
+                            
+                            # Finally delete the scorecard
+                            delete_scorecard_mutation = f"""
+                            mutation DeleteScorecard {{
+                                deleteScorecard(input: {{ id: "{selected_id}" }}) {{
+                                    id
+                                }}
+                            }}
+                            """
+                            client.execute(delete_scorecard_mutation)
+                            
+                            console.print(f"[green]Successfully deleted scorecard: {selected_name} (ID: {selected_id})[/green]")
+                            console.print(f"[green]Deleted {total_sections} sections, {total_scores} scores, and {total_versions} versions.[/green]")
+                            
+                        except Exception as e:
+                            console.print(f"[red]Error deleting scorecard: {e}[/red]")
+                    else:
+                        console.print("[yellow]Deletion cancelled[/yellow]")
+                else:
+                    console.print("[yellow]Consider renaming or deleting duplicate scorecards to avoid confusion.[/yellow]")
+            else:
+                console.print(f"[green]No duplicate scorecards found with key '{scorecard_key}'[/green]")
+    
+    except Exception as e:
+        console.print(f"[red]Error checking for duplicate scorecards: {e}[/red]")
+    
+    # Continue with the original function to check for duplicate scores
+    console.print("\n[bold]Checking for duplicate scores...[/bold]")
     
     # Get all sections for this scorecard
     sections_query = f"""
@@ -971,8 +1181,8 @@ def delete(scorecard: str, force: bool):
         for section in sections:
             section_id = section.get('id')
             delete_section_mutation = f"""
-            mutation DeleteSection {{
-                deleteSection(input: {{ id: "{section_id}" }}) {{
+            mutation DeleteScorecardSection {{
+                deleteScorecardSection(input: {{ id: "{section_id}" }}) {{
                     id
                 }}
             }}
@@ -1956,3 +2166,258 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
         
     except Exception as e:
         console.print(f"[red]Error during push operation: {e}[/red]") 
+
+@scorecards.command()
+@click.option('--account', help='Filter by account (accepts ID, name, or key)')
+@click.option('--limit', type=int, default=100, help='Maximum number of scorecards to check')
+def find_duplicates(account: Optional[str], limit: int):
+    """Find and manage duplicate scorecards across the system."""
+    client = create_client()
+    
+    # Build filter string for GraphQL query
+    filter_parts = []
+    if account:
+        account_id = resolve_account_identifier(client, account)
+        if not account_id:
+            click.echo(f"Account not found: {account}")
+            return
+        filter_parts.append(f'accountId: {{ eq: "{account_id}" }}')
+    
+    filter_str = ", ".join(filter_parts)
+    
+    # First, get all scorecards
+    query = f"""
+    query ListScorecards {{
+        listScorecards(filter: {{ {filter_str} }}, limit: {limit}) {{
+            items {{
+                id
+                name
+                key
+                accountId
+                createdAt
+                updatedAt
+            }}
+        }}
+    }}
+    """
+    
+    try:
+        response = client.execute(query)
+        scorecards = response.get('listScorecards', {}).get('items', [])
+        
+        if not scorecards:
+            console.print("[yellow]No scorecards found.[/yellow]")
+            return
+        
+        console.print(f"[green]Found {len(scorecards)} scorecards to check for duplicates.[/green]")
+        
+        # Group scorecards by key
+        scorecards_by_key = {}
+        for scorecard in scorecards:
+            key = scorecard.get('key')
+            if not key:
+                continue
+                
+            if key not in scorecards_by_key:
+                scorecards_by_key[key] = []
+            scorecards_by_key[key].append(scorecard)
+        
+        # Find keys with multiple scorecards
+        duplicate_keys = [key for key, cards in scorecards_by_key.items() if len(cards) > 1]
+        
+        if not duplicate_keys:
+            console.print("[green]No duplicate scorecards found.[/green]")
+            return
+        
+        console.print(f"[yellow]Found {len(duplicate_keys)} keys with duplicate scorecards:[/yellow]")
+        
+        # Create a table to display the duplicate keys
+        keys_table = Table(title="Keys with Duplicate Scorecards")
+        keys_table.add_column("#", style="dim")
+        keys_table.add_column("Key", style="blue")
+        keys_table.add_column("Count", style="magenta")
+        
+        for i, key in enumerate(duplicate_keys):
+            keys_table.add_row(
+                str(i + 1),
+                key,
+                str(len(scorecards_by_key[key]))
+            )
+        
+        console.print(keys_table)
+        
+        # Prompt user to select a key to examine
+        if click.confirm("Do you want to examine a specific key?"):
+            max_key_choice = len(duplicate_keys)
+            key_choice_str = click.prompt(
+                f"Enter the number of the key to examine (1-{max_key_choice})",
+                type=str
+            )
+            
+            try:
+                key_choice = int(key_choice_str)
+                if key_choice < 1 or key_choice > max_key_choice:
+                    console.print(f"[red]Invalid choice: {key_choice}. Must be between 1 and {max_key_choice}.[/red]")
+                    return
+            except ValueError:
+                console.print(f"[red]Invalid input: {key_choice_str}. Please enter a number.[/red]")
+                return
+            
+            selected_key = duplicate_keys[key_choice - 1]
+            duplicate_scorecards = scorecards_by_key[selected_key]
+            
+            console.print(f"\n[bold]Examining scorecards with key: {selected_key}[/bold]")
+            
+            # Create a table to display the duplicates
+            table = Table(title=f"Duplicate Scorecards with Key: {selected_key}")
+            table.add_column("#", style="dim")
+            table.add_column("ID", style="magenta")
+            table.add_column("Name", style="blue")
+            table.add_column("Account ID", style="cyan")
+            table.add_column("Created At", style="dim")
+            table.add_column("Updated At", style="dim")
+            
+            # Add index number for selection
+            for i, dup in enumerate(duplicate_scorecards):
+                table.add_row(
+                    str(i + 1),
+                    dup.get('id'),
+                    dup.get('name'),
+                    dup.get('accountId'),
+                    dup.get('createdAt'),
+                    dup.get('updatedAt')
+                )
+            
+            console.print(table)
+            
+            # Prompt user to choose which scorecard to delete
+            if click.confirm("Do you want to delete one of these duplicate scorecards?"):
+                # Get user choice
+                max_choice = len(duplicate_scorecards)
+                choice_str = click.prompt(
+                    f"Enter the number of the scorecard to delete (1-{max_choice})",
+                    type=str
+                )
+                
+                try:
+                    choice = int(choice_str)
+                    if choice < 1 or choice > max_choice:
+                        console.print(f"[red]Invalid choice: {choice}. Must be between 1 and {max_choice}.[/red]")
+                        return
+                except ValueError:
+                    console.print(f"[red]Invalid input: {choice_str}. Please enter a number.[/red]")
+                    return
+                
+                # Get the selected scorecard
+                selected_scorecard = duplicate_scorecards[choice - 1]
+                selected_id = selected_scorecard.get('id')
+                selected_name = selected_scorecard.get('name')
+                
+                # Confirm deletion
+                console.print(f"[bold red]You are about to delete scorecard: {selected_name} (ID: {selected_id})[/bold red]")
+                console.print("[red]This will permanently delete the scorecard and all its scores and versions.[/red]")
+                
+                if click.confirm("Are you sure you want to proceed?", default=False):
+                    # Get all sections and scores for this scorecard
+                    detailed_query = f"""
+                    query GetScorecardDetails {{
+                        getScorecard(id: "{selected_id}") {{
+                            id
+                            name
+                            key
+                            sections {{
+                                items {{
+                                    id
+                                    name
+                                    scores {{
+                                        items {{
+                                            id
+                                            name
+                                            versions {{
+                                                items {{
+                                                    id
+                                                }}
+                                            }}
+                                        }}
+                                    }}
+                                }}
+                            }}
+                        }}
+                    }}
+                    """
+                    
+                    try:
+                        detailed_result = client.execute(detailed_query)
+                        detailed_scorecard = detailed_result.get('getScorecard', {})
+                        sections = detailed_scorecard.get('sections', {}).get('items', [])
+                        
+                        total_sections = len(sections)
+                        total_scores = 0
+                        total_versions = 0
+                        
+                        # First, delete all versions for each score
+                        for section in sections:
+                            section_id = section.get('id')
+                            section_name = section.get('name')
+                            scores = section.get('scores', {}).get('items', [])
+                            
+                            for score in scores:
+                                score_id = score.get('id')
+                                score_name = score.get('name')
+                                versions = score.get('versions', {}).get('items', [])
+                                
+                                total_scores += 1
+                                total_versions += len(versions)
+                                
+                                # Delete each version
+                                for version in versions:
+                                    version_id = version.get('id')
+                                    delete_version_mutation = f"""
+                                    mutation DeleteScoreVersion {{
+                                        deleteScoreVersion(input: {{ id: "{version_id}" }}) {{
+                                            id
+                                        }}
+                                    }}
+                                    """
+                                    client.execute(delete_version_mutation)
+                                
+                                # Delete the score
+                                delete_score_mutation = f"""
+                                mutation DeleteScore {{
+                                    deleteScore(input: {{ id: "{score_id}" }}) {{
+                                        id
+                                    }}
+                                }}
+                                """
+                                client.execute(delete_score_mutation)
+                            
+                            # Delete the section
+                            delete_section_mutation = f"""
+                            mutation DeleteScorecardSection {{
+                                deleteScorecardSection(input: {{ id: "{section_id}" }}) {{
+                                    id
+                                }}
+                            }}
+                            """
+                            client.execute(delete_section_mutation)
+                        
+                        # Finally delete the scorecard
+                        delete_scorecard_mutation = f"""
+                        mutation DeleteScorecard {{
+                            deleteScorecard(input: {{ id: "{selected_id}" }}) {{
+                                id
+                            }}
+                        }}
+                        """
+                        client.execute(delete_scorecard_mutation)
+                        
+                        console.print(f"[green]Successfully deleted scorecard: {selected_name} (ID: {selected_id})[/green]")
+                        console.print(f"[green]Deleted {total_sections} sections, {total_scores} scores, and {total_versions} versions.[/green]")
+                        
+                    except Exception as e:
+                        console.print(f"[red]Error deleting scorecard: {e}[/red]")
+                else:
+                    console.print("[yellow]Deletion cancelled[/yellow]")
+    
+    except Exception as e:
+        console.print(f"[red]Error finding duplicate scorecards: {e}[/red]")
