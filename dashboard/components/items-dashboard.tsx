@@ -889,7 +889,6 @@ export default function ItemsDashboard() {
                   externalId
                   description
                   accountId
-                  scorecardId
                   scoreId
                   evaluationId
                   updatedAt
@@ -949,7 +948,6 @@ export default function ItemsDashboard() {
                   externalId
                   description
                   accountId
-                  scorecardId
                   scoreId
                   evaluationId
                   updatedAt
@@ -1017,7 +1015,6 @@ export default function ItemsDashboard() {
           id: item.id,
           externalId: item.externalId,
           accountId: item.accountId,
-          scorecardId: item.scorecardId,
           scoreId: item.scoreId,
           hasScoreResults: !!item.scoreResults,
           scoreResultsItemsCount: item.scoreResults?.items?.length,
