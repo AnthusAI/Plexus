@@ -47,7 +47,7 @@ Scores can depend on other Scores, accessing their results and conditionally exe
   id: 67890
   depends_on:
     Previous Score:
-      operator: "=="  # Operators: ==, !=, >, =, <=
+      operator: "=="  # Operators: ==, !=
       value: "Yes"    # Only runs if Previous Score is "Yes"
   graph:
     - name: first_node
