@@ -25,12 +25,13 @@ Common implementation classes:
 - `LangGraphScore`: Multi-step agentic flow using a directed graph (recommended)
 - Direct model types (legacy): `OpenAIModelScore`, `AnthropicModelScore`
 
-## Dependencies Between Scores
+## 3. Dependencies Between Scores
 
 Scores can depend on other Scores, accessing their results and conditionally executing:
 
 ```yaml
-- name: Followup Score
+# Simple dependency - Score runs after "Previous Score" completes
+- name: Simple Dependent Score
   id: 56789
   depends_on:
     - Previous Score
@@ -40,6 +41,18 @@ Scores can depend on other Scores, accessing their results and conditionally exe
       user_message: |
         Previous result: {{results["Previous Score"].value}}
         # Access results using {{results["Score Name"].value}}
+
+# Conditional dependency - Score only runs if condition is met
+- name: Conditional Dependent Score
+  id: 67890
+  depends_on:
+    Previous Score:
+      operator: "=="  # Operators: ==, !=, >, =, <=
+      value: "Yes"    # Only runs if Previous Score is "Yes"
+  graph:
+    - name: first_node
+      class: Classifier
+      # Configuration continues...
 ```
 
 ## LangGraph Configuration
