@@ -463,7 +463,7 @@ export default function ItemsDashboard() {
             }
           `, {
             scoreId: selectedScore,
-            limit: 20,
+            limit: 100,
             nextToken: nextToken
           });
           
@@ -523,7 +523,7 @@ export default function ItemsDashboard() {
             }
           `, {
             scorecardId: selectedScorecard,
-            limit: 20,
+            limit: 100,
             nextToken: nextToken
           });
           
@@ -583,7 +583,7 @@ export default function ItemsDashboard() {
             }
           `, {
             accountId: selectedAccount.id,
-            limit: 20,
+            limit: 100,
             nextToken: nextToken
           });
           
@@ -770,7 +770,7 @@ export default function ItemsDashboard() {
       try {
         const itemsResult = await amplifyClient.Item.list({
           filter: { accountId: { eq: accountId } },
-          limit: 20,
+          limit: 100,
           sort: { field: 'updatedAt', direction: 'DESC' },
           // Unfortunately, adding scoreResults here doesn't work well with Amplify Gen2
           // so we'll fall back to the direct GraphQL query
@@ -849,7 +849,7 @@ export default function ItemsDashboard() {
             }
           `, {
             scoreId: selectedScore,
-            limit: 20
+            limit: 100
           });
           
           console.log('Direct GraphQL query response for items:', JSON.stringify(directQuery, null, 2));
@@ -907,7 +907,7 @@ export default function ItemsDashboard() {
             }
           `, {
             scorecardId: selectedScorecard,
-            limit: 20
+            limit: 100
           });
           
           console.log('Direct GraphQL query response for items:', JSON.stringify(directQuery, null, 2));
@@ -965,7 +965,7 @@ export default function ItemsDashboard() {
             }
           `, {
             accountId: accountId,
-            limit: 20
+            limit: 100
           });
           
           console.log('Direct GraphQL query response for items:', JSON.stringify(directQuery, null, 2));
