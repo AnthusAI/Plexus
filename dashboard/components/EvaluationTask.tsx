@@ -16,6 +16,7 @@ import { EvaluationListAccuracyBar } from '@/components/EvaluationListAccuracyBa
 import isEqual from 'lodash/isEqual'
 import { standardizeScoreResults } from '@/utils/data-operations'
 import { ScoreResultComponent, ScoreResultData } from '@/components/ui/score-result'
+import { useScoreResults } from '@/features/evaluations/hooks/useScoreResults'
 
 export interface EvaluationMetric {
   name: string
@@ -559,9 +560,22 @@ const DetailContent = React.memo(({
     actual: string | null
   }>({ predicted: null, actual: null })
 
+  // Use the useScoreResults hook to fetch all score results with proper pagination
+  const { scoreResults: allScoreResults, isLoading: isLoadingScoreResults, error: scoreResultsError } = useScoreResults(data.id);
+
+  // Log the results from the hook
+  console.log('DetailContent score results from hook:', {
+    count: allScoreResults.length,
+    isLoading: isLoadingScoreResults,
+    error: scoreResultsError,
+    firstResult: allScoreResults[0],
+    lastResult: allScoreResults[allScoreResults.length - 1]
+  });
+
   // Find the selected score result from the standardized results
-  const standardizedResults = useMemo(() => standardizeScoreResults(data.scoreResults), [data.scoreResults]);
-  const selectedScoreResult = selectedScoreResultId ? standardizedResults.find(r => r.id === selectedScoreResultId) : null;
+  // Use allScoreResults from the hook if available, otherwise fall back to the data prop
+  const effectiveScoreResults = allScoreResults.length > 0 ? allScoreResults : standardizeScoreResults(data.scoreResults);
+  const selectedScoreResult = selectedScoreResultId ? effectiveScoreResults.find(r => r.id === selectedScoreResultId) : null;
 
   console.log('DetailContent selected score result:', {
     selectedScoreResultId,
@@ -571,26 +585,27 @@ const DetailContent = React.memo(({
 
   // Parse score results with more detailed logging
   const parsedScoreResults = useMemo(() => {
-    // Standardize score results to ensure consistent format
-    const standardizedResults = standardizeScoreResults(data.scoreResults);
+    // Use allScoreResults from the hook if available, otherwise fall back to the data prop
+    const resultsToUse = allScoreResults.length > 0 ? allScoreResults : standardizeScoreResults(data.scoreResults);
     
-    console.log('DetailContent standardized score results:', {
-      count: standardizedResults.length,
-      firstResult: standardizedResults[0],
-      isArray: Array.isArray(standardizedResults)
+    console.log('DetailContent using score results:', {
+      source: allScoreResults.length > 0 ? 'hook' : 'props',
+      count: resultsToUse.length,
+      firstResult: resultsToUse[0],
+      isArray: Array.isArray(resultsToUse)
     });
     
-    if (!standardizedResults.length) {
+    if (!resultsToUse.length) {
       console.log('No score results to parse in DetailContent');
       return [];
     }
     
     console.log('Parsing score results in DetailContent:', {
-      count: standardizedResults.length,
-      firstResult: standardizedResults[0]
+      count: resultsToUse.length,
+      firstResult: resultsToUse[0]
     });
     
-    const results = standardizedResults.map((result: any) => parseScoreResult(result));
+    const results = resultsToUse.map((result: any) => parseScoreResult(result));
     
     console.log('Parsed score results in DetailContent:', {
       count: results.length,
@@ -598,7 +613,7 @@ const DetailContent = React.memo(({
     });
     
     return results;
-  }, [data.scoreResults]);
+  }, [allScoreResults, data.scoreResults]);
 
   useResizeObserver(containerRef, (entry) => {
     setContainerWidth(entry.contentRect.width)
@@ -807,6 +822,7 @@ const DetailContent = React.memo(({
                 selectedActualValue={selectedPredictedActual.actual}
                 onResultSelect={handleScoreResultSelect}
                 selectedScoreResult={selectedScoreResult}
+                isLoading={isLoadingScoreResults}
               />
             </div>
           </div>
