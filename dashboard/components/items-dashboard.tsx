@@ -433,8 +433,6 @@ export default function ItemsDashboard() {
                   externalId
                   description
                   accountId
-                  scorecardId
-                  scoreId
                   evaluationId
                   updatedAt
                   createdAt
@@ -495,8 +493,6 @@ export default function ItemsDashboard() {
                   externalId
                   description
                   accountId
-                  scorecardId
-                  scoreId
                   evaluationId
                   updatedAt
                   createdAt
@@ -557,8 +553,6 @@ export default function ItemsDashboard() {
                   externalId
                   description
                   accountId
-                  scorecardId
-                  scoreId
                   evaluationId
                   updatedAt
                   createdAt
@@ -703,8 +697,6 @@ export default function ItemsDashboard() {
           accountId: item.accountId,
           externalId: item.externalId,
           description: item.description,
-          scorecardId: item.scorecardId,
-          scoreId: item.scoreId,
           evaluationId: item.evaluationId,
           updatedAt: item.updatedAt,
           createdAt: item.createdAt,
@@ -726,8 +718,6 @@ export default function ItemsDashboard() {
           id: transformedItem.id,
           primaryScorecard: transformedItem.scorecard,
           primaryScore: transformedItem.score,
-          scorecardId: transformedItem.scorecardId,
-          scoreId: transformedItem.scoreId,
           groupedScoreResultsKeys: Object.keys(transformedItem.groupedScoreResults || {})
         });
         
@@ -829,8 +819,6 @@ export default function ItemsDashboard() {
                   externalId
                   description
                   accountId
-                  scorecardId
-                  scoreId
                   evaluationId
                   updatedAt
                   createdAt
@@ -889,7 +877,6 @@ export default function ItemsDashboard() {
                   externalId
                   description
                   accountId
-                  scoreId
                   evaluationId
                   updatedAt
                   createdAt
@@ -948,7 +935,6 @@ export default function ItemsDashboard() {
                   externalId
                   description
                   accountId
-                  scoreId
                   evaluationId
                   updatedAt
                   createdAt
@@ -1091,8 +1077,6 @@ export default function ItemsDashboard() {
           accountId: item.accountId,
           externalId: item.externalId,
           description: item.description,
-          scorecardId: item.scorecardId,
-          scoreId: item.scoreId,
           evaluationId: item.evaluationId,
           updatedAt: item.updatedAt,
           createdAt: item.createdAt,
@@ -1114,8 +1098,6 @@ export default function ItemsDashboard() {
           id: transformedItem.id,
           primaryScorecard: transformedItem.scorecard,
           primaryScore: transformedItem.score,
-          scorecardId: transformedItem.scorecardId,
-          scoreId: transformedItem.scoreId,
           groupedScoreResultsKeys: Object.keys(transformedItem.groupedScoreResults || {})
         });
         
