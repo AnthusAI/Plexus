@@ -169,9 +169,12 @@ export function EvaluationTaskScoreResults({
         <div className="flex items-center">
           <Split className="w-4 h-4 mr-1 text-foreground shrink-0" />
           <span className="text-sm text-foreground">
-            Score Results ({isLoading ? '...' : filteredResults.length})
+            Score Results ({filteredResults.length})
             {isLoading && (
-              <Loader2 className="ml-2 h-4 w-4 inline animate-spin text-muted-foreground" />
+              <span className="ml-2 text-xs text-muted-foreground inline-flex items-center">
+                <Loader2 className="h-3 w-3 mr-1 inline animate-spin" />
+                Loading more...
+              </span>
             )}
           </span>
         </div>
@@ -238,28 +241,38 @@ export function EvaluationTaskScoreResults({
       </div>
       <div className="flex-1 min-h-0 overflow-hidden">
         <div className="h-full overflow-y-auto">
-          {isLoading ? (
+          {results.length === 0 && isLoading ? (
             <div className="flex items-center justify-center h-full">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <span className="ml-2 text-muted-foreground">Loading score results...</span>
             </div>
           ) : (
-            <div className="space-y-2 pb-4">
-              {filteredResults.map((result) => (
-                <div key={result.id}>
-                  <ScoreResultComponent
-                    result={result}
-                    variant="list"
-                    isFocused={selectedScoreResult?.id === result.id}
-                    onSelect={() => onResultSelect?.(result)}
-                  />
-                </div>
-              ))}
-              {filteredResults.length === 0 && (
-                <div className="text-center py-8 text-muted-foreground">
-                  No score results match the current filters
+            <>
+              <div className="space-y-2 pb-4">
+                {filteredResults.map((result) => (
+                  <div key={result.id}>
+                    <ScoreResultComponent
+                      result={result}
+                      variant="list"
+                      isFocused={selectedScoreResult?.id === result.id}
+                      onSelect={() => onResultSelect?.(result)}
+                    />
+                  </div>
+                ))}
+                {filteredResults.length === 0 && (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No score results match the current filters
+                  </div>
+                )}
+              </div>
+              
+              {isLoading && (
+                <div className="flex justify-center items-center py-4 border-t border-border">
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground mr-2" />
+                  <span className="text-sm text-muted-foreground">Loading more results...</span>
                 </div>
               )}
-            </div>
+            </>
           )}
         </div>
       </div>
