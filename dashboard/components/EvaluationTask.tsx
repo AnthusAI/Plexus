@@ -561,7 +561,11 @@ const DetailContent = React.memo(({
   }>({ predicted: null, actual: null })
 
   // Use the useScoreResults hook to fetch all score results with proper pagination
-  const { scoreResults: allScoreResults, isLoading: isLoadingScoreResults, error: scoreResultsError } = useScoreResults(data.id);
+  // Pass the initial score results to show them immediately while loading the rest
+  const { scoreResults: allScoreResults, isLoading: isLoadingScoreResults, error: scoreResultsError } = useScoreResults(
+    data.id,
+    data.scoreResults
+  );
 
   // Log the results from the hook
   console.log('DetailContent score results from hook:', {

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { observeScoreResults } from '@/utils/subscriptions';
 import type { Schema } from '@/amplify/data/resource';
+import { standardizeScoreResults } from '@/utils/data-operations';
 
 type ScoreResult = {
   id: string;
@@ -23,17 +24,41 @@ type UseScoreResultsReturn = {
  * Hook to fetch and subscribe to score results for a specific evaluation
  * This uses the observeScoreResults function which properly handles pagination
  * to fetch ALL score results, not just the first 100
+ * 
+ * Implements progressive loading:
+ * - Shows the first 100 results immediately from initialResults
+ * - Then loads the rest in the background and appends them
  */
-export function useScoreResults(evaluationId: string | null): UseScoreResultsReturn {
-  const [scoreResults, setScoreResults] = useState<ScoreResult[]>([]);
+export function useScoreResults(
+  evaluationId: string | null,
+  initialResults?: any // Initial results from the evaluation query
+): UseScoreResultsReturn {
+  // Initialize with the initial results if available
+  const standardizedInitialResults = initialResults ? standardizeScoreResults(initialResults) : [];
+  
+  const [scoreResults, setScoreResults] = useState<ScoreResult[]>(standardizedInitialResults);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<Error | null>(null);
+  const [hasLoadedAll, setHasLoadedAll] = useState<boolean>(false);
 
   useEffect(() => {
-    // Reset state when evaluation ID changes
-    setScoreResults([]);
+    // If we have initial results, show them immediately
+    if (initialResults && !hasLoadedAll) {
+      const standardized = standardizeScoreResults(initialResults);
+      console.log('Using initial results while loading all:', {
+        count: standardized.length,
+        firstResult: standardized[0],
+        lastResult: standardized[standardized.length - 1]
+      });
+      setScoreResults(standardized);
+    }
+  }, [initialResults, hasLoadedAll]);
+
+  useEffect(() => {
+    // Reset loading state when evaluation ID changes
     setIsLoading(true);
     setError(null);
+    setHasLoadedAll(false);
 
     if (!evaluationId) {
       setIsLoading(false);
@@ -74,8 +99,16 @@ export function useScoreResults(evaluationId: string | null): UseScoreResultsRet
           return result;
         });
         
-        setScoreResults(transformedItems);
-        setIsLoading(false);
+        // Only update if we have more results than before or if we've synced
+        if (transformedItems.length > scoreResults.length || data.isSynced) {
+          setScoreResults(transformedItems);
+          setHasLoadedAll(data.isSynced);
+        }
+        
+        // Only set loading to false when we've synced
+        if (data.isSynced) {
+          setIsLoading(false);
+        }
       },
       error: (err: Error) => {
         console.error('Error in score results subscription:', err);
