@@ -1,9 +1,4 @@
----
-description: Plexus score configuration YAML
-globs: *.yaml
-alwaysApply: false
----
-# Plexus Score Configuration Documentation
+# Plexus Score Configuration YAML Format Documentation
 
 ## Core Concepts
 
