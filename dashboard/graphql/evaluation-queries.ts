@@ -165,4 +165,21 @@ export const GET_TASK_QUERY = `
       }
     }
   }
+`;
+
+export const ITEM_CREATE_SUBSCRIPTION = `
+  subscription OnCreateItem {
+    onCreateItem {
+      id
+      externalId
+      description
+      accountId
+      scorecardId
+      scoreId
+      evaluationId
+      updatedAt
+      createdAt
+      isEvaluation
+    }
+  }
 `; 

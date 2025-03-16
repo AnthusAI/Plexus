@@ -69,6 +69,13 @@ interface CreateScoreVersionResponse {
   createScoreVersion: ScoreVersion
 }
 
+// Add a new interface for the secondary index query response
+interface GetScoreVersionsByScoreIdResponse {
+  listScoreVersionByScoreIdAndCreatedAt: {
+    items: ScoreVersion[]
+  }
+}
+
 interface GetScoreResponse {
   getScore: {
     id: string
@@ -231,7 +238,9 @@ const DetailContent = React.memo(({
   const [isEditing, setIsEditing] = React.useState(false)
   
   // Add showOnlyFeatured state directly to the DetailContent component
-  const [showOnlyFeatured, setShowOnlyFeatured] = React.useState(true)
+  // Default to false to show all versions, not just featured ones
+  // This ensures all versions are visible, including the champion version
+  const [showOnlyFeatured, setShowOnlyFeatured] = React.useState(false)
   
   // Reset isEditing when resetEditingCounter changes
   React.useEffect(() => {
@@ -930,11 +939,16 @@ export function ScoreComponent({
           }
         }
         
-        // Then fetch all versions
+        // Then fetch all versions using the secondary index query
+        // This query uses the GSI on scoreId with createdAt as sort key
+        // which correctly returns all versions for a score
         const response = await client.graphql({
           query: `
-            query GetScoreVersions($scoreId: String!) {
-              listScoreVersions(filter: { scoreId: { eq: $scoreId } }) {
+            query GetScoreVersionsByScoreId($scoreId: String!, $sortDirection: ModelSortDirection) {
+              listScoreVersionByScoreIdAndCreatedAt(
+                scoreId: $scoreId,
+                sortDirection: $sortDirection
+              ) {
                 items {
                   id
                   scoreId
@@ -948,14 +962,15 @@ export function ScoreComponent({
             }
           `,
           variables: {
-            scoreId: String(score.id) // Explicitly convert to string
+            scoreId: String(score.id), // Explicitly convert to string
+            sortDirection: "DESC" // Newest first
           }
-        }) as GraphQLResult<GetScoreVersionsResponse>;
+        }) as GraphQLResult<GetScoreVersionsByScoreIdResponse>;
         
         console.log('API Response:', response);
         
-        if ('data' in response && response.data?.listScoreVersions?.items) {
-          const versionItems = response.data.listScoreVersions.items;
+        if ('data' in response && response.data?.listScoreVersionByScoreIdAndCreatedAt?.items) {
+          const versionItems = response.data.listScoreVersionByScoreIdAndCreatedAt.items;
           console.log('Found versions:', versionItems);
           setVersions(versionItems);
           

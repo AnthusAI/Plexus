@@ -1,6 +1,70 @@
 # CHANGELOG
 
 
+## v0.15.0 (2025-03-11)
+
+### Chores
+
+- Remove unused LangGraph ToolExecutor import
+  ([`739df25`](https://github.com/AnthusAI/Plexus/commit/739df253542c246d6a672ae47c53cf41ae5184a6))
+
+### Features
+
+- **items**: Realtime subscription for new Items.
+  ([`75d9d5f`](https://github.com/AnthusAI/Plexus/commit/75d9d5f8b31b2b13f3ff9f7e084007c4f08cb4f0))
+
+
+## v0.14.0 (2025-03-10)
+
+### Features
+
+- **items**: Implemented items dashboard using real data.
+  ([`9a29577`](https://github.com/AnthusAI/Plexus/commit/9a29577ba7703e94cadae406251e35c3ab3739e6))
+
+
+## v0.13.0 (2025-03-09)
+
+### Features
+
+- **evaluations**: Filter evaluations by scorecard or score, using a server-side index.
+  ([`03463c4`](https://github.com/AnthusAI/Plexus/commit/03463c435cda9e953a8d4aefe70b0bd126261432))
+
+
+## v0.12.0 (2025-03-09)
+
+### Bug Fixes
+
+- **core**: Enhance dynamic class loading with plexus_extensions fallback
+  ([`f93e274`](https://github.com/AnthusAI/Plexus/commit/f93e2748febe3597269be52ff841594758216af4))
+
+- Add fallback mechanism to load classes from plexus_extensions namespace - Improve logging for
+  class loading attempts - Provide more informative error messages when class resolution fails
+
+### Features
+
+- **langgraph**: Add node results tracking
+  ([`8474e71`](https://github.com/AnthusAI/Plexus/commit/8474e71ec3dd704fa88056a3094263bff4ebf0e6))
+
+- Introduce `node_results` field in LangGraphScore to track node execution details - Implement
+  `log_state` method in BaseNode for comprehensive state logging - Update Classifier node to use new
+  state logging mechanism
+
+- **trace**: Enhance trace data handling and logging
+  ([`a4ed51f`](https://github.com/AnthusAI/Plexus/commit/a4ed51f2fee06a0f38fe7101eef910c8420cf714))
+
+- Update Evaluation.py to add trace data to score results - Modify LangGraphScore to support trace
+  metadata merging - Implement comprehensive BaseNode_test.py with trace logging tests - Refactor
+  BaseNode.py to improve trace metadata management
+
+
+## v0.11.0 (2025-03-09)
+
+### Features
+
+- **CLI**: Added `plexus results list` and `info` CLI commands for examining recent score results.
+  ([`1b2d786`](https://github.com/AnthusAI/Plexus/commit/1b2d7869ea44ecf21faf2b8190ea26338544797b))
+
+
 ## v0.10.1 (2025-03-08)
 
 ### Bug Fixes

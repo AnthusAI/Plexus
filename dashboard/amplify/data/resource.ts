@@ -25,7 +25,7 @@ type ItemIndexFields = "name" | "description" | "accountId" | "evaluationId" | "
 type ScoringJobIndexFields = "accountId" | "scorecardId" | "itemId" | "status" | 
     "scoreId" | "evaluationId" | "startedAt" | "completedAt" | "errorMessage" | "updatedAt" | "createdAt";
 type ScoreResultIndexFields = "accountId" | "scorecardId" | "itemId" | 
-    "scoringJobId" | "evaluationId" | "scoreVersionId" | "updatedAt" | "createdAt";
+    "scoringJobId" | "evaluationId" | "scoreVersionId" | "updatedAt" | "createdAt" | "scoreId";
 type BatchJobScoringJobIndexFields = "batchJobId" | "scoringJobId";
 type TaskIndexFields = "accountId" | "type" | "status" | "target" | 
     "currentStageId" | "updatedAt" | "scorecardId" | "scoreId";
@@ -128,6 +128,8 @@ const schema = a.schema({
             datasets: a.hasMany('Dataset', 'scoreId'),
             tasks: a.hasMany('Task', 'scoreId'),
             versions: a.hasMany('ScoreVersion', 'scoreId'),
+            items: a.hasMany('Item', 'scoreId'),
+            scoreResults: a.hasMany('ScoreResult', 'scoreId'),
             championVersionId: a.string(),
             championVersion: a.belongsTo('ScoreVersion', 'championVersionId'),
             externalId: a.string().required()
@@ -255,7 +257,7 @@ const schema = a.schema({
 
     Item: a
         .model({
-            name: a.string().required(),
+            externalId: a.string(),
             description: a.string(),
             accountId: a.string().required(),
             account: a.belongsTo('Account', 'accountId'),
@@ -264,6 +266,8 @@ const schema = a.schema({
             scorecards: a.hasMany('Scorecard', 'itemId'),
             evaluationId: a.string(),
             evaluation: a.belongsTo('Evaluation', 'evaluationId'),
+            scoreId: a.string(),
+            score: a.belongsTo('Score', 'scoreId'),
             updatedAt: a.datetime(),
             createdAt: a.datetime(),
             isEvaluation: a.boolean().required(),
@@ -273,7 +277,11 @@ const schema = a.schema({
             allow.authenticated()
         ])
         .secondaryIndexes((idx) => [
-            idx("accountId").sortKeys(["updatedAt"])
+            idx("accountId").sortKeys(["updatedAt"]),
+            idx("externalId"),
+            idx("scoreId").sortKeys(["updatedAt"]),
+            // Composite GSI for accountId+externalId to enforce uniqueness within an account
+            idx("accountId").sortKeys(["externalId"]).name("byAccountAndExternalId")
         ]),
 
     ScoringJob: a
@@ -331,6 +339,8 @@ const schema = a.schema({
             scorecard: a.belongsTo('Scorecard', 'scorecardId'),
             scoreVersionId: a.string(),
             scoreVersion: a.belongsTo('ScoreVersion', 'scoreVersionId'),
+            scoreId: a.string(),
+            score: a.belongsTo('Score', 'scoreId'),
             updatedAt: a.datetime(),
             createdAt: a.datetime(),
         })
@@ -342,9 +352,10 @@ const schema = a.schema({
             idx("accountId").sortKeys(["updatedAt"]),
             idx("itemId"),
             idx("scoringJobId"),
-            idx("scorecardId"),
+            idx("scorecardId").sortKeys(["updatedAt"]),
             idx("evaluationId"),
-            idx("scoreVersionId")
+            idx("scoreVersionId"),
+            idx("scoreId")
         ]),
 
     BatchJobScoringJob: a

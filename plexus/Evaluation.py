@@ -23,6 +23,8 @@ from concurrent.futures import ThreadPoolExecutor
 from asyncio import Queue
 import importlib
 import logging
+import re
+import uuid
 
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -1628,12 +1630,17 @@ Total cost:       ${expenses['total_cost']:.6f}
                 }
             }
             
+            # First, create or upsert the Item record
+            # We'll use the content_id as the externalId
+            await self._create_or_upsert_item(content_id=content_id, score_result=score_result, result=result)
+            
             # Create data dictionary with all required fields
             data = {
                 'evaluationId': self.experiment_id,
-                'itemId': str(result.get('form_id', '')),  # Ensure itemId is a string
+                'itemId': content_id,  # Use content_id as the itemId
                 'accountId': self.account_id,
                 'scorecardId': self.scorecard_id,
+                'scoreId': self.score_id,
                 'value': value,
                 'metadata': json.dumps(metadata_dict)  # Ensure metadata is a JSON string
             }
@@ -1709,6 +1716,109 @@ Total cost:       ${expenses['total_cost']:.6f}
             logging.error(f"Error creating score result: {e}")
             logging.error(f"Error details:", exc_info=True)
             raise
+
+    async def _create_or_upsert_item(self, *, content_id, score_result, result):
+        """Create or update an Item record for the given content_id."""
+        try:
+            # First, check if an item with this externalId already exists for this account
+            query = """
+            query GetItemByAccountAndExternalId($accountId: String!, $externalId: String!) {
+                listItems(filter: {accountId: {eq: $accountId}, externalId: {eq: $externalId}}, limit: 1) {
+                    items {
+                        id
+                    }
+                }
+            }
+            """
+            
+            variables = {
+                "accountId": self.account_id,
+                "externalId": content_id
+            }
+            
+            logging.info(f"Checking if item exists with externalId: {content_id}")
+            response = await asyncio.to_thread(self.dashboard_client.execute, query, variables)
+            
+            existing_items = response.get('listItems', {}).get('items', [])
+            
+            if existing_items:
+                # Item exists, we'll update it
+                item_id = existing_items[0]['id']
+                logging.info(f"Found existing item with id: {item_id}, will update")
+                
+                # Update the item with latest information
+                mutation = """
+                mutation UpdateItem($input: UpdateItemInput!) {
+                    updateItem(input: $input) {
+                        id
+                        externalId
+                    }
+                }
+                """
+                
+                # Extract description from metadata if available
+                description = ""
+                if score_result.metadata and 'text' in score_result.metadata:
+                    # Truncate long text for description
+                    description = score_result.metadata['text'][:200] + "..." if len(score_result.metadata['text']) > 200 else score_result.metadata['text']
+                
+                update_variables = {
+                    "input": {
+                        "id": item_id,
+                        "updatedAt": datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
+                        "description": description,
+                        "evaluationId": self.experiment_id
+                    }
+                }
+                
+                await asyncio.to_thread(self.dashboard_client.execute, mutation, update_variables)
+                logging.info(f"Successfully updated item: {item_id}")
+                
+            else:
+                # Item doesn't exist, create a new one
+                logging.info(f"No existing item found with externalId: {content_id}, creating new item")
+                
+                mutation = """
+                mutation CreateItem($input: CreateItemInput!) {
+                    createItem(input: $input) {
+                        id
+                        externalId
+                    }
+                }
+                """
+                
+                # Extract description from metadata if available
+                description = ""
+                if score_result.metadata and 'text' in score_result.metadata:
+                    # Truncate long text for description
+                    description = score_result.metadata['text'][:200] + "..." if len(score_result.metadata['text']) > 200 else score_result.metadata['text']
+                
+                # Get score name if available
+                score_name = score_result.parameters.name if hasattr(score_result, 'parameters') and hasattr(score_result.parameters, 'name') else ""
+                
+                # Determine if this is an evaluation item
+                is_evaluation = self.experiment_id is not None
+                
+                create_variables = {
+                    "input": {
+                        "externalId": content_id,
+                        "description": description,
+                        "accountId": self.account_id,
+                        "evaluationId": self.experiment_id,
+                        "isEvaluation": is_evaluation
+                    }
+                }
+                
+                # Remove None values
+                create_variables["input"] = {k: v for k, v in create_variables["input"].items() if v is not None}
+                
+                await asyncio.to_thread(self.dashboard_client.execute, mutation, create_variables)
+                logging.info(f"Successfully created new item with externalId: {content_id}")
+                
+        except Exception as e:
+            logging.error(f"Error creating/upserting item: {e}")
+            logging.error("Error details:", exc_info=True)
+            # We'll continue with score result creation even if item creation fails
 
     async def cleanup(self):
         """Clean up all resources"""
