@@ -149,9 +149,28 @@ class Extractor(BaseNode, LangChainUser):
                 use_exact_matching=self.parameters.use_exact_matching,
                 trust_model_output=self.parameters.trust_model_output
             )
-            return chain.invoke({
+            
+            # Invoke the chain to get the extraction result
+            extraction_result = chain.invoke({
                 **state.dict()
             })
+            
+            # Create the result state with the extracted text
+            state_dict = state.model_dump()
+                
+            result_state = self.GraphState(
+                **state_dict
+            )
+            
+            # Create output state for logging
+            output_state = {
+                "extracted_text": extraction_result["extracted_text"]
+            }
+            
+            # Log the state and get a new state object with updated node_results
+            updated_state = self.log_state(result_state, None, output_state)
+            
+            return updated_state
 
         return extractor_node
 
