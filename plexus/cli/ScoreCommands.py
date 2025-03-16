@@ -589,57 +589,60 @@ def optimize(scorecard: str, score: str, output: Optional[str], model: str):
                 model_kwargs={"max_tokens": 4096}  # Increase max tokens to handle larger responses
             )
             
-            # Define the text editor tool with required fields
-            tools = [
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "view_file",
-                        "description": "View the contents of a file",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "path": {
-                                    "type": "string",
-                                    "description": "The path to the file to view"
-                                }
+            # Define the official Anthropic text editor tool
+            tool = {
+                "type": "text_editor_20250124", 
+                "name": "str_replace_editor",
+                "description": "A tool for editing text files and YAML content",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "command": {
+                            "type": "string",
+                            "enum": ["view", "str_replace", "create", "insert", "undo_edit"],
+                            "description": "The command to execute"
+                        },
+                        "path": {
+                            "type": "string",
+                            "description": "The path to the file to view or edit"
+                        },
+                        "old_str": {
+                            "type": "string",
+                            "description": "The text to replace (for str_replace command)"
+                        },
+                        "new_str": {
+                            "type": "string",
+                            "description": "The new text to insert (for str_replace or insert commands)"
+                        },
+                        "file_text": {
+                            "type": "string",
+                            "description": "The content to write to the new file (for create command)"
+                        },
+                        "insert_line": {
+                            "type": "integer",
+                            "description": "The line number after which to insert text (for insert command)"
+                        },
+                        "view_range": {
+                            "type": "array",
+                            "items": {
+                                "type": "integer"
                             },
-                            "required": ["path"]
+                            "description": "The range of lines to view (for view command)"
                         }
-                    }
-                },
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "edit_file",
-                        "description": "Edit a file by replacing its contents",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "path": {
-                                    "type": "string",
-                                    "description": "The path to the file to edit"
-                                },
-                                "content": {
-                                    "type": "string",
-                                    "description": "The new content for the file"
-                                }
-                            },
-                            "required": ["path", "content"]
-                        }
-                    }
+                    },
+                    "required": ["command", "path"]
                 }
-            ]
+            }
             
-            # Bind the tools to the LLM
-            llm_with_tools = llm.bind_tools(tools)
+            # Bind the tool to the LLM
+            llm_with_tools = llm.bind_tools([tool])
             
             # Create the initial prompt for Claude
             prompt = f"""
             I have a YAML configuration file for a call center quality assurance score at {temp_path}. 
             The YAML contains system_message and user_message fields that are used as prompts for an LLM to evaluate call transcripts.
             
-            First, please view the file using the view_file tool.
+            First, please view the file using the view command.
             
             Then, please improve the prompts based on best prompt engineering practices:
             
@@ -652,20 +655,28 @@ def optimize(scorecard: str, score: str, output: Optional[str], model: str):
             
             Focus only on improving the system_message and user_message fields.
             
-            After viewing the file, use the edit_file tool to provide the improved YAML.
+            After viewing the file, use the str_replace command to provide the improved YAML.
             """
             
             console.print("[bold]Sending request to Claude to view and optimize the YAML file...[/bold]")
             
             # Process the conversation with Claude
             try:
-                # Start the conversation
-                response = llm_with_tools.invoke(prompt)
+                # Start the conversation with just the initial prompt
+                initial_messages = [HumanMessage(content=prompt)]
+                response = llm_with_tools.invoke(initial_messages)
                 
-                # Track the conversation state
-                conversation_messages = [HumanMessage(content=prompt), response]
+                # Initialize tracking variables
                 optimized_yaml = None
                 explanation = None
+                file_edited = False
+                
+                # Keep track of the full conversation history for subsequent calls
+                # Start with just the initial prompt and response
+                conversation_messages = [HumanMessage(content=prompt), response]
+                
+                # Track which tool calls we've already processed to avoid duplicates
+                processed_tool_ids = set()
                 
                 # Process the conversation until we get the optimized YAML
                 max_turns = 5  # Limit the number of turns to prevent infinite loops
@@ -682,10 +693,11 @@ def optimize(scorecard: str, score: str, output: Optional[str], model: str):
                             tool_args = tool_call.get('args', {})
                             tool_id = tool_call.get('id', '')
                             
-                            console.print(f"[green]Claude is calling tool: {tool_name}[/green]")
+                            command = tool_args.get('command', '')
+                            console.print(f"[green]Claude is using command: {command}[/green]")
                             
-                            if tool_name == "view_file":
-                                # Handle view_file tool call
+                            if command == "view":
+                                # Handle view command
                                 file_path = tool_args.get('path', '')
                                 
                                 if os.path.exists(file_path):
@@ -698,41 +710,104 @@ def optimize(scorecard: str, score: str, output: Optional[str], model: str):
                                         "content": file_content
                                     }
                                     
-                                    # Continue the conversation with the tool response
-                                    follow_up_message = "Now that you've seen the YAML file, please edit it to improve the prompts based on best practices. Use the edit_file tool to provide the improved YAML."
-                                    
-                                    # Add the tool response to the conversation
-                                    conversation_messages.append({"role": "tool", **tool_response})
-                                    conversation_messages.append(HumanMessage(content=follow_up_message))
+                                    # Only add the tool response if we haven't processed this tool ID before
+                                    if tool_id not in processed_tool_ids:
+                                        conversation_messages.append(ToolMessage(content=tool_response["content"], tool_call_id=tool_id))
+                                        processed_tool_ids.add(tool_id)
                                     
                                     # Get the next response
                                     response = llm_with_tools.invoke(conversation_messages)
+                                    # Add the response to the conversation history
                                     conversation_messages.append(response)
                                 else:
                                     console.print(f"[red]File not found: {file_path}[/red]")
                                     break
                             
-                            elif tool_name == "edit_file":
-                                # Handle edit_file tool call
+                            elif command == "str_replace":
+                                # Handle str_replace command
                                 file_path = tool_args.get('path', '')
-                                new_content = tool_args.get('content', '')
+                                old_str = tool_args.get('old_str', '')
+                                new_str = tool_args.get('new_str', '')
                                 
-                                if new_content:
-                                    # Store the optimized YAML
-                                    optimized_yaml = new_content
+                                if old_str and new_str:
+                                    # Read the file content to check for matches
+                                    with open(file_path, 'r') as f:
+                                        content = f.read()
+                                    
+                                    # Check for matches
+                                    match_count = content.count(old_str)
+                                    if match_count == 0:
+                                        error_message = "Error: No match found for replacement text"
+                                        console.print(f"[red]{error_message}[/red]")
+                                        
+                                        # Create an error tool response
+                                        tool_response = {
+                                            "tool_call_id": tool_id,
+                                            "content": error_message,
+                                            "is_error": True
+                                        }
+                                        
+                                        conversation_messages.append(ToolMessage(content=tool_response["content"], tool_call_id=tool_id))
+                                        conversation_messages.append(HumanMessage(content="Please try again with a different approach. You can use the create command to provide the entire optimized YAML."))
+                                        
+                                        response = llm_with_tools.invoke(conversation_messages)
+                                        conversation_messages.append(response)
+                                        continue
+                                    
+                                    if match_count > 1:
+                                        warning_message = f"Warning: Found {match_count} matches for the text to replace. This might lead to unexpected results."
+                                        console.print(f"[yellow]{warning_message}[/yellow]")
+                                    
+                                    # Explicitly update the file content with the replacement
+                                    updated_content = content.replace(old_str, new_str)
+                                    with open(file_path, 'w') as f:
+                                        f.write(updated_content)
+                                    
+                                    file_edited = True
                                     
                                     # Create a tool response
                                     tool_response = {
                                         "tool_call_id": tool_id,
-                                        "content": "Successfully edited the file."
+                                        "content": "Successfully replaced text and updated the file"
                                     }
                                     
-                                    # Continue the conversation with the tool response
-                                    follow_up_message = "Please explain the key improvements you made to the prompts."
+                                    # Only add the tool response if we haven't processed this tool ID before
+                                    if tool_id not in processed_tool_ids:
+                                        conversation_messages.append(ToolMessage(content=tool_response["content"], tool_call_id=tool_id))
+                                        processed_tool_ids.add(tool_id)
                                     
-                                    # Add the tool response to the conversation
-                                    conversation_messages.append({"role": "tool", **tool_response})
-                                    conversation_messages.append(HumanMessage(content=follow_up_message))
+                                    # Get the next response
+                                    response = llm_with_tools.invoke(conversation_messages)
+                                    # Add the response to the conversation history
+                                    conversation_messages.append(response)
+                                else:
+                                    console.print("[red]Missing old_str or new_str for str_replace command[/red]")
+                                    break
+                            
+                            elif command == "create":
+                                # Handle create command
+                                file_path = tool_args.get('path', '')
+                                file_text = tool_args.get('file_text', '')
+                                
+                                if file_text:
+                                    # The text editor tool handles file creation
+                                    file_edited = True
+                                    
+                                    # Create a tool response
+                                    tool_response = {
+                                        "tool_call_id": tool_id,
+                                        "content": "Successfully created file"
+                                    }
+                                    
+                                    # # Continue the conversation with the tool response
+                                    # follow_up_message = "Please explain the key improvements you made to the prompts."
+                                    
+                                    # Only add the tool response if we haven't processed this tool ID before
+                                    if tool_id not in processed_tool_ids:
+                                        conversation_messages.append(ToolMessage(content=tool_response["content"], tool_call_id=tool_id))
+                                        processed_tool_ids.add(tool_id)
+                                    
+                                    # conversation_messages.append(HumanMessage(content=follow_up_message))
                                     
                                     # Get the explanation
                                     explanation_response = llm_with_tools.invoke(conversation_messages)
@@ -741,11 +816,15 @@ def optimize(scorecard: str, score: str, output: Optional[str], model: str):
                                     # We're done
                                     break
                                 else:
-                                    console.print("[red]No content provided for edit_file tool call[/red]")
+                                    console.print("[red]Missing file_text for create command[/red]")
                                     break
                     
                     # If we have the optimized YAML, we're done
                     if optimized_yaml:
+                        break
+                    
+                    # If we have an explanation and the file was edited, we're done
+                    if explanation and file_edited:
                         break
                     
                     # If there are no tool calls, check if the response contains YAML content
@@ -764,8 +843,8 @@ def optimize(scorecard: str, score: str, output: Optional[str], model: str):
                             break
                         else:
                             # Ask Claude to use the tools
-                            follow_up_message = "Please use the view_file tool to see the YAML file, and then use the edit_file tool to provide the improved YAML."
-                            conversation_messages.append(HumanMessage(content=follow_up_message))
+                            # follow_up_message = "Please use the view command to see the YAML file, and then use the str_replace command to provide the improved YAML."
+                            # conversation_messages.append(HumanMessage(content=follow_up_message))
                             response = llm_with_tools.invoke(conversation_messages)
                             conversation_messages.append(response)
                 
@@ -774,8 +853,31 @@ def optimize(scorecard: str, score: str, output: Optional[str], model: str):
                     console.print("\n[bold]Claude's explanation of improvements:[/bold]")
                     console.print(explanation)
                 
-                # Save the optimized YAML if we have it
-                if optimized_yaml:
+                # Check if the file was edited directly by Claude using the tools
+                if file_edited:
+                    # The file was successfully edited by Claude using the tools
+                    if output:
+                        # If an output path was specified, copy the edited file to that location
+                        with open(temp_path, 'r') as src, open(output, 'w') as dst:
+                            dst.write(src.read())
+                        console.print(f"[bold green]Optimized YAML saved to: {output}[/bold green]")
+                    else:
+                        # Otherwise, just inform the user where the optimized file is
+                        console.print(f"[bold green]Optimized YAML is available at: {temp_path}[/bold green]")
+                    
+                    # Verify the YAML is valid using ruamel.yaml
+                    try:
+                        with open(temp_path, 'r') as f:
+                            edited_content = f.read()
+                        
+                        yaml_verifier = YAML()
+                        yaml_verifier.load(io.StringIO(edited_content))
+                        console.print("[green]Optimized YAML validation successful[/green]")
+                    except Exception as e:
+                        console.print(f"[red]Warning: The optimized YAML may not be valid: {e}[/red]")
+                
+                # Save the optimized YAML if we have it (this is for the non-tool-based approach)
+                elif optimized_yaml:
                     if output:
                         # Create backup if file exists
                         if os.path.exists(output):
@@ -802,98 +904,19 @@ def optimize(scorecard: str, score: str, output: Optional[str], model: str):
                     except Exception as e:
                         console.print(f"[red]Warning: The optimized YAML may not be valid: {e}[/red]")
                 else:
-                    console.print("[red]No optimized YAML was generated after {current_turn} turns[/red]")
-                    console.print("[yellow]Falling back to direct approach...[/yellow]")
-                    
-                    # Fall back to the direct approach
-                    with open(temp_path, 'r') as f:
-                        yaml_content = f.read()
-                    
-                    # Create a more direct approach that doesn't rely on tool calls
-                    improved_prompt = f"""
-                    I have a YAML configuration file for a call center quality assurance score. 
-                    The YAML contains system_message and user_message fields that are used as prompts for an LLM to evaluate call transcripts.
-                    
-                    Here is the current YAML content:
-                    
-                    ```yaml
-                    {yaml_content}
-                    ```
-                    
-                    Please improve the prompts based on best prompt engineering practices:
-                    
-                    1. Make the prompts more clear and specific
-                    2. Ensure they guide the model through a structured chain of thought
-                    3. Improve the clarity of evaluation criteria
-                    4. Make sure the prompts are well-formatted and easy to understand
-                    5. Ensure the prompts will lead to consistent, accurate evaluations
-                    6. Maintain the same overall structure and purpose of the prompts
-                    
-                    Focus only on improving the system_message and user_message fields.
-                    
-                    Please provide the entire improved YAML file with your changes, maintaining the exact same structure but with improved prompts.
-                    After providing the improved YAML, please explain the key improvements you made.
-                    """
-                    
-                    # Use a simpler approach without tool calls
-                    console.print("[bold]Sending YAML content directly to Claude for optimization...[/bold]")
-                    response = llm.invoke(improved_prompt)
-                    
-                    # Extract the YAML content from the response
-                    response_text = response.content
-                    
-                    # Look for YAML content between triple backticks
-                    import re
-                    yaml_pattern = r"```(?:yaml)?\n(.*?)```"
-                    yaml_matches = re.findall(yaml_pattern, response_text, re.DOTALL)
-                    
-                    if yaml_matches:
-                        optimized_yaml = yaml_matches[0].strip()
-                        console.print("[green]Successfully extracted optimized YAML from Claude's response[/green]")
-                        
-                        # Extract the explanation (text after the last YAML block)
-                        last_yaml_end = response_text.rfind("```")
-                        if last_yaml_end != -1:
-                            explanation = response_text[last_yaml_end + 3:].strip()
-                            console.print("\n[bold]Claude's explanation of improvements:[/bold]")
-                            console.print(explanation)
-                            
-                        # Save the optimized YAML
-                        if output:
-                            # Create backup if file exists
-                            if os.path.exists(output):
-                                backup_path = f"{output}.backup"
-                                with open(output, 'r') as src, open(backup_path, 'w') as dst:
-                                    dst.write(src.read())
-                                console.print(f"[green]Created backup at: {backup_path}[/green]")
-                            
-                            with open(output, 'w') as f:
-                                f.write(optimized_yaml)
-                            console.print(f"[bold green]Optimized YAML saved to: {output}[/bold green]")
-                        else:
-                            # Create a new temporary file for the optimized YAML in the tmp directory
-                            with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', dir=tmp_dir, delete=False) as opt_file:
-                                opt_path = opt_file.name
-                                opt_file.write(optimized_yaml)
-                            console.print(f"[bold green]Optimized YAML saved to: {opt_path}[/bold green]")
-                        
-                        # Verify the YAML is valid using ruamel.yaml
-                        try:
-                            yaml_verifier = YAML()
-                            yaml_verifier.load(io.StringIO(optimized_yaml))
-                            console.print("[green]Optimized YAML validation successful[/green]")
-                        except Exception as e:
-                            console.print(f"[red]Warning: The optimized YAML may not be valid: {e}[/red]")
-                    else:
-                        console.print("[red]No optimized YAML was generated[/red]")
+                    console.print("[red]No optimized YAML was generated. Please try again.[/red]")
             
             except Exception as e:
                 console.print(f"[red]Error during optimization: {str(e)}[/red]")
                 import traceback
                 console.print(f"[red]{traceback.format_exc()}[/red]")
             
-            # Clean up the temporary file
-            os.unlink(temp_path)
+            # Clean up the temporary file only if we're not using it as the output
+            if output or (not file_edited and not optimized_yaml):
+                try:
+                    os.unlink(temp_path)
+                except:
+                    pass
             
         except Exception as e:
             console.print(f"[red]Error parsing YAML content: {str(e)}[/red]")
