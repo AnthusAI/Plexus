@@ -1,5 +1,6 @@
 import click
 import os
+from pathlib import Path
 import json
 from ruamel.yaml import YAML
 from rich.table import Table
@@ -454,6 +455,33 @@ def optimize(scorecard: str, score: str, output: Optional[str], model: str):
     """Optimize prompts for a score using Claude AI via AWS Bedrock."""
     client = create_client()
     
+    # Get the AWS account ID from the STS service
+    try:
+        import boto3
+        sts = boto3.client('sts')
+        account_id = sts.get_caller_identity()['Account']
+        console.print(f"[blue]Using AWS Account: {account_id}[/blue]")
+    except Exception as e:
+        console.print("[yellow]Could not determine AWS account ID[/yellow]")
+
+    # Load and display the documentation file
+    try:
+        doc_path = Path(__file__).parent.parent / "documentation" / "plexus-score-configuration-yaml-format.md"
+        with open(doc_path) as f:
+            doc_contents = f.readlines()
+            
+        # Print first 10 lines
+        console.print("[bold]Score Configuration Format Documentation:[/bold]")
+        for line in doc_contents[:10]:
+            console.print(line.rstrip())
+        console.print("...")
+    except Exception as e:
+        console.print("[yellow]Could not load documentation file[/yellow]")
+        console.print(f"[red]Error: {e}[/red]")
+            
+    except Exception as e:
+        console.print("[yellow]Could not load documentation file[/yellow]")
+
     console.print(f"[bold]Optimizing prompts for score: {score} in scorecard: {scorecard}[/bold]")
     
     # Resolve the scorecard ID
