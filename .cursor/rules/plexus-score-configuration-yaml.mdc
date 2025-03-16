@@ -1,0 +1,193 @@
+---
+description: Plexus score configuration YAML
+globs: *.yaml
+alwaysApply: false
+---
+# Plexus Score Configuration Documentation
+
+## Core Concepts
+
+A **Score** is a first-class model in Plexus that represents an evaluative judgment on content, typically implemented as a text classifier. Scores are configured using YAML and can range from simple classifications to complex multi-step evaluations.
+
+A **Scorecard** is a collection of related Scores, typically used to evaluate different aspects of the same content (e.g., different quality metrics for a call center transcript).
+
+## Score Implementation Types
+
+```yaml
+- name: Simple Score  # Basic classifier
+  id: 12345
+  class: LangGraphScore  # Most common implementation type
+  model_provider: ChatOpenAI
+  model_name: gpt-4o-mini-2024-07-18
+```
+
+Common implementation classes:
+- `LangGraphScore`: Multi-step agentic flow using a directed graph (recommended)
+- Direct model types (legacy): `OpenAIModelScore`, `AnthropicModelScore`
+
+## 3. Dependencies Between Scores
+
+Scores can depend on other Scores, accessing their results and conditionally executing:
+
+```yaml
+# Simple dependency - Score runs after "Previous Score" completes
+- name: Simple Dependent Score
+  id: 56789
+  depends_on:
+    - Previous Score
+  graph:
+    - name: check_previous_result
+      class: YesOrNoClassifier
+      user_message: |
+        Previous result: {{results["Previous Score"].value}}
+        # Access results using {{results["Score Name"].value}}
+
+# Conditional dependency - Score only runs if condition is met
+- name: Conditional Dependent Score
+  id: 67890
+  depends_on:
+    Previous Score:
+      operator: "=="  # Operators: ==, !=
+      value: "Yes"    # Only runs if Previous Score is "Yes"
+  graph:
+    - name: first_node
+      class: Classifier
+      # Configuration continues...
+```
+
+## LangGraph Configuration
+
+LangGraph Scores consist of nodes arranged in a processing graph:
+
+```yaml
+graph:
+  - name: first_node  # Executed first
+    class: Classifier
+    # Node config...
+    
+  - name: second_node  # Executed next by default
+    class: YesOrNoClassifier
+    # Node config...
+    conditions:  # Optional conditional flow
+      - state: "classification"
+        value: "No"
+        node: "END"  # Special reserved node name
+        output:
+          value: "NA"
+          explanation: "Reason for early termination"
+```
+
+### Node Processing Flow
+
+Nodes are executed sequentially unless redirected by conditions:
+1. Each node processes its input (default: full text)
+2. Results flow to the next node unless conditions redirect
+3. Special node name `"END"` terminates processing
+
+## Node Types
+
+Common node types:
+- `Classifier`: Generic classifier with configurable valid classes
+- `YesOrNoClassifier`: Binary classifier (legacy)
+- `MultiClassClassifier`: Supports multiple classes (legacy)
+- `Extractor`: Extracts specific information from text
+- `BeforeAfterSlicer`: Segments text based on a quote
+- `LogicalClassifier`: Applies custom code-based logic
+
+```yaml
+- name: my_classifier
+  class: Classifier
+  valid_classes: ["Yes", "No", "Maybe"]
+  system_message: |
+    # System prompt here
+  user_message: |
+    # User prompt here
+```
+
+## Input and Output Mapping
+
+Nodes can specify inputs and outputs:
+
+```yaml
+- name: node_name
+  class: Classifier
+  input:  # Optional - use output from previous node
+    text: previous_node_output_field
+  output:  # Map node outputs to named fields
+    custom_field_name: classification
+    explanation_field: explanation
+```
+
+## Text Parsing Direction
+
+Control how the classifier extracts answers from LLM responses:
+
+```yaml
+parse_from_start: true  # Parse from beginning (default: false)
+```
+
+- `false` (default): Parse from the end of text (for "reasoning then answer" patterns)
+- `true`: Parse from the beginning (for "answer then explanation" patterns)
+
+## BeforeAfterSlicer Usage
+
+Segment text into "before" and "after" parts based on a found quote:
+
+```yaml
+- name: slicer_node
+  class: BeforeAfterSlicer
+  system_message: |
+    # Instructions to find a specific part of the text
+  user_message: |
+    # Prompt that asks for a specific quote
+  output:
+    before_quote: before  # Text before the quote
+    after_quote: after    # Text after the quote
+```
+
+## Message Templates
+
+Templates support Jinja2 syntax for dynamic content:
+
+```yaml
+user_message: |
+  {% for school in metadata.schools %}
+  School: {{school.school_id}}
+  - Program: {{program_names.split('\n')[loop.index-1] | replace('Program: ', '')}}
+  {% endfor %}
+```
+
+## Available Metadata
+
+Common metadata includes:
+- `text`: The primary content being scored
+- `metadata.schools`: School-related data (for education clients)
+- `results["Score Name"]`: Results from other scores
+- Custom metadata provided by data sources
+
+## Data Configuration
+
+Specify how to obtain data for testing and training:
+
+```yaml
+data:
+  class: CallCriteriaDBCache
+  queries:
+    - scorecard_id: 1234
+      score_id: 5678
+      number: 1000
+  searches:
+    - item_list_filename: path/to/file.csv
+      values:
+        - "Good Call": "Yes"
+  balance: false  # Whether to balance positive/negative examples
+```
+
+## Best Practices
+
+1. Use modern `Classifier` over legacy classifier types
+2. Structure graphs to handle early termination with conditions
+3. Use descriptive node names and field mappings
+4. Leverage slicers for complex transcript analysis
+5. Include clear system and user prompts
+6. Avoid redundant processing by sharing results between nodes

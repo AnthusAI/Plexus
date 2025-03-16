@@ -429,7 +429,7 @@ export default function ScorecardsComponent({
           { scorecardId: { eq: '' } }
         );
       }
-    } as Schema['Scorecard']['type']
+    } as unknown as Schema['Scorecard']['type']
 
     handleSelectScorecard(blankScorecard);
     setSelectedScorecardSections({ items: [] });
@@ -600,10 +600,6 @@ export default function ScorecardsComponent({
       </div>
     );
   };
-
-  if (isLoading) {
-    return <div>Loading scorecards...</div>
-  }
 
   if (error) {
     return (

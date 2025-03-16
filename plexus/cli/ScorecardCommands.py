@@ -10,6 +10,8 @@ from typing import Optional
 import rich
 import datetime
 from plexus.cli.ScoreCommands import scores, score
+from ruamel.yaml import YAML
+import io
 
 # Define the main command groups that will be exported
 @click.group()
@@ -26,6 +28,8 @@ def create_client() -> PlexusDashboardClient:
 
 def resolve_scorecard_identifier(client, identifier):
     """Resolve a scorecard identifier to its ID."""
+    console.print(f"[dim]Resolving scorecard identifier: {identifier}[/dim]")
+    
     # First try direct ID lookup
     try:
         query = f"""
@@ -37,63 +41,153 @@ def resolve_scorecard_identifier(client, identifier):
         """
         result = client.execute(query)
         if result.get('getScorecard'):
+            console.print(f"[dim]Found scorecard by ID: {identifier}[/dim]")
             return identifier
-    except:
-        pass
+    except Exception as e:
+        console.print(f"[dim]Error looking up by ID: {str(e)}[/dim]")
     
     # Try lookup by key
     try:
         query = f"""
         query ListScorecards {{
-            listScorecards(filter: {{ key: {{ eq: "{identifier}" }} }}, limit: 1) {{
+            listScorecards(filter: {{ key: {{ eq: "{identifier}" }} }}, limit: 10) {{
                 items {{
                     id
+                    key
+                    name
                 }}
             }}
         }}
         """
+        console.print(f"[dim]Looking up by key: {identifier}[/dim]")
         result = client.execute(query)
+        console.print(f"[dim]Key lookup result: {result}[/dim]")
         items = result.get('listScorecards', {}).get('items', [])
         if items and len(items) > 0:
+            if len(items) > 1:
+                console.print(f"[yellow]Warning: Found multiple scorecards with key '{identifier}':[/yellow]")
+                for i, item in enumerate(items):
+                    console.print(f"[yellow]{i+1}. {item.get('name')} (ID: {item.get('id')}, Key: {item.get('key')})[/yellow]")
+                console.print(f"[yellow]Using the first match: {items[0].get('name')} (ID: {items[0].get('id')})[/yellow]")
+            else:
+                console.print(f"[dim]Found scorecard by key: {items[0]['id']} (key: {items[0].get('key')})[/dim]")
             return items[0]['id']
-    except:
-        pass
+    except Exception as e:
+        console.print(f"[dim]Error looking up by key: {str(e)}[/dim]")
     
     # Try lookup by name
     try:
         query = f"""
         query ListScorecards {{
-            listScorecards(filter: {{ name: {{ eq: "{identifier}" }} }}, limit: 1) {{
+            listScorecards(filter: {{ name: {{ eq: "{identifier}" }} }}, limit: 10) {{
                 items {{
                     id
+                    name
+                    key
                 }}
             }}
         }}
         """
+        console.print(f"[dim]Looking up by name: {identifier}[/dim]")
         result = client.execute(query)
+        console.print(f"[dim]Name lookup result: {result}[/dim]")
         items = result.get('listScorecards', {}).get('items', [])
         if items and len(items) > 0:
+            if len(items) > 1:
+                console.print(f"[yellow]Warning: Found multiple scorecards with name '{identifier}':[/yellow]")
+                for i, item in enumerate(items):
+                    console.print(f"[yellow]{i+1}. {item.get('name')} (ID: {item.get('id')}, Key: {item.get('key')})[/yellow]")
+                console.print(f"[yellow]Using the first match: {items[0].get('name')} (ID: {items[0].get('id')})[/yellow]")
+            else:
+                console.print(f"[dim]Found scorecard by name: {items[0]['id']} (name: {items[0].get('name')})[/dim]")
             return items[0]['id']
-    except:
-        pass
+    except Exception as e:
+        console.print(f"[dim]Error looking up by name: {str(e)}[/dim]")
     
     # Try lookup by externalId
     try:
         query = f"""
         query ListScorecards {{
-            listScorecards(filter: {{ externalId: {{ eq: "{identifier}" }} }}, limit: 1) {{
+            listScorecards(filter: {{ externalId: {{ eq: "{identifier}" }} }}, limit: 10) {{
                 items {{
                     id
+                    externalId
+                    name
+                    key
+                }}
+            }}
+        }}
+        """
+        console.print(f"[dim]Looking up by externalId: {identifier}[/dim]")
+        result = client.execute(query)
+        console.print(f"[dim]ExternalId lookup result: {result}[/dim]")
+        items = result.get('listScorecards', {}).get('items', [])
+        if items and len(items) > 0:
+            if len(items) > 1:
+                console.print(f"[yellow]Warning: Found multiple scorecards with externalId '{identifier}':[/yellow]")
+                for i, item in enumerate(items):
+                    console.print(f"[yellow]{i+1}. {item.get('name')} (ID: {item.get('id')}, Key: {item.get('key')})[/yellow]")
+                console.print(f"[yellow]Using the first match: {items[0].get('name')} (ID: {items[0].get('id')})[/yellow]")
+            else:
+                console.print(f"[dim]Found scorecard by externalId: {items[0]['id']} (externalId: {items[0].get('externalId')})[/dim]")
+            return items[0]['id']
+    except Exception as e:
+        console.print(f"[dim]Error looking up by externalId: {str(e)}[/dim]")
+    
+    # If we get here, try a more flexible search for the key
+    try:
+        query = f"""
+        query ListScorecards {{
+            listScorecards(limit: 100) {{
+                items {{
+                    id
+                    key
+                    name
+                    externalId
                 }}
             }}
         }}
         """
         result = client.execute(query)
         items = result.get('listScorecards', {}).get('items', [])
-        if items and len(items) > 0:
-            return items[0]['id']
-    except:
-        pass
+        
+        # First try exact match on key
+        key_matches = [item for item in items if item.get('key') == identifier]
+        if key_matches:
+            if len(key_matches) > 1:
+                console.print(f"[yellow]Warning: Found multiple scorecards with key '{identifier}':[/yellow]")
+                for i, item in enumerate(key_matches):
+                    console.print(f"[yellow]{i+1}. {item.get('name')} (ID: {item.get('id')}, Key: {item.get('key')})[/yellow]")
+                console.print(f"[yellow]Using the first match: {key_matches[0].get('name')} (ID: {key_matches[0].get('id')})[/yellow]")
+            else:
+                console.print(f"[dim]Found scorecard by exact key match: {key_matches[0]['id']} (key: {key_matches[0].get('key')})[/dim]")
+            return key_matches[0]['id']
+        
+        # Then try exact match on externalId
+        ext_id_matches = [item for item in items if item.get('externalId') == identifier]
+        if ext_id_matches:
+            if len(ext_id_matches) > 1:
+                console.print(f"[yellow]Warning: Found multiple scorecards with externalId '{identifier}':[/yellow]")
+                for i, item in enumerate(ext_id_matches):
+                    console.print(f"[yellow]{i+1}. {item.get('name')} (ID: {item.get('id')}, Key: {item.get('key')})[/yellow]")
+                console.print(f"[yellow]Using the first match: {ext_id_matches[0].get('name')} (ID: {ext_id_matches[0].get('id')})[/yellow]")
+            else:
+                console.print(f"[dim]Found scorecard by exact externalId match: {ext_id_matches[0]['id']} (externalId: {ext_id_matches[0].get('externalId')})[/dim]")
+            return ext_id_matches[0]['id']
+        
+        # Then try exact match on name
+        name_matches = [item for item in items if item.get('name') == identifier]
+        if name_matches:
+            if len(name_matches) > 1:
+                console.print(f"[yellow]Warning: Found multiple scorecards with name '{identifier}':[/yellow]")
+                for i, item in enumerate(name_matches):
+                    console.print(f"[yellow]{i+1}. {item.get('name')} (ID: {item.get('id')}, Key: {item.get('key')})[/yellow]")
+                console.print(f"[yellow]Using the first match: {name_matches[0].get('name')} (ID: {name_matches[0].get('id')})[/yellow]")
+            else:
+                console.print(f"[dim]Found scorecard by exact name match: {name_matches[0]['id']} (name: {name_matches[0].get('name')})[/dim]")
+            return name_matches[0]['id']
+    except Exception as e:
+        console.print(f"[dim]Error during flexible search: {str(e)}[/dim]")
     
     return None
 
@@ -156,9 +250,19 @@ def generate_key(name: str) -> str:
     """Generate a key from a name by converting to lowercase and replacing spaces with hyphens."""
     return name.lower().replace(' ', '-')
 
+# Configure ruamel.yaml for better multi-line string handling
+def get_yaml_handler():
+    """Returns a configured YAML handler that preserves multi-line strings."""
+    yaml_handler = YAML()
+    yaml_handler.preserve_quotes = True
+    yaml_handler.width = 4096  # Prevent line wrapping
+    yaml_handler.indent(mapping=2, sequence=4, offset=2)
+    return yaml_handler
+
 def detect_and_clean_duplicates(client, scorecard_id: str) -> int:
     """
     Detect and clean duplicate scores in a scorecard.
+    Also checks for duplicate scorecards by key.
     
     Args:
         client: GraphQL client
@@ -167,7 +271,216 @@ def detect_and_clean_duplicates(client, scorecard_id: str) -> int:
     Returns:
         Number of duplicates removed
     """
-    console.print("[bold]Checking for duplicate scores...[/bold]")
+    # First, check for duplicate scorecards by key
+    console.print("[bold]Checking for duplicate scorecards by key...[/bold]")
+    
+    # Get the current scorecard to find its key
+    scorecard_query = f"""
+    query GetScorecard {{
+        getScorecard(id: "{scorecard_id}") {{
+            id
+            name
+            key
+            accountId
+        }}
+    }}
+    """
+    
+    try:
+        scorecard_result = client.execute(scorecard_query)
+        scorecard = scorecard_result.get('getScorecard', {})
+        scorecard_key = scorecard.get('key')
+        account_id = scorecard.get('accountId')
+        
+        if not scorecard_key:
+            console.print("[yellow]Current scorecard has no key, skipping duplicate scorecard check[/yellow]")
+        else:
+            # Find all scorecards with the same key
+            duplicate_query = f"""
+            query FindDuplicateScorecards {{
+                listScorecardByKey(key: "{scorecard_key}") {{
+                    items {{
+                        id
+                        name
+                        key
+                        accountId
+                        createdAt
+                        updatedAt
+                    }}
+                }}
+            }}
+            """
+            
+            duplicate_result = client.execute(duplicate_query)
+            duplicate_scorecards = duplicate_result.get('listScorecardByKey', {}).get('items', [])
+            
+            if len(duplicate_scorecards) > 1:
+                console.print(f"[yellow]Found {len(duplicate_scorecards)} scorecards with key '{scorecard_key}':[/yellow]")
+                
+                # Create a table to display the duplicates
+                table = Table(title=f"Duplicate Scorecards with Key: {scorecard_key}")
+                table.add_column("#", style="dim")
+                table.add_column("ID", style="magenta")
+                table.add_column("Name", style="blue")
+                table.add_column("Account ID", style="cyan")
+                table.add_column("Created At", style="dim")
+                table.add_column("Updated At", style="dim")
+                table.add_column("Current", style="green")
+                
+                # Add index number for selection
+                for i, dup in enumerate(duplicate_scorecards):
+                    is_current = dup.get('id') == scorecard_id
+                    table.add_row(
+                        str(i + 1),
+                        dup.get('id'),
+                        dup.get('name'),
+                        dup.get('accountId'),
+                        dup.get('createdAt'),
+                        dup.get('updatedAt'),
+                        "✓" if is_current else ""
+                    )
+                
+                console.print(table)
+                console.print("[yellow]Warning: Multiple scorecards with the same key can cause confusion and issues.[/yellow]")
+                
+                # Prompt user to choose which scorecard to delete
+                if click.confirm("Do you want to delete one of these duplicate scorecards?"):
+                    # Get user choice
+                    max_choice = len(duplicate_scorecards)
+                    choice_str = click.prompt(
+                        f"Enter the number of the scorecard to delete (1-{max_choice})",
+                        type=str
+                    )
+                    
+                    try:
+                        choice = int(choice_str)
+                        if choice < 1 or choice > max_choice:
+                            console.print(f"[red]Invalid choice: {choice}. Must be between 1 and {max_choice}.[/red]")
+                            return 0
+                    except ValueError:
+                        console.print(f"[red]Invalid input: {choice_str}. Please enter a number.[/red]")
+                        return 0
+                    
+                    # Get the selected scorecard
+                    selected_scorecard = duplicate_scorecards[choice - 1]
+                    selected_id = selected_scorecard.get('id')
+                    selected_name = selected_scorecard.get('name')
+                    
+                    # Confirm deletion
+                    console.print(f"[bold red]You are about to delete scorecard: {selected_name} (ID: {selected_id})[/bold red]")
+                    console.print("[red]This will permanently delete the scorecard and all its scores and versions.[/red]")
+                    
+                    if click.confirm("Are you sure you want to proceed?", default=False):
+                        # Get all sections and scores for this scorecard
+                        detailed_query = f"""
+                        query GetScorecardDetails {{
+                            getScorecard(id: "{selected_id}") {{
+                                id
+                                name
+                                key
+                                sections {{
+                                    items {{
+                                        id
+                                        name
+                                        scores {{
+                                            items {{
+                                                id
+                                                name
+                                                versions {{
+                                                    items {{
+                                                        id
+                                                    }}
+                                                }}
+                                            }}
+                                        }}
+                                    }}
+                                }}
+                            }}
+                        }}
+                        """
+                        
+                        try:
+                            detailed_result = client.execute(detailed_query)
+                            detailed_scorecard = detailed_result.get('getScorecard', {})
+                            sections = detailed_scorecard.get('sections', {}).get('items', [])
+                            
+                            total_sections = len(sections)
+                            total_scores = 0
+                            total_versions = 0
+                            
+                            # First, delete all versions for each score
+                            for section in sections:
+                                section_id = section.get('id')
+                                section_name = section.get('name')
+                                scores = section.get('scores', {}).get('items', [])
+                                
+                                for score in scores:
+                                    score_id = score.get('id')
+                                    score_name = score.get('name')
+                                    versions = score.get('versions', {}).get('items', [])
+                                    
+                                    total_scores += 1
+                                    total_versions += len(versions)
+                                    
+                                    # Delete each version
+                                    for version in versions:
+                                        version_id = version.get('id')
+                                        delete_version_mutation = f"""
+                                        mutation DeleteScoreVersion {{
+                                            deleteScoreVersion(input: {{ id: "{version_id}" }}) {{
+                                                id
+                                            }}
+                                        }}
+                                        """
+                                        client.execute(delete_version_mutation)
+                                    
+                                    # Delete the score
+                                    delete_score_mutation = f"""
+                                    mutation DeleteScore {{
+                                        deleteScore(input: {{ id: "{score_id}" }}) {{
+                                            id
+                                        }}
+                                    }}
+                                    """
+                                    client.execute(delete_score_mutation)
+                                
+                                # Delete the section
+                                delete_section_mutation = f"""
+                                mutation DeleteScorecardSection {{
+                                    deleteScorecardSection(input: {{ id: "{section_id}" }}) {{
+                                        id
+                                    }}
+                                }}
+                                """
+                                client.execute(delete_section_mutation)
+                            
+                            # Finally delete the scorecard
+                            delete_scorecard_mutation = f"""
+                            mutation DeleteScorecard {{
+                                deleteScorecard(input: {{ id: "{selected_id}" }}) {{
+                                    id
+                                }}
+                            }}
+                            """
+                            client.execute(delete_scorecard_mutation)
+                            
+                            console.print(f"[green]Successfully deleted scorecard: {selected_name} (ID: {selected_id})[/green]")
+                            console.print(f"[green]Deleted {total_sections} sections, {total_scores} scores, and {total_versions} versions.[/green]")
+                            
+                        except Exception as e:
+                            console.print(f"[red]Error deleting scorecard: {e}[/red]")
+                    else:
+                        console.print("[yellow]Deletion cancelled[/yellow]")
+                else:
+                    console.print("[yellow]Consider renaming or deleting duplicate scorecards to avoid confusion.[/yellow]")
+            else:
+                console.print(f"[green]No duplicate scorecards found with key '{scorecard_key}'[/green]")
+    
+    except Exception as e:
+        console.print(f"[red]Error checking for duplicate scorecards: {e}[/red]")
+    
+    # Continue with the original function to check for duplicate scores
+    console.print("\n[bold]Checking for duplicate scores...[/bold]")
     
     # Get all sections for this scorecard
     sections_query = f"""
@@ -868,8 +1181,8 @@ def delete(scorecard: str, force: bool):
         for section in sections:
             section_id = section.get('id')
             delete_section_mutation = f"""
-            mutation DeleteSection {{
-                deleteSection(input: {{ id: "{section_id}" }}) {{
+            mutation DeleteScorecardSection {{
+                deleteScorecardSection(input: {{ id: "{section_id}" }}) {{
                     id
                 }}
             }}
@@ -1030,7 +1343,9 @@ def pull(scorecard: Optional[str], account: str, output: str):
                         if config_yaml:
                             try:
                                 # Parse the configuration YAML
-                                config_data = yaml.safe_load(config_yaml)
+                                yaml_handler = get_yaml_handler()
+                                config_yaml_stream = io.StringIO(config_yaml)
+                                config_data = yaml_handler.load(config_yaml_stream)
                                 if isinstance(config_data, dict):
                                     # Merge the configuration with the score data
                                     # This preserves the full YAML structure
@@ -1069,7 +1384,9 @@ def pull(scorecard: Optional[str], account: str, output: str):
             }
             
             with open(file_path, 'w') as f:
-                yaml.dump(final_yaml, f, default_flow_style=False, sort_keys=False)
+                # Use ruamel.yaml for better handling of multi-line strings
+                yaml_handler = get_yaml_handler()
+                yaml_handler.dump(final_yaml, f)
             
             console.print(f"[green]Saved scorecard to {file_path}[/green]")
         
@@ -1213,14 +1530,159 @@ def fix(scorecard: str, skip_duplicate_check: bool, skip_external_id_check: bool
 @click.option('--skip-external-id-check', is_flag=True, help='Skip checking for and fixing missing external IDs')
 @click.option('--file', help='Path to specific YAML file to push (if not provided, will search in scorecards/ directory)')
 @click.option('--note', help='Note to include when creating a new score version')
-def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external_id_check: bool, file: Optional[str] = None, note: Optional[str] = None):
+@click.option('--create-if-missing', is_flag=True, help='Create the scorecard if it does not exist')
+def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external_id_check: bool, file: Optional[str] = None, note: Optional[str] = None, create_if_missing: bool = False):
     """Push a scorecard to the dashboard."""
     client = create_client()
     
-    # First, resolve the scorecard identifier to an ID
-    scorecard_id = resolve_scorecard_identifier(client, scorecard)
+    # Initialize variables
+    yaml_data = None
+    scorecard_id = None
+    
+    # Load YAML configuration first
+    if file:
+        # Load from specified file
+        if not os.path.exists(file):
+            console.print(f"[red]File not found: {file}[/red]")
+            return
+        
+        try:
+            # Use ruamel.yaml for better handling of multi-line strings
+            yaml_handler = get_yaml_handler()
+            with open(file, 'r') as f:
+                yaml_data = yaml_handler.load(f)
+            console.print(f"[green]Loaded configuration from {file}[/green]")
+        except Exception as e:
+            console.print(f"[red]Error loading YAML from {file}: {e}[/red]")
+            return
+    else:
+        # Search for matching YAML file in scorecards/ directory
+        if not os.path.exists('scorecards'):
+            console.print("[red]scorecards/ directory not found[/red]")
+            return
+        
+        yaml_files = [f for f in os.listdir('scorecards') if f.endswith('.yaml')]
+        if not yaml_files:
+            console.print("[red]No YAML files found in scorecards/ directory[/red]")
+            return
+        
+        # First try to resolve the scorecard identifier to an ID to check if it exists
+        scorecard_id = resolve_scorecard_identifier(client, scorecard)
+        
+        if scorecard_id:
+            # Scorecard exists, get its details
+            query = f"""
+            query GetScorecard {{
+                getScorecard(id: "{scorecard_id}") {{
+                    id
+                    name
+                    key
+                    externalId
+                }}
+            }}
+            """
+            result = client.execute(query)
+            scorecard_data = result.get('getScorecard', {})
+            scorecard_name = scorecard_data.get('name', 'Unknown')
+            scorecard_key = scorecard_data.get('key', 'Unknown')
+            
+            # Try to find a matching file by ID, key, or name
+            matching_file = None
+            for yaml_file in yaml_files:
+                try:
+                    with open(os.path.join('scorecards', yaml_file), 'r') as f:
+                        yaml_handler = get_yaml_handler()
+                        data = yaml_handler.load(f)
+                        if (data.get('id') == scorecard_id or 
+                            data.get('key') == scorecard_key or 
+                            data.get('name') == scorecard_name or
+                            data.get('key') == scorecard or
+                            data.get('name') == scorecard):
+                            matching_file = os.path.join('scorecards', yaml_file)
+                            yaml_data = data
+                            break
+                except Exception:
+                    continue
+        else:
+            # Scorecard doesn't exist, try to find a file that matches the provided identifier
+            matching_file = None
+            for yaml_file in yaml_files:
+                try:
+                    with open(os.path.join('scorecards', yaml_file), 'r') as f:
+                        yaml_handler = get_yaml_handler()
+                        data = yaml_handler.load(f)
+                        # For new scorecards, match by filename (without extension), key, or name
+                        filename_without_ext = os.path.splitext(yaml_file)[0].lower()
+                        if (filename_without_ext == scorecard.lower() or
+                            data.get('key') == scorecard or
+                            data.get('name') == scorecard):
+                            matching_file = os.path.join('scorecards', yaml_file)
+                            yaml_data = data
+                            break
+                except Exception:
+                    continue
+        
+        if not matching_file:
+            console.print(f"[red]Could not find matching YAML file for scorecard: {scorecard}[/red]")
+            return
+        
+        console.print(f"[green]Found and loaded configuration from {matching_file}[/green]")
+    
+    # Now try to resolve the scorecard identifier to an ID (if we haven't already)
     if not scorecard_id:
+        scorecard_id = resolve_scorecard_identifier(client, scorecard)
+    
+    # If scorecard doesn't exist and create_if_missing is True, create it
+    if not scorecard_id and create_if_missing:
+        # First, resolve the account identifier to an ID
+        account_id = resolve_account_identifier(client, account)
+        if not account_id:
+            console.print(f"[red]Could not find account: {account}[/red]")
+            return
+        
+        # Extract required fields from YAML
+        scorecard_name = yaml_data.get('name')
+        scorecard_key = yaml_data.get('key')
+        scorecard_external_id = str(yaml_data.get('id', ''))
+        scorecard_description = yaml_data.get('description', '')
+        
+        if not scorecard_name or not scorecard_key:
+            console.print("[red]YAML file must contain 'name' and 'key' fields to create a new scorecard[/red]")
+            return
+        
+        # Create the scorecard
+        try:
+            create_mutation = f"""
+            mutation CreateScorecard {{
+                createScorecard(input: {{
+                    name: "{scorecard_name}"
+                    key: "{scorecard_key}"
+                    externalId: "{scorecard_external_id}"
+                    accountId: "{account_id}"
+                    description: "{scorecard_description}"
+                }}) {{
+                    id
+                    name
+                    key
+                    externalId
+                }}
+            }}
+            """
+            result = client.execute(create_mutation)
+            new_scorecard = result.get('createScorecard', {})
+            scorecard_id = new_scorecard.get('id')
+            
+            if not scorecard_id:
+                console.print("[red]Failed to create new scorecard[/red]")
+                return
+            
+            console.print(f"[green]Created new scorecard: {scorecard_name} (ID: {scorecard_id}, Key: {scorecard_key})[/green]")
+        except Exception as e:
+            console.print(f"[red]Error creating scorecard: {e}[/red]")
+            return
+    elif not scorecard_id:
         console.print(f"[red]Could not find scorecard: {scorecard}[/red]")
+        console.print("[yellow]Use --create-if-missing flag to create a new scorecard if it doesn't exist[/yellow]")
         return
     
     # Get scorecard details for display
@@ -1260,52 +1722,6 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
         scorecard_external_id = scorecard_data.get('externalId', 'None')
         
         console.print(f"[green]Found scorecard: {scorecard_name} (ID: {scorecard_id}, Key: {scorecard_key}, External ID: {scorecard_external_id})[/green]")
-        
-        # Load YAML configuration
-        yaml_data = None
-        
-        if file:
-            # Load from specified file
-            if not os.path.exists(file):
-                console.print(f"[red]File not found: {file}[/red]")
-                return
-            
-            try:
-                with open(file, 'r') as f:
-                    yaml_data = yaml.safe_load(f)
-                console.print(f"[green]Loaded configuration from {file}[/green]")
-            except Exception as e:
-                console.print(f"[red]Error loading YAML from {file}: {e}[/red]")
-                return
-        else:
-            # Search for matching YAML file in scorecards/ directory
-            if not os.path.exists('scorecards'):
-                console.print("[red]scorecards/ directory not found[/red]")
-                return
-            
-            yaml_files = [f for f in os.listdir('scorecards') if f.endswith('.yaml')]
-            if not yaml_files:
-                console.print("[red]No YAML files found in scorecards/ directory[/red]")
-                return
-            
-            # Try to find a matching file by ID, key, or name
-            matching_file = None
-            for yaml_file in yaml_files:
-                try:
-                    with open(os.path.join('scorecards', yaml_file), 'r') as f:
-                        data = yaml.safe_load(f)
-                        if data.get('id') == scorecard_id or data.get('key') == scorecard_key or data.get('name') == scorecard_name:
-                            matching_file = os.path.join('scorecards', yaml_file)
-                            yaml_data = data
-                            break
-                except Exception:
-                    continue
-            
-            if not matching_file:
-                console.print(f"[red]Could not find matching YAML file for scorecard: {scorecard_name}[/red]")
-                return
-            
-            console.print(f"[green]Found and loaded configuration from {matching_file}[/green]")
         
         # Update scorecard metadata if necessary
         if yaml_data.get('name') != scorecard_name or yaml_data.get('key') != scorecard_key or yaml_data.get('externalId') != scorecard_external_id:
@@ -1460,7 +1876,9 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
                         
                         try:
                             # Try to parse the parent configuration as YAML
-                            parent_config_obj = yaml.safe_load(parent_config)
+                            yaml_handler = get_yaml_handler()
+                            parent_config_stream = io.StringIO(parent_config)
+                            parent_config_obj = yaml_handler.load(parent_config_stream)
                         except:
                             # If parsing fails, try JSON as fallback
                             try:
@@ -1478,11 +1896,16 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
                             del parent_config_obj['parent']
                         
                         # Compare the configurations
-                        # Use sort_keys=False for both to preserve field order in the comparison
-                        # We're comparing the full score_data object, not just a subset
-                        # Convert to YAML strings for comparison to ensure consistent formatting
-                        yaml_str1 = yaml.dump(score_data_for_comparison, sort_keys=False, default_flow_style=False)
-                        yaml_str2 = yaml.dump(parent_config_obj, sort_keys=False, default_flow_style=False)
+                        # Use ruamel.yaml for better handling of multi-line strings
+                        yaml_handler = get_yaml_handler()
+                        
+                        yaml_str1 = io.StringIO()
+                        yaml_handler.dump(score_data_for_comparison, yaml_str1)
+                        yaml_str1 = yaml_str1.getvalue()
+                        
+                        yaml_str2 = io.StringIO()
+                        yaml_handler.dump(parent_config_obj, yaml_str2)
+                        yaml_str2 = yaml_str2.getvalue()
                         
                         # Log the comparison for debugging
                         console.print(f"[dim]Comparing configurations for score: {score_name}[/dim]")
@@ -1524,9 +1947,11 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
                             score_config_data['parent'] = parent_version_id
                         
                         # Convert score_data to YAML string for configuration
-                        # Use yaml.dump with sort_keys=False to preserve field order
-                        # and default_flow_style=False for better readability
-                        yaml_config = yaml.dump(score_config_data, sort_keys=False, default_flow_style=False)
+                        # Use ruamel.yaml for better handling of multi-line strings
+                        yaml_handler = get_yaml_handler()
+                        yaml_str = io.StringIO()
+                        yaml_handler.dump(score_config_data, yaml_str)
+                        yaml_config = yaml_str.getvalue()
                         
                         # Get version note - either from command line or prompt user
                         version_note = note
@@ -1651,9 +2076,11 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
                     now = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
                     
                     # Convert score_data to YAML string for configuration
-                    # Use yaml.dump with sort_keys=False to preserve field order
-                    # and default_flow_style=False for better readability
-                    yaml_config = yaml.dump(score_config_data, sort_keys=False, default_flow_style=False)
+                    # Use ruamel.yaml for better handling of multi-line strings
+                    yaml_handler = get_yaml_handler()
+                    yaml_str = io.StringIO()
+                    yaml_handler.dump(score_config_data, yaml_str)
+                    yaml_config = yaml_str.getvalue()
                     
                     # Get version note - either from command line or prompt user
                     version_note = note
@@ -1739,3 +2166,258 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
         
     except Exception as e:
         console.print(f"[red]Error during push operation: {e}[/red]") 
+
+@scorecards.command()
+@click.option('--account', help='Filter by account (accepts ID, name, or key)')
+@click.option('--limit', type=int, default=100, help='Maximum number of scorecards to check')
+def find_duplicates(account: Optional[str], limit: int):
+    """Find and manage duplicate scorecards across the system."""
+    client = create_client()
+    
+    # Build filter string for GraphQL query
+    filter_parts = []
+    if account:
+        account_id = resolve_account_identifier(client, account)
+        if not account_id:
+            click.echo(f"Account not found: {account}")
+            return
+        filter_parts.append(f'accountId: {{ eq: "{account_id}" }}')
+    
+    filter_str = ", ".join(filter_parts)
+    
+    # First, get all scorecards
+    query = f"""
+    query ListScorecards {{
+        listScorecards(filter: {{ {filter_str} }}, limit: {limit}) {{
+            items {{
+                id
+                name
+                key
+                accountId
+                createdAt
+                updatedAt
+            }}
+        }}
+    }}
+    """
+    
+    try:
+        response = client.execute(query)
+        scorecards = response.get('listScorecards', {}).get('items', [])
+        
+        if not scorecards:
+            console.print("[yellow]No scorecards found.[/yellow]")
+            return
+        
+        console.print(f"[green]Found {len(scorecards)} scorecards to check for duplicates.[/green]")
+        
+        # Group scorecards by key
+        scorecards_by_key = {}
+        for scorecard in scorecards:
+            key = scorecard.get('key')
+            if not key:
+                continue
+                
+            if key not in scorecards_by_key:
+                scorecards_by_key[key] = []
+            scorecards_by_key[key].append(scorecard)
+        
+        # Find keys with multiple scorecards
+        duplicate_keys = [key for key, cards in scorecards_by_key.items() if len(cards) > 1]
+        
+        if not duplicate_keys:
+            console.print("[green]No duplicate scorecards found.[/green]")
+            return
+        
+        console.print(f"[yellow]Found {len(duplicate_keys)} keys with duplicate scorecards:[/yellow]")
+        
+        # Create a table to display the duplicate keys
+        keys_table = Table(title="Keys with Duplicate Scorecards")
+        keys_table.add_column("#", style="dim")
+        keys_table.add_column("Key", style="blue")
+        keys_table.add_column("Count", style="magenta")
+        
+        for i, key in enumerate(duplicate_keys):
+            keys_table.add_row(
+                str(i + 1),
+                key,
+                str(len(scorecards_by_key[key]))
+            )
+        
+        console.print(keys_table)
+        
+        # Prompt user to select a key to examine
+        if click.confirm("Do you want to examine a specific key?"):
+            max_key_choice = len(duplicate_keys)
+            key_choice_str = click.prompt(
+                f"Enter the number of the key to examine (1-{max_key_choice})",
+                type=str
+            )
+            
+            try:
+                key_choice = int(key_choice_str)
+                if key_choice < 1 or key_choice > max_key_choice:
+                    console.print(f"[red]Invalid choice: {key_choice}. Must be between 1 and {max_key_choice}.[/red]")
+                    return
+            except ValueError:
+                console.print(f"[red]Invalid input: {key_choice_str}. Please enter a number.[/red]")
+                return
+            
+            selected_key = duplicate_keys[key_choice - 1]
+            duplicate_scorecards = scorecards_by_key[selected_key]
+            
+            console.print(f"\n[bold]Examining scorecards with key: {selected_key}[/bold]")
+            
+            # Create a table to display the duplicates
+            table = Table(title=f"Duplicate Scorecards with Key: {selected_key}")
+            table.add_column("#", style="dim")
+            table.add_column("ID", style="magenta")
+            table.add_column("Name", style="blue")
+            table.add_column("Account ID", style="cyan")
+            table.add_column("Created At", style="dim")
+            table.add_column("Updated At", style="dim")
+            
+            # Add index number for selection
+            for i, dup in enumerate(duplicate_scorecards):
+                table.add_row(
+                    str(i + 1),
+                    dup.get('id'),
+                    dup.get('name'),
+                    dup.get('accountId'),
+                    dup.get('createdAt'),
+                    dup.get('updatedAt')
+                )
+            
+            console.print(table)
+            
+            # Prompt user to choose which scorecard to delete
+            if click.confirm("Do you want to delete one of these duplicate scorecards?"):
+                # Get user choice
+                max_choice = len(duplicate_scorecards)
+                choice_str = click.prompt(
+                    f"Enter the number of the scorecard to delete (1-{max_choice})",
+                    type=str
+                )
+                
+                try:
+                    choice = int(choice_str)
+                    if choice < 1 or choice > max_choice:
+                        console.print(f"[red]Invalid choice: {choice}. Must be between 1 and {max_choice}.[/red]")
+                        return
+                except ValueError:
+                    console.print(f"[red]Invalid input: {choice_str}. Please enter a number.[/red]")
+                    return
+                
+                # Get the selected scorecard
+                selected_scorecard = duplicate_scorecards[choice - 1]
+                selected_id = selected_scorecard.get('id')
+                selected_name = selected_scorecard.get('name')
+                
+                # Confirm deletion
+                console.print(f"[bold red]You are about to delete scorecard: {selected_name} (ID: {selected_id})[/bold red]")
+                console.print("[red]This will permanently delete the scorecard and all its scores and versions.[/red]")
+                
+                if click.confirm("Are you sure you want to proceed?", default=False):
+                    # Get all sections and scores for this scorecard
+                    detailed_query = f"""
+                    query GetScorecardDetails {{
+                        getScorecard(id: "{selected_id}") {{
+                            id
+                            name
+                            key
+                            sections {{
+                                items {{
+                                    id
+                                    name
+                                    scores {{
+                                        items {{
+                                            id
+                                            name
+                                            versions {{
+                                                items {{
+                                                    id
+                                                }}
+                                            }}
+                                        }}
+                                    }}
+                                }}
+                            }}
+                        }}
+                    }}
+                    """
+                    
+                    try:
+                        detailed_result = client.execute(detailed_query)
+                        detailed_scorecard = detailed_result.get('getScorecard', {})
+                        sections = detailed_scorecard.get('sections', {}).get('items', [])
+                        
+                        total_sections = len(sections)
+                        total_scores = 0
+                        total_versions = 0
+                        
+                        # First, delete all versions for each score
+                        for section in sections:
+                            section_id = section.get('id')
+                            section_name = section.get('name')
+                            scores = section.get('scores', {}).get('items', [])
+                            
+                            for score in scores:
+                                score_id = score.get('id')
+                                score_name = score.get('name')
+                                versions = score.get('versions', {}).get('items', [])
+                                
+                                total_scores += 1
+                                total_versions += len(versions)
+                                
+                                # Delete each version
+                                for version in versions:
+                                    version_id = version.get('id')
+                                    delete_version_mutation = f"""
+                                    mutation DeleteScoreVersion {{
+                                        deleteScoreVersion(input: {{ id: "{version_id}" }}) {{
+                                            id
+                                        }}
+                                    }}
+                                    """
+                                    client.execute(delete_version_mutation)
+                                
+                                # Delete the score
+                                delete_score_mutation = f"""
+                                mutation DeleteScore {{
+                                    deleteScore(input: {{ id: "{score_id}" }}) {{
+                                        id
+                                    }}
+                                }}
+                                """
+                                client.execute(delete_score_mutation)
+                            
+                            # Delete the section
+                            delete_section_mutation = f"""
+                            mutation DeleteScorecardSection {{
+                                deleteScorecardSection(input: {{ id: "{section_id}" }}) {{
+                                    id
+                                }}
+                            }}
+                            """
+                            client.execute(delete_section_mutation)
+                        
+                        # Finally delete the scorecard
+                        delete_scorecard_mutation = f"""
+                        mutation DeleteScorecard {{
+                            deleteScorecard(input: {{ id: "{selected_id}" }}) {{
+                                id
+                            }}
+                        }}
+                        """
+                        client.execute(delete_scorecard_mutation)
+                        
+                        console.print(f"[green]Successfully deleted scorecard: {selected_name} (ID: {selected_id})[/green]")
+                        console.print(f"[green]Deleted {total_sections} sections, {total_scores} scores, and {total_versions} versions.[/green]")
+                        
+                    except Exception as e:
+                        console.print(f"[red]Error deleting scorecard: {e}[/red]")
+                else:
+                    console.print("[yellow]Deletion cancelled[/yellow]")
+    
+    except Exception as e:
+        console.print(f"[red]Error finding duplicate scorecards: {e}[/red]")

@@ -14,7 +14,13 @@ import type {
   AmplifyTask,
   Evaluation
 } from '@/utils/data-operations';
-import { transformEvaluation, getValueFromLazyLoader, transformAmplifyTask, processTask } from '@/utils/data-operations';
+import { 
+  transformEvaluation, 
+  getValueFromLazyLoader, 
+  transformAmplifyTask, 
+  processTask,
+  listRecentEvaluations
+} from '@/utils/data-operations';
 import { observeRecentEvaluations } from '@/utils/data-operations';
 import { observeScoreResults } from '@/utils/amplify-helpers';
 import { isEqual } from 'lodash';
@@ -54,6 +60,8 @@ type ScoreResultsSubscription = {
 type UseEvaluationDataProps = {
   accountId: string | null;
   limit?: number;
+  selectedScorecard?: string | null;
+  selectedScore?: string | null;
 };
 
 type UseEvaluationDataReturn = {
@@ -63,7 +71,12 @@ type UseEvaluationDataReturn = {
   refetch: () => void;
 };
 
-export function useEvaluationData({ accountId, limit = 24 }: UseEvaluationDataProps): UseEvaluationDataReturn {
+export function useEvaluationData({ 
+  accountId, 
+  limit = 24,
+  selectedScorecard = null,
+  selectedScore = null
+}: UseEvaluationDataProps): UseEvaluationDataReturn {
   const [evaluations, setEvaluations] = useState<ProcessedEvaluation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -71,6 +84,24 @@ export function useEvaluationData({ accountId, limit = 24 }: UseEvaluationDataPr
   const taskMapRef = useRef<Map<string, AmplifyTask>>(new Map());
   const stageMapRef = useRef<Map<string, Map<string, TaskStageType>>>(new Map());
   const activeSubscriptionRef = useRef<{ unsubscribe: () => void } | null>(null);
+  
+  // Store the current filter values in refs to use in the refetch function
+  const filterValuesRef = useRef({
+    accountId,
+    limit,
+    selectedScorecard,
+    selectedScore
+  });
+  
+  // Update the ref when filter values change
+  useEffect(() => {
+    filterValuesRef.current = {
+      accountId,
+      limit,
+      selectedScorecard,
+      selectedScore
+    };
+  }, [accountId, limit, selectedScorecard, selectedScore]);
 
   // Helper function to get task stages
   const getTaskStages = useCallback((taskId: string | null | undefined) => {
@@ -249,12 +280,25 @@ export function useEvaluationData({ accountId, limit = 24 }: UseEvaluationDataPr
   // Setup subscriptions and initial data load
   useEffect(() => {
     if (!accountId) return;
-
+    
+    // Clean up any existing subscription
+    if (activeSubscriptionRef.current) {
+      activeSubscriptionRef.current.unsubscribe();
+      activeSubscriptionRef.current = null;
+    }
+    
+    setIsLoading(true);
+    
     let subscriptions: { unsubscribe: () => void }[] = [];
     const client = getClient();
 
     // Initial data load and evaluation subscription
-    const evaluationSubscription = observeRecentEvaluations(limit).subscribe({
+    const evaluationSubscription = observeRecentEvaluations(
+      limit, 
+      accountId, 
+      selectedScorecard, 
+      selectedScore
+    ).subscribe({
       next: async ({ items, isSynced }) => {
         console.log('Received evaluations:', {
           count: items.length,
@@ -262,7 +306,11 @@ export function useEvaluationData({ accountId, limit = 24 }: UseEvaluationDataPr
             id: items[0].id,
             type: items[0].type,
             task: items[0].task
-          } : null
+          } : null,
+          filters: {
+            selectedScorecard,
+            selectedScore
+          }
         });
 
         // Transform items and filter out nulls
@@ -295,12 +343,42 @@ export function useEvaluationData({ accountId, limit = 24 }: UseEvaluationDataPr
         setEvaluations(transformedItems);
         setIsLoading(false);
       },
-      error: (error) => {
+      error: async (error) => {
         console.error('Error in evaluation subscription:', error);
-        setError('Failed to load evaluations');
-        setIsLoading(false);
+        
+        // Even if subscription fails, try to load data directly
+        try {
+          const response = await listRecentEvaluations(
+            limit,
+            accountId,
+            selectedScorecard,
+            selectedScore
+          );
+          
+          console.log('Loaded evaluations directly after subscription error:', {
+            count: response.length,
+            filters: {
+              selectedScorecard,
+              selectedScore
+            }
+          });
+          
+          // Transform items and filter out nulls
+          const transformedItems = response
+            .map(item => transformEvaluation(item))
+            .filter((item): item is ProcessedEvaluation => item !== null);
+            
+          setEvaluations(transformedItems);
+        } catch (directError) {
+          console.error('Error loading evaluations directly:', directError);
+          setError('Failed to load evaluations');
+        } finally {
+          setIsLoading(false);
+        }
       }
     });
+    
+    activeSubscriptionRef.current = evaluationSubscription;
     subscriptions.push(evaluationSubscription);
 
     // Subscribe to evaluation creates
@@ -704,18 +782,107 @@ export function useEvaluationData({ accountId, limit = 24 }: UseEvaluationDataPr
         activeSubscriptionRef.current = null;
       }
     };
-  }, [accountId, limit, handleTaskUpdate, handleStageUpdate]);
+  }, [accountId, limit, selectedScorecard, selectedScore, handleTaskUpdate, handleStageUpdate]);
 
+  // Define refetch function to reload data with current filters
   const refetch = useCallback(() => {
-    if (!accountId) return;
+    if (!filterValuesRef.current.accountId) return;
+    
+    // Clean up existing subscription
+    if (activeSubscriptionRef.current) {
+      activeSubscriptionRef.current.unsubscribe();
+      activeSubscriptionRef.current = null;
+    }
+    
     setIsLoading(true);
-    // The subscription will automatically refetch and update the data
-  }, [accountId]);
+    
+    // Create new subscription with current filter values
+    const newSubscription = observeRecentEvaluations(
+      filterValuesRef.current.limit,
+      filterValuesRef.current.accountId,
+      filterValuesRef.current.selectedScorecard,
+      filterValuesRef.current.selectedScore
+    ).subscribe({
+      next: async ({ items, isSynced }) => {
+        console.log('Refetched evaluations:', {
+          count: items.length,
+          filters: {
+            selectedScorecard: filterValuesRef.current.selectedScorecard,
+            selectedScore: filterValuesRef.current.selectedScore
+          }
+        });
 
-  return {
-    evaluations,
-    isLoading,
-    error,
-    refetch
-  };
+        // Transform items and filter out nulls
+        const transformedItems = items
+          .map(item => {
+            // Check if we have task data in our map
+            if (item.taskId) {
+              const taskData = taskMapRef.current.get(item.taskId);
+              if (taskData) {
+                // Get stages from stageMap
+                const taskStages = stageMapRef.current.get(item.taskId);
+                const stageItems = taskStages ? Array.from(taskStages.values()) : [];
+                
+                // Add stages to task data
+                taskData.stages = {
+                  data: {
+                    items: stageItems
+                  }
+                };
+                
+                // Update the item with our task data
+                item.task = taskData;
+              }
+            }
+            
+            return transformEvaluation(item);
+          })
+          .filter((item): item is ProcessedEvaluation => item !== null);
+
+        setEvaluations(transformedItems);
+        setIsLoading(false);
+      },
+      error: (error) => {
+        console.error('Error in evaluation refetch:', error);
+        
+        // Even if subscription fails, try to load data directly
+        async function loadDataDirectly() {
+          try {
+            const response = await listRecentEvaluations(
+              filterValuesRef.current.limit,
+              filterValuesRef.current.accountId,
+              filterValuesRef.current.selectedScorecard,
+              filterValuesRef.current.selectedScore
+            );
+            
+            console.log('Loaded evaluations directly after subscription error:', {
+              count: response.length,
+              filters: {
+                selectedScorecard: filterValuesRef.current.selectedScorecard,
+                selectedScore: filterValuesRef.current.selectedScore
+              }
+            });
+            
+            // Transform items and filter out nulls
+            const transformedItems = response
+              .map(item => transformEvaluation(item))
+              .filter((item): item is ProcessedEvaluation => item !== null);
+              
+            setEvaluations(transformedItems);
+          } catch (directError) {
+            console.error('Error loading evaluations directly:', directError);
+            setError('Failed to load evaluations');
+          } finally {
+            setIsLoading(false);
+          }
+        }
+        
+        loadDataDirectly();
+      }
+    });
+    
+    activeSubscriptionRef.current = newSubscription;
+  }, []);
+
+  return { evaluations, isLoading, error, refetch };
 } 

@@ -46,6 +46,7 @@ function AuthWrapper({ children }: { children: React.ReactNode }) {
     '/documentation/concepts/evaluations',
     '/documentation/concepts/tasks',
     '/documentation/concepts/items',
+    '/documentation/concepts/score-results',
     '/documentation/methods/add-edit-source',
     '/documentation/methods/profile-source',
     '/documentation/methods/add-edit-scorecard',
@@ -69,7 +70,7 @@ function AuthWrapper({ children }: { children: React.ReactNode }) {
     if (authStatus === 'unauthenticated' && !isPublicPath) {
       router.push('/');
     } else if (authStatus === 'authenticated' && pathname === '/') {
-      router.push('/lab/activity');
+      router.push('/lab/items');
     }
   }, [authStatus, router, pathname]);
 
