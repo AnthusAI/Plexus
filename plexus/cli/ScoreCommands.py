@@ -456,10 +456,10 @@ score.add_command(versions)
 @click.option('--scorecard', required=True, help='Scorecard containing the score (accepts ID, name, key, or external ID)')
 @click.option('--score', required=True, help='Score to optimize prompts for (accepts ID, name, key, or external ID)')
 @click.option('--output', help='Output file path for the optimized YAML')
-@click.option('--model', default="claude-3-7-sonnet-20250219", help='Bedrock model ID to use for optimization')
+@click.option('--model', default="claude-3-7-sonnet-20250219", help='Anthropic model ID to use for optimization')
 @click.option('--debug', is_flag=True, help='Enable debug mode with more verbose output')
 def optimize(scorecard: str, score: str, output: Optional[str], model: str, debug: bool = False):
-    """Optimize prompts for a score using Claude AI via AWS Bedrock."""
+    """Optimize prompts for a score using Claude AI via ChatAnthropic."""
     client = create_client()
     
     # Get the AWS account ID from the STS service
