@@ -157,6 +157,9 @@ class Extractor(BaseNode, LangChainUser):
             
             # Create the result state with the extracted text
             state_dict = state.model_dump()
+            
+            # Update the state dictionary with the extracted text
+            state_dict["extracted_text"] = extraction_result["extracted_text"]
                 
             result_state = self.GraphState(
                 **state_dict
