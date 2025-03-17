@@ -1,25 +1,21 @@
 import click
 import os
-from pathlib import Path
 import json
+import rich
+import tempfile
+import urllib3.exceptions
+import requests
+from pathlib import Path
 from ruamel.yaml import YAML
 from rich.table import Table
 from rich.panel import Panel
 from plexus.cli.console import console
 from plexus.dashboard.api.client import PlexusDashboardClient
+from plexus.cli.file_editor import FileEditor
 from typing import Optional
-import rich
-import datetime
-import tempfile
-from langchain_aws import ChatBedrock
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, ToolMessage
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
-import botocore.exceptions
-import urllib3.exceptions
-import re
-import requests
-from plexus.cli.file_editor import FileEditor
 
 # Define the main command groups that will be exported
 @click.group()
