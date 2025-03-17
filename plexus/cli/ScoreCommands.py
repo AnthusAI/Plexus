@@ -12,7 +12,13 @@ import rich
 import datetime
 import tempfile
 from langchain_aws import ChatBedrock
+from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, ToolMessage
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+import botocore.exceptions
+import urllib3.exceptions
+import re
+import requests
 
 # Define the main command groups that will be exported
 @click.group()
@@ -450,8 +456,9 @@ score.add_command(versions)
 @click.option('--scorecard', required=True, help='Scorecard containing the score (accepts ID, name, key, or external ID)')
 @click.option('--score', required=True, help='Score to optimize prompts for (accepts ID, name, key, or external ID)')
 @click.option('--output', help='Output file path for the optimized YAML')
-@click.option('--model', default="us.anthropic.claude-3-7-sonnet-20250219-v1:0", help='Bedrock model ID to use for optimization')
-def optimize(scorecard: str, score: str, output: Optional[str], model: str):
+@click.option('--model', default="claude-3-7-sonnet-20250219", help='Bedrock model ID to use for optimization')
+@click.option('--debug', is_flag=True, help='Enable debug mode with more verbose output')
+def optimize(scorecard: str, score: str, output: Optional[str], model: str, debug: bool = False):
     """Optimize prompts for a score using Claude AI via AWS Bedrock."""
     client = create_client()
     
@@ -478,9 +485,7 @@ def optimize(scorecard: str, score: str, output: Optional[str], model: str):
     except Exception as e:
         console.print("[yellow]Could not load documentation file[/yellow]")
         console.print(f"[red]Error: {e}[/red]")
-            
-    except Exception as e:
-        console.print("[yellow]Could not load documentation file[/yellow]")
+        doc_path = None
 
     console.print(f"[bold]Optimizing prompts for score: {score} in scorecard: {scorecard}[/bold]")
     
@@ -610,80 +615,56 @@ def optimize(scorecard: str, score: str, output: Optional[str], model: str):
             
             console.print(f"[green]YAML content saved to temporary file: {temp_path}[/green]")
             
-            # Initialize ChatBedrock
-            console.print(f"[bold]Initializing ChatBedrock with model: {model}[/bold]")
-            llm = ChatBedrock(
-                model_id=model,
-                model_kwargs={"max_tokens": 4096}  # Increase max tokens to handle larger responses
+            # Initialize ChatAnthropic
+            console.print(f"[bold]Initializing ChatAnthropic with model: {model}[/bold]")
+            llm = ChatAnthropic(
+                model_name=model,
+                verbose=True,
+                temperature=0.2,  # Lower temperature for more deterministic responses
+                max_tokens=8096   # Increase max tokens to handle larger responses
             )
             
-            # Define the official Anthropic text editor tool
+            # Define the official Anthropic text editor tool - only include type and name as required by the API
             tool = {
                 "type": "text_editor_20250124", 
-                "name": "str_replace_editor",
-                "description": "A tool for editing text files and YAML content",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "command": {
-                            "type": "string",
-                            "enum": ["view", "str_replace", "create", "insert", "undo_edit"],
-                            "description": "The command to execute"
-                        },
-                        "path": {
-                            "type": "string",
-                            "description": "The path to the file to view or edit"
-                        },
-                        "old_str": {
-                            "type": "string",
-                            "description": "The text to replace (for str_replace command)"
-                        },
-                        "new_str": {
-                            "type": "string",
-                            "description": "The new text to insert (for str_replace or insert commands)"
-                        },
-                        "file_text": {
-                            "type": "string",
-                            "description": "The content to write to the new file (for create command)"
-                        },
-                        "insert_line": {
-                            "type": "integer",
-                            "description": "The line number after which to insert text (for insert command)"
-                        },
-                        "view_range": {
-                            "type": "array",
-                            "items": {
-                                "type": "integer"
-                            },
-                            "description": "The range of lines to view (for view command)"
-                        }
-                    },
-                    "required": ["command", "path"]
-                }
+                "name": "str_replace_editor"
             }
             
             # Bind the tool to the LLM
             llm_with_tools = llm.bind_tools([tool])
             
             # Create the initial prompt for Claude
+            doc_instructions = ""
+            if doc_path and os.path.exists(doc_path):
+                doc_instructions = f"""
+                First, please view the documentation file at {doc_path} to understand the YAML configuration format.
+                This documentation will help you understand how to structure the YAML and break it into multiple nodes if needed.
+                """
+            
             prompt = f"""
             I have a YAML configuration file for a call center quality assurance score at {temp_path}. 
             The YAML contains system_message and user_message fields that are used as prompts for an LLM to evaluate call transcripts.
             
-            First, please view the file using the view command.
+            {doc_instructions}
             
-            Then, please improve the prompts based on best prompt engineering practices:
+            Then, please view the YAML file using the view command.
             
-            1. Make the prompts more clear and specific
-            2. Ensure they guide the model through a structured chain of thought
-            3. Improve the clarity of evaluation criteria
-            4. Make sure the prompts are well-formatted and easy to understand
-            5. Ensure the prompts will lead to consistent, accurate evaluations
-            6. Maintain the same overall structure and purpose of the prompts
+            After reviewing both files, please optimize the YAML configuration by:
             
-            Focus only on improving the system_message and user_message fields.
+            1. Improving the prompts based on best prompt engineering practices:
+                - Make the prompts more clear and specific
+                - Ensure they guide the model through a structured chain of thought
+                - Improve the clarity of evaluation criteria
+                - Make sure the prompts are well-formatted and easy to understand
+                - Ensure the prompts will lead to consistent, accurate evaluations
             
-            After viewing the file, use the str_replace command to provide the improved YAML.
+            2. Breaking the YAML into multiple nodes where appropriate:
+                - Identify logical sections that could be separated into different nodes
+                - Use the insert and str_replace commands to restructure the YAML
+                - Maintain the overall functionality while improving organization
+                - Follow the structure guidelines from the documentation
+            
+            Use the appropriate commands (view, str_replace, insert) to make your changes to the file.
             """
             
             console.print("[bold]Sending request to Claude to view and optimize the YAML file...[/bold]")
@@ -691,248 +672,196 @@ def optimize(scorecard: str, score: str, output: Optional[str], model: str):
             # Process the conversation with Claude
             try:
                 # Start the conversation with just the initial prompt
-                initial_messages = [HumanMessage(content=prompt)]
-                response = llm_with_tools.invoke(initial_messages)
+                conversation_messages = [HumanMessage(content=prompt)]
                 
                 # Initialize tracking variables
-                optimized_yaml = None
-                explanation = None
                 file_edited = False
                 
-                # Keep track of the full conversation history for subsequent calls
-                # Start with just the initial prompt and response
-                conversation_messages = [HumanMessage(content=prompt), response]
-                
-                # Track which tool calls we've already processed to avoid duplicates
-                processed_tool_ids = set()
-                
-                # Process the conversation until we get the optimized YAML
-                max_turns = 5  # Limit the number of turns to prevent infinite loops
+                # Process tool calls
+                max_turns = 10  # Allow more turns
                 current_turn = 0
                 
                 while current_turn < max_turns:
                     current_turn += 1
+                    console.print(f"[cyan]Processing turn {current_turn}/{max_turns}[/cyan]")
                     
-                    # Check if there are tool calls in the response
-                    if hasattr(response, 'tool_calls') and response.tool_calls:
-                        for tool_call in response.tool_calls:
-                            # Get the tool name and arguments
-                            tool_name = tool_call.get('name', '')
-                            tool_args = tool_call.get('args', {})
-                            tool_id = tool_call.get('id', '')
-                            
-                            command = tool_args.get('command', '')
-                            console.print(f"[green]Claude is using command: {command}[/green]")
-                            
-                            if command == "view":
-                                # Handle view command
-                                file_path = tool_args.get('path', '')
-                                
-                                if os.path.exists(file_path):
-                                    with open(file_path, 'r') as f:
-                                        file_content = f.read()
-                                    
-                                    # Create a tool response
-                                    tool_response = {
-                                        "tool_call_id": tool_id,
-                                        "content": file_content
-                                    }
-                                    
-                                    # Only add the tool response if we haven't processed this tool ID before
-                                    if tool_id not in processed_tool_ids:
-                                        conversation_messages.append(ToolMessage(content=tool_response["content"], tool_call_id=tool_id))
-                                        processed_tool_ids.add(tool_id)
-                                    
-                                    # Get the next response
-                                    response = llm_with_tools.invoke(conversation_messages)
-                                    # Add the response to the conversation history
-                                    conversation_messages.append(response)
-                                else:
-                                    console.print(f"[red]File not found: {file_path}[/red]")
-                                    break
-                            
-                            elif command == "str_replace":
-                                # Handle str_replace command
-                                file_path = tool_args.get('path', '')
-                                old_str = tool_args.get('old_str', '')
-                                new_str = tool_args.get('new_str', '')
-                                
-                                if old_str and new_str:
-                                    # Read the file content to check for matches
-                                    with open(file_path, 'r') as f:
-                                        content = f.read()
-                                    
-                                    # Check for matches
-                                    match_count = content.count(old_str)
-                                    if match_count == 0:
-                                        error_message = "Error: No match found for replacement text"
-                                        console.print(f"[red]{error_message}[/red]")
-                                        
-                                        # Create an error tool response
-                                        tool_response = {
-                                            "tool_call_id": tool_id,
-                                            "content": error_message,
-                                            "is_error": True
-                                        }
-                                        
-                                        conversation_messages.append(ToolMessage(content=tool_response["content"], tool_call_id=tool_id))
-                                        conversation_messages.append(HumanMessage(content="Please try again with a different approach. You can use the create command to provide the entire optimized YAML."))
-                                        
-                                        response = llm_with_tools.invoke(conversation_messages)
-                                        conversation_messages.append(response)
-                                        continue
-                                    
-                                    if match_count > 1:
-                                        warning_message = f"Warning: Found {match_count} matches for the text to replace. This might lead to unexpected results."
-                                        console.print(f"[yellow]{warning_message}[/yellow]")
-                                    
-                                    # Explicitly update the file content with the replacement
-                                    updated_content = content.replace(old_str, new_str)
-                                    with open(file_path, 'w') as f:
-                                        f.write(updated_content)
-                                    
-                                    file_edited = True
-                                    
-                                    # Create a tool response
-                                    tool_response = {
-                                        "tool_call_id": tool_id,
-                                        "content": "Successfully replaced text and updated the file"
-                                    }
-                                    
-                                    # Only add the tool response if we haven't processed this tool ID before
-                                    if tool_id not in processed_tool_ids:
-                                        conversation_messages.append(ToolMessage(content=tool_response["content"], tool_call_id=tool_id))
-                                        processed_tool_ids.add(tool_id)
-                                    
-                                    # Get the next response
-                                    response = llm_with_tools.invoke(conversation_messages)
-                                    # Add the response to the conversation history
-                                    conversation_messages.append(response)
-                                else:
-                                    console.print("[red]Missing old_str or new_str for str_replace command[/red]")
-                                    break
-                            
-                            elif command == "create":
-                                # Handle create command
-                                file_path = tool_args.get('path', '')
-                                file_text = tool_args.get('file_text', '')
-                                
-                                if file_text:
-                                    # The text editor tool handles file creation
-                                    file_edited = True
-                                    
-                                    # Create a tool response
-                                    tool_response = {
-                                        "tool_call_id": tool_id,
-                                        "content": "Successfully created file"
-                                    }
-                                    
-                                    # # Continue the conversation with the tool response
-                                    # follow_up_message = "Please explain the key improvements you made to the prompts."
-                                    
-                                    # Only add the tool response if we haven't processed this tool ID before
-                                    if tool_id not in processed_tool_ids:
-                                        conversation_messages.append(ToolMessage(content=tool_response["content"], tool_call_id=tool_id))
-                                        processed_tool_ids.add(tool_id)
-                                    
-                                    # conversation_messages.append(HumanMessage(content=follow_up_message))
-                                    
-                                    # Get the explanation
-                                    explanation_response = llm_with_tools.invoke(conversation_messages)
-                                    explanation = explanation_response.content
-                                    
-                                    # We're done
-                                    break
-                                else:
-                                    console.print("[red]Missing file_text for create command[/red]")
-                                    break
+                    # Get response from Claude
+                    response = invoke_with_retry(llm_with_tools, conversation_messages)
                     
-                    # If we have the optimized YAML, we're done
-                    if optimized_yaml:
-                        break
-                    
-                    # If we have an explanation and the file was edited, we're done
-                    if explanation and file_edited:
-                        break
-                    
-                    # If there are no tool calls, check if the response contains YAML content
-                    if not hasattr(response, 'tool_calls') or not response.tool_calls:
-                        # Try to extract YAML content from the response
-                        response_text = response.content
+                    # Debug: Print the full response structure
+                    if debug:
+                        console.print("[magenta]Full response structure:[/magenta]")
+                        console.print(f"[magenta]{response}[/magenta]")
+                        if hasattr(response, 'content'):
+                            console.print("[magenta]Response content:[/magenta]")
+                            console.print(f"[magenta]{response.content}[/magenta]")
                         
-                        # Look for YAML content between triple backticks
-                        import re
-                        yaml_pattern = r"```(?:yaml)?\n(.*?)```"
-                        yaml_matches = re.findall(yaml_pattern, response_text, re.DOTALL)
+                        # Check if response was truncated
+                        if hasattr(response, 'response_metadata') and response.response_metadata.get('stop_reason') == 'max_tokens':
+                            console.print("[yellow]Warning: Response was truncated due to max_tokens limit[/yellow]")
+                    
+                    # Check if there's a tool use in the response
+                    tool_use_found = False
+                    
+                    # Process the response content
+                    if hasattr(response, 'content') and isinstance(response.content, type([])):
+                        for content_item in response.content:
+                            if isinstance(content_item, type({})) and content_item.get('type') == 'tool_use':
+                                tool_use_found = True
+                                
+                                # Extract tool information
+                                tool_name = content_item.get('name', '')
+                                tool_id = content_item.get('id', '')
+                                tool_input = content_item.get('input', {})
+                                command = tool_input.get('command', '')
+                                
+                                console.print(f"[green]Claude is using command: {command}[/green]")
+                                
+                                # Debug: Print the full tool input
+                                if debug:
+                                    console.print(f"[magenta]Tool input: {json.dumps(tool_input, indent=2)}[/magenta]")
+                                
+                                # Process the command
+                                tool_result_content = None
+                                
+                                if command == "view":
+                                    file_path = tool_input.get('path', '')
+                                    if os.path.exists(file_path):
+                                        with open(file_path, 'r') as f:
+                                            tool_result_content = f.read()
+                                    else:
+                                        tool_result_content = f"Error: File not found: {file_path}"
+                                
+                                elif command == "str_replace":
+                                    file_path = tool_input.get('path', '')
+                                    old_str = tool_input.get('old_str', '')
+                                    new_str = tool_input.get('new_str', '')
+                                    
+                                    console.print(f"[blue]str_replace: path={file_path}[/blue]")
+                                    if debug:
+                                        console.print(f"[blue]old_str length: {len(old_str) if old_str else 0} chars[/blue]")
+                                        console.print(f"[blue]new_str length: {len(new_str) if new_str else 0} chars[/blue]")
+                                                                        
+                                    if os.path.exists(file_path) and old_str and new_str:
+                                        with open(file_path, 'r') as f:
+                                            content = f.read()
+                                        
+                                        match_count = content.count(old_str)
+                                        console.print(f"[blue]Found {match_count} matches for replacement[/blue]")
+                                        
+                                        if match_count == 0:
+                                            tool_result_content = "Error: No match found for replacement text"
+                                            console.print(f"[red]{tool_result_content}[/red]")
+                                            # Print a snippet of the old_str to help debug
+                                            if debug and old_str and len(old_str) > 50:
+                                                console.print(f"[red]First 50 chars of old_str: {old_str[:50]}...[/red]")
+                                                # Also print a snippet of the file content
+                                                if content and len(content) > 100:
+                                                    console.print(f"[red]First 100 chars of file content: {content[:100]}...[/red]")
+                                                
+                                                # Save the problematic inputs to files for inspection
+                                                debug_dir = os.path.join(os.path.dirname(file_path), "debug")
+                                                os.makedirs(debug_dir, exist_ok=True)
+                                                
+                                                # Save old_str
+                                                with open(os.path.join(debug_dir, "old_str.txt"), 'w') as f:
+                                                    f.write(old_str)
+                                                console.print(f"[yellow]Saved old_str to {os.path.join(debug_dir, 'old_str.txt')}[/yellow]")
+                                                
+                                                # Save file content
+                                                with open(os.path.join(debug_dir, "file_content.txt"), 'w') as f:
+                                                    f.write(content)
+                                                console.print(f"[yellow]Saved file content to {os.path.join(debug_dir, 'file_content.txt')}[/yellow]")
+                                        else:
+                                            updated_content = content.replace(old_str, new_str)
+                                            
+                                            # Check if content actually changed
+                                            if updated_content == content:
+                                                console.print("[yellow]Warning: Content unchanged after replacement[/yellow]")
+                                            
+                                            with open(file_path, 'w') as f:
+                                                f.write(updated_content)
+                                            
+                                            file_edited = True
+                                            tool_result_content = f"Successfully replaced text ({match_count} occurrences)"
+                                            console.print(f"[green]{tool_result_content}[/green]")
+                                    else:
+                                        missing = []
+                                        if not os.path.exists(file_path):
+                                            missing.append("file not found")
+                                        if not old_str:
+                                            missing.append("old_str missing")
+                                        if not new_str:
+                                            missing.append("new_str missing")
+                                        
+                                        tool_result_content = f"Error: Missing parameters or file not found ({', '.join(missing)})"
+                                        console.print(f"[red]{tool_result_content}[/red]")
+                                
+                                elif command == "insert":
+                                    file_path = tool_input.get('path', '')
+                                    insert_line = tool_input.get('insert_line', 0)
+                                    new_str = tool_input.get('new_str', '')
+                                    
+                                    if os.path.exists(file_path) and new_str is not None:
+                                        with open(file_path, 'r') as f:
+                                            lines = f.readlines()
+                                        
+                                        if insert_line < 0:
+                                            insert_line = 0
+                                        elif insert_line > len(lines):
+                                            insert_line = len(lines)
+                                        
+                                        if not new_str.endswith('\n'):
+                                            new_str += '\n'
+                                        
+                                        lines.insert(insert_line, new_str)
+                                        
+                                        with open(file_path, 'w') as f:
+                                            f.writelines(lines)
+                                        
+                                        file_edited = True
+                                        tool_result_content = f"Successfully inserted text at line {insert_line}"
+                                    else:
+                                        tool_result_content = "Error: Missing parameters or file not found"
+                                
+                                elif command == "create":
+                                    file_path = tool_input.get('path', '')
+                                    file_text = tool_input.get('file_text', '')
+                                    
+                                    if file_path and file_text:
+                                        with open(file_path, 'w') as f:
+                                            f.write(file_text)
+                                        
+                                        file_edited = True
+                                        tool_result_content = f"Successfully created file at {file_path}"
+                                    else:
+                                        tool_result_content = "Error: Missing parameters"
+                                
+                                # Create a tool result message and add it to the conversation
+                                if tool_result_content is not None:
+                                    tool_result = ToolMessage(
+                                        content=tool_result_content,
+                                        tool_call_id=tool_id,
+                                        name=tool_name
+                                    )
+                                    
+                                    # Add the response to the conversation
+                                    conversation_messages.append(response)
+                                    conversation_messages.append(tool_result)
+                                    break  # Process one tool use at a time
+                    
+                    if not tool_use_found:
+                        # No tool use found, add the response to the conversation and check if we're done
+                        conversation_messages.append(response)
                         
-                        if yaml_matches:
-                            optimized_yaml = yaml_matches[0].strip()
-                            explanation = response_text
+                        if file_edited:
+                            # If we've edited the file and Claude is now just providing text, we're done
+                            console.print("[green]File editing complete[/green]")
                             break
                         else:
                             # Ask Claude to use the tools
-                            # follow_up_message = "Please use the view command to see the YAML file, and then use the str_replace command to provide the improved YAML."
-                            # conversation_messages.append(HumanMessage(content=follow_up_message))
-                            response = llm_with_tools.invoke(conversation_messages)
-                            conversation_messages.append(response)
-                
-                # Display the explanation if we have it
-                if explanation:
-                    console.print("\n[bold]Claude's explanation of improvements:[/bold]")
-                    console.print(explanation)
-                
-                # Check if the file was edited directly by Claude using the tools
-                if file_edited:
-                    # The file was successfully edited by Claude using the tools
-                    if output:
-                        # If an output path was specified, copy the edited file to that location
-                        with open(temp_path, 'r') as src, open(output, 'w') as dst:
-                            dst.write(src.read())
-                        console.print(f"[bold green]Optimized YAML saved to: {output}[/bold green]")
-                    else:
-                        # Otherwise, just inform the user where the optimized file is
-                        console.print(f"[bold green]Optimized YAML is available at: {temp_path}[/bold green]")
-                    
-                    # Verify the YAML is valid using ruamel.yaml
-                    try:
-                        with open(temp_path, 'r') as f:
-                            edited_content = f.read()
-                        
-                        yaml_verifier = YAML()
-                        yaml_verifier.load(io.StringIO(edited_content))
-                        console.print("[green]Optimized YAML validation successful[/green]")
-                    except Exception as e:
-                        console.print(f"[red]Warning: The optimized YAML may not be valid: {e}[/red]")
-                
-                # Save the optimized YAML if we have it (this is for the non-tool-based approach)
-                elif optimized_yaml:
-                    if output:
-                        # Create backup if file exists
-                        if os.path.exists(output):
-                            backup_path = f"{output}.backup"
-                            with open(output, 'r') as src, open(backup_path, 'w') as dst:
-                                dst.write(src.read())
-                            console.print(f"[green]Created backup at: {backup_path}[/green]")
-                        
-                        with open(output, 'w') as f:
-                            f.write(optimized_yaml)
-                        console.print(f"[bold green]Optimized YAML saved to: {output}[/bold green]")
-                    else:
-                        # Create a new temporary file for the optimized YAML in the tmp directory
-                        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', dir=tmp_dir, delete=False) as opt_file:
-                            opt_path = opt_file.name
-                            opt_file.write(optimized_yaml)
-                        console.print(f"[bold green]Optimized YAML saved to: {opt_path}[/bold green]")
-                    
-                    # Verify the YAML is valid using ruamel.yaml
-                    try:
-                        yaml_verifier = YAML()
-                        yaml_verifier.load(io.StringIO(optimized_yaml))
-                        console.print("[green]Optimized YAML validation successful[/green]")
-                    except Exception as e:
-                        console.print(f"[red]Warning: The optimized YAML may not be valid: {e}[/red]")
-                else:
-                    console.print("[red]No optimized YAML was generated. Please try again.[/red]")
+                            follow_up = "Please use the text editor tool to make your changes to the YAML file. Start with the view command to see the file contents."
+                            conversation_messages.append(HumanMessage(content=follow_up))
             
             except Exception as e:
                 console.print(f"[red]Error during optimization: {str(e)}[/red]")
@@ -940,12 +869,39 @@ def optimize(scorecard: str, score: str, output: Optional[str], model: str):
                 console.print(f"[red]{traceback.format_exc()}[/red]")
             
             # Clean up the temporary file only if we're not using it as the output
-            if output or (not file_edited and not optimized_yaml):
+            if output or not file_edited:
                 try:
                     os.unlink(temp_path)
                 except:
                     pass
             
+            # Check if the file was edited
+            if file_edited:
+                console.print("[green]File editing completed successfully[/green]")
+                
+                # The file was successfully edited by Claude
+                if output:
+                    # If an output path was specified, copy the edited file to that location
+                    with open(temp_path, 'r') as src, open(output, 'w') as dst:
+                        dst.write(src.read())
+                    console.print(f"[bold green]Optimized YAML saved to: {output}[/bold green]")
+                else:
+                    # Otherwise, just inform the user where the optimized file is
+                    console.print(f"[bold green]Optimized YAML is available at: {temp_path}[/bold green]")
+                
+                # Verify the YAML is valid
+                try:
+                    with open(temp_path, 'r') as f:
+                        edited_content = f.read()
+                    
+                    yaml_verifier = YAML()
+                    yaml_verifier.load(io.StringIO(edited_content))
+                    console.print("[green]Optimized YAML validation successful[/green]")
+                except Exception as e:
+                    console.print(f"[red]Warning: The optimized YAML may not be valid: {e}[/red]")
+            else:
+                console.print("[red]No changes were made to the file. The optimization process did not result in any edits.[/red]")
+                console.print("[yellow]Try running with --debug flag for more detailed information.[/yellow]")
         except Exception as e:
             console.print(f"[red]Error parsing YAML content: {str(e)}[/red]")
             import traceback
@@ -957,3 +913,23 @@ def optimize(scorecard: str, score: str, output: Optional[str], model: str):
         console.print(f"[red]{traceback.format_exc()}[/red]")
 
 score.add_command(optimize)
+
+# Define retry decorator for API calls
+@retry(
+    retry=retry_if_exception_type((
+        urllib3.exceptions.ReadTimeoutError,  # General HTTP timeout
+        urllib3.exceptions.ConnectTimeoutError,  # Connection timeout
+        urllib3.exceptions.MaxRetryError,  # Max retries exceeded
+        requests.exceptions.Timeout,  # General requests timeout
+        requests.exceptions.ConnectionError,  # Connection error
+        requests.exceptions.RequestException,  # General requests exception
+        # Add any Anthropic-specific exceptions here if they exist
+    )),
+    wait=wait_exponential(multiplier=1, min=4, max=60),
+    stop=stop_after_attempt(5),
+    reraise=True,
+    before_sleep=lambda retry_state: console.print(f"[yellow]API timeout, retrying (attempt {retry_state.attempt_number}/5)...[/yellow]")
+)
+def invoke_with_retry(llm, messages):
+    """Invoke the LLM with retry logic for handling timeouts and connection errors."""
+    return llm.invoke(messages)
