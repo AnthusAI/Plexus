@@ -19,6 +19,7 @@ import botocore.exceptions
 import urllib3.exceptions
 import re
 import requests
+from plexus.cli.file_editor import FileEditor
 
 # Define the main command groups that will be exported
 @click.group()
@@ -461,6 +462,7 @@ score.add_command(versions)
 def optimize(scorecard: str, score: str, output: Optional[str], model: str, debug: bool = False):
     """Optimize prompts for a score using Claude AI via ChatAnthropic."""
     client = create_client()
+    file_editor = FileEditor(debug=debug)
     
     # Get the AWS account ID from the STS service
     try:
@@ -726,10 +728,9 @@ def optimize(scorecard: str, score: str, output: Optional[str], model: str, debu
                                 
                                 if command == "view":
                                     file_path = tool_input.get('path', '')
-                                    if os.path.exists(file_path):
-                                        with open(file_path, 'r') as f:
-                                            tool_result_content = f.read()
-                                    else:
+                                    try:
+                                        tool_result_content = file_editor.view(file_path)
+                                    except FileNotFoundError:
                                         tool_result_content = f"Error: File not found: {file_path}"
                                 
                                 elif command == "str_replace":
@@ -741,21 +742,17 @@ def optimize(scorecard: str, score: str, output: Optional[str], model: str, debu
                                     if debug:
                                         console.print(f"[blue]old_str length: {len(old_str) if old_str else 0} chars[/blue]")
                                         console.print(f"[blue]new_str length: {len(new_str) if new_str else 0} chars[/blue]")
-                                                                        
-                                    if os.path.exists(file_path) and old_str and new_str:
-                                        with open(file_path, 'r') as f:
-                                            content = f.read()
-                                        
-                                        match_count = content.count(old_str)
-                                        console.print(f"[blue]Found {match_count} matches for replacement[/blue]")
-                                        
-                                        if match_count == 0:
-                                            tool_result_content = "Error: No match found for replacement text"
-                                            console.print(f"[red]{tool_result_content}[/red]")
-                                            # Print a snippet of the old_str to help debug
-                                            if debug and old_str and len(old_str) > 50:
-                                                console.print(f"[red]First 50 chars of old_str: {old_str[:50]}...[/red]")
-                                                # Also print a snippet of the file content
+                                    
+                                    tool_result_content = file_editor.str_replace(file_path, old_str, new_str)
+                                    
+                                    if tool_result_content.startswith("Error: No match found"):
+                                        console.print(f"[red]{tool_result_content}[/red]")
+                                        # Print a snippet of the old_str to help debug
+                                        if debug and old_str and len(old_str) > 50:
+                                            console.print(f"[red]First 50 chars of old_str: {old_str[:50]}...[/red]")
+                                            # Also print a snippet of the file content
+                                            try:
+                                                content = file_editor.view(file_path)
                                                 if content and len(content) > 100:
                                                     console.print(f"[red]First 100 chars of file content: {content[:100]}...[/red]")
                                                 
@@ -772,29 +769,24 @@ def optimize(scorecard: str, score: str, output: Optional[str], model: str, debu
                                                 with open(os.path.join(debug_dir, "file_content.txt"), 'w') as f:
                                                     f.write(content)
                                                 console.print(f"[yellow]Saved file content to {os.path.join(debug_dir, 'file_content.txt')}[/yellow]")
-                                        else:
-                                            updated_content = content.replace(old_str, new_str)
-                                            
-                                            # Check if content actually changed
-                                            if updated_content == content:
-                                                console.print("[yellow]Warning: Content unchanged after replacement[/yellow]")
-                                            
-                                            with open(file_path, 'w') as f:
-                                                f.write(updated_content)
-                                            
-                                            file_edited = True
-                                            tool_result_content = f"Successfully replaced text ({match_count} occurrences)"
-                                            console.print(f"[green]{tool_result_content}[/green]")
+                                            except FileNotFoundError:
+                                                pass
+                                    elif tool_result_content.startswith("Successfully"):
+                                        console.print(f"[green]{tool_result_content}[/green]")
+                                        file_edited = True
                                     else:
-                                        missing = []
-                                        if not os.path.exists(file_path):
-                                            missing.append("file not found")
-                                        if not old_str:
-                                            missing.append("old_str missing")
-                                        if not new_str:
-                                            missing.append("new_str missing")
-                                        
-                                        tool_result_content = f"Error: Missing parameters or file not found ({', '.join(missing)})"
+                                        console.print(f"[red]{tool_result_content}[/red]")
+                                
+                                elif command == "undo_edit":
+                                    file_path = tool_input.get('path', '')
+                                    console.print(f"[blue]undo_edit: path={file_path}[/blue]")
+                                    
+                                    tool_result_content = file_editor.undo_edit(file_path)
+                                    
+                                    if tool_result_content.startswith("Successfully"):
+                                        console.print(f"[green]{tool_result_content}[/green]")
+                                        file_edited = True
+                                    else:
                                         console.print(f"[red]{tool_result_content}[/red]")
                                 
                                 elif command == "insert":
@@ -802,40 +794,28 @@ def optimize(scorecard: str, score: str, output: Optional[str], model: str, debu
                                     insert_line = tool_input.get('insert_line', 0)
                                     new_str = tool_input.get('new_str', '')
                                     
-                                    if os.path.exists(file_path) and new_str is not None:
-                                        with open(file_path, 'r') as f:
-                                            lines = f.readlines()
-                                        
-                                        if insert_line < 0:
-                                            insert_line = 0
-                                        elif insert_line > len(lines):
-                                            insert_line = len(lines)
-                                        
-                                        if not new_str.endswith('\n'):
-                                            new_str += '\n'
-                                        
-                                        lines.insert(insert_line, new_str)
-                                        
-                                        with open(file_path, 'w') as f:
-                                            f.writelines(lines)
-                                        
+                                    console.print(f"[blue]insert: path={file_path}, line={insert_line}[/blue]")
+                                    
+                                    tool_result_content = file_editor.insert(file_path, insert_line, new_str)
+                                    
+                                    if tool_result_content.startswith("Successfully"):
+                                        console.print(f"[green]{tool_result_content}[/green]")
                                         file_edited = True
-                                        tool_result_content = f"Successfully inserted text at line {insert_line}"
                                     else:
-                                        tool_result_content = "Error: Missing parameters or file not found"
+                                        console.print(f"[red]{tool_result_content}[/red]")
                                 
                                 elif command == "create":
                                     file_path = tool_input.get('path', '')
-                                    file_text = tool_input.get('file_text', '')
+                                    content = tool_input.get('content', '')
                                     
-                                    if file_path and file_text:
-                                        with open(file_path, 'w') as f:
-                                            f.write(file_text)
-                                        
+                                    console.print(f"[blue]create: path={file_path}[/blue]")
+                                    tool_result_content = file_editor.create(file_path, content)
+                                    
+                                    if tool_result_content.startswith("Successfully"):
+                                        console.print(f"[green]{tool_result_content}[/green]")
                                         file_edited = True
-                                        tool_result_content = f"Successfully created file at {file_path}"
                                     else:
-                                        tool_result_content = "Error: Missing parameters"
+                                        console.print(f"[red]{tool_result_content}[/red]")
                                 
                                 # Create a tool result message and add it to the conversation
                                 if tool_result_content is not None:
