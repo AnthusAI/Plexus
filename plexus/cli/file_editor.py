@@ -75,13 +75,13 @@ class FileEditor:
         with open(file_path, 'r') as f:
             return f.read()
     
-    def str_replace(self, file_path: str, old_str: str, new_str: str) -> str:
+    def str_replace(self, file_path: str, old_str: str, new_str: str = "") -> str:
         """Replace text in a file.
         
         Args:
             file_path: Path to the file to edit
             old_str: Text to replace
-            new_str: Text to replace with
+            new_str: Text to replace with (can be empty to delete the old_str)
             
         Returns:
             A status message indicating success or failure
@@ -94,9 +94,6 @@ class FileEditor:
             
         if not old_str:
             return "Error: Missing parameters or file not found (old_str missing)"
-            
-        if not new_str:
-            return "Error: Missing parameters or file not found (new_str missing)"
         
         # Create backup before making changes
         backup_path = self._create_backup(file_path)
@@ -177,6 +174,11 @@ class FileEditor:
         elif insert_line > len(lines):
             insert_line = len(lines)
         
+        # Ensure each line in the file ends with a newline
+        for i in range(len(lines)):
+            if not lines[i].endswith('\n'):
+                lines[i] += '\n'
+        
         # Ensure new_str ends with a newline
         if not new_str.endswith('\n'):
             new_str += '\n'
@@ -189,12 +191,12 @@ class FileEditor:
         
         return f"Successfully inserted text at line {insert_line}"
     
-    def create(self, file_path: str, content: str = "") -> str:
+    def create(self, file_path: str, file_text: str = "") -> str:
         """Create a new file with the specified content.
         
         Args:
             file_path: Path to the file to create
-            content: Content to write to the file (default: empty string)
+            file_text: Content to write to the file (default: empty string)
             
         Returns:
             str: Success or error message
@@ -207,12 +209,12 @@ class FileEditor:
             
         try:
             # Ensure content ends with newline
-            if content and not content.endswith('\n'):
-                content += '\n'
+            if file_text and not file_text.endswith('\n'):
+                file_text += '\n'
                 
             # Create the file with content
             with open(file_path, 'w') as f:
-                f.write(content)
+                f.write(file_text)
                 
             return "Successfully created new file"
             
