@@ -680,7 +680,7 @@ def optimize(scorecard: str, score: str, output: Optional[str], model: str, debu
                 file_edited = False
                 
                 # Process tool calls
-                max_turns = 10  # Allow more turns
+                max_turns = 20  # Allow more turns
                 current_turn = 0
                 
                 while current_turn < max_turns:
@@ -806,10 +806,10 @@ def optimize(scorecard: str, score: str, output: Optional[str], model: str, debu
                                 
                                 elif command == "create":
                                     file_path = tool_input.get('path', '')
-                                    content = tool_input.get('content', '')
+                                    file_text = tool_input.get('file_text', '')
                                     
                                     console.print(f"[blue]create: path={file_path}[/blue]")
-                                    tool_result_content = file_editor.create(file_path, content)
+                                    tool_result_content = file_editor.create(file_path, file_text)
                                     
                                     if tool_result_content.startswith("Successfully"):
                                         console.print(f"[green]{tool_result_content}[/green]")
