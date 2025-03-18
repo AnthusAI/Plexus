@@ -2,7 +2,71 @@
 import os
 import json
 import pandas as pd
+import re
+from pathlib import Path
 from plexus.CustomLogging import logging
+
+def get_score_yaml_path(scorecard_name: str, score_name: str) -> Path:
+    """Compute the YAML file path for a score based on scorecard and score names.
+    
+    This function follows the convention:
+    ./scorecards/[scorecard_name]/[score_name].yaml
+    
+    where both scorecard_name and score_name are sanitized for use in file paths.
+    
+    Args:
+        scorecard_name: The name of the scorecard
+        score_name: The name of the score
+        
+    Returns:
+        A Path object pointing to the YAML file location
+        
+    Example:
+        >>> get_score_yaml_path("My Scorecard", "Call Quality Score")
+        Path('scorecards/my_scorecard/call_quality_score.yaml')
+    """
+    # Create the scorecards directory if it doesn't exist
+    scorecards_dir = Path('scorecards')
+    scorecards_dir.mkdir(exist_ok=True)
+    
+    # Create sanitized directory names
+    scorecard_dir = scorecards_dir / sanitize_path_name(scorecard_name)
+    scorecard_dir.mkdir(exist_ok=True)
+    
+    # Create the YAML file path
+    return scorecard_dir / f"{sanitize_path_name(score_name)}.yaml"
+
+def sanitize_path_name(name: str) -> str:
+    """
+    Sanitize a string to be safe for use as a path name while preserving readability.
+    Only replaces characters that are unsafe for paths.
+    
+    Args:
+        name: The string to sanitize
+        
+    Returns:
+        A sanitized string that is safe to use as a path name
+        
+    Example:
+        >>> sanitize_path_name("Patient Interest")
+        'Patient Interest'
+        >>> sanitize_path_name("Call/Response*Test")
+        'Call-Response-Test'
+    """
+    # Replace slashes, backslashes, and other filesystem-unsafe characters with dashes
+    # Keep spaces and most punctuation intact
+    sanitized = re.sub(r'[<>:"/\\|?*]', '-', name)
+    
+    # Remove or replace any other control characters
+    sanitized = "".join(char if char.isprintable() else '-' for char in sanitized)
+    
+    # Remove leading/trailing whitespace and dashes
+    sanitized = sanitized.strip('- ')
+    
+    # Replace multiple consecutive dashes with a single dash
+    sanitized = re.sub(r'-+', '-', sanitized)
+    
+    return sanitized
 
 async def get_scoring_jobs_for_batch(client, batch_job_id):
     """Get scoring jobs associated with a batch job."""

@@ -5,11 +5,10 @@ The `plexus score chat` command will implement an interactive REPL using Rich th
 
 ## Core Requirements
 
-### 1. Individual Score Version Management
-- Implement `plexus score pull` command to fetch individual score versions as YAML files
-- Implement `plexus score push` command to update individual score versions from YAML files
-- Store score versions in a structured directory format (e.g., `scores/<scorecard_key>/<score_key>/versions/`)
-- Support version history and parent-child relationships
+### 1. Individual Score Version Management ✅
+- ✅ Implement `plexus score pull` command to fetch individual score versions as YAML files
+- ✅ Implement `plexus score push` command to update individual score versions from YAML files
+- ✅ Store score versions in a structured directory format (e.g., `scorecards/<scorecard_name>/<score_name>.yaml`)
 
 ### 2. Plexus Tool Implementation
 - Create a Plexus tool class that provides methods for:
@@ -42,15 +41,14 @@ The `plexus score chat` command will implement an interactive REPL using Rich th
 
 ## Implementation Milestones
 
-### Milestone 1: Score Version Management
-1. Create `score pull` command
-   - Implement YAML file generation
-   - Handle version relationships
-   - Add proper error handling
-2. Create `score push` command
-   - Implement YAML file reading
-   - Handle version updates
-   - Add validation
+### Milestone 1: Score Version Management ✅
+1. ✅ Create `score pull` command
+   - ✅ Implement YAML file generation
+   - ✅ Add proper error handling
+2. ✅ Create `score push` command
+   - ✅ Implement YAML file reading
+   - ✅ Handle version updates
+   - ✅ Add validation
 
 ### Milestone 2: Plexus Tool
 1. Create Plexus tool class
@@ -82,12 +80,9 @@ The `plexus score chat` command will implement an interactive REPL using Rich th
 
 ### Directory Structure
 ```
-scores/
-  <scorecard_key>/
-    <score_key>/
-      versions/
-        <version_number>.yaml
-      current.yaml  # Symlink to latest version
+scorecards/
+  <scorecard_name>/
+    <score_name>.yaml
 ```
 
 ### Tool Interface
@@ -142,4 +137,19 @@ def react_loop():
 1. Support for batch operations
 2. Version comparison tools
 3. Score template management
-4. Collaborative editing support 
+4. Collaborative editing support
+
+## Next Steps (Deferred Items)
+1. Version History Management
+   - Implement version history tracking
+   - Add support for viewing version history
+   - Add ability to switch between versions
+   - Add version comparison functionality
+2. Parent-Child Relationships
+   - Implement proper version lineage tracking
+   - Add support for branching and merging versions
+   - Add visualization of version relationships
+3. Version Management UI
+   - Add interactive version selection
+   - Add version diff viewer
+   - Add version merge conflict resolution 
