@@ -789,7 +789,7 @@ Then ask the user what they would like to change about the scorecard."""
                                 
                             elif command == "create":
                                 file_path = tool_input.get('path', '').lstrip('/')
-                                content = tool_input.get('content', '')
+                                content = tool_input.get('file_text', '')
                                 tool_result_content = self.file_editor.create(file_path, content)
                             
                             # Update the tool call with result and notify callback
