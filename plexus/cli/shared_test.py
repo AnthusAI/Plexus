@@ -29,30 +29,33 @@ class TestPathHandling(unittest.TestCase):
         """Test the path name sanitization function."""
         test_cases = [
             # Basic cases
-            ("Simple Name", "simple_name"),
-            ("Multiple   Spaces", "multiple_spaces"),
-            ("Mixed-Case Name", "mixed_case_name"),
+            ("Simple Name", "Simple Name"),
+            ("Multiple   Spaces", "Multiple   Spaces"),
+            ("Mixed-Case Name", "Mixed-Case Name"),
             
             # Special characters
-            ("Name with @#$%^&*()", "name_with"),
-            ("Name with dots...", "name_with_dots"),
-            ("Name with slashes/\\", "name_with_slashes"),
+            ("Name with @#$%^&*()", "Name with @#$%^&-()"),
+            ("Name with dots...", "Name with dots..."),
+            ("Name with slashes/\\", "Name with slashes"),
             
             # Leading/trailing characters
-            ("-Name with hyphens-", "name_with_hyphens"),
-            ("_Name with underscores_", "name_with_underscores"),
-            ("-Name with both-_", "name_with_both"),
+            ("-Name with hyphens-", "Name with hyphens"),
+            ("_Name with underscores_", "_Name with underscores_"),
+            ("-Name with both-_", "Name with both-_"),
             
             # Empty and edge cases
             ("", ""),
             ("   ", ""),
             ("---", ""),
-            ("___", ""),
-            ("-_-", ""),
+            ("___", "___"),
+            ("-_-", "_"),
             
             # Unicode characters
-            ("Name with éèêë", "name_with"),
-            ("Name with 你好", "name_with"),
+            ("Name with éèêë", "Name with éèêë"),
+            ("Name with 你好", "Name with 你好"),
+            
+            # Characters unsafe for filesystem
+            ("File<>:\"/?*|Name", "File-Name"),
         ]
         
         for input_name, expected in test_cases:
@@ -64,16 +67,16 @@ class TestPathHandling(unittest.TestCase):
         """Test the score YAML path computation function."""
         test_cases = [
             # Basic cases
-            ("My Scorecard", "Call Quality", "scorecards/my_scorecard/call_quality.yaml"),
-            ("Customer Service", "Response Time", "scorecards/customer_service/response_time.yaml"),
+            ("My Scorecard", "Call Quality", "scorecards/My Scorecard/Call Quality.yaml"),
+            ("Customer Service", "Response Time", "scorecards/Customer Service/Response Time.yaml"),
             
             # Cases with special characters
-            ("Scorecard@#$", "Score!@#", "scorecards/scorecard/score.yaml"),
-            ("My Scorecard...", "Call Quality...", "scorecards/my_scorecard/call_quality.yaml"),
+            ("Scorecard@#$", "Score!@#", "scorecards/Scorecard@#$/Score!@#.yaml"),
+            ("My Scorecard...", "Call Quality...", "scorecards/My Scorecard.../Call Quality....yaml"),
             
             # Cases with spaces and mixed case
-            ("My Score Card", "Call Quality Score", "scorecards/my_score_card/call_quality_score.yaml"),
-            ("CUSTOMER SERVICE", "RESPONSE TIME", "scorecards/customer_service/response_time.yaml"),
+            ("My Score Card", "Call Quality Score", "scorecards/My Score Card/Call Quality Score.yaml"),
+            ("CUSTOMER SERVICE", "RESPONSE TIME", "scorecards/CUSTOMER SERVICE/RESPONSE TIME.yaml"),
             
             # Edge cases
             ("", "", "scorecards/.yaml"),
@@ -95,12 +98,12 @@ class TestPathHandling(unittest.TestCase):
         # Test with a nested path
         result = get_score_yaml_path("Parent/Child", "My Score")
         self.assertTrue(result.parent.exists())
-        self.assertEqual(str(result), "scorecards/parentchild/my_score.yaml")
+        self.assertEqual(str(result), "scorecards/Parent-Child/My Score.yaml")
         
         # Test with multiple levels
         result = get_score_yaml_path("Level1/Level2/Level3", "My Score")
         self.assertTrue(result.parent.exists())
-        self.assertEqual(str(result), "scorecards/level1level2level3/my_score.yaml")
+        self.assertEqual(str(result), "scorecards/Level1-Level2-Level3/My Score.yaml")
     
     def test_get_score_yaml_path_existing_directory(self):
         """Test behavior with existing directories."""
@@ -110,14 +113,14 @@ class TestPathHandling(unittest.TestCase):
         
         # Try to create a file in the existing directory
         result = get_score_yaml_path("Manual Dir", "My Score")
-        self.assertEqual(str(result), "scorecards/manual_dir/my_score.yaml")
+        self.assertEqual(str(result), "scorecards/Manual Dir/My Score.yaml")
         
         # Verify the directory still exists
         self.assertTrue(result.parent.exists())
         
         # Try to create another file in the same directory
         result2 = get_score_yaml_path("Manual Dir", "Another Score")
-        self.assertEqual(str(result2), "scorecards/manual_dir/another_score.yaml")
+        self.assertEqual(str(result2), "scorecards/Manual Dir/Another Score.yaml")
         self.assertTrue(result2.parent.exists())
 
 if __name__ == '__main__':
