@@ -1,6 +1,115 @@
 # CHANGELOG
 
 
+## v0.16.0 (2025-03-17)
+
+### Bug Fixes
+
+- **extractor**: Update test assertions and state handling in Extractor
+  ([`d5d0cdf`](https://github.com/AnthusAI/Plexus/commit/d5d0cdf2f8d782fbb8ca04e330974445a83741b5))
+
+- Modified test assertions to check for attributes instead of dictionary keys for better
+  compatibility with object-oriented design. - Enhanced the Extractor class to include extracted
+  text in the state dictionary, improving the result handling.
+
+- **score-commands**: Update FileEditor to handle Claude's tool call parameters
+  ([`b76c10f`](https://github.com/AnthusAI/Plexus/commit/b76c10f2a105d4d87079b0190537d5b7a716092b))
+
+- Add file_text parameter to create method to match Claude's format - Allow empty strings in
+  str_replace for text deletion - Improve newline handling in insert method - Update
+  ScoreCommands.py to use file_text instead of content - Update tests to expect consistent newline
+  behavior
+
+This ensures compatibility with Claude's tool call format and fixes issues with empty files being
+  created.
+
+### Chores
+
+- **dependencies**: Add langchain-anthropic to project dependencies
+  ([`feb3639`](https://github.com/AnthusAI/Plexus/commit/feb36399e8c74678afa0dee91d4ff7a599f6c6b2))
+
+- **dependencies**: Add ruamel.yaml to project dependencies for YAML handling
+  ([`660cee4`](https://github.com/AnthusAI/Plexus/commit/660cee461ad47f6494e171ab3e49639d43b9c7a3))
+
+### Features
+
+- **score**: Add command to list all versions for a specific score
+  ([`315a808`](https://github.com/AnthusAI/Plexus/commit/315a808136e48b233b3389a69eff0530f202de0d))
+
+- **score-commands**: Add optimize command for score prompts using AWS Bedrock
+  ([`af35f45`](https://github.com/AnthusAI/Plexus/commit/af35f4555a15704a351bf230f5b7940aca005928))
+
+- **scorecards**: Add duplicate scorecard detection and management
+  ([`7b55d89`](https://github.com/AnthusAI/Plexus/commit/7b55d89a24e1a16db4b6386cbe268b7c12f21c22))
+
+- Implement functionality to detect and clean duplicate scorecards by key - Enhance user interaction
+  with prompts for deletion of duplicates - Introduce a new command to find and manage duplicate
+  scorecards across the system - Improve console output for better user experience during duplicate
+  checks
+
+- **scorecards**: Enhance scorecard resolution and push functionality
+  ([`068011b`](https://github.com/AnthusAI/Plexus/commit/068011b68f07158e4d3039610fb4b7b1645874d1))
+
+- Add detailed logging and error handling to scorecard identifier resolution - Implement flexible
+  scorecard lookup with multiple matching strategies - Add --create-if-missing flag to automatically
+  create scorecards - Improve YAML file matching and loading for scorecard push - Enhance error
+  messages and provide more informative console output
+
+### Refactoring
+
+- **classifier**: Enhance find_matches_in_text method to handle overlapping matches and maintain
+  original index
+  ([`6790a12`](https://github.com/AnthusAI/Plexus/commit/6790a12680439e183b9c2e72ea5b3eecef4a76c5))
+
+- Updated the method to return an additional original_index in the match tuples. - Improved logic to
+  prioritize longer matches when parsing from the end. - Clarified sorting strategy based on parsing
+  direction to handle conflicts effectively.
+
+- **extractor**: Enhance Extractor class: Added logging and state management for extraction results
+  ([`f7c17b5`](https://github.com/AnthusAI/Plexus/commit/f7c17b5e7281da25190816eb08cddba723983313))
+
+- **resolvers**: Add trace field to getResourceByShareToken response
+  ([`72ee20a`](https://github.com/AnthusAI/Plexus/commit/72ee20af89e9b2c8222a98a0b854b74cd0b45e7e))
+
+- **score**: Implement secondary index query for fetching all score versions
+  ([`931ae55`](https://github.com/AnthusAI/Plexus/commit/931ae552bbd20fcfe1aad82406623cffd9922866))
+
+- **score-commands**: Clean up imports and streamline dependencies in ScoreCommands.py
+  ([`18498b3`](https://github.com/AnthusAI/Plexus/commit/18498b3b782ffabfba0c7b42f11e96c121983a10))
+
+- Removed unused imports to improve code clarity and maintainability. - Organized import statements
+  for better readability. - Ensured all necessary dependencies are included for functionality.
+
+- **score-commands**: Enhance optimize function with new text editor tool and command handling
+  ([`ad8ce9b`](https://github.com/AnthusAI/Plexus/commit/ad8ce9b0996dec950ac14b9cca5a305a97926adf))
+
+- Replaced the previous tool definitions with a single official Anthropic text editor tool. -
+  Updated command handling to include 'view', 'str_replace', 'create', and 'insert' commands. -
+  Improved conversation tracking and error handling for tool interactions. - Added validation for
+  edited YAML files and enhanced user feedback for optimization results.
+
+- **score-commands**: Implement retry logic and enhance debug capabilities in optimize function
+  ([`f0b44a3`](https://github.com/AnthusAI/Plexus/commit/f0b44a3d7ad1e41190dab30a7d92ddbd7eccb5ba))
+
+- Added retry decorator for API calls to handle timeouts and connection errors. - Introduced a debug
+  flag for more verbose output during optimization. - Improved error handling and user feedback for
+  file editing processes. - Updated the initialization of the ChatAnthropic model with new
+  parameters for better response control.
+
+- **score-commands**: Update model reference and documentation in optimize function
+  ([`1fb500e`](https://github.com/AnthusAI/Plexus/commit/1fb500eb1ee0de7438aa1a4ef78c5d365fc00b36))
+
+- Changed the help text for the model option to specify it as an Anthropic model ID. - Updated the
+  function docstring to clarify that optimization uses Claude AI via ChatAnthropic.
+
+- **scorecards**: Improve YAML handling with ruamel.yaml
+  ([`356c6d6`](https://github.com/AnthusAI/Plexus/commit/356c6d64f4516b64108d909e7c9a5285d6b9038c))
+
+- Replace PyYAML with ruamel.yaml for better multi-line string preservation - Add custom YAML
+  handler to maintain formatting and prevent line wrapping - Refactor YAML loading and dumping
+  across pull and push methods - Enhance configuration file processing with improved YAML parsing
+
+
 ## v0.15.0 (2025-03-11)
 
 ### Chores
