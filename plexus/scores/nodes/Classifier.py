@@ -58,9 +58,9 @@ class Classifier(BaseNode):
             # Remove all non-alphanumeric characters except spaces
             return ''.join(c.lower() for c in text if c.isalnum() or c.isspace())
 
-        def find_matches_in_text(self, text: str) -> List[Tuple[str, int, int]]:
+        def find_matches_in_text(self, text: str) -> List[Tuple[str, int, int, int]]:
             """Find all matches in text with their line and position.
-            Returns list of tuples: (valid_class, line_number, position)
+            Returns list of tuples: (valid_class, line_number, position, original_index)
             """
             matches = []
             lines = text.strip().split('\n')
@@ -68,9 +68,15 @@ class Classifier(BaseNode):
             # First normalize all valid classes (do this once)
             normalized_classes = [(vc, self.normalize_text(vc), i) for i, vc in enumerate(self.valid_classes)]
             
-            # When parsing from end, sort by length to handle overlapping terms
-            # When parsing from start, keep original order
-            if not self.parse_from_start:
+            # Sort by appropriate strategy:
+            # 1. For parse_from_start=True: use original order, but handle exact same match text
+            # 2. For parse_from_start=False: sort by length (descending) to prioritize specific classes
+            if self.parse_from_start:
+                # When parsing from start, maintain original order
+                # (Already in original order, so no sorting needed)
+                pass
+            else:
+                # When parsing from end, sort by length to handle overlapping terms
                 normalized_classes.sort(key=lambda x: len(x[1]), reverse=True)
             
             # Process each line
@@ -91,11 +97,27 @@ class Classifier(BaseNode):
                                 normalized_line[pos + len(normalized_class)].isspace())
                         
                         if before and after:
-                            # Store original index to maintain order
-                            matches.append((original_class, line_idx, pos, original_idx))
-                            # When parsing from start, return first match immediately
-                            if self.parse_from_start:
-                                return [(original_class, line_idx, pos, original_idx)]
+                            # Check for already matched terms that completely contain this match
+                            conflict = False
+                            if not self.parse_from_start:
+                                for m_class, m_line, m_pos, m_idx in matches:
+                                    m_norm = self.normalize_text(m_class)
+                                    # If they're on the same line and there's an overlap
+                                    if (m_line == line_idx and 
+                                        m_pos <= pos < m_pos + len(m_norm) and 
+                                        len(m_norm) > len(normalized_class)):
+                                        # Longer match takes precedence
+                                        conflict = True
+                                        break
+                            
+                            if not conflict:
+                                # Store match
+                                matches.append((original_class, line_idx, pos, original_idx))
+                                
+                                # When parsing from start, return first match immediately
+                                if self.parse_from_start:
+                                    return [(original_class, line_idx, pos, original_idx)]
+                            
                             # Skip past this match
                             pos += len(normalized_class)
                         else:
@@ -113,7 +135,8 @@ class Classifier(BaseNode):
                 # When parsing from start, we already have the first match
                 return matches[0][0]
             else:
-                # When parsing from end, sort by line and position in reverse
+                # When parsing from end, sort by position (line and column) in reverse
+                # For substring conflicts, we already handled this in find_matches_in_text
                 matches.sort(key=lambda x: (x[1], x[2]), reverse=True)
                 return matches[0][0]  # Return the original class name
 
