@@ -20,6 +20,12 @@ import urllib3.exceptions
 import re
 import requests
 from plexus.cli.file_editor import FileEditor
+from plexus.cli.shared import sanitize_path_name, get_score_yaml_path
+from plexus.cli.memoized_resolvers import (
+    memoized_resolve_scorecard_identifier,
+    memoized_resolve_score_identifier,
+    clear_resolver_caches
+)
 
 # Define the main command groups that will be exported
 @click.group()
@@ -39,152 +45,6 @@ def create_client() -> PlexusDashboardClient:
     client = PlexusDashboardClient()
     return client
 
-def resolve_scorecard_identifier(client, identifier):
-    """Resolve a scorecard identifier to its ID."""
-    # First try direct ID lookup
-    try:
-        query = f"""
-        query GetScorecard {{
-            getScorecard(id: "{identifier}") {{
-                id
-            }}
-        }}
-        """
-        result = client.execute(query)
-        if result.get('getScorecard'):
-            return identifier
-    except:
-        pass
-    
-    # Try lookup by key
-    try:
-        query = f"""
-        query ListScorecards {{
-            listScorecards(filter: {{ key: {{ eq: "{identifier}" }} }}, limit: 1) {{
-                items {{
-                    id
-                }}
-            }}
-        }}
-        """
-        result = client.execute(query)
-        items = result.get('listScorecards', {}).get('items', [])
-        if items and len(items) > 0:
-            return items[0]['id']
-    except:
-        pass
-    
-    # Try lookup by name
-    try:
-        query = f"""
-        query ListScorecards {{
-            listScorecards(filter: {{ name: {{ eq: "{identifier}" }} }}, limit: 1) {{
-                items {{
-                    id
-                }}
-            }}
-        }}
-        """
-        result = client.execute(query)
-        items = result.get('listScorecards', {}).get('items', [])
-        if items and len(items) > 0:
-            return items[0]['id']
-    except:
-        pass
-    
-    # Try lookup by externalId
-    try:
-        query = f"""
-        query ListScorecards {{
-            listScorecards(filter: {{ externalId: {{ eq: "{identifier}" }} }}, limit: 1) {{
-                items {{
-                    id
-                }}
-            }}
-        }}
-        """
-        result = client.execute(query)
-        items = result.get('listScorecards', {}).get('items', [])
-        if items and len(items) > 0:
-            return items[0]['id']
-    except:
-        pass
-    
-    return None
-
-def resolve_score_identifier(client, identifier: str) -> Optional[str]:
-    """Resolve a score identifier to its ID."""
-    # First try direct ID lookup
-    try:
-        query = f"""
-        query GetScore {{
-            getScore(id: "{identifier}") {{
-                id
-            }}
-        }}
-        """
-        result = client.execute(query)
-        if result.get('getScore'):
-            return identifier
-    except:
-        pass
-    
-    # Try lookup by key
-    try:
-        query = f"""
-        query ListScores {{
-            listScores(filter: {{ key: {{ eq: "{identifier}" }} }}, limit: 1) {{
-                items {{
-                    id
-                }}
-            }}
-        }}
-        """
-        result = client.execute(query)
-        items = result.get('listScores', {}).get('items', [])
-        if items and len(items) > 0:
-            return items[0]['id']
-    except:
-        pass
-    
-    # Try lookup by name
-    try:
-        query = f"""
-        query ListScores {{
-            listScores(filter: {{ name: {{ eq: "{identifier}" }} }}, limit: 1) {{
-                items {{
-                    id
-                }}
-            }}
-        }}
-        """
-        result = client.execute(query)
-        items = result.get('listScores', {}).get('items', [])
-        if items and len(items) > 0:
-            return items[0]['id']
-    except:
-        pass
-    
-    # Try lookup by externalId
-    try:
-        query = f"""
-        query ListScores {{
-            listScores(filter: {{ externalId: {{ eq: "{identifier}" }} }}, limit: 1) {{
-                items {{
-                    id
-                }}
-            }}
-        }}
-        """
-        result = client.execute(query)
-        items = result.get('listScores', {}).get('items', [])
-        if items and len(items) > 0:
-            return items[0]['id']
-    except:
-        pass
-    
-    return None
-
 def generate_key(name: str) -> str:
     """Generate a key from a name by converting to lowercase and replacing spaces with hyphens."""
     return name.lower().replace(' ', '-')
@@ -197,7 +57,7 @@ def info(scorecard: str, score: str):
     client = create_client()
     
     # Resolve the scorecard ID
-    scorecard_id = resolve_scorecard_identifier(client, scorecard)
+    scorecard_id = memoized_resolve_scorecard_identifier(client, scorecard)
     if not scorecard_id:
         click.echo(f"Scorecard not found: {scorecard}")
         return
@@ -290,7 +150,7 @@ def list(scorecard: str, limit: int):
     client = create_client()
     
     # Resolve the scorecard ID
-    scorecard_id = resolve_scorecard_identifier(client, scorecard)
+    scorecard_id = memoized_resolve_scorecard_identifier(client, scorecard)
     if not scorecard_id:
         click.echo(f"Scorecard not found: {scorecard}")
         return
@@ -492,7 +352,7 @@ def optimize(scorecard: str, score: str, output: Optional[str], model: str, debu
     console.print(f"[bold]Optimizing prompts for score: {score} in scorecard: {scorecard}[/bold]")
     
     # Resolve the scorecard ID
-    scorecard_id = resolve_scorecard_identifier(client, scorecard)
+    scorecard_id = memoized_resolve_scorecard_identifier(client, scorecard)
     if not scorecard_id:
         console.print(f"[red]Scorecard not found: {scorecard}[/red]")
         return
@@ -894,6 +754,258 @@ def optimize(scorecard: str, score: str, output: Optional[str], model: str, debu
 
 score.add_command(optimize)
 
+@score.command()
+@click.option('--scorecard', required=True, help='Scorecard containing the score (accepts ID, name, key, or external ID)')
+@click.option('--score', required=True, help='Score to pull (accepts ID, name, key, or external ID)')
+def pull(scorecard: str, score: str):
+    """Pull a score's current champion version as a YAML file."""
+    client = create_client()
+    
+    # First, resolve the scorecard identifier to an ID
+    scorecard_id = memoized_resolve_scorecard_identifier(client, scorecard)
+    if not scorecard_id:
+        console.print(f"[red]Could not find scorecard: {scorecard}[/red]")
+        return
+    
+    # Get scorecard details for display
+    query = f"""
+    query GetScorecardDetails {{
+        getScorecard(id: "{scorecard_id}") {{
+            id
+            name
+            key
+            sections {{
+                items {{
+                    id
+                    name
+                    scores {{
+                        items {{
+                            id
+                            name
+                            key
+                            championVersionId
+                        }}
+                    }}
+                }}
+            }}
+        }}
+    }}
+    """
+    
+    try:
+        result = client.execute(query)
+        scorecard_data = result.get('getScorecard', {})
+        scorecard_name = scorecard_data.get('name', 'Unknown')
+        scorecard_key = scorecard_data.get('key', 'Unknown')
+        
+        console.print(f"[green]Found scorecard: {scorecard_name} (ID: {scorecard_id})[/green]")
+        
+        # Find the score in the scorecard
+        found_score = None
+        for section in scorecard_data.get('sections', {}).get('items', []):
+            for score_item in section.get('scores', {}).get('items', []):
+                if (score_item['id'] == score or 
+                    score_item['key'] == score or 
+                    score_item['name'] == score):
+                    found_score = score_item
+                    break
+            if found_score:
+                break
+        
+        if not found_score:
+            console.print(f"[red]Could not find score: {score}[/red]")
+            return
+        
+        score_id = found_score['id']
+        score_name = found_score['name']
+        score_key = found_score['key']
+        champion_version_id = found_score.get('championVersionId')
+        
+        if not champion_version_id:
+            console.print(f"[red]No champion version found for score: {score_name}[/red]")
+            return
+        
+        console.print(f"[green]Found score: {score_name} (ID: {score_id})[/green]")
+        console.print(f"[green]Champion version ID: {champion_version_id}[/green]")
+        
+        # Get the score version content
+        version_query = f"""
+        query GetScoreVersion {{
+            getScoreVersion(id: "{champion_version_id}") {{
+                id
+                configuration
+                createdAt
+                updatedAt
+                note
+            }}
+        }}
+        """
+        
+        version_result = client.execute(version_query)
+        version_data = version_result.get('getScoreVersion')
+        
+        if not version_data or not version_data.get('configuration'):
+            console.print(f"[red]No configuration found for version: {champion_version_id}[/red]")
+            return
+        
+        # Get the YAML file path using the utility function
+        yaml_path = get_score_yaml_path(scorecard_name, score_name)
+        
+        # Parse the content as YAML using ruamel.yaml
+        try:
+            content = version_data.get('configuration')
+            
+            # Initialize ruamel.yaml
+            yaml = YAML()
+            yaml.preserve_quotes = True
+            yaml.width = 4096  # Prevent line wrapping
+            
+            # Configure YAML formatting
+            yaml.indent(mapping=2, sequence=4, offset=2)
+            yaml.map_indent = 2
+            yaml.sequence_indent = 4
+            yaml.sequence_dash_offset = 2
+            
+            # Configure literal block style for system_message and user_message
+            def literal_presenter(dumper, data):
+                if isinstance(data, str) and "\n" in data:
+                    return dumper.represent_scalar('tag:yaml.org,2002:str', data, style='|')
+                return dumper.represent_scalar('tag:yaml.org,2002:str', data)
+            
+            yaml.representer.add_representer(str, literal_presenter)
+            
+            # Parse the YAML content
+            yaml_data = yaml.load(content)
+            
+            # Write to file
+            with open(yaml_path, 'w') as f:
+                yaml.dump(yaml_data, f)
+            
+            console.print(f"[green]Saved score configuration to: {yaml_path}[/green]")
+            
+        except Exception as e:
+            console.print(f"[red]Error parsing YAML content: {str(e)}[/red]")
+            import traceback
+            console.print(f"[red]{traceback.format_exc()}[/red]")
+            
+    except Exception as e:
+        console.print(f"[red]Error during pull operation: {str(e)}[/red]")
+        import traceback
+        console.print(f"[red]{traceback.format_exc()}[/red]")
+
+@scores.command()
+@click.option('--scorecard', required=True, help='Scorecard identifier (ID, name, key, or external ID)')
+@click.option('--score', required=True, help='Score identifier (ID, name, key, or external ID)')
+def push(scorecard: str, score: str):
+    """Push a score's YAML configuration to the server.
+    
+    The YAML file is expected to be in the standard location:
+    ./scorecards/[scorecard_name]/[score_name].yaml
+    """
+    client = create_client()
+    
+    # Resolve the scorecard ID and get its name
+    scorecard_id = memoized_resolve_scorecard_identifier(client, scorecard)
+    if not scorecard_id:
+        click.echo(f"Scorecard not found: {scorecard}")
+        return
+    
+    # Get the scorecard name
+    query = f"""
+    query GetScorecard {{
+        getScorecard(id: "{scorecard_id}") {{
+            name
+        }}
+    }}
+    """
+    result = client.execute(query)
+    scorecard_data = result.get('getScorecard')
+    if not scorecard_data:
+        click.echo(f"Error retrieving scorecard: {scorecard}")
+        return
+    scorecard_name = scorecard_data['name']
+    
+    # Resolve the score ID and get its name
+    score_id = memoized_resolve_score_identifier(client, scorecard_id, score)
+    if not score_id:
+        click.echo(f"Score not found: {score}")
+        return
+    
+    # Get the score name and champion version ID
+    query = f"""
+    query GetScore {{
+        getScore(id: "{score_id}") {{
+            name
+            championVersionId
+        }}
+    }}
+    """
+    result = client.execute(query)
+    score_data = result.get('getScore')
+    if not score_data:
+        click.echo(f"Error retrieving score: {score}")
+        return
+    score_name = score_data['name']
+    champion_version_id = score_data.get('championVersionId')
+    
+    # Compute the YAML file path
+    yaml_path = get_score_yaml_path(scorecard_name, score_name)
+    
+    if not yaml_path.exists():
+        click.echo(f"YAML file not found at expected location: {yaml_path}")
+        return
+    
+    # Read the YAML file
+    yaml = YAML()
+    with open(yaml_path, 'r') as f:
+        yaml_content = f.read()
+        score_config = yaml.load(yaml_content)
+    
+    if not score_config:
+        click.echo(f"Error reading YAML file: {yaml_path}")
+        return
+    
+    # Create a new version with the configuration
+    mutation = """
+    mutation CreateScoreVersion($input: CreateScoreVersionInput!) {
+        createScoreVersion(input: $input) {
+            id
+            configuration
+            createdAt
+            updatedAt
+            note
+            score {
+                id
+                name
+                championVersionId
+            }
+        }
+    }
+    """
+    
+    try:
+        result = client.execute(mutation, {
+            'input': {
+                'scoreId': score_id,
+                'configuration': yaml_content,
+                'parentVersionId': champion_version_id,
+                'note': 'Updated via CLI push command',
+                'isFeatured': True
+            }
+        })
+        
+        if result.get('createScoreVersion'):
+            click.echo(f"Successfully created new version for score: {score_name}")
+            click.echo(f"New version ID: {result['createScoreVersion']['id']}")
+        else:
+            click.echo("Error creating new version")
+            
+    except Exception as e:
+        click.echo(f"Error pushing score configuration: {e}")
+
+# Add the push command to the score group as an alias
+score.add_command(push)
+
 # Define retry decorator for API calls
 @retry(
     retry=retry_if_exception_type((
@@ -913,3 +1025,16 @@ score.add_command(optimize)
 def invoke_with_retry(llm, messages):
     """Invoke the LLM with retry logic for handling timeouts and connection errors."""
     return llm.invoke(messages)
+
+@score.command()
+@click.option('--scorecard', help='Scorecard identifier (ID, name, key, or external ID)')
+@click.option('--score', help='Score identifier (ID, name, key, or external ID)')
+def chat(scorecard: Optional[str], score: Optional[str]):
+    """Launch an interactive REPL for working with Plexus scores.
+    
+    If --scorecard and --score are provided, the REPL will start with that score's configuration.
+    Otherwise, you can select a scorecard and score using the REPL commands.
+    """
+    from plexus.cli.score_chat_repl import ScoreChatREPL
+    repl = ScoreChatREPL(scorecard, score)
+    repl.run()

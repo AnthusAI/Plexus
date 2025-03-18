@@ -96,32 +96,41 @@ class FileEditor:
             return "Error: Missing parameters or file not found (old_str missing)"
             
         if not new_str:
-            return "Error: Missing parameters or file not found (new_str missing)"
+            try:
+                # Get additional context about the failure for debugging
+                old_str_len = len(old_str) if old_str else 0
+                return f"Error: Missing parameters or file not found (new_str missing, old_str length: {old_str_len})"
+            except Exception as e:
+                return f"Error: Missing parameters or file not found (new_str missing, error counting old_str: {str(e)})"
         
-        # Create backup before making changes
-        backup_path = self._create_backup(file_path)
-        if backup_path:
-            self._last_edit[file_path] = backup_path
-        
-        with open(file_path, 'r') as f:
-            content = f.read()
-        
-        match_count = content.count(old_str)
-        
-        if match_count == 0:
-            return "Error: No match found for replacement text"
-        
-        updated_content = content.replace(old_str, new_str)
-        
-        # Check if content actually changed
-        if updated_content == content:
-            if self.debug:
-                print("Warning: Content unchanged after replacement")
-        
-        with open(file_path, 'w') as f:
-            f.write(updated_content)
-        
-        return f"Successfully replaced text ({match_count} occurrences)"
+        try:
+            # Create backup before making changes
+            backup_path = self._create_backup(file_path)
+            if backup_path:
+                self._last_edit[file_path] = backup_path
+            
+            with open(file_path, 'r') as f:
+                content = f.read()
+            
+            match_count = content.count(old_str)
+            
+            if match_count == 0:
+                return "Error: No match found for replacement text"
+            
+            updated_content = content.replace(old_str, new_str)
+            
+            # Check if content actually changed
+            if updated_content == content:
+                if self.debug:
+                    print("Warning: Content unchanged after replacement")
+            
+            with open(file_path, 'w') as f:
+                f.write(updated_content)
+            
+            return f"Successfully replaced text ({match_count} occurrences)"
+        except Exception as e:
+            # Provide more detailed error information
+            return f"Error during replacement: {str(e)}"
     
     def undo_edit(self, file_path: str) -> str:
         """Undo the last edit made to a file.
