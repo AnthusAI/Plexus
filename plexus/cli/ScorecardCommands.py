@@ -2,6 +2,7 @@ import click
 import os
 import json
 import yaml
+import io
 from rich.table import Table
 from rich.panel import Panel
 from plexus.cli.console import console
@@ -11,7 +12,6 @@ import rich
 import datetime
 from plexus.cli.ScoreCommands import scores, score
 from ruamel.yaml import YAML
-import io
 
 # Define the main command groups that will be exported
 @click.group()
