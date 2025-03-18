@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 import json
 from ruamel.yaml import YAML
+import io
 from rich.table import Table
 from rich.panel import Panel
 from plexus.cli.console import console
