@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.17.0 (2025-03-19)
+
+### Bug Fixes
+
+- **scorecard**: Move io to top of file to solve linter error
+  ([`ce41887`](https://github.com/AnthusAI/Plexus/commit/ce41887aafba48a2954b2cf20ec365a472d46275))
+
+
 ## v0.16.0 (2025-03-17)
 
 ### Bug Fixes
@@ -32,6 +40,10 @@ This ensures compatibility with Claude's tool call format and fixes issues with 
   ([`660cee4`](https://github.com/AnthusAI/Plexus/commit/660cee461ad47f6494e171ab3e49639d43b9c7a3))
 
 ### Features
+
+- **chat**: `plexus score chat` - Edit Score configurations with natural language, like Cursor or
+  GitHub Copilot.
+  ([`d76661f`](https://github.com/AnthusAI/Plexus/commit/d76661fc1ecbcab77c44cf69646896fcaef7226c))
 
 - **score**: Add command to list all versions for a specific score
   ([`315a808`](https://github.com/AnthusAI/Plexus/commit/315a808136e48b233b3389a69eff0530f202de0d))
