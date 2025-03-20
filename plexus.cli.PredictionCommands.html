@@ -1,0 +1,232 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.cli.PredictionCommands module &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=9a2dae69"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.cli.ReportingCommands module" href="plexus.cli.ReportingCommands.html" />
+    <link rel="prev" title="plexus.cli.EvaluationCommands module" href="plexus.cli.EvaluationCommands.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.cli.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.html">plexus.utils package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.cli.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.AnalyzeCommands.html">plexus.cli.AnalyzeCommands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.BatchCommands.html">plexus.cli.BatchCommands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.CommandDispatch.html">plexus.cli.CommandDispatch module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.CommandLineInterface.html">plexus.cli.CommandLineInterface module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.CommandProgress.html">plexus.cli.CommandProgress module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.CommandTasks.html">plexus.cli.CommandTasks module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.DataCommands.html">plexus.cli.DataCommands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.DataLakeCommands.html">plexus.cli.DataLakeCommands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.EvaluationCommands.html">plexus.cli.EvaluationCommands module</a></li>
+<li class="toctree-l3 current"><a class="current reference internal" href="#">plexus.cli.PredictionCommands module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.cli.PredictionCommands.create_score_input"><code class="docutils literal notranslate"><span class="pre">create_score_input()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.cli.PredictionCommands.get_scorecard_class"><code class="docutils literal notranslate"><span class="pre">get_scorecard_class()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.cli.PredictionCommands.handle_exception"><code class="docutils literal notranslate"><span class="pre">handle_exception()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.cli.PredictionCommands.output_excel"><code class="docutils literal notranslate"><span class="pre">output_excel()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.cli.PredictionCommands.predict_impl"><code class="docutils literal notranslate"><span class="pre">predict_impl()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.cli.PredictionCommands.predict_score"><code class="docutils literal notranslate"><span class="pre">predict_score()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.cli.PredictionCommands.predict_score_impl"><code class="docutils literal notranslate"><span class="pre">predict_score_impl()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.cli.PredictionCommands.select_sample"><code class="docutils literal notranslate"><span class="pre">select_sample()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.cli.PredictionCommands.select_sample_csv"><code class="docutils literal notranslate"><span class="pre">select_sample_csv()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.cli.PredictionCommands.select_sample_data_driven"><code class="docutils literal notranslate"><span class="pre">select_sample_data_driven()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.ReportingCommands.html">plexus.cli.ReportingCommands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.ResultCommands.html">plexus.cli.ResultCommands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.ScoreCommands.html">plexus.cli.ScoreCommands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.ScorecardCommands.html">plexus.cli.ScorecardCommands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.TaskCommands.html">plexus.cli.TaskCommands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.TaskTargeting.html">plexus.cli.TaskTargeting module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.TrainingCommands.html">plexus.cli.TrainingCommands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.TuningCommands.html">plexus.cli.TuningCommands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.console.html">plexus.cli.console module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.file_editor.html">plexus.cli.file_editor module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.identifier_resolution.html">plexus.cli.identifier_resolution module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.memoized_resolvers.html">plexus.cli.memoized_resolvers module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.plexus_tool.html">plexus.cli.plexus_tool module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.score_chat_repl.html">plexus.cli.score_chat_repl module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.html">plexus.cli.shared module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.task_progress_tracker.html">plexus.cli.task_progress_tracker module</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.cli.html">plexus.cli package</a></li>
+      <li class="breadcrumb-item active">plexus.cli.PredictionCommands module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.cli.PredictionCommands.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.cli.PredictionCommands">
+<span id="plexus-cli-predictioncommands-module"></span><h1>plexus.cli.PredictionCommands module<a class="headerlink" href="#module-plexus.cli.PredictionCommands" title="Link to this heading"></a></h1>
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.PredictionCommands.create_score_input">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.PredictionCommands.</span></span><span class="sig-name descname"><span class="pre">create_score_input</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sample_row</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">content_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scorecard_class</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_name</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.PredictionCommands.create_score_input" title="Link to this definition"></a></dt>
+<dd><p>Create a Score.Input object from sample data.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.PredictionCommands.get_scorecard_class">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.PredictionCommands.</span></span><span class="sig-name descname"><span class="pre">get_scorecard_class</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scorecard_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.PredictionCommands.get_scorecard_class" title="Link to this definition"></a></dt>
+<dd><p>Get the scorecard class from the registry.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.PredictionCommands.handle_exception">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.PredictionCommands.</span></span><span class="sig-name descname"><span class="pre">handle_exception</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">loop</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">context</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scorecard_name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.PredictionCommands.handle_exception" title="Link to this definition"></a></dt>
+<dd><p>Custom exception handler for the event loop</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.PredictionCommands.output_excel">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.PredictionCommands.</span></span><span class="sig-name descname"><span class="pre">output_excel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">results</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_names</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scorecard_name</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.PredictionCommands.output_excel" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.PredictionCommands.predict_impl">
+<em class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">plexus.cli.PredictionCommands.</span></span><span class="sig-name descname"><span class="pre">predict_impl</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scorecard_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_names</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">content_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">excel</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_langsmith_trace</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fresh</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.PredictionCommands.predict_impl" title="Link to this definition"></a></dt>
+<dd><p>Implementation of predict command</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.PredictionCommands.predict_score">
+<em class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">plexus.cli.PredictionCommands.</span></span><span class="sig-name descname"><span class="pre">predict_score</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">score_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scorecard_class</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_row</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">used_content_id</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.PredictionCommands.predict_score" title="Link to this definition"></a></dt>
+<dd><p>Predict a single score.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.PredictionCommands.predict_score_impl">
+<em class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">plexus.cli.PredictionCommands.</span></span><span class="sig-name descname"><span class="pre">predict_score_impl</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scorecard_class</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">content_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_langsmith_trace</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fresh</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.PredictionCommands.predict_score_impl" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.PredictionCommands.select_sample">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.PredictionCommands.</span></span><span class="sig-name descname"><span class="pre">select_sample</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scorecard_class</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">content_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fresh</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.PredictionCommands.select_sample" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.PredictionCommands.select_sample_csv">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.PredictionCommands.</span></span><span class="sig-name descname"><span class="pre">select_sample_csv</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">csv_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">content_id</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.PredictionCommands.select_sample_csv" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.PredictionCommands.select_sample_data_driven">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.PredictionCommands.</span></span><span class="sig-name descname"><span class="pre">select_sample_data_driven</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scorecard_class</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">content_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_configuration</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fresh</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.PredictionCommands.select_sample_data_driven" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.cli.EvaluationCommands.html" class="btn btn-neutral float-left" title="plexus.cli.EvaluationCommands module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.cli.ReportingCommands.html" class="btn btn-neutral float-right" title="plexus.cli.ReportingCommands module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
