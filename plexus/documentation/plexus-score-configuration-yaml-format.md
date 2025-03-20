@@ -140,6 +140,31 @@ Segment text into "before" and "after" parts based on a found quote:
     after_quote: after    # Text after the quote
 ```
 
+## LogicalClassifier Usage
+
+Apply custom Python logic to make scoring decisions based on previous node outputs:
+
+```yaml
+- name: decision_node
+  class: LogicalClassifier
+  code: |
+    def score(parameters: Score.Parameters, input: Score.Input) -> Score.Result:
+        # Access input values from metadata
+        value1 = input.metadata.get('field1', 'default')
+        value2 = input.metadata.get('field2', 'default')
+        
+        # Apply custom logic
+        result = "Yes" if some_condition else "No"
+        
+        return Score.Result(
+            parameters=parameters,
+            value=result,
+            metadata={
+                "explanation": f"Decision based on {value1} and {value2}"
+            }
+        )
+```
+
 ## Message Templates
 
 Templates support Jinja2 syntax for dynamic content:
