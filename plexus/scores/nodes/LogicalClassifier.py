@@ -16,7 +16,8 @@ class LogicalClassifier(BaseNode):
     
     class Parameters(BaseNode.Parameters):
         code: str = Field(description="Python code string defining the score function")
-        conditions: list = Field(description="List of conditions for routing results")
+        # Make conditions optional with a default of None
+        conditions: Optional[list] = Field(default=None, description="List of conditions for routing results")
 
     class GraphState(BaseNode.GraphState):
         classification: Optional[str]
