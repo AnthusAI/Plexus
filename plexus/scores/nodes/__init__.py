@@ -8,3 +8,4 @@ from .Extractor import Extractor
 from .Classifier import Classifier
 from .ContextExtractor import ContextExtractor
 from .LogicalClassifier import LogicalClassifier
+from .Generator import Generator
