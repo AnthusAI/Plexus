@@ -1,6 +1,33 @@
 # CHANGELOG
 
 
+## v0.18.0 (2025-03-20)
+
+### Bug Fixes
+
+- **generator**: Remove explanation from result state in Generator class
+  ([`08d83b5`](https://github.com/AnthusAI/Plexus/commit/08d83b528f4965e083d9053f04b96c3cb108d1fd))
+
+- Updated the result state creation in the `Generator` class to exclude the `explanation` field,
+  ensuring only the `completion` is included in the state. This change simplifies the state
+  management and aligns with the intended functionality.
+
+### Features
+
+- **generator**: Add Generator node for LLM completions
+  ([`4a00a52`](https://github.com/AnthusAI/Plexus/commit/4a00a52d0d8ff61f73b7d3be50a8bab344ebf46c))
+
+- Introduced a new `Generator` class in `Generator.py` that generates completions from LLM calls
+  using a LangGraph subgraph. - Updated `__init__.py` to include the new `Generator` class. -
+  Implemented methods for handling LLM requests, retries, and state management within the
+  `Generator` class.
+
+### Refactoring
+
+- **documentation**: Add LogicalClassifier usage example to YAML configuration guide
+  ([`64eec40`](https://github.com/AnthusAI/Plexus/commit/64eec408402d673282682db57024a3e9740de9b2))
+
+
 ## v0.17.0 (2025-03-19)
 
 ### Bug Fixes
