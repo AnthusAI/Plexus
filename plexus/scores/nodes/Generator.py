@@ -375,9 +375,8 @@ class Generator(BaseNode):
                     
                     # Create the initial result state
                     result_state = self.GraphState(
-                        **{k: v for k, v in state.model_dump().items() if k not in ['completion', 'explanation']},
-                        completion=response.content,
-                        explanation=response.content
+                        **{k: v for k, v in state.model_dump().items() if k not in ['completion']},
+                        completion=response.content
                     )
                     
                     output_state = {
