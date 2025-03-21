@@ -88,7 +88,34 @@ class LogicalClassifier(BaseNode):
             }
             logging.info(f"LogicalClassifier result value: {result.value}")
             logging.info(f"LogicalClassifier result explanation: {result.metadata.get('explanation')}")
-            return self.GraphState(**state_update)
+            graph_state = self.GraphState(**state_update)
+
+            # Input state that contains everything except metadata.
+            input_metadata = graph_state.model_dump()
+            
+            # Safely remove 'scores' from metadata if metadata exists
+            if 'metadata' in input_metadata and isinstance(input_metadata['metadata'], dict):
+                input_metadata['metadata'].pop('scores', None)
+                input_metadata['metadata'].pop('trace', None)
+            
+            input_metadata.pop('messages', None)
+            input_metadata.pop('text', None)
+            
+            input_state = {
+                "state_input": {
+                    **input_metadata
+                }
+            }
+
+            output_state = {
+                "classification": result.value,
+                "explanation": result.metadata.get('explanation')
+            }
+
+            # Log the state and get a new state object with updated node_results
+            updated_state = self.log_state(graph_state, input_state, output_state)
+
+            return updated_state
 
         return execute_score
 
