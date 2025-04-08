@@ -22,6 +22,7 @@ jobs:
       run: |
         PYTHONPATH=$GITHUB_WORKSPACE python -m pip install --upgrade pip
         PYTHONPATH=$GITHUB_WORKSPACE pip install invoke
+        PYTHONPATH=$GITHUB_WORKSPACE pip install pybind11
         PYTHONPATH=$GITHUB_WORKSPACE pip install -e .
 
     - name: Run Python Tests
