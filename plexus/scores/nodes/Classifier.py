@@ -140,6 +140,62 @@ class Classifier(BaseNode):
                 matches.sort(key=lambda x: (x[1], x[2]), reverse=True)
                 return matches[0][0]  # Return the original class name
 
+        def strip_classification_from_explanation(self, output: str, classification: str) -> str:
+            """Remove the classification from the explanation text."""
+            if not classification:
+                return output.strip()
+
+            lines = output.strip().split('\n')
+            result_lines = []
+            classification_removed = False
+
+            # Normalize the classification for comparison
+            normalized_classification = self.normalize_text(classification)
+            
+            for line in lines:
+                normalized_line = self.normalize_text(line)
+                
+                # Skip lines that ONLY contain the classification or very short lines with the classification
+                if (normalized_line == normalized_classification or 
+                    (len(normalized_line) < len(normalized_classification) + 5 and 
+                     normalized_classification in normalized_line)):
+                    classification_removed = True
+                    continue
+                
+                result_lines.append(line)
+            
+            # If we didn't filter any lines and there are at least 2 lines,
+            # try to remove classification from the beginning of the first line
+            if not classification_removed and len(lines) >= 1:
+                first_line = lines[0]
+                normalized_first = self.normalize_text(first_line)
+                
+                if normalized_first.startswith(normalized_classification):
+                    # Try to find where to split the first line
+                    # Look for common separators after the classification
+                    original_class_len = len(classification)
+                    potential_cuts = [
+                        first_line.find(': ', 0, len(first_line)),
+                        first_line.find(' - ', 0, len(first_line)),
+                        first_line.find('. ', 0, len(first_line)),
+                        first_line.find(', ', 0, len(first_line)),
+                        first_line.find(':\n', 0, len(first_line)),
+                        first_line.find('.\n', 0, len(first_line))
+                    ]
+                    
+                    valid_cuts = [cut for cut in potential_cuts if cut > 0]
+                    if valid_cuts:
+                        cut_point = min(valid_cuts) + 2  # +2 to include the separator
+                        result_lines[0] = first_line[cut_point:].strip()
+                    else:
+                        # No clear separator found, try a simpler approach
+                        for i, char in enumerate(first_line):
+                            if i >= original_class_len and not char.isalnum():
+                                result_lines[0] = first_line[i+1:].strip()
+                                break
+            
+            return '\n'.join(result_lines).strip()
+
         def parse(self, output: str) -> Dict[str, Any]:
             # Find all matches in the text
             matches = self.find_matches_in_text(output)
@@ -147,9 +203,12 @@ class Classifier(BaseNode):
             # Select the appropriate match
             selected_class = self.select_match(matches, output)
             
+            # Remove the classification from the explanation
+            clean_explanation = self.strip_classification_from_explanation(output, selected_class)
+            
             return {
                 "classification": selected_class,
-                "explanation": output.strip()
+                "explanation": clean_explanation or output.strip()  # Fall back to original if empty
             }
 
     def get_llm_prompt_node(self):
