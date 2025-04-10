@@ -6,3 +6,4 @@ mlruns/
 reports/
 .DS_Store
 .env
+tmp/
