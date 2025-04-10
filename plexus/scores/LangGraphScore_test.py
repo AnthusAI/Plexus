@@ -344,6 +344,7 @@ async def test_graph_with_previous_results(basic_graph_config, mock_azure_openai
             explanation="Previous explanation"
         )
 
+        # Results should be a list of dictionaries with 'name', 'id', and 'result' keys
         previous_results = [
             {
                 "name": "previous_score",
@@ -366,9 +367,92 @@ async def test_graph_with_previous_results(basic_graph_config, mock_azure_openai
         }]))
         instance.workflow = mock_workflow
 
-        results = await instance.predict(None, input_data)
-        assert results[0].value == "Yes"
-        assert results[0].explanation == "New explanation"
+        result = await instance.predict(input_data, "test-thread")
+        assert result.value == "Yes"
+        assert result.metadata["explanation"] == "New explanation"
+
+@pytest.mark.asyncio
+async def test_invalid_previous_results(basic_graph_config, mock_azure_openai):
+    """Test handling of invalid previous results"""
+    with patch('plexus.LangChainUser.LangChainUser._initialize_model',
+               return_value=mock_azure_openai):
+        instance = await LangGraphScore.create(**basic_graph_config)
+
+        # Create invalid result (not a Score.Result)
+        previous_results = [
+            {
+                "name": "previous_score",
+                "id": "123",
+                "result": "invalid_result"  # Not a Score.Result
+            }
+        ]
+
+        input_data = Score.Input(
+            text="test",
+            metadata={},
+            results=previous_results
+        )
+
+        # Mock workflow
+        mock_workflow = MagicMock()
+        mock_workflow.astream = MagicMock(return_value=AsyncIteratorMock([{
+            "value": "Yes",
+            "explanation": "New explanation"
+        }]))
+        instance.workflow = mock_workflow
+
+        # Should raise TypeError
+        with pytest.raises(TypeError) as exc_info:
+            await instance.predict(input_data, "test-thread")
+        
+        assert "Expected Score.Result object but got" in str(exc_info.value)
+
+@pytest.mark.asyncio
+async def test_multiple_previous_results(basic_graph_config, mock_azure_openai):
+    """Test handling of multiple previous results"""
+    with patch('plexus.LangChainUser.LangChainUser._initialize_model',
+               return_value=mock_azure_openai):
+        instance = await LangGraphScore.create(**basic_graph_config)
+
+        # Create multiple results as dictionaries with Score.Result objects
+        previous_results = [
+            {
+                "name": "score1",
+                "id": "123",
+                "result": LangGraphScore.Result(
+                    parameters=basic_graph_config,
+                    value="Yes",
+                    explanation="First explanation"
+                )
+            },
+            {
+                "name": "score2",
+                "id": "456",
+                "result": LangGraphScore.Result(
+                    parameters=basic_graph_config,
+                    value="No",
+                    explanation="Second explanation"
+                )
+            }
+        ]
+
+        input_data = Score.Input(
+            text="test",
+            metadata={},
+            results=previous_results
+        )
+
+        # Mock workflow
+        mock_workflow = MagicMock()
+        mock_workflow.ainvoke = AsyncMock(return_value={
+            "value": "Yes",
+            "explanation": "New explanation"
+        })
+        instance.workflow = mock_workflow
+
+        result = await instance.predict(input_data, "test-thread")
+        assert result.value == "Yes"
+        assert result.metadata["explanation"] == "New explanation"
 
 @pytest.mark.skip(reason="Needs update: requires account_key in metadata")
 @pytest.mark.asyncio
@@ -793,6 +877,13 @@ async def test_edge_routing(graph_config_with_edge, mock_azure_openai, mock_yes_
     with patch('plexus.LangChainUser.LangChainUser._initialize_model', return_value=mock_azure_openai):
         instance = await LangGraphScore.create(**graph_config_with_edge)
         
+        # Create input data for the test
+        input_data = Score.Input(
+            text="test text",
+            metadata={"key": "value"},
+            results=[]
+        )
+
         # Mock workflow to simulate state with classification and explanation
         mock_workflow = MagicMock()
         mock_workflow.ainvoke = AsyncMock(return_value={
@@ -816,11 +907,7 @@ async def test_edge_routing(graph_config_with_edge, mock_azure_openai, mock_yes_
         mock_workflow.graph = mock_graph
         instance.workflow = mock_workflow
         
-        result = await instance.predict(Score.Input(
-            text="test text",
-            metadata={"key": "value"},
-            results=[]
-        ))
+        result = await instance.predict(input_data, "test-thread")
         
         # Verify the result includes both aliased variables and literal values
         assert result.value == "Revenue Only"  # Aliased from customer_type
