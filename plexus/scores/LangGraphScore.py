@@ -983,14 +983,57 @@ class LangGraphScore(Score, LangChainUser):
                 "checkpoint_id": checkpoint_id
             }
         }
+        
+        # ADDED DEBUG LOGGING FOR DEPENDENCY HANDLING
+        logging.info(f"=== LangGraphScore.predict DEBUG ===")
+        logging.info(f"Score name: {self.parameters.name}")
+        logging.info(f"Model input metadata: {model_input.metadata}")
+        
+        # Debug previous score results
+        if hasattr(model_input, 'results') and model_input.results:
+            logging.info(f"Dependent score results available: {len(model_input.results)}")
+            for idx, result_dict in enumerate(model_input.results):
+                if not isinstance(result_dict, dict):
+                    raise TypeError(f"Expected result dict but got {type(result_dict)}")
+                if 'result' not in result_dict:
+                    raise ValueError(f"Result dict missing 'result' key: {result_dict}")
+                result = result_dict['result']
+                if not isinstance(result, Score.Result):
+                    raise TypeError(f"Expected Score.Result object but got {type(result)}")
+                logging.info(f"Dependent result #{idx}: name={result_dict['name']}, value={result.value}")
+                if hasattr(result, 'metadata'):
+                    logging.info(f"Dependent result #{idx} metadata: {result.metadata}")
+        else:
+            logging.info("No dependent score results available")
+            
         # Use the passed-in results if available, otherwise start with empty dict
         initial_results = {}
         if model_input.results:
-            for result in model_input.results:
+            logging.info("Processing dependent results for initial state...")
+            for result_dict in model_input.results:
+                if not isinstance(result_dict, dict):
+                    raise TypeError(f"Expected result dict but got {type(result_dict)}")
+                if 'result' not in result_dict:
+                    raise ValueError(f"Result dict missing 'result' key: {result_dict}")
+                result = result_dict['result']
                 if not isinstance(result, Score.Result):
                     raise TypeError(f"Expected Score.Result object but got {type(result)}")
-                initial_results[result.parameters.name] = result.value
+                    
+                # DEBUG: Show what's being added from each dependent result
+                logging.info(f"Adding dependent result '{result_dict['name']}': {result.value}")
+                initial_results[result_dict['name']] = result.value
+                
+                # IMPORTANT: Also add to metadata to ensure it's accessible by the nodes
+                if 'results' not in model_input.metadata:
+                    model_input.metadata['results'] = {}
+                model_input.metadata['results'][result_dict['name']] = result.value
+                
+                # Additionally, add a direct metadata key for convenience
+                model_input.metadata[f"{result_dict['name'].lower().replace(' ', '_')}_result"] = result.value
 
+        logging.debug(f"Initial results dictionary: {initial_results}")
+        logging.debug(f"Updated model_input.metadata: {model_input.metadata}")
+        
         initial_state = self.combined_state_class(
             text=self.preprocess_text(model_input.text),
             metadata=model_input.metadata,
@@ -1033,6 +1076,11 @@ class LangGraphScore(Score, LangChainUser):
             if 'metadata' in graph_result and graph_result['metadata'] is not None:
                 # Merge the existing metadata with the graph_result metadata
                 result.metadata.update(graph_result['metadata'])
+            
+            # ADDED FINAL RESULT DEBUG LOGGING
+            logging.info(f"=== LangGraphScore Final Result ===")
+            logging.info(f"Result value: {result.value}")
+            logging.info(f"Result metadata: {result.metadata}")
             
             return result
         except BatchProcessingPause:
