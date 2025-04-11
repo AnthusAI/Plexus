@@ -1,6 +1,8 @@
 """Shared functions for resolving identifiers to IDs."""
 from plexus.cli.console import console
 from functools import lru_cache
+from gql.transport.exceptions import TransportQueryError
+from gql import gql
 
 @lru_cache(maxsize=100)
 def resolve_scorecard_identifier(client, identifier):
@@ -15,10 +17,13 @@ def resolve_scorecard_identifier(client, identifier):
             }}
         }}
         """
-        result = client.execute(query)
+        with client as session:
+            result = session.execute(gql(query))
         if result.get('getScorecard'):
             console.print(f"[dim]Found scorecard by ID: {identifier}[/dim]")
             return identifier
+    except TransportQueryError as e:
+        console.print(f"[dim]Error looking up by ID: {str(e)}[/dim]")
     except Exception as e:
         console.print(f"[dim]Error looking up by ID: {str(e)}[/dim]")
     
@@ -35,7 +40,8 @@ def resolve_scorecard_identifier(client, identifier):
             }}
         }}
         """
-        result = client.execute(query)
+        with client as session:
+            result = session.execute(gql(query))
         items = result.get('listScorecards', {}).get('items', [])
         if items and len(items) > 0:
             if len(items) > 1:
@@ -46,6 +52,8 @@ def resolve_scorecard_identifier(client, identifier):
             else:
                 console.print(f"[dim]Found scorecard by key: {items[0]['id']} (key: {items[0].get('key')})[/dim]")
             return items[0]['id']
+    except TransportQueryError as e:
+        console.print(f"[dim]Error looking up by key: {str(e)}[/dim]")
     except Exception as e:
         console.print(f"[dim]Error looking up by key: {str(e)}[/dim]")
     
@@ -62,7 +70,8 @@ def resolve_scorecard_identifier(client, identifier):
             }}
         }}
         """
-        result = client.execute(query)
+        with client as session:
+            result = session.execute(gql(query))
         items = result.get('listScorecards', {}).get('items', [])
         if items and len(items) > 0:
             if len(items) > 1:
@@ -73,6 +82,8 @@ def resolve_scorecard_identifier(client, identifier):
             else:
                 console.print(f"[dim]Found scorecard by name: {items[0]['id']} (name: {items[0].get('name')})[/dim]")
             return items[0]['id']
+    except TransportQueryError as e:
+        console.print(f"[dim]Error looking up by name: {str(e)}[/dim]")
     except Exception as e:
         console.print(f"[dim]Error looking up by name: {str(e)}[/dim]")
     
@@ -90,7 +101,8 @@ def resolve_scorecard_identifier(client, identifier):
             }}
         }}
         """
-        result = client.execute(query)
+        with client as session:
+            result = session.execute(gql(query))
         items = result.get('listScorecards', {}).get('items', [])
         if items and len(items) > 0:
             if len(items) > 1:
@@ -101,6 +113,8 @@ def resolve_scorecard_identifier(client, identifier):
             else:
                 console.print(f"[dim]Found scorecard by externalId: {items[0]['id']} (externalId: {items[0].get('externalId')})[/dim]")
             return items[0]['id']
+    except TransportQueryError as e:
+        console.print(f"[dim]Error looking up by externalId: {str(e)}[/dim]")
     except Exception as e:
         console.print(f"[dim]Error looking up by externalId: {str(e)}[/dim]")
     
@@ -118,7 +132,8 @@ def resolve_scorecard_identifier(client, identifier):
             }}
         }}
         """
-        result = client.execute(query)
+        with client as session:
+            result = session.execute(gql(query))
         items = result.get('listScorecards', {}).get('items', [])
         
         # First try exact match on key
@@ -156,6 +171,8 @@ def resolve_scorecard_identifier(client, identifier):
             else:
                 console.print(f"[dim]Found scorecard by exact name match: {name_matches[0]['id']} (name: {name_matches[0].get('name')})[/dim]")
             return name_matches[0]['id']
+    except TransportQueryError as e:
+        console.print(f"[dim]Error during flexible search: {str(e)}[/dim]")
     except Exception as e:
         console.print(f"[dim]Error during flexible search: {str(e)}[/dim]")
     
@@ -187,11 +204,12 @@ def resolve_score_identifier(client, scorecard_id: str, identifier: str):
             }}
         }}
         """
-        result = client.execute(query)
+        with client as session:
+            result = session.execute(gql(query))
         score_data = result.get('getScore')
         if score_data and score_data.get('section', {}).get('scorecard', {}).get('id') == scorecard_id:
             return identifier
-    except:
+    except Exception:
         pass
     
     # Try lookup within the scorecard
@@ -214,7 +232,8 @@ def resolve_score_identifier(client, scorecard_id: str, identifier: str):
             }}
         }}
         """
-        result = client.execute(query)
+        with client as session:
+            result = session.execute(gql(query))
         sections = result.get('getScorecard', {}).get('sections', {}).get('items', [])
         
         for section in sections:
@@ -225,7 +244,7 @@ def resolve_score_identifier(client, scorecard_id: str, identifier: str):
                     score['key'] == identifier or 
                     score.get('externalId') == identifier):
                     return score['id']
-    except:
+    except Exception:
         pass
     
     return None 
