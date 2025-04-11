@@ -78,7 +78,8 @@ def load_configuration_from_yaml_file(configuration_file_path):
         return {}
 
 @evaluate.command()
-@click.option('--scorecard-name', 'scorecard_name', default=None, help='Name of the scorecard to evaluate')
+@click.option('--scorecard', 'scorecard', default=None, help='Scorecard identifier (ID, name, key, or external ID)')
+@click.option('--yaml', is_flag=True, help='Load scorecard from local YAML file instead of the API')
 @click.option('--use-langsmith-trace', is_flag=True, default=False, help='Activate LangSmith trace client for LangGraphScore')
 @click.option('--number-of-samples', default=1, type=int, help='Number of texts to sample')
 @click.option('--sampling-method', default='random', type=str, help='Method for sampling texts')
@@ -90,7 +91,8 @@ def load_configuration_from_yaml_file(configuration_file_path):
 @click.option('--visualize', is_flag=True, default=False, help='Generate PNG visualization of LangGraph scores')
 @click.option('--task-id', default=None, type=str, help='Task ID for progress tracking')
 def accuracy(
-    scorecard_name: str,
+    scorecard: str,
+    yaml: bool,
     use_langsmith_trace: bool,
     number_of_samples: int,
     sampling_method: str,
@@ -164,14 +166,14 @@ def accuracy(
                         tracker = TaskProgressTracker(
                             total_items=number_of_samples,
                             stage_configs=stage_configs,
-                            target=f"evaluation/accuracy/{scorecard_name}",
-                            command=f"evaluate accuracy --scorecard-name {scorecard_name}",
-                            description=f"Accuracy evaluation for {scorecard_name}",
+                            target=f"evaluation/accuracy/{scorecard}",
+                            command=f"evaluate accuracy --scorecard {scorecard}",
+                            description=f"Accuracy evaluation for {scorecard}",
                             dispatch_status="DISPATCHED",
                             prevent_new_task=False,
                             metadata={
                                 "type": "Accuracy Evaluation",
-                                "scorecard": scorecard_name,
+                                "scorecard": scorecard,
                                 "task_type": "Accuracy Evaluation"  # Move type to metadata
                             },
                             account_id=account.id
@@ -353,14 +355,14 @@ def accuracy(
                     total_items=number_of_samples,
                     stage_configs=stage_configs,
                     task_id=task.id,  # Use existing task ID
-                    target=f"evaluation/accuracy/{scorecard_name}",
-                    command=f"evaluate accuracy --scorecard-name {scorecard_name}",
-                    description=f"Accuracy evaluation for {scorecard_name}",
+                    target=f"evaluation/accuracy/{scorecard}",
+                    command=f"evaluate accuracy --scorecard {scorecard}",
+                    description=f"Accuracy evaluation for {scorecard}",
                     dispatch_status="DISPATCHED",
                     prevent_new_task=True,  # Prevent new task creation since we have one
                     metadata={
                         "type": "Accuracy Evaluation",
-                        "scorecard": scorecard_name,
+                        "scorecard": scorecard,
                         "task_type": "Accuracy Evaluation"
                     },
                     account_id=account.id  # Now we have account.id available
@@ -474,7 +476,7 @@ def accuracy(
                         content_ids_to_sample_set = {id.strip() for id in content_ids_to_sample.split(',') if id.strip()}
                         logging.info(f"Will sample from content IDs: {content_ids_to_sample_set}")
 
-                    if not scorecard_name:
+                    if not scorecard:
                         error_msg = "Scorecard not specified"
                         logging.error(error_msg)
                         tracker.current_stage.status_message = error_msg
@@ -483,7 +485,7 @@ def accuracy(
                             task.fail_processing(error_msg)
                         sys.exit(1)
 
-                    scorecard_folder = os.path.join('scorecards', scorecard_name)
+                    scorecard_folder = os.path.join('scorecards', scorecard)
                     override_folder: str = os.path.join(scorecard_folder, 'experiments/calibrations')
 
                     logging.info('Running accuracy experiment...')
@@ -491,9 +493,9 @@ def accuracy(
                     tracker.update(current_items=0)
                     
                     Scorecard.load_and_register_scorecards('scorecards/')
-                    scorecard_type = scorecard_registry.get(scorecard_name)
+                    scorecard_type = scorecard_registry.get(scorecard)
                     if scorecard_type is None:
-                        error_msg = f"Scorecard with name '{scorecard_name}' not found."
+                        error_msg = f"Scorecard with name '{scorecard}' not found."
                         logging.error(error_msg)
                         tracker.current_stage.status_message = error_msg
                         tracker.update(current_items=0)
@@ -501,9 +503,9 @@ def accuracy(
                             task.fail_processing(error_msg)
                         return
 
-                    scorecard_instance = scorecard_type(scorecard=scorecard_name)
-                    logging.info(f"Using scorecard {scorecard_name} with class {scorecard_instance.__class__.__name__}")
-                    tracker.current_stage.status_message = f"Loaded scorecard: {scorecard_name}"
+                    scorecard_instance = scorecard_type(scorecard=scorecard)
+                    logging.info(f"Using scorecard {scorecard} with class {scorecard_instance.__class__.__name__}")
+                    tracker.current_stage.status_message = f"Loaded scorecard: {scorecard}"
                     tracker.update(current_items=0)
 
                     # Look up scorecard record using its key
@@ -513,7 +515,7 @@ def accuracy(
                         
                         scorecard_key = scorecard_instance.properties.get('key')
                         if not scorecard_key:
-                            raise ValueError(f"Scorecard {scorecard_name} does not have a key defined in its properties")
+                            raise ValueError(f"Scorecard {scorecard} does not have a key defined in its properties")
                             
                         logging.info(f"Looking up Scorecard record for key: {scorecard_key}")
                         query = """
@@ -770,7 +772,7 @@ def accuracy(
                                     bound_progress_callback = types.MethodType(progress_callback_fn, tracker)
 
                                     single_score_labeled_samples = get_data_driven_samples(
-                                        scorecard_instance, scorecard_name, single_score_name, 
+                                        scorecard_instance, scorecard, single_score_name, 
                                         score_config, fresh, content_ids_to_sample_set,
                                         progress_callback=bound_progress_callback,
                                         number_of_samples=tracker.total_items,
@@ -792,7 +794,7 @@ def accuracy(
                             tracker.update(current_items=0)
                         
                         single_score_experiment_args = {
-                            'scorecard_name': scorecard_name,
+                            'scorecard_name': scorecard,
                             'scorecard': scorecard_instance,
                             'override_folder': override_folder,
                             'number_of_texts_to_sample': tracker.total_items,
@@ -1182,24 +1184,26 @@ def get_csv_samples(csv_filename):
     return df.to_dict('records')
 
 @evaluate.command()
-@click.option('--scorecard-name', required=True, help='Name of the scorecard to evaluate')
+@click.option('--scorecard', required=True, help='Scorecard identifier (ID, name, key, or external ID)')
+@click.option('--yaml', is_flag=True, help='Load scorecard from local YAML file instead of the API')
 @click.option('--number-of-samples', default=100, help='Number of samples to evaluate')
 @click.option('--subset-of-scores', default='', help='Comma-separated list of score names to evaluate')
 @click.option('--max-workers', default=10, help='Maximum number of parallel workers')
 def distribution(
-    scorecard_name: str,
+    scorecard: str,
+    yaml: bool,
     number_of_samples: int,
     subset_of_scores: str,
     max_workers: int
 ):
     start_time = time.time()
-    logging.info(f"Starting distribution evaluation for Scorecard {scorecard_name} at {time.strftime('%H:%M:%S')}")
+    logging.info(f"Starting distribution evaluation for Scorecard {scorecard} at {time.strftime('%H:%M:%S')}")
 
     Scorecard.load_and_register_scorecards('scorecards/')
-    scorecard_class = scorecard_registry.get(scorecard_name)
+    scorecard_class = scorecard_registry.get(scorecard)
 
     if scorecard_class is None:
-        logging.error(f"Scorecard with name '{scorecard_name}' not found.")
+        logging.error(f"Scorecard with name '{scorecard}' not found.")
         return
 
     # We're removing support for a list of scores.
