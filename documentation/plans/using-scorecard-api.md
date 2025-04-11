@@ -1,4 +1,4 @@
-# Plan: Using the Scorecard API with Evaluation Commands (v2 - Dependency Aware)
+# Plan: Using the Scorecard API with Evaluation Commands
 
 ## 1. Overview
 
@@ -252,3 +252,116 @@ This is the core change, moving away from the global registry for API loading an
 *   Optimize the fetching of required configurations (e.g., explore batched `getScoreVersion` calls if the API supports it).
 *   Consider adding optional caching for *parsed* score configurations fetched via API to speed up repeated evaluations of the same scorecard version.
 *   Extend this API-first, dependency-aware loading approach to other commands (`train`, `predict`, etc.).
+
+## 7. Implementation Checklist
+
+### Current Status Legend
+- ⬜ = Not started
+- 🟡 = In progress
+- ✅ = Completed
+
+### Preparation
+- ⬜ **Step 1: Set up testing fixtures**
+  - What: Create test fixtures for scorecards with dependencies
+  - Goal: Have reliable test data for implementation verification
+  - Verify: Test data exists and correctly represents dependency relationships
+
+### CLI Options Changes
+- ⬜ **Step 2: Update CLI parameter names in `EvaluationCommands.py`**
+  - What: Rename `--scorecard-name` to `--scorecard` in both `accuracy` and `distribution` commands
+  - Goal: Align option naming with other commands
+  - Verify: Run `plexus evaluate --help` and confirm parameter name change
+
+- ⬜ **Step 3: Add `--yaml` flag to commands**
+  - What: Add boolean `--yaml` flag to both `accuracy` and `distribution` commands
+  - Goal: Allow explicit request for loading from local YAML files
+  - Verify: Run `plexus evaluate --help` and confirm flag is present with correct help text
+
+### Identifier Resolution & Local Caching
+- ⬜ **Step 4: Verify existing identifier caching**
+  - What: Add logging to track cache hits/misses in `memoized_resolvers.py`
+  - Goal: Confirm identifier resolution caching is working correctly
+  - Verify: Run commands with same identifier multiple times and see cache hits in logs
+
+- ⬜ **Step 5: Verify existing local file storage**
+  - What: Test score configuration saving/loading using `get_score_yaml_path`
+  - Goal: Confirm local file storage pattern works as expected
+  - Verify: Configurations are saved and loaded from expected paths
+
+### Core Loading Logic
+- ⬜ **Step 6: Implement scorecard structure fetching**
+  - What: Add code to fetch scorecard structure without full configurations
+  - Goal: Retrieve minimal data needed to identify scores and relationships
+  - Verify: Structure data contains required fields (ids, names, champion version ids)
+
+- ⬜ **Step 7: Implement target score identification**
+  - What: Add logic to identify target scores from command options or all scores
+  - Goal: Determine which scores need to be evaluated
+  - Verify: Correct scores are identified based on command options
+
+- ⬜ **Step 8: Implement local cache checking**
+  - What: Add code to check if score configurations exist locally before API calls
+  - Goal: Avoid unnecessary API calls for cached configurations
+  - Verify: API calls are skipped when configurations exist locally
+
+- ⬜ **Step 9: Implement configuration retrieval with caching**
+  - What: Add code to fetch and cache missing configurations
+  - Goal: Retrieve and store score configurations efficiently
+  - Verify: Configurations are fetched when needed and stored locally
+
+- ⬜ **Step 10: Implement dependency discovery**
+  - What: Add code to parse configurations and extract dependencies
+  - Goal: Build complete dependency graph for required scores
+  - Verify: All dependencies are correctly identified and resolved
+
+- ⬜ **Step 11: Implement iterative configuration fetching**
+  - What: Add logic to iteratively fetch dependencies until all are resolved
+  - Goal: Ensure all required configurations are available
+  - Verify: Complete dependency chain is fetched and cached
+
+### Scorecard Instantiation
+- ⬜ **Step 12: Modify Scorecard instantiation for API data**
+  - What: Update `Scorecard` class to work with directly instantiated API data
+  - Goal: Create scorecard instances from API data without class factory
+  - Verify: Scorecard instances can be created directly from API data
+
+- ⬜ **Step 13: Implement score registry population**
+  - What: Add code to populate instance-specific score registry
+  - Goal: Register only required scores in the instance registry
+  - Verify: Instance registry contains only needed scores with correct configurations
+
+- ⬜ **Step 14: Ensure compatibility with dependency resolution**
+  - What: Test/fix dependency resolution with instance registry
+  - Goal: Ensure existing dependency resolution works with new approach
+  - Verify: Dependencies resolve correctly during evaluation
+
+### Integration & Testing
+- ⬜ **Step 15: Integrate API path into command handler**
+  - What: Connect new loading logic to command handler with flag check
+  - Goal: Switch between API and YAML loading based on flags
+  - Verify: Commands work with both loading approaches
+
+- ⬜ **Step 16: Implement error handling**
+  - What: Add robust error handling for API failures, missing data, etc.
+  - Goal: Ensure graceful failure and helpful error messages
+  - Verify: Commands fail gracefully with clear error messages
+
+- ⬜ **Step 17: End-to-end testing with single scores**
+  - What: Test evaluation with single target scores via API
+  - Goal: Confirm basic functionality works
+  - Verify: Results match expected output for single scores
+
+- ⬜ **Step 18: End-to-end testing with dependencies**
+  - What: Test evaluation with scores that have dependencies
+  - Goal: Confirm dependency resolution works correctly
+  - Verify: All dependencies are loaded and evaluation results are correct
+
+- ⬜ **Step 19: Performance testing**
+  - What: Test performance with and without caching
+  - Goal: Confirm caching improves performance
+  - Verify: Second runs are faster due to cache hits
+
+- ⬜ **Step 20: Documentation update**
+  - What: Update command documentation with new options
+  - Goal: Ensure users understand the new capabilities
+  - Verify: Help text is clear and comprehensive
