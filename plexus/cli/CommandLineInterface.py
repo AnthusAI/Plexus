@@ -42,9 +42,10 @@ from .TaskCommands import tasks
 from .ScorecardCommands import scorecards
 from .ScoreCommands import scores, score
 from .ResultCommands import results
+from .client_utils import create_client
+from .ScoreChatCommands import score_chat
 
 # Import dashboard-specific modules
-from plexus.dashboard.api.client import PlexusDashboardClient
 from plexus.dashboard.api.models.account import Account
 from plexus.dashboard.api.models.evaluation import Evaluation
 from plexus.dashboard.api.models.scorecard import Scorecard
@@ -77,12 +78,6 @@ def generate_key(name: str) -> str:
     """Generate a URL-safe key from a name."""
     return name.lower().replace(' ', '-')
 
-def create_client() -> PlexusDashboardClient:
-    """Create a client and log its configuration"""
-    client = PlexusDashboardClient()
-    logger.debug(f"Using API URL: {client.api_url}")
-    return client
-
 class OrderCommands(click.Group):
     def list_commands(self, ctx: click.Context) -> list[str]:
         return list(self.commands)
@@ -104,6 +99,7 @@ cli.add_command(tuning)
 cli.add_command(analyze)
 cli.add_command(batch)
 cli.add_command(command)
+cli.add_command(score_chat)
 
 # Dashboard CLI Commands
 cli.add_command(evaluations)

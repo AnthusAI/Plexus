@@ -1027,15 +1027,5 @@ def invoke_with_retry(llm, messages):
     """Invoke the LLM with retry logic for handling timeouts and connection errors."""
     return llm.invoke(messages)
 
-@score.command()
-@click.option('--scorecard', help='Scorecard identifier (ID, name, key, or external ID)')
-@click.option('--score', help='Score identifier (ID, name, key, or external ID)')
-def chat(scorecard: Optional[str], score: Optional[str]):
-    """Launch an interactive REPL for working with Plexus scores.
-    
-    If --scorecard and --score are provided, the REPL will start with that score's configuration.
-    Otherwise, you can select a scorecard and score using the REPL commands.
-    """
-    from plexus.cli.score_chat_repl import ScoreChatREPL
-    repl = ScoreChatREPL(scorecard, score)
-    repl.run()
+# Note: The chat command has been moved to ScoreChatCommands.py
+# and is now available as "plexus score-chat repl"
