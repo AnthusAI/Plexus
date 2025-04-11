@@ -261,10 +261,15 @@ This is the core change, moving away from the global registry for API loading an
 - ✅ = Completed
 
 ### Preparation
-- ⬜ **Step 1: Set up testing fixtures**
+- ✅ **Step 1: Set up testing fixtures**
   - What: Create test fixtures for scorecards with dependencies
   - Goal: Have reliable test data for implementation verification
   - Verify: Test data exists and correctly represents dependency relationships
+  - Files created:
+    - `plexus/tests/fixtures/scorecards/test_scorecard.yaml` - Basic scorecard with simple dependencies
+    - `plexus/tests/fixtures/scorecards/test_scorecard_linear.yaml` - Linear dependency chain (A→B→C→D)
+    - `plexus/tests/fixtures/scorecards/test_scorecard_complex.yaml` - Complex dependency structure with parallel branches
+    - `plexus/tests/test_scorecard_dependencies.py` - Test script to validate fixtures
 
 ### CLI Options Changes
 - ⬜ **Step 2: Update CLI parameter names in `EvaluationCommands.py`**

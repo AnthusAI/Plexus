@@ -1,0 +1,102 @@
+name: Test Scorecard
+key: test_scorecard
+id: test-scorecard-id
+externalId: test-scorecard-external-id
+description: A test scorecard with dependencies for testing
+
+scores:
+  - name: Base Score
+    key: base_score
+    id: base-score-id
+    class: LangGraphScore
+    description: A base score that others depend on
+    externalId: base-score-external-id
+    model_provider: ChatOpenAI
+    model_name: gpt-4o-mini
+    graph:
+      - name: classify
+        class: Classifier
+        valid_classes: ["Yes", "No", "Maybe"]
+        system_message: |
+          You are a helpful assistant that classifies text.
+        user_message: |
+          Please classify the following text:
+          {{ text }}
+          
+          Is this positive?
+  
+  - name: Dependent Score 1
+    key: dependent_score_1
+    id: dependent-score-1-id
+    externalId: dependent-score-1-external-id
+    class: LangGraphScore
+    description: A score that depends on Base Score
+    depends_on:
+      - Base Score
+    model_provider: ChatOpenAI
+    model_name: gpt-4o-mini
+    graph:
+      - name: classify
+        class: Classifier
+        valid_classes: ["Good", "Bad", "Neutral"]
+        system_message: |
+          You are a helpful assistant that classifies text.
+        user_message: |
+          Please classify the following text:
+          {{ text }}
+          
+          Previous classification (Base Score): {{ results["Base Score"].value }}
+          
+          How would you rate this text?
+  
+  - name: Dependent Score 2
+    key: dependent_score_2
+    id: dependent-score-2-id
+    externalId: dependent-score-2-external-id
+    class: LangGraphScore
+    description: A score that depends on Base Score with condition
+    depends_on:
+      Base Score:
+        operator: "=="
+        value: "Yes"
+    model_provider: ChatOpenAI
+    model_name: gpt-4o-mini
+    graph:
+      - name: classify
+        class: Classifier
+        valid_classes: ["High", "Medium", "Low"]
+        system_message: |
+          You are a helpful assistant that classifies text.
+        user_message: |
+          Please classify the following text:
+          {{ text }}
+          
+          Since the text is positive (Base Score = Yes), how would you rate its positivity level?
+  
+  - name: Complex Dependent Score
+    key: complex_dependent_score
+    id: complex-dependent-score-id
+    externalId: complex-dependent-score-external-id
+    class: LangGraphScore
+    description: A score that depends on multiple other scores
+    depends_on:
+      - Dependent Score 1
+      - Dependent Score 2
+    model_provider: ChatOpenAI
+    model_name: gpt-4o-mini
+    graph:
+      - name: classify
+        class: Classifier
+        valid_classes: ["Excellent", "Average", "Poor"]
+        system_message: |
+          You are a helpful assistant that provides a final classification.
+        user_message: |
+          Please provide a final classification for the following text:
+          {{ text }}
+          
+          Previous classifications:
+          - Base Score: {{ results["Base Score"].value }}
+          - Dependent Score 1: {{ results["Dependent Score 1"].value }}
+          - Dependent Score 2: {{ results["Dependent Score 2"].value }}
+          
+          Based on all previous classifications, what is your final assessment? 
