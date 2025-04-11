@@ -386,15 +386,37 @@ This is the core change, moving away from the global registry for API loading an
     6. Created verification script with mock API client to test the functionality
   - Verify: Configurations are fetched when needed and stored locally when commands are run from the `/Users/ryan/projects/Call-Criteria-Python` directory
 
-- 🟡 **Step 10: Implement dependency discovery**
+- ✅ **Step 10: Implement dependency discovery**
   - What: Add code to parse configurations and extract dependencies
   - Goal: Build complete dependency graph for required scores
-  - Verify: All dependencies are correctly identified and resolved when testing from the `/Users/ryan/projects/Call-Criteria-Python` directory
+  - Implementation:
+    1. Created `dependency_discovery.py` with three main functions:
+       - `extract_dependencies_from_config`: Parses YAML to find dependencies
+       - `discover_dependencies`: Recursively builds complete dependency graph
+       - `build_name_id_mappings`: Creates mappings between score names and IDs
+    2. Handled both list-style and dictionary-style dependencies
+    3. Created verification script with test cases for different fixture types
+    4. Added proper logging for dependency discovery process
+    5. Successfully tested with complex nested dependency structures
+  - Verification: All dependencies are correctly identified and resolved when testing from the `/Users/ryan/projects/Call-Criteria-Python` directory
+  - Files created:
+    - `plexus/cli/dependency_discovery.py` - Core implementation
+    - `verify_dependency_discovery.py` - Test script
 
-- ⬜ **Step 11: Implement iterative configuration fetching**
+- ✅ **Step 11: Implement iterative configuration fetching**
   - What: Add logic to iteratively fetch dependencies until all are resolved
   - Goal: Ensure all required configurations are available
-  - Verify: Complete dependency chain is fetched and cached when running from the `/Users/ryan/projects/Call-Criteria-Python` directory
+  - Implementation:
+    1. Created `iterative_config_fetching.py` with the main function `iteratively_fetch_configurations`
+    2. Implemented multi-iteration process for dependency discovery and fetching
+    3. Added logic to detect new dependencies and fetch their configurations
+    4. Integrated with the existing caching mechanisms
+    5. Created verification script to test the end-to-end process
+    6. Fixed GraphQL client issues related to query execution
+  - Verification: Complete dependency chain is fetched and cached when running from the `/Users/ryan/projects/Call-Criteria-Python` directory
+  - Files created:
+    - `plexus/cli/iterative_config_fetching.py` - Core implementation
+    - `verify_iterative_fetching.py` - Test script
 
 ### Scorecard Instantiation
 - ⬜ **Step 12: Modify Scorecard instantiation for API data**
