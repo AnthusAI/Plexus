@@ -10,7 +10,7 @@ import pandas as pd
 import importlib.util
 from decimal import Decimal
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Optional, List, Dict, Union
+from typing import Optional, List, Dict, Union, Any
 import asyncio
 import boto3
 from botocore.exceptions import ClientError
@@ -75,12 +75,14 @@ class Scorecard:
             cls.score_registry = ScoreRegistry()
             
 
-    def __init__(self, *, scorecard):
+    def __init__(self, *, scorecard, api_data=None, scores_config=None):
         """
         Initializes a new instance of the Scorecard class.
 
         Args:
-            scorecard (str): The name of the scorecard.
+            scorecard (str): The name or identifier of the scorecard.
+            api_data (dict, optional): API-sourced data for the scorecard when using API-first loading.
+            scores_config (dict, optional): Dictionary of score configurations when using API-first loading.
         """
         self.initialize_registry()
         self.scorecard_identifier = scorecard
@@ -96,6 +98,68 @@ class Scorecard:
         self.scorecard_total_cost = Decimal('0.0')
 
         self.cloudwatch_logger = CloudWatchLogger()
+        
+        # For API-first loading
+        if api_data is not None:
+            self.properties = api_data
+            self.scores_config = scores_config or []
+            # Create a fresh registry for this instance
+            self.score_registry = ScoreRegistry()
+            
+            # Register scores if configurations are provided
+            if scores_config:
+                self.initialize_from_api_data()
+        else:
+            # Legacy flow - shared registry approach
+            self.score_registry = self.__class__.score_registry
+            if hasattr(self.__class__, 'properties'):
+                self.properties = self.__class__.properties
+            if hasattr(self.__class__, 'scores'):
+                self.scores = self.__class__.scores
+                
+    def initialize_from_api_data(self):
+        """
+        Initialize scores from API data and register them in the instance's score registry.
+        
+        This method handles score instantiation when data is loaded directly from the API
+        rather than from YAML files.
+        """
+        if not hasattr(self, 'scores_config') or not self.scores_config:
+            logging.warning("No score configurations provided for API-first initialization")
+            return
+            
+        # Process each score configuration
+        for score_config in self.scores_config:
+            if not isinstance(score_config, dict):
+                logging.warning(f"Invalid score configuration format: {type(score_config)}")
+                continue
+                
+            # Extract necessary information
+            score_class_name = score_config.get('class')
+            if not score_class_name:
+                logging.warning(f"Missing class name in score config: {score_config.get('name')}")
+                continue
+                
+            # Import score class
+            try:
+                score_module = importlib.import_module(f'plexus.scores')
+                score_class = getattr(score_module, score_class_name)
+            except (ImportError, AttributeError) as e:
+                logging.error(f"Failed to import score class {score_class_name}: {str(e)}")
+                continue
+                
+            # Register in instance's registry
+            self.score_registry.register(
+                cls=score_class,
+                properties=score_config,
+                name=score_config.get('name'),
+                key=score_config.get('key'),
+                id=score_config.get('id')
+            )
+            
+        # Set scores attribute for compatibility with other methods
+        self.scores = [config for config in self.scores_config]
+        logging.info(f"Successfully initialized {len(self.scores)} scores from API data")
 
     @classmethod
     def name(cls):
@@ -111,6 +175,19 @@ class Scorecard:
     def score_names(cls):
         return [score['name'] for score in cls.scores]
 
+    def score_names(self):
+        """
+        Instance method to return score names, supporting both class-level and instance-level configurations.
+        
+        Returns:
+            list of str: Names of all scores in this scorecard.
+        """
+        if hasattr(self, 'scores'):
+            return [score['name'] for score in self.scores]
+        elif hasattr(self.__class__, 'scores'):
+            return [score['name'] for score in self.__class__.scores]
+        return []
+
     @classmethod
     def score_names_to_process(cls):
         """
@@ -122,6 +199,19 @@ class Scorecard:
         """
         return [
             score['name'] for score in cls.scores
+            if 'primary' not in score
+        ]
+        
+    def score_names_to_process(self):
+        """
+        Instance method for filtering score names that need to be processed directly.
+        
+        Returns:
+            list of str: Names of scores that need direct processing.
+        """
+        scores_to_use = self.scores if hasattr(self, 'scores') else getattr(self.__class__, 'scores', [])
+        return [
+            score['name'] for score in scores_to_use
             if 'primary' not in score
         ]
 
@@ -303,10 +393,10 @@ class Scorecard:
 
                 # Log the cost for this individual score
                 dimensions = {
-                    'ScoreCardID': str(self.properties['id']),
-                    'ScoreCardName': str(self.properties['name']),
-                    'Score': str(score_configuration.get('name')),
-                    'ScoreID': str(score_configuration.get('id')),
+                    'ScoreCardID': str(self.properties.get('id', 'unknown')),
+                    'ScoreCardName': str(self.properties.get('name', 'unknown')),
+                    'Score': str(score_configuration.get('name', 'unknown')),
+                    'ScoreID': str(score_configuration.get('id', 'unknown')),
                     'Modality': modality or 'Development',
                     'Environment': os.getenv('environment') or 'Unknown'
                 }
@@ -320,7 +410,7 @@ class Scorecard:
                 self.cloudwatch_logger.log_metric('ItemTokens', item_tokens, dimensions)
 
                 scorecard_dimensions = {
-                    'ScoreCardName': str(self.properties['name']),
+                    'ScoreCardName': str(self.properties.get('name', 'unknown')),
                     'Environment': os.getenv('environment') or 'Unknown'
                 }
 
@@ -532,11 +622,26 @@ class Scorecard:
                'Unknown'
 
     def build_dependency_graph(self, subset_of_score_names):
+        """
+        Build a dependency graph for the specified subset of scores.
+        
+        Args:
+            subset_of_score_names: List of score names to include in the graph
+            
+        Returns:
+            Tuple of (graph, name_to_id) where:
+            - graph is a dictionary mapping score IDs to dependency information
+            - name_to_id is a dictionary mapping score names to IDs
+        """
         graph = {}
         name_to_id = {}
-        for score in self.scores:
+        
+        # Determine which scores collection to use
+        scores_to_use = self.scores if hasattr(self, 'scores') else getattr(self.__class__, 'scores', [])
+        
+        for score in scores_to_use:
             if score['name'] in subset_of_score_names:
-                score_id = str(score['id'])
+                score_id = str(score.get('id', ''))
                 score_name = score['name']
                 name_to_id[score_name] = score_id
                 
@@ -642,3 +747,38 @@ class Scorecard:
                 return False
                 
         return True
+                
+    @staticmethod
+    def create_instance_from_api_data(scorecard_id: str, api_data: Dict[str, Any], scores_config: List[Dict[str, Any]]) -> 'Scorecard':
+        """
+        Create a Scorecard instance directly from API data.
+        
+        Args:
+            scorecard_id: The ID of the scorecard
+            api_data: Dictionary containing scorecard metadata from the API
+            scores_config: List of score configurations
+            
+        Returns:
+            A Scorecard instance populated with the API data
+        """
+        # Parse YAML configs and convert to Python objects
+        parsed_configs = []
+        for score_id, config_yaml in scores_config.items():
+            try:
+                yaml_parser = yaml.YAML(typ='safe')
+                config_dict = yaml_parser.load(config_yaml)
+                
+                # Ensure the ID is preserved
+                if 'id' not in config_dict:
+                    config_dict['id'] = score_id
+                    
+                parsed_configs.append(config_dict)
+            except Exception as e:
+                logging.error(f"Failed to parse config for score {score_id}: {str(e)}")
+        
+        # Create scorecard instance with API data
+        return Scorecard(
+            scorecard=scorecard_id,
+            api_data=api_data,
+            scores_config=parsed_configs
+        )
