@@ -419,14 +419,27 @@ This is the core change, moving away from the global registry for API loading an
     - `verify_iterative_fetching.py` - Test script
 
 ### Scorecard Instantiation
-- ⬜ **Step 12: Modify Scorecard instantiation for API data**
+- ✅ **Step 12: Modify Scorecard instantiation for API data**
   - What: Update `Scorecard` class to work with directly instantiated API data
   - Goal: Create scorecard instances from API data without class factory
-  - Verify: Scorecard instances can be created directly from API data in tests run from the `/Users/ryan/projects/Call-Criteria-Python` directory
+  - Implementation:
+    1. Created an alternative initialization path in `__init__` that accepts `api_data` and `scores_config` parameters
+    2. Implemented `initialize_from_api_data()` method to process score configurations and register them in the instance's registry
+    3. Added instance-level versions of `score_names()` and `score_names_to_process()` methods to support both class and instance configurations
+    4. Modified `build_dependency_graph()` to use instance-level scores when available
+    5. Added defensive coding with `.get()` for properties access to handle varying data structures
+    6. Created `create_instance_from_api_data()` static method for convenient instantiation from API data
+  - Verify: Scorecard instances can now be created directly from API data in tests run from the `/Users/ryan/projects/Call-Criteria-Python` directory
 
-- ⬜ **Step 13: Implement score registry population**
+- ✅ **Step 13: Implement score registry population**
   - What: Add code to populate instance-specific score registry
   - Goal: Register only required scores in the instance registry
+  - Implementation:
+    1. This functionality was implemented as part of Step 12 in the `initialize_from_api_data()` method
+    2. The method iterates through provided score configurations and registers each score in the instance's registry
+    3. Each score is registered with its properties, name, key, and ID
+    4. The registry is properly initialized as a fresh `ScoreRegistry` instance for each scorecard instance
+    5. Added a fallback for missing scores or import errors to ensure resilience
   - Verify: Instance registry contains only needed scores with correct configurations when tested from the `/Users/ryan/projects/Call-Criteria-Python` directory
 
 - ⬜ **Step 14: Ensure compatibility with dependency resolution**
