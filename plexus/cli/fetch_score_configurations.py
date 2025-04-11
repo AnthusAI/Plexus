@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional
 
 from ruamel.yaml import YAML
+from gql import gql
 
 from plexus.cli.shared import get_score_yaml_path
 
@@ -75,7 +76,7 @@ def fetch_score_configurations(
         logging.info(f"Fetching configuration for score: {score_name} ({score_id})")
         
         # Get version content
-        version_query = f"""
+        version_query = gql(f"""
         query GetScoreVersion {{
             getScoreVersion(id: "{champion_version_id}") {{
                 id
@@ -85,10 +86,12 @@ def fetch_score_configurations(
                 note
             }}
         }}
-        """
+        """)
         
         try:
-            version_result = client.execute(version_query)
+            with client as session:
+                version_result = session.execute(version_query)
+                
             version_data = version_result.get('getScoreVersion')
             
             if not version_data or not version_data.get('configuration'):
