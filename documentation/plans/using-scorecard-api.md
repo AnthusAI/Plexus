@@ -341,14 +341,26 @@ This is the core change, moving away from the global registry for API loading an
     - Be aware of the directory structure created by `get_score_yaml_path`: it organizes files by scorecard name first
 
 ### Core Loading Logic
-- ⬜ **Step 6: Implement scorecard structure fetching**
+- ✅ **Step 6: Implement scorecard structure fetching**
   - What: Add code to fetch scorecard structure without full configurations
   - Goal: Retrieve minimal data needed to identify scores and relationships
+  - Implementation:
+    1. Created direct memoized resolver functions that don't rely on context managers
+    2. Implemented `fetch_scorecard_structure` function to retrieve scorecard data
+    3. Included all essential fields (ID, name, key, sections, scores) but omitted configurations
+    4. Added proper error handling and logging
+    5. Created verification script to test with different identifier types
   - Verify: Structure data contains required fields (ids, names, champion version ids) when tested from the `/Users/ryan/projects/Call-Criteria-Python` directory
 
-- ⬜ **Step 7: Implement target score identification**
+- ✅ **Step 7: Implement target score identification**
   - What: Add logic to identify target scores from command options or all scores
   - Goal: Determine which scores need to be evaluated
+  - Implementation:
+    1. Created `identify_target_scores` function to process requested score names
+    2. Added support for finding scores by name, key, ID or external ID
+    3. Implemented fallback to all scores when no specific scores found
+    4. Added proper logging and error handling
+    5. Created verification script to test different score name scenarios
   - Verify: Correct scores are identified based on command options when run from the `/Users/ryan/projects/Call-Criteria-Python` directory
 
 - ⬜ **Step 8: Implement local cache checking**
