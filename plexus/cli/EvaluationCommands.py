@@ -70,12 +70,129 @@ def evaluate():
     pass
 
 def load_configuration_from_yaml_file(configuration_file_path):
-    if os.path.exists(configuration_file_path):
-        with open(configuration_file_path, 'r') as file:
-            return yaml.safe_load(file)
-    else:
-        logging.info(f"Configuration file not found: {configuration_file_path}")
-        return {}
+    """Load configuration from a YAML file."""
+    try:
+        with open(configuration_file_path, 'r') as f:
+            configuration = yaml.safe_load(f)
+        return configuration
+    except FileNotFoundError:
+        logging.error(f"File not found: {configuration_file_path}")
+        return None
+    except yaml.YAMLError as e:
+        logging.error(f"YAML parsing error in {configuration_file_path}: {str(e)}")
+        return None
+    except Exception as e:
+        logging.error(f"Error loading configuration from {configuration_file_path}: {str(e)}")
+        return None
+
+def load_scorecard_from_api(identifier, score_names=None):
+    """
+    Load a scorecard from the API with dependency-aware fetching.
+    
+    Args:
+        identifier (str): The scorecard identifier (ID, name, key, or external ID)
+        score_names (list, optional): List of specific score names to load
+        
+    Returns:
+        Scorecard: An initialized Scorecard instance with required scores loaded
+    """
+    from plexus.Scorecard import Scorecard
+    from plexus.cli.memoized_resolvers import memoized_resolve_scorecard_identifier
+    from plexus.dashboard.client import PlexusDashboardClient
+    from plexus.cli.iterative_config_fetching import iteratively_fetch_configurations
+    import logging
+    
+    client = create_client()
+    logging.info(f"Loading scorecard '{identifier}' from API")
+    
+    try:
+        # 1. Resolve the scorecard ID
+        scorecard_id = memoized_resolve_scorecard_identifier(client, identifier)
+        if not scorecard_id:
+            error_msg = f"Could not resolve scorecard identifier: {identifier}"
+            logging.error(error_msg)
+            click.echo(f"Error: {error_msg}", err=True)
+            click.echo("Please check the identifier and ensure it exists in the dashboard.")
+            click.echo("If using a local scorecard, add the --yaml flag to load from YAML files.")
+            raise ValueError(error_msg)
+        logging.info(f"Resolved scorecard ID: {scorecard_id}")
+        
+        # 2. Fetch scorecard structure
+        from plexus.cli.dependency_discovery import fetch_scorecard_structure
+        try:
+            scorecard_structure = fetch_scorecard_structure(client, scorecard_id)
+            if not scorecard_structure:
+                error_msg = f"Could not fetch structure for scorecard: {scorecard_id}"
+                logging.error(error_msg)
+                click.echo(f"Error: {error_msg}", err=True)
+                raise ValueError(error_msg)
+        except Exception as e:
+            error_msg = f"API error fetching scorecard structure: {str(e)}"
+            logging.error(error_msg)
+            click.echo(f"Error: {error_msg}", err=True)
+            click.echo(f"This might be due to API connectivity issues or insufficient permissions.")
+            raise ValueError(error_msg) from e
+        
+        # 3. Identify target scores
+        from plexus.cli.dependency_discovery import identify_target_scores
+        try:
+            target_scores = identify_target_scores(scorecard_structure, score_names)
+            if not target_scores:
+                if score_names:
+                    error_msg = f"No scores found in scorecard matching names: {score_names}"
+                else:
+                    error_msg = f"No scores found in scorecard {identifier}"
+                logging.error(error_msg)
+                click.echo(f"Error: {error_msg}", err=True)
+                raise ValueError(error_msg)
+        except Exception as e:
+            error_msg = f"Error identifying target scores: {str(e)}"
+            logging.error(error_msg)
+            click.echo(f"Error: {error_msg}", err=True)
+            raise ValueError(error_msg) from e
+        
+        # 4. Iteratively fetch configurations with dependency discovery
+        try:
+            scores_config = iteratively_fetch_configurations(client, scorecard_structure, target_scores)
+            if not scores_config:
+                error_msg = f"Failed to fetch score configurations for scorecard: {identifier}"
+                logging.error(error_msg)
+                click.echo(f"Error: {error_msg}", err=True)
+                raise ValueError(error_msg)
+        except Exception as e:
+            error_msg = f"Error fetching score configurations: {str(e)}"
+            logging.error(error_msg)
+            click.echo(f"Error: {error_msg}", err=True)
+            click.echo("This might be due to champion versions missing for some scores.")
+            raise ValueError(error_msg) from e
+        
+        # 5. Create scorecard instance from API data
+        try:
+            scorecard_instance = Scorecard.create_instance_from_api_data(
+                api_data=scorecard_structure,
+                scores_config=scores_config
+            )
+        except Exception as e:
+            error_msg = f"Error creating scorecard instance: {str(e)}"
+            logging.error(error_msg)
+            click.echo(f"Error: {error_msg}", err=True)
+            click.echo("This might be due to invalid score configurations or missing dependencies.")
+            raise ValueError(error_msg) from e
+        
+        logging.info(f"Successfully loaded scorecard '{scorecard_instance.name}' with " +
+                    f"{len(scores_config)} scores and their dependencies")
+        
+        return scorecard_instance
+        
+    except Exception as e:
+        error_msg = f"Error loading scorecard from API: {str(e)}"
+        logging.error(error_msg)
+        if not isinstance(e, ValueError):
+            # Only add this message for unexpected errors
+            click.echo(f"Error: {error_msg}", err=True)
+            click.echo("This might be due to API connectivity issues or invalid configurations.")
+            click.echo("Try using the --yaml flag to load from local YAML files instead.")
+        raise
 
 @evaluate.command()
 @click.option('--scorecard', 'scorecard', default=None, help='Scorecard identifier (ID, name, key, or external ID)')
@@ -277,180 +394,49 @@ def accuracy(
                                         taskId
                                     }
                                 }"""
-                                update_data = {
-                                    'id': evaluation_record.id,
-                                    'taskId': task.id
-                                }
-                                logging.info(f"Attempting to update evaluation record {evaluation_record.id} with data:\n{json.dumps(update_data, indent=2)}")
-                                result = client.execute(mutation, {'input': update_data})
-                                logging.info(f"Update result:\n{json.dumps(result, indent=2)}")
-
-                            # Update evaluation record with scorecard ID if we have one
-                            if scorecard_record and 'id' in scorecard_record:
-                                update_data = {
-                                    'id': evaluation_record.id,
-                                    'taskId': task.id,  # Always include task ID in updates
-                                    'scorecardId': scorecard_record['id']
-                                }
-                                logging.info(f"Updating evaluation record {evaluation_record.id} with data:\n{json.dumps(update_data, indent=2)}")
-                                mutation = """mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
-                                    updateEvaluation(input: $input) {
-                                        id
-                                        taskId
-                                        scorecardId
-                                    }
-                                }"""
-                                result = client.execute(mutation, {'input': update_data})
-                                logging.info(f"Update result:\n{json.dumps(result, indent=2)}")
-
-                            # Update evaluation record with score ID if we have one
-                            if score_id:
-                                update_data = {
-                                    'id': evaluation_record.id,
-                                    'taskId': task.id,  # Always include task ID in updates
-                                    'scoreId': score_id
-                                }
-                                logging.info(f"Updating evaluation record {evaluation_record.id} with data:\n{json.dumps(update_data, indent=2)}")
-                                mutation = """mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
-                                    updateEvaluation(input: $input) {
-                                        id
-                                        taskId
-                                        scoreId
-                                    }
-                                }"""
-                                result = client.execute(mutation, {'input': update_data})
-                                logging.info(f"Update result:\n{json.dumps(result, indent=2)}")
-
-                        except Exception as e:
-                            logging.error(f"Failed to create or update Evaluation record: {str(e)}", exc_info=True)
-                            raise
-
+                                try:
+                                    client.execute(mutation, {
+                                        'input': {
+                                            'id': evaluation_record.id,
+                                            'taskId': task.id
+                                        }
+                                    })
+                                    logging.info(f"Successfully updated task ID for evaluation {evaluation_record.id}")
+                                except Exception as update_err:
+                                    logging.error(f"Failed to update task ID: {str(update_err)}")
+                        except Exception as eval_err:
+                            logging.error(f"Error creating evaluation record: {str(eval_err)}")
                     except Exception as e:
-                        logging.error(f"Failed to create task: {str(e)}")
-                        logging.error("Error details:", exc_info=True)
+                        logging.error(f"Error creating task or evaluation: {str(e)}")
                         raise
-                else:
-                    logging.warning("PLEXUS_API_URL or PLEXUS_API_KEY not set, skipping task creation")
-
-            # If we have a task but no tracker yet (Celery path), create the tracker now
-            if task and not tracker:
-                stage_configs = {
-                    "Setup": StageConfig(
-                        order=1,
-                        status_message="Setting up evaluation..."
-                    ),
-                    "Processing": StageConfig(
-                        order=2,
-                        total_items=number_of_samples,
-                        status_message="Waiting to start processing..."
-                    ),
-                    "Finalizing": StageConfig(
-                        order=3,
-                        status_message="Waiting to start finalization..."
-                    )
-                }
+            
+            # Load the scorecard either from YAML or API
+            if yaml:
+                # Load from YAML (legacy approach)
+                logging.info(f"Loading scorecard '{scorecard}' from local YAML files")
+                Scorecard.load_and_register_scorecards('scorecards/')
+                scorecard_class = scorecard_registry.get(scorecard)
                 
-                # Create tracker with existing task
-                tracker = TaskProgressTracker(
-                    total_items=number_of_samples,
-                    stage_configs=stage_configs,
-                    task_id=task.id,  # Use existing task ID
-                    target=f"evaluation/accuracy/{scorecard}",
-                    command=f"evaluate accuracy --scorecard {scorecard}",
-                    description=f"Accuracy evaluation for {scorecard}",
-                    dispatch_status="DISPATCHED",
-                    prevent_new_task=True,  # Prevent new task creation since we have one
-                    metadata={
-                        "type": "Accuracy Evaluation",
-                        "scorecard": scorecard,
-                        "task_type": "Accuracy Evaluation"
-                    },
-                    account_id=account.id  # Now we have account.id available
-                )
+                if scorecard_class is None:
+                    error_msg = f"Scorecard '{scorecard}' not found in registry"
+                    logging.error(error_msg)
+                    raise ValueError(error_msg)
+                    
+                scorecard_instance = scorecard_class(scorecard=scorecard)
+                logging.info(f"Loaded scorecard '{scorecard_instance.name}' from local YAML files")
+            else:
+                # Load from API (new approach)
+                target_score_names = score_name.split(',') if score_name else None
+                scorecard_instance = load_scorecard_from_api(scorecard, target_score_names)
                 
-                # Create the Evaluation record for Celery path
-                started_at = datetime.now(timezone.utc)
-                experiment_params = {
-                    "type": "accuracy",
-                    "accountId": account.id,
-                    "status": "SETUP",
-                    "accuracy": 0.0,
-                    "createdAt": started_at.isoformat().replace('+00:00', 'Z'),
-                    "updatedAt": started_at.isoformat().replace('+00:00', 'Z'),
-                    "totalItems": number_of_samples,
-                    "processedItems": 0,
-                    "parameters": json.dumps({
-                        "sampling_method": sampling_method,
-                        "sample_size": number_of_samples
-                    }),
-                    "startedAt": started_at.isoformat().replace('+00:00', 'Z'),
-                    "estimatedRemainingSeconds": number_of_samples,
-                    "taskId": task.id
-                }
-                
-                try:
-                    logging.info("Creating initial Evaluation record for Celery path...")
-                    logging.info(f"Creating evaluation record with params:\n{json.dumps(experiment_params, indent=2)}")
-                    evaluation_record = DashboardEvaluation.create(
-                        client=client,
-                        **experiment_params
-                    )
-                    logging.info(f"Created initial Evaluation record with ID: {evaluation_record.id}")
-
-                    # Explicitly update to ensure task ID is set
-                    update_data = {
-                        'id': evaluation_record.id,
-                        'taskId': task.id
-                    }
-                    logging.info(f"Updating evaluation record {evaluation_record.id} with data:\n{json.dumps(update_data, indent=2)}")
-                    mutation = """mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
-                        updateEvaluation(input: $input) {
-                            id
-                            taskId
-                        }
-                    }"""
-                    client.execute(mutation, {'input': update_data})
-                    logging.info(f"Updated Evaluation record {evaluation_record.id} with taskId: {task.id}")
-
-                    # Update evaluation record with scorecard ID if we have one
-                    if scorecard_record and 'id' in scorecard_record:
-                        update_data = {
-                            'id': evaluation_record.id,
-                            'taskId': task.id,  # Always include task ID in updates
-                            'scorecardId': scorecard_record['id']
-                        }
-                        logging.info(f"Updating evaluation record {evaluation_record.id} with data:\n{json.dumps(update_data, indent=2)}")
-                        mutation = """mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
-                            updateEvaluation(input: $input) {
-                                id
-                                taskId
-                                scorecardId
-                            }
-                        }"""
-                        client.execute(mutation, {'input': update_data})
-                        logging.info(f"Updated evaluation record with scorecard ID: {scorecard_record['id']}")
-
-                    # Update evaluation record with score ID if we have one
-                    if score_id:
-                        update_data = {
-                            'id': evaluation_record.id,
-                            'taskId': task.id,  # Always include task ID in updates
-                            'scoreId': score_id
-                        }
-                        logging.info(f"Updating evaluation record {evaluation_record.id} with data:\n{json.dumps(update_data, indent=2)}")
-                        mutation = """mutation UpdateEvaluation($input: UpdateEvaluationInput!) {
-                            updateEvaluation(input: $input) {
-                                id
-                                taskId
-                                scoreId
-                            }
-                        }"""
-                        client.execute(mutation, {'input': update_data})
-                        logging.info(f"Updated evaluation record with score ID: {score_id}")
-
-                except Exception as e:
-                    logging.error(f"Failed to create or update Evaluation record in Celery path: {str(e)}", exc_info=True)
-                    raise
+            # Try to find a matching scorecard in the dashboard
+            try:
+                scorecard_record = ScorecardRecord.get_by_name(name=scorecard_instance.name, client=client)
+                if scorecard_record:
+                    logging.info(f"Found matching dashboard scorecard: {scorecard_record.name} ({scorecard_record.id})")
+            except Exception as e:
+                logging.warning(f"Could not find matching dashboard scorecard: {str(e)}")
+                # Continue even if we can't find a matching scorecard record
 
             if task:
                 try:
@@ -1199,20 +1185,37 @@ def distribution(
     start_time = time.time()
     logging.info(f"Starting distribution evaluation for Scorecard {scorecard} at {time.strftime('%H:%M:%S')}")
 
-    Scorecard.load_and_register_scorecards('scorecards/')
-    scorecard_class = scorecard_registry.get(scorecard)
+    # Load the scorecard either from YAML or API
+    if yaml:
+        # Load from YAML (legacy approach)
+        logging.info(f"Loading scorecard '{scorecard}' from local YAML files")
+        Scorecard.load_and_register_scorecards('scorecards/')
+        scorecard_class = scorecard_registry.get(scorecard)
+        
+        if scorecard_class is None:
+            logging.error(f"Scorecard with name '{scorecard}' not found.")
+            return
+            
+        scorecard_instance = scorecard_class(scorecard=scorecard)
+    else:
+        # Load from API (new approach)
+        target_score_names = subset_of_scores.split(',') if subset_of_scores else None
+        try:
+            scorecard_instance = load_scorecard_from_api(scorecard, target_score_names)
+        except Exception as e:
+            logging.error(f"Failed to load scorecard from API: {str(e)}")
+            return
 
-    if scorecard_class is None:
-        logging.error(f"Scorecard with name '{scorecard}' not found.")
-        return
-
-    # We're removing support for a list of scores.
-    # scores_to_evaluate = subset_of_scores.split(',') if subset_of_scores else list(scorecard_class.scores.keys())[:10]
-    scores_to_evaluate = subset_of_scores
-    total_scores = len(scores_to_evaluate)
-
+    # Extract score names to evaluate
+    if subset_of_scores:
+        scores_to_evaluate = subset_of_scores.split(',')
+    else:
+        scores_to_evaluate = [score['name'] for score in scorecard_instance.scores]
+        
+    logging.info(f"Evaluating {len(scores_to_evaluate)} scores: {', '.join(scores_to_evaluate)}")
+    
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_score = {executor.submit(evaluate_score_distribution, score_name, scorecard_class, number_of_samples): score_name for score_name in scores_to_evaluate}
+        future_to_score = {executor.submit(evaluate_score_distribution, score_name, scorecard_instance, number_of_samples): score_name for score_name in scores_to_evaluate}
         for future in concurrent.futures.as_completed(future_to_score):
             score_name = future_to_score[future]
             try:
@@ -1223,14 +1226,14 @@ def distribution(
     end_time = time.time()
     logging.info(f"Finished distribution evaluation at {time.strftime('%H:%M:%S')}. Total time: {end_time - start_time:.2f} seconds")
 
-def evaluate_score_distribution(score_name, scorecard_class, number_of_samples):
+def evaluate_score_distribution(score_name, scorecard_instance, number_of_samples):
     start_time = time.time()
     logging.info(f"Started evaluating distribution for Score {score_name} at {time.strftime('%H:%M:%S')}")
     
-    score_configuration = next((score for score in scorecard_class.scores if score['name'] == score_name), {})
+    score_configuration = next((score for score in scorecard_instance.scores if score['name'] == score_name), {})
 
     if not score_configuration:
-        logging.error(f"Score with name '{score_name}' not found in scorecard '{scorecard_class.name}'.")
+        logging.error(f"Score with name '{score_name}' not found in scorecard '{scorecard_instance.name}'.")
         return
 
     score_class_name = score_configuration['class']
@@ -1242,7 +1245,7 @@ def evaluate_score_distribution(score_name, scorecard_class, number_of_samples):
         logging.error(f"{score_class_name} is not a class.")
         return
 
-    score_configuration['scorecard_name'] = scorecard_class.name
+    score_configuration['scorecard_name'] = scorecard_instance.name
     score_configuration['score_name'] = score_name
     score_instance = score_class(**score_configuration)
 
@@ -1271,7 +1274,7 @@ def evaluate_score_distribution(score_name, scorecard_class, number_of_samples):
                 raise ValueError("PLEXUS_ACCOUNT_KEY not found in environment")
             metadata.update({
                 'account_key': account_key,
-                'scorecard_key': scorecard_class.key,
+                'scorecard_key': scorecard_instance.key,
                 'score_name': score_name
             })
         prediction_result = score_instance.predict(

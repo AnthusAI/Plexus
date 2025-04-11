@@ -442,20 +442,47 @@ This is the core change, moving away from the global registry for API loading an
     5. Added a fallback for missing scores or import errors to ensure resilience
   - Verify: Instance registry contains only needed scores with correct configurations when tested from the `/Users/ryan/projects/Call-Criteria-Python` directory
 
-- ⬜ **Step 14: Ensure compatibility with dependency resolution**
+- ✅ **Step 14: Ensure compatibility with dependency resolution**
   - What: Test/fix dependency resolution with instance registry
   - Goal: Ensure existing dependency resolution works with new approach
+  - Implementation:
+    1. Created a verification script `verify_instance_dependencies.py` to test dependency resolution
+    2. Tested dependency graph building with simple and linear dependency structures
+    3. Verified that complex dependencies with multiple levels are correctly resolved
+    4. Tested conditional dependencies with different operators (==, in) and values
+    5. Confirmed that `check_dependency_conditions` method works with instance-based scorecards
+    6. Added defensive handling in the `build_dependency_graph` method to handle both class and instance scores
   - Verify: Dependencies resolve correctly during evaluation when running from the `/Users/ryan/projects/Call-Criteria-Python` directory
 
 ### Integration & Testing
-- ⬜ **Step 15: Integrate API path into command handler**
+- ✅ **Step 15: Integrate API path into command handler**
   - What: Connect new loading logic to command handler with flag check
   - Goal: Switch between API and YAML loading based on flags
+  - Implementation:
+    1. Created a unified loading approach in both `accuracy` and `distribution` commands
+    2. Added conditional logic to check the `--yaml` flag
+    3. When `--yaml` is true: use legacy approach with `load_and_register_scorecards` and `scorecard_registry`
+    4. When `--yaml` is false: use new approach with `load_scorecard_from_api` function
+    5. Ensured both paths create compatible scorecard instances
+    6. Added detailed error messages and handling for API errors
+    7. Updated the `distribution` command to use instance-based scorecard instead of class
   - Verify: Commands work with both loading approaches when run from the `/Users/ryan/projects/Call-Criteria-Python` directory
 
-- ⬜ **Step 16: Implement error handling**
+- ✅ **Step 16: Implement error handling**
   - What: Add robust error handling for API failures, missing data, etc.
   - Goal: Ensure graceful failure and helpful error messages
+  - Implementation:
+    1. Added detailed error handling with specific messages for each failure mode:
+       - Scorecard identifier resolution failures
+       - API connectivity issues
+       - Missing score configurations
+       - Invalid or missing champion versions
+       - Scorecard instantiation errors
+    2. Used try/except blocks around each major operation in the loading process
+    3. Added helpful user messages that suggest possible solutions
+    4. Maintained proper error propagation with `raise ... from e` pattern
+    5. Used both logging (for detailed debugging) and click.echo (for user messages)
+    6. Added special handling for different error types to avoid duplicate messages
   - Verify: Commands fail gracefully with clear error messages when tested from the `/Users/ryan/projects/Call-Criteria-Python` directory
 
 - ⬜ **Step 17: End-to-end testing with single scores**
