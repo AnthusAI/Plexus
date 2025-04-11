@@ -2,6 +2,24 @@
 
 > **Note:** All CLI commands in this plan should be run from the Call-Criteria-Python project root directory (`/Users/ryan/projects/Call-Criteria-Python`).
 
+## Repository Structure Clarification
+
+This project involves two separate repositories:
+
+1. **Plexus-2 Repository** (`/Users/ryan/projects/Plexus-2`):
+   - Contains the core `plexus` Python module with all the shared functionality
+   - Includes the implementation of the scorecard API, evaluation framework, and CLI
+   - Houses the `memoized_resolvers.py`, `EvaluationCommands.py`, and other core files
+   - Development and changes to the core Plexus module happen here
+
+2. **Call-Criteria-Python Repository** (`/Users/ryan/projects/Call-Criteria-Python`):
+   - Contains client-specific code and configurations
+   - Uses the Plexus module via installation or symlink
+   - CLI commands are executed from this directory to use the client-specific configurations
+   - The actual evaluation data and client scorecards are stored in this repository
+
+When making changes to the core Plexus functionality (like our current task), we modify files in the Plexus-2 repository, but test the changes by running commands from the Call-Criteria-Python repository.
+
 ## 1. Overview
 
 Currently, evaluation commands (`evaluate accuracy`, `evaluate distribution`) in the Plexus CLI primarily load scorecard configurations from local YAML files found within the `scorecards/` directory. This is done via `Scorecard.load_and_register_scorecards()`, which populates the global `scorecard_registry`. While functional, this approach requires local YAML files, doesn't fully leverage the centralized scorecard management via the API, and can be inefficient for scorecards with many scores, as it loads all of them regardless of need.
@@ -285,15 +303,42 @@ This is the core change, moving away from the global registry for API loading an
   - Verify: Run `plexus evaluate --help` from the `/Users/ryan/projects/Call-Criteria-Python` directory and confirm flag is present with correct help text
 
 ### Identifier Resolution & Local Caching
-- ⬜ **Step 4: Verify existing identifier caching**
-  - What: Add logging to track cache hits/misses in `memoized_resolvers.py`
+- ✅ **Step 4: Verify existing identifier caching**
+  - What: Add logging to track cache hits/misses in `memoized_resolvers.py` in the Plexus-2 repository
   - Goal: Confirm identifier resolution caching is working correctly
+  - Implementation:
+    1. Modified `/Users/ryan/projects/Plexus-2/plexus/cli/memoized_resolvers.py` to add debug logging
+    2. Added log messages for cache hits: `logging.debug(f"Cache HIT for scorecard identifier: {identifier}")`
+    3. Added log messages for cache misses: `logging.debug(f"Cache MISS for scorecard identifier: {identifier}")`
+    4. Added similar logging for score identifier resolution
+    5. Added logging for cache clearing operations
   - Verify: Run commands with same identifier multiple times from the `/Users/ryan/projects/Call-Criteria-Python` directory and see cache hits in logs
 
-- ⬜ **Step 5: Verify existing local file storage**
+- ✅ **Step 5: Verify existing local file storage**
   - What: Test score configuration saving/loading using `get_score_yaml_path`
   - Goal: Confirm local file storage pattern works as expected
-  - Verify: Configurations are saved and loaded from expected paths when commands are run from the `/Users/ryan/projects/Call-Criteria-Python` directory
+  - Implementation:
+    1. Created a verification script `verify_id_resolution_and_cache.py` to test both identifier resolution caching and local file storage
+    2. Script tests scorecard ID resolution, score ID resolution, and verifies that caching improves performance
+    3. Script retrieves score configurations from API and saves them locally using `get_score_yaml_path`
+    4. Fixed GraphQL client issue: updated script to use context manager pattern for GraphQL execution:
+       ```python
+       # Changed from:
+       result = client.execute(query)
+       
+       # To:
+       with client as session:
+           result = session.execute(gql(query))
+       ```
+    5. Updated `identifier_resolution.py` to use the same context manager pattern for consistent GraphQL execution
+    6. Added proper exception handling for TransportQueryError
+  - Verify: Successfully ran verification script from `/Users/ryan/projects/Call-Criteria-Python`, confirming:
+    - Identifier resolution caching works (2nd lookups are faster)
+    - Score configurations are correctly saved to local YAML files
+    - Configurations are saved in expected directory structure: `scorecards/<scorecard_name>/<score_name>.yaml`
+  - Notes for future implementation: 
+    - Always use the context manager pattern for GraphQL client execution to avoid "Must provide document" errors
+    - Be aware of the directory structure created by `get_score_yaml_path`: it organizes files by scorecard name first
 
 ### Core Loading Logic
 - ⬜ **Step 6: Implement scorecard structure fetching**
