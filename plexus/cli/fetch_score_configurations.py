@@ -76,7 +76,7 @@ def fetch_score_configurations(
         logging.info(f"Fetching configuration for score: {score_name} ({score_id})")
         
         # Get version content
-        version_query = gql(f"""
+        version_query = f"""
         query GetScoreVersion {{
             getScoreVersion(id: "{champion_version_id}") {{
                 id
@@ -86,12 +86,12 @@ def fetch_score_configurations(
                 note
             }}
         }}
-        """)
+        """
         
         try:
-            with client as session:
-                version_result = session.execute(version_query)
-                
+            # Execute query directly without context manager
+            version_result = client.execute(version_query)
+            
             version_data = version_result.get('getScoreVersion')
             
             if not version_data or not version_data.get('configuration'):

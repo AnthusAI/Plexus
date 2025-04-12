@@ -3,13 +3,15 @@
 import logging
 from typing import List, Dict, Any, Optional
 
-def identify_target_scores(scorecard_structure: Dict[str, Any], score_names: Optional[str] = None) -> List[Dict[str, Any]]:
+def identify_target_scores(scorecard_structure: Dict[str, Any], score_names: Optional[Any] = None) -> List[Dict[str, Any]]:
     """Identify which scores should be targeted for evaluation.
     
     Args:
         scorecard_structure: The scorecard structure retrieved from the API
-        score_names: Optional comma-separated list of score names to evaluate
-                    If None or empty, all scores in the scorecard will be evaluated
+        score_names: Optional score names to evaluate. Can be:
+                    - None or empty: all scores in the scorecard will be evaluated
+                    - str: comma-separated list of score names
+                    - list: list of score names
     
     Returns:
         List of score objects to be evaluated with their metadata
@@ -32,9 +34,18 @@ def identify_target_scores(scorecard_structure: Dict[str, Any], score_names: Opt
     if not score_names:
         logging.info(f"No specific scores requested. Using all {len(all_scores)} scores in the scorecard.")
         return all_scores
-        
-    # Parse the comma-separated list of score names
-    target_score_names = [name.strip() for name in score_names.split(',') if name.strip()]
+    
+    # Convert score_names to a list of target names
+    target_score_names = []
+    if isinstance(score_names, str):
+        # Parse the comma-separated list of score names
+        target_score_names = [name.strip() for name in score_names.split(',') if name.strip()]
+    elif isinstance(score_names, list):
+        # Already a list, just copy it
+        target_score_names = [name for name in score_names if name]
+    else:
+        logging.warning(f"Unexpected type for score_names: {type(score_names)}. Using all scores.")
+        return all_scores
     
     if not target_score_names:
         logging.info(f"Empty score names list. Using all {len(all_scores)} scores in the scorecard.")
