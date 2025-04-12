@@ -52,10 +52,13 @@ def sanitize_path_name(name: str) -> str:
         'Patient Interest'
         >>> sanitize_path_name("Call/Response*Test")
         'Call-Response-Test'
+        >>> sanitize_path_name("Special: Score (with) [chars]")
+        'Special- Score (with) -chars-'
     """
     # Replace slashes, backslashes, and other filesystem-unsafe characters with dashes
     # Keep spaces and most punctuation intact
-    sanitized = re.sub(r'[<>:"/\\|?*]', '-', name)
+    # Make sure to escape the square brackets in the regex pattern since they're special in regex
+    sanitized = re.sub(r'[<>:"/\\|?*\[\]]', '-', name)
     
     # Remove or replace any other control characters
     sanitized = "".join(char if char.isprintable() else '-' for char in sanitized)

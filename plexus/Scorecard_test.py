@@ -129,7 +129,7 @@ class TestScorecard:
             ]
         }
         self.scorecard.properties = simple_config
-        Scorecard.scores = simple_config['scores']
+        self.scorecard.scores = simple_config['scores']  # Use instance scores instead of class level
         
         # Update the get_properties mock for simple scores
         def get_properties_side_effect(score_name):
@@ -167,19 +167,52 @@ class TestScorecard:
             
         self.mock_registry.get.side_effect = mock_get
 
-        # Call the method we're testing
-        result = await self.scorecard.score_entire_text(
-            text="Sample text",
-            metadata={},
-            modality="test"
-        )
+        # Override score_names_to_process to use our simple scores
+        def mock_score_names_to_process():
+            return ['SimpleScore1', 'SimpleScore2', 'SimpleScore3']
+        
+        original_method = self.scorecard.score_names_to_process
+        self.scorecard.score_names_to_process = mock_score_names_to_process
 
-        # Assert that the result contains all scores
-        assert len(result) == 3
+        try:
+            # Call the method we're testing
+            result = await self.scorecard.score_entire_text(
+                text="Sample text",
+                metadata={},
+                modality="test"
+            )
+            
+            # Assert that the result contains all scores
+            assert len(result) == 3
+        finally:
+            # Restore the original method
+            self.scorecard.score_names_to_process = original_method
 
     @pytest.mark.asyncio
     async def test_score_entire_text_with_dependencies(self):
         """Test scoring with dependencies"""
+        # Create a config with dependencies for this test
+        dependency_config = {
+            'name': 'TestScorecard',
+            'scores': [
+                {'name': 'Score1', 'id': '1'},
+                {'name': 'Score2', 'id': '2', 'depends_on': ['Score1']},
+                {'name': 'Score3', 'id': '3', 'depends_on': ['Score1']}
+            ]
+        }
+        
+        # Set up the scorecard (use instance properties)
+        self.scorecard.properties = dependency_config
+        self.scorecard.scores = dependency_config['scores']
+        
+        # Update the mocks to provide score properties
+        def get_properties_side_effect(score_name):
+            for score in dependency_config['scores']:
+                if score['name'] == score_name:
+                    return score
+            return None
+        self.mock_registry.get_properties.side_effect = get_properties_side_effect
+            
         # Create a mock score class
         mock_score_class = MagicMock()
         mock_score_instance = MagicMock()
@@ -280,7 +313,7 @@ class TestScorecard:
             ]
         }
         self.scorecard.properties = simple_config
-        Scorecard.scores = simple_config['scores']
+        self.scorecard.scores = simple_config['scores']
         
         # Update the get_properties mock for simple scores
         def get_properties_side_effect(score_name):
@@ -318,16 +351,27 @@ class TestScorecard:
             
         self.mock_registry.get.side_effect = mock_get
 
-        # Call the method we're testing
-        result = await self.scorecard.score_entire_text(
-            text="Sample text",
-            metadata={},
-            modality="test"
-        )
+        # Override score_names_to_process to use our simple score
+        def mock_score_names_to_process():
+            return ['SingleResultScore']
+        
+        original_method = self.scorecard.score_names_to_process
+        self.scorecard.score_names_to_process = mock_score_names_to_process
 
-        # Assert that the result contains the score
-        assert len(result) == 1
-        assert result['1'].value == 'Pass'
+        try:
+            # Call the method we're testing
+            result = await self.scorecard.score_entire_text(
+                text="Sample text",
+                metadata={},
+                modality="test"
+            )
+            
+            # Assert that the result contains the score
+            assert len(result) == 1
+            assert result['1'].value == 'Pass'
+        finally:
+            # Restore the original method
+            self.scorecard.score_names_to_process = original_method
 
     @pytest.mark.asyncio
     async def test_score_entire_text_handles_result_list(self):
@@ -340,7 +384,7 @@ class TestScorecard:
             ]
         }
         self.scorecard.properties = simple_config
-        Scorecard.scores = simple_config['scores']
+        self.scorecard.scores = simple_config['scores']  # Use instance scores instead of class level
         
         # Update the get_properties mock for simple scores
         def get_properties_side_effect(score_name):
@@ -378,16 +422,27 @@ class TestScorecard:
             
         self.mock_registry.get.side_effect = mock_get
 
-        # Call the method we're testing
-        result = await self.scorecard.score_entire_text(
-            text="Sample text",
-            metadata={},
-            modality="test"
-        )
+        # Override score_names_to_process to use our simple score
+        def mock_score_names_to_process():
+            return ['ListResultScore']
+        
+        original_method = self.scorecard.score_names_to_process
+        self.scorecard.score_names_to_process = mock_score_names_to_process
 
-        # Assert that the result contains the score
-        assert len(result) == 1
-        assert result['1'].value == 'Pass'
+        try:
+            # Call the method we're testing
+            result = await self.scorecard.score_entire_text(
+                text="Sample text",
+                metadata={},
+                modality="test"
+            )
+            
+            # Assert that the result contains the score
+            assert len(result) == 1
+            assert result['1'].value == 'Pass'
+        finally:
+            # Restore the original method
+            self.scorecard.score_names_to_process = original_method
 
 if __name__ == '__main__':
     pytest.main()

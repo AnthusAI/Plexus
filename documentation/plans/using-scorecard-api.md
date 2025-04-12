@@ -284,6 +284,7 @@ This is the core change, moving away from the global registry for API loading an
 *   **Remove `create_from_api_data`:** This class factory method is no longer needed.
 *   **Remove `create_from_yaml`? (Optional):** We could potentially refactor `create_from_yaml` to use the same direct instantiation logic as the API path, just sourcing the data from the file instead of the API. This would unify the instantiation process.
 *   **Ensure `get_score_result` uses `self.score_registry`:** Double-check that score lookup within the execution logic correctly uses the instance's `score_registry`.
+*   **Instance vs. Class-level scores:** Pay careful attention to whether scores are being stored at the instance level (`self.scores`) or class level (`cls.scores` or `Scorecard.scores`). The `score_entire_text` method uses `self.score_names_to_process()` which falls back to class-level scores if instance-level scores aren't available. Modifying class-level scores without updating instance-level scores (or vice versa) can lead to unexpected behavior when `score_entire_text` processes more or different scores than intended. This is particularly important when dealing with scorecard instances loaded from the API.
 
 ### 3.5. Registry Usage
 
@@ -629,6 +630,132 @@ This is the core change, moving away from the global registry for API loading an
     4. Update README with new features and options
   - Verify: Help text is clear and comprehensive when running commands from the `/Users/ryan/projects/Call-Criteria-Python` directory
 
+- ⬜ **Step 21: Enhance formal test coverage**
+  - What: Incorporate verification scripts into the formal test suite
+  - Goal: Ensure long-term maintainability and regression testing
+  - Implementation Plan:
+    1. Analyze existing `verify_...` scripts to identify testable functionality:
+       - `verify_id_resolution_and_cache.py` → Test identifier resolution and caching
+       - `verify_dependency_discovery.py` → Test dependency extraction and resolution
+       - `verify_iterative_fetching.py` → Test iterative configuration fetching
+       - `verify_instance_dependencies.py` → Test scorecard instantiation from API data
+       - `verify_evaluation_api_loading.py` → Test command integration
+       - `verify_accuracy_dry_run.py` → Test CLI with dry run functionality
+    
+    2. Create formal test modules in the `/plexus/tests/` directory:
+       - `test_scorecard_api_loading.py` - API-based scorecard loading:
+         - Test resolving scorecard by ID, key, name, and external ID
+         - Test scorecard structure fetching with error cases
+         - Test cached vs. uncached resolution performance
+       
+       - `test_score_dependency_resolution.py` - Dependency discovery:
+         - Test simple linear dependencies (A→B→C)
+         - Test complex dependency structures with branches
+         - Test conditional dependencies
+         - Test error cases (circular dependencies, missing scores)
+       
+       - `test_config_caching.py` - Local caching mechanisms:
+         - Test saving configurations to local files
+         - Test loading configurations from cache
+         - Test invalidation and refresh of cached configurations
+         - Test performance improvements with cached configs
+       
+       - `test_evaluation_commands.py` - CLI integration:
+         - Test accuracy command with different identifier types
+         - Test distribution command with API loading
+         - Test YAML flag behavior
+         - Test error handling and user messages
+         - Test `--dry-run` functionality
+    
+    3. Implement proper test fixtures and mocking:
+       - Use `unittest.mock` to mock API responses:
+         ```python
+         @patch('plexus.cli.client.GraphQLClient')
+         def test_scorecard_structure_fetch(self, mock_client):
+             # Configure mock to return predefined responses
+             mock_client.return_value.__enter__.return_value.execute.return_value = {
+                 'getScorecard': {...mock_data...}
+             }
+             # Test the function
+             result = fetch_scorecard_structure(mock_client, 'test-id')
+             # Assert expected results
+         ```
+       
+       - Create YAML fixture files in `/plexus/tests/fixtures/scorecards/`:
+         - `test_simple_dependencies.yaml` - Simple linear dependencies
+         - `test_complex_dependencies.yaml` - Complex dependency structure
+         - `test_conditional_dependencies.yaml` - Conditional dependencies
+       
+       - Create mock GraphQL responses in `/plexus/tests/fixtures/api_responses/`:
+         - `scorecard_structure.json` - Mocked scorecard structure response
+         - `score_configurations.json` - Mocked score configuration responses
+       
+       - Implement `MockGraphQLClient` class to avoid actual API calls:
+         ```python
+         class MockGraphQLClient:
+             def __init__(self, mock_responses=None):
+                 self.mock_responses = mock_responses or {}
+             
+             def __enter__(self):
+                 return self
+                 
+             def __exit__(self, *args):
+                 pass
+                 
+             def execute(self, query, variables=None):
+                 # Return appropriate mock response based on query
+                 query_type = self._determine_query_type(query)
+                 return self.mock_responses.get(query_type, {})
+         ```
+    
+    4. Testing patterns and best practices:
+       - Use `pytest` parameterized tests for testing multiple scenarios:
+         ```python
+         @pytest.mark.parametrize("identifier,expected_id", [
+             ("scorecard-name", "sc-123"),
+             ("scorecard-key", "sc-123"),
+             ("sc-123", "sc-123"),
+             ("ext-id-456", "sc-123"),
+         ])
+         def test_resolve_scorecard_identifier(self, mock_client, identifier, expected_id):
+             # Test with different identifier types
+         ```
+       
+       - Separate unit tests from integration tests:
+         - Unit tests: Test individual functions with mocked dependencies
+         - Integration tests: Test command execution with dry-run flag
+       
+       - Test error handling thoroughly:
+         ```python
+         def test_scorecard_not_found(self, mock_client):
+             # Configure mock to return None for getScorecard
+             mock_client.return_value.__enter__.return_value.execute.return_value = {
+                 'getScorecard': None
+             }
+             # Test function raises appropriate exception
+             with pytest.raises(ScorecardNotFoundError) as excinfo:
+                 fetch_scorecard_structure(mock_client, 'invalid-id')
+             assert "Scorecard not found" in str(excinfo.value)
+         ```
+    
+    5. Create test helpers for common operations:
+       - `create_test_scorecard_structure()` - Generate test scorecard structure
+       - `create_test_score_configuration()` - Generate test score configuration
+       - `setup_mock_client()` - Configure mock GraphQL client with test responses
+       - `assert_dependency_graph()` - Verify dependency graph structure
+    
+    6. Implement CI integration:
+       - Add tests to existing CI workflow
+       - Ensure tests are run on each pull request
+       - Set up code coverage reporting for new test modules
+    
+    7. Create test documentation:
+       - Add docstrings to all test functions explaining what they test
+       - Create README in test directory explaining test organization
+       - Document how to run tests with proper environment setup
+  
+  - Verify: Test suite provides comprehensive coverage of the API loading functionality and passes in CI environment
+
 ## Current Status Update
 
 Based on the latest verification script results, we've made significant progress with the API-based scorecard loading functionality. The core functionality has been successfully implemented and tested:
@@ -640,12 +767,14 @@ Based on the latest verification script results, we've made significant progress
 5. ✅ Scorecard instantiation from API data
 6. ✅ Integration with existing evaluation commands
 7. ✅ Error handling and helpful user messages
+8. ✅ Fixed tests to properly handle instance vs. class-level score configurations
 
 The main improvements in our most recent implementation:
 1. Added the `--dry-run` flag to the accuracy command to bypass database operations
 2. Created a minimal Score class implementation for testing instead of specialized test classes
 3. Eliminated the unnecessary BinaryScore test class for cleaner code organization
 4. Enhanced the setup process to ensure test fixtures are properly copied between repositories
+5. Fixed issues with instance vs. class-level scores, ensuring test fixtures properly set instance-level scores to prevent unintended processing of scores from the original configuration
 
 All tests for single-score evaluation are now passing, including:
 1. ✅ Accuracy command with scorecard name
@@ -655,5 +784,8 @@ All tests for single-score evaluation are now passing, including:
 5. ✅ Accuracy command with YAML flag
 6. ✅ Caching performance improvement
 7. ✅ Invalid scorecard error handling
+8. ✅ Handling of list results from score evaluation
+
+These fixes demonstrate the importance of maintaining proper separation between instance-level and class-level properties in the Scorecard class, which is an important consideration for the API-based loading approach. The `test_score_entire_text_handles_result_list` test now correctly processes only the intended score by setting the instance's scores configuration and overriding the score_names_to_process method.
 
 The next phase will focus on end-to-end testing with scorecard dependencies, comprehensive performance testing, and documentation updates.
