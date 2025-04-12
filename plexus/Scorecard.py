@@ -459,6 +459,10 @@ class Scorecard:
         dependent_scores_added = []
         for score_name in subset_of_score_names:
             score_info = self.score_registry.get_properties(score_name)
+            if score_info is None:
+                logging.warning(f"No properties found for score: {score_name}")
+                continue
+                
             if 'depends_on' in score_info:
                 deps = score_info['depends_on']
                 if isinstance(deps, list):
@@ -525,10 +529,19 @@ class Scorecard:
                     raise ValueError(f"No score class found for {score_name}")
                     
                 score_configuration = self.score_registry.get_properties(score_name)
-                score_configuration.update({
-                    'scorecard_name': self.name,
-                    'score_name': score_name
-                })
+                if score_configuration is None:
+                    # Create a default configuration if none found
+                    score_configuration = {
+                        'name': score_name,
+                        'scorecard_name': self.name
+                    }
+                else:
+                    # Update the existing configuration
+                    score_configuration.update({
+                        'scorecard_name': self.name,
+                        'score_name': score_name
+                    })
+                
                 score_instance = await score_class.create(**score_configuration)
                 if not score_instance:
                     raise ValueError(f"Failed to create score instance for {score_name}")

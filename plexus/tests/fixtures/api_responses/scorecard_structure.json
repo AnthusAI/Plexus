@@ -1,0 +1,48 @@
+{
+  "getScorecard": {
+    "id": "sc-123",
+    "name": "Test Scorecard",
+    "key": "test_scorecard",
+    "externalId": "ext-id-123",
+    "sections": {
+      "items": [
+        {
+          "id": "section-1",
+          "name": "Section 1",
+          "scores": {
+            "items": [
+              {
+                "id": "score-001",
+                "name": "Simple Score",
+                "key": "simple_score",
+                "externalId": "ext-001",
+                "championVersionId": "v-001"
+              },
+              {
+                "id": "score-002",
+                "name": "Dependent Score",
+                "key": "dependent_score",
+                "externalId": "ext-002",
+                "championVersionId": "v-002"
+              },
+              {
+                "id": "score-003",
+                "name": "Base Score",
+                "key": "base_score",
+                "externalId": "ext-003",
+                "championVersionId": "v-003"
+              },
+              {
+                "id": "score-004",
+                "name": "Complex Score",
+                "key": "complex_score",
+                "externalId": "ext-004",
+                "championVersionId": "v-004"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+} 
