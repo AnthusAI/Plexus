@@ -6,55 +6,64 @@ from typing import Dict, List, Any, Set, Optional
 
 from plexus.cli.shared import get_score_yaml_path
 
-def check_local_score_cache(scorecard_data: Dict[str, Any], target_scores: List[Dict[str, Any]]) -> Dict[str, bool]:
-    """Check if configurations for target scores are already cached locally.
-    
-    This function checks if the score configurations exist in the local filesystem
-    following the convention used by `get_score_yaml_path`:
-    ./scorecards/[scorecard_name]/[score_name].yaml
+def check_local_score_cache(score_configs, scorecard_name):
+    """
+    Check which score configurations are already cached locally.
     
     Args:
-        scorecard_data: The scorecard data from the API containing at least 'name'
-        target_scores: List of score objects to check, each containing at least 'name' and 'id'
+        score_configs (dict): A dictionary of score IDs to their configurations
+        scorecard_name (str): The name of the scorecard
         
     Returns:
-        Dictionary mapping score IDs to boolean values indicating if they are cached
+        tuple: (list of cached score IDs, list of uncached score IDs)
     """
-    scorecard_name = scorecard_data.get('name')
-    if not scorecard_name:
-        logging.error("Cannot check local cache: No scorecard name provided")
-        return {}
-        
-    logging.info(f"Checking local cache for {len(target_scores)} scores in scorecard: {scorecard_name}")
+    cached_ids = []
+    uncached_ids = []
     
-    cache_status = {}
-    
-    for score in target_scores:
-        score_id = score.get('id')
-        score_name = score.get('name')
-        
-        if not score_id or not score_name:
-            logging.warning(f"Skipping score with missing ID or name: {score}")
+    for score_id, config in score_configs.items():
+        if not config:
+            logging.warning(f"Empty configuration for score {score_id}")
+            uncached_ids.append(score_id)
             continue
             
-        # Get the expected local file path
-        yaml_path = get_score_yaml_path(scorecard_name, score_name)
+        score_name = None
+        if isinstance(config, str):
+            # Parse the YAML string to get the score name
+            try:
+                from ruamel.yaml import YAML
+                yaml_parser = YAML(typ='safe')
+                parsed_config = yaml_parser.load(config)
+                score_name = parsed_config.get('name')
+            except Exception as e:
+                logging.warning(f"Could not parse YAML for score {score_id}: {str(e)}")
+        else:
+            # Assume it's already a dictionary
+            score_name = config.get('name')
+            
+        if not score_name:
+            logging.warning(f"Could not determine score name for {score_id}")
+            uncached_ids.append(score_id)
+            continue
+            
+        # Get the expected cache path
+        cache_path = get_score_yaml_path(scorecard_name, score_name)
         
-        # Check if the file exists
-        is_cached = yaml_path.exists()
-        cache_status[score_id] = is_cached
-        
-        log_level = logging.INFO if is_cached else logging.DEBUG
-        logging.log(log_level, f"Score '{score_name}' (ID: {score_id}): {'CACHED' if is_cached else 'NOT cached'}")
+        # Check if the file exists and is non-empty
+        if cache_path.exists() and cache_path.stat().st_size > 0:
+            cached_ids.append(score_id)
+            logging.info(f"Loading score configuration from cache: {score_name} ({score_id})")
+        else:
+            uncached_ids.append(score_id)
+            logging.info(f"Fetching score configuration from API: {score_name} ({score_id})")
     
-    # Summary statistics
-    cached_count = sum(1 for is_cached in cache_status.values() if is_cached)
-    total_count = len(cache_status)
+    # Log a summary of the cache check
+    total = len(score_configs)
+    cached = len(cached_ids)
+    cache_percentage = (cached / total * 100) if total > 0 else 0
     
-    if total_count > 0:
-        cache_percentage = (cached_count / total_count) * 100
-        logging.info(f"Cache status: {cached_count}/{total_count} scores cached ({cache_percentage:.1f}%)")
+    if cached > 0:
+        logging.info(f"Cache utilization: {cached}/{total} scores ({cache_percentage:.1f}%) found in local cache")
     else:
-        logging.info("No scores to check for caching.")
-    
-    return cache_status 
+        logging.info(f"Cache utilization: No scores found in local cache")
+        
+    return cached_ids, uncached_ids 
