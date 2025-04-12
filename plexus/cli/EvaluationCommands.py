@@ -10,7 +10,7 @@ import yaml
 import asyncio
 import pandas as pd
 import traceback
-from typing import Optional
+from typing import Optional, Dict
 import numpy as np
 from datetime import datetime, timezone, timedelta
 
@@ -85,113 +85,134 @@ def load_configuration_from_yaml_file(configuration_file_path):
         logging.error(f"Error loading configuration from {configuration_file_path}: {str(e)}")
         return None
 
-def load_scorecard_from_api(identifier, score_names=None):
+def load_scorecard_from_api(scorecard_identifier: str, score_names=None):
     """
-    Load a scorecard from the API with dependency-aware fetching.
+    Load a scorecard from the Plexus Dashboard API.
     
     Args:
-        identifier (str): The scorecard identifier (ID, name, key, or external ID)
-        score_names (list, optional): List of specific score names to load
+        scorecard_identifier: A string that can identify the scorecard (id, key, name, etc.)
+        score_names: Optional list of specific score names to load
         
     Returns:
         Scorecard: An initialized Scorecard instance with required scores loaded
+        
+    Raises:
+        ValueError: If the scorecard cannot be found
     """
     from plexus.Scorecard import Scorecard
-    from plexus.cli.memoized_resolvers import memoized_resolve_scorecard_identifier
-    from plexus.dashboard.client import PlexusDashboardClient
+    from plexus.dashboard.api.client import PlexusDashboardClient
+    from plexus.cli.direct_memoized_resolvers import direct_memoized_resolve_scorecard_identifier
     from plexus.cli.iterative_config_fetching import iteratively_fetch_configurations
+    from plexus.cli.fetch_scorecard_structure import fetch_scorecard_structure
+    from plexus.cli.identify_target_scores import identify_target_scores
     import logging
     
-    client = create_client()
-    logging.info(f"Loading scorecard '{identifier}' from API")
+    logging.info(f"Loading scorecard '{scorecard_identifier}' from API")
     
     try:
+        # Create client directly without context manager
+        client = PlexusDashboardClient()
+        
         # 1. Resolve the scorecard ID
-        scorecard_id = memoized_resolve_scorecard_identifier(client, identifier)
+        scorecard_id = direct_memoized_resolve_scorecard_identifier(client, scorecard_identifier)
         if not scorecard_id:
-            error_msg = f"Could not resolve scorecard identifier: {identifier}"
+            error_msg = f"Could not resolve scorecard identifier: {scorecard_identifier}"
             logging.error(error_msg)
-            click.echo(f"Error: {error_msg}", err=True)
-            click.echo("Please check the identifier and ensure it exists in the dashboard.")
-            click.echo("If using a local scorecard, add the --yaml flag to load from YAML files.")
-            raise ValueError(error_msg)
+            error_hint = "\nPlease check the identifier and ensure it exists in the dashboard."
+            error_hint += "\nIf using a local scorecard, add the --yaml flag to load from YAML files."
+            raise ValueError(f"{error_msg}{error_hint}")
+        
         logging.info(f"Resolved scorecard ID: {scorecard_id}")
         
         # 2. Fetch scorecard structure
-        from plexus.cli.dependency_discovery import fetch_scorecard_structure
         try:
             scorecard_structure = fetch_scorecard_structure(client, scorecard_id)
             if not scorecard_structure:
                 error_msg = f"Could not fetch structure for scorecard: {scorecard_id}"
                 logging.error(error_msg)
-                click.echo(f"Error: {error_msg}", err=True)
                 raise ValueError(error_msg)
         except Exception as e:
             error_msg = f"API error fetching scorecard structure: {str(e)}"
             logging.error(error_msg)
-            click.echo(f"Error: {error_msg}", err=True)
-            click.echo(f"This might be due to API connectivity issues or insufficient permissions.")
             raise ValueError(error_msg) from e
         
         # 3. Identify target scores
-        from plexus.cli.dependency_discovery import identify_target_scores
         try:
             target_scores = identify_target_scores(scorecard_structure, score_names)
             if not target_scores:
                 if score_names:
                     error_msg = f"No scores found in scorecard matching names: {score_names}"
                 else:
-                    error_msg = f"No scores found in scorecard {identifier}"
+                    error_msg = f"No scores found in scorecard {scorecard_identifier}"
                 logging.error(error_msg)
-                click.echo(f"Error: {error_msg}", err=True)
                 raise ValueError(error_msg)
         except Exception as e:
             error_msg = f"Error identifying target scores: {str(e)}"
             logging.error(error_msg)
-            click.echo(f"Error: {error_msg}", err=True)
             raise ValueError(error_msg) from e
         
         # 4. Iteratively fetch configurations with dependency discovery
         try:
             scores_config = iteratively_fetch_configurations(client, scorecard_structure, target_scores)
             if not scores_config:
-                error_msg = f"Failed to fetch score configurations for scorecard: {identifier}"
+                error_msg = f"Failed to fetch score configurations for scorecard: {scorecard_identifier}"
                 logging.error(error_msg)
-                click.echo(f"Error: {error_msg}", err=True)
                 raise ValueError(error_msg)
         except Exception as e:
             error_msg = f"Error fetching score configurations: {str(e)}"
             logging.error(error_msg)
-            click.echo(f"Error: {error_msg}", err=True)
-            click.echo("This might be due to champion versions missing for some scores.")
             raise ValueError(error_msg) from e
         
         # 5. Create scorecard instance from API data
         try:
+            # Parse string configuration into dictionaries if needed
+            parsed_configs = []
+            from ruamel.yaml import YAML
+            yaml_parser = YAML(typ='safe')
+            
+            for score_id, config in scores_config.items():
+                try:
+                    # If config is a string, parse it as YAML
+                    if isinstance(config, str):
+                        parsed_config = yaml_parser.load(config)
+                        # Add the score ID as an identifier if not present
+                        if 'id' not in parsed_config:
+                            parsed_config['id'] = score_id
+                        parsed_configs.append(parsed_config)
+                    elif isinstance(config, dict):
+                        # If already a dict, add as is
+                        if 'id' not in config:
+                            config['id'] = score_id
+                        parsed_configs.append(config)
+                    else:
+                        logging.warning(f"Skipping config with unexpected type: {type(config)}")
+                except Exception as parse_err:
+                    logging.error(f"Failed to parse configuration for score {score_id}: {str(parse_err)}")
+            
+            # Create instance with parsed configurations
             scorecard_instance = Scorecard.create_instance_from_api_data(
+                scorecard_id=scorecard_id,
                 api_data=scorecard_structure,
-                scores_config=scores_config
+                scores_config=parsed_configs
             )
         except Exception as e:
             error_msg = f"Error creating scorecard instance: {str(e)}"
             logging.error(error_msg)
-            click.echo(f"Error: {error_msg}", err=True)
-            click.echo("This might be due to invalid score configurations or missing dependencies.")
             raise ValueError(error_msg) from e
         
-        logging.info(f"Successfully loaded scorecard '{scorecard_instance.name}' with " +
+        # Get actual name from the properties
+        scorecard_name = scorecard_structure.get('name', scorecard_identifier)
+        logging.info(f"Successfully loaded scorecard '{scorecard_name}' with " +
                     f"{len(scores_config)} scores and their dependencies")
         
         return scorecard_instance
         
     except Exception as e:
-        error_msg = f"Error loading scorecard from API: {str(e)}"
-        logging.error(error_msg)
         if not isinstance(e, ValueError):
-            # Only add this message for unexpected errors
-            click.echo(f"Error: {error_msg}", err=True)
-            click.echo("This might be due to API connectivity issues or invalid configurations.")
-            click.echo("Try using the --yaml flag to load from local YAML files instead.")
+            # For unexpected errors not already handled
+            error_msg = f"Error loading scorecard from API: {str(e)}"
+            logging.error(error_msg)
+            raise ValueError(f"{error_msg}\nThis might be due to API connectivity issues or invalid configurations.\nTry using the --yaml flag to load from local YAML files instead.") from e
         raise
 
 @evaluate.command()
@@ -1233,7 +1254,9 @@ def evaluate_score_distribution(score_name, scorecard_instance, number_of_sample
     score_configuration = next((score for score in scorecard_instance.scores if score['name'] == score_name), {})
 
     if not score_configuration:
-        logging.error(f"Score with name '{score_name}' not found in scorecard '{scorecard_instance.name}'.")
+        # Get the scorecard name safely from either properties or method
+        scorecard_name = getattr(scorecard_instance, 'properties', {}).get('name') or scorecard_instance.__class__.__name__
+        logging.error(f"Score with name '{score_name}' not found in scorecard '{scorecard_name}'.")
         return
 
     score_class_name = score_configuration['class']
@@ -1245,14 +1268,20 @@ def evaluate_score_distribution(score_name, scorecard_instance, number_of_sample
         logging.error(f"{score_class_name} is not a class.")
         return
 
-    score_configuration['scorecard_name'] = scorecard_instance.name
-    score_configuration['score_name'] = score_name
-    score_instance = score_class(**score_configuration)
+    # Get the scorecard name safely from either properties or method
+    scorecard_name = getattr(scorecard_instance, 'properties', {}).get('name') or scorecard_instance.__class__.__name__
+    
+    # Make a copy of the score configuration to avoid modifying the original
+    score_config_copy = score_configuration.copy()
+    score_config_copy['scorecard_name'] = scorecard_name
+    score_config_copy['score_name'] = score_name
+    
+    score_instance = score_class(**score_config_copy)
 
-    score_instance.record_configuration(score_configuration)
+    score_instance.record_configuration(score_config_copy)
 
     logging.info(f"Loading data for {score_name} at {time.strftime('%H:%M:%S')}")
-    score_instance.load_data(data=score_configuration['data'])
+    score_instance.load_data(data=score_config_copy['data'])
     
     logging.info(f"Processing data for {score_name} at {time.strftime('%H:%M:%S')}")
     score_instance.process_data()
@@ -1272,9 +1301,13 @@ def evaluate_score_distribution(score_name, scorecard_instance, number_of_sample
             account_key = os.getenv('PLEXUS_ACCOUNT_KEY')
             if not account_key:
                 raise ValueError("PLEXUS_ACCOUNT_KEY not found in environment")
+                
+            # Get scorecard key safely
+            scorecard_key = getattr(scorecard_instance, 'properties', {}).get('key') or getattr(scorecard_instance, 'key', None)
+            
             metadata.update({
                 'account_key': account_key,
-                'scorecard_key': scorecard_instance.key,
+                'scorecard_key': scorecard_key,
                 'score_name': score_name
             })
         prediction_result = score_instance.predict(

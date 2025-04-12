@@ -16,6 +16,7 @@ import boto3
 from botocore.exceptions import ClientError
 import tiktoken
 from os import getenv
+from ruamel.yaml import YAML
 
 from plexus.Registries import ScoreRegistry
 from plexus.Registries import scorecard_registry
@@ -129,8 +130,20 @@ class Scorecard:
             return
             
         # Process each score configuration
+        parsed_configs = []  # Store parsed configs
         for score_config in self.scores_config:
-            if not isinstance(score_config, dict):
+            # Check if this is a string (YAML) that needs parsing
+            if isinstance(score_config, str):
+                try:
+                    yaml_parser = YAML(typ='safe')
+                    score_config = yaml_parser.load(score_config)
+                    parsed_configs.append(score_config)
+                except Exception as e:
+                    logging.warning(f"Invalid score configuration format: {type(score_config)}")
+                    continue
+            elif isinstance(score_config, dict):
+                parsed_configs.append(score_config)
+            else:
                 logging.warning(f"Invalid score configuration format: {type(score_config)}")
                 continue
                 
@@ -158,7 +171,7 @@ class Scorecard:
             )
             
         # Set scores attribute for compatibility with other methods
-        self.scores = [config for config in self.scores_config]
+        self.scores = parsed_configs
         logging.info(f"Successfully initialized {len(self.scores)} scores from API data")
 
     @classmethod
@@ -175,18 +188,16 @@ class Scorecard:
     def score_names(cls):
         return [score['name'] for score in cls.scores]
 
-    def score_names(self):
+    def name(self):
         """
-        Instance method to return score names, supporting both class-level and instance-level configurations.
+        Returns the name of this scorecard instance.
         
         Returns:
-            list of str: Names of all scores in this scorecard.
+            str: The name of the scorecard, from properties if available, otherwise the class name.
         """
-        if hasattr(self, 'scores'):
-            return [score['name'] for score in self.scores]
-        elif hasattr(self.__class__, 'scores'):
-            return [score['name'] for score in self.__class__.scores]
-        return []
+        if hasattr(self, 'properties') and isinstance(self.properties, dict) and 'name' in self.properties:
+            return self.properties['name']
+        return self.__class__.__name__
 
     @classmethod
     def score_names_to_process(cls):
@@ -761,24 +772,9 @@ class Scorecard:
         Returns:
             A Scorecard instance populated with the API data
         """
-        # Parse YAML configs and convert to Python objects
-        parsed_configs = []
-        for score_id, config_yaml in scores_config.items():
-            try:
-                yaml_parser = yaml.YAML(typ='safe')
-                config_dict = yaml_parser.load(config_yaml)
-                
-                # Ensure the ID is preserved
-                if 'id' not in config_dict:
-                    config_dict['id'] = score_id
-                    
-                parsed_configs.append(config_dict)
-            except Exception as e:
-                logging.error(f"Failed to parse config for score {score_id}: {str(e)}")
-        
-        # Create scorecard instance with API data
+        # The scores_config should already be parsed configurations, so we can use them directly
         return Scorecard(
             scorecard=scorecard_id,
             api_data=api_data,
-            scores_config=parsed_configs
+            scores_config=scores_config
         )
