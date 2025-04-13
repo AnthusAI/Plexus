@@ -630,6 +630,39 @@ This is the core change, moving away from the global registry for API loading an
     4. Update README with new features and options
   - Verify: Help text is clear and comprehensive when running commands from the `/Users/ryan/projects/Call-Criteria-Python` directory
 
+- 🟡 **Step 21A: Fix pagination and parameter mismatches in API loading**
+  - What: Address issues discovered during testing with scorecard list pagination and parameter mismatches
+  - Goal: Ensure all scorecards are discoverable and API loading works with all scorecards and scores
+  - Issues Found:
+    1. Default pagination limit (10) in `plexus/cli/ScorecardCommands.py` is too low to display all scorecards
+    2. Parameter mismatch in `check_local_score_cache` function - called with `(scorecard_data, current_scores)` but expects `(score_configs, scorecard_name)`
+    3. Context manager vs. direct call inconsistencies in GraphQL client usage
+    4. Type error when parsing YAML configurations: `'str' object has no attribute 'get'`
+  - Implementation Plan:
+    1. Increase default scorecard list limit in `plexus/cli/ScorecardCommands.py` (line ~830) from 10 to 100
+    2. Fix parameter handling in `plexus/cli/check_local_score_cache.py` to match how it's called in `iterative_config_fetching.py`
+    3. Ensure consistent GraphQL client usage with or without context managers across all files
+    4. Add better type checking before parsing YAML configurations
+    5. Test with the specific scorecard "SelectQuote HCS Medium-Risk" (ID: `926b3659-834f-4d4f-8655-5513d9250490`, key: `selectquote_hcs_medium_risk`) and score "Call Need and Resolution"
+  - Reproduction Commands:
+    ```bash
+    # First, list scorecards with default limit (only shows 10)
+    python -m plexus scorecards list
+    
+    # List with higher limit to see all scorecards (including SelectQuote HCS Medium-Risk)
+    python -m plexus scorecards list --limit 50
+    
+    # This succeeds in dry-run mode with ID
+    python -m plexus evaluate accuracy --scorecard "926b3659-834f-4d4f-8655-5513d9250490" --score "Call Need and Resolution" --number-of-samples 1 --dry-run
+    
+    # This also succeeds in dry-run mode with key
+    python -m plexus evaluate accuracy --scorecard "selectquote_hcs_medium_risk" --score "Call Need and Resolution" --number-of-samples 1 --dry-run
+    
+    # This would fail without dry-run due to parameter mismatches and YAML parsing errors
+    python -m plexus evaluate accuracy --scorecard "selectquote_hcs_medium_risk" --score "Call Need and Resolution" --number-of-samples 1
+    ```
+  - Verify: All commands work correctly after fixes, including with and without the dry-run flag
+
 - ⬜ **Step 21: Enhance formal test coverage**
   - What: Incorporate verification scripts into the formal test suite
   - Goal: Ensure long-term maintainability and regression testing
