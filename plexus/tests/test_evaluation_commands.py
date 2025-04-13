@@ -26,18 +26,18 @@ with unittest.mock.patch.dict('sys.modules', {'plexus.cli.EvaluationCommands': e
         @staticmethod
         @click.command()
         @click.option('--scorecard', help='The scorecard to use')
-        @click.option('--score-name', help='The score to evaluate')
+        @click.option('--score', help='The score to evaluate')
         @click.option('--yaml', is_flag=True, help='Load from YAML files')
         @click.option('--dry-run', is_flag=True, help='Skip database operations')
-        def accuracy(scorecard, score_name, yaml, dry_run):
+        def accuracy(scorecard, score, yaml, dry_run):
             """Evaluate the accuracy of a scorecard or specific score."""
             if yaml:
                 click.echo("Loading from YAML files")
             else:
                 click.echo(f"Loading scorecard '{scorecard}' from API")
                 
-            if score_name:
-                click.echo(f"Evaluating score: {score_name}")
+            if score:
+                click.echo(f"Evaluating score: {score}")
             else:
                 click.echo("Evaluating all scores")
                 
@@ -51,17 +51,17 @@ with unittest.mock.patch.dict('sys.modules', {'plexus.cli.EvaluationCommands': e
         @staticmethod
         @click.command()
         @click.option('--scorecard', help='The scorecard to use')
-        @click.option('--score-name', help='The score to evaluate')
+        @click.option('--score', help='The score to evaluate')
         @click.option('--yaml', is_flag=True, help='Load from YAML files')
-        def distribution(scorecard, score_name, yaml):
+        def distribution(scorecard, score, yaml):
             """Evaluate the distribution of a scorecard or specific score."""
             if yaml:
                 click.echo("Loading from YAML files")
             else:
                 click.echo(f"Loading scorecard '{scorecard}' from API")
                 
-            if score_name:
-                click.echo(f"Evaluating score: {score_name}")
+            if score:
+                click.echo(f"Evaluating score: {score}")
             else:
                 click.echo("Evaluating all scores")
                 
@@ -91,11 +91,11 @@ class TestAccuracyCommand(unittest.TestCase):
         self.assertIn("Evaluating all scores", result.output)
         self.assertIn("Evaluation complete", result.output)
     
-    def test_accuracy_with_score_name(self):
-        """Test the accuracy command with a specific score name."""
+    def test_accuracy_with_score(self):
+        """Test the accuracy command with a specific score identifier."""
         result = self.runner.invoke(MockEvaluationCommands.accuracy, 
                                    ['--scorecard', 'Test Scorecard',
-                                    '--score-name', 'Test Score'])
+                                    '--score', 'Test Score'])
         
         self.assertEqual(result.exit_code, 0)
         self.assertIn("Loading scorecard 'Test Scorecard' from API", result.output)
@@ -142,11 +142,11 @@ class TestDistributionCommand(unittest.TestCase):
         self.assertIn("Evaluating all scores", result.output)
         self.assertIn("Distribution evaluation complete", result.output)
     
-    def test_distribution_with_score_name(self):
-        """Test the distribution command with a specific score name."""
+    def test_distribution_with_score(self):
+        """Test the distribution command with a specific score identifier."""
         result = self.runner.invoke(MockEvaluationCommands.distribution, 
                                    ['--scorecard', 'Test Scorecard',
-                                    '--score-name', 'Test Score'])
+                                    '--score', 'Test Score'])
         
         self.assertEqual(result.exit_code, 0)
         self.assertIn("Loading scorecard 'Test Scorecard' from API", result.output)

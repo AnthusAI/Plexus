@@ -223,7 +223,7 @@ def load_scorecard_from_api(scorecard_identifier: str, score_names=None):
 @click.option('--sampling-method', default='random', type=str, help='Method for sampling texts')
 @click.option('--random-seed', default=None, type=int, help='Random seed for sampling')
 @click.option('--content-ids-to-sample', default='', type=str, help='Comma-separated list of content IDs to sample')
-@click.option('--score-name', default='', type=str, help='Comma-separated list of score names to evaluate')
+@click.option('--score', 'score', default='', type=str, help='Score identifier (ID, name, key, or external ID). Can be comma-separated for multiple scores.')
 @click.option('--experiment-label', default='', type=str, help='Label for the experiment')
 @click.option('--fresh', is_flag=True, help='Pull fresh, non-cached data from the data lake.')
 @click.option('--visualize', is_flag=True, default=False, help='Generate PNG visualization of LangGraph scores')
@@ -237,7 +237,7 @@ def accuracy(
     sampling_method: str,
     random_seed: int,
     content_ids_to_sample: str,
-    score_name: str,
+    score: str,
     experiment_label: str,
     fresh: bool,
     visualize: bool,
@@ -257,8 +257,8 @@ def accuracy(
         console.print(f"[bold]Scorecard:[/bold] {scorecard}")
         console.print(f"[bold]Loading from:[/bold] {'YAML files' if yaml else 'API'}")
         console.print(f"[bold]Number of samples:[/bold] {number_of_samples}")
-        if score_name:
-            console.print(f"[bold]Target scores:[/bold] {score_name}")
+        if score:
+            console.print(f"[bold]Target scores:[/bold] {score}")
         else:
             console.print("[bold]Target scores:[/bold] All scores in scorecard")
         
@@ -543,9 +543,9 @@ def accuracy(
                     raise ValueError(error_msg)
             else:
                 # Load from API (new approach)
-                target_score_names = score_name.split(',') if score_name else None
+                target_score_identifiers = score.split(',') if score else None
                 try:
-                    scorecard_instance = load_scorecard_from_api(scorecard, target_score_names)
+                    scorecard_instance = load_scorecard_from_api(scorecard, target_score_identifiers)
                 except Exception as e:
                     error_msg = f"Failed to load scorecard from API: {str(e)}"
                     logging.error(error_msg)
@@ -614,20 +614,23 @@ def accuracy(
             # Extract scores
             single_scores = []
             
-            if score_name:
-                # Split comma separated score names
-                target_score_names = [name.strip() for name in score_name.split(',')]
-                for target_score_name in target_score_names:
+            if score:
+                # Split comma separated score identifiers
+                target_score_identifiers = [identifier.strip() for identifier in score.split(',')]
+                for target_score_identifier in target_score_identifiers:
                     found = False
                     # First, try to find the score directly by name in the scores list
-                    for i, score in enumerate(scorecard_instance.scores):
-                        if score.get('name') == target_score_name:
-                            single_scores.append((i, score))
+                    for i, score_obj in enumerate(scorecard_instance.scores):
+                        if (score_obj.get('name') == target_score_identifier or
+                            score_obj.get('key') == target_score_identifier or
+                            str(score_obj.get('id', '')) == target_score_identifier or
+                            score_obj.get('externalId') == target_score_identifier):
+                            single_scores.append((i, score_obj))
                             found = True
                             break
                     
                     if not found:
-                        logging.warning(f"Could not find score with name '{target_score_name}'")
+                        logging.warning(f"Could not find score with identifier '{target_score_identifier}'")
             
             # If no specific scores requested, use all scores
             if not single_scores:
