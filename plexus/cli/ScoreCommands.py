@@ -1030,12 +1030,19 @@ def invoke_with_retry(llm, messages):
 @score.command()
 @click.option('--scorecard', help='Scorecard identifier (ID, name, key, or external ID)')
 @click.option('--score', help='Score identifier (ID, name, key, or external ID)')
-def chat(scorecard: Optional[str], score: Optional[str]):
-    """Launch an interactive REPL for working with Plexus scores.
+@click.option('--ui', '-t', is_flag=True, help='Use the Textual-based UI instead of the Rich UI')
+def chat(scorecard: Optional[str], score: Optional[str], ui: bool = False):
+    """Launch an interactive chat interface for working with Plexus scores.
     
-    If --scorecard and --score are provided, the REPL will start with that score's configuration.
-    Otherwise, you can select a scorecard and score using the REPL commands.
+    If --scorecard and --score are provided, the chat will start with that score's configuration.
+    Otherwise, you can select a scorecard and score using commands.
+    
+    Use --ui or -t to launch the modern Textual-based interface with split panes for input and output.
     """
-    from plexus.cli.score_chat_repl import ScoreChatREPL
-    repl = ScoreChatREPL(scorecard, score)
-    repl.run()
+    if ui:
+        from plexus.cli.score_chat_repl import run_textual_chat
+        run_textual_chat(scorecard, score)
+    else:
+        from plexus.cli.score_chat_repl import ScoreChatREPL
+        repl = ScoreChatREPL(scorecard=scorecard, score=score)
+        repl.run()
