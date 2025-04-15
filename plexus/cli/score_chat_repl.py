@@ -3,6 +3,16 @@ Implementation of a Rich-based REPL for the Plexus score chat command.
 
 This module provides an interactive REPL interface for working with Plexus scores,
 using Rich for beautiful terminal output and command history.
+It also provides a Textual-based UI alternative for a more modern interface with
+real-time streaming output capabilities.
+
+This module can be used directly via:
+    python -m plexus.cli.score_chat_repl [options]
+
+Or through the Plexus CLI via:
+    plexus score chat [options]
+
+The recommended approach is to use the Plexus CLI command.
 """
 
 from typing import Optional, List, Dict, Any
@@ -34,7 +44,33 @@ from plexus.cli.identifier_resolution import resolve_scorecard_identifier, resol
 import logging
 import time
 
+# Add Textual imports
+from textual.app import App, ComposeResult
+from textual.containers import Container, ScrollableContainer, Vertical
+from textual.widgets import Header, Footer, Input, Static, Label, Button, LoadingIndicator
+from textual.reactive import reactive
+from textual import work
+
 from plexus.cli.plexus_tool import PlexusTool
+
+# Import our custom components
+from plexus.cli.components.response_status import ResponseStatus
+from plexus.cli.components.chat_container import ChatContainer
+from plexus.cli.components.chat_input import ChatInput
+from plexus.cli.components.tool_output import ToolOutput
+
+# Import Textual components
+import asyncio
+from textual.app import App, ComposeResult
+from textual.containers import Container, Vertical, VerticalScroll
+from textual.widgets import Header, Footer, Button, Input, TextArea, Static, Label
+from textual.worker import Worker, WorkerState
+
+# Instead of using non-existent logging tracer, just use standard callback handlers
+# from langchain_core.tracers.logging import LoggingCallbackHandler
+# from langchain_core.tracers.stdout import ConsoleCallbackHandler
+import copy
+from io import StringIO
 
 class StreamingCallbackHandler(BaseCallbackHandler):
     """Callback handler for streaming LLM responses."""
@@ -353,10 +389,641 @@ class StreamingCallbackHandler(BaseCallbackHandler):
             # Clear the current tool call
             self.current_tool_call = None
 
+class TextualStreamingCallbackHandler(BaseCallbackHandler):
+    """Callback handler for streaming LLM responses to a Textual UI."""
+    
+    def __init__(self, app):
+        """Initialize with the Textual app instance.
+        
+        Args:
+            app: The TextualScoreChatApp instance
+        """
+        self.app = app
+        self.current_token_buffer = ""
+        
+    def on_llm_start(self, *args, **kwargs):
+        """Called when LLM starts processing."""
+        self.app.call_from_thread(self.app.response_status.show_responding)
+    
+    def on_llm_end(self, *args, **kwargs):
+        """Called when LLM finishes processing."""
+        self.app.call_from_thread(self.app.response_status.hide_responding)
+        # If there's any buffered content, make sure it's added
+        if self.current_token_buffer:
+            self.app.call_from_thread(self.app.add_ai_response, self.current_token_buffer)
+            self.current_token_buffer = ""
+    
+    def on_llm_new_token(self, token: str, **kwargs):
+        """Called on each new token from streaming."""
+        self.current_token_buffer += token
+        if token.endswith(("\n", ".", "!", "?")) or len(self.current_token_buffer) > 40:
+            # Send the buffered content to be displayed
+            buffered = self.current_token_buffer
+            self.app.call_from_thread(self.app.update_ai_response, buffered)
+            self.current_token_buffer = ""
+    
+    def on_tool_start(self, serialized: Dict[str, Any], input_str: str, **kwargs):
+        """Called when a tool starts execution."""
+        tool_name = serialized.get("name", "Tool")
+        self.app.call_from_thread(self.app.add_tool_start, tool_name, input_str)
+    
+    def on_tool_end(self, output: str, **kwargs):
+        """Called when a tool finishes execution."""
+        self.app.call_from_thread(self.app.add_tool_end, output)
+
+class TextualScoreChatApp(App):
+    """Textual UI implementation of the Score Chat REPL."""
+    
+    CSS = """
+    Screen {
+        layout: vertical;
+    }
+    
+    /* Chat container */
+    #chat-container {
+        width: 100%;
+        height: 1fr;
+        min-height: 20;
+        scrollbar-color: #5521b5;
+        scrollbar-background: #272820;
+        scrollbar-corner-color: #5521b5;
+    }
+    
+    /* Custom scrollbar for all scrollable elements */
+    ScrollableContainer {
+        scrollbar-color: #5521b5;
+        scrollbar-background: #272820;
+        scrollbar-corner-color: #5521b5;
+    }
+    
+    #message-list {
+        width: 100%;
+        height: auto;
+        padding: 1 2;
+    }
+    
+    /* Input container above footer */
+    #input-container {
+        width: 100%;
+        height: auto;
+        min-height: 3;
+        margin-bottom: 1;
+        padding: 1;
+        background: $background;
+    }
+    
+    /* Chat messages */
+    .assistant-message {
+        margin-bottom: 1;
+        padding: 1 2;
+        width: 100%;
+        height: auto;
+    }
+    
+    .user-message {
+        margin-bottom: 1;
+        padding: 1 2;
+        width: 100%;
+        height: auto;
+    }
+    
+    .message-content {
+        padding: 2 3;
+        min-height: 2;
+        height: auto;
+        overflow-x: auto;
+        overflow-y: auto;
+    }
+    
+    .sender-label {
+        color: #888888;
+        height: 1;
+    }
+    
+    .assistant-message .message-content {
+        background: #5521b5;
+        border: solid #ffffff;
+        color: white;
+        height: auto;
+        min-height: 2;
+    }
+    
+    .user-message .message-content {
+        background: #272820;
+        color: white;
+        border: solid #ffffff;
+        height: auto;
+        min-height: 2;
+    }
+    
+    /* Response status */
+    .response-status {
+        width: 100%;
+        height: auto;
+        padding: 0 2;
+        align-horizontal: center;
+        background: transparent;
+    }
+    
+    .status-text {
+        margin-left: 1;
+        color: #888888;
+    }
+    
+    /* Chat input */
+    .chat-input {
+        width: 100%;
+        height: auto;
+        padding: 0 2;
+    }
+    
+    .message-input {
+        height: 3;
+        width: 9fr;
+        margin-right: 1;
+    }
+    
+    #send-button {
+        width: 1fr;
+        background: #5521b5;
+        color: white;
+    }
+    
+    /* Tool output */
+    .tool-output {
+        margin: 1;
+        width: 90%;
+    }
+    
+    .tool-output-header {
+        background: #333333;
+        color: white;
+        padding: 0 1;
+    }
+    
+    .tool-output-content {
+        background: #222222;
+        color: #888888;
+        padding: 1;
+        height: auto;
+        overflow: auto;
+    }
+    """
+    
+    BINDINGS = [
+        ("ctrl+c", "quit", "Quit"),
+        ("ctrl+d", "toggle_dark", "Toggle Dark Mode"),
+        ("ctrl+s", "screenshot", "Screenshot")
+    ]
+    
+    def __init__(
+        self, 
+        scorecard: Optional[Any] = None, 
+        score: Optional[Any] = None,
+        repl: Optional["ScoreChatREPL"] = None
+    ):
+        """Initialize the Textual UI app.
+        
+        Args:
+            scorecard: The scorecard to use
+            score: The score to use
+            repl: An existing ScoreChatREPL instance
+        """
+        super().__init__()
+        self.scorecard = scorecard
+        self.score = score
+        self.repl = repl
+        self.chat_history = []
+        self.current_ai_message = None
+        self.current_tool_output = None
+        self.is_processing = False
+    
+    def compose(self) -> ComposeResult:
+        """Create the UI layout."""
+        # Chat container (takes up most of the space)
+        with ScrollableContainer(id="chat-container"):
+            yield ChatContainer()
+        
+        # Input container
+        with Container(id="input-container"):
+            yield ChatInput()
+        
+        # Footer
+        yield Footer()
+    
+    def on_mount(self) -> None:
+        """Called when the app is mounted."""
+        self.title = "Plexus Score Chat REPL"
+        
+        # Store references to components
+        self.chat_container = self.query_one(ChatContainer)
+        self.chat_input = self.query_one(ChatInput)
+        self.response_status = self.query_one(ResponseStatus)
+        
+        # Initialize the REPL if not already provided
+        if self.repl is None:
+            self.repl = ScoreChatREPL(
+                callbacks=[TextualStreamingCallbackHandler(self)],
+                scorecard=self.scorecard,
+                score=self.score
+            )
+            # If scorecard and score were provided, initialize the system message
+            if self.scorecard and self.score:
+                self.repl.initialize_system_message()
+                
+        # Display initial welcome message and trigger analysis
+        if self.scorecard and self.score:
+            # Use a worker to run the async function
+            self.run_worker(self.get_initial_analysis)
+    
+    async def on_chat_input_submit_message(self, message: ChatInput.SubmitMessage) -> None:
+        """Handle submit message events from the chat input."""
+        if self.is_processing:
+            return
+        
+        user_message = message.message.strip()
+        if not user_message:
+            return
+        
+        # Add user message to chat
+        self.chat_container.add_message("You", user_message, is_user=True)
+        
+        # Ensure the user message is visible
+        self.force_scroll()
+        
+        # Schedule another scroll after a short delay to make sure it's visible
+        self.set_timer(0.1, self.force_scroll)
+        
+        # Process user input in a worker to keep UI responsive
+        self.is_processing = True
+        worker = self.run_worker(self.process_user_input(user_message))
+    
+    async def process_user_input(self, user_message: str) -> None:
+        """Process user input and get response from REPL.
+        
+        Args:
+            user_message: The user message to process
+        """
+        try:
+            # Show we're processing
+            self.response_status.show_responding()
+            
+            # Add the user input to chat history
+            self.repl.chat_history.append(HumanMessage(content=user_message))
+            
+            # Start processing loop for handling tool calls and responses
+            finished = False
+            while not finished:
+                try:
+                    # Get response from LLM with tools
+                    ai_msg = await asyncio.to_thread(
+                        lambda: self.repl.llm_with_tools.invoke(self.repl.chat_history)
+                    )
+                    
+                    # Add the model response to chat history
+                    self.repl.chat_history.append(ai_msg)
+                    
+                    # Check if the response has tool calls
+                    if hasattr(ai_msg, 'tool_calls') and ai_msg.tool_calls:
+                        # Process each tool call
+                        for tool_call in ai_msg.tool_calls:
+                            # Extract the tool input
+                            tool_input = {}
+                            if 'args' in tool_call:
+                                tool_input = tool_call['args']
+                            elif 'input' in tool_call:
+                                tool_input = tool_call['input']
+                            
+                            # Update tool output widget
+                            tool_name = tool_call.get('name', 'unknown')
+                            self.add_tool_start(tool_name, tool_input)
+                            # Force scrolling to bottom after tool start
+                            self.force_scroll()
+                            
+                            # Process the command
+                            command = tool_input.get('command', '')
+                            tool_result = None
+                            
+                            if command == "view":
+                                file_path = tool_input.get('path', '').lstrip('/')
+                                try:
+                                    tool_result = await asyncio.to_thread(
+                                        self.repl.file_editor.view, file_path
+                                    )
+                                except FileNotFoundError:
+                                    tool_result = f"Error: File not found: {file_path}"
+                                
+                            elif command == "str_replace":
+                                file_path = tool_input.get('path', '').lstrip('/')
+                                old_str = tool_input.get('old_str', '')
+                                new_str = tool_input.get('new_str', '')
+                                
+                                if not file_path or not old_str or 'new_str' not in tool_input:
+                                    tool_result = "Error: Missing required parameters"
+                                else:
+                                    tool_result = await asyncio.to_thread(
+                                        self.repl.file_editor.str_replace, file_path, old_str, new_str
+                                    )
+                                
+                            elif command == "undo_edit":
+                                file_path = tool_input.get('path', '').lstrip('/')
+                                tool_result = await asyncio.to_thread(
+                                    self.repl.file_editor.undo_edit, file_path
+                                )
+                                
+                            elif command == "insert":
+                                file_path = tool_input.get('path', '').lstrip('/')
+                                insert_line = tool_input.get('insert_line', 0)
+                                new_str = tool_input.get('new_str', '')
+                                tool_result = await asyncio.to_thread(
+                                    self.repl.file_editor.insert, file_path, insert_line, new_str
+                                )
+                                
+                            elif command == "create":
+                                file_path = tool_input.get('path', '').lstrip('/')
+                                content = tool_input.get('content', '')
+                                tool_result = await asyncio.to_thread(
+                                    self.repl.file_editor.create, file_path, content
+                                )
+                            
+                            # Update tool output with result
+                            if tool_result is not None:
+                                # Update UI
+                                self.add_tool_end(tool_result)
+                                # Force scrolling to bottom after tool result
+                                self.force_scroll()
+                                
+                                # Create a ToolMessage to send back to the model
+                                tool_msg = ToolMessage(
+                                    content=tool_result,
+                                    tool_call_id=tool_call.get('id', ''),
+                                    name=tool_name
+                                )
+                                
+                                # Add the tool message to chat history
+                                self.repl.chat_history.append(tool_msg)
+                    else:
+                        # No tool calls, add the AI response to the UI
+                        content = ai_msg.content if hasattr(ai_msg, 'content') else ""
+                        
+                        if content:
+                            if isinstance(content, str):
+                                self.add_ai_response(content)
+                            elif isinstance(content, list):
+                                content_text = ""
+                                for item in content:
+                                    if isinstance(item, dict) and "text" in item:
+                                        content_text += item["text"]
+                                    elif isinstance(item, str):
+                                        content_text += item
+                                if content_text:
+                                    self.add_ai_response(content_text)
+                        
+                        # Force scrolling to bottom after AI response
+                        self.force_scroll()
+                        
+                        # We're done processing
+                        finished = True
+                
+                except Exception as e:
+                    import traceback
+                    error_details = traceback.format_exc()
+                    
+                    # Display the error in chat
+                    self.chat_container.add_message("Plexus", f"**Error:** {str(e)}", is_user=False)
+                    
+                    # Force scrolling to bottom for error message
+                    self.force_scroll()
+                    
+                    finished = True
+        
+        finally:
+            self.response_status.hide_responding()
+            self.is_processing = False
+
+    def force_scroll(self) -> None:
+        """Force the chat container to scroll to the bottom."""
+        # Call the force_scroll method on the chat container
+        self.chat_container.force_scroll()
+        
+        # Schedule another scroll after a brief delay
+        self.set_timer(0.2, self._delayed_scroll)
+    
+    def _delayed_scroll(self) -> None:
+        """Called after a delay to ensure scrolling works."""
+        self.chat_container.force_scroll()
+    
+    def add_ai_response(self, text: str) -> None:
+        """Add an AI response to the chat.
+        
+        Args:
+            text: The text of the AI response
+        """
+        self.chat_container.add_message("Plexus", text, is_user=False)
+        self.current_ai_message = None
+        # Force scrolling to the bottom
+        self.force_scroll()
+    
+    def update_ai_response(self, text: str) -> None:
+        """Update the current AI response with new text.
+        
+        Args:
+            text: The updated text for the AI response
+        """
+        if self.current_ai_message is None:
+            self.current_ai_message = text
+            self.chat_container.add_message("Plexus", text, is_user=False)
+        else:
+            self.current_ai_message += text
+            # This would typically update the existing message, but for now
+            # we'll just add a new message with the complete text
+            self.chat_container.add_message("Plexus", self.current_ai_message, is_user=False)
+        
+        # Force scrolling to the bottom
+        self.force_scroll()
+    
+    def add_tool_start(self, tool_name: str, input_str: str) -> None:
+        """Add a tool start notification to the chat.
+        
+        Args:
+            tool_name: The name of the tool
+            input_str: The input to the tool
+        """
+        # Create a new tool output widget
+        tool_output = ToolOutput()
+        self.current_tool_output = tool_output
+        
+        # Update the tool output with the input information
+        tool_output.update_output(tool_name, input_str)
+        
+        # Add it to the chat container
+        self.chat_container.query_one("#message-list").mount(tool_output)
+        self.chat_container.scroll_end(animate=False)
+    
+    def add_tool_end(self, output: str) -> None:
+        """Add a tool end notification with the output.
+        
+        Args:
+            output: The output from the tool
+        """
+        if self.current_tool_output:
+            self.current_tool_output.set_output(output)
+            self.current_tool_output = None
+            self.chat_container.scroll_end(animate=False)
+    
+    def action_quit(self) -> None:
+        """Quit the application."""
+        self.exit()
+
+    async def get_initial_analysis(self):
+        """Get the initial analysis for the loaded score."""
+        # Add the initial welcome message
+        self.chat_container.add_message("Plexus", "Welcome! I'm Plexus, your AI assistant for score configuration. I'll analyze this score configuration and tell you what I see.", is_user=False)
+        # Force scrolling to make welcome message visible
+        self.force_scroll()
+        
+        # Show we're processing
+        self.response_status.show_responding()
+        
+        try:
+            # Add the initial analysis question to chat history
+            user_message = "Please analyze this score configuration and tell me what you see."
+            self.repl.chat_history.append(HumanMessage(content=user_message))
+            
+            # Start processing loop for handling tool calls and responses
+            finished = False
+            while not finished:
+                try:
+                    # Get response from LLM with tools
+                    ai_msg = await asyncio.to_thread(
+                        lambda: self.repl.llm_with_tools.invoke(self.repl.chat_history)
+                    )
+                    
+                    # Add the model response to chat history
+                    self.repl.chat_history.append(ai_msg)
+                    
+                    # Check if the response has tool calls
+                    if hasattr(ai_msg, 'tool_calls') and ai_msg.tool_calls:
+                        # Process each tool call
+                        for tool_call in ai_msg.tool_calls:
+                            # Extract the tool input
+                            tool_input = {}
+                            if 'args' in tool_call:
+                                tool_input = tool_call['args']
+                            elif 'input' in tool_call:
+                                tool_input = tool_call['input']
+                            
+                            # Update tool output widget
+                            tool_name = tool_call.get('name', 'unknown')
+                            self.add_tool_start(tool_name, tool_input)
+                            # Force scrolling to bottom after tool start
+                            self.force_scroll()
+                            
+                            # Process the command
+                            command = tool_input.get('command', '')
+                            tool_result = None
+                            
+                            if command == "view":
+                                file_path = tool_input.get('path', '').lstrip('/')
+                                try:
+                                    tool_result = await asyncio.to_thread(
+                                        self.repl.file_editor.view, file_path
+                                    )
+                                except FileNotFoundError:
+                                    tool_result = f"Error: File not found: {file_path}"
+                                
+                            elif command == "str_replace":
+                                file_path = tool_input.get('path', '').lstrip('/')
+                                old_str = tool_input.get('old_str', '')
+                                new_str = tool_input.get('new_str', '')
+                                
+                                if not file_path or not old_str or 'new_str' not in tool_input:
+                                    tool_result = "Error: Missing required parameters"
+                                else:
+                                    tool_result = await asyncio.to_thread(
+                                        self.repl.file_editor.str_replace, file_path, old_str, new_str
+                                    )
+                                
+                            elif command == "undo_edit":
+                                file_path = tool_input.get('path', '').lstrip('/')
+                                tool_result = await asyncio.to_thread(
+                                    self.repl.file_editor.undo_edit, file_path
+                                )
+                                
+                            elif command == "insert":
+                                file_path = tool_input.get('path', '').lstrip('/')
+                                insert_line = tool_input.get('insert_line', 0)
+                                new_str = tool_input.get('new_str', '')
+                                tool_result = await asyncio.to_thread(
+                                    self.repl.file_editor.insert, file_path, insert_line, new_str
+                                )
+                                
+                            elif command == "create":
+                                file_path = tool_input.get('path', '').lstrip('/')
+                                content = tool_input.get('content', '')
+                                tool_result = await asyncio.to_thread(
+                                    self.repl.file_editor.create, file_path, content
+                                )
+                            
+                            # Update tool output with result
+                            if tool_result is not None:
+                                # Update UI
+                                self.add_tool_end(tool_result)
+                                # Force scrolling to bottom after tool result
+                                self.force_scroll()
+                                
+                                # Create a ToolMessage to send back to the model
+                                tool_msg = ToolMessage(
+                                    content=tool_result,
+                                    tool_call_id=tool_call.get('id', ''),
+                                    name=tool_name
+                                )
+                                
+                                # Add the tool message to chat history
+                                self.repl.chat_history.append(tool_msg)
+                    else:
+                        # No tool calls, add the AI response to the UI
+                        content = ai_msg.content if hasattr(ai_msg, 'content') else ""
+                        
+                        if content:
+                            if isinstance(content, str):
+                                self.add_ai_response(content)
+                            elif isinstance(content, list):
+                                content_text = ""
+                                for item in content:
+                                    if isinstance(item, dict) and "text" in item:
+                                        content_text += item["text"]
+                                    elif isinstance(item, str):
+                                        content_text += item
+                                if content_text:
+                                    self.add_ai_response(content_text)
+                        
+                        # Force scrolling to bottom after AI response
+                        self.force_scroll()
+                        
+                        # We're done processing
+                        finished = True
+                
+                except Exception as e:
+                    import traceback
+                    error_details = traceback.format_exc()
+                    
+                    # Display the error in chat
+                    self.chat_container.add_message("Plexus", f"**Error:** {str(e)}", is_user=False)
+                    # Force scrolling to bottom for error message
+                    self.force_scroll()
+                    
+                    finished = True
+        
+        finally:
+            self.response_status.hide_responding()
+            self.is_processing = False
+
 class ScoreChatREPL:
     """Interactive REPL for working with Plexus scores."""
     
-    def __init__(self, scorecard: Optional[str] = None, score: Optional[str] = None):
+    def __init__(self, scorecard: Optional[str] = None, score: Optional[str] = None, **kwargs):
+        # Ignore prompt_toolkit parameter if passed from ScoreCommands.py
         self.client = PlexusDashboardClient()
         self.file_editor = FileEditor()
         self.console = console
@@ -528,55 +1195,68 @@ Then ask the user what they would like to change about the scorecard."""
             # Fall back to a basic system message
             self.chat_history = [SystemMessage(content=self.system_message_template)]
 
-    def run(self):
-        """Run the REPL."""
+    def run(self, use_textual: bool = False):
+        """Run the REPL with either Rich or Textual UI.
+        
+        Args:
+            use_textual: Whether to use the Textual UI (default: False, uses Rich)
+        """
         try:
             # If scorecard and score were provided, load them and get initial response
             if self.scorecard and self.score:
                 self.load_score(self.scorecard, self.score)
                 # Initialize system message with the loaded score
                 self.initialize_system_message()
-                # Add a human message to trigger the initial analysis
-                self.chat_history.append(HumanMessage(content="Please analyze this score configuration and tell me what you see."))
-                # Get initial response from Claude
-                try:
-                    # Use the streaming LLM for the initial response
-                    response = self.llm.invoke(self.chat_history)
-                    self.chat_history.append(response)
-                    self.console.print()  # Add blank line after response
-                except Exception as e:
-                    self.console.print(f"[red]Error getting initial response: {str(e)}[/red]")
             
-            while True:
-                try:
-                    # Get user input with a simple prompt
-                    self.console.print("[bold dodger_blue1]>[/bold dodger_blue1] ", end="")
-                    user_input = input()
-                    self.console.print()  # Add blank line after user input
-                    
-                    # Check if it's a command (with or without slash)
-                    if user_input.startswith("/"):
-                        # Handle slash-prefixed command
-                        self.handle_command(user_input[1:])
-                    else:
-                        # Check if it's exit/quit/help without slash
-                        parts = user_input.split()
-                        cmd = parts[0].lower()
+            if use_textual:
+                # Run the Textual UI
+                app = TextualScoreChatApp(self)
+                app.run()
+            else:
+                # Original Rich-based REPL
+                # If scorecard and score were provided, get initial response
+                if self.scorecard and self.score:
+                    # Add a human message to trigger the initial analysis
+                    self.chat_history.append(HumanMessage(content="Please analyze this score configuration and tell me what you see."))
+                    # Get initial response from Claude
+                    try:
+                        # Use the streaming LLM for the initial response
+                        response = self.llm.invoke(self.chat_history)
+                        self.chat_history.append(response)
+                        self.console.print()  # Add blank line after response
+                    except Exception as e:
+                        self.console.print(f"[red]Error getting initial response: {str(e)}[/red]")
+                
+                while True:
+                    try:
+                        # Get user input with a simple prompt
+                        self.console.print("[bold dodger_blue1]>[/bold dodger_blue1] ", end="")
+                        user_input = input()
+                        self.console.print()  # Add blank line after user input
                         
-                        if cmd in ["exit", "quit"]:
-                            self.console.print("[yellow]Goodbye![/yellow]")
-                            exit(0)
-                        elif cmd == "help":
-                            self.show_help()
+                        # Check if it's a command (with or without slash)
+                        if user_input.startswith("/"):
+                            # Handle slash-prefixed command
+                            self.handle_command(user_input[1:])
                         else:
-                            # Handle as natural language input
-                            self.handle_natural_language(user_input)
-                        
-                except KeyboardInterrupt:
-                    self.console.print("\n[yellow]Goodbye![/yellow]")
-                    break
-                except Exception as e:
-                    self.console.print(f"[red]Error: {str(e)}[/red]")
+                            # Check if it's exit/quit/help without slash
+                            parts = user_input.split()
+                            cmd = parts[0].lower()
+                            
+                            if cmd in ["exit", "quit"]:
+                                self.console.print("[yellow]Goodbye![/yellow]")
+                                exit(0)
+                            elif cmd == "help":
+                                self.show_help()
+                            else:
+                                # Handle as natural language input
+                                self.handle_natural_language(user_input)
+                            
+                    except KeyboardInterrupt:
+                        self.console.print("\n[yellow]Goodbye![/yellow]")
+                        break
+                    except Exception as e:
+                        self.console.print(f"[red]Error: {str(e)}[/red]")
         finally:
             # Restore original logging handlers
             logging.getLogger().handlers = self.original_handlers
@@ -587,343 +1267,299 @@ Then ask the user what they would like to change about the scorecard."""
         cmd = parts[0]
         args = parts[1:]
         
+        tool_output = self.query_one(ToolOutput)
+        
         if cmd == "help":
-            self.show_help()
+            # Show help information
+            help_text = """
+[bold]Available Commands:[/bold]
+/help             - Show this help message
+/list             - List available scorecards
+/pull <s> <s>     - Pull a score's current version
+/push <s> <s>     - Push a score's updated version
+/exit             - Exit the REPL
+            """
+            # Display using the AI message format
+            chat_container = self.query_one(ChatContainer)
+            chat_container.add_ai_message(help_text)
+            
         elif cmd == "list":
-            self.list_scorecards()
+            # List scorecards
+            scorecards = self.list_scorecards()
+            if scorecards:
+                scorecard_text = "[bold]Available Scorecards:[/bold]\n"
+                for scorecard in scorecards:
+                    scorecard_text += f"{scorecard['name']} ({scorecard['key']})\n"
+                chat_container = self.query_one(ChatContainer)
+                chat_container.add_ai_message(scorecard_text)
+            else:
+                chat_container = self.query_one(ChatContainer)
+                chat_container.add_ai_message("[yellow]No scorecards found.[/yellow]")
+                
         elif cmd == "pull":
             if len(args) < 2:
-                self.console.print("[red]Usage: /pull <scorecard> <score>[/red]")
+                chat_container = self.query_one(ChatContainer)
+                chat_container.add_ai_message("[red]Usage: /pull <scorecard> <score>[/red]")
                 return
-            self.pull_score(args[0], args[1])
+            
+            self.update_status(f"Pulling score {args[1]} from scorecard {args[0]}...")
+            result = self.pull_score(args[0], args[1])
+            chat_container = self.query_one(ChatContainer)
+            chat_container.add_ai_message(f"Pull result: {result}")
+            self.update_status("Ready")
+            
         elif cmd == "push":
             if len(args) < 2:
-                self.console.print("[red]Usage: /push <scorecard> <score>[/red]")
+                chat_container = self.query_one(ChatContainer)
+                chat_container.add_ai_message("[red]Usage: /push <scorecard> <score>[/red]")
                 return
-            self.push_score(args[0], args[1])
+            
+            self.update_status(f"Pushing score {args[1]} to scorecard {args[0]}...")
+            result = self.push_score(args[0], args[1])
+            chat_container = self.query_one(ChatContainer)
+            chat_container.add_ai_message(f"Push result: {result}")
+            self.update_status("Ready")
+            
         elif cmd == "exit":
             self.console.print("[yellow]Goodbye![/yellow]")
             exit(0)
         else:
-            self.console.print(f"[red]Unknown command: {cmd}[/red]")
-
-    def handle_natural_language(self, user_input: str):
-        """Handle natural language input from the user."""
+            chat_container = self.query_one(ChatContainer)
+            chat_container.add_ai_message(f"[red]Unknown command: {cmd}[/red]")
+    
+    @work(exclusive=True)
+    async def process_natural_language(self, user_input: str):
+        """Process natural language input asynchronously."""
+        self.is_processing = True
+        
+        # Show "Plexus is responding" indicator
+        response_status = self.query_one(ResponseStatus)
+        response_status.set_plexus_responding()
+        response_status.display = True
+        
+        self.update_status("Processing...")
+        
         try:
-            # Clear log file for this session
-            with open("tool_calls.log", "w") as f:
-                f.write(f"=== NEW SESSION {time.strftime('%Y-%m-%d %H:%M:%S')} ===\n\n")
-                
-            # Append the new user input to existing chat history
+            # Clear tool output
+            tool_output = self.query_one(ToolOutput)
+            tool_output.clear()
+            
+            # Add the user input to chat history
             self.chat_history.append(HumanMessage(content=user_input))
             
-            # Process messages with a proper tool calling loop
+            # Start processing loop
             finished = False
             while not finished:
                 try:
-                    # Get response from Claude - invoke, not stream
-                    ai_msg = self.llm_with_tools.invoke(self.chat_history)
+                    # Get response from Claude
+                    ai_msg = await self.llm_with_tools.ainvoke(self.chat_history)
                     
                     # Add the model response to chat history
                     self.chat_history.append(ai_msg)
                     
-                    # First, stream the AI's text response, even if it contains tool calls
-                    if ai_msg.content:
-                        # Detect and clean up the content if it contains tool calls
-                        clean_content = ""
-                        
-                        # Handle different content formats
-                        if isinstance(ai_msg.content, list):
-                            # For list responses, extract only text content items
-                            for item in ai_msg.content:
-                                if isinstance(item, dict):
-                                    if 'text' in item:
-                                        clean_content += item['text']
-                                    # Skip tool call items
-                                    elif 'type' in item and item.get('type') == 'tool_use':
-                                        continue
-                                else:
-                                    clean_content += str(item)
-                        elif isinstance(ai_msg.content, dict) and 'text' in ai_msg.content:
-                            # Handle dictionary with text key
-                            clean_content = ai_msg.content['text']
-                        else:
-                            # For string content (the normal case)
-                            clean_content = ai_msg.content
-                            # Check for tool call metadata in string content
-                            if isinstance(clean_content, str):
-                                # Find where any tool call data begins (look for patterns like ":{" or ":[")
-                                for pattern in [':{', ':[', ': {', ': [']:
-                                    split_pos = clean_content.find(pattern)
-                                    if split_pos > 0:
-                                        # Only keep content before the tool call data
-                                        clean_content = clean_content[:split_pos]
-                                        break
-                        
-                        # Stream the cleaned content
-                        if clean_content:
-                            self.callback_handler.on_llm_start()
-                            for chunk in clean_content:
-                                self.callback_handler.on_llm_new_token(chunk)
-                            self.callback_handler.on_llm_end()
-                    
                     # Check if the response has tool calls
                     if hasattr(ai_msg, 'tool_calls') and ai_msg.tool_calls:
-                        # Enhanced logging for all tool calls
-                        self.console.print(f"[blue]DEBUG: Found {len(ai_msg.tool_calls)} tool calls[/blue]")
-                        
-                        # Log all tool calls to file for analysis
-                        with open("tool_calls.log", "a") as f:
-                            f.write(f"Found {len(ai_msg.tool_calls)} tool calls\n")
-                            for i, tc in enumerate(ai_msg.tool_calls):
-                                f.write(f"TOOL CALL #{i+1}:\n")
-                                f.write(f"  ID: {tc.get('id', 'unknown')}\n")
-                                f.write(f"  Name: {tc.get('name', 'unknown')}\n")
-                                f.write(f"  Type: {tc.get('type', 'unknown')}\n")
-                                f.write(f"  Content: {str(ai_msg.content)[:500]}...\n")
-                                
-                                # If it's a str_replace, do special logging
-                                args = tc.get('args', {})
-                                if isinstance(args, dict) and args.get('command') == 'str_replace':
-                                    f.write("  STR_REPLACE DETECTED!\n")
-                                    f.write(f"  Path: {args.get('path', 'missing')}\n")
-                                    if 'old_str' in args:
-                                        f.write(f"  old_str length: {len(args['old_str'])}\n")
-                                        f.write(f"  old_str preview: {args['old_str'][:50]}...{args['old_str'][-50:]}\n")
-                                    else:
-                                        f.write("  old_str: MISSING\n")
-                                        
-                                    if 'new_str' in args:
-                                        f.write(f"  new_str length: {len(args['new_str'])}\n")
-                                        f.write(f"  new_str preview: {args['new_str'][:50]}...{args['new_str'][-50:]}\n")
-                                    else:
-                                        f.write("  new_str: MISSING\n")
-                                
-                                f.write("\n")
-                        
                         # Process each tool call
                         for tool_call in ai_msg.tool_calls:
-                            # Debug output for tool call
-                            self.console.print(f"[blue]DEBUG: Tool Call Information[/blue]")
-                            self.console.print(f"[blue]DEBUG: Tool type: {tool_call.get('type', 'unknown')}[/blue]")
-                            self.console.print(f"[blue]DEBUG: Tool name: {tool_call.get('name', 'unknown')}[/blue]")
-                            self.console.print(f"[blue]DEBUG: Tool ID: {tool_call.get('id', 'unknown')}[/blue]")
-                            self.console.print(f"[blue]DEBUG: Tool call keys: {list(tool_call.keys())}[/blue]")
-                            
-                            # Extract the tool input more carefully
+                            # Extract the tool input
                             tool_input = {}
-                            
-                            # First check the 'args' field (standard format)
                             if 'args' in tool_call:
                                 tool_input = tool_call['args']
-                                self.console.print(f"[blue]DEBUG: Found tool input in 'args' field[/blue]")
-                            # Fallback to 'input' field
                             elif 'input' in tool_call:
                                 tool_input = tool_call['input']
-                                self.console.print(f"[blue]DEBUG: Found tool input in 'input' field[/blue]")
-                            # Fallback to scanning all fields for expected command parameters
-                            else:
-                                self.console.print(f"[yellow]WARNING: Could not find standard tool input fields. Scanning all fields...[/yellow]")
-                                for key, value in tool_call.items():
-                                    if isinstance(value, dict) and any(param in value for param in ['command', 'path', 'old_str', 'new_str']):
-                                        tool_input = value
-                                        self.console.print(f"[blue]DEBUG: Found likely tool input in '{key}' field[/blue]")
-                                        break
                             
-                            # Create a dictionary representation for the callback handler
-                            current_tool_call = {
-                                'id': tool_call.get('id', ''),
-                                'name': tool_call.get('name', ''),
-                                'input': tool_input,
-                                'output': None
-                            }
-                            
-                            # Notify callback of tool start
-                            self.callback_handler.on_tool_start(
-                                {'name': tool_call.get('name', ''), 'id': tool_call.get('id', '')},
-                                json.dumps(tool_input) if isinstance(tool_input, dict) else str(tool_input)
-                            )
+                            # Update tool output widget
+                            tool_name = tool_call.get('name', 'unknown')
+                            tool_output.update_output(tool_name, tool_input)
+                            tool_output.add_class("active")
                             
                             # Process the command
                             command = tool_input.get('command', '')
-                            tool_result_content = None
+                            tool_result = None
                             
                             if command == "view":
                                 file_path = tool_input.get('path', '').lstrip('/')
                                 try:
-                                    tool_result_content = self.file_editor.view(file_path)
+                                    tool_result = self.file_editor.view(file_path)
                                 except FileNotFoundError:
-                                    tool_result_content = f"Error: File not found: {file_path}"
+                                    tool_result = f"Error: File not found: {file_path}"
                                 
                             elif command == "str_replace":
                                 file_path = tool_input.get('path', '').lstrip('/')
                                 old_str = tool_input.get('old_str', '')
                                 new_str = tool_input.get('new_str', '')
                                 
-                                # Enhanced debugging
-                                self.console.print("[cyan]===== STR_REPLACE EXECUTION =====")
-                                self.console.print(f"[cyan]File path: {file_path}")
-                                self.console.print(f"[cyan]Old string length: {len(old_str) if old_str else 0}")
-                                self.console.print(f"[cyan]New string length: {len(new_str) if new_str else 0}")
-                                
-                                # Verify all parameters are present
-                                if not file_path:
-                                    tool_result_content = "Error: Missing file path parameter"
-                                elif not old_str:
-                                    tool_result_content = "Error: Missing old_str parameter"
-                                elif not new_str and 'new_str' not in tool_input:
-                                    tool_result_content = "Error: Missing new_str parameter (key not found in input)"
+                                if not file_path or not old_str or 'new_str' not in tool_input:
+                                    tool_result = "Error: Missing required parameters"
                                 else:
-                                    # Execute the str_replace operation
-                                    tool_result_content = self.file_editor.str_replace(file_path, old_str, new_str)
+                                    tool_result = self.file_editor.str_replace(file_path, old_str, new_str)
                                 
                             elif command == "undo_edit":
                                 file_path = tool_input.get('path', '').lstrip('/')
-                                tool_result_content = self.file_editor.undo_edit(file_path)
+                                tool_result = self.file_editor.undo_edit(file_path)
                                 
                             elif command == "insert":
                                 file_path = tool_input.get('path', '').lstrip('/')
                                 insert_line = tool_input.get('insert_line', 0)
                                 new_str = tool_input.get('new_str', '')
-                                tool_result_content = self.file_editor.insert(file_path, insert_line, new_str)
+                                tool_result = self.file_editor.insert(file_path, insert_line, new_str)
                                 
                             elif command == "create":
                                 file_path = tool_input.get('path', '').lstrip('/')
                                 content = tool_input.get('content', '')
-                                tool_result_content = self.file_editor.create(file_path, content)
+                                tool_result = self.file_editor.create(file_path, content)
                             
-                            # Update the tool call with result and notify callback
-                            if tool_result_content is not None:
-                                current_tool_call['output'] = tool_result_content
-                                self.callback_handler.on_tool_end(tool_result_content)
+                            # Update tool output with result
+                            if tool_result is not None:
+                                # Update UI
+                                tool_output.update_output(tool_name, tool_input, tool_result)
                                 
                                 # Create a ToolMessage to send back to the model
                                 tool_msg = ToolMessage(
-                                    content=tool_result_content,
+                                    content=tool_result,
                                     tool_call_id=tool_call.get('id', ''),
-                                    name=tool_call.get('name', '')
+                                    name=tool_name
                                 )
                                 
                                 # Add the tool message to chat history
                                 self.chat_history.append(tool_msg)
                     else:
-                        # No tool calls, this is a final response
+                        # No tool calls, we're done
                         finished = True
                 
                 except Exception as e:
-                    self.console.print(f"[red]Error during model interaction: {str(e)}[/red]")
                     import traceback
-                    self.console.print(f"[red]{traceback.format_exc()}[/red]")
-                    # Try recovery if there's an issue
-                    self.recover_and_continue()
+                    error_details = traceback.format_exc()
+                    
+                    # Display the error in chat
+                    chat_container = self.query_one(ChatContainer)
+                    chat_container.add_ai_message(f"[red]Error: {str(e)}[/red]")
+                    
+                    # Also update the tool output
+                    tool_output = self.query_one(ToolOutput)
+                    tool_output.update_output("Error", {}, f"{str(e)}\n{error_details}")
+                    tool_output.add_class("active")
+                    
                     finished = True
-            
-        except Exception as e:
-            self.console.print(f"[red]Error processing user input: {str(e)}[/red]")
-            import traceback
-            self.console.print(f"[red]{traceback.format_exc()}[/red]")
-
-    def recover_and_continue(self):
-        """Recover from an error by creating a simplified chat history and continuing the conversation."""
-        try:
-            # Create a simplified history with the system message and the last human message
-            simplified_history = []
-            
-            # Keep the system message
-            for msg in self.chat_history:
-                if isinstance(msg, SystemMessage):
-                    simplified_history.append(msg)
-                    break
-            
-            # Find the last real content from model (not tool calls)
-            last_content = ""
-            for i in range(len(self.chat_history) - 1, -1, -1):
-                msg = self.chat_history[i]
-                if isinstance(msg, AIMessage) and msg.content and not msg.additional_kwargs.get('tool_calls'):
-                    last_content = msg.content
-                    break
-            
-            # Add a summary message with what happened so far
-            # Extract input from the last tool call
-            last_tool_command = ""
-            last_tool_path = ""
-            for i in range(len(self.chat_history) - 1, -1, -1):
-                msg = self.chat_history[i]
-                if isinstance(msg, AIMessage) and msg.additional_kwargs.get('tool_calls'):
-                    tool_calls = msg.additional_kwargs.get('tool_calls', [])
-                    if tool_calls and 'input' in tool_calls[0]:
-                        input_data = tool_calls[0].get('input', {})
-                        if isinstance(input_data, dict):
-                            last_tool_command = input_data.get('command', '')
-                            last_tool_path = input_data.get('path', '')
-                    break
-            
-            # Add the last human message
-            last_human_msg = None
-            for i in range(len(self.chat_history) - 1, -1, -1):
-                if isinstance(self.chat_history[i], HumanMessage):
-                    last_human_msg = self.chat_history[i]
-                    break
-            
-            if last_human_msg:
-                # If we found a tool call, mention it in the summary
-                if last_tool_command:
-                    summary = f"I previously processed a {last_tool_command} command on {last_tool_path}. The user would like: {last_human_msg.content}"
-                    summary_msg = AIMessage(content=summary)
-                    simplified_history.append(summary_msg)
-                
-                # Add the human message
-                simplified_history.append(last_human_msg)
-                
-                # Try again with the simplified history
-                self.console.print("[yellow]Retrying with simplified chat history...[/yellow]")
-                
-                # Create a new instance of the LLM to avoid any lingering state issues
-                recovery_llm = ChatAnthropic(
-                    model_name="claude-3-7-sonnet-20250219",
-                    temperature=0.7,
-                    streaming=True,
-                    anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY"),
-                    max_tokens_to_sample=64000,  # Maximum allowed for Claude 3.7 Sonnet
-                    callbacks=[self.callback_handler]
-                ).bind_tools([{
-                    "type": "text_editor_20250124",
-                    "name": "str_replace_editor"
-                }])
-                
-                # Get a new response with the simplified history
-                response = recovery_llm.invoke(simplified_history)
-                
-                # Add the response to the chat history
-                self.chat_history.append(response)
-                self.console.print()  # Add blank line after response
-                
-                # Print helpful message to the user
-                self.console.print("[green]Recovered from error and continued the conversation.[/green]")
         
+        finally:
+            # Hide the "Plexus is responding" indicator
+            self.query_one(ResponseStatus).display = False
+            self.is_processing = False
+            self.update_status("Ready")
+    
+    def get_initial_response(self):
+        """Get the initial response for a loaded score."""
+        if not self.chat_history:
+            return
+        
+        # Add the initial prompt to the chat history
+        self.chat_history.append(HumanMessage(content="Please analyze this score configuration and tell me what you see."))
+        
+        # Show "Plexus is responding" indicator 
+        response_status = self.query_one(ResponseStatus)
+        response_status.set_plexus_responding()
+        response_status.display = True
+        
+        self.is_processing = True
+        self.update_status("Analyzing score configuration...")
+        
+        # This will be handled by the streaming callback
+        self.process_natural_language("Please analyze this score configuration and tell me what you see.")
+
+    def load_score(self, scorecard: str, score: str):
+        """Load a score's configuration."""
+        try:
+            # Get scorecard details to get its name
+            scorecard_id = resolve_scorecard_identifier(self.client, scorecard)
+            if not scorecard_id:
+                self.console.print(f"[red]Scorecard not found: {scorecard}[/red]")
+                return
+            
+            scorecard_query = f"""
+            query GetScorecard {{
+                getScorecard(id: "{scorecard_id}") {{
+                    id
+                    name
+                }}
+            }}
+            """
+            scorecard_result = self.client.execute(scorecard_query)
+            scorecard_data = scorecard_result.get('getScorecard')
+            if not scorecard_data:
+                self.console.print(f"[red]Error retrieving scorecard: {scorecard}[/red]")
+                return
+            scorecard_name = scorecard_data['name']
+            
+            # Get score details to get its name and champion version
+            score_id = resolve_score_identifier(self.client, scorecard_id, score)
+            if not score_id:
+                self.console.print(f"[red]Score not found: {score}[/red]")
+                return
+            
+            score_query = f"""
+            query GetScore {{
+                getScore(id: "{score_id}") {{
+                    id
+                    name
+                    championVersionId
+                }}
+            }}
+            """
+            score_result = self.client.execute(score_query)
+            score_data = score_result.get('getScore')
+            if not score_data:
+                self.console.print(f"[red]Error retrieving score: {score}[/red]")
+                return
+            
+            # Get the champion version ID
+            champion_version_id = score_data.get('championVersionId')
+            if not champion_version_id:
+                self.console.print(f"[red]No champion version found for score: {score}[/red]")
+                return
+            
+            # Get version content
+            version_query = f"""
+            query GetScoreVersion {{
+                getScoreVersion(id: "{champion_version_id}") {{
+                    id
+                    configuration
+                    createdAt
+                    updatedAt
+                    note
+                }}
+            }}
+            """
+            
+            version_result = self.client.execute(version_query)
+            version_data = version_result.get('getScoreVersion')
+            
+            if not version_data or not version_data.get('configuration'):
+                self.console.print(f"[red]No configuration found for version: {champion_version_id}[/red]")
+                return
+            
+            # Get the YAML file path using the correct names
+            yaml_path = get_score_yaml_path(scorecard_name, score_data['name'])
+            
+            # Write to file
+            with open(yaml_path, 'w') as f:
+                f.write(version_data['configuration'])
+            
+            self.console.print(f"[green]Saved score configuration to: {yaml_path}[/green]")
+            
         except Exception as e:
-            self.console.print(f"[red]Error during recovery: {str(e)}[/red]")
-            import traceback
-            self.console.print(f"[red]{traceback.format_exc()}[/red]")
+            self.console.print(f"[red]Error loading score: {str(e)}[/red]")
 
     def show_help(self):
         """Show available commands."""
         help_text = """
 [bold]Available Commands:[/bold]
 /help             - Show this help message
-
 /list             - List available scorecards
-
 /pull <s> <s>     - Pull a score's current version
-
 /push <s> <s>     - Push a score's updated version
-
-exit              - Exit the REPL (no slash needed)
-quit              - Same as exit (no slash needed)
-
-[bold]Natural Language:[/bold]
-You can also just ask me questions or tell me what you'd like to do in plain English.
-"""
+/exit             - Exit the REPL
+            """
         self.console.print(Panel.fit(help_text, title="Help", border_style="blue"))
 
     def list_scorecards(self):
@@ -1105,6 +1741,9 @@ You can also just ask me questions or tell me what you'd like to do in plain Eng
                 self.console.print(f"[red]YAML file not found at: {yaml_path}[/red]")
                 return
             
+            self.current_scorecard = scorecard
+            self.current_score = score
+            
             # Read the YAML file
             with open(yaml_path, 'r') as f:
                 yaml_content = f.read()
@@ -1146,62 +1785,163 @@ You can also just ask me questions or tell me what you'd like to do in plain Eng
         except Exception as e:
             self.console.print(f"[red]Error pushing score: {str(e)}[/red]")
 
-    def load_score(self, scorecard: str, score: str):
-        """Load a score's configuration."""
+    def process_input(self, user_input: str):
+        """Process user input and get response from the LLM.
+        
+        Args:
+            user_input: The user message to process
+        """
+        # Add the user input to chat history
+        self.chat_history.append(HumanMessage(content=user_input))
+        
+        # Process this message with tools to allow for file viewing etc.
+        response = self.llm_with_tools.invoke(self.chat_history)
+        
+        # Add the model response to chat history
+        self.chat_history.append(response)
+        
+        # Check for tool calls
+        if hasattr(response, 'tool_calls') and response.tool_calls:
+            # Process each tool call
+            for tool_call in response.tool_calls:
+                # Extract tool information
+                tool_name = tool_call.get('name', '')
+                tool_args = tool_call.get('args', {})
+                
+                # Process the command
+                command = tool_args.get('command', '')
+                tool_result = None
+                
+                if command == "view":
+                    file_path = tool_args.get('path', '').lstrip('/')
+                    try:
+                        tool_result = self.file_editor.view(file_path)
+                    except FileNotFoundError:
+                        tool_result = f"Error: File not found: {file_path}"
+                    
+                elif command == "str_replace":
+                    file_path = tool_args.get('path', '').lstrip('/')
+                    old_str = tool_args.get('old_str', '')
+                    new_str = tool_args.get('new_str', '')
+                    
+                    if not file_path or not old_str or 'new_str' not in tool_args:
+                        tool_result = "Error: Missing required parameters"
+                    else:
+                        tool_result = self.file_editor.str_replace(file_path, old_str, new_str)
+                    
+                elif command == "undo_edit":
+                    file_path = tool_args.get('path', '').lstrip('/')
+                    tool_result = self.file_editor.undo_edit(file_path)
+                    
+                elif command == "insert":
+                    file_path = tool_args.get('path', '').lstrip('/')
+                    insert_line = tool_args.get('insert_line', 0)
+                    new_str = tool_args.get('new_str', '')
+                    tool_result = self.file_editor.insert(file_path, insert_line, new_str)
+                    
+                elif command == "create":
+                    file_path = tool_args.get('path', '').lstrip('/')
+                    content = tool_args.get('content', '')
+                    tool_result = self.file_editor.create(file_path, content)
+                
+                # If we have a tool result, create a tool message
+                if tool_result is not None:
+                    tool_msg = ToolMessage(
+                        content=tool_result,
+                        tool_call_id=tool_call.get('id', ''),
+                        name=tool_name
+                    )
+                    
+                    # Add the tool message to chat history
+                    self.chat_history.append(tool_msg)
+            
+            # Get another response after tools have been processed
+            final_response = self.llm_with_tools.invoke(self.chat_history)
+            
+            # Add the final response to chat history
+            self.chat_history.append(final_response)
+            
+            return final_response.content
+        
+        # Return the response content
+        return response.content
+
+def run_textual_chat(scorecard: Optional[str] = None, score: Optional[str] = None):
+    """Run the Textual-based chat interface.
+    
+    Args:
+        scorecard: The scorecard to use
+        score: The score to use
+    """
+    # Configure basic logging
+    import logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    
+    # Run the Textual app
+    try:
+        console.print("Starting Plexus Score Chat Textual UI...")
+        
+        # First create a REPL instance to load the score
+        repl = ScoreChatREPL(scorecard=scorecard, score=score)
+        
+        # Load the score if specified
+        if scorecard and score:
+            console.print(f"Loading score '{score}' from scorecard '{scorecard}'...")
+            repl.load_score(scorecard, score)
+            repl.initialize_system_message()
+        
+        # Now create the app with the initialized REPL
+        app = TextualScoreChatApp(
+            scorecard=scorecard,
+            score=score,
+            repl=repl  # Pass the initialized REPL with loaded score
+        )
+        app.run()
+    except Exception as e:
+        console.print(f"Error running Textual UI: {e}")
+        import traceback
+        console.print(traceback.format_exc())
+        console.print("\nFalling back to traditional REPL...")
+        # Fall back to traditional REPL
         try:
-            # First pull the score
-            self.pull_score(scorecard, score)
-            
-            # Get scorecard details to get its name
-            scorecard_id = resolve_scorecard_identifier(self.client, scorecard)
-            if not scorecard_id:
-                self.console.print(f"[red]Scorecard not found: {scorecard}[/red]")
-                return
-            
-            scorecard_query = f"""
-            query GetScorecard {{
-                getScorecard(id: "{scorecard_id}") {{
-                    id
-                    name
-                }}
-            }}
-            """
-            scorecard_result = self.client.execute(scorecard_query)
-            scorecard_data = scorecard_result.get('getScorecard')
-            if not scorecard_data:
-                self.console.print(f"[red]Error retrieving scorecard: {scorecard}[/red]")
-                return
-            scorecard_name = scorecard_data['name']
-            
-            # Get score details to get its name
-            score_id = resolve_score_identifier(self.client, scorecard_id, score)
-            if not score_id:
-                self.console.print(f"[red]Score not found: {score}[/red]")
-                return
-            
-            score_query = f"""
-            query GetScore {{
-                getScore(id: "{score_id}") {{
-                    id
-                    name
-                }}
-            }}
-            """
-            score_result = self.client.execute(score_query)
-            score_data = score_result.get('getScore')
-            if not score_data:
-                self.console.print(f"[red]Error retrieving score: {score}[/red]")
-                return
-            
-            # Get the YAML file path using the correct names
-            yaml_path = get_score_yaml_path(scorecard_name, score_data['name'])
-            
-            if not yaml_path.exists():
-                self.console.print(f"[red]YAML file not found at: {yaml_path}[/red]")
-                return
-            
-            self.current_scorecard = scorecard
-            self.current_score = score
-            
-        except Exception as e:
-            self.console.print(f"[red]Error loading score: {str(e)}[/red]") 
+            repl = ScoreChatREPL(scorecard=scorecard, score=score)
+            repl.run()
+        except Exception as repl_error:
+            console.print(f"Error falling back to traditional REPL: {repl_error}")
+            console.print(traceback.format_exc())
+            console.print("\nUnable to start any interface. Please check your environment setup.")
+
+def main():
+    """Main entry point when run as a module."""
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Run the Score Chat REPL.")
+    parser.add_argument(
+        "--textual", "-t", 
+        action="store_true",
+        help="Use the Textual UI instead of the Rich UI."
+    )
+    parser.add_argument(
+        "--scorecard", "-s",
+        help="Scorecard identifier (ID, name, key, or external ID)."
+    )
+    parser.add_argument(
+        "--score", "-q",
+        help="Score identifier (ID, name, key)."
+    )
+    
+    args = parser.parse_args()
+    
+    if args.textual:
+        # Use the run_textual_chat function which now properly loads the score
+        run_textual_chat(scorecard=args.scorecard, score=args.score)
+    else:
+        # Use the traditional Rich UI
+        repl = ScoreChatREPL(scorecard=args.scorecard, score=args.score)
+        repl.run()
+
+if __name__ == "__main__":
+    main()
