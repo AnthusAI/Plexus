@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import { Square, RectangleVertical, X, ChevronDown, ChevronUp, Info, MessageCircleMore, Plus, ThumbsUp, ThumbsDown, ChevronLeft } from "lucide-react"
+import { Square, Columns2, X, ChevronDown, ChevronUp, Info, MessageCircleMore, Plus, ThumbsUp, ThumbsDown, ChevronLeft } from "lucide-react"
 import { formatDistanceToNow, parseISO } from "date-fns"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -569,7 +569,7 @@ export default function FeedbackDashboard() {
       <>
         {!isNarrowViewport && (
           <Button variant="outline" size="icon" onClick={() => setIsFullWidth(!isFullWidth)}>
-            {isFullWidth ? <RectangleVertical className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+            {isFullWidth ? <Columns2 className="h-4 w-4" /> : <Square className="h-4 w-4" />}
           </Button>
         )}
         <Button variant="outline" size="icon" onClick={() => {

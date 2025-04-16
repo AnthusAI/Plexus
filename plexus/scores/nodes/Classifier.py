@@ -58,9 +58,9 @@ class Classifier(BaseNode):
             # Remove all non-alphanumeric characters except spaces
             return ''.join(c.lower() for c in text if c.isalnum() or c.isspace())
 
-        def find_matches_in_text(self, text: str) -> List[Tuple[str, int, int]]:
+        def find_matches_in_text(self, text: str) -> List[Tuple[str, int, int, int]]:
             """Find all matches in text with their line and position.
-            Returns list of tuples: (valid_class, line_number, position)
+            Returns list of tuples: (valid_class, line_number, position, original_index)
             """
             matches = []
             lines = text.strip().split('\n')
@@ -68,9 +68,15 @@ class Classifier(BaseNode):
             # First normalize all valid classes (do this once)
             normalized_classes = [(vc, self.normalize_text(vc), i) for i, vc in enumerate(self.valid_classes)]
             
-            # When parsing from end, sort by length to handle overlapping terms
-            # When parsing from start, keep original order
-            if not self.parse_from_start:
+            # Sort by appropriate strategy:
+            # 1. For parse_from_start=True: use original order, but handle exact same match text
+            # 2. For parse_from_start=False: sort by length (descending) to prioritize specific classes
+            if self.parse_from_start:
+                # When parsing from start, maintain original order
+                # (Already in original order, so no sorting needed)
+                pass
+            else:
+                # When parsing from end, sort by length to handle overlapping terms
                 normalized_classes.sort(key=lambda x: len(x[1]), reverse=True)
             
             # Process each line
@@ -91,11 +97,27 @@ class Classifier(BaseNode):
                                 normalized_line[pos + len(normalized_class)].isspace())
                         
                         if before and after:
-                            # Store original index to maintain order
-                            matches.append((original_class, line_idx, pos, original_idx))
-                            # When parsing from start, return first match immediately
-                            if self.parse_from_start:
-                                return [(original_class, line_idx, pos, original_idx)]
+                            # Check for already matched terms that completely contain this match
+                            conflict = False
+                            if not self.parse_from_start:
+                                for m_class, m_line, m_pos, m_idx in matches:
+                                    m_norm = self.normalize_text(m_class)
+                                    # If they're on the same line and there's an overlap
+                                    if (m_line == line_idx and 
+                                        m_pos <= pos < m_pos + len(m_norm) and 
+                                        len(m_norm) > len(normalized_class)):
+                                        # Longer match takes precedence
+                                        conflict = True
+                                        break
+                            
+                            if not conflict:
+                                # Store match
+                                matches.append((original_class, line_idx, pos, original_idx))
+                                
+                                # When parsing from start, return first match immediately
+                                if self.parse_from_start:
+                                    return [(original_class, line_idx, pos, original_idx)]
+                            
                             # Skip past this match
                             pos += len(normalized_class)
                         else:
@@ -113,9 +135,66 @@ class Classifier(BaseNode):
                 # When parsing from start, we already have the first match
                 return matches[0][0]
             else:
-                # When parsing from end, sort by line and position in reverse
+                # When parsing from end, sort by position (line and column) in reverse
+                # For substring conflicts, we already handled this in find_matches_in_text
                 matches.sort(key=lambda x: (x[1], x[2]), reverse=True)
                 return matches[0][0]  # Return the original class name
+
+        def strip_classification_from_explanation(self, output: str, classification: str) -> str:
+            """Remove the classification from the explanation text."""
+            if not classification:
+                return output.strip()
+
+            lines = output.strip().split('\n')
+            result_lines = []
+            classification_removed = False
+
+            # Normalize the classification for comparison
+            normalized_classification = self.normalize_text(classification)
+            
+            for line in lines:
+                normalized_line = self.normalize_text(line)
+                
+                # Skip lines that ONLY contain the classification or very short lines with the classification
+                if (normalized_line == normalized_classification or 
+                    (len(normalized_line) < len(normalized_classification) + 5 and 
+                     normalized_classification in normalized_line)):
+                    classification_removed = True
+                    continue
+                
+                result_lines.append(line)
+            
+            # If we didn't filter any lines and there are at least 2 lines,
+            # try to remove classification from the beginning of the first line
+            if not classification_removed and len(lines) >= 1:
+                first_line = lines[0]
+                normalized_first = self.normalize_text(first_line)
+                
+                if normalized_first.startswith(normalized_classification):
+                    # Try to find where to split the first line
+                    # Look for common separators after the classification
+                    original_class_len = len(classification)
+                    potential_cuts = [
+                        first_line.find(': ', 0, len(first_line)),
+                        first_line.find(' - ', 0, len(first_line)),
+                        first_line.find('. ', 0, len(first_line)),
+                        first_line.find(', ', 0, len(first_line)),
+                        first_line.find(':\n', 0, len(first_line)),
+                        first_line.find('.\n', 0, len(first_line))
+                    ]
+                    
+                    valid_cuts = [cut for cut in potential_cuts if cut > 0]
+                    if valid_cuts:
+                        cut_point = min(valid_cuts) + 2  # +2 to include the separator
+                        result_lines[0] = first_line[cut_point:].strip()
+                    else:
+                        # No clear separator found, try a simpler approach
+                        for i, char in enumerate(first_line):
+                            if i >= original_class_len and not char.isalnum():
+                                result_lines[0] = first_line[i+1:].strip()
+                                break
+            
+            return '\n'.join(result_lines).strip()
 
         def parse(self, output: str) -> Dict[str, Any]:
             # Find all matches in the text
@@ -124,9 +203,12 @@ class Classifier(BaseNode):
             # Select the appropriate match
             selected_class = self.select_match(matches, output)
             
+            # Remove the classification from the explanation
+            clean_explanation = self.strip_classification_from_explanation(output, selected_class)
+            
             return {
                 "classification": selected_class,
-                "explanation": output.strip()
+                "explanation": clean_explanation or output.strip()  # Fall back to original if empty
             }
 
     def get_llm_prompt_node(self):
@@ -171,23 +253,9 @@ class Classifier(BaseNode):
                     else:
                         chat_messages.append(msg)
                 
-                # Get the initial system and human messages from state.messages
-                initial_messages = []
-                if hasattr(state, 'messages') and state.messages:
-                    for msg in state.messages:
-                        if isinstance(msg, dict) and msg.get('type') in ['system', 'human']:
-                            msg_type = msg.get('type', '').lower()
-                            if msg_type == 'human':
-                                initial_messages.append(HumanMessage(content=msg['content']))
-                            elif msg_type == 'system':
-                                initial_messages.append(SystemMessage(content=msg['content']))
-                        else:
-                            break
-                
-                # If we don't have initial messages in state, get them from prompt template
-                if not initial_messages:
-                    prompt = prompt_templates[0].format_prompt(**state.model_dump())
-                    initial_messages = prompt.to_messages()[:2]  # Only take system and first human message
+                # Get the initial system and human messages from prompt template
+                prompt = prompt_templates[0].format_prompt(**state.model_dump())
+                initial_messages = prompt.to_messages()[:2]  # Only take system and first human message
                 
                 # Combine messages in the correct order:
                 # 1. System message from initial_messages[0]
@@ -199,34 +267,9 @@ class Classifier(BaseNode):
                 logging.info("Final message sequence:")
                 for i, msg in enumerate(messages):
                     logging.info(f"Message {i}: type={type(msg)}, content={msg.content}")
-                
-                # Store messages in state.messages to preserve them
-                state.messages = [{
-                    'type': msg.__class__.__name__.lower().replace('message', ''),
-                    'content': msg.content,
-                    '_type': msg.__class__.__name__
-                } for msg in messages]
-            # Otherwise use existing messages or create new ones
-            elif hasattr(state, 'messages') and state.messages:
-                logging.info("Found existing messages in state")
-                # Convert dict messages back to LangChain objects if needed
-                messages = []
-                for msg in state.messages:
-                    if isinstance(msg, dict):
-                        msg_type = msg.get('type', '').lower()
-                        if msg_type == 'human':
-                            messages.append(HumanMessage(content=msg['content']))
-                        elif msg_type == 'ai':
-                            messages.append(AIMessage(content=msg['content']))
-                        elif msg_type == 'system':
-                            messages.append(SystemMessage(content=msg['content']))
-                        else:
-                            messages.append(BaseMessage(content=msg['content']))
-                    else:
-                        messages.append(msg)
+            # Otherwise build new messages from prompt template
             else:
-                # Build initial messages from prompt template
-                logging.info("No chat history or existing messages, building initial messages")
+                logging.info("Building new messages from prompt template")
                 try:
                     prompt = prompt_templates[0].format_prompt(**state.model_dump())
                     messages = prompt.to_messages()
@@ -244,9 +287,10 @@ class Classifier(BaseNode):
 
             # Store messages as dicts in state - they'll be converted back to objects when needed
             return self.GraphState(
-                **{k: v for k, v in state.model_dump().items() if k not in ['messages', 'completion']},
+                **{k: v for k, v in state.model_dump().items() if k not in ['messages', 'completion', 'chat_history']},
                 messages=message_dicts,
-                completion=state.completion if hasattr(state, 'completion') else None
+                chat_history=state.chat_history if hasattr(state, 'chat_history') else [],
+                completion=None  # Always start with no completion
             )
 
         return llm_request
@@ -301,51 +345,43 @@ class Classifier(BaseNode):
             logging.info(f"Preparing retry attempt {state.retry_count + 1}")
             logging.debug(f"Retry message: {retry_message}")
             
-            chat_history = state.chat_history if state.chat_history else []
-            
-            # Convert existing chat history to LangChain objects if needed
-            converted_history = []
-            for msg in chat_history:
-                if isinstance(msg, dict):
-                    msg_type = msg.get('type', '').lower()
-                    if msg_type == 'human':
-                        converted_history.append(HumanMessage(content=msg['content']))
-                    elif msg_type == 'ai':
-                        converted_history.append(AIMessage(content=msg['content']))
-                    elif msg_type == 'system':
-                        converted_history.append(SystemMessage(content=msg['content']))
+            # Get the initial system and human messages
+            initial_messages = []
+            if hasattr(state, 'messages') and state.messages:
+                for msg in state.messages[:2]:  # Only take the first two messages (system and initial human)
+                    if isinstance(msg, dict):
+                        initial_messages.append(msg)
                     else:
-                        converted_history.append(BaseMessage(content=msg['content']))
-                else:
-                    converted_history.append(msg)
+                        initial_messages.append({
+                            'type': msg.__class__.__name__.lower().replace('message', ''),
+                            'content': msg.content,
+                            '_type': msg.__class__.__name__
+                        })
+
+            # Initialize or update chat history
+            chat_history = []
+            if state.chat_history:
+                chat_history.extend(state.chat_history)
             
             # Add the last completion to chat history if it exists
             if state.completion is not None:
-                converted_history.append(AIMessage(content=state.completion))
+                chat_history.append({
+                    'type': 'ai',
+                    'content': state.completion,
+                    '_type': 'AIMessage'
+                })
             
             # Add the retry message
-            converted_history.append(retry_message)
-            
-            # Convert all messages back to dictionaries for state storage
-            message_dicts = [{
-                'type': msg.__class__.__name__.lower().replace('message', ''),
-                'content': msg.content,
-                '_type': msg.__class__.__name__
-            } for msg in converted_history]
-            
-            # Get the initial system and human messages from state.messages
-            initial_messages = []
-            if hasattr(state, 'messages') and state.messages:
-                for msg in state.messages:
-                    if msg.get('type') in ['system', 'human']:
-                        initial_messages.append(msg)
-                    else:
-                        break
+            chat_history.append({
+                'type': 'human',
+                'content': retry_message.content,
+                '_type': 'HumanMessage'
+            })
             
             # Store messages as dicts in state and explicitly clear completion
             new_state = self.GraphState(
-                chat_history=message_dicts,
-                messages=initial_messages + message_dicts,  # Combine initial messages with chat history
+                chat_history=chat_history,
+                messages=initial_messages + chat_history,  # Combine initial messages with chat history
                 retry_count=state.retry_count + 1,
                 completion=None,  # Explicitly clear completion for next LLM call
                 **{k: v for k, v in state.model_dump().items() 
@@ -535,10 +571,20 @@ class Classifier(BaseNode):
 
                     response = await model.ainvoke(messages)
                     
-                    return self.GraphState(
+                    # Create the initial result state
+                    result_state = self.GraphState(
                         **{k: v for k, v in state.model_dump().items() if k not in ['completion']},
                         completion=response.content
                     )
+                    
+                    output_state = {
+                        "explanation": response.content
+                    }
+                    
+                    # Log the state and get a new state object with updated node_results
+                    updated_state = self.log_state(result_state, None, output_state)
+                    
+                    return updated_state
 
             except Exception as e:
                 logging.error(f"Error in llm_call: {e}")

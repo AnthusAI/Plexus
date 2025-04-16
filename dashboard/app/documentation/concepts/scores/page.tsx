@@ -131,6 +131,41 @@ export default function ScoresPage() {
             evaluation, each score in the scorecard is applied to your content, building a comprehensive assessment.
           </p>
           
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-xl font-medium mb-2">Score Versions</h3>
+              <p className="text-muted-foreground mb-4">
+                Scores in Plexus support versioning, allowing you to track changes to score configurations over time.
+                Each version represents a different configuration of the score, with one version designated as the
+                "champion" (active) version that's used for evaluations.
+              </p>
+              <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
+                <li>
+                  <strong>Champion Version</strong>: The currently active version used for evaluations
+                </li>
+                <li>
+                  <strong>Featured Versions</strong>: Versions that are highlighted for importance or reference
+                </li>
+                <li>
+                  <strong>Configuration</strong>: Each version contains its own configuration, including prompts, 
+                  parameters, and other settings
+                </li>
+              </ul>
+              <p className="text-muted-foreground mt-4">
+                You can view score versions using the CLI command:
+              </p>
+              <pre className="bg-muted rounded-lg mb-4">
+                <div className="code-container p-4">
+                  <code>{`plexus scores info --scorecard "Example Scorecard" --score "Example Score"`}</code>
+                </div>
+              </pre>
+              <p className="text-muted-foreground">
+                This command displays up to 10 versions in reverse chronological order (newest first), showing which 
+                version is the champion and which versions are featured.
+              </p>
+            </div>
+          </div>
+          
           <div className="flex gap-4 mt-6">
             <Link href="/documentation/concepts/scorecards">
               <DocButton>Learn about Scorecards</DocButton>

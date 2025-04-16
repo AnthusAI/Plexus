@@ -5,12 +5,14 @@ interface EvaluationListAccuracyBarProps {
   progress: number
   accuracy: number
   isFocused?: boolean
+  isSelected?: boolean
 }
 
 export function EvaluationListAccuracyBar({ 
   progress, 
   accuracy,
-  isFocused = false 
+  isFocused = false,
+  isSelected = false
 }: EvaluationListAccuracyBarProps) {
   const formattedAccuracy = accuracy >= 98 
     ? Math.round(accuracy * 10) / 10 
@@ -22,13 +24,16 @@ export function EvaluationListAccuracyBar({
   const falseWidth = 100 - trueWidth
   
   return (
-    <div className="relative w-full h-8 bg-neutral rounded-md">
+    <div className={cn(
+      "relative w-full h-8 rounded-md",
+      isSelected ? "bg-progress-background-selected" : "bg-progress-background"
+    )}>
       {clampedProgress > 0 && (
         <>
           <div
             className={cn(
               "absolute top-0 left-0 h-full flex items-center pl-2 text-sm font-medium rounded-md",
-              isFocused ? "text-focus" : "text-primary-foreground"
+              isFocused ? "text-focus" : isSelected ? "text-primary-selected-foreground" : "text-primary-foreground"
             )}
             style={{ width: 'auto' }}
           >
@@ -37,8 +42,9 @@ export function EvaluationListAccuracyBar({
           {trueWidth > 0 && (
             <div
               className={cn(
-                "absolute top-0 left-0 h-full bg-true flex items-center pl-2 text-sm font-medium",
-                isFocused ? "text-focus" : "text-primary-foreground"
+                "absolute top-0 left-0 h-full flex items-center pl-2 text-sm font-medium",
+                isSelected ? "bg-true-selected" : "bg-true",
+                isFocused ? "text-focus" : isSelected ? "text-foreground-true" : "text-primary-foreground"
               )}
               style={{ 
                 width: `${trueWidth}%`, 
@@ -54,7 +60,10 @@ export function EvaluationListAccuracyBar({
           )}
           {falseWidth > 0 && (
             <div
-              className="absolute top-0 h-full bg-false"
+              className={cn(
+                "absolute top-0 h-full",
+                isSelected ? "bg-false-selected" : "bg-false"
+              )}
               style={{ 
                 left: `${trueWidth}%`, 
                 width: `${falseWidth}%`,

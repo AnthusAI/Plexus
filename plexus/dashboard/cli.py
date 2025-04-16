@@ -49,13 +49,7 @@ import yaml
 import boto3
 from botocore.config import Config
 
-# Configure logging with a more concise format
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s [%(levelname).1s] %(message)s',
-    datefmt='%H:%M:%S'
-)
-logger = logging.getLogger(__name__)
+from plexus.CustomLogging import logging
 
 # Add after other constants
 SCORE_TYPES = ['binary', 'multiclass']
@@ -78,7 +72,7 @@ def evaluation():
 def create_client() -> PlexusDashboardClient:
     """Create a client and log its configuration"""
     client = PlexusDashboardClient()
-    logger.info(f"Using API URL: {client.api_url}")
+    logging.info(f"Using API URL: {client.api_url}")
     return client
 
 @evaluation.command()
@@ -147,9 +141,9 @@ def create(
     
     try:
         # First get the account
-        logger.info(f"Looking up account with key: {account_key}")
+        logging.info(f"Looking up account with key: {account_key}")
         account = Account.get_by_key(account_key, client)
-        logger.info(f"Found account: {account.name} ({account.id})")
+        logging.info(f"Found account: {account.name} ({account.id})")
         
         # Build input dictionary with all provided values
         input_data = {
@@ -161,29 +155,29 @@ def create(
         # Look up scorecard if any identifier was provided
         if any([scorecard_id, scorecard_key, scorecard_name]):
             if scorecard_id:
-                logger.info(f"Using provided scorecard ID: {scorecard_id}")
+                logging.info(f"Using provided scorecard ID: {scorecard_id}")
                 scorecard = Scorecard.get_by_id(scorecard_id, client)
             elif scorecard_key:
-                logger.info(f"Looking up scorecard by key: {scorecard_key}")
+                logging.info(f"Looking up scorecard by key: {scorecard_key}")
                 scorecard = Scorecard.get_by_key(scorecard_key, client)
             else:
-                logger.info(f"Looking up scorecard by name: {scorecard_name}")
+                logging.info(f"Looking up scorecard by name: {scorecard_name}")
                 scorecard = Scorecard.get_by_name(scorecard_name, client)
-            logger.info(f"Found scorecard: {scorecard.name} ({scorecard.id})")
+            logging.info(f"Found scorecard: {scorecard.name} ({scorecard.id})")
             input_data['scorecardId'] = scorecard.id
         
         # Look up score if any identifier was provided
         if any([score_id, score_key, score_name]):
             if score_id:
-                logger.info(f"Using provided score ID: {score_id}")
+                logging.info(f"Using provided score ID: {score_id}")
                 score = Score.get_by_id(score_id, client)
             elif score_key:
-                logger.info(f"Looking up score by key: {score_key}")
+                logging.info(f"Looking up score by key: {score_key}")
                 score = Score.get_by_key(score_key, client)
             else:
-                logger.info(f"Looking up score by name: {score_name}")
+                logging.info(f"Looking up score by name: {score_name}")
                 score = Score.get_by_name(score_name, client)
-            logger.info(f"Found score: {score.name} ({score.id})")
+            logging.info(f"Found score: {score.name} ({score.id})")
             input_data['scoreId'] = score.id
         
         # Add optional fields if provided
@@ -205,7 +199,7 @@ def create(
         if confusion_matrix: input_data['confusionMatrix'] = confusion_matrix
         
         # Create the evaluation
-        logger.info("Creating evaluation...")
+        logging.info("Creating evaluation...")
         evaluation = Evaluation.create(
             client=client,
             type=type,
@@ -225,7 +219,7 @@ def create(
             scoreId=score.id if 'score' in locals() else None,
             confusionMatrix=confusion_matrix,
         )
-        logger.info(f"Created evaluation: {evaluation.id}")
+        logging.info(f"Created evaluation: {evaluation.id}")
         
         # Output results
         click.echo(f"Created evaluation: {evaluation.id}")
@@ -234,7 +228,7 @@ def create(
         click.echo(f"Created at: {evaluation.createdAt}")
         
     except Exception as e:
-        logger.error(f"Error creating evaluation: {str(e)}")
+        logging.error(f"Error creating evaluation: {str(e)}")
         click.echo(f"Error: {str(e)}", err=True)
 
 @evaluation.command()
@@ -300,9 +294,9 @@ def update(
     
     try:
         # First get the existing evaluation
-        logger.info(f"Looking up evaluation: {id}")
+        logging.info(f"Looking up evaluation: {id}")
         evaluation = Evaluation.get_by_id(id, client)
-        logger.info(f"Found evaluation: {evaluation.id}")
+        logging.info(f"Found evaluation: {evaluation.id}")
         
         # Build update data with only provided fields
         update_data = {
@@ -330,9 +324,9 @@ def update(
         if confusion_matrix is not None: update_data['confusionMatrix'] = confusion_matrix
         
         # Update the evaluation
-        logger.info("Updating evaluation...")
+        logging.info("Updating evaluation...")
         updated = evaluation.update(**update_data)
-        logger.info(f"Updated evaluation: {updated.id}")
+        logging.info(f"Updated evaluation: {updated.id}")
         
         # Output results
         click.echo(f"Updated evaluation: {updated.id}")
@@ -341,7 +335,7 @@ def update(
         click.echo(f"Updated at: {updated.updatedAt}")
         
     except Exception as e:
-        logger.error(f"Error updating evaluation: {str(e)}")
+        logging.error(f"Error updating evaluation: {str(e)}")
         click.echo(f"Error: {str(e)}", err=True)
 
 @cli.group()
@@ -440,11 +434,11 @@ def fix_missing_external_ids(dry_run: bool):
         total_processed = 0
         page_number = 0
         
-        logger.info("Starting to fetch scores...")
+        logging.info("Starting to fetch scores...")
         
         while True:
             page_number += 1
-            logger.info(f"Fetching page {page_number} (size: {page_size}, next_token: {next_token})")
+            logging.info(f"Fetching page {page_number} (size: {page_size}, next_token: {next_token})")
             
             # Query scores with pagination
             query = """
@@ -462,20 +456,20 @@ def fix_missing_external_ids(dry_run: bool):
             """
             
             try:
-                logger.info("Executing ListScores query...")
+                logging.info("Executing ListScores query...")
                 response = client.execute(query, {
                     'limit': page_size,
                     'nextToken': next_token
                 })
-                logger.info("Received response from ListScores query")
+                logging.info("Received response from ListScores query")
                 
                 items = response['listScores']['items']
                 total_processed += len(items)
-                logger.info(f"Found {len(items)} scores on this page")
+                logging.info(f"Found {len(items)} scores on this page")
                 
                 # Try to get externalId for each score
                 for i, score in enumerate(items):
-                    logger.info(f"Checking score {i+1}/{len(items)} on page {page_number} (ID: {score['id']})")
+                    logging.info(f"Checking score {i+1}/{len(items)} on page {page_number} (ID: {score['id']})")
                     detail_query = """
                     query GetScore($id: ID!) {
                         getScore(id: $id) {
@@ -489,24 +483,24 @@ def fix_missing_external_ids(dry_run: bool):
                     try:
                         detail = client.execute(detail_query, {'id': score['id']})
                         if not detail['getScore'].get('externalId'):
-                            logger.info(f"Found score missing externalId: {score['id']} ({score['name']})")
+                            logging.info(f"Found score missing externalId: {score['id']} ({score['name']})")
                             scores_to_fix.append(score)
                     except Exception as e:
                         if 'non-nullable' in str(e) and 'externalId' in str(e):
-                            logger.info(f"Found score with null externalId: {score['id']} ({score['name']})")
+                            logging.info(f"Found score with null externalId: {score['id']} ({score['name']})")
                             scores_to_fix.append(score)
                         else:
-                            logger.error(f"Error checking score {score['id']}: {str(e)}")
+                            logging.error(f"Error checking score {score['id']}: {str(e)}")
                 
                 next_token = response['listScores'].get('nextToken')
-                logger.info(f"Next token: {next_token}")
+                logging.info(f"Next token: {next_token}")
                 
                 if not next_token:
-                    logger.info("No more pages to process")
+                    logging.info("No more pages to process")
                     break
                     
             except Exception as e:
-                logger.error(f"Error processing page {page_number}: {str(e)}")
+                logging.error(f"Error processing page {page_number}: {str(e)}")
                 if 'non-nullable' in str(e) and 'externalId' in str(e):
                     # Try to extract the problematic score index
                     try:
@@ -514,7 +508,7 @@ def fix_missing_external_ids(dry_run: bool):
                         if 'items[' in error_str:
                             index = int(error_str.split('items[')[1].split(']')[0])
                             if len(items) > index:
-                                logger.info(f"Adding problematic score from error: {items[index]['id']}")
+                                logging.info(f"Adding problematic score from error: {items[index]['id']}")
                                 scores_to_fix.append(items[index])
                     except:
                         pass
@@ -552,7 +546,7 @@ def fix_missing_external_ids(dry_run: bool):
         click.echo("Update complete")
         
     except Exception as e:
-        logger.error(f"Error fixing scores: {str(e)}")
+        logging.error(f"Error fixing scores: {str(e)}")
         click.echo(f"Error: {str(e)}", err=True)
 
 @evaluation.command()
@@ -595,26 +589,26 @@ def simulate(
         
         # Look up or validate account
         if account_id:
-            logger.info(f"Using provided account ID: {account_id}")
+            logging.info(f"Using provided account ID: {account_id}")
             account = Account.get_by_id(account_id, client)
         elif account_key:
-            logger.info(f"Looking up account by key: {account_key}")
+            logging.info(f"Looking up account by key: {account_key}")
             account = Account.get_by_key(account_key, client)
         elif account_name:
-            logger.info(f"Looking up account by name: {account_name}")
+            logging.info(f"Looking up account by name: {account_name}")
             account = Account.get_by_name(account_name, client)
         else:
             raise click.UsageError("Must provide account-id, account-key, or account-name")
         
         # Look up or validate scorecard
         if scorecard_id:
-            logger.info(f"Using provided scorecard ID: {scorecard_id}")
+            logging.info(f"Using provided scorecard ID: {scorecard_id}")
             scorecard = Scorecard.get_by_id(scorecard_id, client)
         elif scorecard_key:
-            logger.info(f"Looking up scorecard by key: {scorecard_key}")
+            logging.info(f"Looking up scorecard by key: {scorecard_key}")
             scorecard = Scorecard.get_by_key(scorecard_key, client)
         elif scorecard_name:
-            logger.info(f"Looking up scorecard by name: {scorecard_name}")
+            logging.info(f"Looking up scorecard by name: {scorecard_name}")
             scorecard = Scorecard.get_by_name(scorecard_name, client)
         else:
             raise click.UsageError("Must provide scorecard-id, scorecard-key, or scorecard-name")
@@ -623,15 +617,15 @@ def simulate(
         score = None
         if any([score_id, score_key, score_name]):
             if score_id:
-                logger.info(f"Using provided score ID: {score_id}")
+                logging.info(f"Using provided score ID: {score_id}")
                 score = Score.get_by_id(score_id, client)
             elif score_key:
-                logger.info(f"Looking up score by key: {score_key}")
+                logging.info(f"Looking up score by key: {score_key}")
                 score = Score.get_by_key(score_key, client)
             else:
-                logger.info(f"Looking up score by name: {score_name}")
+                logging.info(f"Looking up score by name: {score_name}")
                 score = Score.get_by_name(score_name, client)
-            logger.info(f"Using score: {score.name} ({score.id})")
+            logging.info(f"Using score: {score.name} ({score.id})")
 
         # Randomly decide evaluation characteristics
         is_binary = random.random() < 0.3  # 30% chance of binary classification
@@ -710,7 +704,7 @@ def simulate(
                 
                 # Add debug logging
                 is_correct = true_value == predicted_value
-                logger.info(f"Result {i}: true={true_value}, "
+                logging.info(f"Result {i}: true={true_value}, "
                           f"predicted={predicted_value}, correct={is_correct}")
 
                 create_args = {
@@ -729,12 +723,12 @@ def simulate(
                     }
                 }
                 
-                logger.info(f"Creating score result with args: {create_args}")
+                logging.info(f"Creating score result with args: {create_args}")
                 result = ScoreResult.create(
                     client=iteration_client,
                     **create_args
                 )
-                logger.info(f"Created score result: {result.id}, correct={result.correct}")
+                logging.info(f"Created score result: {result.id}, correct={result.correct}")
 
                 # Calculate metrics immediately after each result
                 metrics, metrics_explanation = calculate_metrics(
@@ -794,7 +788,7 @@ def simulate(
                 }
                 
                 # Log the update data to verify metricsExplanation is included
-                logger.info(f"Updating evaluation with data: {json.dumps(update_data, indent=2)}")
+                logging.info(f"Updating evaluation with data: {json.dumps(update_data, indent=2)}")
                 
                 # Create new client for update
                 update_client = PlexusDashboardClient()
@@ -805,7 +799,7 @@ def simulate(
                 )
                 
             except Exception as e:
-                logger.error(f"Error in iteration {i}: {str(e)}")
+                logging.error(f"Error in iteration {i}: {str(e)}")
                 continue  # Continue to next iteration instead of failing completely
             
             # Random delay between results
@@ -813,7 +807,7 @@ def simulate(
             
             # Progress update
             if (i + 1) % 10 == 0:
-                logger.info(f"Generated {i + 1} of {num_items} results")
+                logging.info(f"Generated {i + 1} of {num_items} results")
         
         # Final update
         final_client = PlexusDashboardClient()
@@ -824,10 +818,10 @@ def simulate(
             estimatedRemainingSeconds=0,
             accuracy=accuracy_metric["value"]
         )
-        logger.info("Simulation completed")
+        logging.info("Simulation completed")
         
     except Exception as e:
-        logger.error(f"Error in simulation: {str(e)}")
+        logging.error(f"Error in simulation: {str(e)}")
         if 'evaluation' in locals():
             try:
                 # Error update
@@ -840,7 +834,7 @@ def simulate(
                     estimatedRemainingSeconds=None
                 )
             except Exception as update_error:
-                logger.error(f"Error updating evaluation status: {str(update_error)}")
+                logging.error(f"Error updating evaluation status: {str(update_error)}")
         click.echo(f"Error: {str(e)}", err=True)
 
 def simulate_evaluation_progress(evaluation_id: str, client: PlexusDashboardClient):
@@ -963,7 +957,7 @@ def list_results(id: str, limit: int):
             )
         
     except Exception as e:
-        logger.error(f"Error listing results: {e}")
+        logging.error(f"Error listing results: {e}")
         click.echo(f"Error: {e}", err=True)
 
 @cli.group()
@@ -1014,15 +1008,17 @@ def create(evaluation_id: str, value: str):
         click.echo(f"Created at: {created['createdAt']}")
         
     except Exception as e:
-        logger.error(f"Error creating result test: {str(e)}")
+        logging.error(f"Error creating result test: {str(e)}")
         click.echo(f"Error: {str(e)}", err=True)
 
 @cli.group()
-def scorecard():
+def scorecards():
     """Manage scorecards"""
+    click.echo("WARNING: The 'plexus-dashboard scorecard' commands are deprecated.", err=True)
+    click.echo("Please use the main 'plexus scorecards' commands instead.", err=True)
     pass
 
-@scorecard.command()
+@scorecards.command()
 @click.option('--account-key', help='Filter by account key')
 @click.option('--name', help='Filter by name')
 @click.option('--key', help='Filter by key')
@@ -1030,363 +1026,40 @@ def list(account_key: Optional[str], name: Optional[str], key: Optional[str]):
     """List scorecards with optional filtering.
     
     Examples:
-        plexus-dashboard scorecard list
-        plexus-dashboard scorecard list --account-key my-account
-        plexus-dashboard scorecard list --name "QA Scorecard"
-        plexus-dashboard scorecard list --key qa-v1
+        plexus-dashboard scorecards list
+        plexus-dashboard scorecards list --account-key my-account
+        plexus-dashboard scorecards list --name "QA Scorecard"
+        plexus-dashboard scorecards list --key qa-v1
     """
-    client = create_client()
-    
-    try:
-        # Build filter based on provided options
-        filter_parts = []
-        variables = {}
-        
-        if account_key:
-            # First get the account ID
-            account = Account.get_by_key(account_key, client)
-            filter_parts.append("accountId: {eq: $accountId}")
-            variables['accountId'] = account.id
-            
-        if name:
-            filter_parts.append("name: {eq: $name}")
-            variables['name'] = name
-            
-        if key:
-            filter_parts.append("key: {eq: $key}")
-            variables['key'] = key
-            
-        filter_str = ", ".join(filter_parts)
-        if filter_str:
-            filter_str = f"filter: {{{filter_str}}}"
-            
-        # Query scorecards
-        variables_str = ""
-        if variables:
-            variables_str = f"({', '.join(f'${k}: String!' for k in variables.keys())})"
-            
-        query = f"""
-            query ListScorecards{variables_str} {{
-                listScorecards{' ' + filter_str if filter_str else ''} {{
-                    items {{
-                        id
-                        name
-                        key
-                        externalId
-                        description
-                        account {{
-                            name
-                            key
-                        }}
-                        sections {{
-                            items {{
-                                scores {{
-                                    items {{
-                                        id
-                                        name
-                                    }}
-                                }}
-                            }}
-                        }}
-                    }}
-                }}
-            }}
-        """
-        
-        result = client.execute(query, variables)
-        scorecards = result['listScorecards']['items']
-        
-        if not scorecards:
-            click.echo("No scorecards found")
-            return
-            
-        # Display results
-        click.echo(f"\nFound {len(scorecards)} scorecard(s):\n")
-        for sc in scorecards:
-            # Count total scores across all sections
-            score_count = sum(
-                len(section['scores']['items'])
-                for section in sc['sections']['items']
-            )
-            
-            click.echo(f"ID: {sc['id']}")
-            click.echo(f"Name: {sc['name']}")
-            click.echo(f"Key: {sc['key']}")
-            click.echo(f"External ID: {sc['externalId']}")
-            if sc['description']:
-                click.echo(f"Description: {sc['description']}")
-            click.echo(f"Account: {sc['account']['name']} ({sc['account']['key']})")
-            click.echo(f"Total Scores: {score_count}")
-            click.echo("")
-        
-    except Exception as e:
-        logger.error(f"Error listing scorecards: {str(e)}")
-        click.echo(f"Error: {str(e)}", err=True)
+    click.echo("WARNING: This command is deprecated. Please use 'plexus scorecards list-scorecards' instead.", err=True)
+    # Forward to the main CLI command
+    os.system(f"plexus scorecards list-scorecards {' --account-key ' + account_key if account_key else ''} {' --name ' + name if name else ''} {' --key ' + key if key else ''}")
 
-@scorecard.command()
+@scorecards.command()
 @click.option('--account-key', default='call-criteria', help='Account key identifier')
 @click.option('--directory', default='scorecards', help='Directory containing YAML scorecard files')
 def sync(account_key: str, directory: str):
     """Sync YAML scorecards to the API.
     
     Examples:
-        plexus-dashboard scorecard sync
-        plexus-dashboard scorecard sync --account-key my-account
-        plexus-dashboard scorecard sync --directory path/to/scorecards
+        plexus-dashboard scorecards sync
+        plexus-dashboard scorecards sync --account-key my-account
+        plexus-dashboard scorecards sync --directory path/to/scorecards
     """
-    client = create_client()
-    
-    try:
-        # Get account
-        logger.info(f"Looking up account with key: {account_key}")
-        account = Account.get_by_key(account_key, client)
-        logger.info(f"Found account: {account.name} ({account.id})")
-        
-        # Load all YAML files from directory
-        logger.info(f"Loading scorecards from {directory}")
-        for filename in os.listdir(directory):
-            if not filename.endswith('.yaml'):
-                continue
-                
-            filepath = os.path.join(directory, filename)
-            logger.info(f"Processing {filepath}")
-            
-            with open(filepath, 'r') as f:
-                yaml_data = yaml.safe_load(f)
-                
-            # Get or create scorecard
-            try:
-                scorecard = Scorecard.get_by_key(yaml_data['key'], client)
-                logger.info(f"Found existing scorecard: {scorecard.name}")
-            except ValueError:
-                logger.info("Creating new scorecard")
-                scorecard = Scorecard.create(
-                    client=client,
-                    name=yaml_data['name'],
-                    key=yaml_data['key'],
-                    externalId=str(yaml_data['id']),
-                    accountId=account.id,
-                    description=yaml_data.get('description')
-                )
-                logger.info(f"Created scorecard: {scorecard.name}")
-            
-            # Create default section if none exists
-            sections = client.execute("""
-                query GetSections($scorecardId: String!) {
-                    listScorecardSections(filter: {scorecardId: {eq: $scorecardId}}) {
-                        items {
-                            id
-                            name
-                            order
-                        }
-                    }
-                }
-            """, {'scorecardId': scorecard.id})
-            
-            if not sections['listScorecardSections']['items']:
-                logger.info("Creating default section")
-                section = client.execute("""
-                    mutation CreateSection($input: CreateScorecardSectionInput!) {
-                        createScorecardSection(input: $input) {
-                            id
-                            name
-                            order
-                        }
-                    }
-                """, {
-                    'input': {
-                        'name': 'Default',
-                        'order': 1,
-                        'scorecardId': scorecard.id
-                    }
-                })
-                section_id = section['createScorecardSection']['id']
-            else:
-                section_id = sections['listScorecardSections']['items'][0]['id']
-            
-            # Process each score
-            for index, score_data in enumerate(yaml_data['scores'], start=1):
-                try:
-                    logger.info(f"Processing score at index {index}")
-                    logger.info(f"Score data: {json.dumps(score_data, indent=2)}")
-                    
-                    score_name = score_data['name']
-                    logger.info(f"Score name: {score_name!r}")
-                    
-                    score_key = score_data.get('key', generate_key(score_name))
-                    logger.info(f"Score key: {score_key!r}")
-                    
-                    score_type = score_data.get('class', 'LangGraphScore')
-                    logger.info(f"Score type: {score_type!r}")
-                    
-                    score_order = score_data.get('order', index)
-                    logger.info(f"Score order: {score_order!r}")
-                    
-                    logger.info(f"Section ID: {section_id!r}")
-                    
-                    score_input = {
-                        'name': score_name,
-                        'key': score_key,
-                        'type': score_type,
-                        'order': score_order,
-                        'sectionId': section_id,
-                        'aiProvider': score_data.get('model_provider'),
-                        'aiModel': score_data.get('model_name'),
-                        'configuration': json.dumps(score_data)
-                    }
-                    
-                    logger.info("Score input fields:")
-                    for key, value in score_input.items():
-                        logger.info(f"  {key}: {value!r}")
-                    
-                    # Try to find existing score by key first, then by name as fallback
-                    existing_scores = client.execute("""
-                        query GetScores($sectionId: String!, $key: String!, $name: String!) {
-                            listScores(filter: {
-                                and: {
-                                    sectionId: {eq: $sectionId},
-                                    or: {
-                                        key: {eq: $key},
-                                        name: {eq: $name}
-                                    }
-                                }
-                            }) {
-                                items {
-                                    id
-                                    name
-                                    key
-                                    type
-                                    order
-                                    aiProvider
-                                    aiModel
-                                    configuration
-                                    externalId
-                                    createdAt
-                                }
-                            }
-                        }
-                    """, {
-                        'sectionId': section_id,
-                        'key': score_key,
-                        'name': score_name
-                    })
-                    
-                    existing_items = existing_scores['listScores']['items']
-                    if len(existing_items) > 1:
-                        logger.info(f"Found {len(existing_items)} duplicate scores for {score_name}")
-                        # Sort by createdAt to keep oldest
-                        sorted_items = sorted(existing_items, key=lambda s: s.get('createdAt', ''))
-                        keep_score = sorted_items[0]
-                        to_delete = sorted_items[1:]
-                        
-                        # Delete duplicates
-                        for duplicate in to_delete:
-                            logger.info(f"Deleting duplicate score {duplicate['id']}")
-                            client.execute("""
-                                mutation DeleteScore($input: DeleteScoreInput!) {
-                                    deleteScore(input: $input) {
-                                        id
-                                    }
-                                }
-                            """, {
-                                'input': {
-                                    'id': duplicate['id']
-                                }
-                            })
-                        existing_items = [keep_score]
-                    
-                    if existing_items:
-                        existing_score = existing_items[0]
-                        logger.info(f"Updating score: {score_name} (id: {existing_score['id']})")
-                        
-                        # Check for missing required fields
-                        needs_update = False
-                        if not existing_score.get('key'):
-                            logger.info(f"Score {existing_score['id']} missing key, will add")
-                            needs_update = True
-                        if not existing_score.get('externalId'):
-                            logger.info(f"Score {existing_score['id']} missing externalId, will add")
-                            needs_update = True
-                            score_input['externalId'] = f"score_{existing_score['id']}"
-                        
-                        update_input = {
-                            'id': existing_score['id'],
-                            **score_input
-                        }
-                        
-                        if needs_update or any(update_input[k] != existing_score.get(k) for k in score_input if k in existing_score):
-                            logger.info(f"Update input data: {json.dumps(update_input, indent=2)}")
-                            try:
-                                result = client.execute("""
-                                    mutation UpdateScore($input: UpdateScoreInput!) {
-                                        updateScore(input: $input) {
-                                            id
-                                            name
-                                            key
-                                            type
-                                            order
-                                            externalId
-                                        }
-                                    }
-                                """, {
-                                    'input': update_input
-                                })
-                                logger.info(f"Update result: {json.dumps(result, indent=2)}")
-                                logger.info(f"Updated score: {score_name}")
-                            except Exception as e:
-                                logger.error(f"Error updating score: {str(e)}")
-                                logger.error(f"Update input was: {json.dumps(update_input, indent=2)}")
-                                raise
-                        else:
-                            logger.info(f"No updates needed for score: {score_name}")
-                    else:
-                        # Create new score
-                        logger.info(f"Creating score: {score_name} with key {score_key}")
-                        # Ensure externalId will be set for new scores
-                        if 'externalId' not in score_input:
-                            score_input['externalId'] = f"score_new_{int(time.time())}"
-                        logger.info(f"Create input data: {json.dumps(score_input, indent=2)}")
-                        try:
-                            mutation = """
-                                mutation CreateScore($input: CreateScoreInput!) {
-                                    createScore(input: $input) {
-                                        id
-                                        name
-                                        key
-                                        type
-                                        order
-                                        externalId
-                                    }
-                                }
-                            """
-                            logger.info(f"Executing mutation: {mutation}")
-                            logger.info(f"With variables: {json.dumps({'input': score_input}, indent=2)}")
-                            score = client.execute(mutation, {'input': score_input})
-                            logger.info(f"Create result: {json.dumps(score, indent=2)}")
-                            logger.info(f"Created score: {score['createScore']['name']} (id: {score['createScore']['id']})")
-                        except Exception as e:
-                            logger.error(f"Error creating score: {str(e)}")
-                            logger.error(f"Create input was: {json.dumps(score_input, indent=2)}")
-                            logger.error(f"Error type: {type(e).__name__}")
-                            if hasattr(e, 'response'):
-                                logger.error(f"Response: {e.response}")
-                            raise
-                except Exception as e:
-                    logger.error(f"Error processing score data: {str(e)}")
-                    logger.error(f"Score data: {json.dumps(score_data, indent=2)}")
-                    raise
-        
-        logger.info("Sync completed successfully")
-        
-    except Exception as e:
-        logger.error(f"Error syncing scorecards: {str(e)}")
-        click.echo(f"Error: {str(e)}", err=True)
+    click.echo("WARNING: This command is deprecated. Please use 'plexus scorecards sync' instead.", err=True)
+    # Forward to the main CLI command
+    os.system(f"plexus scorecards sync --account-key {account_key} --directory {directory}")
 
-@scorecard.command()
+@scorecards.command()
 @click.option('--account-key', required=True, help='Account key')
 @click.option('--fix', is_flag=True, help='Fix duplicates by removing newer copies')
 def find_duplicates(account_key: str, fix: bool):
-    """Find and optionally fix duplicate scores based on name+order+section combination."""
+    """Find duplicate scorecards and scores.
+    
+    Examples:
+        plexus-dashboard scorecards find-duplicates --account-key my-account
+        plexus-dashboard scorecards find-duplicates --account-key my-account --fix
+    """
     client = create_client()
     account = Account.get_by_key(account_key, client)
 
@@ -1420,7 +1093,7 @@ def find_duplicates(account_key: str, fix: bool):
             if not next_token:
                 break
         except Exception as e:
-            logger.error(f"Error fetching scores: {str(e)}")
+            logging.error(f"Error fetching scores: {str(e)}")
             break
 
     # Group scores by name+order+sectionId
@@ -1435,7 +1108,7 @@ def find_duplicates(account_key: str, fix: bool):
     duplicates = {k: v for k, v in scores_by_key.items() if len(v) > 1}
     
     if duplicates:
-        logger.info(f"Found {len(duplicates)} sets of duplicate scores:")
+        logging.info(f"Found {len(duplicates)} sets of duplicate scores:")
         for key, scores in duplicates.items():
             name, order, section = key.split('|')
             # Sort by createdAt to identify oldest (keep) vs newer (delete)
@@ -1443,20 +1116,20 @@ def find_duplicates(account_key: str, fix: bool):
             oldest = sorted_scores[0]
             to_delete = sorted_scores[1:]
             
-            logger.info(f"\nDuplicate score found:")
-            logger.info(f"  Name: {name}")
-            logger.info(f"  Order: {order}")
-            logger.info(f"  Section: {section}")
-            logger.info(f"  Keeping oldest:")
-            logger.info(f"    - id: {oldest['id']}, created: {oldest['createdAt']}")
-            logger.info(f"  Duplicates to remove:")
+            logging.info(f"\nDuplicate score found:")
+            logging.info(f"  Name: {name}")
+            logging.info(f"  Order: {order}")
+            logging.info(f"  Section: {section}")
+            logging.info(f"  Keeping oldest:")
+            logging.info(f"    - id: {oldest['id']}, created: {oldest['createdAt']}")
+            logging.info(f"  Duplicates to remove:")
             for score in to_delete:
-                logger.info(f"    - id: {score['id']}, created: {score['createdAt']}")
+                logging.info(f"    - id: {score['id']}, created: {score['createdAt']}")
             
             if fix:
                 for score in to_delete:
                     try:
-                        logger.info(f"Deleting duplicate score {score['id']}")
+                        logging.info(f"Deleting duplicate score {score['id']}")
                         mutation = """
                         mutation DeleteScore($input: DeleteScoreInput!) {
                             deleteScore(input: $input) {
@@ -1469,35 +1142,41 @@ def find_duplicates(account_key: str, fix: bool):
                                 'id': score['id']
                             }
                         })
-                        logger.info(f"Successfully deleted score {score['id']}")
+                        logging.info(f"Successfully deleted score {score['id']}")
                     except Exception as e:
-                        logger.error(f"Failed to delete score {score['id']}: {str(e)}")
+                        logging.error(f"Failed to delete score {score['id']}: {str(e)}")
     else:
-        logger.info("No duplicate scores found")
+        logging.info("No duplicate scores found")
 
-@scorecard.command()
+@scorecards.command()
 @click.option('--scorecard-id', help='Scorecard ID')
 @click.option('--scorecard-key', help='Scorecard key')
 @click.option('--scorecard-name', help='Scorecard name')
 def list_scores(scorecard_id: Optional[str], scorecard_key: Optional[str], scorecard_name: Optional[str]):
-    """List all scores for a specific scorecard."""
+    """List all scores for a specific scorecard.
+    
+    Examples:
+        plexus-dashboard scorecards list-scores --scorecard-id 1234
+        plexus-dashboard scorecards list-scores --scorecard-key qa-v1
+        plexus-dashboard scorecards list-scores --scorecard-name "QA Scorecard"
+    """
     client = create_client()
     
     try:
         # Get scorecard
         if scorecard_id:
-            logger.info(f"Using provided scorecard ID: {scorecard_id}")
+            logging.info(f"Using provided scorecard ID: {scorecard_id}")
             scorecard = Scorecard.get_by_id(scorecard_id, client)
         elif scorecard_key:
-            logger.info(f"Looking up scorecard by key: {scorecard_key}")
+            logging.info(f"Looking up scorecard by key: {scorecard_key}")
             scorecard = Scorecard.get_by_key(scorecard_key, client)
         elif scorecard_name:
-            logger.info(f"Looking up scorecard by name: {scorecard_name}")
+            logging.info(f"Looking up scorecard by name: {scorecard_name}")
             scorecard = Scorecard.get_by_name(scorecard_name, client)
         else:
             raise click.UsageError("Must provide scorecard-id, scorecard-key, or scorecard-name")
         
-        logger.info(f"Found scorecard: {scorecard.name} ({scorecard.id})")
+        logging.info(f"Found scorecard: {scorecard.name} ({scorecard.id})")
         
         # First get all sections for this scorecard
         sections_query = """
@@ -1570,7 +1249,7 @@ def list_scores(scorecard_id: Optional[str], scorecard_key: Optional[str], score
             click.echo("")
             
     except Exception as e:
-        logger.error(f"Error listing scores: {str(e)}")
+        logging.error(f"Error listing scores: {str(e)}")
         click.echo(f"Error: {str(e)}", err=True)
 
 if __name__ == '__main__':

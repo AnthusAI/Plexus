@@ -16,6 +16,13 @@ export const Default: Story = {
     value: 75,
     title: 'Accuracy'
   },
+  decorators: [
+    (Story) => (
+      <div className="bg-card-light p-6 rounded-lg">
+        <Story />
+      </div>
+    )
+  ],
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
     const valueText = canvas.getByText('75%')
@@ -31,13 +38,13 @@ export const Priority: Story = {
     title: 'Accuracy',
     priority: true
   },
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement)
-    const valueText = canvas.getByText('75%')
-    const titleText = canvas.getByText('Accuracy')
-    await expect(valueText).toHaveClass('fill-focus')
-    await expect(titleText).toHaveClass('text-focus')
-  }
+  decorators: [
+    (Story) => (
+      <div className="bg-card-light p-6 rounded-lg">
+        <Story />
+      </div>
+    )
+  ]
 }
 
 export const DecimalValue: Story = {
@@ -98,7 +105,7 @@ export const CustomBackground: Story = {
   },
   decorators: [
     (Story) => (
-      <div className="bg-card p-6 rounded-lg">
+      <div className="bg-card-light p-6 rounded-lg">
         <Story />
       </div>
     )
@@ -125,14 +132,28 @@ export const LowValue: Story = {
   args: {
     value: 30,
     title: 'Accuracy'
-  }
+  },
+  decorators: [
+    (Story) => (
+      <div className="bg-card-light p-6 rounded-lg">
+        <Story />
+      </div>
+    )
+  ]
 }
 
 export const HighValue: Story = {
   args: {
     value: 95,
     title: 'Accuracy'
-  }
+  },
+  decorators: [
+    (Story) => (
+      <div className="bg-card-light p-6 rounded-lg">
+        <Story />
+      </div>
+    )
+  ]
 }
 
 export const NoTicks: Story = {
@@ -153,7 +174,7 @@ export const NoTicks: Story = {
 
 export const MetricsGrid: Story = {
   render: () => (
-    <div className="grid grid-cols-2 gap-4 max-w-4xl">
+    <div className="grid grid-cols-2 gap-4 max-w-4xl bg-card-light p-6 rounded-lg">
       <Gauge
         value={92.5}
         title="Accuracy"

@@ -21,6 +21,7 @@ import json
 import datetime
 from plexus.cli.task_progress_tracker import TaskProgressTracker, StageConfig
 from datetime import timezone
+from urllib.parse import quote
 
 class ItemCountColumn(ProgressColumn):
     """Renders item count and total."""
@@ -110,6 +111,14 @@ def create_celery_app() -> Celery:
         worker_soft_shutdown_timeout=30,  # 30s grace period for task completion
         worker_cancel_long_running_tasks_on_connection_loss=True
     )
+    
+    # Register task modules
+    from plexus.cli.CommandTasks import register_tasks as register_command_tasks
+    from plexus.cli.ScoreChatCommands import register_tasks as register_score_chat_tasks
+    
+    # Register tasks
+    register_command_tasks(app)
+    register_score_chat_tasks(app)
     
     return app
 
@@ -239,10 +248,18 @@ def dispatch(
                 expand=True
             ) as progress:
                 # Add a single task that tracks both status and progress
+                stage_configs = {
+                    "Setup": StageConfig(
+                        name="Setup",
+                        order=1,
+                        status_message="Setting up...",
+                        total_items=100  # Set a default total
+                    )
+                }
                 task_progress = progress.add_task(
                     "Processing...",
-                    total=100,
-                    status="Initializing..."
+                    total=100,  # Set a default total
+                    status=stage_configs["Setup"].status_message
                 )
                 
                 while not task.ready():
@@ -370,9 +387,17 @@ def status(task_id: str, loglevel: str) -> None:
                 expand=True
             ) as progress:
                 # Add a single task that tracks both status and progress
+                stage_configs = {
+                    "Setup": StageConfig(
+                        name="Setup",
+                        order=1,
+                        status_message="Setting up...",
+                        total_items=100  # Set a default total
+                    )
+                }
                 task_progress = progress.add_task(
                     "Processing...",
-                    total=total,
+                    total=100,  # Set a default total
                     status=stage_configs["Setup"].status_message
                 )
                 progress.refresh()
@@ -448,7 +473,7 @@ def demo(target: str, task_id: Optional[str] = None, fail: bool = False) -> None
             order=1, 
             status_message="Loading AI models..."
         ),
-        "Running": StageConfig(
+        "Processing": StageConfig(
             order=2, 
             total_items=total_items,
             status_message="Processing items..."
@@ -553,7 +578,7 @@ def _run_demo_task(tracker, progress, task_progress, total_items, min_batch_size
             time.sleep(0.15)  # Reduced from 0.3s to 0.15s per message
         
         # Main processing stage
-        tracker.advance_stage()  # Advance to "Running" stage
+        tracker.advance_stage()  # Advance to "Processing" stage
         
         # Process items with target rate - doubled duration with ±5s jitter
         current_item = 0
@@ -580,7 +605,7 @@ def _run_demo_task(tracker, progress, task_progress, total_items, min_batch_size
                 raise Exception(error_msg)
                 
             # Calculate how many items we should have processed by now to stay on target
-            elapsed = time.time() - stage_start_time  # Use stage-specific elapsed time
+            elapsed = time.time() - stage_start_time
             target_items = min(
                 total_items,
                 int((elapsed / target_duration) * total_items)
@@ -630,7 +655,7 @@ def _run_demo_task(tracker, progress, task_progress, total_items, min_batch_size
             time.sleep(0.15)  # Reduced from 0.3s to 0.15s per message
         
         # Set completion message and complete task in one atomic operation
-        tracker.current_stage.status_message = "Task completed."
+        tracker.current_stage.status_message = "Demo command completed"
         tracker.complete()  # This will mark the task as complete and send the final update
         
     except KeyboardInterrupt:
@@ -654,3 +679,49 @@ def _run_demo_task(tracker, progress, task_progress, total_items, min_batch_size
         except Exception as update_error:
             logging.error(f"Failed to update task status on error: {str(update_error)}")
         raise  # Re-raise the original exception after updating the task status
+
+def safequote(value: str) -> str:
+    """Safely quote a string value, handling None."""
+    if value is None:
+        return ""
+    return quote(str(value))
+
+def create_cli():
+    """Create and configure the command line interface."""
+    from plexus.cli import CommandLineInterface
+    cli = CommandLineInterface.cli
+    
+    # Import and register commands
+    from plexus.cli.ScoreCommands import score
+    from plexus.cli.ScorecardCommands import scorecard
+    from plexus.cli.EvaluationCommands import evaluation
+    from plexus.cli.DataCommands import data
+    from plexus.cli.BatchCommands import batch
+    from plexus.cli.TaskCommands import task
+    from plexus.cli.ResultCommands import result
+    from plexus.cli.AnalyzeCommands import analyze
+    from plexus.cli.ReportingCommands import reporting
+    from plexus.cli.DataLakeCommands import datalake
+    from plexus.cli.TrainingCommands import training
+    from plexus.cli.TuningCommands import tuning
+    from plexus.cli.PredictionCommands import prediction
+    from plexus.cli.ScoreChatCommands import score_chat
+    
+    # Add top-level commands
+    cli.add_command(score)
+    cli.add_command(scorecard)
+    cli.add_command(evaluation)
+    cli.add_command(data)
+    cli.add_command(batch)
+    cli.add_command(task)
+    cli.add_command(result)
+    cli.add_command(analyze)
+    cli.add_command(reporting)
+    cli.add_command(datalake)
+    cli.add_command(training)
+    cli.add_command(tuning)
+    cli.add_command(prediction)
+    cli.add_command(score_chat)
+    cli.add_command(command)
+    
+    return cli

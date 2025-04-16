@@ -33,16 +33,16 @@ export default function EvaluateScorePage() {
 
 plexus = Plexus(api_key="your-api-key")
 
-# Evaluate using a specific score
+# Evaluate using a specific score (accepts ID, name, key, or external ID)
 evaluation = plexus.evaluations.create(
     source_id="source-id",
-    score_id="score-id"
+    score="Grammar Check"  # Can use name, key, ID, or external ID
 )
 
-# Or evaluate using an entire scorecard
+# Or evaluate using an entire scorecard (accepts ID, name, key, or external ID)
 evaluation = plexus.evaluations.create(
     source_id="source-id",
-    scorecard_id="scorecard-id"
+    scorecard="Content Quality"  # Can use name, key, ID, or external ID
 )
 
 # Get evaluation results
@@ -52,6 +52,28 @@ results = evaluation.get_results()
 for score in results.scores:
     print(f"{score.name}: {score.value}")`}</code>
               </pre>
+              
+              <p className="text-muted-foreground mb-4">
+                The SDK supports the flexible identifier system, allowing you to reference scorecards and scores using different types of identifiers (name, key, ID, or external ID).
+              </p>
+            </div>
+
+            <div>
+              <h3 className="text-xl font-medium mb-2">Using the CLI</h3>
+              <pre className="bg-muted p-4 rounded-lg mb-4">
+                <code>{`# Evaluate using a scorecard
+plexus evaluate accuracy --scorecard "Content Quality" --number-of-samples 100
+
+# List evaluation results
+plexus evaluations list
+
+# View detailed results for a specific evaluation
+plexus evaluations list-results --evaluation evaluation-id`}</code>
+              </pre>
+              
+              <p className="text-muted-foreground mb-4">
+                The CLI supports the flexible identifier system, allowing you to reference scorecards using different types of identifiers (name, key, ID, or external ID).
+              </p>
             </div>
           </div>
         </section>
@@ -90,7 +112,7 @@ for score in results.scores:
             <code>{`# Create a batch evaluation
 batch = plexus.evaluations.create_batch(
     source_ids=["source-1", "source-2", "source-3"],
-    scorecard_id="scorecard-id"
+    scorecard="Quality Assurance"  # Can use name, key, ID, or external ID
 )
 
 # Monitor batch progress
@@ -99,6 +121,10 @@ status = batch.get_status()
 # Get results when complete
 results = batch.get_results()`}</code>
           </pre>
+          
+          <p className="text-muted-foreground mb-4">
+            Like individual evaluations, batch evaluations also support the flexible identifier system for scorecards and scores.
+          </p>
         </section>
 
         <section>

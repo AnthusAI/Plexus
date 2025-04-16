@@ -23,16 +23,6 @@ export async function listFromModel<T extends { id: string }>(
 ): Promise<AmplifyListResult<T>> {
   const isEvaluation = model?.constructor?.name === 'EvaluationModel';
   
-  console.log('listFromModel called:', {
-    modelName: model?.constructor?.name,
-    modelType: typeof model,
-    hasGraphQL: !!model?.graphql,
-    graphqlFunctions: Object.keys(model?.graphql || {}),
-    filter,
-    nextToken,
-    limit
-  });
-  
   try {
     let response;
     
@@ -114,6 +104,38 @@ export async function listFromModel<T extends { id: string }>(
                   isDatasetClassDistributionBalanced
                   predictedClassDistribution
                   isPredictedClassDistributionBalanced
+                  taskId
+                  task {
+                    id
+                    type
+                    status
+                    target
+                    command
+                    description
+                    dispatchStatus
+                    metadata
+                    createdAt
+                    startedAt
+                    completedAt
+                    estimatedCompletionAt
+                    errorMessage
+                    errorDetails
+                    currentStageId
+                    stages {
+                      items {
+                        id
+                        name
+                        order
+                        status
+                        statusMessage
+                        startedAt
+                        completedAt
+                        estimatedCompletionAt
+                        processedItems
+                        totalItems
+                      }
+                    }
+                  }
                 }
                 nextToken
               }
@@ -355,6 +377,7 @@ export function observeScoreResults(client: any, evaluationId: string) {
                 'value',
                 'confidence',
                 'metadata',
+                'explanation',
                 'correct',
                 'itemId',
                 'accountId',
@@ -390,9 +413,11 @@ export function observeScoreResults(client: any, evaluationId: string) {
           } while (nextToken)
 
           // Sort all results in memory
-          const sortedData = [...allData].sort((a, b) => 
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-          )
+          const sortedData = [...allData].sort((a, b) => {
+            const bDate = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            const aDate = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+            return bDate - aDate;
+          })
 
           console.log('Completed fetching all ScoreResults:', {
             totalPages: pageCount,

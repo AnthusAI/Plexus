@@ -12,6 +12,7 @@ import socket
 import os
 import time
 import random
+import subprocess
 
 def register_tasks(app):
     """Register Celery tasks with the application."""
@@ -52,15 +53,64 @@ def register_tasks(app):
                             updatedAt=datetime.now(timezone.utc).isoformat()
                         )
                         logging.info(f"Successfully claimed task {task_id} with worker ID {worker_id}")
-                        
-                        # Brief pause to ensure UI can show claimed state
-                        time.sleep(0.5)
+
+                        # Initialize stages if they don't exist
+                        stages = task.get_stages()
+                        if not stages:
+                            logging.info("No stages found for task, creating standard stages...")
+                            # Create the three standard stages
+                            mutation = """
+                            mutation CreateTaskStage($input: CreateTaskStageInput!) {
+                                createTaskStage(input: $input) {
+                                    id
+                                    taskId
+                                    name
+                                    order
+                                    status
+                                    statusMessage
+                                }
+                            }
+                            """
+                            
+                            # Create each stage in order
+                            stage_configs = [
+                                {
+                                    "name": "Setup",
+                                    "order": 1,
+                                    "status": "PENDING",
+                                    "statusMessage": "Setting up evaluation...",
+                                    "taskId": task.id
+                                },
+                                {
+                                    "name": "Processing",
+                                    "order": 2,
+                                    "status": "PENDING",
+                                    "statusMessage": "Waiting to start processing...",
+                                    "taskId": task.id
+                                },
+                                {
+                                    "name": "Finalizing",
+                                    "order": 3,
+                                    "status": "PENDING",
+                                    "statusMessage": "Waiting to start finalization...",
+                                    "taskId": task.id
+                                }
+                            ]
+                            
+                            for stage_config in stage_configs:
+                                try:
+                                    client.execute(mutation, {'input': stage_config})
+                                    logging.info(f"Created {stage_config['name']} stage for task {task.id}")
+                                except Exception as e:
+                                    logging.error(f"Failed to create {stage_config['name']} stage: {str(e)}")
+                                    raise
                         
                         # Second update - start processing
                         task.update(
                             status='RUNNING',
                             startedAt=datetime.now(timezone.utc).isoformat(),
-                            updatedAt=datetime.now(timezone.utc).isoformat()
+                            updatedAt=datetime.now(timezone.utc).isoformat(),
+                            command=command_string  # Set the command string
                         )
                         logging.info(f"Started processing task {task_id}")
                     except Exception as e:
@@ -86,6 +136,14 @@ def register_tasks(app):
                 if task_id:
                     # Get the task for further updates
                     task = Task.get_by_id(task_id, client)
+                    # Ensure command is set
+                    task.update(
+                        accountId=task.accountId,
+                        type=task.type,
+                        status=task.status,
+                        target=task.target,
+                        command=command_string
+                    )
                 else:
                     # Create new task if no task_id provided
                     try:
@@ -158,19 +216,54 @@ def register_tasks(app):
                 
                 # Update Task progress if we have a task
                 if task:
-                    task.update_progress(
-                        state.current,
-                        state.total,
-                        {
-                            "Running": {
+                    # Get current stages
+                    stages = task.get_stages()
+                    if not stages:
+                        # If no stages exist, create the three standard stages
+                        stages_config = {
+                            "Setup": {
                                 "order": 1,
+                                "statusMessage": "Setting up evaluation...",
+                                "taskId": task.id  # Ensure taskId is set
+                            },
+                            "Processing": {
+                                "order": 2,
                                 "totalItems": state.total,
                                 "processedItems": state.current,
-                                "statusMessage": state.status
+                                "statusMessage": state.status,
+                                "taskId": task.id  # Ensure taskId is set
+                            },
+                            "Finalizing": {
+                                "order": 3,
+                                "statusMessage": "Waiting to start finalization...",
+                                "taskId": task.id  # Ensure taskId is set
                             }
-                        },
-                        estimated_completion_at=datetime.now(timezone.utc) + timedelta(seconds=estimated_remaining)
-                    )
+                        }
+                    else:
+                        # Update the appropriate stage based on status message
+                        stages_config = {}
+                        for stage in stages:
+                            stage_config = {
+                                "order": stage.order,
+                                "statusMessage": stage.statusMessage,
+                                "taskId": task.id  # Ensure taskId is set
+                            }
+                            
+                            # Only add progress tracking to Processing stage
+                            if stage.name == "Processing":
+                                stage_config.update({
+                                    "totalItems": state.total,
+                                    "processedItems": state.current
+                                })
+                            
+                            stages_config[stage.name] = stage_config
+
+                        task.update_progress(
+                            state.current,
+                            state.total,
+                            stages_config,
+                            estimated_completion_at=datetime.now(timezone.utc) + timedelta(seconds=estimated_remaining)
+                        )
             
             # Set up progress reporting
             CommandProgress.set_update_callback(progress_callback)
@@ -196,13 +289,68 @@ def register_tasks(app):
                 # Update task status if we have a task
                 if task:
                     if status == 'success':
+                        # Get current stages
+                        stages = task.get_stages()
+                        if stages:
+                            # Get total items and current progress from the Processing stage
+                            processing_stage = next((stage for stage in stages if stage.name == "Processing"), None)
+                            if processing_stage:
+                                total_items = processing_stage.totalItems
+                                current_items = processing_stage.processedItems
+                                logging.info(f"Final progress: {current_items}/{total_items} items")
+                            else:
+                                total_items = 0
+                                current_items = 0
+                                logging.warning("No Processing stage found for final update")
+                            
+                            # First update to show logging state
+                            stages_config = {}
+                            for stage in stages:
+                                stage_config = {
+                                    "order": stage.order,
+                                    "statusMessage": "Logging final evaluation state..." if stage.name == "Finalizing" else stage.statusMessage,
+                                    "taskId": task.id
+                                }
+                                # Preserve the actual progress for the Processing stage
+                                if stage.name == "Processing":
+                                    stage_config["totalItems"] = total_items
+                                    stage_config["processedItems"] = current_items
+                                stages_config[stage.name] = stage_config
+                            
+                            # Update with logging state
+                            task.update_progress(
+                                current_items,
+                                total_items,
+                                stages_config
+                            )
+
+                            # Then update to show completion
+                            for stage in stages:
+                                stage_config = {
+                                    "order": stage.order,
+                                    "statusMessage": "Evaluation completed." if stage.name == "Finalizing" else stage.statusMessage,
+                                    "taskId": task.id
+                                }
+                                # Preserve the actual progress for the Processing stage
+                                if stage.name == "Processing":
+                                    stage_config["totalItems"] = total_items
+                                    stage_config["processedItems"] = current_items
+                                stages_config[stage.name] = stage_config
+                            
+                            # Final update before completing
+                            task.update_progress(
+                                current_items,
+                                total_items,
+                                stages_config
+                            )
+                        
                         task.complete_processing()
                     else:
                         # Clear progress callback immediately to prevent further updates
                         CommandProgress.set_update_callback(None)
                         
-                        # Get error message from stderr if available, otherwise use exception message
-                        error_msg = stderr_capture.getvalue().strip() or (str(e) if 'e' in locals() else None)
+                        # Get error message from stderr if available
+                        error_msg = stderr_capture.getvalue().strip()
                         if error_msg:
                             task.fail_processing(error_msg)
                         else:

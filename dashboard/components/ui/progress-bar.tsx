@@ -13,6 +13,7 @@ export interface ProgressBarProps {
   color?: 'primary' | 'secondary' | 'true' | 'false' | 'neutral'
   isFocused?: boolean
   showTiming?: boolean
+  isSelected?: boolean
 }
 
 export function ProgressBar({ 
@@ -24,7 +25,8 @@ export function ProgressBar({
   estimatedTimeRemaining,
   color = 'secondary',
   isFocused = false,
-  showTiming = true
+  showTiming = true,
+  isSelected = false
 }: ProgressBarProps) {
   const highestProgressRef = useRef(0)
   const highestProcessedItemsRef = useRef(0)
@@ -65,13 +67,16 @@ export function ProgressBar({
           isFocused={isFocused}
         />
       )}
-      <div className="relative w-full h-8 bg-neutral rounded-md">
+      <div className={cn(
+        "relative w-full h-8 rounded-md",
+        isSelected ? "bg-progress-background-selected" : "bg-progress-background"
+      )}>
         <div
           role="progressbar"
           className={cn(
             "absolute top-0 left-0 h-full rounded-md",
-            `bg-${color}`,
-            clampedProgress > 0 ? `bg-${color}` : ''
+            isSelected ? `bg-${color}-selected` : `bg-${color}`,
+            clampedProgress > 0 ? (isSelected ? `bg-${color}-selected` : `bg-${color}`) : ''
           )}
           style={{ 
             width: `${clampedProgress}%`,
@@ -85,7 +90,7 @@ export function ProgressBar({
                 "text-sm font-medium",
                 isFocused
                   ? "text-focus" 
-                  : "text-primary-foreground"
+                  : isSelected ? "text-primary-selected-foreground" : "text-primary-foreground"
               )}>
                 <NumberFlow 
                   value={safeProcessedItems ?? 0}
@@ -94,12 +99,15 @@ export function ProgressBar({
                   willChange
                 />
               </span>
-              <span className="text-sm font-medium text-primary-foreground"> / </span>
+              <span className={cn(
+                "text-sm font-medium",
+                isSelected ? "text-primary-selected-foreground" : "text-primary-foreground"
+              )}> / </span>
               <span className={cn(
                 "text-sm font-medium",
                 isFocused && safeProcessedItems !== totalItems 
                   ? "text-focus" 
-                  : "text-primary-foreground" 
+                  : isSelected ? "text-primary-selected-foreground" : "text-primary-foreground"
               )}>
                 {totalItems}
               </span>
@@ -107,7 +115,9 @@ export function ProgressBar({
           )}
           <span className={cn(
             "text-sm font-medium",
-            isFocused && isInProgress ? "text-focus" : "text-primary-foreground"
+            isFocused && isInProgress 
+              ? "text-focus" 
+              : isSelected ? "text-primary-selected-foreground" : "text-primary-foreground"
           )}>
             <NumberFlow 
               value={clampedProgress}
