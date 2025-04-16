@@ -28,10 +28,17 @@ class ExtendedAccuracyEvaluation(AccuracyEvaluation):
     """Extended AccuracyEvaluation with prompt management."""
     
     def __init__(self, *args, **kwargs):
+        # Make sure override_folder is provided with a default value of None if not in kwargs
+        if 'override_folder' not in kwargs:
+            kwargs['override_folder'] = None
+        # Ensure account_id is set if not provided
+        if 'account_id' not in kwargs and 'account_key' in kwargs:
+            kwargs['account_id'] = kwargs['account_key']
         super().__init__(*args, **kwargs)
         self.prompts = {}
         self.system_message = None
         self.user_message = None
+        self.experiment_id = None  # Initialize experiment_id attribute
     
     def set_prompts(self, prompts: Dict[str, Dict[str, str]]) -> None:
         """
@@ -59,6 +66,63 @@ class ExtendedAccuracyEvaluation(AccuracyEvaluation):
     
     async def _async_run(self) -> Dict[str, Any]:
         """Override to use the set prompts."""
+        # Initialize started_at for elapsed time calculations
+        self.started_at = datetime.now(timezone.utc)
+        
+        # Set up experiment_id from evaluation_id like parent class does
+        if hasattr(self, 'evaluation_id') and self.evaluation_id:
+            self.experiment_id = self.evaluation_id
+            logger.info(f"Using existing evaluation ID: {self.experiment_id}")
+        else:
+            # If no evaluation_id, create a new one
+            import uuid
+            self.experiment_id = str(uuid.uuid4())
+            logger.info(f"Generated new evaluation ID: {self.experiment_id}")
+        
+        # Make sure we have the crucial fields
+        self.account_id = getattr(self, 'account_id', 'call-criteria')
+        
+        # Import needed modules but catch import errors gracefully
+        try:
+            from plexus.dashboard.api.client import PlexusDashboardClient
+            from plexus.dashboard.api.models.evaluation import Evaluation as DashboardEvaluation
+            
+            # Use for_account method like parent class
+            account_key = getattr(self, 'account_key', 'call-criteria')
+            self.dashboard_client = PlexusDashboardClient.for_account(account_key)
+            logger.info(f"Initialized dashboard client for account: {account_key}")
+            
+            # Create evaluation record using the high-level API
+            try:
+                # Add the required Float fields
+                now = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
+                
+                # Use the Evaluation model's create method with required fields
+                DashboardEvaluation.create(
+                    client=self.dashboard_client,
+                    type='ACCURACY',
+                    accountId=self.account_id,
+                    id=self.experiment_id, 
+                    status='RUNNING',
+                    scorecardId=getattr(self, 'scorecard_id', None),
+                    scoreId=getattr(self, 'score_id', None),
+                    taskId=getattr(self, 'task_id', None),
+                    accuracy=0.0,  # Required non-null Float
+                    totalItems=self.number_of_texts_to_sample,  # Required non-null Integer
+                    processedItems=0,  # Required non-null Integer
+                    startedAt=now  # Required timestamp
+                )
+                logger.info(f"Created evaluation record with ID: {self.experiment_id}")
+            except Exception as create_error:
+                logger.error(f"Error creating evaluation record: {create_error}")
+                
+        except ImportError as e:
+            logger.warning(f"Could not import dashboard modules: {e}")
+            self.dashboard_client = None
+        except Exception as e:
+            logger.error(f"Dashboard client initialization error: {e}")
+            self.dashboard_client = None
+        
         if not self.prompts:
             raise ValueError("No prompts set for evaluation")
         
@@ -68,7 +132,7 @@ class ExtendedAccuracyEvaluation(AccuracyEvaluation):
             if not self.subset_of_score_names or score_name in self.subset_of_score_names:
                 # Find the score in the scorecard's scores
                 score_config = next((score for score in self.scorecard.scores 
-                                   if score['name'] == score_name), None)
+                                 if score['name'] == score_name), None)
                 if score_config:
                     # Set the prompts directly in the score config
                     score_config['system_message'] = prompt['system_message']
@@ -77,7 +141,77 @@ class ExtendedAccuracyEvaluation(AccuracyEvaluation):
                 else:
                     logger.warning(f"Score {score_name} not found in scorecard")
         
-        return await super()._async_run()
+        try:
+            # Create a dummy tracker class if needed
+            class DummyTracker:
+                def __init__(self):
+                    self.current_stage = type('obj', (object,), {'status_message': ''})
+                
+                def update(self, current_items=0):
+                    pass
+            
+            # Import pandas for dataframe handling
+            import pandas as pd
+            
+            # Load the labeled samples
+            if self.labeled_samples:
+                df = pd.DataFrame(self.labeled_samples)
+            else:
+                df = pd.read_csv(self.labeled_samples_filename)
+
+            # Adjust the sample size if necessary
+            self.number_of_texts_to_sample = min(len(df), self.requested_sample_size)
+            logger.info(f"Adjusted sample size from {self.requested_sample_size} to {self.number_of_texts_to_sample} based on available data")
+
+            # Sample rows based on the sampling method
+            if self.sampling_method == 'random':
+                selected_sample_rows = df.sample(n=self.number_of_texts_to_sample, random_state=self.random_seed)
+            elif self.sampling_method == 'sequential':
+                selected_sample_rows = df.head(self.number_of_texts_to_sample)
+            else:
+                selected_sample_rows = df
+
+            # Create a dummy tracker
+            tracker = DummyTracker()
+
+            # Process all scores concurrently
+            score_tasks = []
+            for score_name in self.score_names():
+                task = asyncio.create_task(self.score_all_texts_for_score(selected_sample_rows, score_name, tracker))
+                score_tasks.append(task)
+
+            all_results = await asyncio.gather(*score_tasks)
+            self.all_results = [result for score_results in all_results for result in score_results if not isinstance(result, Exception)]
+
+            # Calculate metrics from the results
+            metrics = self.calculate_metrics(self.all_results)
+
+            # Update dashboard with final metrics 
+            if self.dashboard_client and self.experiment_id:
+                try:
+                    from plexus.dashboard.api.models.evaluation import Evaluation as DashboardEvaluation
+                    
+                    # Get the evaluation instance
+                    eval_instance = DashboardEvaluation.get_by_id(self.experiment_id, self.dashboard_client)
+                    
+                    # Update with proper metrics
+                    eval_instance.update(
+                        status='COMPLETED',
+                        accuracy=metrics.get('accuracy', 0) * 100,
+                        totalItems=self.number_of_texts_to_sample,
+                        processedItems=self.number_of_texts_to_sample
+                    )
+                    logger.info(f"Updated dashboard evaluation {self.experiment_id} with metrics")
+                except Exception as e:
+                    logger.error(f"Error updating dashboard evaluation: {e}")
+
+            if hasattr(self, 'progress_callback') and self.progress_callback:
+                self.progress_callback(self.number_of_texts_to_sample)
+
+            return metrics
+        except Exception as e:
+            logger.error(f"Error in _async_run: {e}", exc_info=True)
+            raise e
 
 
 class EvaluationNode(APOSNode):
@@ -369,6 +503,7 @@ class EvaluationNode(APOSNode):
             labeled_samples=self.evaluation_samples,
             number_of_texts_to_sample=len(self.evaluation_samples),
             account_key='call-criteria',
+            account_id='call-criteria',  # Set account_id to match account_key
             subset_of_score_names=[score_name],
             max_mismatches_to_report=self.config.optimization.max_mismatches_to_report
         )
