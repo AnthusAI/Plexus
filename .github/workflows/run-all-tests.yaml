@@ -18,15 +18,33 @@ jobs:
       with:
         python-version: "3.9"
         
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential python3-dev
+
     - name: Install Python dependencies
       run: |
-        python -m pip install --upgrade pip
-        pip install invoke
-        pip install -e .
+        PYTHONPATH=$GITHUB_WORKSPACE python -m pip install --upgrade pip
+        PYTHONPATH=$GITHUB_WORKSPACE pip install invoke
+        # Install build dependencies first to ensure they're available
+        PYTHONPATH=$GITHUB_WORKSPACE pip install pybind11 cython setuptools wheel
+        PYTHONPATH=$GITHUB_WORKSPACE pip install numpy
         
+        # Install fasttext-wheel instead of fasttext
+        PYTHONPATH=$GITHUB_WORKSPACE pip install fasttext-wheel==0.9.2
+        
+        # Now install package dependencies
+        PYTHONPATH=$GITHUB_WORKSPACE pip install -e .
+
     - name: Run Python Tests
-      run: invoke ci
-        
+      run: |
+        echo "Current directory: $(pwd)"
+        echo "GITHUB_WORKSPACE: $GITHUB_WORKSPACE"
+        cd $GITHUB_WORKSPACE
+        echo "Changed to directory: $(pwd)"
+        PYTHONPATH=$GITHUB_WORKSPACE invoke ci
+
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:

@@ -1,8 +1,8 @@
-import React from "react"
-import type { Meta, StoryObj } from "@storybook/react"
-import { expect, within, userEvent } from "@storybook/test"
-import { ConfusionMatrix } from "../components/confusion-matrix"
-import { Card } from "@/components/ui/card"
+import React from 'react'
+import type { Meta, StoryObj } from '@storybook/react'
+import { expect, within, userEvent } from '@storybook/test'
+import { ConfusionMatrix } from '../components/confusion-matrix'
+import { Card } from '@/components/ui/card'
 
 const meta: Meta<typeof ConfusionMatrix> = {
   title: "Visualization/ConfusionMatrix",
@@ -131,8 +131,8 @@ export const ColorScaling: Story = {
     await expect(maxBgColor).not.toBe(minBgColor)
     
     // Check text color contrast
-    await expect(maxValueCell.closest('div')).toHaveClass('text-white')
-    await expect(minValueCell.closest('div')).toHaveClass('text-primary')
+    await expect(maxValueCell.closest('div')).toHaveClass('text-foreground-selected')
+    await expect(minValueCell.closest('div')).toHaveClass('text-foreground')
   }
 }
 

@@ -7,3 +7,4 @@ reports/
 .DS_Store
 .env
 .vscode/settings.json
+tmp/

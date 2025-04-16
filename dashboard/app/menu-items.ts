@@ -8,14 +8,14 @@ export interface MenuItem {
 }
 
 export const menuItems: MenuItem[] = [
-  { name: "Activity", icon: Activity, path: "/activity" },
-  { name: "Alerts", icon: Siren, path: "/alerts" },
-  { name: "Feedback", icon: Inbox, path: "/feedback-queues" },
-  { name: "Items", icon: AudioLines, path: "/items" },
-  { name: "Reports", icon: FileBarChart, path: "/reports" },
-  { name: "Evaluation", icon: FlaskConical, path: "/evaluations" },
-  { name: "Analysis", icon: Sparkles, path: "/analysis" },
-  { name: "Scorecards", icon: ListTodo, path: "/scorecards" },
-  { name: "Data", icon: Database, path: "/data" },
-  { name: "Settings", icon: Settings, path: "/settings" },
+  { name: "Activity", icon: Activity, path: "/lab/activity" },
+  { name: "Alerts", icon: Siren, path: "/lab/alerts" },
+  { name: "Feedback", icon: Inbox, path: "/lab/feedback-queues" },
+  { name: "Items", icon: AudioLines, path: "/lab/items" },
+  { name: "Reports", icon: FileBarChart, path: "/lab/reports" },
+  { name: "Evaluation", icon: FlaskConical, path: "/lab/evaluations" },
+  { name: "Analysis", icon: Sparkles, path: "/lab/analysis" },
+  { name: "Scorecards", icon: ListTodo, path: "/lab/scorecards" },
+  { name: "Data", icon: Database, path: "/lab/data" },
+  { name: "Settings", icon: Settings, path: "/lab/settings" },
 ]

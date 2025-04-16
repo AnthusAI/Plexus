@@ -6,6 +6,7 @@ from .account import Account
 from ..client import _BaseAPIClient
 import logging
 import uuid
+import json
 
 if TYPE_CHECKING:
     from .task_stage import TaskStage
@@ -152,12 +153,17 @@ class Task(BaseModel):
         if 'accountId' not in kwargs:
             kwargs['accountId'] = cls._get_account_id(client)
 
+        # Get current timestamp for createdAt and updatedAt
+        now = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
+
         # Prepare input data
         input_data = {
             "type": type,
             "target": target,
             "command": command,
             "status": "PENDING",  # Default status for new tasks
+            "createdAt": now,
+            "updatedAt": now,  # Set initial updatedAt
             **kwargs
         }
 
@@ -369,8 +375,19 @@ class Task(BaseModel):
             startedAt=self._format_datetime(datetime.now(timezone.utc))
         )
 
-    def complete_processing(self) -> None:
-        """Mark the task as completed."""
+    def complete_processing(self):
+        """Complete processing of the task."""
+        # First update all stages to completed state
+        stages = self.get_stages()
+        for stage in stages:
+            if stage.status != 'FAILED':  # Don't override failed stages
+                stage.update(
+                    status='COMPLETED',
+                    completedAt=self._format_datetime(datetime.now(timezone.utc)),
+                    startedAt=self._format_datetime(self.startedAt) if not stage.startedAt else stage.startedAt
+                )
+
+        # Then complete the task
         self.update(
             status="COMPLETED",
             completedAt=self._format_datetime(datetime.now(timezone.utc))
@@ -392,13 +409,21 @@ class Task(BaseModel):
         # First fail the current stage with the error message and progress count
         self.fail_current_stage(error_message, error_details, current_items)
         
-        # Then update the task level status and error info
-        self.update(
-            status="FAILED",
-            errorMessage=error_message,
-            errorDetails=error_details,
-            completedAt=self._format_datetime(datetime.now(timezone.utc))
-        )
+        # Then update the task level status and error info with all required fields
+        update_data = {
+            'accountId': self.accountId,
+            'type': self.type,
+            'status': 'FAILED',
+            'target': self.target,
+            'command': self.command,
+            'errorMessage': error_message,
+            'completedAt': self._format_datetime(datetime.now(timezone.utc)),
+            'updatedAt': self._format_datetime(datetime.now(timezone.utc))
+        }
+        if error_details:
+            update_data['errorDetails'] = json.dumps(error_details)
+            
+        self.update(**update_data)
 
     def fail_current_stage(
         self,

@@ -1,6 +1,5 @@
-import React, { useState, useMemo, useEffect } from 'react'
+import React, { useState, useMemo, useEffect, useCallback } from 'react'
 import { Split, Filter, Download } from 'lucide-react'
-import { EvaluationTaskScoreResult } from './EvaluationTaskScoreResult'
 import { AccuracyBar } from '@/components/ui/accuracy-bar'
 import { CardButton } from '@/components/CardButton'
 import {
@@ -11,6 +10,7 @@ import {
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
 import type { Schema } from "@/amplify/data/resource"
+import { ScoreResultComponent, ScoreResultData } from '@/components/ui/score-result'
 
 interface FilterState {
   showCorrect: boolean | null  // null means show all
@@ -19,17 +19,7 @@ interface FilterState {
 }
 
 export interface EvaluationTaskScoreResultsProps {
-  results: {
-    id: string
-    value: string | number
-    confidence: number | null
-    explanation: string | null
-    metadata: {
-      human_label: string | null
-      correct: boolean
-    }
-    itemId: string | null
-  }[]
+  results: ScoreResultData[]
   accuracy: number | null
   selectedPredictedValue?: string | null
   selectedActualValue?: string | null
@@ -47,6 +37,17 @@ export function EvaluationTaskScoreResults({
   selectedScoreResult,
   navigationControls
 }: EvaluationTaskScoreResultsProps) {
+  console.log('EvaluationTaskScoreResults render:', {
+    resultCount: results.length,
+    firstResult: results[0],
+    lastResult: results[results.length - 1],
+    accuracy,
+    selectedPredictedValue,
+    selectedActualValue,
+    hasSelectedResult: !!selectedScoreResult,
+    selectedScoreResultId: selectedScoreResult?.id
+  });
+
   const [filters, setFilters] = useState<FilterState>({
     showCorrect: null,
     predictedValue: null,
@@ -54,11 +55,20 @@ export function EvaluationTaskScoreResults({
   })
 
   useEffect(() => {
-    setFilters(prev => ({
-      ...prev,
-      predictedValue: selectedPredictedValue?.toLowerCase() ?? null,
-      actualValue: selectedActualValue?.toLowerCase() ?? null
-    }))
+    setFilters(prev => {
+      const newPredicted = selectedPredictedValue?.toLowerCase() ?? null;
+      const newActual = selectedActualValue?.toLowerCase() ?? null;
+      
+      if (prev.predictedValue === newPredicted && prev.actualValue === newActual) {
+        return prev;
+      }
+      
+      return {
+        ...prev,
+        predictedValue: newPredicted,
+        actualValue: newActual
+      };
+    });
   }, [selectedPredictedValue, selectedActualValue])
 
   const uniqueValues = useMemo(() => {
@@ -81,7 +91,16 @@ export function EvaluationTaskScoreResults({
   }, [results])
 
   const filteredResults = useMemo(() => {
-    return results.filter(result => {
+    console.log('Filtering score results:', {
+      totalResults: results.length,
+      filters: {
+        showCorrect: filters.showCorrect,
+        predictedValue: filters.predictedValue,
+        actualValue: filters.actualValue
+      }
+    });
+
+    const filtered = results.filter(result => {
       if (filters.showCorrect !== null && result.metadata.correct !== filters.showCorrect) {
         return false
       }
@@ -95,8 +114,17 @@ export function EvaluationTaskScoreResults({
       }
       
       return true
-    })
-  }, [results, filters])
+    });
+
+    console.log('Filtered results:', {
+      inputCount: results.length,
+      filteredCount: filtered.length,
+      firstFiltered: filtered[0],
+      lastFiltered: filtered[filtered.length - 1]
+    });
+
+    return filtered;
+  }, [results, filters]);
 
   const filteredAccuracy = useMemo(() => {
     if (filteredResults.length === 0) return null
@@ -104,54 +132,61 @@ export function EvaluationTaskScoreResults({
     return (correctCount / filteredResults.length) * 100
   }, [filteredResults])
 
-  const handleAccuracySegmentClick = (isCorrect: boolean) => {
+  const handleAccuracySegmentClick = useCallback((isCorrect: boolean) => {
     setFilters(prev => ({
       ...prev,
       showCorrect: prev.showCorrect === isCorrect ? null : isCorrect,
       predictedValue: null,
       actualValue: null
     }))
-  }
+  }, [])
+
+  const handleFilterChange = useCallback((type: 'predicted' | 'actual', value: string | null) => {
+    setFilters(prev => ({
+      ...prev,
+      predictedValue: type === 'predicted' ? (prev.predictedValue === value ? null : value) : prev.predictedValue,
+      actualValue: type === 'actual' ? (prev.actualValue === value ? null : value) : prev.actualValue
+    }))
+  }, [])
+
+  const handleCorrectFilterChange = useCallback((value: boolean | null) => {
+    setFilters(prev => ({
+      ...prev,
+      showCorrect: prev.showCorrect === value ? null : value
+    }))
+  }, [])
+
+  const isFiltered = filters.showCorrect !== null || 
+                     filters.predictedValue !== null || 
+                     filters.actualValue !== null
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex-none relative mb-1">
-        <div className="flex items-start">
+      <div className="flex justify-between items-center mb-2 flex-shrink-0">
+        <div className="flex items-center">
           <Split className="w-4 h-4 mr-1 text-foreground shrink-0" />
-          <span className="text-sm text-foreground">
-            {filteredResults.length} Predictions
-          </span>
+          <span className="text-sm text-foreground">Score Results ({filteredResults.length})</span>
         </div>
-        <div className="absolute bottom-1 right-0 flex items-center gap-2">
+        <div className="flex items-center gap-2">
           {navigationControls}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <div>
-                <CardButton
-                  icon={Filter}
-                  active={filters.showCorrect !== null || 
-                         filters.predictedValue !== null || 
-                         filters.actualValue !== null}
-                  onClick={() => {}}
-                />
-              </div>
+              <CardButton
+                icon={Filter}
+                active={isFiltered}
+                onClick={() => {}}
+              />
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuContent align="end">
               <DropdownMenuCheckboxItem
                 checked={filters.showCorrect === true}
-                onCheckedChange={() => setFilters(f => ({
-                  ...f,
-                  showCorrect: f.showCorrect === true ? null : true
-                }))}
+                onCheckedChange={() => handleCorrectFilterChange(true)}
               >
                 Show Only Correct
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem
                 checked={filters.showCorrect === false}
-                onCheckedChange={() => setFilters(f => ({
-                  ...f,
-                  showCorrect: f.showCorrect === false ? null : false
-                }))}
+                onCheckedChange={() => handleCorrectFilterChange(false)}
               >
                 Show Only Incorrect
               </DropdownMenuCheckboxItem>
@@ -162,10 +197,7 @@ export function EvaluationTaskScoreResults({
                 <DropdownMenuCheckboxItem
                   key={`predicted-${value}`}
                   checked={filters.predictedValue === value}
-                  onCheckedChange={() => setFilters(f => ({
-                    ...f,
-                    predictedValue: f.predictedValue === value ? null : value
-                  }))}
+                  onCheckedChange={() => handleFilterChange('predicted', value)}
                 >
                   Predicted: {value}
                 </DropdownMenuCheckboxItem>
@@ -177,10 +209,7 @@ export function EvaluationTaskScoreResults({
                 <DropdownMenuCheckboxItem
                   key={`actual-${value}`}
                   checked={filters.actualValue === value}
-                  onCheckedChange={() => setFilters(f => ({
-                    ...f,
-                    actualValue: f.actualValue === value ? null : value
-                  }))}
+                  onCheckedChange={() => handleFilterChange('actual', value)}
                 >
                   Actual: {value}
                 </DropdownMenuCheckboxItem>
@@ -193,29 +222,26 @@ export function EvaluationTaskScoreResults({
           />
         </div>
       </div>
-      <div className="flex-none mb-4">
+      <div className="flex-none z-10 mb-4">
         <AccuracyBar 
           accuracy={filters.showCorrect !== null ? filteredAccuracy : accuracy} 
           onSegmentClick={handleAccuracySegmentClick}
         />
       </div>
-      <div className="flex-1 min-h-0 overflow-y-auto">
-        <div className="space-y-2">
-          {filteredResults.map((result) => (
-            <div
-              key={result.id}
-              onClick={() => onResultSelect?.(result)}
-              className="cursor-pointer"
-            >
-              <EvaluationTaskScoreResult
-                {...{
-                  ...result,
-                  value: String(result.value)
-                }}
-                isFocused={selectedScoreResult?.id === result.id}
-              />
-            </div>
-          ))}
+      <div className="flex-1 min-h-0 overflow-hidden">
+        <div className="h-full overflow-y-auto">
+          <div className="space-y-2 pb-4">
+            {filteredResults.map((result) => (
+              <div key={result.id}>
+                <ScoreResultComponent
+                  result={result}
+                  variant="list"
+                  isFocused={selectedScoreResult?.id === result.id}
+                  onSelect={() => onResultSelect?.(result)}
+                />
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div>

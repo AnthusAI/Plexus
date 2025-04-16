@@ -108,15 +108,55 @@ export default function AddEditScorecardPage() {
           </p>
           
           <pre className="bg-muted p-4 rounded-lg mb-4">
-            <code>{`# Create a new scorecard
+            <code>{`# List scorecards with optimized performance
+plexus scorecards list "account-name" --fast
+
+# View a specific scorecard by filtering
+plexus scorecards list "account-name" --name "Content Quality"
+
+# View detailed information about a score
+plexus scorecards score "score-name" --account "account-name" --show-versions
+
+# Coming soon:
+# Create a new scorecard
 plexus scorecards create --name "Content Quality" --description "Evaluates content quality"
 
-# Add a score to the scorecard
-plexus scorecards add-score scorecard-id --type sentiment --weight 0.5
+# Get detailed information about a specific scorecard
+plexus scorecards info --scorecard "Content Quality"
 
-# Update a scorecard
-plexus scorecards update scorecard-id --name "Updated Name"`}</code>
+# List all scores in a scorecard
+plexus scorecards list-scores --scorecard "Content Quality"
+
+# Pull scorecard configuration to YAML
+plexus scorecards pull --scorecard "Content Quality" --output ./my-scorecards
+
+# Push scorecard configuration from YAML
+plexus scorecards push --scorecard "Content Quality" --file ./my-scorecard.yaml --note "Updated configuration"
+
+# Delete a scorecard
+plexus scorecards delete --scorecard "Content Quality"`}</code>
           </pre>
+          
+          <div className="mt-4 space-y-4">
+            <div>
+              <h3 className="text-xl font-medium mb-2">Performance Considerations</h3>
+              <p className="text-muted-foreground">
+                The CLI now uses optimized GraphQL queries to fetch scorecard data efficiently:
+              </p>
+              <ul className="list-disc pl-6 mt-2 space-y-2 text-muted-foreground">
+                <li>
+                  <strong>Single Query Approach:</strong> Instead of making separate queries for each scorecard's sections and scores, 
+                  the system now fetches all data in a single comprehensive GraphQL query.
+                </li>
+                <li>
+                  <strong>Fast Mode:</strong> Use the <code>--fast</code> option to skip fetching sections and scores when you only need basic scorecard information.
+                </li>
+                <li>
+                  <strong>Hide Scores:</strong> Use <code>--hide-scores</code> to exclude score details from the output while still fetching basic scorecard data.
+                </li>
+              </ul>
+            </div>
+          </div>
         </section>
 
         <section>
@@ -130,22 +170,30 @@ plexus scorecards update scorecard-id --name "Updated Name"`}</code>
 
 plexus = Plexus(api_key="your-api-key")
 
-# Create a new scorecard
-scorecard = plexus.scorecards.create(
-    name="Content Quality",
-    description="Evaluates content quality"
-)
+# Get a scorecard using any identifier (name, key, ID, or external ID)
+scorecard = plexus.scorecards.get("Content Quality")
 
-# Add a score
-scorecard.add_score(
-    type="sentiment",
-    weight=0.5,
-    threshold=0.7
-)
+# List all scorecards
+scorecards = plexus.scorecards.list()
 
-# Update a scorecard
-scorecard.update(name="Updated Name")`}</code>
+# Get all scores in a scorecard
+scores = scorecard.get_scores()
+
+# Export scorecard to YAML
+yaml_config = scorecard.to_yaml()
+with open("scorecard.yaml", "w") as f:
+    f.write(yaml_config)
+
+# Import scorecard from YAML
+with open("scorecard.yaml", "r") as f:
+    yaml_content = f.read()
+    
+new_scorecard = plexus.scorecards.from_yaml(yaml_content)`}</code>
           </pre>
+          
+          <p className="text-muted-foreground mb-4">
+            Like the CLI, the Python SDK also supports the flexible identifier system, allowing you to reference scorecards using different types of identifiers.
+          </p>
         </section>
 
         <section>
@@ -158,6 +206,7 @@ scorecard.update(name="Updated Name")`}</code>
             <li>Scorecard version control</li>
             <li>Collaborative editing features</li>
             <li>Performance analytics</li>
+            <li>YAML synchronization for offline editing</li>
           </ul>
         </section>
       </div>

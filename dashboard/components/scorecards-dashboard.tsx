@@ -1,7 +1,6 @@
 "use client"
 import React, { useState, useEffect } from "react"
-import { Button } from "@/components/ui/button"
-import { ScorecardForm } from "@/components/scorecards/create-edit-form"
+import { Button } from "./ui/button"
 import { amplifyClient } from "@/utils/amplify-client"
 import type { Schema } from "@/amplify/data/resource"
 import type { AuthModeStrategyType } from "aws-amplify/datastore"
@@ -12,106 +11,346 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table"
+} from "./ui/table"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+} from "./ui/dropdown-menu"
 import { 
   Activity, 
   Pencil, 
   MoreHorizontal,
   Plus,
-  Database
+  Database,
+  Columns2,
+  Square,
+  X
 } from "lucide-react"
 import { ScoreCount } from "./scorecards/score-count"
-import { CardButton } from "@/components/CardButton"
-import { DatasetConfigFormComponent } from "@/components/dataset-config-form"
+import { CardButton } from "./CardButton"
+import { DatasetConfigFormComponent } from "./dataset-config-form"
 import { listFromModel } from "@/utils/amplify-helpers"
 import { AmplifyListResult } from '@/types/shared'
-import { getClient } from "@/utils/data-operations"
+import { getClient } from "@/utils/amplify-client"
 import { generateClient } from "aws-amplify/data"
+import ScorecardComponent from "./scorecards/ScorecardComponent"
+import { cn } from "@/lib/utils"
+import { ScoreComponent } from "./ui/score-component"
+import ScorecardDetailView from "./scorecards/ScorecardDetailView"
+import { useRouter, usePathname, useParams } from "next/navigation"
 
 const ACCOUNT_KEY = 'call-criteria'
 
-const client = generateClient<Schema>()
-
-export default function ScorecardsComponent() {
+export default function ScorecardsComponent({
+  initialSelectedScorecardId = null,
+  initialSelectedScoreId = null
+}: {
+  initialSelectedScorecardId?: string | null,
+  initialSelectedScoreId?: string | null
+} = {}) {
   const [scorecards, setScorecards] = useState<Schema['Scorecard']['type'][]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [selectedScorecard, setSelectedScorecard] = useState<Schema['Scorecard']['type'] | null>(null)
-  const [isEditing, setIsEditing] = useState(false)
+  const [selectedScore, setSelectedScore] = useState<{
+    id: string
+    name: string
+    key: string
+    description: string
+    order: number
+    type: string
+    sectionId: string
+  } | null>(null)
+  const [selectedScorecardSections, setSelectedScorecardSections] = useState<{
+    items: Array<{
+      id: string
+      name: string
+      order: number
+      scores: {
+        items: Array<{
+          id: string
+          name: string
+          key: string
+          description: string
+          order: number
+          type: string
+        }>
+      }
+    }>
+  } | null>(null)
   const [accountId, setAccountId] = useState<string | null>(null)
   const [error, setError] = useState<Error | null>(null)
-  
-  // **Add refreshTrigger state (if needed)**
-  const [refreshTrigger, setRefreshTrigger] = useState(0)
-
-  // Add missing state variables
-  const [isFullWidth, setIsFullWidth] = useState(false)
+  const [isFullWidth, setIsFullWidth] = useState(!!initialSelectedScorecardId)
   const [isNarrowViewport, setIsNarrowViewport] = useState(false)
   const [showDatasetConfig, setShowDatasetConfig] = useState(false)
   const [selectedScorecardForDataset, setSelectedScorecardForDataset] = useState<string>("")
+  const [leftPanelWidth, setLeftPanelWidth] = useState(40)
+  const [scorecardScoreCounts, setScorecardScoreCounts] = useState<Record<string, number>>({})
+  const [scorecardDetailWidth, setScorecardDetailWidth] = useState(50)
+  const [maximizedScoreId, setMaximizedScoreId] = useState<string | null>(null)
+  const router = useRouter()
+  const pathname = usePathname()
+  const params = useParams()
+
+  // Handle deep linking - check if we're on a specific scorecard or score page
+  useEffect(() => {
+    if (initialSelectedScorecardId) {
+      // Find the scorecard in the list
+      const scorecard = scorecards.find(sc => sc.id === initialSelectedScorecardId);
+      if (scorecard) {
+        handleSelectScorecard(scorecard);
+        
+        // If we also have a score ID, select that score
+        if (initialSelectedScoreId) {
+          // We need to wait for sections to load before selecting the score
+          fetchSectionsWithScores(initialSelectedScorecardId).then(() => {
+            // Find the score in the sections
+            if (selectedScorecardSections) {
+              for (const section of selectedScorecardSections.items) {
+                const score = section.scores.items.find(s => s.id === initialSelectedScoreId);
+                if (score) {
+                  handleScoreSelect({...score, sectionId: section.id}, section.id);
+                  break;
+                }
+              }
+            }
+          });
+        }
+      }
+    }
+  }, [initialSelectedScorecardId, initialSelectedScoreId, scorecards, selectedScorecardSections]);
+
+  // Handle browser back/forward navigation with popstate event
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      // Extract scorecard ID from URL if present
+      const scorecardMatch = window.location.pathname.match(/\/lab\/scorecards\/([^\/]+)(?:\/|$)/);
+      const scorecardIdFromUrl = scorecardMatch ? scorecardMatch[1] : null;
+      
+      // Extract score ID from URL if present
+      const scoreMatch = window.location.pathname.match(/\/lab\/scorecards\/[^\/]+\/scores\/([^\/]+)$/);
+      const scoreIdFromUrl = scoreMatch ? scoreMatch[1] : null;
+      
+      if (scorecardIdFromUrl) {
+        // Find the scorecard in the list
+        const scorecard = scorecards.find(sc => sc.id === scorecardIdFromUrl);
+        if (scorecard) {
+          setSelectedScorecard(scorecard);
+          if (isNarrowViewport) {
+            setIsFullWidth(true);
+          }
+          
+          // If we also have a score ID, select that score
+          if (scoreIdFromUrl && selectedScorecardSections) {
+            for (const section of selectedScorecardSections.items) {
+              const score = section.scores.items.find(s => s.id === scoreIdFromUrl);
+              if (score) {
+                setSelectedScore({...score, sectionId: section.id});
+                break;
+              }
+            }
+          } else {
+            setSelectedScore(null);
+          }
+        }
+      } else {
+        setSelectedScorecard(null);
+        setSelectedScore(null);
+        if (isNarrowViewport) {
+          setIsFullWidth(false);
+        }
+      }
+    };
+
+    // Add event listener for popstate (browser back/forward)
+    window.addEventListener('popstate', handlePopState);
+    
+    // Clean up event listener on unmount
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [scorecards, selectedScorecardSections, isNarrowViewport]);
+
+  // Custom setter for selectedScorecard that handles both state and URL
+  const handleSelectScorecard = (scorecard: Schema['Scorecard']['type'] | null) => {
+    // Only update state if the selected scorecard has changed
+    if (scorecard?.id !== selectedScorecard?.id) {
+      setSelectedScorecard(scorecard);
+      setSelectedScore(null); // Reset selected score when changing scorecard
+      
+      // Update URL without triggering a navigation/re-render
+      const newPathname = scorecard ? `/lab/scorecards/${scorecard.id}` : '/lab/scorecards';
+      window.history.pushState(null, '', newPathname);
+      
+      if (scorecard && isNarrowViewport) {
+        setIsFullWidth(true);
+      }
+      
+      // Load sections for the selected scorecard
+      if (scorecard) {
+        fetchSectionsWithScores(scorecard.id);
+      }
+    }
+  };
+
+  // Custom setter for selectedScore that handles both state and URL
+  const handleScoreSelect = (score: any, sectionId: string) => {
+    // Only update state if the selected score has changed
+    if (score?.id !== selectedScore?.id) {
+      setSelectedScore({...score, sectionId});
+      
+      // Update URL without triggering a navigation/re-render
+      if (selectedScorecard) {
+        const newPathname = `/lab/scorecards/${selectedScorecard.id}/scores/${score.id}`;
+        window.history.pushState(null, '', newPathname);
+      }
+    }
+  };
+
+  // Handle closing the selected scorecard
+  const handleCloseScorecard = () => {
+    setSelectedScorecard(null);
+    setSelectedScore(null);
+    setIsFullWidth(false);
+    
+    // Update URL without triggering a navigation/re-render
+    window.history.pushState(null, '', '/lab/scorecards');
+  };
+
+  // Initial data load
+  const fetchScorecards = async () => {
+    try {
+      const accountResult = await amplifyClient.Account.list({
+        filter: { key: { eq: ACCOUNT_KEY } }
+      })
+
+      if (accountResult.data.length === 0) {
+        setIsLoading(false)
+        return
+      }
+
+      const foundAccountId = accountResult.data[0].id
+      setAccountId(foundAccountId)
+
+      type NestedScorecard = Schema['Scorecard']['type'] & {
+        sections?: {
+          data?: Array<{
+            id: string;
+            scores?: {
+              data?: Array<{ id: string }>;
+            };
+          }>;
+        };
+      }
+
+      // Get scorecards with nested sections and scores
+      const initialScorecards = await amplifyClient.Scorecard.list({
+        filter: { accountId: { eq: foundAccountId } }
+      })
+
+      // Process scorecards and load sections/scores in parallel
+      const scorecardsWithCounts = await Promise.all(
+        initialScorecards.data
+          .filter(s => s.accountId === foundAccountId)
+          .map(async scorecard => {
+            const sectionsResult = await scorecard.sections();
+            const sections = sectionsResult.data || [];
+            
+            // Load all scores for each section in parallel using fetchAllScoresForSection
+            const sectionsWithScores = await Promise.all(
+              sections.map(async section => {
+                // Use fetchAllScoresForSection instead of section.scores() to ensure all scores are fetched
+                const allScores = await fetchAllScoresForSection(section.id);
+                return {
+                  id: section.id,
+                  scores: {
+                    data: allScores
+                  }
+                };
+              })
+            );
+
+            const scoreCount = sectionsWithScores.reduce(
+              (total, section) => total + (section.scores.data.length || 0),
+              0
+            );
+
+            // Store the count in our state object
+            setScorecardScoreCounts(prev => ({
+              ...prev,
+              [scorecard.id]: scoreCount
+            }));
+
+            return {
+              ...scorecard,
+              sections: async () => ({
+                data: sections,
+                nextToken: null
+              })
+            } as Schema['Scorecard']['type'];
+          })
+      );
+
+      setScorecards(scorecardsWithCounts);
+      setIsLoading(false)
+    } catch (error) {
+      console.error('Error fetching scorecards:', error)
+      setError(error as Error)
+      setIsLoading(false)
+    }
+  }
 
   useEffect(() => {
-    let subscription: { unsubscribe: () => void } | null = null
-
-    async function setupRealTimeSync() {
-      try {
-        const [accountResult, initialScorecards] = await Promise.all([
-          amplifyClient.Account.list({
-            filter: { key: { eq: ACCOUNT_KEY } }
-          }),
-          amplifyClient.Scorecard.list()
-        ])
-
-        if (accountResult.data.length > 0) {
-          const foundAccountId = accountResult.data[0].id
-          setAccountId(foundAccountId)
-          
-          setScorecards(initialScorecards.data.filter(s => 
-            s.accountId === foundAccountId
-          ))
-          setIsLoading(false)
-
-          subscription = amplifyClient.Scorecard.observeQuery({
-            filter: { accountId: { eq: foundAccountId } }
-          }).subscribe({
-            next: ({ items }: { items: Schema['Scorecard']['type'][] }) => {
-              console.log('Subscription event:', JSON.stringify(items, null, 2))
-              setScorecards(items.filter((item: Schema['Scorecard']['type']) => 
-                item && item.accountId === foundAccountId
-              ))
-            },
-            error: (error: Error) => {
-              console.error('Subscription error:', error)
-              setError(error)
-            }
-          })
-        } else {
-          setIsLoading(false)
-        }
-      } catch (error) {
-        console.error('Error setting up real-time sync:', error)
-        setError(error as Error)
-        setIsLoading(false)
-      }
-    }
-
-    setupRealTimeSync()
-
-    return () => {
-      if (subscription) {
-        subscription.unsubscribe()
-      }
-    }
+    fetchScorecards()
   }, [])
+
+  useEffect(() => {
+    async function loadScorecardSections() {
+      if (!selectedScorecard) {
+        setSelectedScorecardSections(null)
+        return
+      }
+
+      try {
+        const sectionsResult = await selectedScorecard.sections()
+        const sections = sectionsResult.data || []
+        
+        const transformedSections = {
+          items: await Promise.all(sections.map(async section => {
+            // Use fetchAllScoresForSection instead of section.scores() to ensure all scores are fetched
+            const allScores = await fetchAllScoresForSection(section.id);
+            
+            return {
+              id: section.id,
+              name: section.name,
+              order: section.order,
+              scores: {
+                items: allScores.map(score => ({
+                  id: score.id,
+                  name: score.name,
+                  key: score.key || '',
+                  description: score.description || '',
+                  order: score.order,
+                  type: score.type,
+                }))
+              }
+            }
+          }))
+        }
+
+        setSelectedScorecardSections(transformedSections)
+      } catch (error) {
+        console.error('Error loading scorecard sections:', error)
+        setError(error as Error)
+      }
+    }
+
+    loadScorecardSections()
+  }, [selectedScorecard])
 
   // Helper function to fetch all scores for a section
   const fetchAllScoresForSection = async (sectionId: string) => {
-    console.log('fetchAllScoresForSection: Starting to fetch all scores for section:', sectionId)
     let allScores: Schema['Score']['type'][] = []
     let nextToken: string | null = null
     
@@ -120,12 +359,11 @@ export default function ScorecardsComponent() {
         filter: { sectionId: { eq: sectionId } },
         ...(nextToken ? { nextToken } : {})
       })
-      console.log('fetchAllScoresForSection: Got page of scores:', scoresResult)
+      
       allScores = [...allScores, ...(scoresResult.data || [])]
       nextToken = scoresResult.nextToken
     } while (nextToken)
     
-    console.log('fetchAllScoresForSection: Total scores found:', allScores.length)
     return allScores
   }
 
@@ -137,39 +375,40 @@ export default function ScorecardsComponent() {
     
     const sortedSections = sectionsResult.data.sort((a, b) => a.order - b.order)
     
-    return Promise.all(sortedSections.map(async (section) => ({
-      id: section.id,
-      name: section.name,
-      order: section.order,
-      scorecardId,
-      createdAt: section.createdAt,
-      updatedAt: section.updatedAt,
-      scorecard: async () => amplifyClient.Scorecard.get({ id: scorecardId }),
-      scores: async () => {
-        const allScores = await fetchAllScoresForSection(section.id)
-        return {
-          data: allScores.sort((a, b) => a.order - b.order),
-          nextToken: null
+    const sectionsWithScores = await Promise.all(sortedSections.map(async (section) => {
+      const allScores = await fetchAllScoresForSection(section.id)
+      
+      return {
+        id: section.id,
+        name: section.name,
+        order: section.order,
+        scorecardId,
+        createdAt: section.createdAt,
+        updatedAt: section.updatedAt,
+        scorecard: async () => amplifyClient.Scorecard.get({ id: scorecardId }),
+        scores: async () => {
+          return {
+            data: allScores.sort((a, b) => a.order - b.order),
+            nextToken: null
+          }
         }
       }
-    })))
+    }))
+    
+    return sectionsWithScores
   }
 
   // Handle creating a new scorecard
   const handleCreate = async () => {
     if (!accountId) return
 
-    const newScorecard = {
+    const blankScorecard = {
+      id: '',
       name: '',
       key: '',
       externalId: '',
       description: '',
       accountId,
-    }
-
-    setSelectedScorecard({
-      ...newScorecard,
-      id: '',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       account: async () => amplifyClient.Account.get({ id: accountId }),
@@ -187,46 +426,36 @@ export default function ScorecardsComponent() {
       tasks: async (): Promise<AmplifyListResult<Schema['Task']['type']>> => {
         return listFromModel<Schema['Task']['type']>(
           client.models.Task,
-          { scorecardId: { eq: '' } }  // Empty ID for new scorecard
+          { scorecardId: { eq: '' } }
         );
       }
-    } as Schema['Scorecard']['type'])
-    setIsEditing(true)
+    } as unknown as Schema['Scorecard']['type']
+
+    handleSelectScorecard(blankScorecard);
+    setSelectedScorecardSections({ items: [] });
   }
 
   // Handle editing an existing scorecard
   const handleEdit = async (scorecard: Schema['Scorecard']['type']) => {
-    if (isEditing) {
-      setIsEditing(false)
-    }
-    
     try {
-      console.log('handleEdit: Starting to edit scorecard:', scorecard.id)
-      
       const fullScorecard = await amplifyClient.Scorecard.get({ id: scorecard.id })
-      console.log('handleEdit: Full scorecard data:', fullScorecard.data)
 
       const scorecardData = fullScorecard.data
       if (!scorecardData) {
-        throw new Error('Scorecard not found')
+        setError(new Error(`Could not find scorecard with ID ${scorecard.id}`))
+        return
       }
 
       // Get all sections for this scorecard
-      console.log('handleEdit: Fetching sections for scorecard:', scorecard.id)
       const sectionsResult = await amplifyClient.ScorecardSection.list({
         filter: { scorecardId: { eq: scorecard.id } }
       })
-      console.log('handleEdit: Sections result:', sectionsResult)
       
       const sortedSections = sectionsResult.data.sort((a, b) => a.order - b.order)
-      console.log('handleEdit: Sorted sections:', sortedSections)
 
       // Get scores for each section
-      console.log('handleEdit: Starting to fetch scores for each section')
       const sectionsWithScores = await Promise.all(sortedSections.map(async section => {
-        console.log('handleEdit: Fetching scores for section:', section.id)
         const allScores = await fetchAllScoresForSection(section.id)
-        console.log('handleEdit: All scores for section:', section.id, allScores)
         return {
           ...section,
           scores: async () => ({
@@ -235,7 +464,6 @@ export default function ScorecardsComponent() {
           })
         }
       }))
-      console.log('handleEdit: All sections with scores:', sectionsWithScores)
 
       const accountResult = await amplifyClient.Account.get({ 
         id: scorecardData.accountId 
@@ -243,7 +471,7 @@ export default function ScorecardsComponent() {
       if (!accountResult.data) {
         throw new Error('Account not found')
       }
-      
+
       const fullScorecardData = {
         ...scorecardData,
         account: async () => amplifyClient.Account.get({ id: scorecardData.accountId }),
@@ -275,178 +503,236 @@ export default function ScorecardsComponent() {
         }
       } as Schema['Scorecard']['type']
       
-      console.log('Setting selected scorecard with data:', fullScorecardData)
-      setSelectedScorecard(fullScorecardData)
-      setIsEditing(true)
+      handleSelectScorecard(fullScorecardData);
     } catch (error) {
-      console.error('Error fetching scorecard details:', error)
+      console.error('Error editing scorecard:', error)
+      setError(error as Error)
     }
   }
 
-  if (isLoading) {
-    return <div>Loading scorecards...</div>;
+  const handleDragStart = (e: React.MouseEvent) => {
+    e.preventDefault()
+    const startX = e.pageX
+    const startWidth = leftPanelWidth
+
+    const handleDrag = (e: MouseEvent) => {
+      const delta = e.pageX - startX
+      const newWidth = Math.min(Math.max(startWidth + (delta / window.innerWidth) * 100, 30), 70)
+      setLeftPanelWidth(newWidth)
+    }
+
+    const handleDragEnd = () => {
+      document.removeEventListener('mousemove', handleDrag)
+      document.removeEventListener('mouseup', handleDragEnd)
+    }
+
+    document.addEventListener('mousemove', handleDrag)
+    document.addEventListener('mouseup', handleDragEnd)
   }
+
+  // Add back the renderSelectedScorecard function
+  const renderSelectedScorecard = () => {
+    if (!selectedScorecard || !selectedScorecardSections) return null;
+
+    const scorecardData = {
+      id: selectedScorecard.id,
+      name: selectedScorecard.name,
+      key: selectedScorecard.key || '',
+      description: selectedScorecard.description || '',
+      type: 'scorecard',
+      configuration: {},
+      order: 0,
+      externalId: selectedScorecard.externalId || '',
+      sections: selectedScorecardSections || { items: [] }
+    }
+
+    return (
+      <div className={cn(
+        "h-full overflow-y-auto overflow-x-hidden",
+        maximizedScoreId ? "hidden" : ""
+      )}
+      style={selectedScore && !maximizedScoreId ? {
+        width: `${scorecardDetailWidth}%`
+      } : { width: '100%' }}>
+        <ScorecardComponent
+          variant="detail"
+          score={scorecardData}
+          onEdit={() => handleEdit(selectedScorecard)}
+          onViewData={() => {
+            setSelectedScorecardForDataset(selectedScorecard.id)
+            setShowDatasetConfig(true)
+          }}
+          isFullWidth={isFullWidth}
+          onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
+          onClose={handleCloseScorecard}
+          onSave={async () => {
+            await fetchScorecards()
+          }}
+          onScoreSelect={handleScoreSelect}
+          selectedScoreId={selectedScore?.id}
+        />
+      </div>
+    );
+  };
+
+  // Add back the renderSelectedScore function
+  const renderSelectedScore = () => {
+    if (!selectedScore) return null;
+
+    return (
+      <div className={cn(
+        "h-full overflow-y-auto overflow-x-hidden",
+        maximizedScoreId ? "w-full" : ""
+      )}
+      style={!maximizedScoreId ? {
+        width: `${100 - scorecardDetailWidth}%`
+      } : undefined}>
+        <ScoreComponent
+          score={selectedScore}
+          variant="detail"
+          isFullWidth={maximizedScoreId === selectedScore.id}
+          onToggleFullWidth={() => setMaximizedScoreId(maximizedScoreId ? null : selectedScore.id)}
+          onClose={() => {
+            setSelectedScore(null);
+            setMaximizedScoreId(null);
+          }}
+        />
+      </div>
+    );
+  };
 
   if (error) {
     return (
-      <div className="p-4 text-red-500">
-        Error loading scorecards: {error.message}
+      <div className="p-4">
+        <div className="text-red-500 mb-2">
+          Error loading scorecards: {error.message}
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="space-y-4 h-full flex flex-col">
-      <div className={`flex flex-col flex-grow overflow-hidden pb-2`}>
-        {(selectedScorecard || showDatasetConfig) ? (
-          <div className="flex-shrink-0 h-full overflow-hidden">
-            {selectedScorecard && (
-              <ScorecardForm
-                scorecard={selectedScorecard}
-                accountId={accountId!}
-                onSave={async () => {
-                  setIsEditing(false)
-                  setSelectedScorecard(null)
-                }}
-                onCancel={() => {
-                  setIsEditing(false)
-                  setSelectedScorecard(null)
-                }}
-                isFullWidth={isFullWidth}
-                onToggleWidth={() => setIsFullWidth(!isFullWidth)}
-                isNarrowViewport={isNarrowViewport}
-              />
-            )}
-            {showDatasetConfig && (
-              <DatasetConfigFormComponent 
-                scorecardId={selectedScorecardForDataset}
-                onClose={() => setShowDatasetConfig(false)}
-                isFullWidth={isFullWidth}
-                onToggleWidth={() => setIsFullWidth(!isFullWidth)}
-                isNarrowViewport={isNarrowViewport}
-              />
-            )}
-          </div>
-        ) : (
-          <div className={`flex ${isNarrowViewport || isFullWidth ? 'flex-col' : 'space-x-6'} h-full overflow-hidden`}>
-            <div className={`flex-1 @container overflow-auto`}>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[70%]">Scorecard</TableHead>
-                    <TableHead className="w-[20%] @[630px]:table-cell hidden text-right">Scores</TableHead>
-                    <TableHead className="w-[10%] @[630px]:table-cell hidden text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {scorecards.map((scorecard) => (
-                    <TableRow 
-                      key={scorecard.id} 
-                      onClick={() => handleEdit(scorecard)} 
-                      className="cursor-pointer transition-colors duration-200 hover:bg-muted"
-                    >
-                      <TableCell className="w-[70%]">
-                        <div>
-                          {/* Narrow variant - visible below 630px */}
-                          <div className="block @[630px]:hidden">
-                            <div className="flex justify-between items-start mb-2">
-                              <div>
-                                <div className="font-medium">{scorecard.name}</div>
-                                <div className="text-sm text-muted-foreground font-mono">
-                                  {scorecard.externalId || 'No ID'} - {scorecard.key}
-                                </div>
-                                <div className="text-sm text-muted-foreground mt-1">
-                                  <ScoreCount scorecard={scorecard} />
-                                </div>
-                              </div>
-                              <div className="flex items-center">
-                                <CardButton 
-                                  icon={Pencil}
-                                  onClick={() => handleEdit(scorecard)}
-                                />
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <CardButton 
-                                      icon={MoreHorizontal}
-                                      onClick={() => {}}
-                                    />
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end">
-                                    <DropdownMenuItem onClick={(e) => {
-                                      e.stopPropagation()
-                                      setSelectedScorecardForDataset(scorecard.id)
-                                      setShowDatasetConfig(true)
-                                    }}>
-                                      <Database className="h-4 w-4 mr-2" /> Datasets
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem>
-                                      <Activity className="h-4 w-4 mr-2" /> Activity
-                                    </DropdownMenuItem>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                              </div>
-                            </div>
-                          </div>
-                          {/* Wide variant - visible at 630px and above */}
-                          <div className="hidden @[630px]:block">
-                            <div className="font-medium">{scorecard.name}</div>
-                            <div className="text-sm text-muted-foreground font-mono">
-                              {scorecard.externalId || 'No ID'} - {scorecard.key}
-                            </div>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="w-[20%] hidden @[630px]:table-cell text-right">
-                        <ScoreCount scorecard={scorecard} />
-                      </TableCell>
-                      <TableCell className="w-[10%] hidden @[630px]:table-cell text-right">
-                        <div className="flex items-center justify-end space-x-2">
-                          <CardButton 
-                            icon={Pencil}
-                            onClick={() => {
-                              handleEdit(scorecard)
-                            }}
-                          />
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                              <Button 
-                                variant="ghost" 
-                                size="icon"
-                                className="h-8 w-8 p-0"
-                              >
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={(e) => {
-                                e.stopPropagation()
-                                setSelectedScorecardForDataset(scorecard.id)
-                                setShowDatasetConfig(true)
-                              }}>
-                                <Database className="h-4 w-4 mr-2" /> Datasets
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={(e) => e.stopPropagation()}>
-                                <Activity className="h-4 w-4 mr-2" /> Activity
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              <div className="mt-4">
-                <CardButton
-                  icon={Plus}
-                  label="Create Scorecard"
-                  onClick={handleCreate}
-                />
+    <div className="h-full flex flex-col">
+      <div className="flex h-full w-full">
+        {/* Grid Panel */}
+        <div 
+          className={cn(
+            "h-full overflow-y-auto overflow-x-hidden",
+            selectedScore || (selectedScorecard && isFullWidth) ? "hidden" : selectedScorecard ? "flex" : "w-full",
+            "transition-all duration-200"
+          )}
+          style={selectedScorecard && !isFullWidth ? {
+            width: `${leftPanelWidth}%`
+          } : undefined}
+        >
+          <div className="space-y-2 p-1.5 w-full">
+            <div className="flex justify-end">
+              <Button 
+                onClick={handleCreate} 
+                variant="ghost" 
+                className="bg-card hover:bg-accent text-muted-foreground"
+              >
+                New Scorecard
+              </Button>
+            </div>
+            <div className="@container">
+              <div className="grid grid-cols-1 @[400px]:grid-cols-1 @[600px]:grid-cols-2 @[900px]:grid-cols-3 gap-4">
+                {scorecards
+                  .sort((a, b) => a.name.localeCompare(b.name))
+                  .map(scorecard => {
+                    const scorecardData = {
+                      id: scorecard.id,
+                      name: scorecard.name,
+                      key: scorecard.key || '',
+                      description: scorecard.description || '',
+                      type: 'scorecard',
+                      configuration: {},
+                      order: 0,
+                      externalId: scorecard.externalId || '',
+                      scoreCount: scorecardScoreCounts[scorecard.id] || 0
+                    }
+
+                    return (
+                      <ScorecardComponent
+                        key={scorecard.id}
+                        variant="grid"
+                        score={scorecardData}
+                        isSelected={selectedScorecard?.id === scorecard.id}
+                        onClick={() => handleSelectScorecard(scorecard)}
+                        onEdit={() => handleEdit(scorecard)}
+                      />
+                    )
+                  })}
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Resize Handle between Grid and Detail */}
+        {selectedScorecard && !isFullWidth && !selectedScore && (
+          <div
+            className="w-[12px] relative cursor-col-resize flex-shrink-0 group"
+            onMouseDown={handleDragStart}
+          >
+            <div className="absolute inset-0 rounded-full transition-colors duration-150 
+              group-hover:bg-accent" />
+          </div>
         )}
+
+        {/* Detail Panel Container */}
+        <div className="flex-1 flex overflow-hidden">
+          {renderSelectedScorecard()}
+          
+          {/* Resize Handle between Scorecard and Score */}
+          {selectedScore && !maximizedScoreId && (
+            <div
+              className="w-[12px] relative cursor-col-resize flex-shrink-0 group mx-1"
+              onMouseDown={(e: React.MouseEvent<HTMLDivElement>) => {
+                e.preventDefault()
+                const startX = e.pageX
+                const startDetailWidth = scorecardDetailWidth
+                const container = e.currentTarget.parentElement
+                if (!container) return
+
+                const handleDrag = (e: MouseEvent) => {
+                  const deltaX = e.pageX - startX
+                  const containerWidth = container.getBoundingClientRect().width
+                  const deltaPercent = (deltaX / containerWidth) * 100
+                  const newDetailWidth = Math.min(Math.max(startDetailWidth + deltaPercent, 30), 70)
+                  requestAnimationFrame(() => {
+                    setScorecardDetailWidth(newDetailWidth)
+                  })
+                }
+
+                const handleDragEnd = () => {
+                  document.removeEventListener('mousemove', handleDrag)
+                  document.removeEventListener('mouseup', handleDragEnd)
+                  document.body.style.cursor = ''
+                }
+
+                document.body.style.cursor = 'col-resize'
+                document.addEventListener('mousemove', handleDrag)
+                document.addEventListener('mouseup', handleDragEnd)
+              }}
+            >
+              <div className="absolute inset-0 rounded-full transition-colors duration-150 
+                group-hover:bg-accent" />
+            </div>
+          )}
+          
+          {renderSelectedScore()}
+        </div>
       </div>
+
+      {showDatasetConfig && selectedScorecardForDataset && (
+        <DatasetConfigFormComponent
+          scorecardId={selectedScorecardForDataset}
+          onClose={() => {
+            setShowDatasetConfig(false)
+            setSelectedScorecardForDataset("")
+          }}
+        />
+      )}
     </div>
   )
 }
