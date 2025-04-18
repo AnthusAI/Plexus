@@ -909,11 +909,52 @@ The remaining tasks focus on ensuring the metrics calculation and API posting co
 2. 🟡 **Enhance Error Detection**: Add better error handling for async issues
 3. 🟡 **Documentation Updates**: Update all user-facing documentation
 
-## Recent Changes
-1. Improved error handling in GraphQL mutations to only include allowed fields
-2. Added detailed logging throughout the evaluation process
-3. Fixed score_text_wrapper to handle event loop errors gracefully
-4. Simplified the async handling approach, though not fully resolved
+## Testing Commands
 
-## Conclusion
-The Scorecard API integration is structurally complete and loads scorecard configurations correctly, but cannot currently perform actual evaluations due to the async function handling issue. Once this critical issue is resolved, the implementation will be ready for comprehensive testing with real-world scorecards and complex dependency structures.
+> **Note:** All commands should be run from the Call-Criteria-Python project root directory (`~/projects/Call-Criteria-Python`).
+
+### Listing Available Scorecards
+```bash
+# List all scorecards (with higher limit to see all)
+python -m plexus scorecards list --limit 50
+```
+
+### Testing Dry-Run Mode
+```bash
+# Test with scorecard key (dry run - no database operations)
+python -m plexus evaluate accuracy --scorecard "selectquote_hcs_medium_risk" --score "Call Need and Resolution" --number-of-samples 1 --dry-run
+
+# Test with scorecard ID (dry run - no database operations)
+python -m plexus evaluate accuracy --scorecard "926b3659-834f-4d4f-8655-5513d9250490" --score "Call Need and Resolution" --number-of-samples 1 --dry-run
+```
+
+### Testing API Loading vs. YAML Loading
+```bash
+# API loading (default behavior)
+python -m plexus evaluate accuracy --scorecard "selectquote_hcs_medium_risk" --score "Call Need and Resolution" --number-of-samples 1 --dry-run
+
+# YAML loading (legacy behavior)
+python -m plexus evaluate accuracy --scorecard "selectquote_hcs_medium_risk" --score "Call Need and Resolution" --number-of-samples 1 --yaml --dry-run
+```
+
+### Testing Full Evaluation (Will Encounter Async Issue)
+```bash
+# Currently will encounter the coroutine not awaited issue
+python -m plexus evaluate accuracy --scorecard "selectquote_hcs_medium_risk" --score "Call Need and Resolution" --number-of-samples 1
+```
+
+### Testing Distribution Command
+```bash
+# Test distribution command with dry run
+python -m plexus evaluate distribution --scorecard "selectquote_hcs_medium_risk" --score "Call Need and Resolution" --number-of-samples 10 --dry-run
+```
+
+### Verification Checklist
+When running these tests, verify:
+1. ✅ Command executes without errors (except for the known async issue in full evaluation)
+2. ✅ Scorecard and score are correctly resolved from identifiers
+3. ✅ Dependencies are properly loaded
+4. ✅ Cache is used on subsequent runs (look for "Cache HIT" log messages)
+5. ❌ In full evaluation, watch for "coroutine was never awaited" warning
+
+## Recent Changes
