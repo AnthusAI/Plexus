@@ -1,74 +1,30 @@
 # Plan: Using the Scorecard API with Evaluation Commands
 
-> **Note:** All CLI commands in this plan should be run from the Call-Criteria-Python project root directory (`/Users/ryan/projects/Call-Criteria-Python`).
+This project is about shifting Plexus from using score YAML configurations stored in per-scorecard YAML files in `scorecards/scorecard-X.yaml` to using the API to store versioned Score configurations in ScoreVersion records, with caching, and with support for working from the cached local YAML files using the new `--yaml` option.
+
+> **Note:** All CLI commands in this plan should be run from the Call-Criteria-Python project root directory (`~/projects/Call-Criteria-Python`).
 
 ## Repository Structure Clarification
 
 This project involves two separate repositories:
 
-1. **Plexus-2 Repository** (`/Users/ryan/projects/Plexus-2`):
+1. **Plexus Repository** (`~/projects/Plexus`):
    - Contains the core `plexus` Python module with all the shared functionality
    - Includes the implementation of the scorecard API, evaluation framework, and CLI
    - Houses the `memoized_resolvers.py`, `EvaluationCommands.py`, and other core files
    - Development and changes to the core Plexus module happen here
 
-2. **Call-Criteria-Python Repository** (`/Users/ryan/projects/Call-Criteria-Python`):
+2. **Call-Criteria-Python Repository** (`~/projects/Call-Criteria-Python`):
    - Contains client-specific code and configurations
    - Uses the Plexus module via installation or symlink
    - CLI commands are executed from this directory to use the client-specific configurations
    - The actual evaluation data and client scorecards are stored in this repository
 
-When making changes to the core Plexus functionality (like our current task), we modify files in the Plexus-2 repository, but test the changes by running commands from the Call-Criteria-Python repository.
-
-## Execution Environment Complexity
-
-A key challenge in this implementation is the complex execution environment with two separate repositories:
-
-1. **Plexus-2 Repository** (`/Users/ryan/projects/Plexus-2`):
-   - Contains our implementation code and newly added features 
-   - Houses the core `plexus` package with the `--dry-run` flag, API loading logic, etc.
-   - Where we're developing and testing our new features initially
-
-2. **Call-Criteria-Python Repository** (`/Users/ryan/projects/Call-Criteria-Python`):
-   - Contains the client-specific implementation that uses the `plexus` package
-   - Where commands are actually executed and need to be tested
-   - Has its own version of the `plexus` package which may not contain our latest changes
-
-### Current Testing Approach and Issues
-
-Our current approach tries to use both repositories simultaneously:
-1. We implement changes in `Plexus-2`
-2. We copy test fixtures to `Call-Criteria-Python`
-3. We attempt to run verification scripts from `Plexus-2` that execute commands in `Call-Criteria-Python`
-
-This approach is failing due to module import conflicts. When executing commands in `Call-Criteria-Python`, the Python interpreter:
-1. Attempts to import modules from `Plexus-2` rather than using the local versions in `Call-Criteria-Python`
-2. Cannot find the necessary module dependencies (`plexus.scores.Score`) in the expected locations
-3. Fails with import errors despite the test fixtures being copied correctly
-
-### Potential Solutions
-
-For the next phase, we should consider:
-
-1. **Development Installation Approach:**
-   - Use `pip install -e .` in the Plexus-2 directory to install the development version
-   - This would allow Call-Criteria-Python to directly use the development code
-
-2. **Module Path Management:**
-   - Add explicit Python path manipulation to control which modules are imported
-   - Use environment variables to specify which repository's modules should be used
-
-3. **Simplified Testing Strategy:**
-   - Test the API loading functionality directly within Plexus-2 first
-   - Only test in Call-Criteria-Python once the feature is stable and merged
-
-4. **Documentation of Test Environment Setup:**
-   - Create detailed documentation on how to set up a proper testing environment
-   - Include steps to ensure the correct versions of packages are used
+When making changes to the core Plexus functionality (like our current task), we modify files in the Plexus repository, but test the changes by running commands from the Call-Criteria-Python repository.
 
 ## 1. Overview
 
-Currently, evaluation commands (`evaluate accuracy`, `evaluate distribution`) in the Plexus CLI primarily load scorecard configurations from local YAML files found within the `scorecards/` directory. This is done via `Scorecard.load_and_register_scorecards()`, which populates the global `scorecard_registry`. While functional, this approach requires local YAML files, doesn't fully leverage the centralized scorecard management via the API, and can be inefficient for scorecards with many scores, as it loads all of them regardless of need.
+Previously, evaluation commands (`evaluate accuracy`, `evaluate distribution`) in the Plexus CLI primarily loaded scorecard configurations from local YAML files found within the `scorecards/` directory. This was done via `Scorecard.load_and_register_scorecards()`, which populated the global `scorecard_registry`. We want to move from Git-managed scorecard YAML files to API-managed Score configuration YAML.
 
 This revised plan details modifications to the evaluation commands to prioritize loading only the necessary scorecard configurations (target scores and their dependencies) directly from the API using various identifiers, while retaining the ability to load *all* configurations from local YAML files as an explicit option.
 
@@ -85,8 +41,9 @@ This revised plan details modifications to the evaluation commands to prioritize
 
 ### 3.1. Command Line Interface Changes (`plexus/cli/EvaluationCommands.py`)
 
+*   **Rename `--scorecard-name` to `--scorecard`:** Update the option name for consistency with other commands (e.g., `plexus scorecards push`, `plexus scores pull`).  The `--scorecard` argument can be an ID, an external ID, a key, or a name.
+*   **Rename `--score-name` to `--score`:** Also for consistency.  The `--score` argument can be an ID, an external ID, a key, or a name.
 *   **Introduce `--yaml` flag:** Add a `--yaml` boolean flag to `evaluate accuracy` and `evaluate distribution`. Presence indicates loading the *entire* scorecard definition from a local YAML file (legacy behavior).
-*   **Rename `--scorecard-name` to `--scorecard`:** Update the option name for consistency with other commands (e.g., `plexus scorecards push`, `plexus scores pull`).
 *   **Update Help Text:** Modify the `--scorecard` option's help text to clarify:
     *   Without `--yaml`: Accepts scorecard ID, key, name, or external ID to load from the API.
     *   With `--yaml`: Accepts a scorecard name/key that should correspond to a definition loadable via `scorecard_registry` after scanning YAML files.
@@ -97,47 +54,7 @@ Before diving into the loading logic, it's important to understand the existing 
 
 #### 3.2.1. Identifier Resolution Caching (`plexus/cli/memoized_resolvers.py`)
 
-The codebase already implements an efficient caching system for resolving scorecard and score identifiers:
-
-```python
-# Cache for scorecard lookups
-_scorecard_cache: Dict[str, str] = {}
-# Cache for score lookups within scorecards
-_score_cache: Dict[str, Dict[str, str]] = {}
-
-def memoized_resolve_scorecard_identifier(client, identifier: str) -> Optional[str]:
-    """Memoized version of resolve_scorecard_identifier."""
-    # Check cache first
-    if identifier in _scorecard_cache:
-        return _scorecard_cache[identifier]
-    
-    # If not in cache, resolve and cache the result
-    result = resolve_scorecard_identifier(client, identifier)
-    if result:
-        _scorecard_cache[identifier] = result
-    return result
-
-def memoized_resolve_score_identifier(client, scorecard_id: str, identifier: str) -> Optional[str]:
-    """Memoized version of resolve_score_identifier."""
-    # Check cache first
-    if scorecard_id in _score_cache and identifier in _score_cache[scorecard_id]:
-        return _score_cache[scorecard_id][identifier]
-    
-    # If not in cache, resolve and cache the result
-    result = resolve_score_identifier(client, scorecard_id, identifier)
-    if result:
-        if scorecard_id not in _score_cache:
-            _score_cache[scorecard_id] = {}
-        _score_cache[scorecard_id][identifier] = result
-    return result
-
-def clear_resolver_caches():
-    """Clear all resolver caches."""
-    _scorecard_cache.clear()
-    _score_cache.clear()
-```
-
-This caching system significantly reduces API calls by storing previously resolved identifiers and should be used in our implementation.
+The codebase already implements an efficient caching system for resolving scorecard and score identifiers.  This caching system significantly reduces API calls by storing previously resolved identifiers and should be used in our implementation.
 
 #### 3.2.2. Local Score Configuration Storage (`plexus/cli/shared.py`)
 
@@ -276,16 +193,6 @@ This is the core change, moving away from the global registry for API loading an
         *   Use the constructed `scorecard_instance` (with its `score_registry` populated only with required scores) for the evaluation. The internal dependency resolution in `score_entire_text` will use this instance-specific registry.
     9.  **Error Handling:** Implement robust error handling for API failures, missing champion versions/configurations, YAML parsing errors, and resolution failures.
 
-### 3.4. Scorecard Class Modifications (`plexus/Scorecard.py`)
-
-*   **`__init__` Method:** May need adjustment to correctly initialize properties (like `self.scores`, `self.properties`, `self.score_registry`) when instantiated directly with API data, rather than relying solely on class attributes set by `create_from_yaml`. It should initialize `self.score_registry = ScoreRegistry()`.
-*   **`build_dependency_graph` Method:** Should ideally work with the `self.scores_config` (the list of required, parsed score dictionaries) stored on the instance. It needs access to the `name`, `id`, and `depends_on` fields within these configurations.
-*   **`score_names` / `score_names_to_process`:** These methods might need to operate on `self.scores_config` instead of a class-level `cls.scores` when loaded via API.
-*   **Remove `create_from_api_data`:** This class factory method is no longer needed.
-*   **Remove `create_from_yaml`? (Optional):** We could potentially refactor `create_from_yaml` to use the same direct instantiation logic as the API path, just sourcing the data from the file instead of the API. This would unify the instantiation process.
-*   **Ensure `get_score_result` uses `self.score_registry`:** Double-check that score lookup within the execution logic correctly uses the instance's `score_registry`.
-*   **Instance vs. Class-level scores:** Pay careful attention to whether scores are being stored at the instance level (`self.scores`) or class level (`cls.scores` or `Scorecard.scores`). The `score_entire_text` method uses `self.score_names_to_process()` which falls back to class-level scores if instance-level scores aren't available. Modifying class-level scores without updating instance-level scores (or vice versa) can lead to unexpected behavior when `score_entire_text` processes more or different scores than intended. This is particularly important when dealing with scorecard instances loaded from the API.
-
 ### 3.5. Registry Usage
 
 *   **Global `scorecard_registry`:** This registry is *not* actively used or populated when loading via the API with this revised plan. It remains populated only when the `--yaml` flag is used.
@@ -342,24 +249,24 @@ This is the core change, moving away from the global registry for API loading an
 - ✅ **Step 2: Update CLI parameter names in `EvaluationCommands.py`**
   - What: Rename `--scorecard-name` to `--scorecard` in both `accuracy` and `distribution` commands
   - Goal: Align option naming with other commands
-  - Verify: Run `plexus evaluate --help` from the `/Users/ryan/projects/Call-Criteria-Python` directory and confirm parameter name change
+  - Verify: Run `plexus evaluate --help` from the `~/projects/Call-Criteria-Python` directory and confirm parameter name change
 
 - ✅ **Step 3: Add `--yaml` flag to commands**
   - What: Add boolean `--yaml` flag to both `accuracy` and `distribution` commands
   - Goal: Allow explicit request for loading from local YAML files
-  - Verify: Run `plexus evaluate --help` from the `/Users/ryan/projects/Call-Criteria-Python` directory and confirm flag is present with correct help text
+  - Verify: Run `plexus evaluate --help` from the `~/projects/Call-Criteria-Python` directory and confirm flag is present with correct help text
 
 ### Identifier Resolution & Local Caching
 - ✅ **Step 4: Verify existing identifier caching**
-  - What: Add logging to track cache hits/misses in `memoized_resolvers.py` in the Plexus-2 repository
+  - What: Add logging to track cache hits/misses in `memoized_resolvers.py` in the Plexus repository
   - Goal: Confirm identifier resolution caching is working correctly
   - Implementation:
-    1. Modified `/Users/ryan/projects/Plexus-2/plexus/cli/memoized_resolvers.py` to add debug logging
+    1. Modified `~/projects/Plexus/plexus/cli/memoized_resolvers.py` to add debug logging
     2. Added log messages for cache hits: `logging.debug(f"Cache HIT for scorecard identifier: {identifier}")`
     3. Added log messages for cache misses: `logging.debug(f"Cache MISS for scorecard identifier: {identifier}")`
     4. Added similar logging for score identifier resolution
     5. Added logging for cache clearing operations
-  - Verify: Run commands with same identifier multiple times from the `/Users/ryan/projects/Call-Criteria-Python` directory and see cache hits in logs
+  - Verify: Run commands with same identifier multiple times from the `~/projects/Call-Criteria-Python` directory and see cache hits in logs
 
 - ✅ **Step 5: Verify existing local file storage**
   - What: Test score configuration saving/loading using `get_score_yaml_path`
@@ -379,7 +286,7 @@ This is the core change, moving away from the global registry for API loading an
        ```
     5. Updated `identifier_resolution.py` to use the same context manager pattern for consistent GraphQL execution
     6. Added proper exception handling for TransportQueryError
-  - Verify: Successfully ran verification script from `/Users/ryan/projects/Call-Criteria-Python`, confirming:
+  - Verify: Successfully ran verification script from `~/projects/Call-Criteria-Python`, confirming:
     - Identifier resolution caching works (2nd lookups are faster)
     - Score configurations are correctly saved to local YAML files
     - Configurations are saved in expected directory structure: `scorecards/<scorecard_name>/<score_name>.yaml`
@@ -397,7 +304,7 @@ This is the core change, moving away from the global registry for API loading an
     3. Included all essential fields (ID, name, key, sections, scores) but omitted configurations
     4. Added proper error handling and logging
     5. Created verification script to test with different identifier types
-  - Verify: Structure data contains required fields (ids, names, champion version ids) when tested from the `/Users/ryan/projects/Call-Criteria-Python` directory
+  - Verify: Structure data contains required fields (ids, names, champion version ids) when tested from the `~/projects/Call-Criteria-Python` directory
 
 - ✅ **Step 7: Implement target score identification**
   - What: Add logic to identify target scores from command options or all scores
@@ -408,7 +315,7 @@ This is the core change, moving away from the global registry for API loading an
     3. Implemented fallback to all scores when no specific scores found
     4. Added proper logging and error handling
     5. Created verification script to test different score name scenarios
-  - Verify: Correct scores are identified based on command options when run from the `/Users/ryan/projects/Call-Criteria-Python` directory
+  - Verify: Correct scores are identified based on command options when run from the `~/projects/Call-Criteria-Python` directory
 
 - ✅ **Step 8: Implement local cache checking**
   - What: Add code to check if score configurations exist locally before API calls
@@ -419,7 +326,7 @@ This is the core change, moving away from the global registry for API loading an
     3. Added proper logging with different levels for cached/non-cached items
     4. Added summary statistics for caching percentage
     5. Created verification script to test with different caching scenarios
-  - Verify: API calls are skipped when configurations exist locally by running tests from the `/Users/ryan/projects/Call-Criteria-Python` directory
+  - Verify: API calls are skipped when configurations exist locally by running tests from the `~/projects/Call-Criteria-Python` directory
 
 - ✅ **Step 9: Implement configuration retrieval with caching**
   - What: Add code to fetch and cache missing configurations
@@ -431,7 +338,7 @@ This is the core change, moving away from the global registry for API loading an
     4. Added YAML validation and proper formatting when storing on disk
     5. Implemented `load_cached_configurations` to load all configurations after fetching
     6. Created verification script with mock API client to test the functionality
-  - Verify: Configurations are fetched when needed and stored locally when commands are run from the `/Users/ryan/projects/Call-Criteria-Python` directory
+  - Verify: Configurations are fetched when needed and stored locally when commands are run from the `~/projects/Call-Criteria-Python` directory
 
 - ✅ **Step 10: Implement dependency discovery**
   - What: Add code to parse configurations and extract dependencies
@@ -445,7 +352,7 @@ This is the core change, moving away from the global registry for API loading an
     3. Created verification script with test cases for different fixture types
     4. Added proper logging for dependency discovery process
     5. Successfully tested with complex nested dependency structures
-  - Verification: All dependencies are correctly identified and resolved when testing from the `/Users/ryan/projects/Call-Criteria-Python` directory
+  - Verification: All dependencies are correctly identified and resolved when testing from the `~/projects/Call-Criteria-Python` directory
   - Files created:
     - `plexus/cli/dependency_discovery.py` - Core implementation
     - `verify_dependency_discovery.py` - Test script
@@ -460,7 +367,7 @@ This is the core change, moving away from the global registry for API loading an
     4. Integrated with the existing caching mechanisms
     5. Created verification script to test the end-to-end process
     6. Fixed GraphQL client issues related to query execution
-  - Verification: Complete dependency chain is fetched and cached when running from the `/Users/ryan/projects/Call-Criteria-Python` directory
+  - Verification: Complete dependency chain is fetched and cached when running from the `~/projects/Call-Criteria-Python` directory
   - Files created:
     - `plexus/cli/iterative_config_fetching.py` - Core implementation
     - `verify_iterative_fetching.py` - Test script
@@ -476,7 +383,7 @@ This is the core change, moving away from the global registry for API loading an
     4. Modified `build_dependency_graph()` to use instance-level scores when available
     5. Added defensive coding with `.get()` for properties access to handle varying data structures
     6. Created `create_instance_from_api_data()` static method for convenient instantiation from API data
-  - Verify: Scorecard instances can now be created directly from API data in tests run from the `/Users/ryan/projects/Call-Criteria-Python` directory
+  - Verify: Scorecard instances can now be created directly from API data in tests run from the `~/projects/Call-Criteria-Python` directory
 
 - ✅ **Step 13: Implement score registry population**
   - What: Add code to populate instance-specific score registry
@@ -487,7 +394,7 @@ This is the core change, moving away from the global registry for API loading an
     3. Each score is registered with its properties, name, key, and ID
     4. The registry is properly initialized as a fresh `ScoreRegistry` instance for each scorecard instance
     5. Added a fallback for missing scores or import errors to ensure resilience
-  - Verify: Instance registry contains only needed scores with correct configurations when tested from the `/Users/ryan/projects/Call-Criteria-Python` directory
+  - Verify: Instance registry contains only needed scores with correct configurations when tested from the `~/projects/Call-Criteria-Python` directory
 
 - ✅ **Step 14: Ensure compatibility with dependency resolution**
   - What: Test/fix dependency resolution with instance registry
@@ -499,7 +406,7 @@ This is the core change, moving away from the global registry for API loading an
     4. Tested conditional dependencies with different operators (==, in) and values
     5. Confirmed that `check_dependency_conditions` method works with instance-based scorecards
     6. Added defensive handling in the `build_dependency_graph` method to handle both class and instance scores
-  - Verify: Dependencies resolve correctly during evaluation when running from the `/Users/ryan/projects/Call-Criteria-Python` directory
+  - Verify: Dependencies resolve correctly during evaluation when running from the `~/projects/Call-Criteria-Python` directory
 
 ### Integration & Testing
 - ✅ **Step 15: Integrate API path into command handler**
@@ -513,7 +420,7 @@ This is the core change, moving away from the global registry for API loading an
     5. Ensured both paths create compatible scorecard instances
     6. Added detailed error messages and handling for API errors
     7. Updated the `distribution` command to use instance-based scorecard instead of class
-  - Verify: Commands work with both loading approaches when run from the `/Users/ryan/projects/Call-Criteria-Python` directory
+  - Verify: Commands work with both loading approaches when run from the `~/projects/Call-Criteria-Python` directory
 
 - ✅ **Step 16: Implement error handling**
   - What: Add robust error handling for API failures, missing data, etc.
@@ -530,7 +437,7 @@ This is the core change, moving away from the global registry for API loading an
     4. Maintained proper error propagation with `raise ... from e` pattern
     5. Used both logging (for detailed debugging) and click.echo (for user messages)
     6. Added special handling for different error types to avoid duplicate messages
-  - Verify: Commands fail gracefully with clear error messages when tested from the `/Users/ryan/projects/Call-Criteria-Python` directory
+  - Verify: Commands fail gracefully with clear error messages when tested from the `~/projects/Call-Criteria-Python` directory
 
 - ✅ **Step 17: End-to-end testing with single scores**
   - What: Test evaluation with single target scores via API
@@ -608,7 +515,7 @@ This is the core change, moving away from the global registry for API loading an
     2. Set up verification tests to check dependency resolution
     3. Ensure both direct and conditional dependencies are handled correctly
     4. Test with different dependency patterns (linear, branching, diamond)
-  - Verify: All dependencies are loaded and evaluation results are correct when tested from the `/Users/ryan/projects/Call-Criteria-Python` directory
+  - Verify: All dependencies are loaded and evaluation results are correct when tested from the `~/projects/Call-Criteria-Python` directory
 
 - 🟡 **Step 19: Performance testing**
   - What: Test performance with and without caching
@@ -618,7 +525,7 @@ This is the core change, moving away from the global registry for API loading an
     2. Run measurements with clean cache vs. pre-populated cache
     3. Test with different scorecard sizes to measure scaling properties
     4. Document performance gains from caching strategy
-  - Verify: Second runs are faster due to cache hits when running from the `/Users/ryan/projects/Call-Criteria-Python` directory
+  - Verify: Second runs are faster due to cache hits when running from the `~/projects/Call-Criteria-Python` directory
 
 - 🟡 **Step 20: Documentation update**
   - What: Update command documentation with new options
@@ -628,7 +535,7 @@ This is the core change, moving away from the global registry for API loading an
     2. Create usage examples for common scenarios
     3. Document caching behavior and performance expectations
     4. Update README with new features and options
-  - Verify: Help text is clear and comprehensive when running commands from the `/Users/ryan/projects/Call-Criteria-Python` directory
+  - Verify: Help text is clear and comprehensive when running commands from the `~/projects/Call-Criteria-Python` directory
 
 - 🟡 **Step 21A: Fix pagination and parameter mismatches in API loading**
   - What: Address issues discovered during testing with scorecard list pagination and parameter mismatches
@@ -663,7 +570,181 @@ This is the core change, moving away from the global registry for API loading an
     ```
   - Verify: All commands work correctly after fixes, including with and without the dry-run flag
 
-- ⬜ **Step 21: Enhance formal test coverage**
+🟡 **Step 22: Score Parameter Handling Fix
+
+### Issue Description
+
+After changing the parameter name from `--score-name` to `--score`, we're experiencing issues with the evaluation metrics calculation and result posting. The root cause is a confusion between:
+
+1. **Score Identifier** - What the user supplies with `--score`, which could be an ID, key, name, or external ID
+2. **Score Name** - The actual canonical name of the score needed for internal operations
+
+The parameter change allows more flexibility in identifying scores, but it requires careful handling to ensure that:
+- We use the score identifier (from `--score`) for lookups
+- We use the resolved score name for internal operations that expect a name
+
+The current implementation issues:
+1. The parameter was renamed from `--score-name` to `--score` to allow passing any identifier
+2. We correctly look up score records based on the identifier (checking against ID, key, name, external ID)
+3. However, when calling internal functions that expect a score name (like `score_text_wrapper` or `score_entire_text`), we might be using the original identifier instead of the resolved name
+4. This affects the accuracy computation and metrics posting where we need to use the correct score name
+
+### Implementation Plan
+
+1. **Identifier Resolution** ⬜ 
+   - Update `EvaluationCommands.py` to clearly separate the identifier resolution from name resolution
+   - Add explicit logging when resolving a score identifier to its canonical name
+   - Example:
+     ```python
+     # From this:
+     target_score_identifiers = score.split(',') if score else None
+     
+     # To this:
+     target_score_identifiers = score.split(',') if score else None
+     score_id_to_name_map = {}  # Track the mapping from identifier to canonical name
+     ```
+
+2. **Score Config Resolution** ⬜
+   - Update the score lookup logic to explicitly map identifiers to score configurations and names:
+   - Example:
+     ```python
+     for target_score_identifier in target_score_identifiers:
+         found = False
+         for i, score_obj in enumerate(scorecard_instance.scores):
+             if (score_obj.get('name') == target_score_identifier or
+                 score_obj.get('key') == target_score_identifier or
+                 str(score_obj.get('id', '')) == target_score_identifier or
+                 score_obj.get('externalId') == target_score_identifier):
+                 
+                 # Store the mapping from identifier to canonical name
+                 score_id_to_name_map[target_score_identifier] = score_obj.get('name')
+                 single_scores.append((i, score_obj))
+                 found = True
+                 break
+     ```
+
+3. **Update Internal Function Calls** ⬜
+   - Modify all internal function calls to use the resolved name instead of the identifier:
+   - Example for `score_text_wrapper`:
+     ```python
+     # From this:
+     result = score_text_wrapper(scorecard_instance, text, target_score_identifier)
+     
+     # To this:
+     score_name = score_id_to_name_map.get(target_score_identifier, target_score_identifier)
+     result = score_text_wrapper(scorecard_instance, text, score_name)
+     ```
+
+4. **Update Subset Score Names** ⬜
+   - Ensure `subset_of_score_names` always contains canonical names, not identifiers
+   - Example:
+     ```python
+     # From this:
+     subset_of_score_names=[score_name]
+     
+     # To this:
+     resolved_name = score_id_to_name_map.get(score_name, score_name)
+     subset_of_score_names=[resolved_name]
+     ```
+
+5. **Fix Evaluation Creation** ⬜
+   - When creating `AccuracyEvaluation` instances, ensure we're passing resolved names:
+   - Example:
+     ```python
+     # From this:
+     new_experiment = AccuracyEvaluation(
+         scorecard_name=scorecard_name,
+         scorecard=scorecard_instance,
+         labeled_samples=samples,
+         number_of_texts_to_sample=len(samples),
+         subset_of_score_names=[score_name] if score_name else None,
+         # ...other params...
+     )
+     
+     # To this:
+     resolved_name = score_id_to_name_map.get(score_name, score_name) if score_name else None
+     new_experiment = AccuracyEvaluation(
+         scorecard_name=scorecard_name,
+         scorecard=scorecard_instance,
+         labeled_samples=samples,
+         number_of_texts_to_sample=len(samples),
+         subset_of_score_names=[resolved_name] if resolved_name else None,
+         # ...other params...
+     )
+     ```
+
+6. **Update Metrics Calculation** ⬜
+   - Verify that `calculate_metrics` and related methods use the correct name:
+   - Focus on where `primary_score_name` is determined from `self.subset_of_score_names`
+   - Ensure that all score-specific data in metrics (distributions, confusion matrices) use the canonical score names
+
+### Implementation Progress
+
+We've made the following changes to address the score parameter handling issues:
+
+1. **Identifier to Name Mapping** ✅
+   - Added a `score_id_to_name_map` dictionary to track mappings between user-provided identifiers and canonical score names
+   - Implemented in both accuracy and distribution commands
+   - Each mapping is logged for debugging purposes
+
+2. **Sample Processing Update** ✅
+   - Updated sample retrieval to use canonical score names for consistency
+   - Fixed how the score_name is used in expected_label lookup (`sample.get(f'{canonical_score_name}_label')`)
+   - All logs now include the canonical score name instead of user-provided identifier
+
+3. **Score Text Wrapper Enhancement** ✅
+   - Updated documentation to specify that the score_name parameter should be a canonical name
+   - Added clear logging about using canonical names during scoring
+   - Enhanced comments explaining the importance of canonical names for metrics calculation
+
+4. **Metadata Storage** ✅
+   - Fixed metadata storing in score results to use canonical names instead of identifiers
+   - Updated result data creation to ensure score_name in metadata is canonical
+
+5. **Launch Configuration Update** ✅
+   - Updated VSCode launch configuration to use `--scorecard` and `--score` instead of the previous parameter names
+
+The remaining tasks focus on ensuring the metrics calculation and API posting correctly use canonical names throughout:
+
+6. **Test with Different Identifier Types** 🟡
+   - Need to test with scorecard and score IDs, keys, names, and external IDs
+   - Verify correct resolution and metrics calculation in all cases
+
+7. **End-to-End Testing** 🟡
+   - Test full accuracy and distribution workflows with the updated code
+   - Verify metrics calculation works correctly with different identifier types
+
+8. **Documentation Update** 🟡
+   - Need to update the full help text and documentation
+
+### Verification Strategy
+
+1. **Score Resolution**
+   - Add logging to print both the original identifier and resolved name
+   - Verify correct resolution with multiple identifier types
+
+2. **Metric Calculation**
+   - Add detailed logging to show what score names are being used in metrics
+   - Verify calculated metrics match expected results
+
+3. **API Posting**
+   - Use the test script to verify metrics are properly posted
+   - Check that score names in the posted metrics match canonical names
+
+4. **Command-line Testing**
+   - Test with various real-world scorecards using different identifier types
+   - Verify correct accuracy calculation and result posting
+
+### Implementation Steps
+
+1. Implement the identifier-to-name mapping in `EvaluationCommands.py`
+2. Update all internal function calls to use resolved names
+3. Add detailed logging to track identifier resolution
+4. Test with different identifier types
+5. Update `.vscode/launch.json` and documentation
+6. Perform comprehensive end-to-end testing
+
+- ⬜ **Step 23: Enhance formal test coverage**
   - What: Incorporate verification scripts into the formal test suite
   - Goal: Ensure long-term maintainability and regression testing
   - Implementation Plan:
@@ -789,36 +870,50 @@ This is the core change, moving away from the global registry for API loading an
   
   - Verify: Test suite provides comprehensive coverage of the API loading functionality and passes in CI environment
 
-## Current Status Update
+## Current Implementation Status
 
-Based on the latest verification script results, we've made significant progress with the API-based scorecard loading functionality. The core functionality has been successfully implemented and tested:
+## What's Working
+1. ✅ **API-Based Scorecard Loading**: Successfully implemented loading scorecard configurations from the API using various identifier types (ID, key, name, external ID)
+2. ✅ **Dependency Resolution**: Correctly identifies and loads dependencies for scores
+3. ✅ **Caching Mechanism**: Local caching of score configurations is working properly and improving performance
+4. ✅ **Command Line Interface**: Updated to use `--scorecard` and `--score` parameters with appropriate help text
+5. ✅ **YAML Flag Support**: Added `--yaml` flag to load from local files when needed
+6. ✅ **Dry Run Mode**: Implemented `--dry-run` flag to test without database operations
+7. ✅ **Error Handling**: Robust error handling for API failures and missing configurations
+8. ✅ **GraphQL Mutations**: Fixed field validation to ensure only allowed fields are sent in GraphQL mutations
 
-1. ✅ Command line interface updates (`--scorecard`, `--yaml` flag, `--dry-run` flag)
-2. ✅ Scorecard structure fetching from the API
-3. ✅ Dependency discovery and resolution
-4. ✅ Local caching of score configurations
-5. ✅ Scorecard instantiation from API data
-6. ✅ Integration with existing evaluation commands
-7. ✅ Error handling and helpful user messages
-8. ✅ Fixed tests to properly handle instance vs. class-level score configurations
+## What's Not Working
+1. ❌ **Async Function Handling**: Critical issue with coroutines not being properly awaited:
+   ```
+   RuntimeWarning: coroutine 'Scorecard.score_entire_text' was never awaited
+   ```
+   
+   This prevents actual scoring from occurring despite the process completing without errors.
 
-The main improvements in our most recent implementation:
-1. Added the `--dry-run` flag to the accuracy command to bypass database operations
-2. Created a minimal Score class implementation for testing instead of specialized test classes
-3. Eliminated the unnecessary BinaryScore test class for cleaner code organization
-4. Enhanced the setup process to ensure test fixtures are properly copied between repositories
-5. Fixed issues with instance vs. class-level scores, ensuring test fixtures properly set instance-level scores to prevent unintended processing of scores from the original configuration
+2. ❌ **Score Parameter Handling**: When using the new `--score` parameter, there may still be inconsistencies in how the score identifier is resolved to a canonical name across different functions.
 
-All tests for single-score evaluation are now passing, including:
-1. ✅ Accuracy command with scorecard name
-2. ✅ Accuracy command with scorecard key 
-3. ✅ Accuracy command with specific score
-4. ✅ Distribution command
-5. ✅ Accuracy command with YAML flag
-6. ✅ Caching performance improvement
-7. ✅ Invalid scorecard error handling
-8. ✅ Handling of list results from score evaluation
+## Next Steps
 
-These fixes demonstrate the importance of maintaining proper separation between instance-level and class-level properties in the Scorecard class, which is an important consideration for the API-based loading approach. The `test_score_entire_text_handles_result_list` test now correctly processes only the intended score by setting the instance's scores configuration and overriding the score_names_to_process method.
+### Immediate Priority: Fix Async Handling
+1. 🟡 **Investigate Async Chain**: Review the call chain from `score_text_wrapper` through `Scorecard.score_entire_text` to identify where the async/await pattern breaks.
 
-The next phase will focus on end-to-end testing with scorecard dependencies, comprehensive performance testing, and documentation updates.
+2. 🟡 **Implement Solution**: Options include:
+   - Making evaluation commands fully async-aware with proper await statements
+   - Creating a synchronous wrapper that ensures coroutines complete
+   - Running async functions in dedicated event loops
+
+3. 🟡 **Add Safeguards**: Implement runtime checks to detect unawaited coroutines
+
+### Secondary Priorities
+1. 🟡 **End-to-End Testing**: Test with complex dependency structures
+2. 🟡 **Enhance Error Detection**: Add better error handling for async issues
+3. 🟡 **Documentation Updates**: Update all user-facing documentation
+
+## Recent Changes
+1. Improved error handling in GraphQL mutations to only include allowed fields
+2. Added detailed logging throughout the evaluation process
+3. Fixed score_text_wrapper to handle event loop errors gracefully
+4. Simplified the async handling approach, though not fully resolved
+
+## Conclusion
+The Scorecard API integration is structurally complete and loads scorecard configurations correctly, but cannot currently perform actual evaluations due to the async function handling issue. Once this critical issue is resolved, the implementation will be ready for comprehensive testing with real-world scorecards and complex dependency structures.
