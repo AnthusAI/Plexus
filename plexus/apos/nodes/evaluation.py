@@ -186,6 +186,44 @@ class ExtendedAccuracyEvaluation(AccuracyEvaluation):
             # Calculate metrics from the results
             metrics = self.calculate_metrics(self.all_results)
 
+            # Collect mismatches from results - similar to parent class approach
+            self.mismatches = []  # Clear any existing mismatches
+            self.total_correct = 0
+            self.total_questions = 0
+            
+            # Count correct answers and collect mismatches
+            for result in self.all_results:
+                form_id = result.get('form_id', '')
+                for question in self.score_names():
+                    score_result = next((r for r in result['results'].values() 
+                                       if hasattr(r, 'parameters') and r.parameters.name == question), None)
+                    if not score_result:
+                        continue
+                        
+                    score_value = str(score_result.value).lower() if score_result else None
+                    human_label = str(score_result.metadata.get('human_label', '')).lower() if hasattr(score_result, 'metadata') else None
+                    
+                    # Count correct vs incorrect
+                    is_match = 1 if hasattr(score_result, 'metadata') and score_result.metadata.get('correct', False) else 0
+                    self.total_correct += is_match
+                    self.total_questions += 1
+                    
+                    # Collect mismatches (incorrect answers)
+                    if not is_match and len(self.mismatches) < self.max_mismatches_to_report:
+                        mismatch_data = {
+                            'form_id': form_id,
+                            'question': question,
+                            'predicted': score_value,
+                            'ground_truth': human_label,
+                            'explanation': score_result.metadata.get('explanation', '') if hasattr(score_result, 'metadata') else '',
+                            'transcript': score_result.metadata.get('text', '') if hasattr(score_result, 'metadata') else ''
+                        }
+                        # Only include if we have either transcript or explanation
+                        if mismatch_data['transcript'] or mismatch_data['explanation']:
+                            self.mismatches.append(mismatch_data)
+            
+            logger.info(f"Collected {len(self.mismatches)} mismatches from evaluation")
+
             # Update dashboard with final metrics 
             if self.dashboard_client and self.experiment_id:
                 try:
@@ -615,27 +653,38 @@ class EvaluationNode(APOSNode):
             # Only save to disk if this was indeed better than the previous best accuracy
             if current_accuracy > previous_best_accuracy:
                 logger.info(f"New best accuracy achieved: {current_accuracy:.3f} (previous: {previous_best_accuracy:.3f})")
-                # Get system and user messages, replacing escaped newlines with actual newlines
-                system_message = iteration_result.metadata.get("system_message", "").replace('\\n', '\n')
-                user_message = iteration_result.metadata.get("user_message", "").replace('\\n', '\n')
                 
-                # Create YAML content manually to ensure proper formatting
-                yaml_content = f"""accuracy: {current_accuracy}
-iteration: {iteration_result.iteration}
-prompts:
-  {score_name}:
-    system_message: |
-{os.linesep.join(f'      {line}' for line in system_message.splitlines())}
-    user_message: |
-{os.linesep.join(f'      {line}' for line in user_message.splitlines())}
-score_name: {score_name}
-scorecard_name: {scorecard_name}
-"""
+                # Get system and user messages, ensuring proper line breaks
+                system_message = iteration_result.metadata.get("system_message", "")
+                user_message = iteration_result.metadata.get("user_message", "")
                 
-                # Write the YAML content directly
+                # Make sure line breaks are preserved
+                system_lines = []
+                for line in system_message.splitlines():
+                    system_lines.append(f"      {line}")
+                
+                user_lines = []
+                for line in user_message.splitlines():
+                    user_lines.append(f"      {line}")
+                
+                # Create YAML content with proper indentation and line breaks
+                yaml_content = [
+                    f"accuracy: {current_accuracy}",
+                    f"iteration: {iteration_result.iteration}",
+                    "prompts:",
+                    f"  {score_name}:",
+                    "    system_message: |",
+                ]
+                yaml_content.extend(system_lines)
+                yaml_content.append("    user_message: |")
+                yaml_content.extend(user_lines)
+                yaml_content.append(f"score_name: {score_name}")
+                yaml_content.append(f"scorecard_name: {scorecard_name}")
+                
+                # Join with proper line endings and write to file
                 best_accuracy_file = os.path.join(best_accuracy_dir, "best_accuracy.yaml")
-                with open(best_accuracy_file, 'w') as f:
-                    f.write(yaml_content)
+                with open(best_accuracy_file, 'w', newline='\n') as f:
+                    f.write('\n'.join(yaml_content))
                     
                 logger.info(f"Saved new best accuracy mark to {best_accuracy_file}")
                 
