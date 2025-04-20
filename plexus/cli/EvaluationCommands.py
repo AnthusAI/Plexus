@@ -35,6 +35,9 @@ import time
 import threading
 import socket
 import types  # Add this at the top with other imports
+import uuid
+import inspect
+from concurrent.futures import ThreadPoolExecutor
 
 def truncate_dict_strings(d, max_length=100):
     """Recursively truncate long string values in a dictionary."""
@@ -205,6 +208,18 @@ def load_scorecard_from_api(scorecard_identifier: str, score_names=None):
         logging.info(f"Successfully loaded scorecard '{scorecard_name}' with " +
                     f"{len(scores_config)} scores and their dependencies")
         
+        # Add debugging information about scorecard structure
+        logging.info(f"Loaded scorecard instance type: {type(scorecard_instance).__name__}")
+        logging.info(f"Scorecard instance has properties attribute: {hasattr(scorecard_instance, 'properties')}")
+        if hasattr(scorecard_instance, 'properties'):
+            logging.info(f"Scorecard properties: {scorecard_instance.properties}")
+        logging.info(f"Scorecard instance has name attribute: {hasattr(scorecard_instance, 'name')}")
+        if hasattr(scorecard_instance, 'name'):
+            logging.info(f"Scorecard name is callable: {callable(scorecard_instance.name)}")
+        logging.info(f"Scorecard instance has scores attribute: {hasattr(scorecard_instance, 'scores')}")
+        if hasattr(scorecard_instance, 'scores'):
+            logging.info(f"Scorecard scores count: {len(scorecard_instance.scores)}")
+        
         return scorecard_instance
         
     except Exception as e:
@@ -262,10 +277,17 @@ def accuracy(
         else:
             console.print("[bold]Target scores:[/bold] All scores in scorecard")
         
+        # Make it clear that sample retrieval and evaluation would happen in normal mode
+        console.print("\n[yellow]In normal mode, the following operations would be performed:[/yellow]")
+        console.print("1. Load data and retrieve samples from data sources")
+        console.print("2. Evaluate each sample using the scorecard")
+        console.print("3. Calculate accuracy by comparing expected vs. actual results")
+        console.print("4. Store results in the database")
+        
         # Simulate successful completion
         console.print("\n[bold green]Dry run completed successfully.[/bold green]")
         console.print("[dim]No actual evaluation or database operations were performed.[/dim]")
-        console.print("[dim]To run with actual database operations, remove the --dry-run flag.[/dim]")
+        console.print("[dim]To run with actual sample evaluation, remove the --dry-run flag.[/dim]")
         return
     
     # Original implementation for non-dry-run mode
@@ -546,6 +568,18 @@ def accuracy(
                 target_score_identifiers = score.split(',') if score else None
                 try:
                     scorecard_instance = load_scorecard_from_api(scorecard, target_score_identifiers)
+                    
+                    # Add debugging information about scorecard structure
+                    logging.info(f"Loaded scorecard instance type: {type(scorecard_instance).__name__}")
+                    logging.info(f"Scorecard instance has properties attribute: {hasattr(scorecard_instance, 'properties')}")
+                    if hasattr(scorecard_instance, 'properties'):
+                        logging.info(f"Scorecard properties: {scorecard_instance.properties}")
+                    logging.info(f"Scorecard instance has name attribute: {hasattr(scorecard_instance, 'name')}")
+                    if hasattr(scorecard_instance, 'name'):
+                        logging.info(f"Scorecard name is callable: {callable(scorecard_instance.name)}")
+                    logging.info(f"Scorecard instance has scores attribute: {hasattr(scorecard_instance, 'scores')}")
+                    if hasattr(scorecard_instance, 'scores'):
+                        logging.info(f"Scorecard scores count: {len(scorecard_instance.scores)}")
                 except Exception as e:
                     error_msg = f"Failed to load scorecard from API: {str(e)}"
                     logging.error(error_msg)
@@ -611,205 +645,247 @@ def accuracy(
             if tracker and not dry_run:
                 tracker.update(current_items=0)
             
-            # Extract scores
-            single_scores = []
-            
-            if score:
-                # Split comma separated score identifiers
-                target_score_identifiers = [identifier.strip() for identifier in score.split(',')]
-                for target_score_identifier in target_score_identifiers:
-                    found = False
-                    # First, try to find the score directly by name in the scores list
-                    for i, score_obj in enumerate(scorecard_instance.scores):
-                        if (score_obj.get('name') == target_score_identifier or
-                            score_obj.get('key') == target_score_identifier or
-                            str(score_obj.get('id', '')) == target_score_identifier or
-                            score_obj.get('externalId') == target_score_identifier):
-                            single_scores.append((i, score_obj))
-                            found = True
-                            break
-                    
-                    if not found:
-                        logging.warning(f"Could not find score with identifier '{target_score_identifier}'")
-            
-            # If no specific scores requested, use all scores
-            if not single_scores:
-                single_scores = list(enumerate(scorecard_instance.scores))
-                
-            if not single_scores:
-                error_msg = "No scores found in scorecard configuration"
-                logging.error(error_msg)
-                if tracker:
-                    tracker.fail_current_stage(error_msg)
-                raise ValueError(error_msg)
-            
-            # Convert content IDs to a set for lookups
-            content_ids_to_sample_set = set()
-            if content_ids_to_sample:
-                content_ids_to_sample_set = set(content_ids_to_sample.split(','))
+            # --- BEGIN REFACTOR ---
+            # Determine the primary score for fetching data
+            target_score_identifiers = [s.strip() for s in score.split(',')] if score else []
+            primary_score_identifier = target_score_identifiers[0] if target_score_identifiers else None
+            primary_score_config = None
+            primary_score_name = None
+            primary_score_index = -1
 
-            # Process the samples
-            progress_unit = 1.0 / len(single_scores) if single_scores else 0
-            progress_so_far = 0.0
+            if not scorecard_instance or not hasattr(scorecard_instance, 'scores') or not scorecard_instance.scores:
+                 error_msg = "Scorecard instance has no scores to evaluate."
+                 logging.error(error_msg)
+                 if tracker: tracker.fail_current_stage(error_msg)
+                 raise ValueError(error_msg)
+
+            if primary_score_identifier:
+                # Find the config for the specified primary score
+                for i, sc_config in enumerate(scorecard_instance.scores):
+                    if (sc_config.get('name') == primary_score_identifier or
+                        sc_config.get('key') == primary_score_identifier or
+                        str(sc_config.get('id', '')) == primary_score_identifier or
+                        sc_config.get('externalId') == primary_score_identifier):
+                        primary_score_config = sc_config
+                        primary_score_name = sc_config.get('name')
+                        primary_score_index = i
+                        logging.info(f"Using specified score '{primary_score_name}' for fetching samples.")
+                        break
+                if not primary_score_config:
+                    logging.warning(f"Could not find specified primary score '{primary_score_identifier}'. Using first score for samples.")
             
-            # Create samples for each score
-            for i, (score_index, score_config) in enumerate(single_scores):
-                try:
-                    score_name = score_config.get('name', f"Score {score_index+1}")
-                    logging.info(f"Processing score '{score_name}'")
-                    
-                    # Check for Score record to update the evaluation with
-                    if scorecard_record and not dry_run:
-                        try:
-                            # Look up Score record via API
-                            score_key = score_config.get('key', None)
-                            if score_key:
-                                logging.info(f"Looking up Score record for key: {score_key}")
-                                score_record = DashboardScore.list_by_key_and_scorecard_id(
-                                    key=score_key, 
-                                    scorecardId=scorecard_record.id,
-                                    client=client
-                                )
-                                if score_record:
-                                    score_id = score_record.id
-                                    logging.info(f"Found Score record with ID: {score_id}")
-                                    
-                                    # Update evaluation record with score ID for this iteration
-                                    if evaluation_record:
-                                        logging.info(f"Updating evaluation record with score ID: {score_id}")
-                                        evaluation_record.update(scoreId=score_id)
-                                        logging.info(f"Successfully updated evaluation with score ID")
-                        except Exception as e:
-                            logging.warning(f"Could not find Score record: {str(e)}")
-                    elif dry_run:
-                        logging.info(f"[DRY RUN] Skipping Score record lookup for: {score_name}")
-                        score_id = f"mock-score-id-{i}"
-                        logging.info(f"[DRY RUN] Using mock score ID: {score_id}")
-                        
-                        # Update mock evaluation with score ID
-                        if evaluation_record:
-                            evaluation_record.scoreId = score_id
-                            logging.info(f"[DRY RUN] Updated evaluation with score ID: {score_id}")
-                    
-                    # ... code that processes samples ...
-                    
-                    # When creating score results
-                    for result_data in results_to_create:
-                        try:
-                            if not dry_run:
-                                # Create the ScoreResult record
-                                ScoreResult.create(
-                                    client=client,
-                                    **result_data
-                                )
-                                logging.debug(f"Created score result: {result_data.get('contentId')}")
-                            else:
-                                # Log what would have been created in dry run mode
-                                logging.debug(f"[DRY RUN] Would create score result: {json.dumps(truncate_dict_strings(result_data, 100))}")
-                        except Exception as e:
-                            if not dry_run:
-                                logging.error(f"Error creating score result: {str(e)}")
-                            else:
-                                logging.debug(f"[DRY RUN] Error simulation for score result creation: {str(e)}")
-                    
-                    # Update the evaluation after processing each score
-                    if evaluation_record and not dry_run:
-                        try:
-                            # Update with current metrics
-                            evaluation_record.update(
-                                accuracy=metrics["accuracy"],
-                                processedItems=processed_items,
-                                status="RUNNING",
-                                estimatedRemainingSeconds=estimated_remaining_seconds,
-                                metrics=json.dumps(metrics)
-                            )
-                            logging.info(f"Updated evaluation record with accuracy: {metrics['accuracy']:.2f}%")
-                        except Exception as e:
-                            logging.warning(f"Could not update evaluation record: {str(e)}")
-                    elif evaluation_record and dry_run:
-                        # Log the update that would happen in dry run mode
-                        logging.info(f"[DRY RUN] Would update evaluation with accuracy: {metrics['accuracy']:.2f}%")
-                        # Update mock properties for consistency
-                        evaluation_record.accuracy = metrics["accuracy"]
-                        evaluation_record.processedItems = processed_items
-                        evaluation_record.status = "RUNNING"
-                        evaluation_record.estimatedRemainingSeconds = estimated_remaining_seconds
-                        evaluation_record.metrics = json.dumps(metrics)
-                
-                except Exception as score_error:
-                    logging.error(f"Error processing score {score_name}: {str(score_error)}")
-                    traceback.print_exc()
-                    if not dry_run and task:
-                        task.fail_processing(f"Error in score {score_name}: {str(score_error)}")
-                    elif dry_run and task:
-                        logging.info(f"[DRY RUN] Would mark task as failed: Error in score {score_name}: {str(score_error)}")
-                    raise
+            if not primary_score_config:
+                 # Default to the first score in the scorecard if none specified or found
+                 primary_score_config = scorecard_instance.scores[0]
+                 primary_score_name = primary_score_config.get('name', 'Score 0')
+                 primary_score_index = 0
+                 logging.info(f"Using first score '{primary_score_name}' for fetching samples.")
+
+            # Resolve the canonical scorecard name
+            scorecard_name_resolved = None
+            if hasattr(scorecard_instance, 'properties') and isinstance(scorecard_instance.properties, dict):
+                scorecard_name_resolved = scorecard_instance.properties.get('name')
+            elif hasattr(scorecard_instance, 'name') and not callable(scorecard_instance.name):
+                scorecard_name_resolved = scorecard_instance.name
+            else:
+                scorecard_name_resolved = scorecard # Fallback to initial identifier
+            
+            # Fetch samples using the primary score's config
+            logging.info(f"Fetching samples using data source for score: '{primary_score_name}'")
+            labeled_samples_data = get_data_driven_samples(
+                scorecard_instance=scorecard_instance,
+                scorecard_name=scorecard_name_resolved,
+                score_name=primary_score_name,
+                score_config=primary_score_config,
+                fresh=fresh,
+                content_ids_to_sample_set=set(content_ids_to_sample.split(',') if content_ids_to_sample else []),
+                progress_callback=tracker.update if tracker else None,
+                number_of_samples=number_of_samples,
+                random_seed=random_seed
+            )
+            logging.info(f"Retrieved {len(labeled_samples_data)} samples.")
+
+            # Determine the subset of score names to evaluate
+            # Use the names resolved during scorecard loading if available
+            subset_of_score_names = None
+            if target_score_identifiers:
+                 # Ensure we have loaded all necessary scores during load_scorecard_from_api
+                 # The 'scores' attribute of scorecard_instance should contain only the requested scores + dependencies
+                 subset_of_score_names = [sc.get('name') for sc in scorecard_instance.scores 
+                                            if sc.get('name') and any(sc.get('name') == tid or 
+                                                                      sc.get('key') == tid or 
+                                                                      str(sc.get('id', '')) == tid or
+                                                                      sc.get('externalId') == tid for tid in target_score_identifiers)]
+                 logging.info(f"Evaluating subset of scores: {subset_of_score_names}")
+            else:
+                 logging.info("Evaluating all scores in the loaded scorecard.")
+                 # If no specific scores requested, evaluate all *loaded* scores
+                 subset_of_score_names = [sc.get('name') for sc in scorecard_instance.scores if sc.get('name')]
+
+            # Get score ID and version ID if a specific score was targeted
+            score_id_for_eval = None
+            score_version_id_for_eval = None
+            if primary_score_config:
+                score_id_for_eval = primary_score_config.get('id')
+                score_version_id_for_eval = primary_score_config.get('championVersionId')
+                logging.info(f"Using score ID: {score_id_for_eval} and score version ID: {score_version_id_for_eval}")
+            
+            # Instantiate AccuracyEvaluation
+            logging.info("Instantiating AccuracyEvaluation...")
+            # Ensure scorecard_id is passed correctly
+            sc_id_for_eval = scorecard_id if scorecard_record else getattr(scorecard_instance, 'id', None)
+            # Ensure account_id is passed correctly
+            acc_id_for_eval = account.id if account else None
+            # Ensure evaluation_id is passed correctly (from created record or task metadata)
+            eval_id_for_eval = evaluation_record.id if evaluation_record else None
+            if not eval_id_for_eval and task and task.metadata and 'evaluation_id' in task.metadata:
+                eval_id_for_eval = task.metadata['evaluation_id']
+            
+            accuracy_eval = AccuracyEvaluation(
+                scorecard_name=scorecard_name_resolved,
+                scorecard=scorecard_instance,
+                labeled_samples=labeled_samples_data,
+                number_of_texts_to_sample=len(labeled_samples_data), # Use actual sample count
+                sampling_method='provided', # Indicate samples are already provided
+                random_seed=random_seed,
+                subset_of_score_names=subset_of_score_names,
+                visualize=visualize,
+                task_id=task_id,
+                evaluation_id=eval_id_for_eval,
+                account_id=acc_id_for_eval,
+                scorecard_id=sc_id_for_eval,
+                score_id=score_id_for_eval, # Pass score_id from primary score config
+                score_version_id=score_version_id_for_eval, # Pass score_version_id from primary score config
+                # override_folder might be needed if AccuracyEvaluation uses it
+                override_folder=f"./overrides/{scorecard_name_resolved}" # Example path
+            )
+            logging.info(f"AccuracyEvaluation instantiated for task {task_id} and evaluation {eval_id_for_eval}")
+
+            # Advance to Processing stage
+            if tracker:
+                tracker.advance_stage()
+                logging.info("Entered Processing stage: Running AccuracyEvaluation")
+
+            # Run the evaluation using the AccuracyEvaluation instance
+            final_metrics = await accuracy_eval.run(tracker=tracker)
+            logging.info(f"AccuracyEvaluation run completed. Metrics: {final_metrics}")
+
+            # --- END REFACTOR ---
+
+            # Advance to the Finalizing stage after evaluation completes
+            if tracker:
+                tracker.advance_stage()
             
             # Final update to the evaluation record
             if evaluation_record and not dry_run:
                 try:
-                    final_metrics = {
-                        "accuracy": evaluation_metrics["accuracy"],
-                        "precision": evaluation_metrics.get("precision"),
-                        "sensitivity": evaluation_metrics.get("sensitivity"),
-                        "specificity": evaluation_metrics.get("specificity"),
-                    }
+                    # Use metrics returned by AccuracyEvaluation
+                    # Format metrics for the update payload as an array of name/value objects
+                    update_payload_metrics = []
+                    if final_metrics.get("accuracy") is not None:
+                        update_payload_metrics.append({"name": "Accuracy", "value": final_metrics["accuracy"] * 100})
+                    if final_metrics.get("precision") is not None:
+                        update_payload_metrics.append({"name": "Precision", "value": final_metrics["precision"] * 100})
+                    if final_metrics.get("sensitivity") is not None:
+                        update_payload_metrics.append({"name": "Sensitivity", "value": final_metrics["sensitivity"] * 100})
+                    if final_metrics.get("specificity") is not None:
+                        update_payload_metrics.append({"name": "Specificity", "value": final_metrics["specificity"] * 100})
+
+                    # Find and extract score ID and score version ID
+                    score_id = None
+                    score_version_id = None
                     
-                    evaluation_record.update(
-                        status="COMPLETED",
-                        accuracy=evaluation_metrics["accuracy"],
-                        metrics=json.dumps(final_metrics),
-                        completedAt=datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
-                        estimatedRemainingSeconds=0
-                    )
-                    logging.info(f"Marked evaluation as COMPLETED with final accuracy: {evaluation_metrics['accuracy']:.2f}%")
+                    if primary_score_config:
+                        # Extract scoreId from the primary score configuration
+                        score_id = primary_score_config.get('id')
+                        # Extract scoreVersionId (championVersionId) from the configuration
+                        score_version_id = primary_score_config.get('championVersionId')
+                        
+                        logging.info(f"Using score ID: {score_id} and score version ID: {score_version_id}")
+
+                    # The allowed fields are documented in the GraphQL schema
+                    update_fields = {
+                        'status': "COMPLETED",
+                        'accuracy': final_metrics.get("accuracy", 0) * 100, # Use calculated accuracy
+                        'metrics': json.dumps(update_payload_metrics), # Store detailed metrics
+                        'estimatedRemainingSeconds': 0,
+                        'processedItems': len(labeled_samples_data), # Add processed items count
+                        # Add score IDs if available
+                        'scoreId': score_id,
+                        'scoreVersionId': score_version_id,
+                        # Add confusion matrix and distributions if available and needed by API
+                        'confusionMatrix': json.dumps(final_metrics.get("confusionMatrix")) if final_metrics.get("confusionMatrix") else None,
+                        'predictedClassDistribution': json.dumps(final_metrics.get("predictedClassDistribution")) if final_metrics.get("predictedClassDistribution") else None,
+                        'datasetClassDistribution': json.dumps(final_metrics.get("datasetClassDistribution")) if final_metrics.get("datasetClassDistribution") else None,
+                        # TODO: Add isDatasetClassDistributionBalanced, isPredictedClassDistributionBalanced if calculated
+                    }
+                    # Remove None values from update_fields
+                    update_fields = {k: v for k, v in update_fields.items() if v is not None}
+                    
+                    # Log all fields we're sending to help debug API errors
+                    logging.info(f"Updating evaluation with the following fields: {json.dumps(update_fields, default=str)}")
+                    
+                    # Make the update request
+                    try:
+                        evaluation_record.update(**update_fields)
+                        logging.info(f"Marked evaluation as COMPLETED with final accuracy: {update_payload_metrics[0]['value']:.2f}%")
+                    except Exception as graphql_err:
+                        # Log detailed error information for GraphQL errors
+                        logging.error(f"GraphQL error updating evaluation: {str(graphql_err)}")
+                        if hasattr(graphql_err, 'errors'):
+                            for error in getattr(graphql_err, 'errors'):
+                                logging.error(f"GraphQL error details: {error}")
+                        else:
+                            logging.error(f"No detailed GraphQL errors available")
+                        raise
                 except Exception as e:
-                    logging.warning(f"Could not complete evaluation record: {str(e)}")
+                    logging.error(f"Could not complete evaluation record - error details: {str(e)}")
+                    # Print more details if possible
+                    if hasattr(e, 'errors'):
+                        logging.error(f"GraphQL errors: {getattr(e, 'errors')}")
             elif evaluation_record and dry_run:
                 # Log the final update that would happen in dry run mode
-                logging.info(f"[DRY RUN] Would mark evaluation as COMPLETED with final accuracy: {evaluation_metrics['accuracy']:.2f}%")
+                logging.info(f"[DRY RUN] Would mark evaluation as COMPLETED with final accuracy: {final_metrics['accuracy']:.2f}%")
                 # Update mock properties
                 evaluation_record.status = "COMPLETED"
-                evaluation_record.accuracy = evaluation_metrics["accuracy"]
+                evaluation_record.accuracy = final_metrics["accuracy"]
                 evaluation_record.completedAt = datetime.now(timezone.utc).isoformat()
                 evaluation_record.estimatedRemainingSeconds = 0
             
-            # Finalize task if needed
-            if task and tracker and not dry_run:
-                try:
-                    tracker.complete_with_message(f"Completed accuracy evaluation with {len(all_results)} samples")
-                    logging.info(f"Marked task as completed: {task.id}")
-                except Exception as e:
-                    logging.warning(f"Could not complete task: {str(e)}")
-            elif task and dry_run:
-                logging.info(f"[DRY RUN] Would mark task as completed with message: Completed accuracy evaluation with {len(all_results)} samples")
-            
             # Display final results summary
             logging.info(f"\n{'='*50}\nEVALUATION RESULTS\n{'='*50}")
-            logging.info(f"Completed evaluation of {len(all_results)} samples")
-            logging.info(f"Overall accuracy: {evaluation_metrics['accuracy']:.2f}%")
-            logging.info(f"Precision: {evaluation_metrics.get('precision', 'N/A')}")
-            logging.info(f"Sensitivity: {evaluation_metrics.get('sensitivity', 'N/A')}")
-            logging.info(f"Specificity: {evaluation_metrics.get('specificity', 'N/A')}")
+            logging.info(f"Completed evaluation of {len(labeled_samples_data)} samples")
+            logging.info(f"Overall accuracy: {final_metrics['accuracy']:.2f}%")
+            logging.info(f"Precision: {final_metrics.get('precision', 'N/A')}")
+            logging.info(f"Sensitivity: {final_metrics.get('sensitivity', 'N/A')}")
+            logging.info(f"Specificity: {final_metrics.get('specificity', 'N/A')}")
             
             if dry_run:
                 logging.info("\n[DRY RUN SUMMARY]")
                 logging.info("Dry run completed successfully - no database operations were performed")
                 logging.info(f"Scorecard loaded: {scorecard}")
-                logging.info(f"Total scores evaluated: {len(single_scores)}")
-                logging.info(f"Total samples processed: {len(all_results)}")
+                logging.info(f"Total scores evaluated: {len(subset_of_score_names)}")
+                logging.info(f"Total samples processed: {len(labeled_samples_data)}")
                 logging.info("To run with actual database operations, remove the --dry-run flag")
 
         except Exception as e:
             logging.error(f"Evaluation failed: {str(e)}")
-            if task and not dry_run:
-                task.fail_processing(str(e))
+            if task and not dry_run and tracker:
+                # Use tracker to fail the task properly
+                tracker.fail_processing(str(e), traceback.format_exc())
+            elif task and not dry_run and not tracker:
+                # Fallback if tracker wasn't initialized
+                 task.update(status='FAILED', errorMessage=str(e), errorDetails=traceback.format_exc())
             elif task and dry_run:
                 logging.info(f"[DRY RUN] Would mark task as failed with error: {str(e)}")
+            # Ensure the exception is re-raised to be caught by the outer try/except
             raise
         finally:
-            if experiment:
-                await experiment.cleanup()
+            # Cleanup is handled by AccuracyEvaluation's __aexit__ if used as context manager
+            # Or we might need manual cleanup if not using context manager
+            # if accuracy_eval:
+            #     await accuracy_eval.cleanup()
+            pass # Keep simple for now
 
     # Create and run the event loop for non-dry-run mode
     try:
@@ -852,7 +928,7 @@ def get_data_driven_samples(
     score_module = importlib.import_module(score_module_path)
     score_class = getattr(score_module, score_class_name)
 
-    score_config['scorecard_name'] = scorecard_instance.name
+    score_config['scorecard_name'] = scorecard_name
     score_config['score_name'] = score_name
     score_instance = score_class(**score_config)
 
@@ -962,190 +1038,133 @@ def get_csv_samples(csv_filename):
     df = pd.read_csv(csv_filename)
     return df.to_dict('records')
 
-@evaluate.command()
-@click.option('--scorecard', required=True, help='Scorecard identifier (ID, name, key, or external ID)')
-@click.option('--yaml', is_flag=True, help='Load scorecard from local YAML file instead of the API')
-@click.option('--number-of-samples', default=100, help='Number of samples to evaluate')
-@click.option('--subset-of-scores', default='', help='Comma-separated list of score names to evaluate')
-@click.option('--max-workers', default=10, help='Maximum number of parallel workers')
-@click.option('--dry-run', is_flag=True, help='Skip database operations (for testing API loading)')
-def distribution(
-    scorecard: str,
-    yaml: bool,
-    number_of_samples: int,
-    subset_of_scores: str,
-    max_workers: int,
-    dry_run: bool
-):
+# *** START ADDITION: Helper functions for JSON serializability ***
+def is_json_serializable(obj):
+    try:
+        # Use a basic check first for common types
+        if isinstance(obj, (str, int, float, bool, type(None))):
+             return True
+        # Try dumping for more complex structures
+        json.dumps(obj)
+        return True
+    except (TypeError, OverflowError):
+        return False
+
+def check_dict_serializability(d, path=""):
+    non_serializable_paths = []
+    if not isinstance(d, dict):
+        if not is_json_serializable(d):
+            # Log the problematic object type directly
+            logging.warning(f"Non-serializable object found at path '{path if path else '<root>'}': type={type(d)}")
+            non_serializable_paths.append(path if path else "<root>")
+        return non_serializable_paths
+
+    for k, v in d.items():
+        current_path = f"{path}.{k}" if path else k
+        if isinstance(v, dict):
+            non_serializable_paths.extend(check_dict_serializability(v, current_path))
+        elif isinstance(v, list):
+            for i, item in enumerate(v):
+                item_path = f"{current_path}[{i}]"
+                # Check items within the list recursively for dicts/lists, or directly for primitives
+                if isinstance(item, dict):
+                    non_serializable_paths.extend(check_dict_serializability(item, item_path))
+                elif isinstance(item, list):
+                     # Handle nested lists if necessary, though less common in typical results
+                     pass # Or add recursive list check if needed
+                elif not is_json_serializable(item):
+                    logging.warning(f"Non-serializable list item found at path '{item_path}': type={type(item)}")
+                    non_serializable_paths.append(item_path)
+        elif not is_json_serializable(v):
+            # Log the problematic object type directly
+            logging.warning(f"Non-serializable value found at path '{current_path}': type={type(v)}")
+            non_serializable_paths.append(current_path)
+            
+    return non_serializable_paths
+# *** END ADDITION ***
+
+def score_text_wrapper(scorecard_instance, text, score_name, scorecard_name=None, executor=None):
+    """Wrapper to handle the scoring of text with proper error handling and logging.
+    
+    This function is called from within an async context (_run_accuracy), 
+    so we expect an event loop to be running. We use ThreadPoolExecutor to run 
+    the async score_entire_text method in a separate thread to avoid nested loop issues.
     """
-    Evaluate the distribution of scores within a scorecard.
-    """
-    # If dry-run is enabled, provide a simplified successful execution path
-    if dry_run:
-        # Log the dry run mode message
-        logging.info("Dry run mode enabled - database operations will be skipped")
-        console.print("[bold green]Dry run mode enabled - database operations will be skipped[/bold green]")
+    import asyncio
+    import inspect
+    import concurrent.futures
+    logging.debug(f"Attempting to score text with score: {score_name}")
+    
+    # Create metadata dictionary
+    metadata = {"scorecard_name": scorecard_name} if scorecard_name else {}
+    
+    try:
+        # Get the coroutine from score_entire_text function
+        score_entire_text_coroutine = scorecard_instance.score_entire_text(
+                           text=text, 
+                           subset_of_score_names=[score_name],
+                           metadata=metadata)
         
-        # Log the parameters that would be used
-        console.print(f"[bold]Scorecard:[/bold] {scorecard}")
-        console.print(f"[bold]Loading from:[/bold] {'YAML files' if yaml else 'API'}")
-        console.print(f"[bold]Number of samples:[/bold] {number_of_samples}")
-        if subset_of_scores:
-            console.print(f"[bold]Target scores:[/bold] {subset_of_scores}")
+        # Check if we got a coroutine (async function result)
+        if inspect.iscoroutine(score_entire_text_coroutine):
+            logging.debug(f"Detected coroutine result. Running in ThreadPoolExecutor.")
+            # Since we are called from within a running loop (_run_accuracy),
+            # run the coroutine in a separate thread using asyncio.run.
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                future = pool.submit(asyncio.run, score_entire_text_coroutine)
+                result = future.result()
         else:
-            console.print("[bold]Target scores:[/bold] All scores in scorecard")
-        console.print(f"[bold]Max workers:[/bold] {max_workers}")
+            # This case should ideally not happen if score_entire_text is always async
+            logging.warning(f"Expected coroutine from score_entire_text but got direct result")
+            result = score_entire_text_coroutine
         
-        # Simulate successful completion
-        console.print("\n[bold green]Dry run completed successfully.[/bold green]")
-        console.print("[dim]No actual evaluation or database operations were performed.[/dim]")
-        console.print("[dim]To run with actual database operations, remove the --dry-run flag.[/dim]")
-        return
-    
-    # Original implementation
-    start_time = time.time()
-    logging.info(f"Starting distribution evaluation for Scorecard {scorecard} at {time.strftime('%H:%M:%S')}")
+        # Process the result
+        if result is None:
+            logging.warning(f"No result returned for score '{score_name}'")
+            return {"error": "No result returned", "value": "ERROR"}
+            
+        # Extract the specific score result from the returned dictionary
+        if isinstance(result, dict):
+            # Find the score result for our specific score name
+            # The result dict keys are score IDs, values are Score.Result objects
+            for score_id, score_result_obj in result.items():
+                # Access the name from the Result object's parameters if available
+                score_result_name = None
+                if hasattr(score_result_obj, 'parameters') and hasattr(score_result_obj.parameters, 'name'):
+                    score_result_name = score_result_obj.parameters.name
+                elif hasattr(score_result_obj, 'name'): # Fallback if name is directly on the object
+                     score_result_name = score_result_obj.name
 
-    # Load the scorecard either from YAML or API
-    if yaml:
-        # Load from YAML (legacy approach)
-        logging.info(f"Loading scorecard '{scorecard}' from local YAML files")
-        try:
-            logging.debug("Calling Scorecard.load_and_register_scorecards('scorecards/')")
-            Scorecard.load_and_register_scorecards('scorecards/')
-            logging.debug(f"Successfully loaded scorecard YAML files from scorecards/ directory")
-            
-            logging.debug(f"Looking up scorecard '{scorecard}' in scorecard_registry")
-            scorecard_class = scorecard_registry.get(scorecard)
-            
-            if scorecard_class is None:
-                error_msg = f"Scorecard with name '{scorecard}' not found."
-                logging.error(error_msg)
-                raise ValueError(error_msg)
+                if score_result_name == score_name:
+                    # Ensure the returned object is a Score.Result instance or similar
+                    if hasattr(score_result_obj, 'value'):
+                         return score_result_obj
+                    else:
+                         # If it doesn't look like a Result object, wrap it or return error
+                         logging.warning(f"Found matching score name '{score_name}' but object type is unexpected: {type(score_result_obj)}")
+                         return {"error": "Unexpected result type", "value": "ERROR", "data": str(score_result_obj)}
+
+            # If no exact match found by name, log and return error (or first result as fallback?)
+            logging.warning(f"Could not find result for score name '{score_name}' in the returned dictionary.")
+            # Option 1: Return error if exact name not found
+            return {"error": f"Score name '{score_name}' not found in results", "value": "ERROR"}
+            # Option 2: Return the first result as a fallback (uncomment if preferred)
+            # if result:
+            #     first_key = next(iter(result))
+            #     logging.debug(f"Returning first available result as fallback.")
+            #     return result[first_key]
+            # else:
+            #     return {"error": "Empty result dictionary", "value": "ERROR"}
+        elif hasattr(result, 'value'): # Handle case where a single Result object is returned directly
+             return result
+        else:
+            # Handle unexpected result types
+            logging.warning(f"Unexpected result type from score_entire_text: {type(result)}")
+            return {"error": "Unexpected result type", "value": "ERROR", "data": str(result)}
                 
-            logging.debug(f"Instantiating scorecard class: {scorecard_class.__name__}")
-            scorecard_instance = scorecard_class(scorecard=scorecard)
-            logging.info(f"Using scorecard {scorecard} with class {scorecard_instance.__class__.__name__}")
-        except Exception as e:
-            error_msg = f"Error loading scorecard from YAML: {str(e)}"
-            logging.error(error_msg)
-            raise ValueError(error_msg)
-    else:
-        # Load from API (new approach)
-        target_score_names = subset_of_scores.split(',') if subset_of_scores else None
-        try:
-            scorecard_instance = load_scorecard_from_api(scorecard, target_score_names)
-        except Exception as e:
-            logging.error(f"Failed to load scorecard from API: {str(e)}")
-            return
-
-    # Extract score names to evaluate
-    if subset_of_scores:
-        scores_to_evaluate = subset_of_scores.split(',')
-    else:
-        scores_to_evaluate = [score['name'] for score in scorecard_instance.scores]
-        
-    logging.info(f"Evaluating {len(scores_to_evaluate)} scores: {', '.join(scores_to_evaluate)}")
-    
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_score = {executor.submit(evaluate_score_distribution, score_name, scorecard_instance, number_of_samples): score_name for score_name in scores_to_evaluate}
-        for future in concurrent.futures.as_completed(future_to_score):
-            score_name = future_to_score[future]
-            try:
-                future.result()
-            except Exception as e:
-                logging.error(f"Error evaluating score {score_name}: {str(e)}")
-                traceback.print_exc()
-
-    end_time = time.time()
-    logging.info(f"Distribution evaluation completed in {end_time - start_time:.2f} seconds")
-
-def evaluate_score_distribution(score_name, scorecard_instance, number_of_samples):
-    start_time = time.time()
-    logging.info(f"Started evaluating distribution for Score {score_name} at {time.strftime('%H:%M:%S')}")
-    
-    score_configuration = next((score for score in scorecard_instance.scores if score['name'] == score_name), {})
-
-    if not score_configuration:
-        # Get the scorecard name safely from either properties or method
-        scorecard_name = getattr(scorecard_instance, 'properties', {}).get('name') or scorecard_instance.__class__.__name__
-        logging.error(f"Score with name '{score_name}' not found in scorecard '{scorecard_name}'.")
-        return
-
-    score_class_name = score_configuration['class']
-    score_module_path = f'plexus.scores.{score_class_name}'
-    score_module = importlib.import_module(score_module_path)
-    score_class = getattr(score_module, score_class_name)
-
-    if not isinstance(score_class, type):
-        logging.error(f"{score_class_name} is not a class.")
-        return
-
-    # Get the scorecard name safely from either properties or method
-    scorecard_name = getattr(scorecard_instance, 'properties', {}).get('name') or scorecard_instance.__class__.__name__
-    
-    # Make a copy of the score configuration to avoid modifying the original
-    score_config_copy = score_configuration.copy()
-    score_config_copy['scorecard_name'] = scorecard_name
-    score_config_copy['score_name'] = score_name
-    
-    score_instance = score_class(**score_config_copy)
-
-    score_instance.record_configuration(score_config_copy)
-
-    logging.info(f"Loading data for {score_name} at {time.strftime('%H:%M:%S')}")
-    score_instance.load_data(data=score_config_copy['data'])
-    
-    logging.info(f"Processing data for {score_name} at {time.strftime('%H:%M:%S')}")
-    score_instance.process_data()
-
-    logging.info(f"Starting predictions for {score_name} at {time.strftime('%H:%M:%S')}")
-    sample_rows = score_instance.dataframe.sample(n=number_of_samples)
-    predictions = []
-
-    for _, row in sample_rows.iterrows():
-        row_dictionary = row.to_dict()
-        text = row_dictionary.get('text', '')
-        metadata_str = row_dictionary.get('metadata', '{}')
-        metadata = json.loads(metadata_str)
-        model_input_class = getattr(score_class, 'Input')
-        # Add required metadata for LangGraphScore
-        if score_class_name == 'LangGraphScore':
-            account_key = os.getenv('PLEXUS_ACCOUNT_KEY')
-            if not account_key:
-                raise ValueError("PLEXUS_ACCOUNT_KEY not found in environment")
-                
-            # Get scorecard key safely
-            scorecard_key = getattr(scorecard_instance, 'properties', {}).get('key') or getattr(scorecard_instance, 'key', None)
-            
-            metadata.update({
-                'account_key': account_key,
-                'scorecard_key': scorecard_key,
-                'score_name': score_name
-            })
-        prediction_result = score_instance.predict(
-            model_input_class(
-                text=text,
-                metadata=metadata
-            )
-        )
-        predictions.append(prediction_result)
-
-    answer_counts = Counter(pred.score for pred in predictions)
-    
-    logging.info(f"\nResults for {score_name}:")
-    logging.info(f"Total samples: {number_of_samples}")
-    logging.info(f"Yes answers: {answer_counts['Yes']}")
-    logging.info(f"No answers: {answer_counts['No']}")
-    
-    yes_percentage = (answer_counts['Yes'] / number_of_samples) * 100
-    no_percentage = (answer_counts['No'] / number_of_samples) * 100
-    
-    logging.info(f"Yes percentage: {yes_percentage:.2f}%")
-    logging.info(f"No percentage: {no_percentage:.2f}%")
-    
-    end_time = time.time()
-    logging.info(f"Finished {score_name} at {time.strftime('%H:%M:%S')}. Time taken: {end_time - start_time:.2f} seconds")
+    except Exception as e:
+        logging.error(f"Error in score_text_wrapper: {str(e)}", exc_info=True)
+        return {"error": str(e), "value": "ERROR"}
 
 @click.group()
 def evaluations():
@@ -1278,7 +1297,7 @@ def create(
         if total_items is not None: input_data['totalItems'] = total_items
         if processed_items is not None: input_data['processedItems'] = processed_items
         if error_message: input_data['errorMessage'] = error_message
-        if error_details: input_data['errorDetails'] = error_details
+        if error_details is not None: input_data['errorDetails'] = error_details
         if confusion_matrix: input_data['confusionMatrix'] = confusion_matrix
         
         # Create the evaluation
