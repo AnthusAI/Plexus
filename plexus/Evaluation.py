@@ -187,8 +187,8 @@ class Evaluation:
                     self.logging.info(f"Using scorecard ID: {self.scorecard.id}")
                     scorecard_obj = DashboardScorecard.get_by_id(self.scorecard.id, self.dashboard_client)
                 else:
-                    self.logging.info(f"Looking up scorecard by name: {self.scorecard.name}")
-                    scorecard_obj = DashboardScorecard.get_by_name(self.scorecard.name, self.dashboard_client)
+                    self.logging.info(f"Looking up scorecard by name: {self.scorecard_name}")
+                    scorecard_obj = DashboardScorecard.get_by_name(self.scorecard_name, self.dashboard_client)
                 
                 if scorecard_obj:
                     self.logging.info(f"Found scorecard: {scorecard_obj.name} ({scorecard_obj.id})")
@@ -352,78 +352,150 @@ class Evaluation:
         wait=wait_exponential(multiplier=1, min=4, max=10)
     )
     async def log_to_dashboard(self, metrics, status="RUNNING"):
-        """Log metrics to Plexus Dashboard with retry logic"""
-        if not self.experiment_id:
-            self.logging.warning("Experiment ID not available - skipping metrics update")
+        """Log metrics to the Plexus Dashboard with retry logic"""
+        if not self.task_id:
+            logging.info("No task_id provided, skipping metrics logging")
             return
-        
-        self.logging.info(f"Starting dashboard update for experiment {self.experiment_id}")
-        
-        try:
-            elapsed_seconds = int((datetime.now(timezone.utc) - self.started_at).total_seconds())
-            
-            # Convert metrics to percentages for the dashboard
-            metrics_list = [
-                {"name": "Accuracy", "value": metrics["accuracy"] * 100},
-                {"name": "Precision", "value": metrics["precision"] * 100},
-                {"name": "Sensitivity", "value": metrics["sensitivity"] * 100},
-                {"name": "Specificity", "value": metrics["specificity"] * 100}
-            ]
-            
-            # Format confusion matrix data for the API
-            confusion_matrix_data = metrics["confusion_matrices"][0]  # Get first score's matrix
-            matrix_data = {
-                "matrix": confusion_matrix_data["matrix"],
-                "labels": confusion_matrix_data["labels"]
-            }
-            
-            # Calculate total items based on status
-            if status == "COMPLETED":
-                # For final update, use actual total from distribution data
-                total_predictions = 0
-                if metrics["predicted_distribution"]:
-                    first_score = metrics["predicted_distribution"][0]["score"]
-                    total_predictions = sum(item["count"] for item in metrics["predicted_distribution"] 
-                                         if item["score"] == first_score)
-            else:
-                # During evaluation, use the initial sample size
-                total_predictions = self.number_of_texts_to_sample
-            
-            update_params = {
-                "id": self.experiment_id,
-                "status": status,
-                "metrics": json.dumps(metrics_list),
-                "processedItems": self.processed_items,
-                "totalItems": total_predictions,
-                "elapsedSeconds": elapsed_seconds,
-                "estimatedRemainingSeconds": int(elapsed_seconds * (total_predictions - self.processed_items) / self.processed_items) if self.processed_items > 0 else total_predictions,
-                "accuracy": metrics["accuracy"] * 100,
-                "confusionMatrix": json.dumps(matrix_data),
-                "predictedClassDistribution": json.dumps(metrics["predicted_distribution"]),
-                "datasetClassDistribution": json.dumps(metrics["actual_distribution"])
-            }
 
-            if self.task_id:  # Ensure taskId is included in all updates
-                update_params["taskId"] = self.task_id
+        class MethodSafeEncoder(json.JSONEncoder):
+            """Custom JSON encoder that safely handles methods and other non-serializable objects."""
+            def default(self, obj):
+                if inspect.ismethod(obj) or inspect.isfunction(obj) or callable(obj):
+                    return f"<method: {obj.__name__ if hasattr(obj, '__name__') else str(obj)}>"
+                elif hasattr(obj, 'tolist') and callable(obj.tolist):
+                    # Handle numpy arrays and similar objects with tolist method
+                    return obj.tolist()
+                elif hasattr(obj, '__dict__'):
+                    # Handle custom objects by converting to dict when possible
+                    try:
+                        return {k: v for k, v in obj.__dict__.items() 
+                                if not k.startswith('_') and not callable(v)}
+                    except (TypeError, AttributeError):
+                        return str(obj)
+                else:
+                    try:
+                        return super().default(obj)
+                    except (TypeError, OverflowError):
+                        return str(obj)
+
+        def safe_json_dumps(obj):
+            """Convert object to JSON string using our safe encoder"""
+            try:
+                return json.dumps(obj, cls=MethodSafeEncoder)
+            except (TypeError, OverflowError) as e:
+                # If we still have serialization errors, try to identify the problematic paths
+                problematic_paths = []
+                
+                def find_problematic_paths(obj, path=""):
+                    """Recursively identify paths to non-serializable objects"""
+                    if obj is None or isinstance(obj, (str, int, float, bool)):
+                        return []
+                    
+                    problems = []
+                    
+                    # Check if this object itself is problematic
+                    try:
+                        json.dumps(obj)
+                    except (TypeError, OverflowError):
+                        problems.append(path)
+                    
+                    # Recursively check components
+                    if isinstance(obj, dict):
+                        for k, v in obj.items():
+                            problems.extend(find_problematic_paths(v, f"{path}.{k}" if path else k))
+                    elif isinstance(obj, (list, tuple)):
+                        for i, item in enumerate(obj):
+                            problems.extend(find_problematic_paths(item, f"{path}[{i}]"))
+                    elif hasattr(obj, '__dict__'):
+                        try:
+                            for k, v in obj.__dict__.items():
+                                if not k.startswith('_'):
+                                    problems.extend(find_problematic_paths(v, f"{path}.{k}" if path else k))
+                        except Exception:
+                            # If we can't access __dict__ attributes, mark the whole object
+                            problems.append(path)
+                    
+                    return problems
+                
+                problematic_paths = find_problematic_paths(obj)
+                logging.error(f"JSON serialization error: {e}. Problematic paths: {problematic_paths}")
+                
+                # Try again with a simpler encoder that just converts everything to strings
+                cleaned_obj = {}
+                for k, v in obj.items() if isinstance(obj, dict) else []:
+                    try:
+                        json.dumps({k: v})
+                        cleaned_obj[k] = v
+                    except (TypeError, OverflowError):
+                        cleaned_obj[k] = str(v)
+                
+                return json.dumps(cleaned_obj)
+
+        # Create a fresh client for each update
+        client = PlexusDashboardClient()
+        try:
+            # Construct the mutation for updateEvaluation
+            mutation = self._get_update_mutation()
             
-            variables = {
-                "input": update_params
-            }
+            # Construct the variables
+            variables = self._get_update_variables(metrics, status)
             
-            self.logging.info("Executing dashboard update...")
-            # Use synchronous execution during cleanup, async otherwise
-            if status in ["COMPLETED", "FAILED"]:
-                self.dashboard_client.execute(self._get_update_mutation(), variables)
-            else:
-                await asyncio.to_thread(self.dashboard_client.execute, self._get_update_mutation(), variables)
-            self.logging.info("Successfully completed dashboard update")
-            
+            # Ensure we have valid JSON before sending
+            try:
+                # Serialize variables safely and log them for debugging
+                serialized_variables = safe_json_dumps(variables)
+                clean_variables = json.loads(serialized_variables)
+                
+                logging.debug(f"Updating evaluation with variables: {json.dumps(clean_variables, indent=2)}")
+                
+                # Execute the mutation with proper client handling
+                # Use asyncio.to_thread for the synchronous execute method
+                result = await asyncio.to_thread(client.execute, mutation, clean_variables)
+                
+                # Log the success
+                logging.info(f"Successfully updated evaluation metrics for task {self.task_id}")
+                return result
+                
+            except json.JSONDecodeError as je:
+                logging.error(f"JSON serialization error: {je}. Unable to prepare variables for API call.")
+                raise
+                
         except Exception as e:
-            self.logging.error(f"Error updating dashboard experiment: {e}")
+            # Log full error details including the mutation and variables
+            logging.error(f"Error updating evaluation metrics for task {self.task_id}: {str(e)}")
+            if variables:
+                logging.error(f"Failed mutation variables: {variables}")
+            
+            # Re-raise for retry
             raise
+            
+        finally:
+            # Ensure client is properly closed
+            if hasattr(client, 'close') and callable(client.close):
+                try:
+                    await client.close()
+                except Exception as e:
+                    logging.warning(f"Error closing GraphQL client: {str(e)}")
 
     def calculate_metrics(self, results):
-        logging.info(f"\nStarting metrics calculation with {len(results)} results")
+        # --- BEGIN NEW LOGGING ---
+        self.logging.info(f"--- Entering calculate_metrics with {len(results)} results ---")
+        if not results:
+            self.logging.warning("calculate_metrics received an empty list of results.")
+            # Return default/empty metrics to avoid crashing
+            return {
+                "accuracy": 0,
+                "precision": 0,
+                "sensitivity": 0,
+                "specificity": 0,
+                "predicted_distribution": [],
+                "actual_distribution": [],
+                "confusion_matrices": []
+            }
+        # --- END NEW LOGGING ---
+
+        # Use self.logging instead of logging globally
+        self.logging.info(f"\nStarting metrics calculation with {len(results)} results")
         predicted_distributions = {}
         actual_distributions = {}
         confusion_matrices = {}
@@ -437,20 +509,43 @@ class Evaluation:
             primary_score_name = self.subset_of_score_names[0]
         
         # First pass: build distributions and confusion matrices
+        logged_results_count = 0
         for result in results:
-            logging.debug(f"\nProcessing result for form_id: {result['form_id']}")
+            logging.info(f"\nProcessing result for form_id: {result['form_id']}")
             
             for score_identifier, score_result in result['results'].items():
+                # --- Add logging before skips ---
+                self.logging.info(f"  Processing score_identifier: {score_identifier}")
+                if hasattr(score_result, 'value'):
+                    self.logging.info(f"    Score value: {score_result.value}")
+                else:
+                    self.logging.warning(f"    Score result object has no 'value' attribute: {score_result}")
+                    continue # Skip if value is missing
+
                 # Skip if the score result is an error
                 if isinstance(score_result.value, str) and score_result.value == "Error":
+                    self.logging.warning(f"  Skipping metrics calculation for error result: {score_identifier}")
                     continue
+
+                # Ensure parameters attribute exists before accessing name
+                if not hasattr(score_result, 'parameters') or not hasattr(score_result.parameters, 'name'):
+                    self.logging.warning(f"  Skipping metrics calculation for result without valid parameters/name: {score_identifier}")
+                    continue
+                score_name = score_result.parameters.name
+                self.logging.info(f"    Score name resolved to: {score_name}")
 
                 # Skip if this is a dependency score and not our primary score
-                score_name = score_result.parameters.name
                 if primary_score_name and score_name != primary_score_name:
-                    logging.info(f"Skipping metrics for dependency score: {score_name}")
+                    logging.info(f"  Skipping metrics for dependency score: {score_name} (Primary: {primary_score_name})")
                     continue
 
+                # Ensure metadata and human_label exist before accessing
+                if not hasattr(score_result, 'metadata') or 'human_label' not in score_result.metadata:
+                    self.logging.warning(f"  Skipping metrics calculation for result missing metadata or human_label: {score_identifier}")
+                    continue
+                # --- End logging ---
+
+                # Standardize and prepare predicted & actual values
                 predicted = str(score_result.value).lower().strip()
                 actual = str(score_result.metadata['human_label']).lower().strip()
                 
@@ -458,13 +553,24 @@ class Evaluation:
                 predicted = 'na' if predicted in ['', 'nan', 'n/a', 'none', 'null'] else predicted
                 actual = 'na' if actual in ['', 'nan', 'n/a', 'none', 'null'] else actual
                 
-                logging.debug(f"Score: {score_name}")
-                logging.debug(f"Predicted: '{predicted}'")
-                logging.debug(f"Actual: '{actual}'")
-                logging.debug(f"Correct: {score_result.metadata['correct']}")
+                # Log the first 10 results for visual inspection
+                if logged_results_count < 10:
+                    self.logging.info(f"  Result {logged_results_count + 1}: Form ID: {result.get('form_id', 'N/A')}, Score: {score_name}, Predicted: '{predicted}', Actual: '{actual}'")
+                    logged_results_count += 1
+
+                self.logging.info(f"Score: {score_name}")
+                self.logging.info(f"Predicted: '{predicted}'")
+                self.logging.info(f"Actual: '{actual}'")
                 
-                # Update total correct and predictions - only for the primary score
-                if score_result.metadata['correct']:
+                # Determine correctness - check if predicted value exactly matches the actual value
+                is_correct = predicted == actual
+                self.logging.info(f"Correct: {is_correct}")
+                
+                # Update score_result metadata to ensure correct value is set
+                score_result.metadata['correct'] = is_correct
+                
+                # Update total correct and predictions
+                if is_correct:
                     total_correct += 1
                 total_predictions += 1
                 
@@ -513,7 +619,11 @@ class Evaluation:
         # If we have binary classification data (yes/no), calculate detailed metrics
         for score_name, matrix_data in confusion_matrices.items():
             labels = sorted(list(matrix_data['labels']))
+            # --- BEGIN NEW LOGGING ---
+            self.logging.info(f"Checking labels for score '{score_name}' for binary metrics: {labels}")
+            # --- END NEW LOGGING ---
             if len(labels) == 2 and 'yes' in labels and 'no' in labels:
+                self.logging.info(f"Calculating binary metrics for score '{score_name}'") # Added logging
                 tp = matrix_data['matrix'].get('yes', {}).get('yes', 0)
                 tn = matrix_data['matrix'].get('no', {}).get('no', 0)
                 fp = matrix_data['matrix'].get('no', {}).get('yes', 0)
@@ -523,10 +633,27 @@ class Evaluation:
                 sensitivity = tp / (tp + fn) if (tp + fn) > 0 else 0
                 specificity = tn / (tn + fp) if (tn + fp) > 0 else 0
                 break  # Use the first binary score found for these metrics
+            else: # Added logging
+                self.logging.info(f"Labels for score '{score_name}' do not match binary criteria ['yes', 'no']. Skipping binary metrics calculation for this score.")
 
-        # Format confusion matrices for API
-        formatted_confusion_matrices = []
-        for score_name, matrix_data in confusion_matrices.items():
+        # Format the confusion matrix for the primary score (or first score) for the API
+        primary_confusion_matrix_dict = None
+        # Determine primary score name again for clarity
+        primary_score_name_for_cm = None
+        if self.subset_of_score_names and len(self.subset_of_score_names) == 1:
+            primary_score_name_for_cm = self.subset_of_score_names[0]
+
+        target_score_name = primary_score_name_for_cm
+        if target_score_name and target_score_name in confusion_matrices:
+            matrix_data = confusion_matrices[target_score_name]
+        elif confusion_matrices: # Fallback to the first matrix if primary not found or not set
+            first_score_name = next(iter(confusion_matrices))
+            matrix_data = confusion_matrices[first_score_name]
+            target_score_name = first_score_name # Update target name for logging
+        else:
+            matrix_data = None # No matrices calculated
+
+        if matrix_data:
             labels = sorted(list(matrix_data['labels']))
             matrix = []
             
@@ -538,18 +665,22 @@ class Evaluation:
             for i, actual_label in enumerate(labels):
                 for j, predicted_label in enumerate(labels):
                     matrix[i][j] = matrix_data['matrix'].get(actual_label, {}).get(predicted_label, 0)
-            
-            formatted_confusion_matrices.append({
-                "score_name": score_name,
+
+            primary_confusion_matrix_dict = {
                 "matrix": matrix,
                 "labels": labels
-            })
-            
-            # Log the confusion matrix for debugging
-            logging.info(f"\nConfusion Matrix for {score_name}:")
-            logging.info(f"Labels: {labels}")
+            }
+            self.logging.info(f"\nSelected Confusion Matrix for API (Score: {target_score_name}):")
+            self.logging.info(f"Labels: {labels}")
             for i, row in enumerate(matrix):
-                logging.info(f"{labels[i]}: {row}")
+                self.logging.info(f"{labels[i]}: {row}")
+        else:
+            # Create a default empty matrix if none were generated
+            self.logging.warning("No confusion matrix data generated, creating default structure.")
+            primary_confusion_matrix_dict = {
+                "matrix": [[0, 0], [0, 0]],
+                "labels": ['yes', 'no'] # Default labels
+            }
 
         # Format distributions for API - now including score names in the distribution
         predicted_label_distributions = []
@@ -575,12 +706,11 @@ class Evaluation:
                 })
 
         # Ensure we have at least one entry in each required field
-        if not formatted_confusion_matrices:
-            formatted_confusion_matrices.append({
-                "score_name": primary_score_name or self.score_names()[0],
+        if not primary_confusion_matrix_dict:
+            primary_confusion_matrix_dict = {
                 "matrix": [[0, 0], [0, 0]],
                 "labels": ['yes', 'no']
-            })
+            }
         
         if not predicted_label_distributions:
             predicted_label_distributions.append({
@@ -598,27 +728,43 @@ class Evaluation:
                 "percentage": 0
             })
 
-        logging.info("\nCalculated metrics:")
-        logging.info(f"Total predictions: {total_predictions}")
-        logging.info(f"Total correct: {total_correct}")
-        logging.info(f"Accuracy: {accuracy}")
-        logging.info(f"Precision: {precision}")
-        logging.info(f"Sensitivity: {sensitivity}")
-        logging.info(f"Specificity: {specificity}")
-        logging.info(f"Predicted distributions: {predicted_label_distributions}")
-        logging.info(f"Actual distributions: {actual_label_distributions}")
+        # --- BEGIN NEW LOGGING ---
+        self.logging.info("\n--- Calculated Metrics Summary ---")
+        self.logging.info(f"Total predictions processed: {total_predictions}")
+        self.logging.info(f"Total correct predictions: {total_correct}")
+        self.logging.info(f"Final Accuracy: {accuracy}")
+        self.logging.info(f"Final Precision: {precision}")
+        self.logging.info(f"Final Sensitivity: {sensitivity}")
+        self.logging.info(f"Final Specificity: {specificity}")
+        # --- END NEW LOGGING ---
+        # Replace previous logging block
+        # logging.info("\nCalculated metrics:")
+        # logging.info(f"Total predictions: {total_predictions}")
+        # logging.info(f"Total correct: {total_correct}")
+        # logging.info(f"Accuracy: {accuracy}")
+        # logging.info(f"Precision: {precision}")
+        # logging.info(f"Sensitivity: {sensitivity}")
+        # logging.info(f"Specificity: {specificity}")
+        # logging.info(f"Predicted distributions: {predicted_label_distributions}")
+        # logging.info(f"Actual distributions: {actual_label_distributions}")
 
         return {
             "accuracy": accuracy,
             "precision": precision,
             "sensitivity": sensitivity,
             "specificity": specificity,
-            "predicted_distribution": predicted_label_distributions,
-            "actual_distribution": actual_label_distributions,
-            "confusion_matrices": formatted_confusion_matrices
+            "confusionMatrix": primary_confusion_matrix_dict, # Use the new single dict
+            "predictedClassDistribution": predicted_label_distributions,
+            "datasetClassDistribution": actual_label_distributions,
+            # "confusion_matrices": formatted_confusion_matrices # Removed old key
         }
 
     async def _async_run(self):
+        # --- BEGIN NEW LOGGING ---
+        print("\n\n--- Evaluation _async_run CALLED ---\n\n")
+        self.logging.info("--- Evaluation _async_run CALLED ---")
+        # --- END NEW LOGGING ---
+
         # Configure logging
         # logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -1058,14 +1204,26 @@ class Evaluation:
                     # For final updates, use synchronous execution
                     if status == "COMPLETED":
                         try:
+                            # Create a client instance specifically for this final update
+                            final_client = PlexusDashboardClient()
                             update_variables = self._get_update_variables(metrics, status)
                             if self.task_id:  # Ensure taskId is preserved in final update
                                 update_variables['input']['taskId'] = self.task_id
-                            self.dashboard_client.execute(
+                            # Use the new client instance for the synchronous call
+                            final_client.execute(
                                 self._get_update_mutation(),
                                 update_variables
                             )
                             last_processed_count = current_count
+                            # Close the client if possible (assuming synchronous close or relying on GC)
+                            if hasattr(final_client, 'close') and callable(final_client.close):
+                                try:
+                                    # If close is async, this needs await asyncio.to_thread(final_client.close)
+                                    # Assuming sync close or GC for now.
+                                    pass
+                                except Exception as close_err:
+                                    self.logging.warning(f"Error closing final update client: {close_err}")
+
                         except Exception as e:
                             self.logging.error(f"Error in final metrics update: {e}")
                     else:
@@ -1142,59 +1300,119 @@ class Evaluation:
 
     def _get_update_variables(self, metrics, status):
         """Get the variables for the update mutation"""
+        # --- DETAILED LOGGING START ---
+        self.logging.info(f"[_get_update_variables ENTRY] Status: {status}, Metrics keys: {list(metrics.keys())}")
+        # --- DETAILED LOGGING END ---
         elapsed_seconds = int((datetime.now(timezone.utc) - self.started_at).total_seconds())
         
         # Format metrics for API
-        metrics_list = [
-            {"name": "Accuracy", "value": metrics["accuracy"] * 100},
-            {"name": "Precision", "value": metrics["precision"] * 100},
-            {"name": "Sensitivity", "value": metrics["sensitivity"] * 100},
-            {"name": "Specificity", "value": metrics["specificity"] * 100}
-        ]
+        metrics_for_api = []
+        if metrics.get("accuracy") is not None:
+            metrics_for_api.append({"name": "Accuracy", "value": metrics["accuracy"] * 100})
+        if metrics.get("precision") is not None:
+            metrics_for_api.append({"name": "Precision", "value": metrics["precision"] * 100})
+        if metrics.get("sensitivity") is not None:
+            metrics_for_api.append({"name": "Sensitivity", "value": metrics["sensitivity"] * 100})
+        if metrics.get("specificity") is not None:
+            metrics_for_api.append({"name": "Specificity", "value": metrics["specificity"] * 100})
         
         # Get first score's confusion matrix
-        confusion_matrix_data = metrics["confusion_matrices"][0]
-        matrix_data = {
-            "matrix": confusion_matrix_data["matrix"],
-            "labels": confusion_matrix_data["labels"]
-        }
+        confusion_matrix_data = metrics.get("confusion_matrices", [{}])[0] if metrics.get("confusion_matrices") else {}
+        matrix_data = {}
+        if confusion_matrix_data:
+            matrix_data = {
+                "matrix": confusion_matrix_data.get("matrix", {}),
+                "labels": list(confusion_matrix_data.get("labels", []))
+            }
         
         # Calculate total items based on status
+        total_predictions = 0
         if status == "COMPLETED":
             # For final update, use actual total from distribution data
-            total_predictions = 0
-            if metrics["predicted_distribution"]:
-                first_score = metrics["predicted_distribution"][0]["score"]
-                total_predictions = sum(item["count"] for item in metrics["predicted_distribution"] 
-                                     if item["score"] == first_score)
+            if metrics.get("predicted_distribution"):
+                first_score = next(iter(metrics["predicted_distribution"]), {}).get("score")
+                if first_score:
+                    total_predictions = sum(item.get("count", 0) for item in metrics["predicted_distribution"] 
+                                         if item.get("score") == first_score)
         else:
             # During evaluation, use the initial sample size
             total_predictions = self.number_of_texts_to_sample
         
-        # Build update input that matches the schema
+        # Build update input with only valid fields for UpdateEvaluationInput
+        # Only include the fields that are allowed by the schema
         update_input = {
             "id": self.experiment_id,
             "status": status,
-            "metrics": json.dumps(metrics_list),
-            "processedItems": self.processed_items,
-            "totalItems": total_predictions,
-            "elapsedSeconds": elapsed_seconds,
             "accuracy": metrics["accuracy"] * 100,
-            "taskId": self.task_id  # Always include taskId in all updates
+            "processedItems": self.processed_items  # Add processed items count for progress tracking
         }
+        
+        # Add score ID and version ID if available
+        if hasattr(self, 'score_id') and self.score_id:
+            update_input["scoreId"] = self.score_id
+        
+        if hasattr(self, 'score_version_id') and self.score_version_id:
+            update_input["scoreVersionId"] = self.score_version_id
+        
+        # Add metrics if valid
+        if metrics_for_api:  # Ensure the list is not empty
+            update_input["metrics"] = json.dumps(metrics_for_api)
+        else:
+            update_input["metrics"] = json.dumps([]) # Send empty list if no metrics
+        
+        # Add confusion matrix if available in metrics
+        confusion_matrix_val = metrics.get("confusionMatrix")
+        # --- DETAILED LOGGING START ---
+        self.logging.info(f"[_get_update_variables] confusionMatrix value from metrics: {confusion_matrix_val}")
+        # --- DETAILED LOGGING END ---
+        if confusion_matrix_val:
+            try:
+                update_input["confusionMatrix"] = json.dumps(confusion_matrix_val)
+            except (TypeError, OverflowError) as e:
+                logging.error(f"Error serializing confusion matrix: {e}")
+                update_input["confusionMatrix"] = json.dumps({"error": "Serialization failed"})
+        else:
+            update_input["confusionMatrix"] = json.dumps(None)
 
-        # Only add optional fields if they have values
-        if self.processed_items > 0:
-            update_input["estimatedRemainingSeconds"] = int(elapsed_seconds * (total_predictions - self.processed_items) / self.processed_items)
-        
-        if confusion_matrix_data["matrix"]:
-            update_input["confusionMatrix"] = json.dumps(matrix_data)
-        
-        if metrics["predicted_distribution"]:
-            update_input["predictedClassDistribution"] = json.dumps(metrics["predicted_distribution"])
-        
-        if metrics["actual_distribution"]:
-            update_input["datasetClassDistribution"] = json.dumps(metrics["actual_distribution"])
+        # Add class distributions if available
+        predicted_dist_val = metrics.get("predictedClassDistribution")
+        # --- DETAILED LOGGING START ---
+        self.logging.info(f"[_get_update_variables] predictedClassDistribution value from metrics: {predicted_dist_val}")
+        # --- DETAILED LOGGING END ---
+        if predicted_dist_val:
+            try:
+                update_input["predictedClassDistribution"] = json.dumps(predicted_dist_val)
+            except (TypeError, OverflowError) as e:
+                logging.error(f"Error serializing predicted class distribution: {e}")
+                update_input["predictedClassDistribution"] = json.dumps([{"error": "Serialization failed"}])
+        else:
+            update_input["predictedClassDistribution"] = json.dumps([])
+
+        dataset_dist_val = metrics.get("datasetClassDistribution")
+        # --- DETAILED LOGGING START ---
+        self.logging.info(f"[_get_update_variables] datasetClassDistribution value from metrics: {dataset_dist_val}")
+        # --- DETAILED LOGGING END ---
+        if dataset_dist_val:
+            try:
+                update_input["datasetClassDistribution"] = json.dumps(dataset_dist_val)
+            except (TypeError, OverflowError) as e:
+                logging.error(f"Error serializing dataset class distribution: {e}")
+                update_input["datasetClassDistribution"] = json.dumps([{"error": "Serialization failed"}])
+        else:
+            update_input["datasetClassDistribution"] = json.dumps([])
+            
+        # Add estimatedRemainingSeconds if appropriate
+        if self.processed_items > 0 and total_predictions > self.processed_items and status != "COMPLETED":
+            estimate = int(elapsed_seconds * (total_predictions - self.processed_items) / self.processed_items)
+            update_input["estimatedRemainingSeconds"] = estimate
+        elif status == "COMPLETED":
+            update_input["estimatedRemainingSeconds"] = 0
+            
+        # Log the update fields we're sending to help diagnose issues
+        # --- DETAILED LOGGING START ---
+        self.logging.info(f"[_get_update_variables PRE-RETURN] Final update_input: {json.dumps(update_input, default=str)}") 
+        # --- DETAILED LOGGING END ---
+        # logging.info(f"Sending update to evaluation {self.experiment_id} with fields: {json.dumps(update_input, default=str)}") # Comment out previous log
 
         return {
             "input": update_input
@@ -1507,9 +1725,23 @@ Total cost:       ${expenses['total_cost']:.6f}
                 for score_identifier in scorecard_results.keys():
                     try:
                         score_result = scorecard_results[score_identifier]
-                        score_instance = Score.from_name(self.scorecard.name, score_identifier)
-                        label_score_name = score_instance.get_label_score_name()
-                        score_name = score_instance.parameters.name
+                        
+                        # --- Refactor: Get score config directly from loaded scorecard --- 
+                        score_config = None
+                        current_score_name = getattr(score_result.parameters, 'name', score_identifier)
+                        for config in self.scorecard.scores:
+                            if config.get('name') == current_score_name or config.get('id') == score_identifier:
+                                score_config = config
+                                break
+                        
+                        if not score_config:
+                            logging.warning(f"Could not find configuration for score '{current_score_name}' in self.scorecard.scores. Skipping.")
+                            continue
+                            
+                        # Determine label score name from config or default to current score name
+                        label_score_name = score_config.get('label_score_name', current_score_name)
+                        score_name = current_score_name # Use the name from the result parameters
+                        # --- End Refactor ---
 
                         # Skip if this is a dependency score and not our primary score
                         if primary_score_name and score_name != primary_score_name:
@@ -1567,29 +1799,86 @@ Total cost:       ${expenses['total_cost']:.6f}
 
                     except Exception as e:
                         logging.exception(f"Error processing {score_identifier}: {e}")
+                        # Ensure parameters uses the correct scorecard name string
                         score_result = Score.Result(
                             value="Error", 
                             error=str(e),
                             parameters=Score.Parameters(
                                 name=score_identifier,
-                                scorecard=self.scorecard_name
+                                scorecard=self.scorecard_name # Use string name here too
                             )
                         )
+                        # Add the error result to filtered_results so it's logged/counted
+                        filtered_results[score_identifier] = score_result
 
-                # Remove the result accumulation from here since it's now handled in _async_run
-                if has_processed_scores:
-                    self.processed_items += 1
+                # Remove the result accumulation from here since it's now handled in _run_evaluation / score_all_texts_for_score
+                # We still need to track overall progress if only one score is being evaluated
+                if has_processed_scores and score_name: # Check if we are processing a specific score
+                    self.processed_items_by_score[score_name] = self.processed_items_by_score.get(score_name, 0) + 1
+                    self.processed_items = sum(self.processed_items_by_score.values())
 
-                return result
+                return result # Return the processed result dict
 
             except (Timeout, RequestException) as e:
                 if attempt == max_attempts - 1:  # Last attempt
-                    raise  # Re-raise the last error
+                    logging.error(f"Max attempts reached for content_id {row.get('content_id')}. Error: {e}")
+                    # Return an error result instead of raising
+                    return {
+                        'content_id': row.get('content_id', ''),
+                        'session_id': row.get('Session ID', row.get('content_id', '')),
+                        'form_id': row.get('columns', {}).get('form_id', ''),
+                        'results': {
+                             score_name or 'processing_error': Score.Result(
+                                 value="Error",
+                                 error=f"Timeout/RequestException after {max_attempts} attempts: {e}",
+                                 parameters=Score.Parameters(name=score_name or 'processing_error', scorecard=self.scorecard_name)
+                            )
+                        },
+                        'human_labels': {}
+                    }
                 
                 # Calculate exponential backoff delay
                 delay = min(base_delay * (2 ** attempt), max_delay)
-                logging.info(f"Attempt {attempt + 1} failed with error: {e}. Retrying in {delay} seconds...")
+                logging.info(f"Attempt {attempt + 1} failed for content_id {row.get('content_id')} with error: {e}. Retrying in {delay} seconds...")
                 await asyncio.sleep(delay)
+
+            except Exception as e: # Catch any other unexpected errors during scoring
+                logging.error(f"Unexpected error scoring content_id {row.get('content_id')} on attempt {attempt + 1}: {e}", exc_info=True)
+                if attempt == max_attempts - 1:
+                    # Return an error result on the last attempt
+                    return {
+                        'content_id': row.get('content_id', ''),
+                        'session_id': row.get('Session ID', row.get('content_id', '')),
+                        'form_id': row.get('columns', {}).get('form_id', ''),
+                        'results': {
+                            score_name or 'processing_error': Score.Result(
+                                value="Error",
+                                error=f"Unexpected error after {max_attempts} attempts: {e}",
+                                parameters=Score.Parameters(name=score_name or 'processing_error', scorecard=self.scorecard_name)
+                           )
+                        },
+                        'human_labels': {}
+                    }
+                # Wait before retrying for unexpected errors too
+                delay = min(base_delay * (2 ** attempt), max_delay)
+                logging.info(f"Retrying in {delay} seconds...")
+                await asyncio.sleep(delay)
+        
+        # If loop completes without returning (e.g., all attempts failed but didn't hit max_attempts check correctly)
+        logging.error(f"Scoring loop completed for content_id {row.get('content_id')} without returning a result or error after {max_attempts} attempts.")
+        return {
+            'content_id': row.get('content_id', ''),
+            'session_id': row.get('Session ID', row.get('content_id', '')),
+            'form_id': row.get('columns', {}).get('form_id', ''),
+            'results': {
+                score_name or 'processing_error': Score.Result(
+                    value="Error",
+                    error=f"Scoring failed after {max_attempts} attempts.",
+                    parameters=Score.Parameters(name=score_name or 'processing_error', scorecard=self.scorecard_name)
+                )
+            },
+            'human_labels': {}
+        }
 
     async def _create_score_result(self, *, score_result, content_id, result):
         """Create a score result in the dashboard."""
@@ -1883,7 +2172,10 @@ class ConsistencyEvaluation(Evaluation):
         mlflow.log_param("number_of_times_to_sample_each_text", self.number_of_times_to_sample_each_text)
 
 class AccuracyEvaluation(Evaluation):
-    def __init__(self, *, override_folder: str, labeled_samples: list = None, labeled_samples_filename: str = None, score_id: str = None, visualize: bool = False, task_id: str = None, evaluation_id: str = None, account_id: str = None, scorecard_id: str = None, **kwargs):
+    def __init__(self, *, override_folder: str, labeled_samples: list = None, labeled_samples_filename: str = None, score_id: str = None, score_version_id: str = None, visualize: bool = False, task_id: str = None, evaluation_id: str = None, account_id: str = None, scorecard_id: str = None, **kwargs):
+        # --- BEGIN NEW LOGGING ---
+        print("\n\n--- AccuracyEvaluation __init__ CALLED ---\n\n")
+        # --- END NEW LOGGING ---
         # Store scorecard_id before calling super().__init__
         self.scorecard_id = scorecard_id
         super().__init__(**kwargs)
@@ -1891,6 +2183,7 @@ class AccuracyEvaluation(Evaluation):
         self.labeled_samples = labeled_samples
         self.labeled_samples_filename = labeled_samples_filename
         self.score_id = score_id
+        self.score_version_id = score_version_id  # Store score version ID
         self.visualize = visualize
         self.task_id = task_id  # Store task ID
         self.evaluation_id = evaluation_id  # Store evaluation ID
@@ -1904,6 +2197,11 @@ class AccuracyEvaluation(Evaluation):
         self.logger = logging.getLogger('plexus/evaluation')  # Add dedicated logger
 
     async def run(self, tracker, progress_callback=None):
+        # --- BEGIN NEW LOGGING ---
+        print("\n\n--- AccuracyEvaluation run CALLED ---\n\n")
+        self.logging.info("--- AccuracyEvaluation run CALLED ---")
+        # --- END NEW LOGGING ---
+
         """Modified run method to accept tracker argument"""
         self.progress_callback = progress_callback
         
@@ -1926,6 +2224,8 @@ class AccuracyEvaluation(Evaluation):
                 update_data['scorecardId'] = self.scorecard_id
             if self.score_id:
                 update_data['scoreId'] = self.score_id
+            if hasattr(self, 'score_version_id') and self.score_version_id:
+                update_data['scoreVersionId'] = self.score_version_id
             
             if update_data:
                 try:
@@ -1935,6 +2235,7 @@ class AccuracyEvaluation(Evaluation):
                             id
                             scorecardId
                             scoreId
+                            scoreVersionId
                         }
                     }"""
                     self.dashboard_client.execute(mutation, {
@@ -1949,8 +2250,21 @@ class AccuracyEvaluation(Evaluation):
                     # Continue execution even if update fails
         
         try:
-            return await self._run_evaluation(tracker)
+            # --- BEGIN NEW LOGGING ---
+            self.logging.info("--- Calling _run_evaluation from AccuracyEvaluation.run ---")
+            # --- END NEW LOGGING ---
+            returned_metrics = await self._run_evaluation(tracker)
+            # --- BEGIN NEW LOGGING ---
+            self.logging.info(f"--- _run_evaluation returned: {returned_metrics} ---")
+            # --- END NEW LOGGING ---
+            return returned_metrics
+        except Exception as e:
+            self.logging.error(f"Error during AccuracyEvaluation.run: {e}", exc_info=True)
+            raise e # Re-raise after logging
         finally:
+            # --- BEGIN NEW LOGGING ---
+            self.logging.info("--- Exiting AccuracyEvaluation.run (finally block) ---") 
+            # --- END NEW LOGGING ---
             self.should_stop = True
 
     async def _run_evaluation(self, tracker):
@@ -1987,8 +2301,16 @@ class AccuracyEvaluation(Evaluation):
             all_results = await asyncio.gather(*score_tasks)
             self.all_results = [result for score_results in all_results for result in score_results if not isinstance(result, Exception)]
 
+            # --- BEGIN NEW LOGGING ---
+            self.logging.info(f"--- Calling calculate_metrics from _run_evaluation with {len(self.all_results)} results ---")
+            # --- END NEW LOGGING ---
+
             # Calculate metrics from the results
             metrics = self.calculate_metrics(self.all_results)
+
+            # --- BEGIN NEW LOGGING ---
+            self.logging.info(f"--- calculate_metrics from _run_evaluation returned: {metrics} ---")
+            # --- END NEW LOGGING ---
 
             if hasattr(self, 'progress_callback') and self.progress_callback:
                 self.progress_callback(self.number_of_texts_to_sample)
