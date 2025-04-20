@@ -760,6 +760,7 @@ class PlexusDashboardClient(_BaseAPIClient):
     - Thread-safe operations
     - Context management for accounts, scorecards, and scores
     """
+    
     def __init__(
         self,
         api_url: Optional[str] = None,
@@ -767,7 +768,16 @@ class PlexusDashboardClient(_BaseAPIClient):
         context: Optional[ClientContext] = None
     ):
         super().__init__(api_url=api_url, api_key=api_key, context=context)
-
+        
+    # Context manager methods
+    def __enter__(self):
+        """Make the client usable as a context manager, returning the GQL client."""
+        return self.client
+        
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Handle cleanup when exiting the context manager."""
+        return False  # Don't suppress exceptions
+    
     @classmethod
     def for_account(cls, account_key: str) -> 'PlexusDashboardClient':
         """Create a client initialized with account context"""
