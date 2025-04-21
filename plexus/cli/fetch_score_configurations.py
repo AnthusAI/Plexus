@@ -94,6 +94,14 @@ def fetch_score_configurations(
         logging.info(f"Champion Version ID: {champion_version_id}")
         logging.info(f"=========================================")
         
+        # Validate score_id format - should be a UUID with hyphens
+        if score_id and not (isinstance(score_id, str) and '-' in score_id):
+            logging.warning(f"WARNING: Score ID doesn't appear to be in DynamoDB UUID format: {score_id}")
+            logging.warning(f"This may cause issues with Evaluation records. Expected format is UUID with hyphens.")
+            # Check for externalId which is often incorrectly used
+            if 'externalId' in score:
+                logging.warning(f"Found externalId: {score.get('externalId')} - this should NOT be used as the Score ID")
+        
         if not champion_version_id:
             logging.warning(f"No champion version ID for score: {score_name} ({score_id})")
             continue
@@ -200,6 +208,14 @@ def load_cached_configurations(
         logging.info(f"Score ID: {score_id}")
         logging.info(f"Champion Version ID from API: {champion_version_id}")
         logging.info(f"======================================")
+        
+        # Validate score_id format - should be a UUID with hyphens
+        if score_id and not (isinstance(score_id, str) and '-' in score_id):
+            logging.warning(f"WARNING: Score ID doesn't appear to be in DynamoDB UUID format: {score_id}")
+            logging.warning(f"This may cause issues with Evaluation records. Expected format is UUID with hyphens.")
+            # Check for externalId which is often incorrectly used
+            if 'externalId' in score:
+                logging.warning(f"Found externalId: {score.get('externalId')} - this should NOT be used as the Score ID")
         
         if not score_id or not score_name:
             logging.warning(f"Skipping score with missing ID or name: {score}")

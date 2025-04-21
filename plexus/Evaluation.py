@@ -1349,7 +1349,13 @@ class Evaluation:
         
         # Add score ID and version ID if available
         if hasattr(self, 'score_id') and self.score_id:
-            update_input["scoreId"] = self.score_id
+            # Validate score_id format - should be a UUID with hyphens
+            if not (isinstance(self.score_id, str) and '-' in self.score_id):
+                self.logging.warning(f"WARNING: Score ID doesn't appear to be in DynamoDB UUID format: {self.score_id}")
+                self.logging.warning(f"This will cause issues with Evaluation records. Expected format is UUID with hyphens.")
+                self.logging.warning(f"Will not add this Score ID to the evaluation record update.")
+            else:
+                update_input["scoreId"] = self.score_id
         
         if hasattr(self, 'score_version_id') and self.score_version_id:
             update_input["scoreVersionId"] = self.score_version_id
@@ -1929,10 +1935,19 @@ Total cost:       ${expenses['total_cost']:.6f}
                 'itemId': content_id,  # Use content_id as the itemId
                 'accountId': self.account_id,
                 'scorecardId': self.scorecard_id,
-                'scoreId': self.score_id,
-                'value': value,
-                'metadata': json.dumps(metadata_dict)  # Ensure metadata is a JSON string
             }
+            
+            # Add score_id if available and has valid format
+            if hasattr(self, 'score_id') and self.score_id:
+                # Validate score_id format - should be a UUID with hyphens
+                if not (isinstance(self.score_id, str) and '-' in self.score_id):
+                    self.logging.warning(f"WARNING: Score ID doesn't appear to be in DynamoDB UUID format: {self.score_id}")
+                    self.logging.warning(f"Will not add this Score ID to the ScoreResult record.")
+                else:
+                    data['scoreId'] = self.score_id
+                    
+            data['value'] = value
+            data['metadata'] = json.dumps(metadata_dict)  # Ensure metadata is a JSON string
 
             # Add trace data if available
             logging.info("Checking for trace data to add to score result...")            
@@ -2183,6 +2198,12 @@ class AccuracyEvaluation(Evaluation):
         self.labeled_samples = labeled_samples
         self.labeled_samples_filename = labeled_samples_filename
         self.score_id = score_id
+        
+        # Validate score_id format - should be a UUID with hyphens
+        if self.score_id and not (isinstance(self.score_id, str) and '-' in self.score_id):
+            self.logging.warning(f"WARNING: Score ID doesn't appear to be in DynamoDB UUID format: {self.score_id}")
+            self.logging.warning(f"This may cause issues with Evaluation records. Expected format is UUID with hyphens.")
+        
         self.score_version_id = score_version_id  # Store score version ID
         self.visualize = visualize
         self.task_id = task_id  # Store task ID
@@ -2226,8 +2247,16 @@ class AccuracyEvaluation(Evaluation):
             update_data = {}
             if self.scorecard_id:
                 update_data['scorecardId'] = self.scorecard_id
+            
             if self.score_id:
-                update_data['scoreId'] = self.score_id
+                # Validate score_id format - should be a UUID with hyphens
+                if not (isinstance(self.score_id, str) and '-' in self.score_id):
+                    self.logging.warning(f"WARNING: Score ID doesn't appear to be in DynamoDB UUID format: {self.score_id}")
+                    self.logging.warning(f"This will cause issues with Evaluation records. Expected format is UUID with hyphens.")
+                    self.logging.warning(f"Will not add this Score ID to the evaluation record update.")
+                else:
+                    update_data['scoreId'] = self.score_id
+            
             if hasattr(self, 'score_version_id') and self.score_version_id:
                 update_data['scoreVersionId'] = self.score_version_id
             
