@@ -88,13 +88,16 @@ def load_configuration_from_yaml_file(configuration_file_path):
         logging.error(f"Error loading configuration from {configuration_file_path}: {str(e)}")
         return None
 
-def load_scorecard_from_api(scorecard_identifier: str, score_names=None):
+def load_scorecard_from_api(scorecard_identifier: str, score_names=None, use_cache=False):
     """
     Load a scorecard from the Plexus Dashboard API.
     
     Args:
         scorecard_identifier: A string that can identify the scorecard (id, key, name, etc.)
         score_names: Optional list of specific score names to load
+        use_cache: Whether to prefer local cache files over API (default: False)
+                   When False, will always fetch from API but still write cache files
+                   When True, will check local cache first and only fetch missing configs
         
     Returns:
         Scorecard: An initialized Scorecard instance with required scores loaded
@@ -110,7 +113,10 @@ def load_scorecard_from_api(scorecard_identifier: str, score_names=None):
     from plexus.cli.identify_target_scores import identify_target_scores
     import logging
     
-    logging.info(f"Loading scorecard '{scorecard_identifier}' from API")
+    if use_cache:
+        logging.info(f"Loading scorecard '{scorecard_identifier}' from API with local cache preference")
+    else:
+        logging.info(f"Loading scorecard '{scorecard_identifier}' from API (ignoring local cache)")
     
     try:
         # Create client directly without context manager
@@ -179,7 +185,12 @@ def load_scorecard_from_api(scorecard_identifier: str, score_names=None):
         
         # 4. Iteratively fetch configurations with dependency discovery
         try:
-            scores_config = iteratively_fetch_configurations(client, scorecard_structure, target_scores)
+            scores_config = iteratively_fetch_configurations(
+                client, 
+                scorecard_structure, 
+                target_scores,
+                use_cache=use_cache
+            )
             if not scores_config:
                 error_msg = f"Failed to fetch score configurations for scorecard: {scorecard_identifier}"
                 logging.error(error_msg)
@@ -706,7 +717,7 @@ def accuracy(
                 
                 target_score_identifiers = [s.strip() for s in score.split(',')] if score else []
                 try:
-                    scorecard_instance = load_scorecard_from_api(scorecard, target_score_identifiers)
+                    scorecard_instance = load_scorecard_from_api(scorecard, target_score_identifiers, use_cache=yaml)
                     
                     # Add debugging information about scorecard structure
                     logging.info(f"Loaded scorecard instance type: {type(scorecard_instance).__name__}")
