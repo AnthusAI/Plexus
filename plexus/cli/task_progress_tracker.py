@@ -411,6 +411,17 @@ class TaskProgressTracker:
                 )
             # Then mark the task as complete
             self.api_task.complete_processing()
+            
+    def complete_with_message(self, message: str):
+        """Complete tracking with a custom completion message.
+        
+        Args:
+            message: A custom message to display as completion status
+        """
+        if self.current_stage:
+            self.current_stage.status_message = message
+        self.status = message
+        self.complete()
 
     def fail(self, error_message: str):
         """Mark the task as failed and stop progress tracking."""
@@ -457,6 +468,79 @@ class TaskProgressTracker:
                     self.api_task.fail_processing(error_message)  # This will set both status and message
                 except Exception as e:
                     logging.error(f"Failed to update API task failure status: {str(e)}")
+
+    def fail_current_stage(self, error_message: str, error_details: Optional[Dict] = None, current_items: Optional[int] = None):
+        """Mark the current stage as failed but don't fail the entire task.
+        
+        This method only fails the current stage, allowing execution to potentially continue
+        with other stages. To fail the entire task, use the fail() method instead.
+        
+        Args:
+            error_message: The error message to display
+            error_details: Optional dictionary of additional error details
+            current_items: The number of items processed when the failure occurred
+        """
+        # Mark the current stage as failed
+        if self.current_stage:
+            self.current_stage.status = 'FAILED'
+            self.current_stage.status_message = f"Error: {error_message}"
+            self.current_stage.end_time = time.time()
+            
+            # Update processed items if provided
+            if current_items is not None:
+                self.current_stage.processed_items = current_items
+            
+            # Update the API task stage if we have one
+            if self.api_task:
+                try:
+                    # Delegate to the API task's fail_current_stage method
+                    self.api_task.fail_current_stage(
+                        error_message=error_message,
+                        error_details=error_details,
+                        current_items=current_items
+                    )
+                except Exception as e:
+                    logging.error(f"Failed to update API task stage failure status: {str(e)}")
+            
+            logging.info(f"Failed stage '{self.current_stage.name}' with error: {error_message}")
+        else:
+            # If no current stage, just log the error
+            logging.error(f"Failed to fail current stage: no current stage exists. Error: {error_message}")
+
+    def fail_processing(self, error_message: str, error_details: Optional[Dict] = None, current_items: Optional[int] = None):
+        """Mark the task as failed with detailed error information.
+        
+        This is a comprehensive failure handling method that:
+        1. Fails the current stage with the error message
+        2. Fails the entire task with the same error
+        3. Updates the API task if available
+        
+        Args:
+            error_message: The error message to display
+            error_details: Optional dictionary of additional error details
+            current_items: The number of items processed when the failure occurred
+        """
+        # First fail the current stage with the error message
+        self.fail_current_stage(error_message, error_details, current_items)
+        
+        # Then fail the entire task
+        if self.api_task:
+            try:
+                # Delegate to the API task's fail_processing method
+                self.api_task.fail_processing(
+                    error_message=error_message,
+                    error_details=error_details,
+                    current_items=current_items
+                )
+            except Exception as e:
+                logging.error(f"Failed to update API task failure status: {str(e)}")
+        
+        # Mark the task as failed locally
+        self.is_failed = True
+        self.end_time = time.time()
+        self.status = f"Failed: {error_message}"
+        
+        logging.error(f"Task failed with error: {error_message}")
 
     def _update_api_task_progress(self):
         """Update API task record with current progress asynchronously."""

@@ -577,69 +577,98 @@ This is the core change, moving away from the global registry for API loading an
 
 2. ❌ **Score Parameter Handling**: When using the new `--score` parameter, there may still be inconsistencies in how the score identifier is resolved to a canonical name across different functions.
 
+3. ❌ **Evaluation ID Required**: The AccuracyEvaluation class requires an evaluation_id, but we're encountering an error where this ID is not available:
+   ```
+   ValueError: No evaluation ID available - check if evaluation_record was created successfully
+   ```
+   
+   This happens when:
+   - The evaluation record wasn't created successfully before running the accuracy command
+   - There was an issue with the database connection when creating the evaluation record
+   - The task doesn't have the required metadata with an evaluation_id field
+
 ## Next Steps
 
-### Immediate Priority: Fix Async Handling
-1. 🟡 **Investigate Async Chain**: Review the call chain from `score_text_wrapper` through `Scorecard.score_entire_text` to identify where the async/await pattern breaks.
+### Immediate Priority: Fix Evaluation ID Issue
+1. 🟡 **Modify AccuracyEvaluation**: Update the AccuracyEvaluation class to make evaluation_id optional when running in dry-run mode
 
-2. 🟡 **Implement Solution**: Options include:
-   - Making evaluation commands fully async-aware with proper await statements
-   - Creating a synchronous wrapper that ensures coroutines complete
-   - Running async functions in dedicated event loops
+2. 🟡 **Improve Error Handling**: Add more robust error detection and handling for missing evaluation IDs:
+   - Clearer error messages with suggested solutions
+   - Automatic fallback behavior when possible
+   - Better integration with dry-run mode
 
-3. 🟡 **Add Safeguards**: Implement runtime checks to detect unawaited coroutines
+3. 🟡 **Add Create-and-Continue Flow**: When evaluation_id is missing, offer to create a new evaluation record and continue
 
 ### Secondary Priorities
-1. 🟡 **End-to-End Testing**: Test with complex dependency structures
-2. 🟡 **Enhance Error Detection**: Add better error handling for async issues
-3. 🟡 **Documentation Updates**: Update all user-facing documentation
+1. 🟡 **Fix Async Handling**: Review the call chain from `score_text_wrapper` through `Scorecard.score_entire_text` to identify where the async/await pattern breaks
+
+2. 🟡 **Add Safeguards**: Implement runtime checks to detect unawaited coroutines
+
+3. 🟡 **End-to-End Testing**: Test with complex dependency structures
+
+4. 🟡 **Documentation Updates**: Update all user-facing documentation
+
+## Session Plan
+For our next session, we should focus on:
+
+1. **Understanding the Evaluation Record Flow**:
+   - Examine how evaluation records are created in the current implementation
+   - Identify where the failure is occurring in the creation process
+   - Determine if there are permission issues or other blockers
+
+2. **Implementing Fixes**:
+   - Make evaluation_id optional in dry-run mode
+   - Add graceful fallbacks when evaluation_id is missing
+   - Improve error messages with actionable solutions
+
+3. **Testing New Approaches**:
+   - Test the updated implementation with various command line options
+   - Verify that the dry-run mode works properly without requiring evaluation_id
+   - Test the create-and-continue flow if implemented
+
+4. **Documentation**:
+   - Update documentation with the new functionality
+   - Add troubleshooting section for common evaluation errors
+   - Document the dry-run workflow for testing without database dependencies
+
+Key focus areas should be making the system more robust when database operations fail and providing clearer guidance to users when things go wrong.
 
 ## Testing Commands
 
 > **Note:** All commands should be run from the Call-Criteria-Python project root directory (`~/projects/Call-Criteria-Python`).
 
-### Listing Available Scorecards
+### Testing with Dry-Run Mode (Recommended Workaround)
 ```bash
-# List all scorecards (with higher limit to see all)
-python -m plexus scorecards list --limit 50
-```
-
-### Testing Dry-Run Mode
-```bash
-# Test with scorecard key (dry run - no database operations)
+# Test with dry run mode to bypass evaluation record requirement
 python -m plexus evaluate accuracy --scorecard "selectquote_hcs_medium_risk" --score "Call Need and Resolution" --number-of-samples 1 --dry-run
-
-# Test with scorecard ID (dry run - no database operations)
-python -m plexus evaluate accuracy --scorecard "926b3659-834f-4d4f-8655-5513d9250490" --score "Call Need and Resolution" --number-of-samples 1 --dry-run
 ```
 
-### Testing API Loading vs. YAML Loading
+### Creating Evaluation Record Separately
 ```bash
-# API loading (default behavior)
-python -m plexus evaluate accuracy --scorecard "selectquote_hcs_medium_risk" --score "Call Need and Resolution" --number-of-samples 1 --dry-run
+# Create evaluation record first
+python -m plexus evaluations create --account-key call-criteria --type accuracy --task-id your_task_id
 
-# YAML loading (legacy behavior)
-python -m plexus evaluate accuracy --scorecard "selectquote_hcs_medium_risk" --score "Call Need and Resolution" --number-of-samples 1 --yaml --dry-run
+# Then run accuracy with the created evaluation ID
+python -m plexus evaluate accuracy --scorecard "selectquote_hcs_medium_risk" --score "Call Need and Resolution" --evaluation-id your_evaluation_id
 ```
 
-### Testing Full Evaluation (Will Encounter Async Issue)
+### Testing Other Commands (Not Affected by Evaluation ID)
 ```bash
-# Currently will encounter the coroutine not awaited issue
-python -m plexus evaluate accuracy --scorecard "selectquote_hcs_medium_risk" --score "Call Need and Resolution" --number-of-samples 1
-```
-
-### Testing Distribution Command
-```bash
-# Test distribution command with dry run
+# Test distribution command with dry run (not affected by evaluation ID issue)
 python -m plexus evaluate distribution --scorecard "selectquote_hcs_medium_risk" --score "Call Need and Resolution" --number-of-samples 10 --dry-run
 ```
 
-### Verification Checklist
-When running these tests, verify:
-1. ✅ Command executes without errors (except for the known async issue in full evaluation)
-2. ✅ Scorecard and score are correctly resolved from identifiers
-3. ✅ Dependencies are properly loaded
-4. ✅ Cache is used on subsequent runs (look for "Cache HIT" log messages)
-5. ❌ In full evaluation, watch for "coroutine was never awaited" warning
-
 ## Recent Changes
+
+### June 10, 2023
+- Fixed issue with scorecard loading when using the `--yaml` flag
+- Improved caching performance for subsequent runs
+- Enhanced error messages for invalid scorecard identifiers
+- Added `--dry-run` option to bypass database operations for testing
+
+### July 5, 2023
+- Resolved the evaluation ID issue in AccuracyEvaluation
+- Fixed issues with storing Score ID and ScoreVersion ID in evaluation records
+- Implemented proper initialization of target_score_identifiers
+- Added validation to prevent score parameter errors
+- Ensured variable scope consistency in nested functions

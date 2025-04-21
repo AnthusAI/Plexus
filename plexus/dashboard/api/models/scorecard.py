@@ -86,6 +86,22 @@ class Scorecard(BaseModel):
         return cls.from_dict(items[0], client)
 
     @classmethod
+    def list_by_key(cls, key: str, client: _BaseAPIClient) -> Optional['Scorecard']:
+        """Get a scorecard by its key.
+        
+        Args:
+            key: The scorecard key to look up
+            client: The API client instance
+            
+        Returns:
+            Scorecard: The found scorecard or None
+        """
+        try:
+            return cls.get_by_key(key, client)
+        except ValueError:
+            return None
+
+    @classmethod
     def create(
         cls,
         client: _BaseAPIClient,
@@ -151,6 +167,22 @@ class Scorecard(BaseModel):
         return cls.from_dict(items[0], client)
 
     @classmethod
+    def list_by_name(cls, name: str, client: _BaseAPIClient) -> Optional['Scorecard']:
+        """Get a scorecard by its name.
+        
+        Args:
+            name: The scorecard name to look up
+            client: The API client instance
+            
+        Returns:
+            Scorecard: The found scorecard or None
+        """
+        try:
+            return cls.get_by_name(name, client)
+        except ValueError:
+            return None
+
+    @classmethod
     def get_by_id(cls, id: str, client: _BaseAPIClient) -> 'Scorecard':
         logger.debug(f"Looking up scorecard by ID: {id}")
         query = """
@@ -186,4 +218,20 @@ class Scorecard(BaseModel):
             raise ValueError(f"No scorecard found with external ID: {external_id}")
         logger.debug(f"Found scorecard: {items[0]['name']} ({items[0]['id']})")
         return cls.from_dict(items[0], client)
+
+    @classmethod
+    def list_by_external_id(cls, external_id: str, client: _BaseAPIClient) -> Optional['Scorecard']:
+        """Get a scorecard by its external ID.
+        
+        Args:
+            external_id: The scorecard external ID to look up
+            client: The API client instance
+            
+        Returns:
+            Scorecard: The found scorecard or None
+        """
+        try:
+            return cls.get_by_external_id(external_id, client)
+        except ValueError:
+            return None
   

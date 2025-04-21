@@ -2,7 +2,7 @@
 
 import logging
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Union, Tuple
 
 from ruamel.yaml import YAML
 from gql import gql
@@ -13,7 +13,7 @@ def fetch_score_configurations(
     client,
     scorecard_data: Dict[str, Any], 
     target_scores: List[Dict[str, Any]], 
-    cache_status: Dict[str, bool]
+    cache_status: Union[Dict[str, bool], Tuple[List[str], List[str]]]
 ) -> Dict[str, str]:
     """Fetch and cache missing score configurations from the API.
     
@@ -21,7 +21,8 @@ def fetch_score_configurations(
         client: GraphQL API client
         scorecard_data: The scorecard data containing name and other properties
         target_scores: List of score objects to process
-        cache_status: Dictionary mapping score IDs to their cache status (from check_local_score_cache)
+        cache_status: Either a dictionary mapping score IDs to their cache status (bool)
+                     or a tuple of (cached_ids, uncached_ids) lists
         
     Returns:
         Dictionary mapping score IDs to their parsed configurations
@@ -30,11 +31,29 @@ def fetch_score_configurations(
     if not scorecard_name:
         logging.error("Cannot fetch configurations: No scorecard name provided")
         return {}
-        
-    # Count how many configurations need to be fetched
-    needs_fetch = [score for score in target_scores 
-                  if score.get('id') in cache_status and not cache_status[score.get('id')]]
     
+    # Convert different cache_status formats to a consistent format
+    needs_fetch = []
+    
+    if isinstance(cache_status, dict):
+        # Dictionary format: {score_id: is_cached}
+        # Find scores that are not cached (False values)
+        needs_fetch = [
+            score for score in target_scores 
+            if score.get('id') in cache_status and not cache_status[score.get('id')]
+        ]
+    elif isinstance(cache_status, tuple) and len(cache_status) == 2:
+        # Tuple format: (cached_ids, uncached_ids)
+        cached_ids, uncached_ids = cache_status
+        # Find scores whose IDs are in the uncached_ids list
+        needs_fetch = [
+            score for score in target_scores 
+            if score.get('id') in uncached_ids
+        ]
+    else:
+        logging.error(f"Unsupported cache_status format: {type(cache_status)}")
+        return load_cached_configurations(scorecard_data, target_scores)
+        
     if not needs_fetch:
         logging.info("All required score configurations are already cached locally.")
         return load_cached_configurations(scorecard_data, target_scores)
@@ -69,6 +88,12 @@ def fetch_score_configurations(
         score_name = score.get('name')
         champion_version_id = score.get('championVersionId')
         
+        logging.info(f"===== FETCHING CONFIGURATION FOR SCORE =====")
+        logging.info(f"Score Name: {score_name}")
+        logging.info(f"Score ID: {score_id}")
+        logging.info(f"Champion Version ID: {champion_version_id}")
+        logging.info(f"=========================================")
+        
         if not champion_version_id:
             logging.warning(f"No champion version ID for score: {score_name} ({score_id})")
             continue
@@ -90,7 +115,13 @@ def fetch_score_configurations(
         
         try:
             # Execute query directly without context manager
-            version_result = client.execute(version_query)
+            try:
+                # Try with context manager first
+                with client as session:
+                    version_result = session.execute(gql(version_query))
+            except AttributeError:
+                # Fallback to direct execution without context manager
+                version_result = client.execute(version_query)
             
             version_data = version_result.get('getScoreVersion')
             
@@ -104,6 +135,15 @@ def fetch_score_configurations(
             try:
                 # Parse the configuration to validate it
                 parsed_config = yaml.load(config_yaml)
+                
+                # Ensure parsed config is a dictionary
+                if not isinstance(parsed_config, dict):
+                    logging.error(f"Parsed configuration for {score_name} is not a dictionary")
+                    continue
+                
+                # Add championVersionId to the configuration so we can use it later
+                parsed_config['championVersionId'] = champion_version_id
+                logging.info(f"Added championVersionId to configuration: {champion_version_id}")
                 
                 # Get the YAML file path
                 yaml_path = get_score_yaml_path(scorecard_name, score_name)
@@ -153,6 +193,13 @@ def load_cached_configurations(
     for score in target_scores:
         score_id = score.get('id')
         score_name = score.get('name')
+        champion_version_id = score.get('championVersionId')
+        
+        logging.info(f"===== LOADING CACHED CONFIGURATION =====")
+        logging.info(f"Score Name: {score_name}")
+        logging.info(f"Score ID: {score_id}")
+        logging.info(f"Champion Version ID from API: {champion_version_id}")
+        logging.info(f"======================================")
         
         if not score_id or not score_name:
             logging.warning(f"Skipping score with missing ID or name: {score}")
@@ -170,6 +217,37 @@ def load_cached_configurations(
         try:
             with open(yaml_path, 'r') as f:
                 configuration = f.read()
+                
+            # Check if the cached configuration contains championVersionId
+            try:
+                yaml_parser = YAML(typ='safe')
+                parsed_config = yaml_parser.load(configuration)
+                cached_version_id = parsed_config.get('championVersionId')
+                
+                if cached_version_id:
+                    logging.info(f"Cached configuration contains championVersionId: {cached_version_id}")
+                else:
+                    logging.warning(f"Cached configuration for {score_name} does not contain championVersionId")
+                    
+                    # If the configuration doesn't have championVersionId but we have it from the API
+                    # add it to the configuration before returning
+                    if champion_version_id:
+                        logging.info(f"Adding missing championVersionId from API: {champion_version_id}")
+                        parsed_config['championVersionId'] = champion_version_id
+                        
+                        # Convert updated config back to string
+                        import io
+                        stream = io.StringIO()
+                        yaml_writer = YAML()
+                        yaml_writer.dump(parsed_config, stream)
+                        configuration = stream.getvalue()
+                        
+                        # Save the updated configuration with championVersionId
+                        with open(yaml_path, 'w') as f:
+                            f.write(configuration)
+                        logging.info(f"Updated cached configuration with championVersionId")
+            except Exception as e:
+                logging.warning(f"Could not parse configuration to check for championVersionId: {str(e)}")
                 
             configurations[score_id] = configuration
             logging.debug(f"Loaded configuration for score: {score_name}")

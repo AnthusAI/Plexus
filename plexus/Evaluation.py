@@ -2196,7 +2196,7 @@ class AccuracyEvaluation(Evaluation):
         self.override_data = {}  # Initialize empty override data dictionary
         self.logger = logging.getLogger('plexus/evaluation')  # Add dedicated logger
 
-    async def run(self, tracker, progress_callback=None):
+    async def run(self, tracker, progress_callback=None, dry_run=False):
         # --- BEGIN NEW LOGGING ---
         print("\n\n--- AccuracyEvaluation run CALLED ---\n\n")
         self.logging.info("--- AccuracyEvaluation run CALLED ---")
@@ -2208,17 +2208,21 @@ class AccuracyEvaluation(Evaluation):
         # Store the evaluation ID from the parent process
         self.experiment_id = self.evaluation_id
         
-        if not self.experiment_id:
+        # Only require evaluation_id if not in dry_run mode
+        if not self.experiment_id and not dry_run:
             self.logging.error("No evaluation_id provided to AccuracyEvaluation")
             raise ValueError("No evaluation_id provided to AccuracyEvaluation")
+        elif not self.experiment_id and dry_run:
+            self.logging.info("[DRY RUN] Using mock evaluation ID")
+            self.experiment_id = "mock-evaluation-id-for-dry-run"
         
         # Initialize started_at for elapsed time calculations
         self.started_at = datetime.now(timezone.utc)
         
-        self.logging.info(f"Using existing evaluation record with ID: {self.experiment_id}")
+        self.logging.info(f"Using evaluation record with ID: {self.experiment_id}")
         
         # Update the evaluation record with scorecard and score IDs
-        if self.dashboard_client:
+        if self.dashboard_client and not dry_run:
             update_data = {}
             if self.scorecard_id:
                 update_data['scorecardId'] = self.scorecard_id
@@ -2248,7 +2252,9 @@ class AccuracyEvaluation(Evaluation):
                 except Exception as e:
                     self.logging.error(f"Failed to update evaluation record with IDs: {str(e)}")
                     # Continue execution even if update fails
-        
+        elif dry_run:
+            self.logging.info(f"[DRY RUN] Would update evaluation record with scorecard ID: {self.scorecard_id} and score ID: {self.score_id}")
+
         try:
             # --- BEGIN NEW LOGGING ---
             self.logging.info("--- Calling _run_evaluation from AccuracyEvaluation.run ---")
