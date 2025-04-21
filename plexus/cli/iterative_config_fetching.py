@@ -19,12 +19,13 @@ from plexus.cli.fetch_score_configurations import (
 def iteratively_fetch_configurations(
     client,
     scorecard_data: Dict[str, Any],
-    target_scores: List[Dict[str, Any]]
+    target_scores: List[Dict[str, Any]],
+    use_cache: bool = False
 ) -> Dict[str, str]:
     """Iteratively fetch score configurations including all dependencies.
     
     This function:
-    1. Checks local cache for initial target scores
+    1. Checks local cache for initial target scores (only if use_cache=True)
     2. Fetches missing target configurations
     3. Discovers dependencies in those configurations
     4. Iteratively fetches dependencies until all are resolved
@@ -33,6 +34,9 @@ def iteratively_fetch_configurations(
         client: GraphQL API client
         scorecard_data: The scorecard data containing name and other properties
         target_scores: List of score objects to process initially
+        use_cache: Whether to use local cache files instead of always fetching from API
+                  When False, will always fetch from API but still write cache files
+                  When True, will check local cache first and only fetch missing configs
         
     Returns:
         Dictionary mapping score IDs to their configuration strings
@@ -74,12 +78,22 @@ def iteratively_fetch_configurations(
         
         if not current_scores:
             break
-            
-        # Check which configurations we already have cached locally
-        cache_status = check_local_score_cache(scorecard_data, current_scores)
         
-        # Fetch missing configurations
-        new_configs = fetch_score_configurations(client, scorecard_data, current_scores, cache_status)
+        if use_cache:
+            # Only check local cache if specifically requested to use it
+            # Check which configurations we already have cached locally
+            cache_status = check_local_score_cache(scorecard_data, current_scores)
+            
+            # Fetch missing configurations
+            new_configs = fetch_score_configurations(client, scorecard_data, current_scores, cache_status)
+        else:
+            # When use_cache=False, force fetch all configurations from API
+            # Create a cache_status dict with all scores marked as not cached
+            cache_status = {score.get('id'): False for score in current_scores if score.get('id')}
+            logging.info("Bypassing local cache check - fetching all configurations from API")
+            
+            # Fetch all configurations from API
+            new_configs = fetch_score_configurations(client, scorecard_data, current_scores, cache_status)
         
         # Add to our overall configurations
         configurations.update(new_configs)
@@ -195,7 +209,12 @@ def iteratively_fetch_configurations(
         # Try one final fetch for any missing configurations
         missing_scores = [score for score in all_scores if score.get('id') in missing_configs]
         if missing_scores:
-            missing_cache_status = check_local_score_cache(scorecard_data, missing_scores)
+            if use_cache:
+                missing_cache_status = check_local_score_cache(scorecard_data, missing_scores)
+            else:
+                # Force fetch from API for missing configs as well
+                missing_cache_status = {score.get('id'): False for score in missing_scores if score.get('id')}
+                
             missing_configs = fetch_score_configurations(client, scorecard_data, missing_scores, missing_cache_status)
             configurations.update(missing_configs)
     
