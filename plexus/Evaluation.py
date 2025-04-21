@@ -2188,9 +2188,6 @@ class ConsistencyEvaluation(Evaluation):
 
 class AccuracyEvaluation(Evaluation):
     def __init__(self, *, override_folder: str, labeled_samples: list = None, labeled_samples_filename: str = None, score_id: str = None, score_version_id: str = None, visualize: bool = False, task_id: str = None, evaluation_id: str = None, account_id: str = None, scorecard_id: str = None, **kwargs):
-        # --- BEGIN NEW LOGGING ---
-        print("\n\n--- AccuracyEvaluation __init__ CALLED ---\n\n")
-        # --- END NEW LOGGING ---
         # Store scorecard_id before calling super().__init__
         self.scorecard_id = scorecard_id
         super().__init__(**kwargs)

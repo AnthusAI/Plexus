@@ -943,10 +943,10 @@ class LangGraphScore(Score, LangChainUser):
     @staticmethod
     def generate_output_aliasing_function(output_mapping: dict) -> FunctionType:
         def output_aliasing(state):
-            logging.info("=== Output Aliasing Node Start ===")
-            logging.info(f"Input state type: {type(state)}")
-            logging.info(f"Input state fields: {state.model_fields.keys()}")
-            logging.info(f"Input state values: {truncate_dict_strings(state.model_dump(), max_length=80)}")
+            logging.debug("=== Output Aliasing Node Start ===")
+            logging.debug(f"Input state type: {type(state)}")
+            logging.debug(f"Input state fields: {state.model_fields.keys()}")
+            logging.debug(f"Input state values: {truncate_dict_strings(state.model_dump(), max_length=80)}")
             
             # Create a new dict with all current state values
             new_state = state.model_dump()

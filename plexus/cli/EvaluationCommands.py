@@ -689,11 +689,6 @@ def accuracy(
                             logging.warning(f"Could not find correctly formatted UUID ID for {sc_config.get('name')}")
                             score_id_for_eval = None  # Clear invalid ID
                     
-                    logging.info(f"===== EARLY SCORE ID DETECTION =====")
-                    logging.info(f"Score ID: {score_id_for_eval}")
-                    logging.info(f"Score Version ID: {score_version_id_for_eval}")
-                    logging.info(f"===================================")
-                    
                 except Exception as e:
                     error_msg = f"Failed to load scorecard from API: {str(e)}"
                     logging.error(error_msg)
@@ -776,24 +771,6 @@ def accuracy(
                  logging.error(error_msg)
                  if tracker: tracker.fail_current_stage(error_msg)
                  raise ValueError(error_msg)
-
-            # Log what we have loaded in the scorecard_instance
-            logging.info("===== SCORECARD INSTANCE SCORE DATA =====")
-            for idx, score_data in enumerate(scorecard_instance.scores):
-                logging.info(f"Score {idx+1}:")
-                logging.info(f"  Name: {score_data.get('name', 'Unknown')}")
-                logging.info(f"  ID: {score_data.get('id', 'Unknown')}")
-                logging.info(f"  Key: {score_data.get('key', 'Unknown')}")
-                logging.info(f"  ChampionVersionId: {score_data.get('championVersionId', 'Unknown')}")
-                # Check if we can find version or championVersionId via different paths
-                if 'version' not in score_data and 'championVersionId' not in score_data:
-                    alt_version_id = score_data.get('champion_version_id') or score_data.get('championVersion', {}).get('id')
-                    if alt_version_id:
-                        logging.info(f"  Found alternative version ID: {alt_version_id}")
-            logging.info("=======================================")
-
-            # Additional logging about primary score identifier
-            logging.info(f"Primary score identifier from command line: {primary_score_identifier}")
 
             if primary_score_identifier:
                 # Find the config for the specified primary score
@@ -898,16 +875,6 @@ def accuracy(
                     if not (isinstance(score_id_for_eval, str) and '-' in score_id_for_eval):
                         logging.warning(f"Could not find a correctly formatted Score ID. Not using ID: {score_id_for_eval}")
                         score_id_for_eval = None
-                
-                # Only log the score_id if it's correctly formatted
-                if score_id_for_eval:
-                    logging.info(f"Using score ID: {score_id_for_eval} and score version ID: {score_version_id_for_eval}")
-                    logging.info(f"====== SCORE ID AND VERSION FOR EVALUATION ======")
-                    logging.info(f"Score ID: {score_id_for_eval}")
-                    logging.info(f"Score Version ID: {score_version_id_for_eval}")
-                    logging.info(f"===============================================")
-                else:
-                    logging.warning("No valid score ID found for evaluation.")
 
             # Instantiate AccuracyEvaluation
             logging.info("Instantiating AccuracyEvaluation...")
@@ -919,16 +886,6 @@ def accuracy(
             eval_id_for_eval = evaluation_record.id if evaluation_record else None
             if not eval_id_for_eval and task and task.metadata and 'evaluation_id' in task.metadata:
                 eval_id_for_eval = task.metadata['evaluation_id']
-                
-            # Log crucial information before proceeding
-            logging.info(f"=== ACCURACY EVALUATION INITIALIZATION ===")
-            logging.info(f"Evaluation ID: {eval_id_for_eval}")
-            logging.info(f"Scorecard ID: {sc_id_for_eval}")
-            logging.info(f"Score ID: {score_id_for_eval}")
-            logging.info(f"Score Version ID: {score_version_id_for_eval}")
-            logging.info(f"Account ID: {acc_id_for_eval}")
-            logging.info(f"Task ID: {task_id}")
-            logging.info(f"=====================================")
                 
             # Make sure evaluation_id is not None - it's required by AccuracyEvaluation
             if not eval_id_for_eval and not dry_run:
@@ -1170,11 +1127,6 @@ def get_data_driven_samples(
 
     score_instance.load_data(data=score_config['data'], fresh=fresh)
     score_instance.process_data()
-
-    # Log dataframe information
-    logging.info(f"Dataframe info for score {score_name}:")
-    logging.info(f"Columns: {score_instance.dataframe.columns.tolist()}")
-    logging.info(f"Shape: {score_instance.dataframe.shape}")
 
     # Sample the dataframe if number_of_samples is specified
     if number_of_samples and number_of_samples < len(score_instance.dataframe):
