@@ -162,11 +162,9 @@ def load_scorecard_from_api(scorecard_identifier: str, score_names=None, use_cac
                 score_name = score.get('name', 'Unknown')
                 championVersionId = score.get('championVersionId')
                 score_key = score.get('key', 'Unknown')
-                logging.info(f"====== FOUND TARGET SCORE: {score_name} ======")
                 logging.info(f"Score ID: {score_id}")
                 logging.info(f"Score Key: {score_key}")
                 logging.info(f"Champion Version ID: {championVersionId}")
-                logging.info(f"==========================================")
                 
             # Store the first target score's ID and championVersionId for later use
             # This is critical for setting the evaluation record properly
@@ -174,10 +172,6 @@ def load_scorecard_from_api(scorecard_identifier: str, score_names=None, use_cac
             if primary_score:
                 primary_score_id = primary_score.get('id')
                 primary_score_version_id = primary_score.get('championVersionId')
-                logging.info(f"===== PRIMARY SCORE FOR EVALUATION =====")
-                logging.info(f"Primary Score ID: {primary_score_id}")
-                logging.info(f"Primary Score Version ID: {primary_score_version_id}")
-                logging.info(f"========================================")
         except Exception as e:
             error_msg = f"Error identifying target scores: {str(e)}"
             logging.error(error_msg)
@@ -241,19 +235,7 @@ def load_scorecard_from_api(scorecard_identifier: str, score_names=None, use_cac
         scorecard_name = scorecard_structure.get('name', scorecard_identifier)
         logging.info(f"Successfully loaded scorecard '{scorecard_name}' with " +
                     f"{len(scores_config)} scores and their dependencies")
-        
-        # Add debugging information about scorecard structure
-        logging.info(f"Loaded scorecard instance type: {type(scorecard_instance).__name__}")
-        logging.info(f"Scorecard instance has properties attribute: {hasattr(scorecard_instance, 'properties')}")
-        if hasattr(scorecard_instance, 'properties'):
-            logging.info(f"Scorecard properties: {scorecard_instance.properties}")
-        logging.info(f"Scorecard instance has name attribute: {hasattr(scorecard_instance, 'name')}")
-        if hasattr(scorecard_instance, 'name'):
-            logging.info(f"Scorecard name is callable: {callable(scorecard_instance.name)}")
-        logging.info(f"Scorecard instance has scores attribute: {hasattr(scorecard_instance, 'scores')}")
-        if hasattr(scorecard_instance, 'scores'):
-            logging.info(f"Scorecard scores count: {len(scorecard_instance.scores)}")
-        
+
         return scorecard_instance
         
     except Exception as e:
@@ -478,7 +460,6 @@ def accuracy(
                                 logging.error(error_msg)
                                 raise ValueError(error_msg)
 
-                            logging.info("Creating initial Evaluation record...")
                             logging.info(f"Creating evaluation with params:\n{json.dumps(experiment_params, indent=2)}")
                             
                             # Validate 'score' parameter
@@ -494,97 +475,6 @@ def accuracy(
                             if target_score_identifiers and target_score_identifiers[0]:
                                 target_id = target_score_identifiers[0]
                                 logging.info(f"Using target score identifier: {target_id}")
-                                
-                            # Find the real Score ID and ScoreVersion ID from the initial query
-                            # We need to look through all sections and scores in the API result
-                            score_id = None
-                            score_version_id = None
-                            
-                            # DIRECT ACCESS TO THE API STRUCTURE - Most reliable source
-                            # We're getting IDs directly from the API structure before any transformations
-                            logging.info("Attempting to find Score ID directly from API structure")
-                            if hasattr(scorecard_instance, 'properties') and scorecard_instance.properties:
-                                for section in scorecard_instance.properties.get('sections', {}).get('items', []):
-                                    for score_item in section.get('scores', {}).get('items', []):
-                                        # If no target specified, use the first score
-                                        if not target_id or score_item.get('name') == target_id or score_item.get('key') == target_id:
-                                            score_id = score_item.get('id')
-                                            score_version_id = score_item.get('championVersionId')
-                                            logging.info(f"FOUND SCORE IN API PROPERTIES: {score_item.get('name')}")
-                                            logging.info(f"Setting Score ID: {score_id}")
-                                            logging.info(f"Setting Score Version ID: {score_version_id}")
-                                            break
-                                    if score_id:
-                                        break
-                            
-                            # BACKUP: Check the scores attribute directly if API direct access didn't work
-                            if not score_id and hasattr(scorecard_instance, 'scores') and scorecard_instance.scores:
-                                logging.info("Attempting to find Score ID from scorecard scores list")
-                                logging.info(f"Scores: {scorecard_instance.scores}")
-                                
-                                for score_item in scorecard_instance.scores:
-                                    if isinstance(score_item, dict) and (not target_id or score_item.get('name') == target_id):
-                                        score_id = score_item.get('id')
-                                        score_version_id = score_item.get('championVersionId')
-                                        logging.info(f"FOUND SCORE IN SCORES LIST: {score_item.get('name')}")
-                                        logging.info(f"Setting Score ID: {score_id}")
-                                        logging.info(f"Setting Score Version ID: {score_version_id}")
-                                        break
-                            
-                            # Log warning if we still couldn't find the score ID
-                            if not score_id:
-                                logging.warning(f"Could not find valid Score ID for evaluation record. Target: {target_id}")
-                                
-                                # EMERGENCY FALLBACK: Get any meaningful score ID from the scorecard structure
-                                if hasattr(scorecard_instance, 'properties') and scorecard_instance.properties:
-                                    for section in scorecard_instance.properties.get('sections', {}).get('items', []):
-                                        if section.get('scores', {}).get('items'):
-                                            first_score = section.get('scores', {}).get('items')[0]
-                                            score_id = first_score.get('id')
-                                            score_version_id = first_score.get('championVersionId')
-                                            logging.info(f"EMERGENCY FALLBACK - Using first available score: {first_score.get('name')}")
-                                            logging.info(f"Score ID: {score_id}")
-                                            logging.info(f"Score Version ID: {score_version_id}")
-                                            break
-                                
-                            # If we found a valid Score ID and ScoreVersion ID, add them to the evaluation parameters
-                            if score_id:
-                                # Validate score_id format - should be a UUID with hyphens
-                                if not (isinstance(score_id, str) and '-' in score_id):
-                                    logging.warning(f"WARNING: Score ID doesn't appear to be in DynamoDB UUID format: {score_id}")
-                                    logging.warning(f"This will cause issues with Evaluation records. Expected format is UUID with hyphens.")
-                                    
-                                    # Look for an alternative ID that is correctly formatted
-                                    if hasattr(scorecard_instance, 'properties') and scorecard_instance.properties:
-                                        for section in scorecard_instance.properties.get('sections', {}).get('items', []):
-                                            for score_item in section.get('scores', {}).get('items', []):
-                                                if score_item.get('name') == target_id or (not target_id and score_item.get('id')):
-                                                    alt_id = score_item.get('id')
-                                                    if isinstance(alt_id, str) and '-' in alt_id:
-                                                        logging.info(f"Found correctly formatted UUID Score ID: {alt_id}")
-                                                        score_id = alt_id
-                                                        # Also update score_version_id if present
-                                                        if score_item.get('championVersionId'):
-                                                            score_version_id = score_item.get('championVersionId')
-                                                        break
-                                    
-                                    # If we still have an incorrectly formatted ID, do not include it
-                                    if not (isinstance(score_id, str) and '-' in score_id):
-                                        logging.warning(f"Could not find a correctly formatted Score ID. Will not set ID in evaluation record.")
-                                        score_id = None  # Clear the invalid ID
-                                
-                                # Only add score_id to params if it's correctly formatted
-                                if score_id:
-                                    experiment_params['scoreId'] = score_id
-                                    logging.info(f"Setting Score ID in initial evaluation record: {score_id}")
-                            else:
-                                logging.warning("Could not find valid Score ID for evaluation record")
-                                
-                            if score_version_id:
-                                experiment_params['scoreVersionId'] = score_version_id
-                                logging.info(f"Setting Score Version ID in initial evaluation record: {score_version_id}")
-                            else:
-                                logging.warning("Could not find valid Score Version ID for evaluation record")
                                 
                             evaluation_record = DashboardEvaluation.create(
                                 client=client,
@@ -717,18 +607,6 @@ def accuracy(
                 target_score_identifiers = [s.strip() for s in score.split(',')] if score else []
                 try:
                     scorecard_instance = load_scorecard_from_api(scorecard, target_score_identifiers, use_cache=yaml)
-                    
-                    # Add debugging information about scorecard structure
-                    logging.info(f"Loaded scorecard instance type: {type(scorecard_instance).__name__}")
-                    logging.info(f"Scorecard instance has properties attribute: {hasattr(scorecard_instance, 'properties')}")
-                    if hasattr(scorecard_instance, 'properties'):
-                        logging.info(f"Scorecard properties: {scorecard_instance.properties}")
-                    logging.info(f"Scorecard instance has name attribute: {hasattr(scorecard_instance, 'name')}")
-                    if hasattr(scorecard_instance, 'name'):
-                        logging.info(f"Scorecard name is callable: {callable(scorecard_instance.name)}")
-                    logging.info(f"Scorecard instance has scores attribute: {hasattr(scorecard_instance, 'scores')}")
-                    if hasattr(scorecard_instance, 'scores'):
-                        logging.info(f"Scorecard scores count: {len(scorecard_instance.scores)}")
                         
                     # Immediately identify the primary score and extract score_id and score_version_id
                     # This needs to happen before evaluation record creation
@@ -744,7 +622,12 @@ def accuracy(
                                 str(sc_config.get('id', '')) == primary_score_identifier or
                                 sc_config.get('externalId') == primary_score_identifier):
                                 score_id_for_eval = sc_config.get('id')
-                                score_version_id_for_eval = sc_config.get('championVersionId')
+                                # First try to get from the configuration
+                                score_version_id_for_eval = sc_config.get('version')
+                                
+                                # Fall back to championVersionId if available
+                                if not score_version_id_for_eval:
+                                    score_version_id_for_eval = sc_config.get('championVersionId')
                                 
                                 # Validate score_id format - must be a UUID with hyphens
                                 if not (isinstance(score_id_for_eval, str) and '-' in score_id_for_eval):
@@ -775,7 +658,12 @@ def accuracy(
                     if not score_id_for_eval and scorecard_instance.scores:
                         sc_config = scorecard_instance.scores[0]
                         score_id_for_eval = sc_config.get('id')
-                        score_version_id_for_eval = sc_config.get('championVersionId')
+                        # First try to get from the configuration
+                        score_version_id_for_eval = sc_config.get('version')
+                        
+                        # Fall back to championVersionId if available
+                        if not score_version_id_for_eval:
+                            score_version_id_for_eval = sc_config.get('championVersionId')
                         
                         # Validate score_id format - must be a UUID with hyphens
                         if not (isinstance(score_id_for_eval, str) and '-' in score_id_for_eval):
@@ -897,11 +785,11 @@ def accuracy(
                 logging.info(f"  ID: {score_data.get('id', 'Unknown')}")
                 logging.info(f"  Key: {score_data.get('key', 'Unknown')}")
                 logging.info(f"  ChampionVersionId: {score_data.get('championVersionId', 'Unknown')}")
-                # Check if we can find championVersionId via different paths
-                if 'championVersionId' not in score_data:
+                # Check if we can find version or championVersionId via different paths
+                if 'version' not in score_data and 'championVersionId' not in score_data:
                     alt_version_id = score_data.get('champion_version_id') or score_data.get('championVersion', {}).get('id')
                     if alt_version_id:
-                        logging.info(f"  Found alt ChampionVersionId: {alt_version_id}")
+                        logging.info(f"  Found alternative version ID: {alt_version_id}")
             logging.info("=======================================")
 
             # Additional logging about primary score identifier
@@ -979,7 +867,12 @@ def accuracy(
 
             if primary_score_config:
                 score_id_for_eval = primary_score_config.get('id')
-                score_version_id_for_eval = primary_score_config.get('championVersionId')
+                # First try to get from the configuration
+                score_version_id_for_eval = primary_score_config.get('version')
+                
+                # Fall back to championVersionId if available
+                if not score_version_id_for_eval:
+                    score_version_id_for_eval = primary_score_config.get('championVersionId')
                 
                 # Validate score_id format - should be a UUID with hyphens
                 if not (isinstance(score_id_for_eval, str) and '-' in score_id_for_eval):
@@ -1122,8 +1015,12 @@ def accuracy(
                             if 'externalId' in primary_score_config:
                                 logging.warning(f"Found externalId: {primary_score_config.get('externalId')} which should NOT be used as the Score ID")
                             
-                        # Extract scoreVersionId (championVersionId) from the configuration
-                        score_version_id = primary_score_config.get('championVersionId')
+                        # Extract scoreVersionId (version) from the configuration
+                        score_version_id = primary_score_config.get('version')
+                        
+                        # Fall back to championVersionId if available
+                        if not score_version_id:
+                            score_version_id = primary_score_config.get('championVersionId')
                         
                         # Log both IDs for debugging
                         logging.info(f"Using score ID: {score_id} and score version ID: {score_version_id}")

@@ -146,7 +146,7 @@ class Scorecard:
                                 for score_item in section.get('scores', {}).get('items', []):
                                     if score_item.get('name') == score_config.get('name'):
                                         score_config['id'] = score_item.get('id')
-                                        score_config['championVersionId'] = score_item.get('championVersionId')
+                                        score_config['version'] = score_item.get('championVersionId')
                                         logging.info(f"Restored ID {score_item.get('id')} for score {score_config.get('name')}")
                                         break
                     parsed_configs.append(score_config)
@@ -162,7 +162,7 @@ class Scorecard:
                             for score_item in section.get('scores', {}).get('items', []):
                                 if score_item.get('name') == score_config.get('name'):
                                     score_config['id'] = score_item.get('id')
-                                    score_config['championVersionId'] = score_item.get('championVersionId')
+                                    score_config['version'] = score_item.get('championVersionId')
                                     logging.info(f"Restored ID {score_item.get('id')} for score {score_config.get('name')}")
                                     break
                 parsed_configs.append(score_config)
@@ -805,15 +805,12 @@ class Scorecard:
         Returns:
             A Scorecard instance populated with the API data
         """
-        # Log scorecard API data information before creating the instance
-        logging.info(f"Creating Scorecard instance from API data with ID: {scorecard_id}")
         
         # Verify that the API data contains the correct structure
         if 'sections' in api_data and 'items' in api_data.get('sections', {}):
             all_api_scores = []
             for section in api_data.get('sections', {}).get('items', []):
                 for score in section.get('scores', {}).get('items', []):
-                    logging.info(f"API DATA - Score: {score.get('name')}, ID: {score.get('id')}, VersionID: {score.get('championVersionId')}")
                     all_api_scores.append(score)
                     
             # Ensure scores_config has the correct IDs from API data
@@ -825,9 +822,41 @@ class Scorecard:
                             if not config.get('id'):
                                 config['id'] = api_score.get('id')
                                 logging.info(f"Setting ID {api_score.get('id')} for config {config.get('name')}")
-                            if not config.get('championVersionId'):
-                                config['championVersionId'] = api_score.get('championVersionId')
-                                logging.info(f"Setting championVersionId {api_score.get('championVersionId')} for config {config.get('name')}")
+                            if not config.get('version'):
+                                # Reorder fields in the exact order: name, key, id, version, parent
+                                ordered_config = {}
+                                
+                                # Add name if it exists
+                                if 'name' in config:
+                                    ordered_config['name'] = config['name']
+                                
+                                # Add key if it exists
+                                if 'key' in config:
+                                    ordered_config['key'] = config['key']
+                                
+                                # Add id if it exists
+                                if 'id' in config:
+                                    ordered_config['id'] = config['id']
+                                
+                                # Add version
+                                ordered_config['version'] = api_score.get('championVersionId')
+                                
+                                # Add parent if it exists
+                                if 'parent' in config:
+                                    ordered_config['parent'] = config['parent']
+                                
+                                # Add all other fields
+                                for key, value in config.items():
+                                    if key not in ['name', 'key', 'id', 'version', 'parent']:
+                                        ordered_config[key] = value
+                                
+                                # Replace the original config with ordered config
+                                for key in list(config.keys()):
+                                    del config[key]
+                                for key, value in ordered_config.items():
+                                    config[key] = value
+                                
+                                logging.info(f"Setting version {api_score.get('championVersionId')} for config {config.get('name')}")
                             break
         else:
             logging.warning("API data does not contain expected structure (sections.items)")

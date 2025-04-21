@@ -13,7 +13,8 @@ def fetch_score_configurations(
     client,
     scorecard_data: Dict[str, Any], 
     target_scores: List[Dict[str, Any]], 
-    cache_status: Union[Dict[str, bool], Tuple[List[str], List[str]]]
+    cache_status: Union[Dict[str, bool], Tuple[List[str], List[str]]],
+    use_cache: bool = True
 ) -> Dict[str, str]:
     """Fetch and cache missing score configurations from the API.
     
@@ -23,6 +24,9 @@ def fetch_score_configurations(
         target_scores: List of score objects to process
         cache_status: Either a dictionary mapping score IDs to their cache status (bool)
                      or a tuple of (cached_ids, uncached_ids) lists
+        use_cache: Whether to return configurations from cache (True) or use in-memory data (False)
+                  When True: after fetching, load everything from cache files
+                  When False: return API results directly without loading from cache
         
     Returns:
         Dictionary mapping score IDs to their parsed configurations
@@ -52,16 +56,25 @@ def fetch_score_configurations(
         ]
     else:
         logging.error(f"Unsupported cache_status format: {type(cache_status)}")
-        return load_cached_configurations(scorecard_data, target_scores)
+        if use_cache:
+            return load_cached_configurations(scorecard_data, target_scores)
+        else:
+            return {}
         
-    if not needs_fetch:
+    # Initialize configurations with empty dict
+    configurations = {}
+    
+    # If all scores are already in cache and we're using cache, load cached configurations
+    if not needs_fetch and use_cache:
         logging.info("All required score configurations are already cached locally.")
         return load_cached_configurations(scorecard_data, target_scores)
     
-    logging.info(f"Fetching {len(needs_fetch)} missing score configurations from API")
+    # If nothing needs fetching and we're not using cache, return empty dict
+    if not needs_fetch and not use_cache:
+        logging.info("No score configurations to fetch.")
+        return configurations
     
-    # Initialize dictionary to store configurations
-    configurations = {}
+    logging.info(f"Fetching {len(needs_fetch)} missing score configurations from API")
     
     # Set up YAML formatter for consistent formatting
     yaml = YAML()
@@ -82,58 +95,39 @@ def fetch_score_configurations(
     
     yaml.representer.add_representer(str, literal_presenter)
     
-    # Process each score that needs fetching
+    # Fetch each needed configuration
     for score in needs_fetch:
         score_id = score.get('id')
         score_name = score.get('name')
         champion_version_id = score.get('championVersionId')
         
-        logging.info(f"===== FETCHING CONFIGURATION FOR SCORE =====")
         logging.info(f"Score Name: {score_name}")
         logging.info(f"Score ID: {score_id}")
         logging.info(f"Champion Version ID: {champion_version_id}")
-        logging.info(f"=========================================")
         
-        # Validate score_id format - should be a UUID with hyphens
-        if score_id and not (isinstance(score_id, str) and '-' in score_id):
-            logging.warning(f"WARNING: Score ID doesn't appear to be in DynamoDB UUID format: {score_id}")
-            logging.warning(f"This may cause issues with Evaluation records. Expected format is UUID with hyphens.")
-            # Check for externalId which is often incorrectly used
-            if 'externalId' in score:
-                logging.warning(f"Found externalId: {score.get('externalId')} - this should NOT be used as the Score ID")
-        
-        if not champion_version_id:
-            logging.warning(f"No champion version ID for score: {score_name} ({score_id})")
+        if not score_id or not score_name or not champion_version_id:
+            logging.error(f"Missing required properties for score: {score}")
             continue
-            
-        logging.info(f"Fetching configuration for score: {score_name} ({score_id})")
         
-        # Get version content
-        version_query = f"""
-        query GetScoreVersion {{
-            getScoreVersion(id: "{champion_version_id}") {{
+        # Build the GraphQL query
+        query = """
+        query GetScoreVersion($id: ID!) {
+            getScoreVersion(id: $id) {
                 id
                 configuration
-                createdAt
-                updatedAt
-                note
-            }}
-        }}
+            }
+        }
         """
         
         try:
-            # Execute query directly without context manager
-            try:
-                # Try with context manager first
-                with client as session:
-                    version_result = session.execute(gql(version_query))
-            except AttributeError:
-                # Fallback to direct execution without context manager
-                version_result = client.execute(version_query)
+            # Execute the query
+            with client as session:
+                result = session.execute(gql(query), variable_values={"id": champion_version_id})
             
-            version_data = version_result.get('getScoreVersion')
+            # Extract the configuration
+            version_data = result.get('getScoreVersion', {})
             
-            if not version_data or not version_data.get('configuration'):
+            if not version_data or 'configuration' not in version_data:
                 logging.error(f"No configuration found for version: {champion_version_id}")
                 continue
                 
@@ -149,18 +143,41 @@ def fetch_score_configurations(
                     logging.error(f"Parsed configuration for {score_name} is not a dictionary")
                     continue
                 
-                # Add championVersionId to the configuration so we can use it later
-                parsed_config['championVersionId'] = champion_version_id
-                logging.info(f"Added championVersionId to configuration: {champion_version_id}")
+                # Reorder fields in the exact order: name, key, id, version, parent
+                ordered_config = {}
+                
+                # Add name if it exists
+                if 'name' in parsed_config:
+                    ordered_config['name'] = parsed_config['name']
+                
+                # Add key if it exists
+                if 'key' in parsed_config:
+                    ordered_config['key'] = parsed_config['key']
+                
+                # Add id if it exists
+                if 'id' in parsed_config:
+                    ordered_config['id'] = parsed_config['id']
+                
+                # Add version
+                ordered_config['version'] = champion_version_id
+                
+                # Add parent if it exists
+                if 'parent' in parsed_config:
+                    ordered_config['parent'] = parsed_config['parent']
+                
+                # Add all other fields
+                for key, value in parsed_config.items():
+                    if key not in ['name', 'key', 'id', 'version', 'parent']:
+                        ordered_config[key] = value
                 
                 # Get the YAML file path
                 yaml_path = get_score_yaml_path(scorecard_name, score_name)
                 
                 # Write to file with proper formatting
                 with open(yaml_path, 'w') as f:
-                    yaml.dump(parsed_config, f)
+                    yaml.dump(ordered_config, f)
                 
-                # Store the configuration
+                # Store the configuration in memory
                 configurations[score_id] = config_yaml
                 
                 logging.info(f"Saved score configuration to: {yaml_path}")
@@ -173,8 +190,44 @@ def fetch_score_configurations(
             logging.error(f"Error fetching score version: {str(e)}")
             continue
     
-    # Now load all configurations (both freshly fetched and pre-existing)
-    return load_cached_configurations(scorecard_data, target_scores)
+    # If we're using cache, load everything from cache
+    if use_cache:
+        logging.info("Using cached configurations - loading from disk")
+        return load_cached_configurations(scorecard_data, target_scores)
+    else:
+        # If we're not using cache, we need to return the in-memory configurations
+        # But we might need to fill in any missing configurations from the target_scores
+        # that weren't included in needs_fetch (if cache_status doesn't have all scores)
+        if len(configurations) < len(target_scores):
+            logging.info("Not using cache - returning in-memory configurations")
+            logging.info(f"Have {len(configurations)} configurations in memory, need {len(target_scores)}")
+            
+            # For any scores that are missing from configurations, load them from disk
+            # This ensures we have complete data even if cache_status was incomplete
+            for score in target_scores:
+                score_id = score.get('id')
+                if not score_id or score_id in configurations:
+                    continue
+                
+                score_name = score.get('name')
+                if not score_name:
+                    continue
+                
+                yaml_path = get_score_yaml_path(scorecard_name, score_name)
+                if not yaml_path.exists():
+                    logging.warning(f"Configuration file not found for {score_name}: {yaml_path}")
+                    continue
+                
+                try:
+                    with open(yaml_path, 'r') as f:
+                        configuration = f.read()
+                    configurations[score_id] = configuration
+                    logging.info(f"Added missing configuration for {score_name} from disk")
+                except Exception as e:
+                    logging.error(f"Error loading configuration for {score_name}: {str(e)}")
+        
+        logging.info(f"Returning {len(configurations)} configurations from memory")
+        return configurations
 
 def load_cached_configurations(
     scorecard_data: Dict[str, Any], 
@@ -234,36 +287,62 @@ def load_cached_configurations(
             with open(yaml_path, 'r') as f:
                 configuration = f.read()
                 
-            # Check if the cached configuration contains championVersionId
+            # Check if the cached configuration contains version
             try:
                 yaml_parser = YAML(typ='safe')
                 parsed_config = yaml_parser.load(configuration)
-                cached_version_id = parsed_config.get('championVersionId')
+                cached_version_id = parsed_config.get('version')
                 
                 if cached_version_id:
-                    logging.info(f"Cached configuration contains championVersionId: {cached_version_id}")
+                    logging.info(f"Cached configuration contains version: {cached_version_id}")
                 else:
-                    logging.warning(f"Cached configuration for {score_name} does not contain championVersionId")
+                    logging.warning(f"Cached configuration for {score_name} does not contain version")
                     
-                    # If the configuration doesn't have championVersionId but we have it from the API
+                    # If the configuration doesn't have version but we have it from the API
                     # add it to the configuration before returning
                     if champion_version_id:
-                        logging.info(f"Adding missing championVersionId from API: {champion_version_id}")
-                        parsed_config['championVersionId'] = champion_version_id
+                        logging.info(f"Adding missing version from API: {champion_version_id}")
+                        
+                        # Reorder fields in the exact order: name, key, id, version, parent
+                        ordered_config = {}
+                        
+                        # Add name if it exists
+                        if 'name' in parsed_config:
+                            ordered_config['name'] = parsed_config['name']
+                        
+                        # Add key if it exists
+                        if 'key' in parsed_config:
+                            ordered_config['key'] = parsed_config['key']
+                        
+                        # Add id if it exists
+                        if 'id' in parsed_config:
+                            ordered_config['id'] = parsed_config['id']
+                        
+                        # Add version
+                        ordered_config['version'] = champion_version_id
+                        
+                        # Add parent if it exists
+                        if 'parent' in parsed_config:
+                            ordered_config['parent'] = parsed_config['parent']
+                        
+                        # Add all other fields
+                        for key, value in parsed_config.items():
+                            if key not in ['name', 'key', 'id', 'version', 'parent']:
+                                ordered_config[key] = value
                         
                         # Convert updated config back to string
                         import io
                         stream = io.StringIO()
                         yaml_writer = YAML()
-                        yaml_writer.dump(parsed_config, stream)
+                        yaml_writer.dump(ordered_config, stream)
                         configuration = stream.getvalue()
                         
-                        # Save the updated configuration with championVersionId
+                        # Save the updated configuration with version
                         with open(yaml_path, 'w') as f:
                             f.write(configuration)
-                        logging.info(f"Updated cached configuration with championVersionId")
+                        logging.info(f"Updated cached configuration with version")
             except Exception as e:
-                logging.warning(f"Could not parse configuration to check for championVersionId: {str(e)}")
+                logging.warning(f"Could not parse configuration to check for version: {str(e)}")
                 
             configurations[score_id] = configuration
             logging.debug(f"Loaded configuration for score: {score_name}")
