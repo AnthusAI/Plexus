@@ -539,8 +539,34 @@ def accuracy(
                                 
                             # If we found a valid Score ID and ScoreVersion ID, add them to the evaluation parameters
                             if score_id:
-                                experiment_params['scoreId'] = score_id
-                                logging.info(f"Setting Score ID in initial evaluation record: {score_id}")
+                                # Validate score_id format - should be a UUID with hyphens
+                                if not (isinstance(score_id, str) and '-' in score_id):
+                                    logging.warning(f"WARNING: Score ID doesn't appear to be in DynamoDB UUID format: {score_id}")
+                                    logging.warning(f"This will cause issues with Evaluation records. Expected format is UUID with hyphens.")
+                                    
+                                    # Look for an alternative ID that is correctly formatted
+                                    if hasattr(scorecard_instance, 'properties') and scorecard_instance.properties:
+                                        for section in scorecard_instance.properties.get('sections', {}).get('items', []):
+                                            for score_item in section.get('scores', {}).get('items', []):
+                                                if score_item.get('name') == target_id or (not target_id and score_item.get('id')):
+                                                    alt_id = score_item.get('id')
+                                                    if isinstance(alt_id, str) and '-' in alt_id:
+                                                        logging.info(f"Found correctly formatted UUID Score ID: {alt_id}")
+                                                        score_id = alt_id
+                                                        # Also update score_version_id if present
+                                                        if score_item.get('championVersionId'):
+                                                            score_version_id = score_item.get('championVersionId')
+                                                        break
+                                    
+                                    # If we still have an incorrectly formatted ID, do not include it
+                                    if not (isinstance(score_id, str) and '-' in score_id):
+                                        logging.warning(f"Could not find a correctly formatted Score ID. Will not set ID in evaluation record.")
+                                        score_id = None  # Clear the invalid ID
+                                
+                                # Only add score_id to params if it's correctly formatted
+                                if score_id:
+                                    experiment_params['scoreId'] = score_id
+                                    logging.info(f"Setting Score ID in initial evaluation record: {score_id}")
                             else:
                                 logging.warning("Could not find valid Score ID for evaluation record")
                                 
@@ -709,8 +735,30 @@ def accuracy(
                                 sc_config.get('externalId') == primary_score_identifier):
                                 score_id_for_eval = sc_config.get('id')
                                 score_version_id_for_eval = sc_config.get('championVersionId')
-                                logging.info(f"Found primary score early: {sc_config.get('name')} with ID: {score_id_for_eval}")
-                                logging.info(f"Using champion version ID: {score_version_id_for_eval}")
+                                
+                                # Validate score_id format - must be a UUID with hyphens
+                                if not (isinstance(score_id_for_eval, str) and '-' in score_id_for_eval):
+                                    logging.warning(f"Early detection: Score ID doesn't appear to be in UUID format: {score_id_for_eval}")
+                                    
+                                    # Try to find the correct ID in the original API data
+                                    if hasattr(scorecard_instance, 'properties') and scorecard_instance.properties:
+                                        for section in scorecard_instance.properties.get('sections', {}).get('items', []):
+                                            for score_data in section.get('scores', {}).get('items', []):
+                                                if score_data.get('name') == sc_config.get('name'):
+                                                    uuid_id = score_data.get('id')
+                                                    if isinstance(uuid_id, str) and '-' in uuid_id:
+                                                        logging.info(f"Found correctly formatted UUID for {sc_config.get('name')}: {uuid_id}")
+                                                        score_id_for_eval = uuid_id
+                                                        # Also update version ID if available
+                                                        if score_data.get('championVersionId'):
+                                                            score_version_id_for_eval = score_data.get('championVersionId')
+                                
+                                if isinstance(score_id_for_eval, str) and '-' in score_id_for_eval:
+                                    logging.info(f"Found primary score early: {sc_config.get('name')} with ID: {score_id_for_eval}")
+                                    logging.info(f"Using champion version ID: {score_version_id_for_eval}")
+                                else:
+                                    logging.warning(f"Could not find correctly formatted UUID ID for {sc_config.get('name')}")
+                                    score_id_for_eval = None  # Clear invalid ID
                                 break
                     
                     # If no match found, fall back to first score
@@ -718,8 +766,30 @@ def accuracy(
                         sc_config = scorecard_instance.scores[0]
                         score_id_for_eval = sc_config.get('id')
                         score_version_id_for_eval = sc_config.get('championVersionId')
-                        logging.info(f"Using first score for evaluation record: {sc_config.get('name')} with ID: {score_id_for_eval}")
-                        logging.info(f"Using champion version ID: {score_version_id_for_eval}")
+                        
+                        # Validate score_id format - must be a UUID with hyphens
+                        if not (isinstance(score_id_for_eval, str) and '-' in score_id_for_eval):
+                            logging.warning(f"First score fallback: ID doesn't appear to be in UUID format: {score_id_for_eval}")
+                            
+                            # Try to find the correct ID in the original API data
+                            if hasattr(scorecard_instance, 'properties') and scorecard_instance.properties:
+                                for section in scorecard_instance.properties.get('sections', {}).get('items', []):
+                                    for score_data in section.get('scores', {}).get('items', []):
+                                        if score_data.get('name') == sc_config.get('name'):
+                                            uuid_id = score_data.get('id')
+                                            if isinstance(uuid_id, str) and '-' in uuid_id:
+                                                logging.info(f"Found correctly formatted UUID for {sc_config.get('name')}: {uuid_id}")
+                                                score_id_for_eval = uuid_id
+                                                # Also update version ID if available
+                                                if score_data.get('championVersionId'):
+                                                    score_version_id_for_eval = score_data.get('championVersionId')
+                        
+                        if isinstance(score_id_for_eval, str) and '-' in score_id_for_eval:
+                            logging.info(f"Using first score for evaluation record: {sc_config.get('name')} with ID: {score_id_for_eval}")
+                            logging.info(f"Using champion version ID: {score_version_id_for_eval}")
+                        else:
+                            logging.warning(f"Could not find correctly formatted UUID ID for {sc_config.get('name')}")
+                            score_id_for_eval = None  # Clear invalid ID
                     
                     logging.info(f"===== EARLY SCORE ID DETECTION =====")
                     logging.info(f"Score ID: {score_id_for_eval}")
@@ -900,12 +970,42 @@ def accuracy(
             if primary_score_config:
                 score_id_for_eval = primary_score_config.get('id')
                 score_version_id_for_eval = primary_score_config.get('championVersionId')
-                logging.info(f"Using score ID: {score_id_for_eval} and score version ID: {score_version_id_for_eval}")
-                logging.info(f"====== SCORE ID AND VERSION FOR EVALUATION ======")
-                logging.info(f"Score ID: {score_id_for_eval}")
-                logging.info(f"Score Version ID: {score_version_id_for_eval}")
-                logging.info(f"===============================================")
-            
+                
+                # Validate score_id format - should be a UUID with hyphens
+                if not (isinstance(score_id_for_eval, str) and '-' in score_id_for_eval):
+                    logging.warning(f"WARNING: Score ID for evaluation doesn't appear to be in DynamoDB UUID format: {score_id_for_eval}")
+                    logging.warning("This will cause issues with Evaluation records. Expected format is UUID with hyphens.")
+                    
+                    # Look for a correctly formatted ID in all scores
+                    if hasattr(scorecard_instance, 'properties') and scorecard_instance.properties:
+                        for section in scorecard_instance.properties.get('sections', {}).get('items', []):
+                            for score_item in section.get('scores', {}).get('items', []):
+                                # Try to match by name first
+                                if score_item.get('name') == primary_score_config.get('name') or not primary_score_config.get('name'):
+                                    alt_id = score_item.get('id')
+                                    if isinstance(alt_id, str) and '-' in alt_id:
+                                        logging.info(f"Found correctly formatted UUID Score ID: {alt_id}")
+                                        score_id_for_eval = alt_id
+                                        # Also update score_version_id if present
+                                        if score_item.get('championVersionId'):
+                                            score_version_id_for_eval = score_item.get('championVersionId')
+                                        break
+                    
+                    # If we still have an incorrectly formatted ID, skip using it
+                    if not (isinstance(score_id_for_eval, str) and '-' in score_id_for_eval):
+                        logging.warning(f"Could not find a correctly formatted Score ID. Not using ID: {score_id_for_eval}")
+                        score_id_for_eval = None
+                
+                # Only log the score_id if it's correctly formatted
+                if score_id_for_eval:
+                    logging.info(f"Using score ID: {score_id_for_eval} and score version ID: {score_version_id_for_eval}")
+                    logging.info(f"====== SCORE ID AND VERSION FOR EVALUATION ======")
+                    logging.info(f"Score ID: {score_id_for_eval}")
+                    logging.info(f"Score Version ID: {score_version_id_for_eval}")
+                    logging.info(f"===============================================")
+                else:
+                    logging.warning("No valid score ID found for evaluation.")
+
             # Instantiate AccuracyEvaluation
             logging.info("Instantiating AccuracyEvaluation...")
             # Ensure scorecard_id is passed correctly
@@ -1001,11 +1101,23 @@ def accuracy(
                     
                     if primary_score_config:
                         # Extract scoreId from the primary score configuration
+                        # IMPORTANT: Use the ID field which contains the DynamoDB UUID-format ID
+                        # NOT the externalId which is a simple numeric ID
                         score_id = primary_score_config.get('id')
+                        
+                        # Log warning if the Score ID doesn't match the expected UUID format
+                        if score_id and not (isinstance(score_id, str) and '-' in score_id):
+                            logging.warning(f"Score ID doesn't appear to be in DynamoDB UUID format: {score_id}")
+                            # Try to find the UUID ID from the primary_score_config
+                            if 'externalId' in primary_score_config:
+                                logging.warning(f"Found externalId: {primary_score_config.get('externalId')} which should NOT be used as the Score ID")
+                            
                         # Extract scoreVersionId (championVersionId) from the configuration
                         score_version_id = primary_score_config.get('championVersionId')
                         
+                        # Log both IDs for debugging
                         logging.info(f"Using score ID: {score_id} and score version ID: {score_version_id}")
+                        logging.info(f"Score ID type: {type(score_id)}, Score Version ID type: {type(score_version_id)}")
 
                     # The allowed fields are documented in the GraphQL schema
                     update_fields = {
@@ -1014,15 +1126,28 @@ def accuracy(
                         'metrics': json.dumps(update_payload_metrics), # Store detailed metrics
                         'estimatedRemainingSeconds': 0,
                         'processedItems': len(labeled_samples_data), # Add processed items count
-                        # Add score IDs if available
-                        'scoreId': score_id,
-                        'scoreVersionId': score_version_id,
-                        # Add confusion matrix and distributions if available and needed by API
-                        'confusionMatrix': json.dumps(final_metrics.get("confusionMatrix")) if final_metrics.get("confusionMatrix") else None,
-                        'predictedClassDistribution': json.dumps(final_metrics.get("predictedClassDistribution")) if final_metrics.get("predictedClassDistribution") else None,
-                        'datasetClassDistribution': json.dumps(final_metrics.get("datasetClassDistribution")) if final_metrics.get("datasetClassDistribution") else None,
-                        # TODO: Add isDatasetClassDistributionBalanced, isPredictedClassDistributionBalanced if calculated
                     }
+                    
+                    # Add score IDs if available and correctly formatted
+                    if score_id:
+                        if isinstance(score_id, str) and '-' in score_id:
+                            update_fields['scoreId'] = score_id
+                        else:
+                            logging.warning(f"Final update: Score ID not in proper UUID format: {score_id}. Not using it.")
+                    
+                    if score_version_id:
+                        update_fields['scoreVersionId'] = score_version_id
+                    
+                    # Add other data fields
+                    if final_metrics.get("confusionMatrix"):
+                        update_fields['confusionMatrix'] = json.dumps(final_metrics.get("confusionMatrix"))
+                    
+                    if final_metrics.get("predictedClassDistribution"):
+                        update_fields['predictedClassDistribution'] = json.dumps(final_metrics.get("predictedClassDistribution"))
+                    
+                    if final_metrics.get("datasetClassDistribution"):
+                        update_fields['datasetClassDistribution'] = json.dumps(final_metrics.get("datasetClassDistribution"))
+                    
                     # Remove None values from update_fields
                     update_fields = {k: v for k, v in update_fields.items() if v is not None}
                     
