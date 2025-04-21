@@ -537,24 +537,6 @@ This is the core change, moving away from the global registry for API loading an
     4. Update README with new features and options
   - Verify: Help text is clear and comprehensive when running commands from the `~/projects/Call-Criteria-Python` directory
 
-- 🟡 **Step 21A: Investigate `calculate_metrics` internal logic**
-  - What: Determine why `calculate_metrics` in `Evaluation.py` is returning 0% metrics despite receiving results.
-  - Problem: Logs show `calculate_metrics` is called with results, but the final summary indicates 0 predictions processed and 0 correct.
-  - Hypothesis: The inner loop iterating over `result['results'].items()` might be failing, or the structure of the `results` dictionary passed from `AccuracyEvaluation.run` doesn't match what `calculate_metrics` expects.
-  - Goal: Ensure the `results` data is correctly processed to generate accurate metrics.
-  - Verify: Logs within `calculate_metrics` show correct processing of individual score results, and the final metrics summary reflects the actual data.
-
-- 🟡 **Step 21B: Resolve Dashboard Client Errors**
-  - What: Fix `AttributeError` exceptions related to the `PlexusDashboardClient` during evaluation updates.
-  - Problem:
-    - `AttributeError: 'PlexusDashboardClient' object has no attribute 'execute_async'` in `log_to_dashboard` (called by background task).
-    - `AttributeError: 'NoneType' object has no attribute 'execute'` during the final metrics update in the main evaluation thread.
-  - Hypothesis:
-    - The client instance used by the background metrics task (`continuous_metrics_computation`) might be initialized differently or might be missing the `execute_async` method.
-    - The client instance (`self.dashboard_client`) might be becoming `None` before the final update attempt, possibly due to errors during initialization or cleanup.
-  - Goal: Ensure dashboard updates occur correctly both during and at the end of the evaluation.
-  - Verify: Evaluation progress and final results are successfully updated in the dashboard without client-related errors.
-
 ## Current Implementation Status
 
 ## What's Working
@@ -566,78 +548,15 @@ This is the core change, moving away from the global registry for API loading an
 6. ✅ **Dry Run Mode**: Implemented `--dry-run` flag to test without database operations
 7. ✅ **Error Handling**: Robust error handling for API failures and missing configurations
 8. ✅ **GraphQL Mutations**: Fixed field validation to ensure only allowed fields are sent in GraphQL mutations
-
-## What's Not Working
-1. ❌ **Async Function Handling**: Critical issue with coroutines not being properly awaited:
-   ```
-   RuntimeWarning: coroutine 'Scorecard.score_entire_text' was never awaited
-   ```
-   
-   This prevents actual scoring from occurring despite the process completing without errors.
-
-2. ❌ **Score Parameter Handling**: When using the new `--score` parameter, there may still be inconsistencies in how the score identifier is resolved to a canonical name across different functions.
-
-3. ❌ **Evaluation ID Required**: The AccuracyEvaluation class requires an evaluation_id, but we're encountering an error where this ID is not available:
-   ```
-   ValueError: No evaluation ID available - check if evaluation_record was created successfully
-   ```
-   
-   This happens when:
-   - The evaluation record wasn't created successfully before running the accuracy command
-   - There was an issue with the database connection when creating the evaluation record
-   - The task doesn't have the required metadata with an evaluation_id field
-
-## Next Steps
-
-### Immediate Priority: Fix Evaluation ID Issue
-1. 🟡 **Modify AccuracyEvaluation**: Update the AccuracyEvaluation class to make evaluation_id optional when running in dry-run mode
-
-2. 🟡 **Improve Error Handling**: Add more robust error detection and handling for missing evaluation IDs:
-   - Clearer error messages with suggested solutions
-   - Automatic fallback behavior when possible
-   - Better integration with dry-run mode
-
-3. 🟡 **Add Create-and-Continue Flow**: When evaluation_id is missing, offer to create a new evaluation record and continue
-
-### Secondary Priorities
-1. 🟡 **Fix Async Handling**: Review the call chain from `score_text_wrapper` through `Scorecard.score_entire_text` to identify where the async/await pattern breaks
-
-2. 🟡 **Add Safeguards**: Implement runtime checks to detect unawaited coroutines
-
-3. 🟡 **End-to-End Testing**: Test with complex dependency structures
-
-4. 🟡 **Documentation Updates**: Update all user-facing documentation
-
-## Session Plan
-For our next session, we should focus on:
-
-1. **Understanding the Evaluation Record Flow**:
-   - Examine how evaluation records are created in the current implementation
-   - Identify where the failure is occurring in the creation process
-   - Determine if there are permission issues or other blockers
-
-2. **Implementing Fixes**:
-   - Make evaluation_id optional in dry-run mode
-   - Add graceful fallbacks when evaluation_id is missing
-   - Improve error messages with actionable solutions
-
-3. **Testing New Approaches**:
-   - Test the updated implementation with various command line options
-   - Verify that the dry-run mode works properly without requiring evaluation_id
-   - Test the create-and-continue flow if implemented
-
-4. **Documentation**:
-   - Update documentation with the new functionality
-   - Add troubleshooting section for common evaluation errors
-   - Document the dry-run workflow for testing without database dependencies
-
-Key focus areas should be making the system more robust when database operations fail and providing clearer guidance to users when things go wrong.
+9. ✅ **Async Function Handling**: Fixed issues with coroutines not being properly awaited
+10. ✅ **Score Parameter Handling**: Fixed inconsistencies in score identifier resolution
+11. ✅ **Evaluation ID Handling**: Improved error handling for missing evaluation IDs and made it optional in dry-run mode
 
 ## Testing Commands
 
 > **Note:** All commands should be run from the Call-Criteria-Python project root directory (`~/projects/Call-Criteria-Python`).
 
-### Testing with Dry-Run Mode (Recommended Workaround)
+### Testing with Dry-Run Mode
 ```bash
 # Test with dry run mode to bypass evaluation record requirement
 python -m plexus evaluate accuracy --scorecard "selectquote_hcs_medium_risk" --score "Call Need and Resolution" --number-of-samples 1 --dry-run
@@ -652,9 +571,9 @@ python -m plexus evaluations create --account-key call-criteria --type accuracy 
 python -m plexus evaluate accuracy --scorecard "selectquote_hcs_medium_risk" --score "Call Need and Resolution" --evaluation-id your_evaluation_id
 ```
 
-### Testing Other Commands (Not Affected by Evaluation ID)
+### Testing Other Commands
 ```bash
-# Test distribution command with dry run (not affected by evaluation ID issue)
+# Test distribution command with dry run
 python -m plexus evaluate distribution --scorecard "selectquote_hcs_medium_risk" --score "Call Need and Resolution" --number-of-samples 10 --dry-run
 ```
 
