@@ -112,10 +112,10 @@ class TestScorecard:
             score_instance = await score_class.create(**(score_config or {}))
             
             # Call the predict method with the model_input
-            from plexus.scores.Score import Input
+            from plexus.scores.Score import Score
             result = await score_instance.predict(
                 context=None,
-                model_input=Input(
+                model_input=Score.Input(
                     text=kwargs.get('text', ''),
                     metadata=metadata,
                     results=results
