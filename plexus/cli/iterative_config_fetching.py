@@ -46,6 +46,12 @@ def iteratively_fetch_configurations(
         logging.error("Cannot fetch configurations: No scorecard name provided")
         return {}
     
+    # Log the caching strategy
+    if use_cache:
+        logging.info("CACHING STRATEGY: Using local cache first, fetching from API only for missing configs")
+    else:
+        logging.info("CACHING STRATEGY: Always fetching from API, ignoring local cache (but still writing to cache)")
+    
     # Build name/ID mappings
     id_to_name, name_to_id = build_name_id_mappings(target_scores)
     
@@ -57,12 +63,12 @@ def iteratively_fetch_configurations(
     # Initialize our configuration store
     configurations = {}
     
-    # Store a mapping of score_id to championVersionId
+    # Store a mapping of score_id to version
     score_version_map = {}
     for score in target_scores:
         if score.get('id') and score.get('championVersionId'):
             score_version_map[score.get('id')] = score.get('championVersionId')
-            logging.info(f"Tracking championVersionId {score.get('championVersionId')} for score {score.get('id')}")
+            logging.info(f"Tracking championVersionId {score.get('championVersionId')} as version for score {score.get('id')}")
     
     # Process iteratively until all dependencies are resolved
     iteration = 1
@@ -85,7 +91,7 @@ def iteratively_fetch_configurations(
             cache_status = check_local_score_cache(scorecard_data, current_scores)
             
             # Fetch missing configurations
-            new_configs = fetch_score_configurations(client, scorecard_data, current_scores, cache_status)
+            new_configs = fetch_score_configurations(client, scorecard_data, current_scores, cache_status, use_cache=use_cache)
         else:
             # When use_cache=False, force fetch all configurations from API
             # Create a cache_status dict with all scores marked as not cached
@@ -93,7 +99,7 @@ def iteratively_fetch_configurations(
             logging.info("Bypassing local cache check - fetching all configurations from API")
             
             # Fetch all configurations from API
-            new_configs = fetch_score_configurations(client, scorecard_data, current_scores, cache_status)
+            new_configs = fetch_score_configurations(client, scorecard_data, current_scores, cache_status, use_cache=use_cache)
         
         # Add to our overall configurations
         configurations.update(new_configs)
@@ -181,7 +187,7 @@ def iteratively_fetch_configurations(
             for score in new_dependency_scores:
                 if score.get('id') and score.get('championVersionId'):
                     score_version_map[score.get('id')] = score.get('championVersionId')
-                    logging.info(f"Tracking championVersionId {score.get('championVersionId')} for dependency {score.get('id')}")
+                    logging.info(f"Tracking championVersionId {score.get('championVersionId')} as version for dependency {score.get('id')}")
             
             logging.info(f"Updated score list now contains {len(all_scores)} scores")
             
@@ -215,10 +221,10 @@ def iteratively_fetch_configurations(
                 # Force fetch from API for missing configs as well
                 missing_cache_status = {score.get('id'): False for score in missing_scores if score.get('id')}
                 
-            missing_configs = fetch_score_configurations(client, scorecard_data, missing_scores, missing_cache_status)
+            missing_configs = fetch_score_configurations(client, scorecard_data, missing_scores, missing_cache_status, use_cache=use_cache)
             configurations.update(missing_configs)
     
-    # Ensure each configuration has the championVersionId
+    # Ensure each configuration has the version
     from ruamel.yaml import YAML
     yaml_parser = YAML(typ='safe')
     
@@ -228,22 +234,47 @@ def iteratively_fetch_configurations(
                 # Parse the configuration
                 config_dict = yaml_parser.load(config_str)
                 
-                # Add championVersionId if not already present
-                if isinstance(config_dict, dict) and 'championVersionId' not in config_dict:
+                # Add version if not already present
+                if isinstance(config_dict, dict) and 'version' not in config_dict:
                     version_id = score_version_map.get(score_id)
                     if version_id:
-                        logging.info(f"Adding missing championVersionId {version_id} to score {score_id}")
-                        # We should modify the configuration directly
-                        config_dict['championVersionId'] = version_id
+                        logging.info(f"Adding missing version {version_id} to score {score_id}")
+                        
+                        # Reorder fields in the exact order: name, key, id, version, parent
+                        ordered_config = {}
+                        
+                        # Add name if it exists
+                        if 'name' in config_dict:
+                            ordered_config['name'] = config_dict['name']
+                        
+                        # Add key if it exists
+                        if 'key' in config_dict:
+                            ordered_config['key'] = config_dict['key']
+                        
+                        # Add id if it exists
+                        if 'id' in config_dict:
+                            ordered_config['id'] = config_dict['id']
+                        
+                        # Add version
+                        ordered_config['version'] = version_id
+                        
+                        # Add parent if it exists
+                        if 'parent' in config_dict:
+                            ordered_config['parent'] = config_dict['parent']
+                        
+                        # Add all other fields
+                        for key, value in config_dict.items():
+                            if key not in ['name', 'key', 'id', 'version', 'parent']:
+                                ordered_config[key] = value
                         
                         # Convert back to string
                         import io
                         stream = io.StringIO()
                         yaml_writer = YAML()
-                        yaml_writer.dump(config_dict, stream)
+                        yaml_writer.dump(ordered_config, stream)
                         configurations[score_id] = stream.getvalue()
             except Exception as e:
-                logging.warning(f"Could not update championVersionId in configuration: {str(e)}")
+                logging.warning(f"Could not update version in configuration: {str(e)}")
     
     # Return all configurations
     return configurations 
