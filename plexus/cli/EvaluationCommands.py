@@ -149,6 +149,29 @@ def load_scorecard_from_api(scorecard_identifier: str, score_names=None):
                     error_msg = f"No scores found in scorecard {scorecard_identifier}"
                 logging.error(error_msg)
                 raise ValueError(error_msg)
+                
+            # Log score IDs and championVersionIds for all target scores
+            for score in target_scores:
+                score_id = score.get('id')
+                score_name = score.get('name', 'Unknown')
+                championVersionId = score.get('championVersionId')
+                score_key = score.get('key', 'Unknown')
+                logging.info(f"====== FOUND TARGET SCORE: {score_name} ======")
+                logging.info(f"Score ID: {score_id}")
+                logging.info(f"Score Key: {score_key}")
+                logging.info(f"Champion Version ID: {championVersionId}")
+                logging.info(f"==========================================")
+                
+            # Store the first target score's ID and championVersionId for later use
+            # This is critical for setting the evaluation record properly
+            primary_score = target_scores[0] if target_scores else None
+            if primary_score:
+                primary_score_id = primary_score.get('id')
+                primary_score_version_id = primary_score.get('championVersionId')
+                logging.info(f"===== PRIMARY SCORE FOR EVALUATION =====")
+                logging.info(f"Primary Score ID: {primary_score_id}")
+                logging.info(f"Primary Score Version ID: {primary_score_version_id}")
+                logging.info(f"========================================")
         except Exception as e:
             error_msg = f"Error identifying target scores: {str(e)}"
             logging.error(error_msg)
@@ -292,13 +315,18 @@ def accuracy(
     
     # Original implementation for non-dry-run mode
     async def _run_accuracy():
-        nonlocal task_id  # Make task_id accessible to modify in the async function
-        experiment = None
-        task = None
+        nonlocal task_id, score  # Make task_id and score accessible to modify in the async function
+        
+        task = None  # Track the task
         evaluation_record = None  # Track the evaluation record
+        score_id_for_eval = None  # Track the score ID for the evaluation
+        score_version_id_for_eval = None  # Track the score version ID for the evaluation
+        
+        started_at = datetime.now(timezone.utc)
+        
+        # Initialize our tracker
         tracker = None  # Initialize tracker at the top level
         scorecard_record = None  # Initialize scorecard record at the top level
-        score_id = None  # Initialize score ID at the top level
         scorecard_instance = None  # Initialize scorecard_instance
         
         try:
@@ -442,6 +470,86 @@ def accuracy(
 
                             logging.info("Creating initial Evaluation record...")
                             logging.info(f"Creating evaluation with params:\n{json.dumps(experiment_params, indent=2)}")
+                            
+                            # Validate 'score' parameter
+                            if score is None:
+                                score = ""  # Default to empty string if None
+                                logging.warning("'score' parameter is None, defaulting to empty string")
+                            
+                            # Parse the score option to get target score identifiers
+                            target_score_identifiers = [s.strip() for s in score.split(',')] if score else []
+                            
+                            # Check the target scores from target_score_identifiers
+                            target_id = None
+                            if target_score_identifiers and target_score_identifiers[0]:
+                                target_id = target_score_identifiers[0]
+                                logging.info(f"Using target score identifier: {target_id}")
+                                
+                            # Find the real Score ID and ScoreVersion ID from the initial query
+                            # We need to look through all sections and scores in the API result
+                            score_id = None
+                            score_version_id = None
+                            
+                            # DIRECT ACCESS TO THE API STRUCTURE - Most reliable source
+                            # We're getting IDs directly from the API structure before any transformations
+                            logging.info("Attempting to find Score ID directly from API structure")
+                            if hasattr(scorecard_instance, 'properties') and scorecard_instance.properties:
+                                for section in scorecard_instance.properties.get('sections', {}).get('items', []):
+                                    for score_item in section.get('scores', {}).get('items', []):
+                                        # If no target specified, use the first score
+                                        if not target_id or score_item.get('name') == target_id or score_item.get('key') == target_id:
+                                            score_id = score_item.get('id')
+                                            score_version_id = score_item.get('championVersionId')
+                                            logging.info(f"FOUND SCORE IN API PROPERTIES: {score_item.get('name')}")
+                                            logging.info(f"Setting Score ID: {score_id}")
+                                            logging.info(f"Setting Score Version ID: {score_version_id}")
+                                            break
+                                    if score_id:
+                                        break
+                            
+                            # BACKUP: Check the scores attribute directly if API direct access didn't work
+                            if not score_id and hasattr(scorecard_instance, 'scores') and scorecard_instance.scores:
+                                logging.info("Attempting to find Score ID from scorecard scores list")
+                                logging.info(f"Scores: {scorecard_instance.scores}")
+                                
+                                for score_item in scorecard_instance.scores:
+                                    if isinstance(score_item, dict) and (not target_id or score_item.get('name') == target_id):
+                                        score_id = score_item.get('id')
+                                        score_version_id = score_item.get('championVersionId')
+                                        logging.info(f"FOUND SCORE IN SCORES LIST: {score_item.get('name')}")
+                                        logging.info(f"Setting Score ID: {score_id}")
+                                        logging.info(f"Setting Score Version ID: {score_version_id}")
+                                        break
+                            
+                            # Log warning if we still couldn't find the score ID
+                            if not score_id:
+                                logging.warning(f"Could not find valid Score ID for evaluation record. Target: {target_id}")
+                                
+                                # EMERGENCY FALLBACK: Get any meaningful score ID from the scorecard structure
+                                if hasattr(scorecard_instance, 'properties') and scorecard_instance.properties:
+                                    for section in scorecard_instance.properties.get('sections', {}).get('items', []):
+                                        if section.get('scores', {}).get('items'):
+                                            first_score = section.get('scores', {}).get('items')[0]
+                                            score_id = first_score.get('id')
+                                            score_version_id = first_score.get('championVersionId')
+                                            logging.info(f"EMERGENCY FALLBACK - Using first available score: {first_score.get('name')}")
+                                            logging.info(f"Score ID: {score_id}")
+                                            logging.info(f"Score Version ID: {score_version_id}")
+                                            break
+                                
+                            # If we found a valid Score ID and ScoreVersion ID, add them to the evaluation parameters
+                            if score_id:
+                                experiment_params['scoreId'] = score_id
+                                logging.info(f"Setting Score ID in initial evaluation record: {score_id}")
+                            else:
+                                logging.warning("Could not find valid Score ID for evaluation record")
+                                
+                            if score_version_id:
+                                experiment_params['scoreVersionId'] = score_version_id
+                                logging.info(f"Setting Score Version ID in initial evaluation record: {score_version_id}")
+                            else:
+                                logging.warning("Could not find valid Score Version ID for evaluation record")
+                                
                             evaluation_record = DashboardEvaluation.create(
                                 client=client,
                                 **experiment_params
@@ -565,7 +673,12 @@ def accuracy(
                     raise ValueError(error_msg)
             else:
                 # Load from API (new approach)
-                target_score_identifiers = score.split(',') if score else None
+                # Validate 'score' parameter
+                if score is None:
+                    score = ""  # Default to empty string if None
+                    logging.warning("'score' parameter is None, defaulting to empty string")
+                
+                target_score_identifiers = [s.strip() for s in score.split(',')] if score else []
                 try:
                     scorecard_instance = load_scorecard_from_api(scorecard, target_score_identifiers)
                     
@@ -580,6 +693,39 @@ def accuracy(
                     logging.info(f"Scorecard instance has scores attribute: {hasattr(scorecard_instance, 'scores')}")
                     if hasattr(scorecard_instance, 'scores'):
                         logging.info(f"Scorecard scores count: {len(scorecard_instance.scores)}")
+                        
+                    # Immediately identify the primary score and extract score_id and score_version_id
+                    # This needs to happen before evaluation record creation
+                    primary_score_identifier = target_score_identifiers[0] if target_score_identifiers else None
+                    score_id_for_eval = None
+                    score_version_id_for_eval = None
+                    
+                    if primary_score_identifier and scorecard_instance.scores:
+                        logging.info(f"Identifying primary score '{primary_score_identifier}' for evaluation record")
+                        for sc_config in scorecard_instance.scores:
+                            if (sc_config.get('name') == primary_score_identifier or
+                                sc_config.get('key') == primary_score_identifier or 
+                                str(sc_config.get('id', '')) == primary_score_identifier or
+                                sc_config.get('externalId') == primary_score_identifier):
+                                score_id_for_eval = sc_config.get('id')
+                                score_version_id_for_eval = sc_config.get('championVersionId')
+                                logging.info(f"Found primary score early: {sc_config.get('name')} with ID: {score_id_for_eval}")
+                                logging.info(f"Using champion version ID: {score_version_id_for_eval}")
+                                break
+                    
+                    # If no match found, fall back to first score
+                    if not score_id_for_eval and scorecard_instance.scores:
+                        sc_config = scorecard_instance.scores[0]
+                        score_id_for_eval = sc_config.get('id')
+                        score_version_id_for_eval = sc_config.get('championVersionId')
+                        logging.info(f"Using first score for evaluation record: {sc_config.get('name')} with ID: {score_id_for_eval}")
+                        logging.info(f"Using champion version ID: {score_version_id_for_eval}")
+                    
+                    logging.info(f"===== EARLY SCORE ID DETECTION =====")
+                    logging.info(f"Score ID: {score_id_for_eval}")
+                    logging.info(f"Score Version ID: {score_version_id_for_eval}")
+                    logging.info(f"===================================")
+                    
                 except Exception as e:
                     error_msg = f"Failed to load scorecard from API: {str(e)}"
                     logging.error(error_msg)
@@ -645,8 +791,12 @@ def accuracy(
             if tracker and not dry_run:
                 tracker.update(current_items=0)
             
-            # --- BEGIN REFACTOR ---
             # Determine the primary score for fetching data
+            # Validate 'score' parameter
+            if score is None:
+                score = ""  # Default to empty string if None
+                logging.warning("'score' parameter is None, defaulting to empty string")
+            
             target_score_identifiers = [s.strip() for s in score.split(',')] if score else []
             primary_score_identifier = target_score_identifiers[0] if target_score_identifiers else None
             primary_score_config = None
@@ -659,9 +809,28 @@ def accuracy(
                  if tracker: tracker.fail_current_stage(error_msg)
                  raise ValueError(error_msg)
 
+            # Log what we have loaded in the scorecard_instance
+            logging.info("===== SCORECARD INSTANCE SCORE DATA =====")
+            for idx, score_data in enumerate(scorecard_instance.scores):
+                logging.info(f"Score {idx+1}:")
+                logging.info(f"  Name: {score_data.get('name', 'Unknown')}")
+                logging.info(f"  ID: {score_data.get('id', 'Unknown')}")
+                logging.info(f"  Key: {score_data.get('key', 'Unknown')}")
+                logging.info(f"  ChampionVersionId: {score_data.get('championVersionId', 'Unknown')}")
+                # Check if we can find championVersionId via different paths
+                if 'championVersionId' not in score_data:
+                    alt_version_id = score_data.get('champion_version_id') or score_data.get('championVersion', {}).get('id')
+                    if alt_version_id:
+                        logging.info(f"  Found alt ChampionVersionId: {alt_version_id}")
+            logging.info("=======================================")
+
+            # Additional logging about primary score identifier
+            logging.info(f"Primary score identifier from command line: {primary_score_identifier}")
+
             if primary_score_identifier:
                 # Find the config for the specified primary score
                 for i, sc_config in enumerate(scorecard_instance.scores):
+                    logging.info(f"Checking score: {sc_config.get('name')} (ID: {sc_config.get('id')}, Key: {sc_config.get('key')})")
                     if (sc_config.get('name') == primary_score_identifier or
                         sc_config.get('key') == primary_score_identifier or
                         str(sc_config.get('id', '')) == primary_score_identifier or
@@ -669,17 +838,19 @@ def accuracy(
                         primary_score_config = sc_config
                         primary_score_name = sc_config.get('name')
                         primary_score_index = i
+                        logging.info(f"Found primary score: {sc_config.get('name')} with ID: {sc_config.get('id')}")
                         logging.info(f"Using specified score '{primary_score_name}' for fetching samples.")
                         break
                 if not primary_score_config:
                     logging.warning(f"Could not find specified primary score '{primary_score_identifier}'. Using first score for samples.")
             
             if not primary_score_config:
-                 # Default to the first score in the scorecard if none specified or found
-                 primary_score_config = scorecard_instance.scores[0]
-                 primary_score_name = primary_score_config.get('name', 'Score 0')
-                 primary_score_index = 0
-                 logging.info(f"Using first score '{primary_score_name}' for fetching samples.")
+                # Default to the first score in the scorecard if none specified or found
+                primary_score_config = scorecard_instance.scores[0]
+                primary_score_name = primary_score_config.get('name', 'Score 0')
+                primary_score_index = 0
+                logging.info(f"Using first score as primary: {primary_score_config.get('name')} (ID: {primary_score_config.get('id')})")
+                logging.info(f"Using first score '{primary_score_name}' for fetching samples.")
 
             # Resolve the canonical scorecard name
             scorecard_name_resolved = None
@@ -725,10 +896,15 @@ def accuracy(
             # Get score ID and version ID if a specific score was targeted
             score_id_for_eval = None
             score_version_id_for_eval = None
+
             if primary_score_config:
                 score_id_for_eval = primary_score_config.get('id')
                 score_version_id_for_eval = primary_score_config.get('championVersionId')
                 logging.info(f"Using score ID: {score_id_for_eval} and score version ID: {score_version_id_for_eval}")
+                logging.info(f"====== SCORE ID AND VERSION FOR EVALUATION ======")
+                logging.info(f"Score ID: {score_id_for_eval}")
+                logging.info(f"Score Version ID: {score_version_id_for_eval}")
+                logging.info(f"===============================================")
             
             # Instantiate AccuracyEvaluation
             logging.info("Instantiating AccuracyEvaluation...")
@@ -740,6 +916,29 @@ def accuracy(
             eval_id_for_eval = evaluation_record.id if evaluation_record else None
             if not eval_id_for_eval and task and task.metadata and 'evaluation_id' in task.metadata:
                 eval_id_for_eval = task.metadata['evaluation_id']
+                
+            # Log crucial information before proceeding
+            logging.info(f"=== ACCURACY EVALUATION INITIALIZATION ===")
+            logging.info(f"Evaluation ID: {eval_id_for_eval}")
+            logging.info(f"Scorecard ID: {sc_id_for_eval}")
+            logging.info(f"Score ID: {score_id_for_eval}")
+            logging.info(f"Score Version ID: {score_version_id_for_eval}")
+            logging.info(f"Account ID: {acc_id_for_eval}")
+            logging.info(f"Task ID: {task_id}")
+            logging.info(f"=====================================")
+                
+            # Make sure evaluation_id is not None - it's required by AccuracyEvaluation
+            if not eval_id_for_eval and not dry_run:
+                # This is a critical error - AccuracyEvaluation requires an evaluation_id
+                error_msg = "No evaluation ID available - check if evaluation_record was created successfully"
+                logging.error(error_msg)
+                if tracker:
+                    tracker.fail_current_stage(error_msg)
+                raise ValueError(error_msg)
+            elif not eval_id_for_eval and dry_run:
+                logging.info("[DRY RUN] Using mock evaluation ID since no evaluation record was created")
+                # In dry run mode, we'll use a mock ID that will be set in AccuracyEvaluation.run
+                eval_id_for_eval = None
             
             accuracy_eval = AccuracyEvaluation(
                 scorecard_name=scorecard_name_resolved,
@@ -767,10 +966,15 @@ def accuracy(
                 logging.info("Entered Processing stage: Running AccuracyEvaluation")
 
             # Run the evaluation using the AccuracyEvaluation instance
-            final_metrics = await accuracy_eval.run(tracker=tracker)
-            logging.info(f"AccuracyEvaluation run completed. Metrics: {final_metrics}")
-
-            # --- END REFACTOR ---
+            logging.info("Running accuracy evaluation...")
+            try:
+                final_metrics = await accuracy_eval.run(tracker=tracker, dry_run=dry_run)
+            except Exception as e:
+                error_msg = f"Error during execution: {str(e)}"
+                logging.error(error_msg)
+                if tracker:
+                    tracker.fail_current_stage(error_msg)
+                raise ValueError(error_msg)
 
             # Advance to the Finalizing stage after evaluation completes
             if tracker:

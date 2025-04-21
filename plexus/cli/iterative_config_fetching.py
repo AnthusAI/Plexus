@@ -53,6 +53,13 @@ def iteratively_fetch_configurations(
     # Initialize our configuration store
     configurations = {}
     
+    # Store a mapping of score_id to championVersionId
+    score_version_map = {}
+    for score in target_scores:
+        if score.get('id') and score.get('championVersionId'):
+            score_version_map[score.get('id')] = score.get('championVersionId')
+            logging.info(f"Tracking championVersionId {score.get('championVersionId')} for score {score.get('id')}")
+    
     # Process iteratively until all dependencies are resolved
     iteration = 1
     
@@ -156,6 +163,12 @@ def iteratively_fetch_configurations(
             # Update our name/ID mappings
             id_to_name, name_to_id = build_name_id_mappings(all_scores)
             
+            # Update score_version_map with new dependencies
+            for score in new_dependency_scores:
+                if score.get('id') and score.get('championVersionId'):
+                    score_version_map[score.get('id')] = score.get('championVersionId')
+                    logging.info(f"Tracking championVersionId {score.get('championVersionId')} for dependency {score.get('id')}")
+            
             logging.info(f"Updated score list now contains {len(all_scores)} scores")
             
         except Exception as e:
@@ -185,6 +198,33 @@ def iteratively_fetch_configurations(
             missing_cache_status = check_local_score_cache(scorecard_data, missing_scores)
             missing_configs = fetch_score_configurations(client, scorecard_data, missing_scores, missing_cache_status)
             configurations.update(missing_configs)
+    
+    # Ensure each configuration has the championVersionId
+    from ruamel.yaml import YAML
+    yaml_parser = YAML(typ='safe')
+    
+    for score_id, config_str in configurations.items():
+        if score_id in score_version_map:
+            try:
+                # Parse the configuration
+                config_dict = yaml_parser.load(config_str)
+                
+                # Add championVersionId if not already present
+                if isinstance(config_dict, dict) and 'championVersionId' not in config_dict:
+                    version_id = score_version_map.get(score_id)
+                    if version_id:
+                        logging.info(f"Adding missing championVersionId {version_id} to score {score_id}")
+                        # We should modify the configuration directly
+                        config_dict['championVersionId'] = version_id
+                        
+                        # Convert back to string
+                        import io
+                        stream = io.StringIO()
+                        yaml_writer = YAML()
+                        yaml_writer.dump(config_dict, stream)
+                        configurations[score_id] = stream.getvalue()
+            except Exception as e:
+                logging.warning(f"Could not update championVersionId in configuration: {str(e)}")
     
     # Return all configurations
     return configurations 

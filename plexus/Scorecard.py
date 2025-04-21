@@ -17,6 +17,7 @@ from botocore.exceptions import ClientError
 import tiktoken
 from os import getenv
 from ruamel.yaml import YAML
+from datetime import datetime
 
 from plexus.Registries import ScoreRegistry
 from plexus.Registries import scorecard_registry
@@ -137,11 +138,33 @@ class Scorecard:
                 try:
                     yaml_parser = YAML(typ='safe')
                     score_config = yaml_parser.load(score_config)
+                    # Important: Ensure we don't lose IDs during parsing
+                    if not score_config.get('id') and score_config.get('name'):
+                        # Try to find the original ID by name from the API data
+                        if hasattr(self, 'properties') and self.properties:
+                            for section in self.properties.get('sections', {}).get('items', []):
+                                for score_item in section.get('scores', {}).get('items', []):
+                                    if score_item.get('name') == score_config.get('name'):
+                                        score_config['id'] = score_item.get('id')
+                                        score_config['championVersionId'] = score_item.get('championVersionId')
+                                        logging.info(f"Restored ID {score_item.get('id')} for score {score_config.get('name')}")
+                                        break
                     parsed_configs.append(score_config)
                 except Exception as e:
                     logging.warning(f"Invalid score configuration format: {type(score_config)}")
                     continue
             elif isinstance(score_config, dict):
+                # For dict configs, ensure IDs are preserved
+                if not score_config.get('id') and score_config.get('name'):
+                    # Try to find the original ID by name from the API data
+                    if hasattr(self, 'properties') and self.properties:
+                        for section in self.properties.get('sections', {}).get('items', []):
+                            for score_item in section.get('scores', {}).get('items', []):
+                                if score_item.get('name') == score_config.get('name'):
+                                    score_config['id'] = score_item.get('id')
+                                    score_config['championVersionId'] = score_item.get('championVersionId')
+                                    logging.info(f"Restored ID {score_item.get('id')} for score {score_config.get('name')}")
+                                    break
                 parsed_configs.append(score_config)
             else:
                 logging.warning(f"Invalid score configuration format: {type(score_config)}")
@@ -161,17 +184,24 @@ class Scorecard:
                 logging.error(f"Failed to import score class {score_class_name}: {str(e)}")
                 continue
                 
+            # Before registering, log the ID we're about to use
+            logging.info(f"Registering score {score_config.get('name')} with ID: {score_config.get('id')}")
+                
             # Register in instance's registry
             self.score_registry.register(
                 cls=score_class,
                 properties=score_config,
                 name=score_config.get('name'),
                 key=score_config.get('key'),
-                id=score_config.get('id')
+                id=score_config.get('id')  # Ensure this is the API ID, not zero
             )
             
         # Set scores attribute for compatibility with other methods
         self.scores = parsed_configs
+        
+        # Log and verify all IDs were preserved
+        id_verification = [(score.get('name'), score.get('id')) for score in self.scores]
+        logging.info(f"ID verification after initialization: {id_verification}")
         logging.info(f"Successfully initialized {len(self.scores)} scores from API data")
 
     @classmethod
@@ -340,15 +370,20 @@ class Scorecard:
             item_tokens = len(encoding.encode(text))
             logging.info(f"Item tokens for {score}: {item_tokens}")
 
+            # Ensure the scorecard_name is always provided
             score_configuration.update({
-                'scorecard_name': self.name,
+                'scorecard_name': scorecard,
                 'score_name': score
             })
+            
+            # Log the configuration for debugging
+            logging.info(f"Score configuration: {score_configuration}")
+            
             score_instance = await score_class.create(**score_configuration)
 
             if score_instance is None:
-                logging.error(f"Score with name '{score}' not found in scorecard '{self.name}'.")
-                return [Score.Result(value="Error", error=f"Score with name '{score}' not found in scorecard '{self.name}'.")]
+                logging.error(f"Score with name '{score}' not found in scorecard '{self.name()}'.")
+                return [Score.Result(value="Error", error=f"Score with name '{score}' not found in scorecard '{self.name()}'.")]
 
             # Add required metadata for LangGraphScore
             if isinstance(score_instance, LangGraphScore):
@@ -358,7 +393,7 @@ class Scorecard:
                 metadata = metadata or {}
                 metadata.update({
                     'account_key': account_key,
-                    'scorecard_name': self.name,
+                    'scorecard_name': self.name() if callable(self.name) else self.name,
                     'score_name': score
                 })
 
@@ -497,62 +532,47 @@ class Scorecard:
             try:
                 # Check if conditions are met
                 if not self.check_dependency_conditions(score_id, dependency_graph, results_by_score_id):
-                    logging.info(f"Skipping score {score_name} as conditions are not met")
-                    # Remove this score from remaining scores but don't add it to results
-                    remaining_scores.discard(score_id)
-                    raise Score.SkippedScoreException(
-                        score_name=score_name,
-                        reason="Dependency conditions not met"
-                    )
+                    logging.info(f"Conditions not met for {score_name}. Skipping.")
+                    result = "SKIPPED"
+                    results_by_score_id[score_id] = result
                     
-                logging.info(f"About to predict score {score_name} at {pd.Timestamp.now()}")
-                # Create list of results in the format expected by get_score_result
-                current_results = []
-                for name, result in results_by_score_id.items():
-                    # Convert to Score.Result if it isn't already
-                    if not isinstance(result, Score.Result):
-                        if isinstance(result, dict):
-                            result = Score.Result(
-                                value=result['value'],
-                                metadata=result.get('metadata', {}),
-                                parameters=Score.Parameters(name=name),
-                                error=result.get('error')
-                            )
-                    current_results.append(result)
-
-                logging.info(f"Processing score: {score_name} with dependencies: {[r.parameters.name for r in current_results]}")
-                logging.info(f"Results available: {[r.value for r in current_results]}")
-
-                # Get the score class and create an instance
-                score_class = self.score_registry.get(score_name)
-                if not score_class:
-                    raise ValueError(f"No score class found for {score_name}")
+                    # Enqueue scores that depend on this one
+                    for dependent_id, dependent_info in dependency_graph.items():
+                        if score_id in dependent_info['deps']:
+                            # Check if all dependencies for this dependent score are now processed
+                            if all(dep_id in results_by_score_id for dep_id in dependent_info['deps']):
+                                logging.info(f"Enqueuing dependent score: {dependent_info['name']}")
+                                await processing_queue.put(dependent_id)
                     
-                score_configuration = self.score_registry.get_properties(score_name)
-                if score_configuration is None:
-                    # Create a default configuration if none found
-                    score_configuration = {
-                        'name': score_name,
-                        'scorecard_name': self.name
-                    }
-                else:
-                    # Update the existing configuration
-                    score_configuration.update({
-                        'scorecard_name': self.name,
-                        'score_name': score_name
-                    })
+                    return
                 
-                score_instance = await score_class.create(**score_configuration)
-                if not score_instance:
-                    raise ValueError(f"Failed to create score instance for {score_name}")
-
-                score_result = await score_instance.predict(
-                    context=None,
-                    model_input=Score.Input(
-                        text=text,
-                        metadata=metadata,
-                        results=current_results
-                    )
+                logging.info(f"About to predict score {score_name} at {datetime.now().isoformat()}")
+                
+                # Extract previous results needed for this score
+                score_deps = dependency_graph[score_id]['deps']
+                previous_results = []
+                logging.info(f"Processing score: {score_name} with dependencies: {score_deps}")
+                logging.info(f"Results available: {list(results_by_score_id.keys())}")
+                
+                for dep_id in score_deps:
+                    if dep_id in results_by_score_id:
+                        dep_result = results_by_score_id[dep_id]
+                        if dep_result != "SKIPPED":
+                            previous_results.append(dep_result)
+                
+                # Ensure the scorecard_name is included in the score parameters
+                score_registry_props = self.score_registry.get_properties(score_name)
+                if score_registry_props and 'scorecard_name' not in score_registry_props:
+                    score_registry_props['scorecard_name'] = self.name() if callable(self.name) else self.name
+                
+                # Get the score result
+                score_result = await self.get_score_result(
+                    scorecard=self.name() if callable(self.name) else self.name,
+                    score=score_name,
+                    text=text,
+                    metadata=metadata,
+                    modality=modality,
+                    results=previous_results
                 )
                 
                 if score_result is None:
@@ -785,9 +805,43 @@ class Scorecard:
         Returns:
             A Scorecard instance populated with the API data
         """
+        # Log scorecard API data information before creating the instance
+        logging.info(f"Creating Scorecard instance from API data with ID: {scorecard_id}")
+        
+        # Verify that the API data contains the correct structure
+        if 'sections' in api_data and 'items' in api_data.get('sections', {}):
+            all_api_scores = []
+            for section in api_data.get('sections', {}).get('items', []):
+                for score in section.get('scores', {}).get('items', []):
+                    logging.info(f"API DATA - Score: {score.get('name')}, ID: {score.get('id')}, VersionID: {score.get('championVersionId')}")
+                    all_api_scores.append(score)
+                    
+            # Ensure scores_config has the correct IDs from API data
+            for config in scores_config:
+                if isinstance(config, dict) and 'name' in config:
+                    # Look for the corresponding score in API data
+                    for api_score in all_api_scores:
+                        if api_score.get('name') == config.get('name'):
+                            if not config.get('id'):
+                                config['id'] = api_score.get('id')
+                                logging.info(f"Setting ID {api_score.get('id')} for config {config.get('name')}")
+                            if not config.get('championVersionId'):
+                                config['championVersionId'] = api_score.get('championVersionId')
+                                logging.info(f"Setting championVersionId {api_score.get('championVersionId')} for config {config.get('name')}")
+                            break
+        else:
+            logging.warning("API data does not contain expected structure (sections.items)")
+            
         # The scores_config should already be parsed configurations, so we can use them directly
-        return Scorecard(
+        scorecard_instance = Scorecard(
             scorecard=scorecard_id,
             api_data=api_data,
             scores_config=scores_config
         )
+        
+        # Verify IDs after instance creation
+        if hasattr(scorecard_instance, 'scores'):
+            id_verification = [(score.get('name'), score.get('id')) for score in scorecard_instance.scores]
+            logging.info(f"ID verification after instance creation: {id_verification}")
+            
+        return scorecard_instance
