@@ -10,6 +10,16 @@ from pyairtable import Api
 from pyairtable.formulas import match
 import dotenv
 import os
+from pathlib import Path
+from plexus.cli.bertopic.transformer import transform_transcripts, inspect_data
+from plexus.cli.bertopic.analyzer import analyze_topics
+
+# Configure logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 dotenv.load_dotenv('.env', override=True)
 
@@ -108,6 +118,86 @@ def feedback(
             continue
             
         analyze_score_feedback(score_data, prompt_analyzer, current_prompt)
+
+@analyze.command()
+@click.option('--input-file', required=True, help='Path to input Parquet file containing transcripts')
+@click.option('--output-dir', default='.', help='Base directory for output files (default: current directory)')
+@click.option('--min-words', default=2, help='Minimum number of words for a speaking turn to be included')
+@click.option('--content-column', default='text', help='Name of column containing transcript content (default: text)')
+@click.option('--inspect', is_flag=True, help='Inspect the data before processing')
+@click.option('--skip-analysis', is_flag=True, help='Skip BERTopic analysis, only transform transcripts')
+@click.option('--num-topics', type=int, help='Target number of topics (default: auto-determined)')
+@click.option('--min-ngram', type=int, default=1, help='Minimum n-gram size (default: 1)')
+@click.option('--max-ngram', type=int, default=2, help='Maximum n-gram size (default: 2)')
+@click.option('--min-topic-size', type=int, default=10, help='Minimum size of topics (default: 10)')
+@click.option('--top-n-words', type=int, default=10, help='Number of words to represent each topic (default: 10)')
+def topics(
+    input_file: str,
+    output_dir: str,
+    min_words: int,
+    content_column: str,
+    inspect: bool,
+    skip_analysis: bool,
+    num_topics: int,
+    min_ngram: int,
+    max_ngram: int,
+    min_topic_size: int,
+    top_n_words: int,
+):
+    """
+    Analyze topics in call transcripts using BERTopic.
+    
+    This command processes call transcripts from a Parquet file, extracts customer speaking turns,
+    and performs topic modeling using BERTopic. The results are saved in the specified output directory.
+    
+    Example:
+        plexus analyze topics --input-file ~/projects/Call-Criteria-Python/.plexus_training_data_cache/dataframes/1039_no_score_id_Start-Date_csv.parquet
+    """
+    logging.info(f"Starting topic analysis for file: {input_file}")
+    
+    # Convert paths to Path objects
+    input_path = Path(input_file)
+    output_path = Path(output_dir)
+    
+    if not input_path.exists():
+        logging.error(f"Input file not found: {input_file}")
+        return
+        
+    if inspect:
+        logging.info("Inspecting data before processing...")
+        df = pd.read_parquet(input_path)
+        inspect_data(df, content_column)
+        return
+        
+    try:
+        # Process the transcripts
+        _, text_file_path = transform_transcripts(
+            input_file=str(input_path),
+            content_column=content_column
+        )
+        logging.info("Transcript transformation completed successfully")
+        
+        if not skip_analysis:
+            # Create descriptive output directory
+            analysis_dir = f"topics_{min_ngram}-{max_ngram}gram_{num_topics if num_topics else 'auto'}"
+            output_dir = str(output_path / analysis_dir)
+            
+            logging.info("Starting BERTopic analysis...")
+            analyze_topics(
+                text_file_path=text_file_path,
+                output_dir=output_dir,
+                nr_topics=num_topics,
+                n_gram_range=(min_ngram, max_ngram),
+                min_topic_size=min_topic_size,
+                top_n_words=top_n_words
+            )
+            logging.info("BERTopic analysis completed successfully")
+        else:
+            logging.info("Skipping BERTopic analysis as requested")
+        
+    except Exception as e:
+        logging.error(f"Error during topic analysis: {e}")
+        return
 
 class PromptAnalyzer:
     def __init__(self, llm):
