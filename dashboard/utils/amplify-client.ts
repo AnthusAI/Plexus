@@ -271,6 +271,36 @@ export const amplifyClient = {
     get: async (params: any) => {
       const response = await (getClient().models.Evaluation as any).get(params)
       return { data: response.data as Schema['Evaluation']['type'] | null }
+    },
+    update: async (data: {
+      id: string;
+      type?: string;
+      status?: string;
+      parameters?: any;
+      metrics?: any;
+      metricsExplanation?: string;
+      inferences?: number;
+      accuracy?: number;
+      cost?: number;
+      startedAt?: string;
+      elapsedSeconds?: number;
+      estimatedRemainingSeconds?: number;
+      totalItems?: number;
+      processedItems?: number;
+      errorMessage?: string;
+      errorDetails?: any;
+      scorecardId?: string;
+      scoreId?: string;
+      confusionMatrix?: any;
+      scoreGoal?: string;
+      datasetClassDistribution?: any;
+      isDatasetClassDistributionBalanced?: boolean;
+      predictedClassDistribution?: any;
+      isPredictedClassDistributionBalanced?: boolean;
+      taskId?: string;
+    }) => {
+      const response = await (getClient().models.Evaluation as any).update(data);
+      return { data: response.data as Schema['Evaluation']['type'] };
     }
   },
   BatchJob: {
