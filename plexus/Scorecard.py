@@ -375,10 +375,7 @@ class Scorecard:
                 'scorecard_name': scorecard,
                 'score_name': score
             })
-            
-            # Log the configuration for debugging
-            logging.info(f"Score configuration: {score_configuration}")
-            
+                        
             score_instance = await score_class.create(**score_configuration)
 
             if score_instance is None:
