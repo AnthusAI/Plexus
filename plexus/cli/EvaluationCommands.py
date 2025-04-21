@@ -451,7 +451,6 @@ def accuracy(
                             ]
                         }
                         logging.info(f"Created task with details:\n{json.dumps(task_details, indent=2)}")
-                        logging.info(f"Successfully created and verified task: {task.id}")
 
                         # Create the Evaluation record immediately after Task setup
                         started_at = datetime.now(timezone.utc)

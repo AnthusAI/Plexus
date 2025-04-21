@@ -205,65 +205,49 @@ class TaskProgressTracker:
                     if account_id:
                         create_args["accountId"] = account_id
                     
-                    self.api_task = Task.create(**create_args)
-        
-        # Create API stages once during initialization
-        if self.api_task:
-            # Get existing stages first
-            existing_stages = {s.name: s.id for s in self.api_task.get_stages()}
-            logging.debug(f"Found existing stages: {list(existing_stages.keys())}")
+                    # Prepare all stage configurations for single-request creation
+                    stages_for_api = []
+                    for name, stage in self._stages.items():
+                        now = datetime.now(timezone.utc)
+                        # Set initial estimated completion time for stages that show progress
+                        estimated_completion = None
+                        if stage.total_items is not None:
+                            estimated_completion = (now + timedelta(seconds=20)).isoformat()
+                        
+                        stage_data = {
+                            "name": name,
+                            "order": stage.order,
+                            "status": stage.status
+                        }
+                        if stage.status_message:
+                            stage_data["statusMessage"] = stage.status_message
+                        if stage.total_items is not None:
+                            stage_data["totalItems"] = stage.total_items
+                        if estimated_completion:
+                            stage_data["estimatedCompletionAt"] = estimated_completion
+                        
+                        stages_for_api.append(stage_data)
+                    
+                    try:
+                        # Create task with stages in a single request
+                        logging.debug(f"Creating task and {len(stages_for_api)} stages in a single request")
+                        self.api_task = Task.create_with_stages(
+                            **create_args,
+                            stages=stages_for_api
+                        )
+                        
+                        # No need to verify - trust the API
+                        # Store stage IDs for future reference
+                        if hasattr(self.api_task, '_stages'):
+                            for stage_data in self.api_task._stages:
+                                self._stage_ids[stage_data['name']] = stage_data['id']
+                                logging.debug(f"Stage '{stage_data['name']}' created with ID: {stage_data['id']}")
+                        
+                    except Exception as e:
+                        logging.error(f"Error creating task with stages: {str(e)}", exc_info=True)
+                        raise
             
-            # Create any missing stages and store their IDs
-            for name, stage in self._stages.items():
-                logging.debug(f"Processing stage '{name}' with order {stage.order}, total_items={stage.total_items}, status_message={stage.status_message}")
-                try:
-                    if name in existing_stages:
-                        logging.debug(f"Stage '{name}' already exists with ID: {existing_stages[name]}")
-                        self._stage_ids[name] = existing_stages[name]
-                    else:
-                        logging.debug(f"Creating new stage '{name}' with order {stage.order}")
-                        try:
-                            # Create stage with all required fields upfront
-                            create_fields = {
-                                'name': name,
-                                'order': stage.order,
-                                'status': stage.status,  # Include status in initial creation
-                            }
-                            if stage.status_message:
-                                create_fields['statusMessage'] = stage.status_message
-                            if stage.total_items is not None:
-                                create_fields['totalItems'] = stage.total_items
-                            
-                            # Set initial estimated completion time for stages that show progress
-                            if stage.total_items is not None:
-                                estimated_completion = (
-                                    datetime.now(timezone.utc) + 
-                                    timedelta(seconds=20)  # Initial estimate of 20 seconds
-                                )
-                                create_fields['estimatedCompletionAt'] = estimated_completion.isoformat()
-                            
-                            logging.debug(f"Creating new stage '{name}' with fields: {create_fields}")
-                            try:
-                                new_stage = self.api_task.create_stage(**create_fields)
-                            except Exception as e:
-                                logging.error(f"GraphQL error creating stage '{name}': {str(e)}")
-                                logging.error("This is likely a schema validation error or missing required field")
-                                raise  # Re-raise to be caught by outer try/except
-                            
-                            if not new_stage:
-                                raise Exception(f"Failed to create stage '{name}' - create_stage returned None")
-                                
-                            self._stage_ids[name] = new_stage.id
-                            logging.debug(f"Successfully created stage '{name}' with ID: {new_stage.id}")
-                            
-                        except Exception as e:
-                            logging.error(f"Error creating stage '{name}': {str(e)}", exc_info=True)
-                            logging.error("Stage creation failed - this stage will be missing from the task")
-                            raise  # Re-raise to prevent silent failures
-
-                except Exception as e:
-                    logging.error(f"Error creating stage '{name}': {str(e)}", exc_info=True)
-
+            # Update API task progress with initial values
             self._update_api_task_progress()
 
     def __enter__(self):
