@@ -63,6 +63,7 @@ from plexus.analysis.metrics import GwetAC1
 from plexus.analysis.metrics.metric import Metric
 from plexus.analysis.metrics.accuracy import Accuracy
 from plexus.analysis.metrics.precision import Precision
+from plexus.analysis.metrics.recall import Recall
 
 # Set up logging for evaluations
 set_log_group('plexus/evaluation')
@@ -503,6 +504,7 @@ class Evaluation:
         from plexus.analysis.metrics.gwet_ac1 import GwetAC1
         from plexus.analysis.metrics.accuracy import Accuracy
         from plexus.analysis.metrics.precision import Precision
+        from plexus.analysis.metrics.recall import Recall
         from plexus.analysis.metrics.metric import Metric
 
         # Use self.logging instead of logging globally
@@ -748,15 +750,53 @@ class Evaluation:
             # Default fallback
             self.logging.info(f"Using accuracy as fallback for precision due to insufficient data: {precision_value}")
         
-        # For now, use accuracy as recall, but we can implement a dedicated Recall class later
-        recall = accuracy_value
+        # Calculate recall using the Recall metric class
+        recall_value = accuracy_value  # Default fallback is to use accuracy
         
-        # If we have binary classification data, calculate recall directly from the confusion matrix
-        if binary_confusion_matrix:
+        # Calculate recall using the Recall class
+        if all_predictions and all_actuals and len(all_predictions) == len(all_actuals) and len(all_predictions) > 0:
+            try:
+                # Add diagnostic logging for Recall inputs
+                self.logging.info(f"Recall calculation inputs:")
+                self.logging.info(f"  Predictions ({len(all_predictions)}): {all_predictions[:10]}...")
+                self.logging.info(f"  Actuals ({len(all_actuals)}): {all_actuals[:10]}...")
+                
+                # Create a Recall instance and use proper Metric.Input interface
+                recall_calculator = Recall(positive_labels=['yes'])
+                metric_input = Metric.Input(
+                    reference=all_actuals,
+                    predictions=all_predictions
+                )
+                result = recall_calculator.calculate(metric_input)
+                recall_value = result.value
+                self.logging.info(f"Calculated Recall: {recall_value}")
+                self.logging.info(f"True Positives: {result.metadata.get('true_positives', 0)}")
+                self.logging.info(f"False Negatives: {result.metadata.get('false_negatives', 0)}")
+                self.logging.info(f"Total Actual Positive: {result.metadata.get('total_actual_positive', 0)}")
+            except Exception as e:
+                self.logging.error(f"Error calculating Recall: {str(e)}")
+                self.logging.exception("Stack trace for Recall calculation error:")
+                
+                # Fall back to manual calculation if the Recall class fails
+                if binary_confusion_matrix:
+                    # Manual calculation from confusion matrix
+                    tp = binary_confusion_matrix['matrix'].get('yes', {}).get('yes', 0)
+                    fn = binary_confusion_matrix['matrix'].get('yes', {}).get('no', 0)
+                    recall_value = tp / (tp + fn) if (tp + fn) > 0 else 0
+                    self.logging.info(f"Fallback to manual recall calculation from matrix: {recall_value}")
+                else:
+                    # If no binary confusion matrix, use accuracy as a fallback
+                    recall_value = accuracy_value
+                    self.logging.info(f"Using accuracy as fallback for recall: {recall_value}")
+        elif binary_confusion_matrix:
+            # If we have a binary confusion matrix but couldn't use the Recall class
             tp = binary_confusion_matrix['matrix'].get('yes', {}).get('yes', 0)
             fn = binary_confusion_matrix['matrix'].get('yes', {}).get('no', 0)
-            recall = tp / (tp + fn) if (tp + fn) > 0 else 0
-            self.logging.info(f"Calculated recall manually from confusion matrix: {recall}")
+            recall_value = tp / (tp + fn) if (tp + fn) > 0 else 0
+            self.logging.info(f"Calculated recall manually from confusion matrix: {recall_value}")
+        else:
+            # Default fallback
+            self.logging.info(f"Using accuracy as fallback for recall due to insufficient data: {recall_value}")
         
         # Alignment is calculated with Gwet's AC1
         alignment = gwet_ac1_value
@@ -860,14 +900,14 @@ class Evaluation:
         self.logging.info(f"Final Accuracy: {accuracy_value}")
         self.logging.info(f"Final Precision: {precision_value}")
         self.logging.info(f"Final Alignment (Gwet's AC1): {alignment}")
-        self.logging.info(f"Final Recall: {recall}")  # Changed from Specificity to Recall
+        self.logging.info(f"Final Recall: {recall_value}")  # Changed from Specificity to Recall
         # --- END NEW LOGGING ---
 
         return {
             "accuracy": accuracy_value,
             "precision": precision_value,
             "alignment": alignment,  # Changed from sensitivity to alignment
-            "recall": recall,        # Changed from specificity to recall
+            "recall": recall_value,        # Changed from specificity to recall
             "confusionMatrix": primary_confusion_matrix_dict, # Use the new single dict
             "predictedClassDistribution": predicted_label_distributions,
             "datasetClassDistribution": actual_label_distributions,

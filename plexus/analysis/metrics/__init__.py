@@ -9,6 +9,7 @@ from .metric import Metric
 from .gwet_ac1 import GwetAC1
 from .accuracy import Accuracy
 from .precision import Precision
+from .recall import Recall
 
 # Define all modules that should be exposed when doing `from plexus.analysis.metrics import *`
 __all__ = [
@@ -16,4 +17,5 @@ __all__ = [
     'GwetAC1',
     'Accuracy',
     'Precision',
+    'Recall',
 ] 
