@@ -14,6 +14,7 @@ export interface Segment {
 interface GaugeProps {
   value?: number
   beforeValue?: number
+  target?: number
   segments?: Segment[]
   min?: number
   max?: number
@@ -36,6 +37,7 @@ const calculateAngle = (percent: number) => {
 const GaugeComponent: React.FC<GaugeProps> = ({ 
   value, 
   beforeValue,
+  target,
   segments, 
   min = 0, 
   max = 100,
@@ -51,6 +53,7 @@ const GaugeComponent: React.FC<GaugeProps> = ({
 }) => {
   const [animatedValue, setAnimatedValue] = useState(0)
   const [animatedBeforeValue, setAnimatedBeforeValue] = useState(0)
+  const [animatedTarget, setAnimatedTarget] = useState(0)
   const radius = 80
   const strokeWidth = 25
   const normalizedValue = value !== undefined 
@@ -67,6 +70,10 @@ const GaugeComponent: React.FC<GaugeProps> = ({
     const targetBeforeAngle = beforeValue !== undefined 
       ? ((beforeValue - min) / (max - min)) * 100 
       : null
+    const startTargetAngle = animatedTarget
+    const targetTargetAngle = target !== undefined
+      ? ((target - min) / (max - min)) * 100
+      : null
     
     const animate = (currentTime: number) => {
       const elapsed = currentTime - startTime
@@ -77,9 +84,13 @@ const GaugeComponent: React.FC<GaugeProps> = ({
       const currentBeforeValue = startBeforeAngle !== null && targetBeforeAngle !== null
         ? startBeforeAngle + (targetBeforeAngle - startBeforeAngle) * easeProgress
         : null
+      const currentTarget = startTargetAngle !== null && targetTargetAngle !== null
+        ? startTargetAngle + (targetTargetAngle - startTargetAngle) * easeProgress
+        : null
       
       setAnimatedValue(currentValue)
       setAnimatedBeforeValue(currentBeforeValue ?? 0)
+      setAnimatedTarget(currentTarget ?? 0)
       
       if (progress < 1) {
         requestAnimationFrame(animate)
@@ -87,7 +98,7 @@ const GaugeComponent: React.FC<GaugeProps> = ({
     }
     
     requestAnimationFrame(animate)
-  }, [normalizedValue, beforeValue])
+  }, [normalizedValue, beforeValue, target])
 
   const calculateCoordinates = (angle: number, r: number = radius) => {
     const x = r * Math.cos(angle - Math.PI / 2)
@@ -215,6 +226,58 @@ const GaugeComponent: React.FC<GaugeProps> = ({
     })
   }
 
+  const renderTargetTick = () => {
+    if (!target || !showTicks) return null
+    
+    // Calculate the normalized target position (0-100)
+    const normalizedTarget = ((target - min) / (max - min)) * 100
+    const angle = calculateAngle(normalizedTarget)
+    const { x, y } = calculateCoordinates(angle)
+    
+    const lineEndX = x * 1.08
+    const lineEndY = y * 1.08
+    
+    const angleInDegrees = (angle * 180) / Math.PI
+    const isNearTop = Math.abs(angleInDegrees - 90) < 15
+    const verticalAdjustment = isNearTop 
+      ? 0.95
+      : Math.pow(Math.abs(angleInDegrees - 90) / 90, 0.5) * 0.3
+    
+    const textOffset = radius + 25 - (verticalAdjustment * 10)
+    
+    const textX = textOffset * Math.cos(angle - Math.PI / 2)
+    const textY = textOffset * Math.sin(angle - Math.PI / 2)
+
+    // Format to specified decimal places, then remove trailing zeros
+    const formattedTargetValue = target % 1 === 0 ? target.toString() : parseFloat(target.toFixed(decimalPlaces)).toString()
+
+    return (
+      <g>
+        <line
+          x1={x}
+          y1={y}
+          x2={lineEndX}
+          y2={lineEndY}
+          className="stroke-primary"
+          strokeWidth="1.5"
+          strokeDasharray="2,1"
+        />
+        <g transform={`translate(${textX} ${textY}) rotate(105)`}>
+          <text
+            x="0"
+            y="0"
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fontSize="12"
+            className="fill-primary font-medium"
+          >
+            {formattedTargetValue}
+          </text>
+        </g>
+      </g>
+    )
+  }
+
   const topPadding = showTicks ? 104 : 80
   const viewBoxHeight = showTicks ? 200 : 170
   const textY = showTicks ? 45 : 45
@@ -256,12 +319,20 @@ const GaugeComponent: React.FC<GaugeProps> = ({
                   <g transform="rotate(-105)">
                     {renderSegments()}
                     {showTicks && renderTicks(min, max)}
+                    {renderTargetTick()}
                     <g>
                       {beforeValue !== undefined && (
                         <path
                           d={`M 0,-${radius} L -6,0 L 6,0 Z`}
                           className="fill-muted-foreground opacity-40 transition-[fill] duration-500 ease-in-out"
                           transform={`rotate(${(animatedBeforeValue * 210) / 100})`}
+                        />
+                      )}
+                      {target !== undefined && (
+                        <path
+                          d={`M 0,-${radius} L -6,0 L 6,0 Z`}
+                          className="fill-muted-foreground opacity-40 transition-[fill] duration-500 ease-in-out"
+                          transform={`rotate(${(animatedTarget * 210) / 100})`}
                         />
                       )}
                       <path
