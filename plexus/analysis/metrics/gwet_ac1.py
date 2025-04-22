@@ -28,53 +28,18 @@ class GwetAC1(Metric):
     
     def calculate(self, input_data: Metric.Input) -> Metric.Result:
         """
-        Calculate Gwet's AC1 statistic for measuring agreement between two raters.
+        Calculate Gwet's AC1 agreement coefficient.
         
         Args:
             input_data: Metric.Input containing reference and prediction lists
-            
+        
         Returns:
             Metric.Result with the Gwet's AC1 value and metadata
         """
-        ac1_value = self._calculate_ac1(
-            input_data.reference,
-            input_data.predictions,
-            zero_division='warn'
-        )
+        rater1_ratings = input_data.reference
+        rater2_ratings = input_data.predictions
+        zero_division = 'warn'
         
-        return Metric.Result(
-            name="Gwet's AC1",
-            value=ac1_value,
-            range=[-1.0, 1.0],
-            metadata={
-                "interpretation": {
-                    "1.0": "Perfect agreement",
-                    "0.0": "Agreement no better than chance",
-                    "<0": "Agreement worse than chance (rare)"
-                }
-            }
-        )
-    
-    @staticmethod
-    def _calculate_ac1(
-        rater1_ratings: List[str],
-        rater2_ratings: List[str],
-        zero_division: str = 'warn'
-    ) -> float:
-        """
-        Internal method to calculate Gwet's AC1 statistic.
-        
-        Args:
-            rater1_ratings: List of ratings from the first rater
-            rater2_ratings: List of ratings from the second rater
-            zero_division: How to handle division by zero ('warn', '0', or 'nan')
-        
-        Returns:
-            The Gwet's AC1 value, ranging from -1 to 1 where:
-            - 1: Perfect agreement
-            - 0: Agreement is no better than chance
-            - <0: Agreement is worse than chance (rare)
-        """
         # Ensure inputs are the same length
         if len(rater1_ratings) != len(rater2_ratings):
             raise ValueError("Input lists must be of the same length")
@@ -82,59 +47,67 @@ class GwetAC1(Metric):
         if len(rater1_ratings) == 0:
             if zero_division == 'warn':
                 print("Warning: Empty input lists")
-                return float('nan')
+                return Metric.Result(
+                    name="Gwet's AC1",
+                    value=float('nan'),
+                    range=[-1.0, 1.0]
+                )
             elif zero_division == '0':
-                return 0.0
+                ac1_value = 0.0
             else:  # 'nan'
-                return float('nan')
+                ac1_value = float('nan')
+        else:
+            # Convert ratings to a list of unique categories
+            all_categories = sorted(list(set(rater1_ratings + rater2_ratings)))
+            n_categories = len(all_categories)
+            
+            # If only one category exists, perfect agreement
+            if n_categories <= 1:
+                ac1_value = 1.0
+            else:
+                # Create a mapping from category to index
+                category_to_idx = {cat: idx for idx, cat in enumerate(all_categories)}
+                
+                # Convert ratings to indices
+                rater1_indices = [category_to_idx[r] for r in rater1_ratings]
+                rater2_indices = [category_to_idx[r] for r in rater2_ratings]
+                
+                # Count total number of items
+                n_items = len(rater1_ratings)
+                
+                # Calculate observed agreement
+                observed_agreement = sum(r1 == r2 for r1, r2 in zip(rater1_indices, rater2_indices)) / n_items
+                
+                # Calculate probability of chance agreement using Gwet's method
+                # First, calculate the distribution of ratings across categories
+                category_counts = np.zeros(n_categories)
+                for r1, r2 in zip(rater1_indices, rater2_indices):
+                    category_counts[r1] += 1
+                    category_counts[r2] += 1
+                
+                # Average probability for each category
+                pi_values = category_counts / (2 * n_items)
+                
+                # Calculate expected chance agreement using Gwet's formula
+                # This is different from Cohen's/Fleiss' approach
+                pe = sum(pi_values * (1 - pi_values)) / (n_categories - 1)
+                
+                # Calculate AC1
+                denominator = 1 - pe
+                
+                if denominator == 0:
+                    if zero_division == 'warn':
+                        print("Warning: Division by zero in Gwet's AC1 calculation")
+                        ac1_value = float('nan')
+                    elif zero_division == '0':
+                        ac1_value = 0.0
+                    else:  # 'nan'
+                        ac1_value = float('nan')
+                else:
+                    ac1_value = (observed_agreement - pe) / denominator
         
-        # Convert ratings to a list of unique categories
-        all_categories = sorted(list(set(rater1_ratings + rater2_ratings)))
-        n_categories = len(all_categories)
-        
-        # If only one category exists, perfect agreement
-        if n_categories <= 1:
-            return 1.0
-        
-        # Create a mapping from category to index
-        category_to_idx = {cat: idx for idx, cat in enumerate(all_categories)}
-        
-        # Convert ratings to indices
-        rater1_indices = [category_to_idx[r] for r in rater1_ratings]
-        rater2_indices = [category_to_idx[r] for r in rater2_ratings]
-        
-        # Count total number of items
-        n_items = len(rater1_ratings)
-        
-        # Calculate observed agreement
-        observed_agreement = sum(r1 == r2 for r1, r2 in zip(rater1_indices, rater2_indices)) / n_items
-        
-        # Calculate probability of chance agreement using Gwet's method
-        # First, calculate the distribution of ratings across categories
-        category_counts = np.zeros(n_categories)
-        for r1, r2 in zip(rater1_indices, rater2_indices):
-            category_counts[r1] += 1
-            category_counts[r2] += 1
-        
-        # Average probability for each category
-        pi_values = category_counts / (2 * n_items)
-        
-        # Calculate expected chance agreement using Gwet's formula
-        # This is different from Cohen's/Fleiss' approach
-        pe = sum(pi_values * (1 - pi_values)) / (n_categories - 1)
-        
-        # Calculate AC1
-        denominator = 1 - pe
-        
-        if denominator == 0:
-            if zero_division == 'warn':
-                print("Warning: Division by zero in Gwet's AC1 calculation")
-                return float('nan')
-            elif zero_division == '0':
-                return 0.0
-            else:  # 'nan'
-                return float('nan')
-        
-        ac1 = (observed_agreement - pe) / denominator
-        
-        return ac1 
+        return Metric.Result(
+            name="Gwet's AC1",
+            value=ac1_value,
+            range=[-1.0, 1.0]
+        ) 

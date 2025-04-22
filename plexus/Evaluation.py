@@ -59,6 +59,9 @@ from plexus.CustomLogging import logging, setup_logging, set_log_group
 
 from plexus.cli.task_progress_tracker import StageConfig, TaskProgressTracker
 
+from plexus.analysis.metrics import GwetAC1
+from plexus.analysis.metrics.metric import Metric
+
 # Set up logging for evaluations
 set_log_group('plexus/evaluation')
 setup_logging()
@@ -486,13 +489,16 @@ class Evaluation:
             return {
                 "accuracy": 0,
                 "precision": 0,
-                "sensitivity": 0,
+                "alignment": 0,  # Changed from sensitivity to alignment
                 "specificity": 0,
                 "predicted_distribution": [],
                 "actual_distribution": [],
                 "confusion_matrices": []
             }
         # --- END NEW LOGGING ---
+
+        # Import Gwet's AC1 metric
+        from plexus.analysis.metrics.gwet_ac1 import GwetAC1
 
         # Use self.logging instead of logging globally
         self.logging.info(f"\nStarting metrics calculation with {len(results)} results")
@@ -502,6 +508,10 @@ class Evaluation:
         
         total_correct = 0
         total_predictions = 0
+        
+        # For Gwet's AC1 calculation, track all predictions and actuals
+        all_predictions = []
+        all_actuals = []
         
         # Get the primary score name - if we're evaluating a specific score, use that
         primary_score_name = None
@@ -552,6 +562,10 @@ class Evaluation:
                 # Standardize empty or NA values
                 predicted = 'na' if predicted in ['', 'nan', 'n/a', 'none', 'null'] else predicted
                 actual = 'na' if actual in ['', 'nan', 'n/a', 'none', 'null'] else actual
+                
+                # Collect predictions and actuals for Gwet's AC1 calculation
+                all_predictions.append(predicted)
+                all_actuals.append(actual)
                 
                 # Log the first 10 results for visual inspection
                 if logged_results_count < 10:
@@ -611,12 +625,44 @@ class Evaluation:
         # Calculate overall accuracy
         accuracy = total_correct / total_predictions if total_predictions > 0 else 0
         
+        # Calculate Gwet's AC1 for alignment
+        gwet_ac1_value = 0
+        if all_predictions and all_actuals and len(all_predictions) == len(all_actuals) and len(all_predictions) > 0:
+            try:
+                # Add diagnostic logging for AC1 inputs
+                self.logging.info(f"Gwet's AC1 calculation inputs:")
+                self.logging.info(f"  Predictions ({len(all_predictions)}): {all_predictions[:10]}...")
+                self.logging.info(f"  Actuals ({len(all_actuals)}): {all_actuals[:10]}...")
+                
+                # Calculate unique categories for debugging
+                unique_categories = set(all_predictions + all_actuals)
+                self.logging.info(f"  Unique categories: {unique_categories}")
+                
+                # Create a GwetAC1 instance and use proper Metric.Input interface
+                gwet_calculator = GwetAC1()
+                metric_input = Metric.Input(
+                    reference=all_actuals,
+                    predictions=all_predictions
+                )
+                result = gwet_calculator.calculate(metric_input)
+                gwet_ac1_value = result.value
+                self.logging.info(f"Calculated Gwet's AC1: {gwet_ac1_value}")
+                
+                # Map AC1 from [-1, 1] to [0, 1] for backward compatibility
+                # Any negative values are mapped to 0
+                gwet_ac1_mapped = max(0, (gwet_ac1_value + 1) / 2)
+                self.logging.info(f"Mapped Gwet's AC1 (for backward compatibility): {gwet_ac1_mapped}")
+            except Exception as e:
+                self.logging.error(f"Error calculating Gwet's AC1: {str(e)}")
+                self.logging.exception("Stack trace for AC1 calculation error:")
+                gwet_ac1_value = 0
+        
         # For binary classification scores, calculate additional metrics
         precision = accuracy
-        sensitivity = accuracy
+        alignment = gwet_ac1_value  # Use raw AC1 value (-1 to 1)
         specificity = accuracy
         
-        # If we have binary classification data (yes/no), calculate detailed metrics
+        # If we have binary classification data (yes/no), calculate detailed precision and specificity
         for score_name, matrix_data in confusion_matrices.items():
             labels = sorted(list(matrix_data['labels']))
             # --- BEGIN NEW LOGGING ---
@@ -630,7 +676,7 @@ class Evaluation:
                 fn = matrix_data['matrix'].get('yes', {}).get('no', 0)
                 
                 precision = tp / (tp + fp) if (tp + fp) > 0 else 0
-                sensitivity = tp / (tp + fn) if (tp + fn) > 0 else 0
+                # alignment is already calculated with Gwet's AC1
                 specificity = tn / (tn + fp) if (tn + fp) > 0 else 0
                 break  # Use the first binary score found for these metrics
             else: # Added logging
@@ -734,24 +780,14 @@ class Evaluation:
         self.logging.info(f"Total correct predictions: {total_correct}")
         self.logging.info(f"Final Accuracy: {accuracy}")
         self.logging.info(f"Final Precision: {precision}")
-        self.logging.info(f"Final Sensitivity: {sensitivity}")
+        self.logging.info(f"Final Alignment (Gwet's AC1): {alignment}")
         self.logging.info(f"Final Specificity: {specificity}")
         # --- END NEW LOGGING ---
-        # Replace previous logging block
-        # logging.info("\nCalculated metrics:")
-        # logging.info(f"Total predictions: {total_predictions}")
-        # logging.info(f"Total correct: {total_correct}")
-        # logging.info(f"Accuracy: {accuracy}")
-        # logging.info(f"Precision: {precision}")
-        # logging.info(f"Sensitivity: {sensitivity}")
-        # logging.info(f"Specificity: {specificity}")
-        # logging.info(f"Predicted distributions: {predicted_label_distributions}")
-        # logging.info(f"Actual distributions: {actual_label_distributions}")
 
         return {
             "accuracy": accuracy,
             "precision": precision,
-            "sensitivity": sensitivity,
+            "alignment": alignment,  # Changed from sensitivity to alignment
             "specificity": specificity,
             "confusionMatrix": primary_confusion_matrix_dict, # Use the new single dict
             "predictedClassDistribution": predicted_label_distributions,
@@ -1302,6 +1338,7 @@ class Evaluation:
         """Get the variables for the update mutation"""
         # --- DETAILED LOGGING START ---
         self.logging.info(f"[_get_update_variables ENTRY] Status: {status}, Metrics keys: {list(metrics.keys())}")
+        self.logging.info(f"[_get_update_variables] Raw metrics input: {metrics}")
         # --- DETAILED LOGGING END ---
         elapsed_seconds = int((datetime.now(timezone.utc) - self.started_at).total_seconds())
         
@@ -1311,10 +1348,22 @@ class Evaluation:
             metrics_for_api.append({"name": "Accuracy", "value": metrics["accuracy"] * 100})
         if metrics.get("precision") is not None:
             metrics_for_api.append({"name": "Precision", "value": metrics["precision"] * 100})
-        if metrics.get("sensitivity") is not None:
-            metrics_for_api.append({"name": "Sensitivity", "value": metrics["sensitivity"] * 100})
+        if metrics.get("alignment") is not None:
+            # For alignment (Gwet's AC1), we map from [-1, 1] to [0, 100] for UI display
+            # Only map if the value is negative, otherwise use the raw value scaled to percentage
+            alignment_value = metrics["alignment"]
+            self.logging.info(f"[_get_update_variables] Processing alignment value: {alignment_value}")
+            if alignment_value < 0:
+                display_value = 0  # Map negative values to 0
+            else:
+                display_value = alignment_value * 100  # Scale to percentage
+            metrics_for_api.append({"name": "Alignment", "value": display_value})
+            self.logging.info(f"[_get_update_variables] Added Alignment to metrics_for_api with value: {display_value}")
         if metrics.get("specificity") is not None:
             metrics_for_api.append({"name": "Specificity", "value": metrics["specificity"] * 100})
+        
+        # Log what metrics we've prepared for API
+        self.logging.info(f"[_get_update_variables] Prepared metrics_for_api: {metrics_for_api}")
         
         # Get first score's confusion matrix
         confusion_matrix_data = metrics.get("confusion_matrices", [{}])[0] if metrics.get("confusion_matrices") else {}
@@ -1360,11 +1409,44 @@ class Evaluation:
         if hasattr(self, 'score_version_id') and self.score_version_id:
             update_input["scoreVersionId"] = self.score_version_id
         
-        # Add metrics if valid
+        # Add metrics if valid - ensure we always have all metrics represented
         if metrics_for_api:  # Ensure the list is not empty
+            # Double check that we have our alignment metric if it should be there
+            has_alignment = any(m["name"] == "Alignment" for m in metrics_for_api)
+            if "alignment" in metrics and not has_alignment:
+                self.logging.warning(f"[_get_update_variables] Alignment exists in metrics but not in metrics_for_api!")
+                # Force add it if not already there
+                alignment_value = metrics["alignment"]
+                display_value = 0 if alignment_value < 0 else alignment_value * 100
+                metrics_for_api.append({"name": "Alignment", "value": display_value})
+                self.logging.info(f"[_get_update_variables] Forced added Alignment with value: {display_value}")
+            
+            # Additional validation to ensure all required metrics are included
+            metric_names = [m["name"] for m in metrics_for_api]
+            self.logging.info(f"[_get_update_variables] Current metric names in metrics_for_api: {metric_names}")
+            
+            # Force append any missing metrics with default N/A value (-1 displays as N/A in UI)
+            required_metrics = ["Accuracy", "Precision", "Alignment", "Specificity"]
+            for required_metric in required_metrics:
+                if required_metric not in metric_names:
+                    self.logging.warning(f"[_get_update_variables] Required metric {required_metric} missing - adding with default value")
+                    metrics_for_api.append({"name": required_metric, "value": -1})
+            
+            # Final check and sort for consistent order
+            metrics_for_api.sort(key=lambda x: required_metrics.index(x["name"]) if x["name"] in required_metrics else 999)
+            
             update_input["metrics"] = json.dumps(metrics_for_api)
+            self.logging.info(f"[_get_update_variables] Final metrics_for_api JSON: {json.dumps(metrics_for_api)}")
         else:
-            update_input["metrics"] = json.dumps([]) # Send empty list if no metrics
+            # Create default metrics list with all required metrics if empty
+            default_metrics = [
+                {"name": "Accuracy", "value": metrics.get("accuracy", 0) * 100},
+                {"name": "Precision", "value": metrics.get("precision", 0) * 100},
+                {"name": "Alignment", "value": 0 if metrics.get("alignment", 0) < 0 else metrics.get("alignment", 0) * 100},
+                {"name": "Specificity", "value": metrics.get("specificity", 0) * 100}
+            ]
+            update_input["metrics"] = json.dumps(default_metrics)
+            self.logging.info(f"[_get_update_variables] Using default metrics: {json.dumps(default_metrics)}")
         
         # Add confusion matrix if available in metrics
         confusion_matrix_val = metrics.get("confusionMatrix")

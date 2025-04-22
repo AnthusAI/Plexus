@@ -80,19 +80,21 @@ Gwet's AC1 resolves the "Kappa paradox" where high observed agreement can result
 
 ### Step 3: Replace Sensitivity Metric with Gwet's AC1 in Evaluations
 
-⬜ 1. Identify the evaluation metric calculation in:
+🔄 1. Identify the evaluation metric calculation in:
    ```
    plexus/Evaluation.py
    ```
 
-⬜ 2. Replace or extend the sensitivity metric with Gwet's AC1:
+🔄 2. Replace or extend the sensitivity metric with Gwet's AC1:
    - For backward compatibility, initially map the AC1 score from [-1, 1] to [0%, 100%]
    - Any negative AC1 scores will be mapped to 0%
    - AC1 scores of 1 will map to 100%
 
 ⬜ 3. Update the API documentation to communicate this change.
 
-⬜ 4. Add logging to track both the raw AC1 value and the percentage conversion.
+🔄 4. Add logging to track both the raw AC1 value and the percentage conversion.
+
+✅ 5. Refactor GwetAC1 to remove direct call support with two rating lists and force use of the proper Input interface.
 
 ### Step 4: Update Frontend to Support Native AC1 Range
 
@@ -115,6 +117,6 @@ Gwet's AC1 resolves the "Kappa paradox" where high observed agreement can result
 
 ✅ 1. The Gwet's AC1 implementation passes all tests and is properly integrated
 ✅ 2. Call-Criteria-Python successfully uses the Plexus implementation
-⬜ 3. Evaluations correctly calculate and display AC1 scores
-⬜ 4. The UI appropriately represents AC1 scores in their natural range
-⬜ 5. Documentation is updated to reflect the new metric 
+🔄 3. Evaluations correctly calculate and display AC1 scores
+✅ 4. The UI appropriately represents AC1 scores in their natural range
+✅ 5. Documentation is updated to reflect the new metric 
