@@ -244,7 +244,7 @@ const GaugeComponent: React.FC<GaugeProps> = ({
   }
 
   const renderTargetTick = () => {
-    if (!target) return null
+    if (!target || !showTicks) return null
     
     // Calculate the normalized target position (0-100)
     const normalizedTarget = ((target - min) / (max - min)) * 100
