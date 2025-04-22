@@ -950,8 +950,8 @@ def accuracy(
                         update_payload_metrics.append({"name": "Accuracy", "value": final_metrics["accuracy"] * 100})
                     if final_metrics.get("precision") is not None:
                         update_payload_metrics.append({"name": "Precision", "value": final_metrics["precision"] * 100})
-                    if final_metrics.get("sensitivity") is not None:
-                        update_payload_metrics.append({"name": "Sensitivity", "value": final_metrics["sensitivity"] * 100})
+                    if final_metrics.get("alignment") is not None:
+                        update_payload_metrics.append({"name": "Alignment", "value": final_metrics["alignment"] * 100})
                     if final_metrics.get("specificity") is not None:
                         update_payload_metrics.append({"name": "Specificity", "value": final_metrics["specificity"] * 100})
 
@@ -1050,7 +1050,7 @@ def accuracy(
             logging.info(f"Completed evaluation of {len(labeled_samples_data)} samples")
             logging.info(f"Overall accuracy: {final_metrics['accuracy']:.2f}%")
             logging.info(f"Precision: {final_metrics.get('precision', 'N/A')}")
-            logging.info(f"Sensitivity: {final_metrics.get('sensitivity', 'N/A')}")
+            logging.info(f"Alignment: {final_metrics.get('alignment', 'N/A')}")
             logging.info(f"Specificity: {final_metrics.get('specificity', 'N/A')}")
             
             if dry_run:
