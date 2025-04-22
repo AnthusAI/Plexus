@@ -9,8 +9,10 @@ highly imbalanced class distributions.
 import numpy as np
 from typing import List, Union, Optional
 
+from .metric import Metric
 
-class GwetAC1:
+
+class GwetAC1(Metric):
     """
     Implementation of Gwet's AC1 statistic for measuring inter-rater agreement.
     
@@ -24,14 +26,43 @@ class GwetAC1:
       61(1), 29-48.
     """
     
+    def calculate(self, input_data: Metric.Input) -> Metric.Result:
+        """
+        Calculate Gwet's AC1 statistic for measuring agreement between two raters.
+        
+        Args:
+            input_data: Metric.Input containing reference and prediction lists
+            
+        Returns:
+            Metric.Result with the Gwet's AC1 value and metadata
+        """
+        ac1_value = self._calculate_ac1(
+            input_data.reference,
+            input_data.predictions,
+            zero_division='warn'
+        )
+        
+        return Metric.Result(
+            name="Gwet's AC1",
+            value=ac1_value,
+            range=[-1.0, 1.0],
+            metadata={
+                "interpretation": {
+                    "1.0": "Perfect agreement",
+                    "0.0": "Agreement no better than chance",
+                    "<0": "Agreement worse than chance (rare)"
+                }
+            }
+        )
+    
     @staticmethod
-    def calculate(
+    def _calculate_ac1(
         rater1_ratings: List[str],
         rater2_ratings: List[str],
         zero_division: str = 'warn'
     ) -> float:
         """
-        Calculate Gwet's AC1 statistic for measuring agreement between two raters.
+        Internal method to calculate Gwet's AC1 statistic.
         
         Args:
             rater1_ratings: List of ratings from the first rater
