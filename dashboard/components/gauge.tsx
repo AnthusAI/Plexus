@@ -34,6 +34,23 @@ const calculateAngle = (percent: number) => {
   return (percent / 100) * (Math.PI * 7/6)
 }
 
+// Format decimal values without leading zeros for values between -1 and 1
+const formatDecimalValue = (value: number, decimalPlaces: number): string => {
+  // If it's a whole number, just return the string representation
+  if (value % 1 === 0) return value.toString();
+  
+  // Format to specified decimal places
+  const formatted = value.toFixed(decimalPlaces);
+  
+  // For values between -1 and 1 (but not -1 or 1 exactly), remove leading zero
+  if (value > -1 && value < 1 && value !== 0) {
+    return formatted.replace(/^(-?)0\./, '$1.');
+  }
+  
+  // Otherwise return the full formatted value
+  return formatted;
+};
+
 const GaugeComponent: React.FC<GaugeProps> = ({ 
   value, 
   beforeValue,
@@ -196,8 +213,8 @@ const GaugeComponent: React.FC<GaugeProps> = ({
 
       // Calculate the actual value based on min/max
       const tickValue = minValue + (segment.start / 100) * (maxValue - minValue)
-      // Format to specified decimal places, then remove trailing zeros
-      const formattedTickValue = tickValue % 1 === 0 ? tickValue.toString() : parseFloat(tickValue.toFixed(decimalPlaces)).toString()
+      // Format decimal values without leading zeros
+      const formattedTickValue = formatDecimalValue(tickValue, decimalPlaces)
 
       return (
         <g key={index}>
@@ -227,7 +244,7 @@ const GaugeComponent: React.FC<GaugeProps> = ({
   }
 
   const renderTargetTick = () => {
-    if (!target || !showTicks) return null
+    if (!target) return null
     
     // Calculate the normalized target position (0-100)
     const normalizedTarget = ((target - min) / (max - min)) * 100
@@ -248,8 +265,8 @@ const GaugeComponent: React.FC<GaugeProps> = ({
     const textX = textOffset * Math.cos(angle - Math.PI / 2)
     const textY = textOffset * Math.sin(angle - Math.PI / 2)
 
-    // Format to specified decimal places, then remove trailing zeros
-    const formattedTargetValue = target % 1 === 0 ? target.toString() : parseFloat(target.toFixed(decimalPlaces)).toString()
+    // Format decimal values without leading zeros
+    const formattedTargetValue = formatDecimalValue(target, decimalPlaces)
 
     return (
       <g>
@@ -318,7 +335,7 @@ const GaugeComponent: React.FC<GaugeProps> = ({
                   />
                   <g transform="rotate(-105)">
                     {renderSegments()}
-                    {showTicks && renderTicks(min, max)}
+                    {showTicks && !target && renderTicks(min, max)}
                     {renderTargetTick()}
                     <g>
                       {beforeValue !== undefined && (
@@ -368,7 +385,7 @@ const GaugeComponent: React.FC<GaugeProps> = ({
                     {value !== undefined 
                       ? (valueFormatter
                           ? valueFormatter(value)
-                          : (value % 1 === 0 ? `${value}${valueUnit}` : `${value.toFixed(decimalPlaces)}${valueUnit}`)
+                          : `${formatDecimalValue(value, decimalPlaces)}${valueUnit}`
                         )
                       : ''}
                   </text>
