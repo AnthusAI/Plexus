@@ -24,22 +24,23 @@ Gwet's AC1 resolves the "Kappa paradox" where high observed agreement can result
 
 ### Step 1: Move Gwet's AC1 from Call-Criteria-Python to Plexus
 
-⬜ 1. Create a new module in Plexus for alignment metrics:
+✅ 1. Create a dedicated module in Plexus for Gwet's AC1:
    ```
-   plexus/analysis/metrics.py
+   plexus/analysis/metrics/gwet_ac1.py
    ```
 
-⬜ 2. Implement the `GwetAC1` class based on the existing implementation in:
+✅ 2. Implement the `GwetAC1` class based on the existing implementation in:
    ```
    /home/ryan/projects/Call-Criteria-Python/commands/data/feedback/gwet_ac1.py
    ```
 
-⬜ 3. Create an `__init__.py` file in the analysis directory to make it a proper module:
+✅ 3. Create necessary `__init__.py` files to make it a proper module:
    ```
    plexus/analysis/__init__.py
+   plexus/analysis/metrics/__init__.py
    ```
 
-⬜ 4. Update the existing analysis script in Call-Criteria-Python to use the Plexus implementation:
+✅ 4. Update the existing analysis script in Call-Criteria-Python to use the Plexus implementation:
    ```
    /home/ryan/projects/Call-Criteria-Python/commands/data/feedback/analyze.py
    ```
@@ -51,13 +52,13 @@ Gwet's AC1 resolves the "Kappa paradox" where high observed agreement can result
    
    instead of the current local import.
 
-⬜ 5. Upon successful integration, the original `gwet_ac1.py` file in Call-Criteria-Python can be removed.
+✅ 5. Upon successful integration, the original `gwet_ac1.py` file in Call-Criteria-Python can be removed.
 
 ### Step 2: Add Test Coverage
 
 ⬜ 1. Create a test file for the GwetAC1 implementation:
    ```
-   plexus/analysis/metrics_test.py
+   plexus/analysis/metrics/gwet_ac1_test.py
    ```
 
 ⬜ 2. Implement tests covering:
@@ -104,7 +105,7 @@ Gwet's AC1 resolves the "Kappa paradox" where high observed agreement can result
 ## Success Criteria
 
 ⬜ 1. The Gwet's AC1 implementation passes all tests and is properly integrated
-⬜ 2. Call-Criteria-Python successfully uses the Plexus implementation
+✅ 2. Call-Criteria-Python successfully uses the Plexus implementation
 ⬜ 3. Evaluations correctly calculate and display AC1 scores
 ⬜ 4. The UI appropriately represents AC1 scores in their natural range
 ⬜ 5. Documentation is updated to reflect the new metric 
