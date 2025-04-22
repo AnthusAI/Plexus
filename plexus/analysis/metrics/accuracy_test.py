@@ -1,11 +1,12 @@
 """
-Tests for Accuracy metric implementation.
+Tests for the Accuracy metric implementation.
 
-This module tests the Accuracy class to ensure correct calculation
-of accuracy values.
+This module tests the Accuracy class using various test cases to ensure
+the implementation is correct and robust.
 """
 
 import unittest
+import numpy as np
 import math
 from .accuracy import Accuracy
 from .metric import Metric
@@ -19,7 +20,7 @@ class TestAccuracy(unittest.TestCase):
         self.accuracy = Accuracy()
 
     def test_perfect_accuracy(self):
-        """Test with perfect agreement between predictions and reference."""
+        """Test with perfect accuracy between predictions and references."""
         input_data = Metric.Input(
             reference=["Yes", "No", "Yes", "No", "Yes"],
             predictions=["Yes", "No", "Yes", "No", "Yes"]
@@ -33,7 +34,7 @@ class TestAccuracy(unittest.TestCase):
         self.assertEqual(result.metadata["total"], 5)
 
     def test_partial_accuracy(self):
-        """Test with partial agreement."""
+        """Test with partial accuracy."""
         input_data = Metric.Input(
             reference=["Yes", "No", "Yes", "No", "Yes"],
             predictions=["Yes", "No", "No", "No", "Yes"]
@@ -41,16 +42,16 @@ class TestAccuracy(unittest.TestCase):
         result = self.accuracy.calculate(input_data)
         
         self.assertEqual(result.name, "Accuracy")
-        self.assertEqual(result.value, 0.8)  # 4/5 correct
+        self.assertEqual(result.value, 0.8)  # 4 out of 5 correct
         self.assertEqual(result.range, [0.0, 1.0])
         self.assertEqual(result.metadata["matches"], 4)
         self.assertEqual(result.metadata["total"], 5)
 
     def test_zero_accuracy(self):
-        """Test with no agreement at all."""
+        """Test with zero accuracy."""
         input_data = Metric.Input(
-            reference=["Yes", "Yes", "Yes"],
-            predictions=["No", "No", "No"]
+            reference=["Yes", "No", "Yes", "No", "Yes"],
+            predictions=["No", "Yes", "No", "Yes", "No"]
         )
         result = self.accuracy.calculate(input_data)
         
@@ -58,7 +59,7 @@ class TestAccuracy(unittest.TestCase):
         self.assertEqual(result.value, 0.0)
         self.assertEqual(result.range, [0.0, 1.0])
         self.assertEqual(result.metadata["matches"], 0)
-        self.assertEqual(result.metadata["total"], 3)
+        self.assertEqual(result.metadata["total"], 5)
 
     def test_empty_inputs(self):
         """Test with empty input lists."""
@@ -69,7 +70,7 @@ class TestAccuracy(unittest.TestCase):
         result = self.accuracy.calculate(input_data)
         
         self.assertEqual(result.name, "Accuracy")
-        self.assertTrue(math.isnan(result.value))
+        self.assertTrue(math.isnan(result.value))  # Should be NaN
         self.assertEqual(result.range, [0.0, 1.0])
         self.assertIn("error", result.metadata)
 
@@ -83,19 +84,19 @@ class TestAccuracy(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.accuracy.calculate(input_data)
 
-    def test_multiclass_data(self):
-        """Test with multi-class data."""
+    def test_mixed_types(self):
+        """Test with mixed data types."""
         input_data = Metric.Input(
-            reference=["A", "B", "C", "D", "E", "A", "B", "C", "D", "E"],
-            predictions=["A", "B", "C", "D", "E", "B", "C", "D", "E", "A"]
+            reference=["Yes", 1, True, None, 3.14],
+            predictions=["Yes", 1, True, None, 3.14]
         )
         result = self.accuracy.calculate(input_data)
         
         self.assertEqual(result.name, "Accuracy")
-        self.assertEqual(result.value, 0.5)  # 5/10 correct
+        self.assertEqual(result.value, 1.0)  # All match
         self.assertEqual(result.range, [0.0, 1.0])
         self.assertEqual(result.metadata["matches"], 5)
-        self.assertEqual(result.metadata["total"], 10)
+        self.assertEqual(result.metadata["total"], 5)
 
 
 if __name__ == "__main__":

@@ -61,6 +61,8 @@ from plexus.cli.task_progress_tracker import StageConfig, TaskProgressTracker
 
 from plexus.analysis.metrics import GwetAC1
 from plexus.analysis.metrics.metric import Metric
+from plexus.analysis.metrics.accuracy import Accuracy
+from plexus.analysis.metrics.precision import Precision
 
 # Set up logging for evaluations
 set_log_group('plexus/evaluation')
@@ -497,8 +499,11 @@ class Evaluation:
             }
         # --- END NEW LOGGING ---
 
-        # Import Gwet's AC1 metric
+        # Import metrics classes
         from plexus.analysis.metrics.gwet_ac1 import GwetAC1
+        from plexus.analysis.metrics.accuracy import Accuracy
+        from plexus.analysis.metrics.precision import Precision
+        from plexus.analysis.metrics.metric import Metric
 
         # Use self.logging instead of logging globally
         self.logging.info(f"\nStarting metrics calculation with {len(results)} results")
@@ -622,8 +627,35 @@ class Evaluation:
                 # Update confusion matrix
                 confusion_matrices[score_name]['matrix'][actual][predicted] += 1
 
-        # Calculate overall accuracy
-        accuracy = total_correct / total_predictions if total_predictions > 0 else 0
+        # Calculate overall accuracy using the Accuracy metric class
+        accuracy_value = 0
+        if all_predictions and all_actuals and len(all_predictions) == len(all_actuals) and len(all_predictions) > 0:
+            try:
+                # Add diagnostic logging for Accuracy inputs
+                self.logging.info(f"Accuracy calculation inputs:")
+                self.logging.info(f"  Predictions ({len(all_predictions)}): {all_predictions[:10]}...")
+                self.logging.info(f"  Actuals ({len(all_actuals)}): {all_actuals[:10]}...")
+                
+                # Create an Accuracy instance and use proper Metric.Input interface
+                accuracy_calculator = Accuracy()
+                metric_input = Metric.Input(
+                    reference=all_actuals,
+                    predictions=all_predictions
+                )
+                result = accuracy_calculator.calculate(metric_input)
+                accuracy_value = result.value
+                self.logging.info(f"Calculated Accuracy: {accuracy_value}")
+                self.logging.info(f"Matches: {result.metadata.get('matches', 0)}/{result.metadata.get('total', 0)}")
+            except Exception as e:
+                self.logging.error(f"Error calculating Accuracy: {str(e)}")
+                self.logging.exception("Stack trace for Accuracy calculation error:")
+                # Fall back to manual calculation if the Accuracy class fails
+                accuracy_value = total_correct / total_predictions if total_predictions > 0 else 0
+                self.logging.info(f"Fallback to manual accuracy calculation: {accuracy_value}")
+        else:
+            # If lists are empty or unequal, use the original calculation
+            accuracy_value = total_correct / total_predictions if total_predictions > 0 else 0
+            self.logging.info(f"Used manual accuracy calculation due to empty or unequal lists: {accuracy_value}")
         
         # Calculate Gwet's AC1 for alignment
         gwet_ac1_value = 0
@@ -657,30 +689,77 @@ class Evaluation:
                 self.logging.exception("Stack trace for AC1 calculation error:")
                 gwet_ac1_value = 0
         
-        # For binary classification scores, calculate additional metrics
-        precision = accuracy
-        alignment = gwet_ac1_value  # Use raw AC1 value (-1 to 1)
-        recall = accuracy           # Changed from specificity to recall
+        # Calculate precision using the Precision metric class
+        precision_value = accuracy_value  # Default fallback is to use accuracy
         
-        # If we have binary classification data (yes/no), calculate detailed precision and recall
+        # First check if we have binary classification data (yes/no) for specialized binary metrics
+        binary_confusion_matrix = None
         for score_name, matrix_data in confusion_matrices.items():
             labels = sorted(list(matrix_data['labels']))
-            # --- BEGIN NEW LOGGING ---
             self.logging.info(f"Checking labels for score '{score_name}' for binary metrics: {labels}")
-            # --- END NEW LOGGING ---
+            
             if len(labels) == 2 and 'yes' in labels and 'no' in labels:
-                self.logging.info(f"Calculating binary metrics for score '{score_name}'") # Added logging
-                tp = matrix_data['matrix'].get('yes', {}).get('yes', 0)
-                tn = matrix_data['matrix'].get('no', {}).get('no', 0)
-                fp = matrix_data['matrix'].get('no', {}).get('yes', 0)
-                fn = matrix_data['matrix'].get('yes', {}).get('no', 0)
+                self.logging.info(f"Found binary classification data for score '{score_name}'")
+                binary_confusion_matrix = matrix_data
+                break
+        
+        # Calculate precision using the Precision class
+        if all_predictions and all_actuals and len(all_predictions) == len(all_actuals) and len(all_predictions) > 0:
+            try:
+                # Add diagnostic logging for Precision inputs
+                self.logging.info(f"Precision calculation inputs:")
+                self.logging.info(f"  Predictions ({len(all_predictions)}): {all_predictions[:10]}...")
+                self.logging.info(f"  Actuals ({len(all_actuals)}): {all_actuals[:10]}...")
                 
-                precision = tp / (tp + fp) if (tp + fp) > 0 else 0
-                # alignment is already calculated with Gwet's AC1
-                recall = tp / (tp + fn) if (tp + fn) > 0 else 0  # Changed from specificity to recall with correct formula
-                break  # Use the first binary score found for these metrics
-            else: # Added logging
-                self.logging.info(f"Labels for score '{score_name}' do not match binary criteria ['yes', 'no']. Skipping binary metrics calculation for this score.")
+                # Create a Precision instance and use proper Metric.Input interface
+                precision_calculator = Precision(positive_labels=['yes'])
+                metric_input = Metric.Input(
+                    reference=all_actuals,
+                    predictions=all_predictions
+                )
+                result = precision_calculator.calculate(metric_input)
+                precision_value = result.value
+                self.logging.info(f"Calculated Precision: {precision_value}")
+                self.logging.info(f"True Positives: {result.metadata.get('true_positives', 0)}")
+                self.logging.info(f"False Positives: {result.metadata.get('false_positives', 0)}")
+                self.logging.info(f"Total Predicted Positive: {result.metadata.get('total_predicted_positive', 0)}")
+            except Exception as e:
+                self.logging.error(f"Error calculating Precision: {str(e)}")
+                self.logging.exception("Stack trace for Precision calculation error:")
+                
+                # Fall back to manual calculation if the Precision class fails
+                if binary_confusion_matrix:
+                    # Manual calculation from confusion matrix
+                    tp = binary_confusion_matrix['matrix'].get('yes', {}).get('yes', 0)
+                    fp = binary_confusion_matrix['matrix'].get('no', {}).get('yes', 0)
+                    precision_value = tp / (tp + fp) if (tp + fp) > 0 else 0
+                    self.logging.info(f"Fallback to manual precision calculation from matrix: {precision_value}")
+                else:
+                    # If no binary confusion matrix, use accuracy as a fallback
+                    precision_value = accuracy_value
+                    self.logging.info(f"Using accuracy as fallback for precision: {precision_value}")
+        elif binary_confusion_matrix:
+            # If we have a binary confusion matrix but couldn't use the Precision class
+            tp = binary_confusion_matrix['matrix'].get('yes', {}).get('yes', 0)
+            fp = binary_confusion_matrix['matrix'].get('no', {}).get('yes', 0)
+            precision_value = tp / (tp + fp) if (tp + fp) > 0 else 0
+            self.logging.info(f"Calculated precision manually from confusion matrix: {precision_value}")
+        else:
+            # Default fallback
+            self.logging.info(f"Using accuracy as fallback for precision due to insufficient data: {precision_value}")
+        
+        # For now, use accuracy as recall, but we can implement a dedicated Recall class later
+        recall = accuracy_value
+        
+        # If we have binary classification data, calculate recall directly from the confusion matrix
+        if binary_confusion_matrix:
+            tp = binary_confusion_matrix['matrix'].get('yes', {}).get('yes', 0)
+            fn = binary_confusion_matrix['matrix'].get('yes', {}).get('no', 0)
+            recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+            self.logging.info(f"Calculated recall manually from confusion matrix: {recall}")
+        
+        # Alignment is calculated with Gwet's AC1
+        alignment = gwet_ac1_value
 
         # Format the confusion matrix for the primary score (or first score) for the API
         primary_confusion_matrix_dict = None
@@ -778,15 +857,15 @@ class Evaluation:
         self.logging.info("\n--- Calculated Metrics Summary ---")
         self.logging.info(f"Total predictions processed: {total_predictions}")
         self.logging.info(f"Total correct predictions: {total_correct}")
-        self.logging.info(f"Final Accuracy: {accuracy}")
-        self.logging.info(f"Final Precision: {precision}")
+        self.logging.info(f"Final Accuracy: {accuracy_value}")
+        self.logging.info(f"Final Precision: {precision_value}")
         self.logging.info(f"Final Alignment (Gwet's AC1): {alignment}")
         self.logging.info(f"Final Recall: {recall}")  # Changed from Specificity to Recall
         # --- END NEW LOGGING ---
 
         return {
-            "accuracy": accuracy,
-            "precision": precision,
+            "accuracy": accuracy_value,
+            "precision": precision_value,
             "alignment": alignment,  # Changed from sensitivity to alignment
             "recall": recall,        # Changed from specificity to recall
             "confusionMatrix": primary_confusion_matrix_dict, # Use the new single dict
