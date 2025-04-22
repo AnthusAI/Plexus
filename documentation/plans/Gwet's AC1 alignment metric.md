@@ -56,18 +56,27 @@ Gwet's AC1 resolves the "Kappa paradox" where high observed agreement can result
 
 ### Step 2: Add Test Coverage
 
-⬜ 1. Create a test file for the GwetAC1 implementation:
+✅ 1. Create a test file for the GwetAC1 implementation:
    ```
    plexus/analysis/metrics/gwet_ac1_test.py
    ```
 
-⬜ 2. Implement tests covering:
+✅ 2. Implement tests covering:
    - Basic functionality with known values
    - Edge cases (perfect agreement, no agreement, disagreement)
    - Error handling cases (empty inputs, different length inputs)
    - Special cases (single category, zero division handling)
 
-⬜ 3. Ensure test coverage meets project standards (typically >90% coverage).
+✅ 3. Ensure test coverage meets project standards (typically >90% coverage).
+
+✅ 4. Additional improvement: Created a standardized `Metric` base class:
+   ```
+   plexus/analysis/metrics/metric.py
+   ```
+   - Provides consistent Input/Output interfaces using Pydantic models
+   - Standardizes range information for proper visualization
+   - Added `Accuracy` metric as another example implementation
+   - Added comprehensive test coverage for both metrics
 
 ### Step 3: Replace Sensitivity Metric with Gwet's AC1 in Evaluations
 
@@ -104,7 +113,7 @@ Gwet's AC1 resolves the "Kappa paradox" where high observed agreement can result
 
 ## Success Criteria
 
-⬜ 1. The Gwet's AC1 implementation passes all tests and is properly integrated
+✅ 1. The Gwet's AC1 implementation passes all tests and is properly integrated
 ✅ 2. Call-Criteria-Python successfully uses the Plexus implementation
 ⬜ 3. Evaluations correctly calculate and display AC1 scores
 ⬜ 4. The UI appropriately represents AC1 scores in their natural range
