@@ -394,7 +394,7 @@ const GaugeComponent: React.FC<GaugeProps> = ({
               {title && (
                 <div 
                   className={cn(
-                    "absolute left-1/2 -translate-x-1/2 flex items-center gap-2 whitespace-nowrap",
+                    "absolute left-0 right-0 flex justify-center items-center whitespace-nowrap",
                     "text-[clamp(0.75rem,4vw,1rem)] transition-colors duration-500 ease-in-out",
                     priority ? "text-focus" : "text-foreground"
                   )}
@@ -402,36 +402,38 @@ const GaugeComponent: React.FC<GaugeProps> = ({
                     bottom: showTicks ? '5%' : '2%'
                   }}
                 >
-                  {title}
-                  {information && (
-                    <>
-                      <PopoverTrigger asChild>
-                        <button
-                          className="text-muted-foreground hover:text-foreground transition-colors duration-500 ease-in-out"
-                          aria-label="More information"
-                        >
-                          <CircleHelp className="h-4 w-4 transition-[stroke] duration-500 ease-in-out" />
-                        </button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-80 text-sm">
-                        {information.split('\n\n').map((paragraph, index) => (
-                          <p key={index} className={index > 0 ? 'mt-4' : ''}>
-                            {paragraph}
-                          </p>
-                        ))}
-                        {informationUrl && (
-                          <a 
-                            href={informationUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-primary hover:underline mt-3 inline-block"
+                  <span className="relative">
+                    {title}
+                    {information && (
+                      <div className="absolute -right-5 top-1/2 -translate-y-1/2 inline-flex">
+                        <PopoverTrigger asChild>
+                          <button
+                            className="text-muted-foreground hover:text-foreground transition-colors duration-500 ease-in-out"
+                            aria-label="More information"
                           >
-                            more...
-                          </a>
-                        )}
-                      </PopoverContent>
-                    </>
-                  )}
+                            <CircleHelp className="h-4 w-4 transition-[stroke] duration-500 ease-in-out" />
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-80 text-sm">
+                          {information.split('\n\n').map((paragraph, index) => (
+                            <p key={index} className={index > 0 ? 'mt-4' : ''}>
+                              {paragraph}
+                            </p>
+                          ))}
+                          {informationUrl && (
+                            <a 
+                              href={informationUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary hover:underline mt-3 inline-block"
+                            >
+                              more...
+                            </a>
+                          )}
+                        </PopoverContent>
+                      </div>
+                    )}
+                  </span>
                 </div>
               )}
             </div>
