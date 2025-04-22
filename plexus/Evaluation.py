@@ -488,9 +488,9 @@ class Evaluation:
             # Return default/empty metrics to avoid crashing
             return {
                 "accuracy": 0,
-                "precision": 0,
                 "alignment": 0,  # Changed from sensitivity to alignment
-                "specificity": 0,
+                "precision": 0,
+                "recall": 0,      # Changed from specificity to recall
                 "predicted_distribution": [],
                 "actual_distribution": [],
                 "confusion_matrices": []
@@ -660,9 +660,9 @@ class Evaluation:
         # For binary classification scores, calculate additional metrics
         precision = accuracy
         alignment = gwet_ac1_value  # Use raw AC1 value (-1 to 1)
-        specificity = accuracy
+        recall = accuracy           # Changed from specificity to recall
         
-        # If we have binary classification data (yes/no), calculate detailed precision and specificity
+        # If we have binary classification data (yes/no), calculate detailed precision and recall
         for score_name, matrix_data in confusion_matrices.items():
             labels = sorted(list(matrix_data['labels']))
             # --- BEGIN NEW LOGGING ---
@@ -677,7 +677,7 @@ class Evaluation:
                 
                 precision = tp / (tp + fp) if (tp + fp) > 0 else 0
                 # alignment is already calculated with Gwet's AC1
-                specificity = tn / (tn + fp) if (tn + fp) > 0 else 0
+                recall = tp / (tp + fn) if (tp + fn) > 0 else 0  # Changed from specificity to recall with correct formula
                 break  # Use the first binary score found for these metrics
             else: # Added logging
                 self.logging.info(f"Labels for score '{score_name}' do not match binary criteria ['yes', 'no']. Skipping binary metrics calculation for this score.")
@@ -781,14 +781,14 @@ class Evaluation:
         self.logging.info(f"Final Accuracy: {accuracy}")
         self.logging.info(f"Final Precision: {precision}")
         self.logging.info(f"Final Alignment (Gwet's AC1): {alignment}")
-        self.logging.info(f"Final Specificity: {specificity}")
+        self.logging.info(f"Final Recall: {recall}")  # Changed from Specificity to Recall
         # --- END NEW LOGGING ---
 
         return {
             "accuracy": accuracy,
             "precision": precision,
             "alignment": alignment,  # Changed from sensitivity to alignment
-            "specificity": specificity,
+            "recall": recall,        # Changed from specificity to recall
             "confusionMatrix": primary_confusion_matrix_dict, # Use the new single dict
             "predictedClassDistribution": predicted_label_distributions,
             "datasetClassDistribution": actual_label_distributions,
@@ -1359,8 +1359,8 @@ class Evaluation:
                 display_value = alignment_value * 100  # Scale to percentage
             metrics_for_api.append({"name": "Alignment", "value": display_value})
             self.logging.info(f"[_get_update_variables] Added Alignment to metrics_for_api with value: {display_value}")
-        if metrics.get("specificity") is not None:
-            metrics_for_api.append({"name": "Specificity", "value": metrics["specificity"] * 100})
+        if metrics.get("recall") is not None:
+            metrics_for_api.append({"name": "Recall", "value": metrics["recall"] * 100})
         
         # Log what metrics we've prepared for API
         self.logging.info(f"[_get_update_variables] Prepared metrics_for_api: {metrics_for_api}")
@@ -1426,7 +1426,7 @@ class Evaluation:
             self.logging.info(f"[_get_update_variables] Current metric names in metrics_for_api: {metric_names}")
             
             # Force append any missing metrics with default N/A value (-1 displays as N/A in UI)
-            required_metrics = ["Accuracy", "Precision", "Alignment", "Specificity"]
+            required_metrics = ["Accuracy", "Precision", "Alignment", "Recall"]
             for required_metric in required_metrics:
                 if required_metric not in metric_names:
                     self.logging.warning(f"[_get_update_variables] Required metric {required_metric} missing - adding with default value")
@@ -1441,9 +1441,9 @@ class Evaluation:
             # Create default metrics list with all required metrics if empty
             default_metrics = [
                 {"name": "Accuracy", "value": metrics.get("accuracy", 0) * 100},
-                {"name": "Precision", "value": metrics.get("precision", 0) * 100},
                 {"name": "Alignment", "value": 0 if metrics.get("alignment", 0) < 0 else metrics.get("alignment", 0) * 100},
-                {"name": "Specificity", "value": metrics.get("specificity", 0) * 100}
+                {"name": "Precision", "value": metrics.get("precision", 0) * 100},
+                {"name": "Recall", "value": metrics.get("recall", 0) * 100}
             ]
             update_input["metrics"] = json.dumps(default_metrics)
             self.logging.info(f"[_get_update_variables] Using default metrics: {json.dumps(default_metrics)}")
