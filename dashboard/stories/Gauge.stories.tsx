@@ -58,6 +58,37 @@ export const DecimalValue: Story = {
   }
 }
 
+export const WithTarget: Story = {
+  args: {
+    value: 75.7,
+    title: 'Accuracy',
+    target: 92.3
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await expect(canvas.getByText('75.7%')).toBeInTheDocument()
+    
+    // Check that there are two needles in the gauge
+    const svg = canvas.getByText('75.7%').closest('svg')
+    const needles = svg?.querySelectorAll('path[d^="M 0,-"]')
+    await expect(needles?.length).toBeGreaterThanOrEqual(2)
+  },
+  decorators: [
+    (Story) => (
+      <div className="bg-card-light p-6 rounded-lg">
+        <Story />
+      </div>
+    )
+  ],
+  parameters: {
+    docs: {
+      description: {
+        story: 'The `target` prop allows you to show a target value with a lighter needle, showing what value you want to reach.'
+      }
+    }
+  }
+}
+
 export const WithInformation: Story = {
   args: {
     value: 75,
@@ -213,7 +244,7 @@ export const Alignment: Story = {
       { start: 75, end: 90, color: 'var(--gauge-viable)' },       // Good alignment (0.5 to 0.8)
       { start: 90, end: 100, color: 'var(--gauge-great)' }        // Excellent alignment (0.8 to 1.0)
     ],
-    information: "Fleiss' Kappa measures the degree of agreement between multiple raters when classifying items into categories. Values range from -1 (complete disagreement) to 1 (perfect agreement), with 0 indicating agreement equivalent to random chance. Values above 0 suggest positive alignment, with higher values indicating stronger agreement between raters."
+    information: "Gwet's AC1 is an advanced agreement coefficient that measures inter-rater reliability, accounting for chance agreement more effectively than other metrics. Values range from -1 (complete disagreement) to 1 (perfect agreement), with 0 indicating random agreement. Values above 0.8 generally indicate strong agreement between multiple assessors."
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -223,13 +254,13 @@ export const Alignment: Story = {
     const titleText = canvas.getByText('Alignment')
     await expect(titleText).toBeInTheDocument()
     
-    // Test that the information button shows the Fleiss' Kappa explanation
+    // Test that the information button shows the Gwet's AC1 explanation
     const infoButton = canvas.getByLabelText('More information')
     await userEvent.click(infoButton)
     // The Popover is rendered in a portal, so we need to look at the document body
     const infoText = document.body.querySelector('.w-80.text-sm')
     await expect(infoText).toBeInTheDocument()
-    await expect(infoText?.textContent).toContain("Fleiss' Kappa measures")
+    await expect(infoText?.textContent).toContain("Gwet's AC1")
 
     // Test for presence of tick marks (text elements with segment start values)
     const svg = canvas.getByText('0.76').closest('svg')
@@ -256,6 +287,71 @@ export const Alignment: Story = {
       </div>
     )
   ]
+}
+
+export const AlignmentWithTarget: Story = {
+  args: {
+    value: 0.76,
+    target: 0.92,
+    title: 'Alignment',
+    valueUnit: '',
+    min: -1,
+    max: 1,
+    decimalPlaces: 2,
+    showTicks: true,
+    segments: [
+      { start: 0, end: 50, color: 'var(--gauge-inviable)' },      // Negative values (-1 to 0)
+      { start: 50, end: 60, color: 'var(--gauge-converging)' },   // Low alignment (0 to 0.2)
+      { start: 60, end: 75, color: 'var(--gauge-almost)' },       // Moderate alignment (0.2 to 0.5)
+      { start: 75, end: 90, color: 'var(--gauge-viable)' },       // Good alignment (0.5 to 0.8)
+      { start: 90, end: 100, color: 'var(--gauge-great)' }        // Excellent alignment (0.8 to 1.0)
+    ],
+    information: "Gwet's AC1 is an advanced agreement coefficient that measures inter-rater reliability, accounting for chance agreement more effectively than other metrics. Values range from -1 (complete disagreement) to 1 (perfect agreement), with 0 indicating random agreement. Values above 0.8 generally indicate strong agreement between multiple assessors."
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    const valueText = canvas.getByText('0.76')
+    await expect(valueText).toBeInTheDocument()
+    
+    const titleText = canvas.getByText('Alignment')
+    await expect(titleText).toBeInTheDocument()
+    
+    // Test that there are two needles in the gauge (current value and target)
+    const svg = canvas.getByText('0.76').closest('svg')
+    const needles = svg?.querySelectorAll('path[d^="M 0,-"]')
+    await expect(needles?.length).toBeGreaterThanOrEqual(2)
+    
+    // Test that the target tick mark is displayed with the correct value
+    const targetTickText = canvas.getByText('0.92')
+    await expect(targetTickText).toBeInTheDocument()
+    await expect(targetTickText).toHaveClass('fill-primary')
+    
+    // Verify the target tick has a dashed line
+    const targetTickLine = svg?.querySelector('line.stroke-primary[stroke-dasharray="2,1"]')
+    await expect(targetTickLine).toBeInTheDocument()
+    
+    // Test that the information button shows the Gwet's AC1 explanation
+    const infoButton = canvas.getByLabelText('More information')
+    await userEvent.click(infoButton)
+    // The Popover is rendered in a portal, so we need to look at the document body
+    const infoText = document.body.querySelector('.w-80.text-sm')
+    await expect(infoText).toBeInTheDocument()
+    await expect(infoText?.textContent).toContain("Gwet's AC1")
+  },
+  decorators: [
+    (Story) => (
+      <div className="bg-card-light p-6 rounded-lg">
+        <Story />
+      </div>
+    )
+  ],
+  parameters: {
+    docs: {
+      description: {
+        story: 'This example shows an alignment gauge with both current value and target value. The target is displayed both as a lighter needle and as a special tick mark with label, making it easier to see the exact target value.'
+      }
+    }
+  }
 }
 
 export const DecimalPrecision: Story = {
