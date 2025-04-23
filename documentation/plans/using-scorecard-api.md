@@ -507,7 +507,45 @@ This is the core change, moving away from the global registry for API loading an
 
 ### Remaining Implementation Steps
 
-- 🟡 **Step 18: End-to-end testing with dependencies**
+- ✅ **Step 18: Score Version Tracking Enhancement**
+  - What: Update `score push` command to handle version tracking in local YAML files
+  - Goal: Ensure proper versioning when pushing score configurations
+  - Implementation Baby Steps:
+    - ✅ **Step 18.1: Extract Version Information**
+      - Implement regex pattern to extract version ID from YAML content
+      - Log extracted version to console with `console.print(f"[blue]Found version in YAML: {extracted_version}[/blue]")`
+      - Verify: Run `plexus score push --scorecard "test-scorecard" --score "test-score" | grep "Found version"` and confirm version is extracted
+    
+    - ✅ **Step 18.2: Use Version as Parent ID**
+      - Set extracted version as `parentVersionId` when creating new version
+      - Fall back to champion version ID if no version found
+      - Verify: Check API call payload contains correct parentVersionId by adding debug log
+      
+    - ✅ **Step 18.3: Clean YAML for Comparison**
+      - Implement regex to remove version and parent lines from YAML
+      - Handle multi-line removal and clean up extra newlines
+      - Verify: Add debug log to show YAML before/after cleaning, confirm lines are removed
+      
+    - ✅ **Step 18.4: Compare with Cloud Version**
+      - Fetch current champion version from API
+      - Apply same cleaning to cloud version (remove version/parent)
+      - Compare cleaned versions to determine if changes exist
+      - Verify: Run with unchanged YAML and confirm "No changes detected" message
+      
+    - ✅ **Step 18.5: Update Local YAML After Push**
+      - Find insertion point after name/id/key field using regex
+      - Insert new version and parent information at correct position
+      - Remove any existing version/parent lines
+      - Verify: Check updated YAML file contains new version and parent lines in correct position
+      
+    - ✅ **Step 18.6: End-to-End Testing**
+      - Create test scorecard and score with known configuration
+      - Run push command multiple times with incremental changes
+      - Verify version history is correctly maintained
+      - Verify: Check version chains in API match expected pattern
+  - Verify Overall: The push command correctly handles version tracking through multiple iterations of changes when run from the `~/projects/Call-Criteria-Python` directory
+
+- 🟡 **Step 19: End-to-end testing with dependencies**
   - What: Test evaluation with scores that have dependencies
   - Goal: Confirm dependency resolution works correctly
   - Implementation Plan:
@@ -517,7 +555,7 @@ This is the core change, moving away from the global registry for API loading an
     4. Test with different dependency patterns (linear, branching, diamond)
   - Verify: All dependencies are loaded and evaluation results are correct when tested from the `~/projects/Call-Criteria-Python` directory
 
-- 🟡 **Step 19: Performance testing**
+- 🟡 **Step 20: Performance testing**
   - What: Test performance with and without caching
   - Goal: Confirm caching improves performance
   - Implementation Plan:
@@ -527,7 +565,7 @@ This is the core change, moving away from the global registry for API loading an
     4. Document performance gains from caching strategy
   - Verify: Second runs are faster due to cache hits when running from the `~/projects/Call-Criteria-Python` directory
 
-- 🟡 **Step 20: Documentation update**
+- 🟡 **Step 21: Documentation update**
   - What: Update command documentation with new options
   - Goal: Ensure users understand the new capabilities
   - Implementation Plan:
@@ -576,18 +614,3 @@ python -m plexus evaluate accuracy --scorecard "selectquote_hcs_medium_risk" --s
 # Test distribution command with dry run
 python -m plexus evaluate distribution --scorecard "selectquote_hcs_medium_risk" --score "Call Need and Resolution" --number-of-samples 10 --dry-run
 ```
-
-## Recent Changes
-
-### June 10, 2023
-- Fixed issue with scorecard loading when using the `--yaml` flag
-- Improved caching performance for subsequent runs
-- Enhanced error messages for invalid scorecard identifiers
-- Added `--dry-run` option to bypass database operations for testing
-
-### July 5, 2023
-- Resolved the evaluation ID issue in AccuracyEvaluation
-- Fixed issues with storing Score ID and ScoreVersion ID in evaluation records
-- Implemented proper initialization of target_score_identifiers
-- Added validation to prevent score parameter errors
-- Ensured variable scope consistency in nested functions
