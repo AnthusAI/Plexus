@@ -132,6 +132,10 @@ def fetch_and_cache_single_score(
             with open(yaml_path, 'r') as f:
                 config = yaml.load(f)
             
+            # Ensure consistent handling of IDs as strings
+            if isinstance(config, dict) and 'id' in config and not isinstance(config['id'], str):
+                config['id'] = str(config['id'])
+            
             from_cache = True
             if verbose:
                 logging.info(f"Loaded configuration from cache: {yaml_path}")
@@ -193,8 +197,14 @@ def fetch_and_cache_single_score(
             config = yaml.load(content)
             
             # Add version ID if not present (for consistency with other operations)
-            if isinstance(config, dict) and 'version' not in config:
-                config['version'] = champion_version_id
+            if isinstance(config, dict):
+                # Ensure ID is a string (if present)
+                if 'id' in config and not isinstance(config['id'], str):
+                    config['id'] = str(config['id'])
+                
+                # Add version if not present
+                if 'version' not in config:
+                    config['version'] = champion_version_id
             
             # Write to file
             with open(yaml_path, 'w') as f:
