@@ -545,7 +545,52 @@ This is the core change, moving away from the global registry for API loading an
       - Verify: Check version chains in API match expected pattern
   - Verify Overall: The push command correctly handles version tracking through multiple iterations of changes when run from the `~/projects/Call-Criteria-Python` directory
 
-- 🟡 **Step 19: End-to-end testing with dependencies**
+- ⬜ **Step 19: Unify Score Configuration Caching**
+  - What: Refactor the `score pull` command to use the same caching logic as the evaluation commands
+  - Goal: Implement DRY (Don't Repeat Yourself) pattern for configuration retrieval and caching
+  - Implementation Baby Steps:
+    - ⬜ **Step 19.1: Analyze Current Implementation**
+      - Compare `plexus score pull` implementation in `ScoreCommands.py` with `load_scorecard_from_api` in `EvaluationCommands.py`
+      - Document key differences and similarities in configuration fetching and caching
+      - Identify specific modules from evaluation code that can be reused (`iterative_config_fetching.py`, `fetch_score_configurations.py`, etc.)
+      - Verify: Create a document with side-by-side comparison of both implementations
+    
+    - ⬜ **Step 19.2: Create Shared Utility Function**
+      - Create a new file `plexus/cli/score_config_fetching.py` with a function `fetch_and_cache_single_score`
+      - Implement this function to handle fetching and caching a single score configuration
+      - Use the same YAML parsing and formatting approach as in evaluation commands
+      - Include proper error handling and logging
+      - Verify: Unit test the function with a test scorecard and score
+    
+    - ⬜ **Step 19.3: Update Score Pull Command To Use New Utility**
+      - Modify `score pull` command in `ScoreCommands.py` to use the new `fetch_and_cache_single_score` function
+      - Preserve all existing functionality and CLI interface
+      - Keep existing error messages and console output format
+      - Verify: Run `plexus score pull --scorecard "test-scorecard" --score "test-score"` and confirm it works as before
+    
+    - ⬜ **Step 19.4: Add Version Tracking to Utility**
+      - Ensure the utility function extracts version information from API responses
+      - Store version ID in the cached YAML file using the same format as in `score push`
+      - Verify: Check that pulled configuration files have proper version information
+    
+    - ⬜ **Step 19.5: Add Cache Utilization Logging**
+      - Add logging to show cache hit rates similar to evaluation commands
+      - Log whether configuration was loaded from cache or fetched from API
+      - Implement verbose flag for additional details
+      - Verify: Run command with different verbosity levels and check log output
+    
+    - ⬜ **Step 19.6: End-to-End Testing**
+      - Create test cases for various scenarios: 
+        - Pulling uncached score
+        - Pulling previously cached score
+        - Pulling with invalid credentials
+        - Pulling non-existent score
+      - Test both direct API access and cache utilization paths
+      - Verify command works with different identifier types (ID, key, name)
+      - Verify: Document test results for each scenario
+  - Verify Overall: The `score pull` command uses the same underlying code as evaluation commands for fetching and caching configurations, while maintaining the same user experience
+
+- 🟡 **Step 20: End-to-end testing with dependencies**
   - What: Test evaluation with scores that have dependencies
   - Goal: Confirm dependency resolution works correctly
   - Implementation Plan:
@@ -555,7 +600,7 @@ This is the core change, moving away from the global registry for API loading an
     4. Test with different dependency patterns (linear, branching, diamond)
   - Verify: All dependencies are loaded and evaluation results are correct when tested from the `~/projects/Call-Criteria-Python` directory
 
-- 🟡 **Step 20: Performance testing**
+- 🟡 **Step 21: Performance testing**
   - What: Test performance with and without caching
   - Goal: Confirm caching improves performance
   - Implementation Plan:
@@ -565,7 +610,7 @@ This is the core change, moving away from the global registry for API loading an
     4. Document performance gains from caching strategy
   - Verify: Second runs are faster due to cache hits when running from the `~/projects/Call-Criteria-Python` directory
 
-- 🟡 **Step 21: Documentation update**
+- 🟡 **Step 22: Documentation update**
   - What: Update command documentation with new options
   - Goal: Ensure users understand the new capabilities
   - Implementation Plan:
