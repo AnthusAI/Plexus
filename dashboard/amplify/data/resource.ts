@@ -116,7 +116,7 @@ const schema = a.schema({
             description: a.string(),
             order: a.integer().required(),
             type: a.string().required(),
-            targetAgreement: a.decimal(),
+            targetAgreement: a.float(),
             accuracy: a.float(),
             version: a.string(),
             aiProvider: a.string(),
