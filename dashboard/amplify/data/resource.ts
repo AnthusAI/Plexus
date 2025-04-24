@@ -35,6 +35,8 @@ type DatasetVersionIndexFields = "datasetId";
 type DatasetProfileIndexFields = "datasetId" | "datasetVersionId";
 type ShareLinkIndexFields = "token" | "resourceType" | "resourceId" | "accountId";
 type ScoreVersionIndexFields = "scoreId" | "versionNumber" | "isFeatured";
+type ReportConfigurationIndexFields = "accountId" | "name";
+type ReportIndexFields = "accountId" | "reportConfigurationId" | "status" | "createdAt" | "updatedAt";
 
 // Define the share token handler function
 const getResourceByShareTokenHandler = defineFunction({
@@ -55,6 +57,8 @@ const schema = a.schema({
             scoringJobs: a.hasMany('ScoringJob', 'accountId'),
             scoreResults: a.hasMany('ScoreResult', 'accountId'),
             tasks: a.hasMany('Task', 'accountId'),
+            reportConfigurations: a.hasMany('ReportConfiguration', 'accountId'),
+            reports: a.hasMany('Report', 'accountId'),
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
@@ -547,7 +551,55 @@ const schema = a.schema({
             allow.publicApiKey(),
             allow.authenticated()
         ])
-        .handler(a.handler.function(getResourceByShareTokenHandler))
+        .handler(a.handler.function(getResourceByShareTokenHandler)),
+
+    ReportConfiguration: a
+        .model({
+            name: a.string().required(),
+            description: a.string(),
+            accountId: a.string().required(),
+            account: a.belongsTo('Account', 'accountId'),
+            configuration: a.json().required(), // YAML/JSON definition
+            createdAt: a.datetime().required(),
+            updatedAt: a.datetime().required(),
+            reports: a.hasMany('Report', 'reportConfigurationId'),
+        })
+        .authorization((allow: AuthorizationCallback) => [
+            allow.publicApiKey(),
+            allow.authenticated()
+        ])
+        .secondaryIndexes((idx: (field: ReportConfigurationIndexFields) => any) => [
+            idx("accountId").sortKeys(["updatedAt"]),
+            idx("name")
+        ]),
+
+    Report: a
+        .model({
+            name: a.string(), // Can be auto-generated or user-defined
+            status: a.string().required(), // PENDING, RUNNING, COMPLETED, FAILED
+            createdAt: a.datetime().required(),
+            startedAt: a.datetime(),
+            completedAt: a.datetime(),
+            parameters: a.json(), // Parameters used for this specific run
+            reportData: a.json(), // Generated report output
+            errorMessage: a.string(),
+            errorDetails: a.json(),
+            accountId: a.string().required(),
+            account: a.belongsTo('Account', 'accountId'),
+            reportConfigurationId: a.string().required(),
+            reportConfiguration: a.belongsTo('ReportConfiguration', 'reportConfigurationId'),
+            // shareLinks: a.hasMany('ShareLink', 'resourceId') // Consider adding if ShareLink uses polymorphic relation
+            updatedAt: a.datetime().required(),
+        })
+        .authorization((allow: AuthorizationCallback) => [
+            allow.publicApiKey(),
+            allow.authenticated()
+        ])
+        .secondaryIndexes((idx: (field: ReportIndexFields) => any) => [
+            idx("accountId").sortKeys(["updatedAt"]),
+            idx("reportConfigurationId").sortKeys(["createdAt"]),
+            idx("status")
+        ]),
 });
 
 export type Schema = ClientSchema<typeof schema>;
