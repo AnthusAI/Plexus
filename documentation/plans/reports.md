@@ -5,6 +5,8 @@
 *   🟡 In Progress
 *   ✅ Completed
 
+***Note on Testing:*** *Test files in this project are typically located directly adjacent to the source code file they are testing (e.g., `service.py` would have a corresponding `service_test.py` in the same directory).*
+
 ## Introduction
 
 This document outlines the plan for implementing a flexible and extensible reporting system within the Plexus platform. The goal is to provide a standardized way to define, generate, store, and view various types of reports and analyses without requiring bespoke dashboard pages or API schema changes for each new report type. This system will support reports like feedback analysis, topic modeling, score performance summaries, and more.
