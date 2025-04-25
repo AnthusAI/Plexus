@@ -471,18 +471,64 @@ def _instantiate_and_run_block(block_def: ReportBlockDefinition, report_params: 
 
     Args:
         block_def: The definition of the block to instantiate and run.
-        report_params: The parameters to pass to the block when it runs.
+                   Expected keys: 'class_name', 'config', 'name', 'position'.
+        report_params: Global parameters passed to the report generation run.
 
     Returns:
         A tuple containing:
-        - The output JSON string from the block, or None if the block failed.
-        - The log string from the block, or None if the block failed.
+        - The output dictionary from the block, serialized to a JSON string, 
+          or None if the block failed or produced no dictionary output.
+        - The log string captured during block execution (currently not implemented 
+          in BaseReportBlock, so will likely be None), or an error message string 
+          if instantiation/generation failed.
     """
-    logger.debug(f"Instantiating and running block: {block_def}")
-    # TODO: Implement actual block instantiation and execution logic here.
-    #       - Use block_def to instantiate the correct block class.
-    #       - Pass report_params to the block.
-    #       - Return the output JSON and log string from the block.
-    
-    # Placeholder implementation: Returns None for both output and log for now.
-    return None, None 
+    class_name = block_def.get("class_name")
+    block_config = block_def.get("config", {})
+    block_name = block_def.get("name", f"block_{block_def.get('position', 'unknown')}")
+    logger.info(f"Attempting to instantiate and run block '{block_name}' (Class: {class_name})")
+
+    output_json_str: Optional[str] = None
+    log_str: Optional[str] = None
+
+    try:
+        # 1. Find the block class
+        block_class = BLOCK_CLASSES.get(class_name)
+        if block_class is None:
+            raise ValueError(f"Report block class '{class_name}' not found in registry.")
+
+        # 2. Instantiate the block class
+        # Add error handling for instantiation if needed (e.g., __init__ fails)
+        block_instance = block_class()
+        logger.debug(f"Instantiated block class '{class_name}'")
+
+        # 3. Call the generate method
+        # TODO: Implement log capturing if blocks support returning logs
+        # For now, BaseReportBlock.generate only returns the output dict.
+        # We expect a dictionary here based on BaseReportBlock definition.
+        output_dict = block_instance.generate(config=block_config, params=report_params)
+
+        # 4. Validate and Serialize the output
+        if output_dict is None:
+             logger.warning(f"Block '{block_name}' ({class_name}) returned None output.")
+             # Treat None output as non-failure, but store null in DB?
+             # For now, serialize None as JSON 'null'. Service layer handles None return.
+             output_json_str = json.dumps(None) 
+             log_str = "Block returned None."
+        elif not isinstance(output_dict, dict):
+             # This shouldn't happen if blocks adhere to BaseReportBlock
+             logger.error(f"Block '{block_name}' ({class_name}) generate() did not return a dictionary. Returned type: {type(output_dict)}")
+             raise TypeError("Block generate() must return a dictionary.")
+        else:
+             # Serialize the dictionary to JSON
+             output_json_str = json.dumps(output_dict, indent=2) # Pretty print for readability
+             logger.debug(f"Block '{block_name}' generated output successfully.")
+             # log_str = output.get("_log") # Example if logs were part of dict
+
+    except Exception as e:
+        logger.exception(f"Error running report block '{block_name}' ({class_name}): {e}")
+        # Return None for output, and the error message as the log string
+        output_json_str = None
+        log_str = f"Error executing block '{block_name}': {e}"
+
+    # Return the JSON string and the log/error string
+    return output_json_str, log_str 
