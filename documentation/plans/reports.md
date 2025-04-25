@@ -99,8 +99,6 @@ The reporting system will be built around three core concepts:
 ### Phase 1: Backend Foundation (Post-Schema)
 
 *   ✅ **Create Base Python Class:** Create the base `plexus.reports.blocks.BaseReportBlock` Python class with a placeholder `generate` method.
-*   ⬜ **Implement Base GraphQL:** Create initial GraphQL queries/mutations for basic CRUD operations on `ReportConfiguration` and `Report` (listing, getting, creating basic records without generation logic).
-*   ⬜ **Verify Phase 1:** Confirm models are created in DynamoDB, basic GraphQL queries work via AppSync console or tests.
 
 ### Phase 2: Report Generation (Service & Triggering)
 
