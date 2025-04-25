@@ -27,7 +27,7 @@ The reporting system will be built around three core concepts:
     *   `description`: Optional description.
     *   `accountId`: Link to the owning account.
     *   `configuration`: The core Markdown definition. This content will be rendered directly, with specific sections interpreted as Report Blocks:
-        *   **Embedded Blocks:** Report Blocks are defined using fenced code blocks with the `block` language identifier (e.g., ```block`). The content inside these blocks will be parsed as YAML, specifying the `pythonClass` to use and its parameters (e.g., `scorecardId`, `timeRange`).
+        *   **Embedded Blocks:** Report Blocks are defined using fenced code blocks with the `block` language identifier (e.g., ````block```). The content inside these blocks will be parsed as YAML, specifying the `pythonClass` to use and its parameters (e.g., `scorecardId`, `timeRange`).
         *   **Markdown Content:** Any standard Markdown content (headers, paragraphs, lists, images) outside the ````block` fences will be treated as static content for the report layout.
     *   Standard metadata (`createdAt`, `updatedAt`, etc.).
 
@@ -63,7 +63,7 @@ The reporting system will be built around three core concepts:
 *   The service will:
     1.  Load the `ReportConfiguration`.
     2.  Parse the Markdown `configuration` content.
-    3.  Identify and extract YAML content from ```block` sections.
+    3.  Identify and extract YAML content from ```block``` sections.
     4.  Instantiate and execute the specified `ReportBlock`s based on the parsed YAML, passing the parameters.
     5.  Assemble the results from the blocks (along with potentially rendering the static Markdown content) into the final `reportData` JSON.
     6.  Create/Update the `Report` database record with the status and results.
@@ -99,17 +99,17 @@ The reporting system will be built around three core concepts:
 
 ### Phase 1: Backend Foundation (Post-Schema)
 
-*   ⬜ **Modify Schema & Update Models:** Adjust the `ReportConfiguration` model definition in `dashboard/amplify/data/resource.ts`. Change the `configuration` field's type from `a.json()` (or its current type) to `a.string().required()` to store the Markdown content. **Note:** This is a schema change and will require an `amplify push` or equivalent deployment to take effect. After modifying the schema, run `amplify generate models` locally.
-*   ✅ **Create Base Python Class:** Create the base `plexus.reports.blocks.BaseReportBlock` Python class with a placeholder `generate` method.
+*   ✅ **Update Models:** Adjust the `ReportConfiguration` model in `dashboard/amplify/data/resource.ts` to store `configuration` as a `string` (or appropriate large text type) instead of JSON. Re-run `amplify generate models`.
+*   ✅ **Create Base Python Class:** Create the base `plexus.reports.blocks.BaseReportBlock` Python class with a placeholder `generate` method. 
 
 ### Phase 2: Report Generation (Service & Triggering)
 
-*   ⬜ **Implement Test Block:** Implement a simple `HelloWorldReportBlock` in Python that returns static JSON data for testing.
+*   ✅ **Implement Initial Block:** Implement a simple `ScoreInfoBlock` in Python. This block will take a `scoreId` and optional parameters (e.g., `include_variant`) and return mock JSON data representing basic information about that score.
 *   ⬜ **Develop Generation Service Core:** Create Python service logic (`plexus.reports.service`) that:
     *   ⬜ Takes a `ReportConfiguration` ID and optional parameters.
     *   ⬜ Loads the `ReportConfiguration` data (initially mocked or via basic GraphQL query).
-    *   ⬜ Parses the Markdown `configuration` field, extracting YAML from ```block` sections (using libraries like `mistune` or `markdown-it` and `PyYAML`).
-    *   ⬜ Identifies `ReportBlock`s based on the extracted YAML (initially just handle the `HelloWorldReportBlock`).
+    *   ⬜ Parses the Markdown `configuration` field, extracting YAML from ```block``` sections (using libraries like `mistune` or `markdown-it` and `PyYAML`).
+    *   ⬜ Identifies `ReportBlock`s based on the extracted YAML (initially just handle the `ScoreInfoBlock`).
     *   ⬜ Instantiates and calls the `generate` method for identified blocks.
     *   ⬜ Assembles the results into a final `reportData` JSON.
 *   ⬜ **Implement CLI Trigger:** Create the `plexus report run --config <config_id>` CLI command that:
@@ -131,7 +131,7 @@ The reporting system will be built around three core concepts:
 *   ⬜ **Trigger Generation from UI:** Add a button on the `ReportConfiguration` list/view to trigger a new report run (using the Celery dispatch mechanism from Phase 2).
 *   ⬜ **Basic Report View:** Create a dedicated route/page (e.g., `/reports/[reportId]`) to display a single `Report`.
 *   ⬜ **Fetch Report Data:** Implement logic on the report view page to fetch the full `Report` record, including the `reportData` JSON.
-*   ⬜ **Initial Dynamic Rendering:** Develop basic React components to render simple structures found in `reportData` (e.g., display key-value pairs, render paragraphs of text based on the `HelloWorldReportBlock` output).
+*   ⬜ **Initial Dynamic Rendering:** Develop basic React components to render simple structures found in `reportData` (e.g., display key-value pairs, render paragraphs of text based on the `ScoreInfoBlock` output).
 *   ⬜ **Verify Phase 3:** Confirm basic UI for listing, creating configurations, triggering runs, and viewing simple reports works.
 
 ### Phase 4: Advanced Features & Polish
