@@ -37,6 +37,7 @@ type ShareLinkIndexFields = "token" | "resourceType" | "resourceId" | "accountId
 type ScoreVersionIndexFields = "scoreId" | "versionNumber" | "isFeatured";
 type ReportConfigurationIndexFields = "accountId" | "name";
 type ReportIndexFields = "accountId" | "reportConfigurationId" | "status" | "createdAt" | "updatedAt";
+type ReportBlockIndexFields = "reportId" | "name" | "position";
 
 // Define the share token handler function
 const getResourceByShareTokenHandler = defineFunction({
@@ -570,7 +571,7 @@ const schema = a.schema({
         ])
         .secondaryIndexes((idx: (field: ReportConfigurationIndexFields) => any) => [
             idx("accountId").sortKeys(["updatedAt"]),
-            idx("name")
+            idx("accountId").sortKeys(["name"])
         ]),
 
     Report: a
@@ -588,7 +589,7 @@ const schema = a.schema({
             account: a.belongsTo('Account', 'accountId'),
             reportConfigurationId: a.string().required(),
             reportConfiguration: a.belongsTo('ReportConfiguration', 'reportConfigurationId'),
-            // shareLinks: a.hasMany('ShareLink', 'resourceId') // Consider adding if ShareLink uses polymorphic relation
+            reportBlocks: a.hasMany('ReportBlock', 'reportId'), // Link to ReportBlock
             updatedAt: a.datetime().required(),
         })
         .authorization((allow: AuthorizationCallback) => [
@@ -599,6 +600,26 @@ const schema = a.schema({
             idx("accountId").sortKeys(["updatedAt"]),
             idx("reportConfigurationId").sortKeys(["createdAt"]),
             idx("status")
+        ]),
+
+    ReportBlock: a
+        .model({
+            reportId: a.string().required(),
+            report: a.belongsTo('Report', 'reportId'),
+            name: a.string(), // Optional name for the block
+            position: a.integer().required(), // Required position for ordering
+            output: a.json().required(), // JSON output from the block's execution
+            log: a.string(), // Optional log output from the block
+            createdAt: a.datetime().required(),
+            updatedAt: a.datetime().required(),
+        })
+        .authorization((allow: AuthorizationCallback) => [
+            allow.publicApiKey(),
+            allow.authenticated()
+        ])
+        .secondaryIndexes((idx: (field: ReportBlockIndexFields) => any) => [
+            idx("reportId").sortKeys(["name"]).name("byReportAndName"),
+            idx("reportId").sortKeys(["position"]).name("byReportAndPosition")
         ]),
 });
 
