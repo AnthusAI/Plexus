@@ -116,7 +116,10 @@ The reporting system will be built around three core concepts:
     *   ⬜ Parses arguments.
     *   ⬜ Calls the generation service logic.
     *   ⬜ Creates/Updates the `Report` record via GraphQL mutation (initially just setting `status` to `PENDING`, then `COMPLETED`/`FAILED` and storing `reportData`).
-*   ⬜ **Add Unit Tests:** Implement unit tests for `plexus.reports.service` and `plexus.reports.blocks` (covering parsing, block execution, error handling, etc.).
+*   🟡 **Add Unit Tests:** Implement unit tests for `plexus.reports.service` and `plexus.reports.blocks` (covering parsing, block execution, error handling, etc.).
+    *   ✅ Basic tests for `ScoreInfoBlock` implemented.
+    *   ✅ Basic happy path and config-not-found tests for `service` implemented.
+    *   🟡 Placeholder skipped tests added for remaining service failure scenarios (invalid YAML, class not found, generate error, empty content).
 *   ⬜ **Basic Status Updates:** Ensure the `Report` record `status`, `startedAt`, `completedAt`, `errorMessage`, `reportData` are updated correctly by the CLI process.
 *   ⬜ **Implement Celery Task:** Wrap the generation service logic in a Celery task.
 *   ⬜ **Implement Celery Dispatch:** Create a mechanism (e.g., internal API call, GraphQL mutation triggered by frontend) to dispatch the Celery task for report generation.
