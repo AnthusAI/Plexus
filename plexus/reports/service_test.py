@@ -1,10 +1,11 @@
 import pytest
 from unittest.mock import patch, MagicMock, ANY
 import logging
+import json
 
 from plexus.reports.service import generate_report, _load_report_configuration, ReportBlockExtractor
 from plexus.reports.blocks.base import BaseReportBlock
-from plexus.reports.blocks.score_info import ScoreInfoBlock # Import for mocking later
+from plexus.reports.blocks.score_info import ScoreInfo # Import for mocking later
 
 # Disable logging noise during tests
 logging.disable(logging.CRITICAL)
@@ -40,53 +41,69 @@ Final markdown footer.
     }
 
 @patch('plexus.reports.service._load_report_configuration')
-@patch('plexus.reports.blocks.score_info.ScoreInfoBlock.generate') # Patch the actual block's generate
-def test_generate_report_success(mock_score_info_generate, mock_load_config, mock_report_config):
+@patch('plexus.reports.service._parse_report_configuration')
+@patch('plexus.reports.blocks.score_info.ScoreInfo.generate') # Patch the actual block's generate
+def test_generate_report_success(mock_score_info_generate, mock_parse_config, mock_load_config, mock_report_config):
     """Tests successful report generation with Markdown and blocks."""
     # Configure mocks
     mock_load_config.return_value = mock_report_config
-    
-    # Make generate return different results for each call if needed, or a fixed one
-    mock_score_info_generate.side_effect = [
-        {"type": "ScoreInfo", "data": {"id": "score-test-123", "name": "Mock Score 1"}},
-        {"type": "ScoreInfo", "data": {"id": "score-test-456", "name": "Mock Score 2"}},
+
+    # Configure the mock parser to return a dummy template and two block definitions
+    mock_template_string = "Report Template Content. Blocks: {{ blocks }}"
+    mock_block_defs = [
+        { # Mock definition for the first block
+            "name": "Block 1",
+            "class": "ScoreInfo", # Match the class we are mocking generate for
+            "config": {"score": "score-test-123", "include_variant": False}
+        },
+        { # Mock definition for the second block
+            "name": "Block 2",
+            "class": "ScoreInfo",
+            "config": {"score": "score-test-456"}
+        }
     ]
+    mock_parse_config.return_value = (mock_template_string, mock_block_defs)
+    
+    # Configure the mock block generator
+    # It should return JSON strings now, as expected by generate_report
+    # The json.dumps is needed because generate_report expects JSON *strings* from _instantiate_and_run_block
+    # Let's also patch _instantiate_and_run_block to return these strings
+    # mock_score_info_generate.side_effect = [
+    #     json.dumps({"type": "ScoreInfo", "data": {"id": "score-test-123", "name": "Mock Score 1"}}),
+    #     json.dumps({"type": "ScoreInfo", "data": {"id": "score-test-456", "name": "Mock Score 2"}}),
+    # ]
+    # Instead of patching ScoreInfo.generate directly, patch _instantiate_and_run_block
+    with patch('plexus.reports.service._instantiate_and_run_block') as mock_run_block:
+        # Configure _instantiate_and_run_block mock
+        mock_run_block.side_effect = [
+            # Return value for first block call (output JSON string, log string)
+            (json.dumps({"id": "score-test-123", "name": "Mock Score 1"}), None),
+            # Return value for second block call
+            (json.dumps({"id": "score-test-456", "name": "Mock Score 2"}), None),
+        ]
 
-    # Call the service function
-    report_data = generate_report("test-config-1")
+        # Call the service function
+        report_data = generate_report("test-config-1")
+    
+        # Assertions
+        mock_load_config.assert_called_once_with("test-config-1")
+        mock_parse_config.assert_called_once_with(mock_report_config["configuration"])
+        # Check that _instantiate_and_run_block was called twice
+        assert mock_run_block.call_count == 2 
 
-    # Assertions
-    mock_load_config.assert_called_once_with("test-config-1")
-    assert mock_score_info_generate.call_count == 2
+        # Check the first call to the mocked _instantiate_and_run_block
+        # The first argument passed should be the first block definition
+        assert mock_run_block.call_args_list[0].args[0] == mock_block_defs[0]
+        # The second argument should be the params dictionary
+        assert mock_run_block.call_args_list[0].args[1] == {} 
 
-    # Check the first call to the mocked generate
-    assert mock_score_info_generate.call_args_list[0].kwargs['config'] == {"scoreId": "score-test-123", "include_variant": False}
-    assert mock_score_info_generate.call_args_list[0].kwargs['params'] is None
+        # Check the second call to the mocked _instantiate_and_run_block
+        assert mock_run_block.call_args_list[1].args[0] == mock_block_defs[1]
+        assert mock_run_block.call_args_list[1].args[1] == {} 
 
-    # Check the second call to the mocked generate
-    assert mock_score_info_generate.call_args_list[1].kwargs['config'] == {"scoreId": "score-test-456"}
-    assert mock_score_info_generate.call_args_list[1].kwargs['params'] is None
-
-    # Check the structure and content of the returned report data
-    assert len(report_data) == 5 # 3 markdown sections + 2 block results
-
-    assert report_data[0]["type"] == "markdown"
-    assert "# Test Report Header" in report_data[0]["content"]
-    assert "first markdown section" in report_data[0]["content"]
-
-    assert report_data[1]["type"] == "block_result"
-    assert report_data[1]["block_type"] == "ScoreInfo" # Should match the mock return
-    assert report_data[1]["data"]["data"]["id"] == "score-test-123"
-
-    assert report_data[2]["type"] == "markdown"
-    assert "markdown between blocks" in report_data[2]["content"]
-
-    assert report_data[3]["type"] == "block_result"
-    assert report_data[3]["block_type"] == "ScoreInfo" # Should match the mock return
-    assert report_data[3]["data"]["data"]["id"] == "score-test-456"
-
-    assert report_data[4]["type"] == "markdown"
-    assert "Final markdown footer" in report_data[4]["content"]
+        # Check the structure and content of the returned report data (report_id string)
+        assert isinstance(report_data, str) # Check it returns a string (report_id)
+        assert report_data.startswith("report-test-config-1") # Check mock report ID format
 
 @patch('plexus.reports.service._load_report_configuration')
 def test_generate_report_config_not_found(mock_load_config):
@@ -95,11 +112,11 @@ def test_generate_report_config_not_found(mock_load_config):
     mock_load_config.return_value = None
 
     # Call the service function with a non-existent ID
-    report_data = generate_report("non-existent-config-id")
+    with pytest.raises(ValueError, match="ReportConfiguration not found"):
+        generate_report("non-existent-config-id")
 
     # Assertions
     mock_load_config.assert_called_once_with("non-existent-config-id")
-    assert report_data == [] # Expect an empty list based on current service logic
 
 # TODO: Add tests for config not found, invalid markdown/yaml, block class not found, block generate error etc.
 

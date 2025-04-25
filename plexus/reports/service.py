@@ -1,11 +1,13 @@
 import importlib
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
+import json
 
 # print("[DEBUG] service.py top level print") # DEBUG PRINT
 
 import mistune
 import yaml
+import jinja2
 
 # Import block classes dynamically or maintain a registry
 # For now, let's import the known ones to start. Need a robust way later.
@@ -163,104 +165,182 @@ class ReportBlockExtractor(mistune.BaseRenderer):
 # --- End Block Processing Logic ---
 
 
-def generate_report(report_configuration_id: str, params: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+def generate_report(report_configuration_id: str, params: Optional[Dict[str, Any]] = None) -> str:
     """
-    Generates report data based on a ReportConfiguration ID.
-
-    1. Loads the ReportConfiguration (currently mocked).
-    2. Parses the Markdown configuration content.
-    3. Extracts static Markdown and block definitions (YAML).
-    4. Instantiates and runs the specified ReportBlocks.
-    5. Assembles the results into a list representing the report structure.
+    Generates a report based on a ReportConfiguration and optional parameters.
 
     Args:
         report_configuration_id: The ID of the ReportConfiguration to use.
-        params: Optional runtime parameters to pass to blocks.
+        params: Optional dictionary of parameters to use for this specific run.
 
     Returns:
-        A list representing the structured report data. Each item is a dict,
-        e.g., {"type": "markdown", "content": "..."} or 
-        {"type": "block_result", "block_type": "ScoreInfo", "data": {...}}.
-        Returns an empty list if the configuration is not found or parsing fails severely.
+        The ID of the generated Report record. 
+        (Or potentially raise an exception on failure).
     """
+    if params is None:
+        params = {}
+
+    logger.info(f"Starting report generation for config ID: {report_configuration_id} with params: {params}")
+
+    # === 1. Load ReportConfiguration ===
+    # Call the helper function, which can be mocked by tests.
+    # The helper function itself currently returns mock data.
     report_config = _load_report_configuration(report_configuration_id)
+    
+    # Handle case where config is not found
     if not report_config:
         logger.error(f"ReportConfiguration not found: {report_configuration_id}")
-        # print(f"[DEBUG] ReportConfiguration not found: {report_configuration_id}") # DEBUG PRINT
-        return [] # Or raise an exception
+        # Raise the error so tests can catch it
+        raise ValueError(f"ReportConfiguration not found: {report_configuration_id}")
 
-    markdown_content = report_config.get("configuration", "")
-    if not markdown_content:
-        logger.warning(f"ReportConfiguration {report_configuration_id} has no content.")
-        # print(f"[DEBUG] ReportConfiguration {report_configuration_id} has no content.") # DEBUG PRINT
-        return []
+    # Extract necessary info from the loaded config
+    config_markdown = report_config.get("configuration", "")
+    report_config_name = report_config.get("name", f"Unnamed Config {report_configuration_id}")
+    # TODO: Get accountId from report_config when using real data
+    # account_id = report_config.get("accountId") 
 
-    logger.info(f"Parsing report configuration: {report_configuration_id}")
-    # print(f"[DEBUG] Parsing report configuration: {report_configuration_id}") # DEBUG PRINT
+    # Placeholder for loaded config data:
+    # mock_config_markdown = f"""
+    # # Mock Report for {report_configuration_id}
+    # 
+    # This report uses parameters: {params}
+    # 
+    # ```block name="Test Score Info"
+    # class: ScoreInfo
+    # config:
+    #   score: "mock-score-123" 
+    #   include_variant: true
+    # ```
+    # """
+    # config_markdown = mock_config_markdown # Use mock data for now
+    # report_config_name = f"Mock Config {report_configuration_id[:4]}" # Mock name
+
+    # === 2. TODO: Create Initial Report Record ===
+    # report_name = f"Report for {report_config_name} - {datetime.utcnow()}" # Example name
+    # initial_report_data = {
+    #    "reportConfigurationId": report_configuration_id,
+    #    "accountId": report_config.accountId, # Assuming accountId is available
+    #    "name": report_name,
+    #    "status": "RUNNING",
+    #    "parameters": params,
+    #    "startedAt": datetime.utcnow().isoformat() + "Z",
+    # }
+    # created_report = client.create_report(initial_report_data)
+    # report_id = created_report.id
     
-    # Instantiate the custom renderer
-    renderer_instance = ReportBlockExtractor()
-    # Create mistune instance using the renderer instance
-    md = mistune.create_markdown(renderer=renderer_instance)
-    # Parse the content - this triggers the renderer methods
-    md.parse(markdown_content) 
-    # Get the final processed data from the renderer instance
-    parsed_structure = renderer_instance.finalize(None) 
+    # Placeholder report ID
+    report_id = f"report-{report_configuration_id}-run1" 
+    logger.info(f"Created initial Report record (mock): {report_id}")
 
-    # print(f"[DEBUG] Parsed structure: {parsed_structure}") # DEBUG PRINT
+    try:
+        # === 3. Parse Configuration ===
+        # This step extracts the main template structure and the block definitions.
+        # The `_parse_report_configuration` function needs to return both.
+        template_content_string, block_definitions = _parse_report_configuration(config_markdown)
 
-    report_data = []
-    for item in parsed_structure:
-        if item["type"] == "markdown":
-            report_data.append(item)
-        elif item["type"] == "block_config":
-            class_name = item["class_name"]
-            block_config_params = item["config"]
+        # === 4. Process Report Blocks (Before Rendering Template) ===
+        block_outputs = {} # Store block outputs keyed by name (or position?)
+        block_logs = {} # Store block logs separately
+        all_blocks_succeeded = True
+
+        for position, block_def in enumerate(block_definitions):
+            block_def['position'] = position # Ensure position is set
+            # Use the block's name from the definition if available, otherwise use position
+            block_name = block_def.get('name', f'block_{position}') 
+            logger.info(f"Processing block {position}: {block_name}")
+
+            # Execute the block
+            # TODO: Pass actual report_params if needed by blocks
+            block_output_json, block_log_str = _instantiate_and_run_block(block_def, params) 
             
-            BlockClass = BLOCK_CLASSES.get(class_name)
+            # Store results for Jinja context and for DB record
+            if block_output_json is not None:
+                try:
+                    # Store the parsed JSON data for Jinja context
+                    block_outputs[block_name] = json.loads(block_output_json) 
+                except json.JSONDecodeError:
+                     logger.error(f"Block {position} ('{block_name}') produced invalid JSON output.")
+                     block_outputs[block_name] = {"error": "Invalid JSON output from block."}
+                     all_blocks_succeeded = False
+            else:
+                 all_blocks_succeeded = False
+                 logger.warning(f"Block {position} ('{block_name}') failed or produced no output.")
+                 # Store an error indicator in the output map for Jinja? 
+                 block_outputs[block_name] = {"error": f"Block execution failed or produced no output."}
+
+            block_logs[block_name] = block_log_str
+
+            # === 5. TODO: Create ReportBlock Record ===
+            # This should happen *inside* the loop, after each block runs.
+            # block_record_data = {
+            #     "reportId": report_id,
+            #     "name": block_name, # Use the determined name
+            #     "position": position,
+            #     "output": block_output_json, # Store the raw JSON string
+            #     "log": block_log_str, 
+            # }
+            # created_block = client.create_report_block(block_record_data)
+            # logger.debug(f"Stored DB result for block {position}.")
+            # Mock storing result for now
+            logger.debug(f"Mock storing result for block {position} ('{block_name}').")
             
-            if not BlockClass:
-                logger.error(f"ReportBlock class '{class_name}' not found.")
-                # print(f"[DEBUG] ReportBlock class '{class_name}' not found.") # DEBUG PRINT
-                report_data.append({
-                    "type": "error", 
-                    "message": f"Block class '{class_name}' not found."
-                })
-                continue
+            # TODO: Consider error handling - stop processing? Mark report as failed?
 
-            try:
-                block_instance = BlockClass()
-                logger.info(f"Generating block: {class_name} with config: {block_config_params}")
-                # print(f"[DEBUG] Generating block: {class_name} with config: {block_config_params}") # DEBUG PRINT
-                # Pass both the block-specific config and optional runtime params
-                block_result = block_instance.generate(config=block_config_params, params=params)
-                # print(f"[DEBUG] Block result: {block_result}") # DEBUG PRINT
-                
-                # Structure the result - assuming generate() returns the data payload directly
-                # The block itself can define its 'type' if needed, like ScoreInfoBlock did
-                report_data.append({
-                    "type": "block_result",
-                    # Use result type if available, else use class name
-                    "block_type": block_result.get("type", class_name) if isinstance(block_result, dict) else class_name, 
-                    "data": block_result
-                })
+        # === 6. Render Main Template (After Processing Blocks) ===
+        logger.debug("Rendering main Jinja2 template...")
+        try:
+            jinja_env = jinja2.Environment(undefined=jinja2.StrictUndefined) # Fail on undefined variables
+            template = jinja_env.from_string(template_content_string)
+            
+            # Define context for Jinja rendering
+            render_context = {
+                "params": params, # Report run parameters
+                "metadata": { # Information about the report itself
+                    "report_id": report_id, 
+                    "config_id": report_configuration_id,
+                    "config_name": report_config_name # Mocked for now
+                },
+                "blocks": block_outputs # The collected outputs from the blocks
+            }
+            final_report_output = template.render(render_context)
+            logger.debug("Main template rendered successfully.")
+        except jinja2.exceptions.TemplateError as e:
+            logger.error(f"Jinja2 template rendering failed: {e}")
+            # Mark report as failed if template rendering fails
+            all_blocks_succeeded = False
+            final_report_output = f"<!-- Report Generation Error: Template rendering failed: {e} -->"
+            # TODO: Update report status and error message in DB immediately?
 
-            except Exception as e:
-                logger.exception(f"Error generating block '{class_name}': {e}")
-                # print(f"[DEBUG] Error generating block '{class_name}': {e}") # DEBUG PRINT
-                report_data.append({
-                    "type": "error", 
-                    "message": f"Error running block '{class_name}': {e}"
-                })
-        
-        elif item["type"] == "error":
-             # Propagate parsing errors
-             report_data.append(item)
+        # === 7. TODO: Update Final Report Record ===
+        final_status = "COMPLETED" if all_blocks_succeeded else "FAILED" # Or COMPLETED_WITH_ERRORS?
+        # final_report_update = {
+        #     "id": report_id,
+        #     "status": final_status,
+        #     "output": final_report_output,
+        #     "completedAt": datetime.utcnow().isoformat() + "Z",
+        #     # TODO: Add errorMessage/errorDetails if needed
+        # }
+        # client.update_report(final_report_update)
+        logger.info(f"Report generation finished. Final status (mock): {final_status}")
+        logger.info(f"""Final Report Output (mock):
+{final_report_output}""")
+        logger.info(f"Block Results (mock): {json.dumps(block_outputs, indent=2)}")
 
+    except Exception as e:
+        logger.exception(f"Report generation failed for config {report_configuration_id}: {e}")
+        # === 8. TODO: Update Report Record on Failure ===
+        # error_update = {
+        #     "id": report_id,
+        #     "status": "FAILED",
+        #     "errorMessage": str(e),
+        #     "errorDetails": traceback.format_exc(), # Optional detailed traceback
+        #     "completedAt": datetime.utcnow().isoformat() + "Z",
+        # }
+        # client.update_report(error_update)
+        # Re-raise the exception? Or return a specific failure indicator?
+        raise 
 
-    logger.info(f"Report generation completed for config: {report_configuration_id}")
-    # print(f"[DEBUG] Report generation completed for config: {report_configuration_id}") # DEBUG PRINT
-    return report_data
+    return report_id # Return the ID of the generated report
 
 
 # Example usage (for testing):
@@ -274,3 +354,135 @@ if __name__ == "__main__":
     # MOCK_CONFIGURATIONS["config-err"] = { ... add config with bad class ... }
     # result_err = generate_report("config-err")
     # print(json.dumps(result_err, indent=2)) 
+
+# Placeholder for Report Block parsing result
+ReportBlockDefinition = Dict[str, Any] 
+
+def _parse_report_configuration(config_markdown: str) -> Tuple[str, List[Dict[str, Any]]]:
+    """
+    Parses the report configuration Markdown/Jinja2 string.
+
+    Uses mistune with a custom renderer (ReportBlockExtractor) to identify
+    Markdown sections and fenced code blocks marked with 'block'. It extracts
+    the block definitions for execution but leaves the original block syntax
+    intact in the returned markdown string.
+
+    Args:
+        config_markdown: The raw string content from ReportConfiguration.configuration.
+
+    Returns:
+        A tuple containing:
+        - The original markdown string, suitable for storing in Report.output.
+        - A list of block definition dictionaries, each containing details
+          like 'class_name', 'config', 'name' (optional), and 'position',
+          extracted for execution.
+    """
+    logger.info("Parsing report configuration markdown...")
+    # print("[DEBUG] Parsing report configuration markdown...") # DEBUG PRINT
+
+    # Initialize the mistune Markdown parser with our custom extractor
+    markdown_parser = mistune.create_markdown(renderer=ReportBlockExtractor())
+
+    # Parse the input markdown. The extractor's finalize method returns the list.
+    parsed_items = markdown_parser(config_markdown)
+
+    # print(f"[DEBUG] Parsed items from extractor: {parsed_items}") # DEBUG PRINT
+
+    main_template_parts = []
+    block_definitions = []
+    block_counter = 0 # Used for position and default naming
+
+    for item in parsed_items:
+        item_type = item.get("type")
+        # print(f"[DEBUG] Processing parsed item: {item}") # DEBUG PRINT
+
+        if item_type == "markdown":
+            main_template_parts.append(item.get("content", ""))
+        elif item_type == "block_config":
+            class_name = item.get("class_name")
+            config = item.get("config", {})
+            # Determine the name: use 'name' from config if present, else generate default
+            # We need the name *before* potentially removing it from the config for the definition
+            name = config.get("name", f"block_{block_counter}")
+
+            # Create the block definition for execution later
+            # Keep the original config structure as parsed by the extractor
+            block_def = {
+                "class_name": class_name,
+                "config": config, # Store the original config dict
+                "name": name, # Store the determined/generated name
+                "position": block_counter, # Positional index
+            }
+            block_definitions.append(block_def)
+
+            # Reconstruct the original block definition string for the output markdown
+            # Combine class_name and config back into a dictionary for dumping
+            original_block_content_dict = {"pythonClass": class_name}
+            if config: # Only add 'config' key if it's not empty
+                original_block_content_dict["config"] = config
+                
+            # Dump back to YAML format, trying to preserve original style somewhat
+            # Using default_flow_style=False for block style YAML
+            # indent=2 for readability
+            try:
+                reconstructed_yaml = yaml.dump(original_block_content_dict, default_flow_style=False, indent=2, sort_keys=False)
+                # Strip trailing newline added by dump if present
+                reconstructed_yaml = reconstructed_yaml.strip()
+            except yaml.YAMLError:
+                # Fallback if dumping fails (should be rare)
+                reconstructed_yaml = f"pythonClass: {class_name}\\nconfig: Error reconstructing YAML"
+
+            # Append the reconstructed ```block ... ``` string to the template parts
+            reconstructed_block_string = f"```block\\n{reconstructed_yaml}\\n```"
+            main_template_parts.append(reconstructed_block_string)
+
+            block_counter += 1
+        elif item_type == "error":
+            # Include errors in the template output as comments for debugging
+            # Also add the error message to the block definitions list?
+            # For now, just log and put comment in markdown.
+            error_message = item.get('message', 'Unknown parsing error')
+            logger.warning(f"Found parsing error in configuration: {error_message}")
+            main_template_parts.append(f"<!-- PARSE ERROR: {error_message} -->")
+            # Optionally, add an error block definition
+            # block_definitions.append({
+            #     "type": "error",
+            #     "message": error_message,
+            #     "position": block_counter
+            # })
+            # block_counter += 1 # Increment even for errors?
+        else:
+            logger.warning(f"Ignoring unexpected parsed item type: {item_type}")
+
+    # Join the template parts together
+    # Use two newlines to separate parts, mimicking original paragraph/block spacing
+    final_markdown_string = "\\n\\n".join(main_template_parts).strip()
+    # print(f"[DEBUG] Final reconstructed markdown string:\\n{final_markdown_string}") # DEBUG PRINT
+    # print(f"[DEBUG] Final block definitions: {block_definitions}") # DEBUG PRINT
+
+    logger.info(f"Parsed configuration: Found {len(block_definitions)} blocks. Markdown reconstructed.")
+    # NOTE: The first returned string is now the reconstructed original markdown,
+    # NOT a Jinja template string.
+    return final_markdown_string, block_definitions
+
+def _instantiate_and_run_block(block_def: ReportBlockDefinition, report_params: Dict[str, Any]) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Instantiates and runs a single report block based on its definition.
+
+    Args:
+        block_def: The definition of the block to instantiate and run.
+        report_params: The parameters to pass to the block when it runs.
+
+    Returns:
+        A tuple containing:
+        - The output JSON string from the block, or None if the block failed.
+        - The log string from the block, or None if the block failed.
+    """
+    logger.debug(f"Instantiating and running block: {block_def}")
+    # TODO: Implement actual block instantiation and execution logic here.
+    #       - Use block_def to instantiate the correct block class.
+    #       - Pass report_params to the block.
+    #       - Return the output JSON and log string from the block.
+    
+    # Placeholder implementation: Returns None for both output and log for now.
+    return None, None 

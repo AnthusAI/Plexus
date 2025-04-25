@@ -81,15 +81,11 @@ The reporting system will be built around **four** core concepts:
     *   **Celery Task:** Dispatch report generation jobs to worker nodes, similar to evaluations. This is suitable for long-running reports.
 *   The service will:
     1.  Load the `ReportConfiguration` and the specific run `parameters`.
-    2.  Parse the `ReportConfiguration.configuration` Markdown/Jinja2 template to identify static content and report block definitions (e.g., using ` ```block ... ``` ` syntax).
-    3.  Render the main template content using Jinja2 (passing `parameters` and other relevant context) to produce the final report string. Store this in `Report.output`.
-    4.  For each identified ` ```block ... ``` ` definition (in order of appearance):
-        *   Extract the block `name` (if provided) and configuration parameters (e.g., `class`, `scorecard`, `score`).
-        *   Determine the block's `position`.
-        *   Instantiate the specified Python `ReportBlock` subclass.
-        *   Execute its `generate` method with the provided parameters.
-        *   Create a `ReportBlock` database record, storing the returned `output` (JSON), `log` (string), `name`, `position`, and linking it to the parent `Report`.
-    5.  Create/Update the `Report` database record with the final `status` and the generated `output`. Handle any errors during block execution and update `Report.errorMessage`/`errorDetails` or `ReportBlock.log`.
+    2.  Parse the `ReportConfiguration.configuration` Markdown to extract the block definitions (` ```block ... ``` ` including name, class, config, position) for execution. The parser should also reconstruct the original Markdown string, keeping the block definitions untouched.
+    3.  **Process Blocks First:** For each extracted block definition (in order): Instantiates and calls the `generate` method for the specified Python `ReportBlock` class. Creates `ReportBlock` records storing the resulting JSON `output`, `log`, `name`, and `position`.
+    4.  **Store Original Markdown:** Store the reconstructed, original Markdown string (from step 2, which includes the ` ```block ... ``` ` definitions) directly into the `Report.output` field. **Note:** This field does *not* contain the executed block outputs; those are only in the `ReportBlock` records.
+    5.  **(Removed) Collect Block Results:** This step is no longer needed for generating `Report.output`.
+    6.  **(Removed) Render Main Template Last:** This step is removed as we are storing the original Markdown, not rendering a template with block results.
 
 ## Frontend Implementation (Dashboard)
 
@@ -124,30 +120,28 @@ The reporting system will be built around **four** core concepts:
 
 ### Phase 1: Backend Foundation (Post-Schema)
 
-*   ⬜ **Deploy Schema:** Run `amplify sandbox` or deploy changes to update the backend schema and generate GraphQL assets.
-*   ⬜ **Create Base Python Class:** Create the base `plexus.reports.blocks.BaseReportBlock` Python class with a placeholder `generate` method.
-*   ⬜ **Implement Base GraphQL:** Create initial GraphQL queries/mutations for basic CRUD operations on `ReportConfiguration` and `Report` (listing, getting, creating basic records without generation logic).
-*   ⬜ **Verify Phase 1:** Confirm models are created in DynamoDB, basic GraphQL queries work via AppSync console or tests.
+*   ✅ **Create Base Python Class:** Create the base `plexus.reports.blocks.BaseReportBlock` Python class (`plexus/reports/blocks/base.py`) with a placeholder `generate` method.
+*   ✅ **Verify Phase 1:** Confirm models exist in the backend and that the auto-generated base GraphQL CRUD operations (e.g., `getReport`, `listReports`, `createReportConfiguration`) work as expected via AppSync console or tests.
 
 ### Phase 2: Report Generation (Service & Triggering)
 
-*   ⬜ **Implement Test Block:** Implement a simple `HelloWorldReportBlock` in Python that returns static JSON data for testing.
-*   ⬜ **Develop Generation Service Core:** Create Python service logic (`plexus.reports.service`) that:
-    *   ⬜ Takes a `ReportConfiguration` ID and optional parameters.
-    *   ⬜ Loads the `ReportConfiguration` data.
-    *   ⬜ Parses the `configuration` field (Markdown/Jinja2) to identify static content and ` ```block ... ``` ` definitions.
-    *   ⬜ Renders the main template using Jinja2 and stores the result in `Report.output`.
-    *   ⬜ For each block definition: Instantiates and calls the `generate` method for the specified Python `ReportBlock` class.
-    *   ⬜ Creates `ReportBlock` records storing the JSON `output`, `log`, `name`, and `position`.
+*   ✅ **Use Existing Test Block:** Use the existing `ScoreInfo` block (in `plexus/reports/blocks/score_info.py`) for initial testing instead of creating a separate `HelloWorld` block. *(Renamed from ScoreInfoBlock)*
+*   🟡 **Develop Generation Service Core:** Create Python service logic (`plexus.reports.service`) that:
+    *   🟡 Takes a `ReportConfiguration` ID and optional parameters. *(Function signature and basic structure added)*
+    *   🟡 Loads the `ReportConfiguration` data. *(Stub `_load_report_configuration` added and called)*
+    *   🟡 Parses the `configuration` field (Markdown/Jinja2) to identify static content, the main template structure, and ` ```block ... ``` ` definitions (including name, class, config, position). *(Stub `_parse_report_configuration` added and called, `ReportBlockExtractor` defined but not yet integrated - Now updated to return original Markdown)*
+    *   🟡 **Process Blocks First:** For each block definition (in order): Instantiates and calls the `generate` method for the specified Python `ReportBlock` class. Creates `ReportBlock` records storing the JSON `output`, `log`, `name`, and `position`. *(Stub `_instantiate_and_run_block` added and called in loop, DB TODO)*
+    *   🟡 **(Removed) Collect Block Results:** Gather the outputs from the executed blocks (e.g., into a dictionary accessible by block name or position). *(`block_outputs` dictionary created and populated from stub - This is still needed internally but not for `Report.output`)*
+    *   🟡 **(Removed) Render Main Template Last:** Renders the main template using Jinja2, passing the collected block results (and other metadata/parameters) in the rendering context. Stores the final rendered string in `Report.output`. *(Jinja2 logic added, DB TODO - This step is removed, `Report.output` now stores original Markdown)*
 *   ⬜ **Implement CLI Trigger:** Create the `plexus report run --config <config_id>` CLI command that:
     *   ⬜ Parses arguments.
     *   ⬜ Calls the generation service logic.
     *   ⬜ Creates/Updates the `Report` record (status, `output`) and associated `ReportBlock` records via GraphQL mutations.
-*   ⬜ **Basic Status Updates:** Ensure the `Report` record `status`, `startedAt`, `completedAt`, `errorMessage`, `output`, and `ReportBlock` records are updated/created correctly.
+*   🟡 **Basic Status Updates:** Ensure the `Report` record `status`, `startedAt`, `completedAt`, `errorMessage`, `output`, and `ReportBlock` records are updated/created correctly. *(Placeholders/TODOs exist)*
 *   ⬜ **Implement Celery Task:** Wrap the generation service logic in a Celery task.
 *   ⬜ **Implement Celery Dispatch:** Create a mechanism (e.g., internal API call, GraphQL mutation triggered by frontend) to dispatch the Celery task for report generation.
-*   ⬜ **Add Error Handling:** Implement robust error handling in the generation service and Celery task to capture exceptions and update the `Report` record with `errorMessage` and `errorDetails`.
-*   ⬜ **Verify Phase 2:** Confirm reports can be generated via CLI, data is stored, status updates correctly. Test Celery task dispatch and execution.
+*   🟡 **Add Error Handling:** Implement robust error handling in the generation service and Celery task to capture exceptions and update the `Report` record with `errorMessage` and `errorDetails`. *(Partial implementation with stubs and basic Jinja2 errors)*
+*   🟡 **Verify Phase 2:** Confirm reports can be generated via CLI, data is stored, status updates correctly. Test Celery task dispatch and execution. *(Basic tests passing with mocks)*
 
 ### Phase 3: Frontend Basics (Management & Display)
 
@@ -178,28 +172,6 @@ The reporting system will be built around **four** core concepts:
 
 Here is an example of the content stored in the `ReportConfiguration.configuration` field:
 
-````markdown
-# Example Report
-
-This is a demo Plexus report. A report configuration can contain content like this, in the Markdown code in the `configuration` item.
-
-## Metadata
-
-Reports can use Jinja2 template language to interpolate things, like metadata:
-
-Report ID: {{ metadata.report_id }}
-Run Parameters: {{ parameters }} {# Example: Accessing run-time parameters #}
-
-## Output
-
-When this report configuration is processed, it will generate a `Report` record in the API. The Jinja2-processed report output goes into the `Report.output` item in that record.
-
-## Example Report Block
-
-Reports can run analysis tasks and other processing as report blocks, which are Python classes that generate structured data (JSON) logged in `ReportBlock` records in the API.
-
-Report blocks are added as normal Markdown code blocks using the `block` language identifier. Each includes YAML configuration code within the block. Here's an example:
-
 ```block name="Term Life - Temperature Check - Score Information"
 class: ScoreInformation
 scorecard: termlifev1
@@ -209,7 +181,6 @@ score: Temperature Check
 The parameters for blocks work in the same way as parameters to the CLI tools: `scorecard` can be an ID, an external ID, a key, or a name. Same for `score`.
 
 When the report is generated, each report block in the report will generate structured JSON output that will be stored in a separate `ReportBlock` entry, linked to the `Report`. The JSON output for each block goes into `ReportBlock.output`. The block's execution logs can be stored in `ReportBlock.log`.
-````
 
-*(Note: The example uses four backticks for the outer Markdown block to correctly embed the inner triple-backtick code block within the documentation.)*
+*(Note: The example above shows `ScoreInformation`. We should ensure consistency with the actual class name, which we intend to be `ScoreInfo`.)*
 
