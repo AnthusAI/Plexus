@@ -21,15 +21,14 @@ The reporting system will be built around three core concepts:
 
 ### `ReportConfiguration`
 
-*   **Storage:** Likely stored as YAML or JSON within a new database model (e.g., `ReportConfiguration`). This allows for versioning and easy editing.
+*   **Storage:** Stored as Markdown text within a database model (e.g., `ReportConfiguration`). This allows for embedding rich text, headers, and other Markdown elements alongside the block configurations.
 *   **Structure:**
     *   `name`: Human-readable name for the configuration.
     *   `description`: Optional description.
     *   `accountId`: Link to the owning account.
-    *   `configuration`: The core YAML/JSON definition. This would specify:
-        *   Static content (headers, paragraphs, images).
-        *   Report Blocks to include, along with their specific parameters (e.g., `scorecardId`, `timeRange`, `pythonClass`).
-        *   Layout or ordering information for the blocks.
+    *   `configuration`: The core Markdown definition. This content will be rendered directly, with specific sections interpreted as Report Blocks:
+        *   **Embedded Blocks:** Report Blocks are defined using fenced code blocks with the `block` language identifier (e.g., ```block`). The content inside these blocks will be parsed as YAML, specifying the `pythonClass` to use and its parameters (e.g., `scorecardId`, `timeRange`).
+        *   **Markdown Content:** Any standard Markdown content (headers, paragraphs, lists, images) outside the ````block` fences will be treated as static content for the report layout.
     *   Standard metadata (`createdAt`, `updatedAt`, etc.).
 
 ### `Report`
@@ -63,9 +62,11 @@ The reporting system will be built around three core concepts:
     *   **Celery Task:** Dispatch report generation jobs to worker nodes, similar to evaluations. This is suitable for long-running reports.
 *   The service will:
     1.  Load the `ReportConfiguration`.
-    2.  Instantiate and execute the specified `ReportBlock`s in order.
-    3.  Assemble the results into the final `reportData` JSON.
-    4.  Create/Update the `Report` database record with the status and results.
+    2.  Parse the Markdown `configuration` content.
+    3.  Identify and extract YAML content from ```block` sections.
+    4.  Instantiate and execute the specified `ReportBlock`s based on the parsed YAML, passing the parameters.
+    5.  Assemble the results from the blocks (along with potentially rendering the static Markdown content) into the final `reportData` JSON.
+    6.  Create/Update the `Report` database record with the status and results.
 
 ## Frontend Implementation (Dashboard)
 
@@ -74,8 +75,8 @@ The reporting system will be built around three core concepts:
 *   New dashboard section for "Reports".
 *   View/List existing `ReportConfiguration`s and `Report`s.
 *   Create/Edit `ReportConfiguration`s:
-    *   Potentially a YAML/JSON editor.
-    *   A more user-friendly UI builder could be a future enhancement.
+    *   Use a Markdown editor (like `react-markdown` or a dedicated component) to edit the `configuration` field.
+    *   A more user-friendly UI builder that abstracts the Markdown/YAML could be a future enhancement.
 *   Trigger new `Report` runs from a configuration.
 
 ### Report Viewing
@@ -91,13 +92,14 @@ The reporting system will be built around three core concepts:
 ## Implementation Plan & Checklist
 
 *   ✅ **Define Models:** Define `ReportConfiguration` and `Report` models in `dashboard/amplify/data/resource.ts`.
-    *   ✅ Add fields for `ReportConfiguration` (name, description, accountId, configuration (json), createdAt, updatedAt).
+    *   ✅ Add fields for `ReportConfiguration` (name, description, accountId, configuration (string), createdAt, updatedAt).
     *   ✅ Add fields for `Report` (reportConfigurationId, accountId, name, status, createdAt, startedAt, completedAt, parameters (json), reportData (json), errorMessage, errorDetails).
 *   ✅ **Define Relationships:** Add necessary relationships (e.g., `Account` -> `ReportConfiguration`, `ReportConfiguration` -> `Report`, `Account` -> `Report`). Consider if links to `Scorecard`, `Score` etc. are needed directly on `ReportConfiguration` or `Report` or if they should solely be defined within the `configuration`/`parameters` JSON.
 *   ✅ **Add Indexes:** Define required secondary indexes for efficient querying (e.g., by `accountId`, `reportConfigurationId`, `status`).
 
 ### Phase 1: Backend Foundation (Post-Schema)
 
+*   ⬜ **Modify Schema & Update Models:** Adjust the `ReportConfiguration` model definition in `dashboard/amplify/data/resource.ts`. Change the `configuration` field's type from `a.json()` (or its current type) to `a.string().required()` to store the Markdown content. **Note:** This is a schema change and will require an `amplify push` or equivalent deployment to take effect. After modifying the schema, run `amplify generate models` locally.
 *   ✅ **Create Base Python Class:** Create the base `plexus.reports.blocks.BaseReportBlock` Python class with a placeholder `generate` method.
 
 ### Phase 2: Report Generation (Service & Triggering)
@@ -106,7 +108,8 @@ The reporting system will be built around three core concepts:
 *   ⬜ **Develop Generation Service Core:** Create Python service logic (`plexus.reports.service`) that:
     *   ⬜ Takes a `ReportConfiguration` ID and optional parameters.
     *   ⬜ Loads the `ReportConfiguration` data (initially mocked or via basic GraphQL query).
-    *   ⬜ Parses the `configuration` field to identify `ReportBlock`s (initially just handle the `HelloWorldReportBlock`).
+    *   ⬜ Parses the Markdown `configuration` field, extracting YAML from ```block` sections (using libraries like `mistune` or `markdown-it` and `PyYAML`).
+    *   ⬜ Identifies `ReportBlock`s based on the extracted YAML (initially just handle the `HelloWorldReportBlock`).
     *   ⬜ Instantiates and calls the `generate` method for identified blocks.
     *   ⬜ Assembles the results into a final `reportData` JSON.
 *   ⬜ **Implement CLI Trigger:** Create the `plexus report run --config <config_id>` CLI command that:
@@ -124,7 +127,7 @@ The reporting system will be built around three core concepts:
 *   ⬜ **Create "Reports" Dashboard Section:** Add a new top-level section/route (e.g., `/reports`) in the Next.js dashboard.
 *   ⬜ **List Configurations:** Implement a UI table/list to display existing `ReportConfiguration`s fetched via GraphQL.
 *   ⬜ **List Reports:** Implement a UI table/list to display existing `Report`s fetched via GraphQL, showing key metadata (name, status, created date).
-*   ⬜ **Basic Configuration Editor:** Create a simple form/modal to create/edit `ReportConfiguration`s (editing name, description, and the raw `configuration` JSON/YAML for now). Use GraphQL mutations.
+*   ⬜ **Basic Configuration Editor:** Create a simple form/modal to create/edit `ReportConfiguration`s (editing name, description, and the raw `configuration` Markdown for now). Use GraphQL mutations.
 *   ⬜ **Trigger Generation from UI:** Add a button on the `ReportConfiguration` list/view to trigger a new report run (using the Celery dispatch mechanism from Phase 2).
 *   ⬜ **Basic Report View:** Create a dedicated route/page (e.g., `/reports/[reportId]`) to display a single `Report`.
 *   ⬜ **Fetch Report Data:** Implement logic on the report view page to fetch the full `Report` record, including the `reportData` JSON.
