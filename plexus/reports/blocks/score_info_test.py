@@ -1,54 +1,74 @@
 import pytest
+import asyncio
 from unittest.mock import patch, MagicMock
 
 from plexus.reports.blocks.score_info import ScoreInfo
 
-# TODO: Add test cases for ScoreInfo 
+# Mock API Client
+@pytest.fixture
+def mock_api_client():
+    return MagicMock()
 
-def test_score_info_generate_without_variant():
+# Use pytest fixtures for cleaner setup
+@pytest.fixture
+def score_info_block(mock_api_client): # Depends on the mock client fixture
+    # Provide empty initial config/params, specific test will override config via block.config
+    return ScoreInfo(config={}, params={}, api_client=mock_api_client)
+
+@pytest.mark.asyncio # Mark tests as async
+async def test_score_info_generate_without_variant(score_info_block):
     """Tests the generate method without including the variant."""
-    block = ScoreInfo()
-    # Use the updated key 'score' instead of 'scoreId'
-    config = {"score": "score-abc-123"} 
-    params = {} # Not used by this block currently
+    # Set config for this specific test via the instance attribute
+    score_info_block.config = {"score": "score-abc-123"}
 
-    # TODO: Adapt assertion based on actual generate() return format (JSON string? Dict?)
-    # Current generate() returns a markdown string with JSON
-    # result = block.generate(config, params)
-    # assert result["type"] == "ScoreInfo"
-    # assert "data" in result
-    # assert result["data"]["id"] == "score-abc-123"
-    # assert result["data"]["name"] == "Mock Score scor..." # Based on current mock logic
-    # assert "variant" not in result["data"] or result["data"]["variant"] is None
-    pass # Placeholder until we decide on return format
+    # Call the async generate method
+    output_data, log_string = await score_info_block.generate()
 
-def test_score_info_generate_with_variant():
+    # Assertions on the returned tuple
+    assert output_data is not None
+    assert output_data["type"] == "ScoreInfo"
+    assert "data" in output_data
+    assert output_data["data"]["id"] == "score-abc-123"
+    assert output_data["data"]["name"] == "Mock Score scor..." # Corrected expected value
+    assert "variant" not in output_data["data"]
+    
+    assert log_string is not None
+    assert "Fetching info for score: score-abc-123" in log_string
+    assert "include_variant: False" in log_string
+    assert "ScoreInfo block generation successful." in log_string
+
+@pytest.mark.asyncio
+async def test_score_info_generate_with_variant(score_info_block):
     """Tests the generate method including the variant."""
-    block = ScoreInfo()
-    # Use the updated key 'score' and boolean value
-    config = {"score": "score-def-456", "include_variant": True} 
-    params = {} # Not used by this block currently
+    score_info_block.config = {"score": "score-def-456", "include_variant": True}
 
-    # TODO: Adapt assertion based on actual generate() return format
-    # result = block.generate(config, params)
-    # assert result["type"] == "ScoreInfo"
-    # assert "data" in result
-    # assert result["data"]["id"] == "score-def-456"
-    # assert result["data"]["name"] == "Mock Score scor..." # Based on current mock logic
-    # assert "variant" in result["data"]
-    # assert result["data"]["variant"] is not None
-    # assert result["data"]["variant"]["name"] == "Default Variant" # Based on current mock logic
-    pass # Placeholder
+    output_data, log_string = await score_info_block.generate()
 
-def test_score_info_generate_missing_score():
+    assert output_data is not None
+    assert output_data["type"] == "ScoreInfo"
+    assert "data" in output_data
+    assert output_data["data"]["id"] == "score-def-456"
+    assert output_data["data"]["name"] == "Mock Score scor..." # Corrected expected value
+    assert "variant" in output_data["data"]
+    assert output_data["data"]["variant"] is not None
+    assert output_data["data"]["variant"]["name"] == "Default Variant" # Based on current mock logic
+
+    assert log_string is not None
+    assert "Fetching info for score: score-def-456" in log_string
+    assert "include_variant: True" in log_string
+    assert "ScoreInfo block generation successful." in log_string
+
+@pytest.mark.asyncio
+async def test_score_info_generate_missing_score(score_info_block):
     """Tests the generate method when 'score' is missing in config."""
-    block = ScoreInfo()
-    config = {} # Missing score
-    params = {}
+    score_info_block.config = {} # Missing score
 
-    # TODO: Adapt assertion based on actual generate() return format
-    result = block.generate(config, params)
-    # The error message might be in the returned string or logged
-    assert isinstance(result, dict) # generate() currently returns dict on error
-    assert "error" in result
-    assert result["error"] == "'score' is required in the block configuration." 
+    output_data, log_string = await score_info_block.generate()
+
+    # Assert that output data is None due to the error
+    assert output_data is None
+    
+    assert log_string is not None
+    assert "ERROR: 'score' identifier missing in block configuration." in log_string
+    # Check that the success message is NOT in the log
+    assert "ScoreInfo block generation successful." not in log_string 

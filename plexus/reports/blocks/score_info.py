@@ -1,6 +1,7 @@
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 import json
 import logging
+import asyncio
 
 from .base import BaseReportBlock
 
@@ -18,56 +19,69 @@ class ScoreInfo(BaseReportBlock):
                                          Defaults to False.
     """
 
-    def generate(
-        self, config: Dict[str, Any], params: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
-        # score_id = config.get("scoreId") # OLD
-        score_identifier = config.get("score") # NEW
-        # if not score_id: # OLD
-        if not score_identifier: # NEW
-            # In a real implementation, we might raise an error or return
-            # a specific error structure.
-            # return {"error": "scoreId is required in the block configuration."} # OLD
-            return {"error": "'score' is required in the block configuration."} # NEW
+    async def generate(
+        self # config/params/client accessed via self
+    ) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+        """Fetches (mock) Score data and returns it with logs."""
+        self.log_messages = [] # Reset logs for this run
+        final_output_data = None # Default to None
 
-        include_variant = config.get("include_variant", False)
+        try:
+            self._log(f"Starting ScoreInfo block generation.")
+            score_identifier = self.config.get("score")
+            if not score_identifier:
+                self._log("ERROR: 'score' identifier missing in block configuration.")
+                raise ValueError("'score' is required in the block configuration.")
 
-        # --- Mock Data Fetching ---
-        # In a real implementation, this would involve fetching the Score
-        # object from the database or via an API call using score_identifier.
-        mock_score_data = {
-            # "id": score_id, # OLD
-            "id": score_identifier, # NEW - Mock assumes identifier is the ID for now
-            # "name": f"Mock Score {score_id[:4]}...", # OLD
-            "name": f"Mock Score {score_identifier[:4]}...", # NEW
-            "value": 0.85, # Example value
-            "description": "This is a mock score description.",
-            "variant": {
-                "id": "var-123",
-                "name": "Default Variant",
-            } if include_variant else None,
-            "createdAt": "2023-10-27T10:00:00Z",
-            "updatedAt": "2023-10-27T10:05:00Z",
-        }
-        # --- End Mock Data Fetching ---
+            include_variant = self.config.get("include_variant", False)
+            self._log(f"Fetching info for score: {score_identifier}, include_variant: {include_variant}")
 
-        # Remove variant if not included and it's None
-        # Also remove None values before converting to JSON for cleaner output
-        final_data = {k: v for k, v in mock_score_data.items() if v is not None}
-        # if not include_variant and "variant" in mock_score_data:
-        #     del mock_score_data["variant"]
+            # --- Mock Data Fetching ---
+            # Replace with actual async API call using self.api_client
+            # score_data = await self.api_client.get_score_by_identifier(score_identifier)
+            # For now, use mock data:
+            await asyncio.sleep(0.01) # Simulate async work
+            mock_score_data = {
+                "id": score_identifier,
+                "name": f"Mock Score {score_identifier[:4]}...",
+                "value": 0.85,
+                "description": "This is a mock score description.",
+                "variant": {
+                    "id": "var-123",
+                    "name": "Default Variant",
+                } if include_variant else None,
+                "createdAt": "2023-10-27T10:00:00Z",
+                "updatedAt": "2023-10-27T10:05:00Z",
+            }
+            self._log(f"Mock data fetched successfully for {score_identifier}.")
+            # --- End Mock Data Fetching ---
 
-        # Structure the output data as a dictionary
-        # This dictionary will be serialized to JSON by the service layer.
-        output_data = {
-            "type": "ScoreInfo", # Identify the type of data for potential rendering hints
-            "data": final_data,
-        }
-        
-        # The service layer is responsible for JSON serialization.
-        # Just return the dictionary.
-        return output_data
-        
+            # Process data
+            final_data = {k: v for k, v in mock_score_data.items() if v is not None}
+
+            # Structure the output data dictionary
+            final_output_data = {
+                "type": "ScoreInfo",
+                "data": final_data,
+            }
+            self._log("ScoreInfo block generation successful.")
+
+        except ValueError as ve:
+            # Log specific config errors
+             self._log(f"Configuration Error: {ve}")
+            # final_output_data remains None
+        except Exception as e:
+            # Log unexpected errors during generation
+            self._log(f"ERROR during ScoreInfo generation: {str(e)}")
+            # Log traceback? Might be too verbose for block log, but useful.
+            # self._log(traceback.format_exc())
+            # final_output_data remains None
+
+        # --- Format and Return --- 
+        log_string = "\n".join(self.log_messages) if self.log_messages else None
+        # Return the data (or None if error) and the collected logs
+        return final_output_data, log_string
+
         # try:
         #     json_output = json.dumps(final_data, indent=2)
         #     markdown_output = f"```json\n{json_output}\n```\n"

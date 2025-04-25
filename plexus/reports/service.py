@@ -5,6 +5,7 @@ import json
 import asyncio # Added for async operations
 from datetime import datetime, timezone # Added datetime
 import traceback # Added for error details
+import re
 
 # print("[DEBUG] service.py top level print") # DEBUG PRINT
 
@@ -239,49 +240,74 @@ async def generate_report(report_configuration_id: str, params: Optional[Dict[st
          raise RuntimeError(error_msg)
 
 
-    # --- Main processing block ---
+    # --- Main processing block with final status update ---
+    final_status = 'UNKNOWN' # Default status
+    error_message = None
+    error_details = None
+    template_content_string = None # Initialize here
+
     try:
         # === 3. Parse Configuration ===
+        # Make sure config_markdown is available
+        if not config_markdown:
+             raise ValueError("Report configuration markdown content is empty.")
+
         template_content_string, block_definitions = _parse_report_configuration(config_markdown)
 
         # === 4. Process Report Blocks (and create records sequentially) ===
         block_outputs = {}
         block_logs = {}
-        report_block_records_data = [] # Keep track of data for logging/errors
         all_blocks_succeeded = True # Tracks successful block *execution*
         all_block_records_created = True # Tracks successful block *record creation*
 
         for position, block_def in enumerate(block_definitions):
-            block_def['position'] = position
+            # Ensure position is assigned to the definition itself for use in _instantiate_and_run_block if needed
+            block_def['position'] = position 
             block_name = block_def.get('name', f'block_{position}')
             logger.info(f"Processing block {position}: {block_name}")
 
-            # Instantiate and run the block
-            block_output_json, block_log_str = _instantiate_and_run_block(
-                block_def, report_params=params
-            )
-
-            # Prepare data for ReportBlock creation
-            # We create a record even if execution failed, storing the log/error
-            report_block_data = {
-                "reportId": report_id,
-                "name": block_name,
-                "position": position,
-                # Store output if successful, otherwise null/None might be appropriate
-                "output": block_output_json,
-                # Store log if available (could be execution log or error message)
-                "log": block_log_str
-            }
-            report_block_records_data.append(report_block_data) # Keep track of what we tried to save
-
-            # --- 5. Create ReportBlock Record Immediately ---
-            if block_output_json is None: # Mark block execution as failed
-                all_blocks_succeeded = False
-                logger.error(f"Block {position} ({block_name}) failed to generate output. Log: {block_log_str}")
-                # We still attempt to create the block record to store the failure log
+            block_output_json = None # Initialize for this block iteration
+            block_log_str = None
 
             try:
+                # Instantiate and run the block
+                # Pass api_client in case the block needs it (though BaseReportBlock doesn't mandate it yet)
+                block_output_json, block_log_str = await _instantiate_and_run_block(
+                    block_def, report_params=params, api_client=api_client
+                )
+
+                # Execution succeeded if block_output_json is not None
+                if block_output_json is None:
+                    all_blocks_succeeded = False
+                    logger.error(f"Block {position} ({block_name}) failed to generate output. Log: {block_log_str or 'No log output.'}")
+                    # Even on failure, we try to save the log in ReportBlock
+                else:
+                    logger.info(f"Block {position} ({block_name}) generated output successfully.")
+                    # Store successful output for potential inter-block use (not currently implemented)
+                    block_outputs[block_name] = block_output_json
+                
+                if block_log_str:
+                    block_logs[block_name] = block_log_str
+
+
+            except Exception as exec_err:
+                # Catch errors during the block's execution itself
+                all_blocks_succeeded = False
+                block_log_str = f"Error during block execution: {str(exec_err)}\n{traceback.format_exc()}"
+                logger.exception(f"Error executing block {position} ({block_name}): {exec_err}")
+                # Proceed to try and save the error in ReportBlock
+
+
+            # --- 5. Create ReportBlock Record Immediately ---
+            try:
                 logger.debug(f"Creating ReportBlock record for block {position} ({block_name})...")
+                report_block_data = {
+                    "reportId": report_id,
+                    "name": block_name,
+                    "position": position,
+                    "output": block_output_json, # Stores None if execution failed
+                    "log": block_log_str # Stores log or execution error message
+                }
                 # Assuming ReportBlock.create uses client.execute which is synchronous
                 created_block = await asyncio.to_thread(
                     ReportBlock.create,
@@ -289,265 +315,260 @@ async def generate_report(report_configuration_id: str, params: Optional[Dict[st
                     **report_block_data
                 )
                 logger.info(f"Successfully created ReportBlock record for block {position} ({block_name}) with ID: {created_block.id}")
-                # Store results for potential future inter-block communication (if needed)
-                if block_output_json is not None:
-                     block_outputs[block_name] = block_output_json # Store the actual JSON string
-                if block_log_str is not None:
-                     block_logs[block_name] = block_log_str
 
             except Exception as block_create_err:
                 all_block_records_created = False # Mark record creation failure
                 logger.exception(f"Failed to create ReportBlock record for block {position} ({block_name}): {block_create_err}")
-                # Continue to the next block, but the overall report status will reflect this later
+                # This is a more serious failure, affecting the overall report status.
+                # We will set the final status outside the loop based on this flag.
 
 
-        # === 6. (REMOVED) Batch Create ReportBlock Records ===
-        # We now create them individually inside the loop.
-
-        # === 7. Finalize Report Record (Success Path) ===
-        # Determine final status based on both block execution and record creation
+        # Determine final status after processing all blocks
         if all_blocks_succeeded and all_block_records_created:
              final_status = 'COMPLETED'
+             logger.info(f"Report {report_id} completed successfully.")
         elif not all_blocks_succeeded and not all_block_records_created:
              final_status = 'FAILED'
-             error_message = "One or more report blocks failed to generate and one or more block records failed to save."
+             error_message = "One or more report blocks failed to generate AND one or more block records failed to save."
+             logger.error(f"Report {report_id} failed: Blocks failed to generate AND records failed to save.")
         elif not all_blocks_succeeded:
-             final_status = 'FAILED' # Or 'COMPLETED_WITH_ERRORS'? FAILED seems safer.
-             error_message = "One or more report blocks failed to generate."
+             final_status = 'FAILED' # Treat block execution failure as overall failure
+             error_message = "One or more report blocks failed to generate output."
+             logger.error(f"Report {report_id} failed: Blocks failed to generate.")
         else: # Implies all_blocks_succeeded is True, but all_block_records_created is False
              final_status = 'FAILED' # Treat inability to save results as failure
              error_message = "Successfully generated all block outputs, but failed to save one or more block records."
+             logger.error(f"Report {report_id} failed: Could not save all block records.")
 
-        logger.info(f"Report generation finished. Final status: {final_status}")
-
-        report_update_data = {
-           "status": final_status,
-           "output": template_content_string,
-           "completedAt": datetime.now(timezone.utc)
-        }
+        # If failed, collect detailed errors
         if final_status == 'FAILED':
-           report_update_data["errorMessage"] = error_message
-           # Optionally serialize block_logs for errorDetails
-           try:
-                # Include logs from successfully executed blocks
-                report_update_data["errorDetails"] = json.dumps(block_logs or {"detail": error_message})
-           except TypeError:
-                report_update_data["errorDetails"] = json.dumps({"error": "Could not serialize block logs.", "detail": error_message})
+            try:
+                # Combine logs and any creation errors into details
+                error_details = json.dumps({
+                    "message": error_message,
+                    "block_logs": block_logs,
+                    "block_execution_failed": not all_blocks_succeeded,
+                    "block_record_creation_failed": not all_block_records_created,
+                }, indent=2)
+            except TypeError:
+                error_details = json.dumps({"error": "Could not serialize error details.", "detail": error_message})
+
+        # Update successful completion status and store the original markdown in output
+        report_update_data = {
+            "status": final_status,
+            "completedAt": datetime.now(timezone.utc)
+        }
+        if final_status == 'COMPLETED':
+            report_update_data["output"] = template_content_string # Store original markdown
+        else:
+            report_update_data["errorMessage"] = error_message
+            report_update_data["errorDetails"] = error_details
 
         await asyncio.to_thread(created_report.update, **report_update_data)
         logger.info(f"Successfully updated final status for Report {report_id} to {final_status}")
 
+        # Return the report_id on success or failure (as the record exists)
         return report_id
 
-    except ValueError as ve: # Catch specific config-not-found error (should be caught earlier now)
-        logger.error(f"Configuration loading failed: {ve}")
-        # Update status if report was created before this error (unlikely now)
-        if created_report:
+    except Exception as e:
+        # Catch any other unhandled error during parsing or block processing setup
+        logger.exception(f"Unhandled error during report generation for report {report_id}: {e}")
+        final_status = 'FAILED'
+        error_message = f"Unhandled error during report generation: {str(e)}"
+        error_details = traceback.format_exc()
+
+        # Attempt to update the Report record to FAILED status
+        if created_report: # Should always be true if we get here
              try:
-                 # Assuming Report.update uses client.execute which is synchronous
                  await asyncio.to_thread(
                      created_report.update,
-                     status='FAILED',
-                     errorMessage=f"Configuration loading failed: {ve}",
+                     status=final_status,
+                     errorMessage=error_message,
+                     errorDetails=error_details,
                      completedAt=datetime.now(timezone.utc)
                  )
+                 logger.info(f"Updated Report {report_id} to FAILED due to unhandled exception.")
              except Exception as update_err:
-                  logger.error(f"Failed to update report {report_id} to FAILED after config load error: {update_err}")
-        raise # Re-raise the ValueError
+                  logger.error(f"CRITICAL: Failed to update report {report_id} status to FAILED after unhandled exception {e}: {update_err}")
+        # Re-raise the original exception after attempting to update status
+        raise e
 
-    except Exception as e:
-        logger.exception(f"Unhandled error during report generation for config {report_configuration_id} after initial report creation: {e}")
-        # --- Update Report record to FAILED status ---
-        if created_report: # Check if the report object exists
-            try:
-                # Assuming Report.update uses client.execute which is synchronous
-                await asyncio.to_thread(
-                    created_report.update,
-                    status='FAILED',
-                    errorMessage=f"Unhandled exception: {type(e).__name__}",
-                    errorDetails=traceback.format_exc(), # Store traceback
-                    completedAt=datetime.now(timezone.utc)
-                )
-                logger.info(f"Successfully updated Report {report_id} to FAILED status after exception.")
-            except Exception as update_err:
-                # Log secondary error during update attempt
-                logger.error(f"Failed to update report {report_id} to FAILED after exception {e}: {update_err}")
-        else:
-            # This case should be less likely now, but log if it happens
-             logger.error(f"Unhandled exception occurred but no 'created_report' object was available to update status.")
-
-        raise # Re-raise the original exception
+    # The code should not reach here due to return/raise in try/except blocks,
+    # but added for completeness. Could return report_id if needed.
+    # return report_id
 
 
-# --- Helper: Parse Configuration ---
-# Takes the raw Markdown string from the ReportConfiguration.configuration field
 def _parse_report_configuration(config_markdown: str) -> Tuple[str, List[Dict[str, Any]]]:
     """
-    Parses the report configuration Markdown/Jinja2 string.
-
-    Uses mistune with a custom renderer (ReportBlockExtractor) to identify
-    Markdown sections and fenced code blocks marked with 'block'. It extracts
-    the block definitions for execution but leaves the original block syntax
-    intact in the returned markdown string.
+    Parses the report configuration Markdown to extract block definitions
+    and reconstruct the original Markdown string (including block definitions).
 
     Args:
-        config_markdown: The raw string content from ReportConfiguration.configuration.
+        config_markdown: The raw Markdown content from ReportConfiguration.configuration.
 
     Returns:
         A tuple containing:
-        - The original markdown string, suitable for storing in Report.output.
-        - A list of block definition dictionaries, each containing details
-          like 'class_name', 'config', 'name' (optional), and 'position',
-          extracted for execution.
+          - The original Markdown string.
+          - A list of dictionaries, each representing a block definition
+            extracted from ```block ... ``` sections.
     """
-    logger.info("Parsing report configuration markdown...")
-    # print("[DEBUG] Parsing report configuration markdown...") # DEBUG PRINT
+    logger.debug("Parsing report configuration markdown...")
 
-    # Initialize the mistune Markdown parser with our custom extractor
-    markdown_parser = mistune.create_markdown(renderer=ReportBlockExtractor())
-
-    # Parse the input markdown. The extractor's finalize method returns the list.
-    parsed_items = markdown_parser(config_markdown)
-
-    # print(f"[DEBUG] Parsed items from extractor: {parsed_items}") # DEBUG PRINT
-
-    main_template_parts = []
     block_definitions = []
-    block_counter = 0 # Used for position and default naming
+    reconstructed_markdown = ""
+    current_position = 0 # Track block position
 
-    for item in parsed_items:
-        item_type = item.get("type")
-        # print(f"[DEBUG] Processing parsed item: {item}") # DEBUG PRINT
+    # Use mistune to parse the markdown into tokens
+    # Note: Using a custom renderer is complex for preserving original structure perfectly.
+    # A simpler regex approach might be better for just extracting ```block``` sections
+    # while keeping the rest intact.
 
-        if item_type == "markdown":
-            main_template_parts.append(item.get("content", ""))
-        elif item_type == "block_config":
-            class_name = item.get("class_name")
-            config = item.get("config", {})
-            # Determine the name: use 'name' from config if present, else generate default
-            # We need the name *before* potentially removing it from the config for the definition
-            name = config.get("name", f"block_{block_counter}")
+    # --- Regex Approach ---
+    # Pattern to find ```block ... ``` sections
+    # Using re.DOTALL so '.' matches newlines within the YAML block
+    # Using re.MULTILINE for potentially cleaner handling if needed, though DOTALL is key
+    pattern = re.compile(r"^```block(?: name=\"([^\"]*)\")?\s*\n(.*?)\n^```", re.MULTILINE | re.DOTALL)
 
-            # Create the block definition for execution later
-            # Keep the original config structure as parsed by the extractor
+    last_end = 0
+    for match in pattern.finditer(config_markdown):
+        start, end = match.span()
+        block_name = match.group(1) # Optional name from ```block name="..."
+        yaml_content = match.group(2)
+
+        # Append markdown text before this block
+        reconstructed_markdown += config_markdown[last_end:start]
+        # Append the raw block definition itself to the reconstructed markdown
+        reconstructed_markdown += match.group(0) + "\n" # Add newline after block
+
+        try:
+            # Parse the YAML content within the block
+            block_config = yaml.safe_load(yaml_content)
+            if not isinstance(block_config, dict):
+                raise ValueError("Block YAML must be a dictionary.")
+
+            # Extract required 'pythonClass' and optional 'config'
+            class_name = block_config.get("pythonClass")
+            if not class_name:
+                 raise ValueError("`pythonClass` not specified in block YAML.")
+            block_params = block_config.get("config", {})
+
+            # Add extracted definition to our list
             block_def = {
+                "type": "block_config",
+                "name": block_name or f"block_{current_position}", # Use extracted name or generate default
                 "class_name": class_name,
-                "config": config, # Store the original config dict
-                "name": name, # Store the determined/generated name
-                "position": block_counter, # Positional index
+                "config": block_params,
+                "position": current_position # Add position based on parse order
             }
             block_definitions.append(block_def)
+            logger.debug(f"Extracted block definition: {block_def}")
+            current_position += 1
 
-            # Reconstruct the original block definition string for the output markdown
-            # Combine class_name and config back into a dictionary for dumping
-            original_block_content_dict = {"pythonClass": class_name}
-            if config: # Only add 'config' key if it's not empty
-                original_block_content_dict["config"] = config
-                
-            # Dump back to YAML format, trying to preserve original style somewhat
-            # Using default_flow_style=False for block style YAML
-            # indent=2 for readability
-            try:
-                reconstructed_yaml = yaml.dump(original_block_content_dict, default_flow_style=False, indent=2, sort_keys=False)
-                # Strip trailing newline added by dump if present
-                reconstructed_yaml = reconstructed_yaml.strip()
-            except yaml.YAMLError:
-                # Fallback if dumping fails (should be rare)
-                reconstructed_yaml = f"pythonClass: {class_name}\\nconfig: Error reconstructing YAML"
+        except (yaml.YAMLError, ValueError) as e:
+            logger.error(f"Error parsing report block YAML at position {current_position}: {e}\nYAML:\n{yaml_content}")
+            # How to handle parse errors? Option 1: Skip block, Option 2: Fail report
+            # For now, let's skip the block but log error. The report might still partially run.
+            # TODO: Decide on final error handling strategy for block parsing failures.
+            # Add an error marker to the definition list?
+            block_definitions.append({
+                "type": "error",
+                "message": f"Error parsing block definition: {e}",
+                "yaml_content": yaml_content,
+                "position": current_position
+            })
+            # We still increment position for subsequent blocks
+            current_position += 1
 
-            # Append the reconstructed ```block ... ``` string to the template parts
-            reconstructed_block_string = f"```block\\n{reconstructed_yaml}\\n```"
-            main_template_parts.append(reconstructed_block_string)
 
-            block_counter += 1
-        elif item_type == "error":
-            # Include errors in the template output as comments for debugging
-            # Also add the error message to the block definitions list?
-            # For now, just log and put comment in markdown.
-            error_message = item.get('message', 'Unknown parsing error')
-            logger.warning(f"Found parsing error in configuration: {error_message}")
-            main_template_parts.append(f"<!-- PARSE ERROR: {error_message} -->")
-            # Optionally, add an error block definition
-            # block_definitions.append({
-            #     "type": "error",
-            #     "message": error_message,
-            #     "position": block_counter
-            # })
-            # block_counter += 1 # Increment even for errors?
-        else:
-            logger.warning(f"Ignoring unexpected parsed item type: {item_type}")
+        last_end = end
 
-    # Join the template parts together
-    # Use two newlines to separate parts, mimicking original paragraph/block spacing
-    final_markdown_string = "\\n\\n".join(main_template_parts).strip()
-    # print(f"[DEBUG] Final reconstructed markdown string:\\n{final_markdown_string}") # DEBUG PRINT
-    # print(f"[DEBUG] Final block definitions: {block_definitions}") # DEBUG PRINT
+    # Append any remaining markdown text after the last block
+    reconstructed_markdown += config_markdown[last_end:]
 
-    logger.info(f"Parsed configuration: Found {len(block_definitions)} blocks. Markdown reconstructed.")
-    # NOTE: The first returned string is now the reconstructed original markdown,
-    # NOT a Jinja template string.
-    return final_markdown_string, block_definitions
+    logger.debug(f"Finished parsing. Found {len(block_definitions)} blocks.")
+    # Filter out any potential error markers before returning definitions to run
+    valid_block_definitions = [bd for bd in block_definitions if bd.get("type") == "block_config"]
 
-def _instantiate_and_run_block(block_def: dict, report_params: dict) -> Tuple[Optional[str], Optional[str]]:
+    return reconstructed_markdown.strip(), valid_block_definitions
+
+
+# Note: Updated signature to accept api_client
+async def _instantiate_and_run_block(block_def: dict, report_params: dict, api_client: PlexusDashboardClient) -> Tuple[Optional[str], Optional[str]]:
     """
     Instantiates and runs a specific ReportBlock Python class.
 
     Args:
-        block_def: Dictionary containing 'class_name', 'config', 'name', 'position'.
-        report_params: Global parameters passed to the report run.
+        block_def: Dictionary containing block definition ('class_name', 'config', 'name', 'position').
+        report_params: Overall parameters for the report run.
+        api_client: The PlexusDashboardClient instance.
 
     Returns:
         A tuple containing:
-            - JSON string of the block's output data (or None on failure).
-            - String containing logs/messages from the block's execution (or None).
+          - JSON string of the block's output, or None if execution failed.
+          - String containing logs or error message from the block's execution.
     """
-    class_name = block_def.get("class_name")
-    block_config = block_def.get("config", {})
-    block_name = block_def.get("name", f"block_{block_def.get('position', 'unknown')}")
-    logger.info(f"Attempting to instantiate and run block '{block_name}' (Class: {class_name})")
+    class_name = block_def.get('class_name')
+    block_config_params = block_def.get('config', {}) # Params specific to this block instance
+    block_name = block_def.get('name', 'Unnamed Block')
 
-    output_json_str: Optional[str] = None
-    log_str: Optional[str] = None
+    # Combine general report params with block-specific params (block takes precedence)
+    # TODO: Define precedence rules more clearly if needed.
+    combined_params = {**report_params, **block_config_params}
+
+    logger.debug(f"Attempting to instantiate block: {class_name} with combined params: {combined_params}")
+
+    block_instance = None
+    output_json: Optional[str] = None
+    log_output: Optional[str] = "No log output." # Default log message
 
     try:
-        # 1. Find the block class
+        # Find the class constructor
         block_class = BLOCK_CLASSES.get(class_name)
-        if block_class is None:
-            raise ValueError(f"Report block class '{class_name}' not found in registry.")
+        if not block_class:
+            raise ImportError(f"ReportBlock class '{class_name}' not found or not registered.")
 
-        # 2. Instantiate the block class
-        # Add error handling for instantiation if needed (e.g., __init__ fails)
-        block_instance = block_class()
-        logger.debug(f"Instantiated block class '{class_name}'")
+        # Instantiate the block
+        # Pass api_client and combined_params to the constructor
+        # Ensure BaseReportBlock and subclasses accept these (or handle **kwargs)
+        # TODO: Update BaseReportBlock constructor if necessary
+        block_instance = block_class(config=block_config_params, params=report_params, api_client=api_client) # Adjust as needed
 
-        # 3. Call the generate method
-        # TODO: Implement log capturing if blocks support returning logs
-        # For now, BaseReportBlock.generate only returns the output dict.
-        # We expect a dictionary here based on BaseReportBlock definition.
-        output_dict = block_instance.generate(config=block_config, params=report_params)
+        # Run the block's generate method
+        # Assuming generate is now async
+        logger.info(f"Running generate() for block: {block_name} ({class_name})")
+        # output_data should be JSON-serializable, log_output a string
+        # The generate method itself should handle internal errors and return None for output on failure.
+        output_data, log_output = await block_instance.generate()
 
-        # 4. Validate and Serialize the output
-        if output_dict is None:
-             logger.warning(f"Block '{block_name}' ({class_name}) returned None output.")
-             # Treat None output as non-failure, but store null in DB?
-             # For now, serialize None as JSON 'null'. Service layer handles None return.
-             output_json_str = json.dumps(None) 
-             log_str = "Block returned None."
-        elif not isinstance(output_dict, dict):
-             # This shouldn't happen if blocks adhere to BaseReportBlock
-             logger.error(f"Block '{block_name}' ({class_name}) generate() did not return a dictionary. Returned type: {type(output_dict)}")
-             raise TypeError("Block generate() must return a dictionary.")
+        # Serialize the successful output to JSON string
+        if output_data is not None:
+            try:
+                 # Use default=str to handle non-serializable types like datetime
+                 output_json = json.dumps(output_data, default=str)
+                 logger.debug(f"Block {block_name} finished. Output size: {len(output_json)} chars. Log: {log_output or 'None'}")
+            except TypeError as json_err:
+                logger.exception(f"Failed to serialize output from block {block_name} to JSON: {json_err}")
+                # Set output to None as it's unusable, store serialization error in log
+                output_json = None
+                log_output = f"Failed to serialize block output to JSON: {str(json_err)}\n{traceback.format_exc()}"
         else:
-             # Serialize the dictionary to JSON
-             output_json_str = json.dumps(output_dict, indent=2) # Pretty print for readability
-             logger.debug(f"Block '{block_name}' generated output successfully.")
-             # log_str = output.get("_log") # Example if logs were part of dict
+             # Execution within generate() failed, log should contain details.
+             logger.warning(f"Block {block_name} ({class_name}) generate() returned None for output.")
+             # log_output should already be set by the generate method in case of failure
+
+
+    except ImportError as ie:
+        error_msg = f"ImportError for block '{block_name}' ({class_name}): {ie}"
+        logger.error(error_msg)
+        log_output = error_msg # Return error in log field
+        # Output remains None
 
     except Exception as e:
-        logger.exception(f"Error running report block '{block_name}' ({class_name}): {e}")
-        # Return None for output, and the error message as the log string
-        output_json_str = None
-        log_str = f"Error executing block '{block_name}': {e}"
+        # Catch errors during instantiation or unexpected errors in generate() call
+        error_msg = f"Error instantiating or running block '{block_name}' ({class_name}): {e}"
+        logger.exception(error_msg) # Log full traceback
+        log_output = f"{error_msg}\n{traceback.format_exc()}" # Return error details in log
+        # Output remains None
 
-    # Return the JSON string and the log/error string
-    return output_json_str, log_str 
+    # Return the JSON string (or None) and the log string
+    return output_json, log_output 
