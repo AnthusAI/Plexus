@@ -50,8 +50,10 @@ Final markdown footer.
 # We will mock the instance update method specifically later.
 @patch('plexus.reports.service._load_report_configuration', new_callable=AsyncMock) # Keep AsyncMock for the truly async loader
 @patch('plexus.reports.service._parse_report_configuration') # This one is called directly, sync mock is fine
+@patch('plexus.reports.service._instantiate_and_run_block', new_callable=AsyncMock) # <-- Use AsyncMock here
 @pytest.mark.asyncio
 async def test_generate_report_success(
+    mock_run_block,      # <-- Mock is now AsyncMock
     mock_parse_config,
     mock_load_config, 
     mock_block_create,  # Now a MagicMock again
@@ -76,9 +78,10 @@ async def test_generate_report_success(
 
     # --- Mock Configuration Parsing ---
     reconstructed_markdown = mock_report_config['configuration']
+    # Use actual class name used in service
     mock_block_defs = [
-        {"class_name": "ScoreInfoBlock", "config": {"scoreId": "score-test-123", "include_variant": False}, "name": "block_0", "position": 0},
-        {"class_name": "ScoreInfoBlock", "config": {"scoreId": "score-test-456"}, "name": "block_1", "position": 1}
+        {"class_name": "ScoreInfo", "config": {"scoreId": "score-test-123", "include_variant": False}, "name": "block_0", "position": 0},
+        {"class_name": "ScoreInfo", "config": {"scoreId": "score-test-456"}, "name": "block_1", "position": 1}
     ]
     mock_parse_config.return_value = (reconstructed_markdown, mock_block_defs)
 
@@ -87,16 +90,15 @@ async def test_generate_report_success(
     # Ensure the returned mock has an ID attribute
     mock_block_create.return_value = MagicMock(spec=ReportBlock, id="mock-block-id-123") 
 
-    # --- Mock _instantiate_and_run_block ---
-    # This is called directly within the async function, so MagicMock is fine
-    with patch('plexus.reports.service._instantiate_and_run_block') as mock_run_block:
-        mock_run_block.side_effect = [
-            (json.dumps({"id": "score-test-123", "name": "Mock Score 1"}), None),
-            (json.dumps({"id": "score-test-456", "name": "Mock Score 2"}), None),
-        ]
+    # --- Configure the AsyncMock for _instantiate_and_run_block ---
+    # Set the side_effect directly on the AsyncMock passed to the test
+    mock_run_block.side_effect = [
+        (json.dumps({"id": "score-test-123", "name": "Mock Score 1"}), "Log for block 1"), # Return tuple directly
+        (json.dumps({"id": "score-test-456", "name": "Mock Score 2"}), "Log for block 2"), # Return tuple directly
+    ]
 
-        # === Call the async service function ===
-        report_id_result = await generate_report("test-config-1")
+    # === Call the async service function ===
+    report_id_result = await generate_report("test-config-1")
 
     # === Assertions ===
     # 1. Config Loading
@@ -115,10 +117,9 @@ async def test_generate_report_success(
     # 3. Parsing
     mock_parse_config.assert_called_once_with(mock_config_object.configuration)
 
-    # 4. Block Instantiation/Run
-    assert mock_run_block.call_count == 2
-    call1_args = mock_run_block.call_args_list[0].args
-    call1_kwargs = mock_run_block.call_args_list[0].kwargs
+    # 4. Block Instantiation/Run (Now check the AsyncMock)
+    assert mock_run_block.await_count == 2
+    call1_args, call1_kwargs = mock_run_block.await_args_list[0]
     assert call1_args[0] == mock_block_defs[0]
     assert call1_kwargs.get('report_params') == {}
     # ... (check second call similarly) ...
@@ -132,7 +133,7 @@ async def test_generate_report_success(
     assert block_create_call_kwargs['position'] == mock_block_defs[0]['position']
     assert block_create_call_kwargs['name'] == mock_block_defs[0]['name']
     assert block_create_call_kwargs['output'] == json.dumps({"id": "score-test-123", "name": "Mock Score 1"})
-    assert block_create_call_kwargs['log'] is None
+    assert block_create_call_kwargs['log'] == "Log for block 1"
     # ... (check second call similarly) ...
 
     # 6. Final Report Update

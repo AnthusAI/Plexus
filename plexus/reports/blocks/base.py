@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 
 class BaseReportBlock(ABC):
@@ -10,20 +10,30 @@ class BaseReportBlock(ABC):
     point within a report.
     """
 
-    @abstractmethod
-    def generate(
-        self, config: Dict[str, Any], params: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
-        """
-        Generates the data for this report block.
+    def __init__(self, config: Dict[str, Any], params: Optional[Dict[str, Any]], api_client: 'PlexusDashboardClient'):
+        self.config = config
+        self.params = params if params is not None else {}
+        self.api_client = api_client
+        self.log_messages = []
 
-        Args:
-            config: Configuration specific to this block instance, taken from
-                    the ReportConfiguration.
-            params: Optional runtime parameters passed during report generation.
+    def _log(self, message: str):
+        """Helper method to add log messages during generation."""
+        self.log_messages.append(message)
+
+    @abstractmethod
+    async def generate(
+        self
+    ) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+        """
+        Generates the data for this report block asynchronously.
+
+        Access block configuration via `self.config` and report parameters via `self.params`.
+        Use `self.api_client` for data fetching.
+        Use `self._log("message")` to record log information.
 
         Returns:
-            A dictionary containing the generated data for the block, which
-            must be JSON-serializable.
+            A tuple containing:
+                - A dictionary containing the generated data (JSON-serializable), or None on failure.
+                - A string containing concatenated log messages, or None if no logs.
         """
         pass 
