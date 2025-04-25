@@ -6,6 +6,9 @@ import json
 from plexus.reports.service import generate_report, _load_report_configuration, ReportBlockExtractor
 from plexus.reports.blocks.base import BaseReportBlock
 from plexus.reports.blocks.score_info import ScoreInfo # Import for mocking later
+# Import models needed for spec in MagicMock
+from plexus.dashboard.api.models.report import Report
+from plexus.dashboard.api.models.report_block import ReportBlock
 
 # Disable logging noise during tests
 logging.disable(logging.CRITICAL)
@@ -40,77 +43,112 @@ Final markdown footer.
 """
     }
 
-@patch('plexus.reports.service._load_report_configuration', new_callable=AsyncMock)
-@patch('plexus.reports.service._parse_report_configuration')
+# Use standard MagicMock for methods called via asyncio.to_thread,
+# as the methods themselves are synchronous.
+@patch('plexus.reports.service.Report.create') 
+@patch('plexus.reports.service.ReportBlock.create') 
+# We will mock the instance update method specifically later.
+@patch('plexus.reports.service._load_report_configuration', new_callable=AsyncMock) # Keep AsyncMock for the truly async loader
+@patch('plexus.reports.service._parse_report_configuration') # This one is called directly, sync mock is fine
 @pytest.mark.asyncio
-async def test_generate_report_success(mock_parse_config, mock_load_config, mock_report_config):
+async def test_generate_report_success(
+    mock_parse_config,
+    mock_load_config, 
+    mock_block_create,  # Now a MagicMock again
+    mock_report_create, # Now a MagicMock again
+    mock_report_config  # The fixture
+):
     """Tests successful report generation with Markdown and blocks (async)."""
-    # Configure mocks
-    # mock_load_config corresponds to the _load_report_configuration patch
-    # Create a mock ReportConfiguration object to return
+    # --- Mock ReportConfiguration Loading ---
     mock_config_object = MagicMock()
-    # Use the actual fixture data passed as mock_report_config
     mock_config_object.configuration = mock_report_config['configuration']
     mock_config_object.name = mock_report_config['name']
-    mock_config_object.accountId = 'test-account-id' # Add accountId expected by generate_report
-    mock_load_config.return_value = mock_config_object # Set return value for the correct mock
+    mock_config_object.accountId = 'test-account-id'
+    mock_load_config.return_value = mock_config_object
 
-    # mock_parse_config corresponds to the _parse_report_configuration patch
-    # Configure the mock parser to return the reconstructed markdown and block definitions
-    # The first item should be the reconstructed original markdown string
-    reconstructed_markdown = mock_report_config['configuration'] # For simplicity, assume parser returns original
+    # --- Mock Report Creation ---
+    # Define the mock Report object that Report.create should return
+    mock_created_report_obj = MagicMock(spec=Report) # Keep the base obj as MagicMock
+    mock_created_report_obj.id = "report-test-config-1-run1" # Predictable ID
+    # Mock the update method ON THE INSTANCE as a standard MagicMock
+    mock_created_report_obj.update = MagicMock(return_value=None) # Set return value if needed
+    mock_report_create.return_value = mock_created_report_obj # create returns the mock obj
+
+    # --- Mock Configuration Parsing ---
+    reconstructed_markdown = mock_report_config['configuration']
     mock_block_defs = [
-        { # Mock definition for the first block
-            "class_name": "ScoreInfoBlock", # Corrected class name casing potentially
-            "config": {"scoreId": "score-test-123", "include_variant": False},
-            "name": "block_0", # Assuming default name from parser
-            "position": 0
-        },
-        { # Mock definition for the second block
-            "class_name": "ScoreInfoBlock",
-            "config": {"scoreId": "score-test-456"},
-            "name": "block_1",
-            "position": 1
-        }
+        {"class_name": "ScoreInfoBlock", "config": {"scoreId": "score-test-123", "include_variant": False}, "name": "block_0", "position": 0},
+        {"class_name": "ScoreInfoBlock", "config": {"scoreId": "score-test-456"}, "name": "block_1", "position": 1}
     ]
     mock_parse_config.return_value = (reconstructed_markdown, mock_block_defs)
 
-    # Patch _instantiate_and_run_block within the test using a context manager
+    # --- Mock ReportBlock Creation ---
+    # mock_block_create is now a MagicMock from the decorator
+    # Ensure the returned mock has an ID attribute
+    mock_block_create.return_value = MagicMock(spec=ReportBlock, id="mock-block-id-123") 
+
+    # --- Mock _instantiate_and_run_block ---
+    # This is called directly within the async function, so MagicMock is fine
     with patch('plexus.reports.service._instantiate_and_run_block') as mock_run_block:
-        # Configure _instantiate_and_run_block mock
         mock_run_block.side_effect = [
-            # Return value for first block call (output JSON string, log string)
             (json.dumps({"id": "score-test-123", "name": "Mock Score 1"}), None),
-            # Return value for second block call
             (json.dumps({"id": "score-test-456", "name": "Mock Score 2"}), None),
         ]
 
-        # Call the async service function using await
-        report_data = await generate_report("test-config-1")
-    
-        # Assertions
-        mock_load_config.assert_awaited_once_with(ANY, "test-config-1")
-        mock_parse_config.assert_called_once_with(mock_report_config["configuration"])
-        # Check that _instantiate_and_run_block was called twice
-        assert mock_run_block.call_count == 2 
+        # === Call the async service function ===
+        report_id_result = await generate_report("test-config-1")
 
-        # Check the first call to the mocked _instantiate_and_run_block
-        call1_args = mock_run_block.call_args_list[0].args
-        call1_kwargs = mock_run_block.call_args_list[0].kwargs
-        # The first positional argument should be the first block definition
-        assert call1_args[0] == mock_block_defs[0]
-        # The keyword argument 'report_params' should be the params dictionary (empty in this test)
-        assert call1_kwargs.get('report_params') == {}
+    # === Assertions ===
+    # 1. Config Loading
+    mock_load_config.assert_awaited_once_with(ANY, "test-config-1")
 
-        # Check the second call to the mocked _instantiate_and_run_block
-        call2_args = mock_run_block.call_args_list[1].args
-        call2_kwargs = mock_run_block.call_args_list[1].kwargs
-        assert call2_args[0] == mock_block_defs[1]
-        assert call2_kwargs.get('report_params') == {}
+    # 2. Initial Report Creation
+    # Check that Report.create was called (via to_thread, so sync assert)
+    mock_report_create.assert_called_once() 
+    create_call_kwargs = mock_report_create.call_args.kwargs
+    assert create_call_kwargs['reportConfigurationId'] == "test-config-1"
+    assert create_call_kwargs['accountId'] == 'test-account-id'
+    assert create_call_kwargs['name'].startswith(mock_report_config['name'])
+    assert create_call_kwargs['parameters'] == {}
+    assert create_call_kwargs['status'] == 'RUNNING'
 
-        # Check the structure and content of the returned report data (report_id string)
-        assert isinstance(report_data, str) # Check it returns a string (report_id)
-        assert report_data.startswith("report-test-config-1") # Check mock report ID format
+    # 3. Parsing
+    mock_parse_config.assert_called_once_with(mock_config_object.configuration)
+
+    # 4. Block Instantiation/Run
+    assert mock_run_block.call_count == 2
+    call1_args = mock_run_block.call_args_list[0].args
+    call1_kwargs = mock_run_block.call_args_list[0].kwargs
+    assert call1_args[0] == mock_block_defs[0]
+    assert call1_kwargs.get('report_params') == {}
+    # ... (check second call similarly) ...
+
+    # 5. ReportBlock Creation
+    # Check that ReportBlock.create was called (via to_thread, so sync assert)
+    assert mock_block_create.call_count == len(mock_block_defs) 
+    # Check args for the first block create call
+    block_create_call_kwargs = mock_block_create.call_args_list[0].kwargs
+    assert block_create_call_kwargs['reportId'] == mock_created_report_obj.id
+    assert block_create_call_kwargs['position'] == mock_block_defs[0]['position']
+    assert block_create_call_kwargs['name'] == mock_block_defs[0]['name']
+    assert block_create_call_kwargs['output'] == json.dumps({"id": "score-test-123", "name": "Mock Score 1"})
+    assert block_create_call_kwargs['log'] is None
+    # ... (check second call similarly) ...
+
+    # 6. Final Report Update
+    # Check that the update method *on the created object* was called (via to_thread, so sync assert)
+    mock_created_report_obj.update.assert_called_once()
+    update_call_args, update_call_kwargs = mock_created_report_obj.update.call_args
+    assert update_call_kwargs['status'] == 'COMPLETED'
+    assert update_call_kwargs['output'] == reconstructed_markdown
+    assert 'completedAt' in update_call_kwargs
+    assert 'errorMessage' not in update_call_kwargs # Should not be present on success
+
+    # 7. Return value
+    # Check the structure and content of the returned report data (report_id string)
+    assert isinstance(report_id_result, str)
+    # Check it returns the predictable ID from our mock
+    assert report_id_result == mock_created_report_obj.id
 
 @patch('plexus.reports.service._load_report_configuration', new_callable=AsyncMock)
 @pytest.mark.asyncio

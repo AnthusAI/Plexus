@@ -3,6 +3,8 @@ import logging
 from typing import Any, Dict, List, Optional, Tuple
 import json
 import asyncio # Added for async operations
+from datetime import datetime, timezone # Added datetime
+import traceback # Added for error details
 
 # print("[DEBUG] service.py top level print") # DEBUG PRINT
 
@@ -16,6 +18,8 @@ from plexus.reports import blocks
 # Import API client and models
 from plexus.dashboard.api.client import PlexusDashboardClient
 from plexus.dashboard.api.models.report_configuration import ReportConfiguration
+from plexus.dashboard.api.models.report import Report # Added Report model
+from plexus.dashboard.api.models.report_block import ReportBlock # Import ReportBlock for later
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -30,6 +34,7 @@ async def _load_report_configuration(client: PlexusDashboardClient, config_id: s
     logger.info(f"Loading report configuration from API: {config_id}")
     try:
         # Use the get_by_id method from the ReportConfiguration model
+        # Assuming ReportConfiguration.get_by_id uses client.execute which is synchronous
         config = await asyncio.to_thread(ReportConfiguration.get_by_id, config_id, client)
 
         if config:
@@ -197,142 +202,181 @@ async def generate_report(report_configuration_id: str, params: Optional[Dict[st
     report_config_name = report_config_model.name
     account_id = report_config_model.accountId # Get accountId from the model
 
-    # === 2. TODO: Create Initial Report Record ===
-    # Use account_id from the loaded config
-    # report_name = f"Report for {report_config_name} - {datetime.utcnow()}" # Example name
-    # initial_report_data = {
-    #    "reportConfigurationId": report_configuration_id,
-    #    "accountId": account_id, # Use actual account ID
-    #    "name": report_name,
-    #    "status": "RUNNING",
-    #    "parameters": params,
-    #    "startedAt": datetime.utcnow().isoformat() + "Z",
-    # }
-    # Use Report.create(...) here
-    # created_report = await asyncio.to_thread(
-    #     Report.create,
-    #     client=api_client,
-    #     reportConfigurationId=report_configuration_id,
-    #     accountId=account_id,
-    #     name=report_name,
-    #     parameters=params,
-    #     status='RUNNING'
-    # )
-    # report_id = created_report.id
+    # === 2. Create Initial Report Record ===
+    # This happens BEFORE block processing, making the ID available.
+    created_report: Optional[Report] = None # Initialize to None
+    report_id: Optional[str] = None
+    try:
+        # Generate a unique name for the report run
+        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
+        report_name = f"{report_config_name} - {timestamp}"
 
-    # Placeholder report ID
-    report_id = f"report-{report_configuration_id}-run1"
-    logger.info(f"Created initial Report record (mock): {report_id}")
+        logger.info(f"Creating initial Report record: {report_name}")
+        # Assuming Report.create uses client.execute which is synchronous
+        created_report = await asyncio.to_thread(
+            Report.create,
+            client=api_client,
+            reportConfigurationId=report_configuration_id,
+            accountId=account_id,
+            name=report_name,
+            parameters=params, # Pass runtime parameters
+            status='RUNNING' # Start in RUNNING state
+            # startedAt is handled by the model/backend? Check Report.create impl.
+        )
+        report_id = created_report.id
+        logger.info(f"Successfully created initial Report record with ID: {report_id}")
 
+    except Exception as create_err:
+        logger.exception(f"Failed to create initial Report record for config {report_configuration_id}: {create_err}")
+        # If we can't even create the initial record, we can't proceed.
+        raise # Re-raise the exception to indicate catastrophic failure.
+
+    # Make sure we have a report_id before proceeding
+    if not report_id or not created_report:
+         # This case should ideally be covered by the exception above, but as a safeguard:
+         error_msg = "Failed to create or retrieve ID for the initial Report record."
+         logger.error(error_msg)
+         raise RuntimeError(error_msg)
+
+
+    # --- Main processing block ---
     try:
         # === 3. Parse Configuration ===
-        # The markdown content comes from the loaded model
         template_content_string, block_definitions = _parse_report_configuration(config_markdown)
 
-        # === 4. Process Report Blocks (Before Rendering Template) ===
-        block_outputs = {} # Store block outputs keyed by name (or position?)
-        block_logs = {} # Store block logs separately
-        # List to hold created ReportBlock model instances (or data to create them)
-        report_block_records = []
-        all_blocks_succeeded = True
+        # === 4. Process Report Blocks (and create records sequentially) ===
+        block_outputs = {}
+        block_logs = {}
+        report_block_records_data = [] # Keep track of data for logging/errors
+        all_blocks_succeeded = True # Tracks successful block *execution*
+        all_block_records_created = True # Tracks successful block *record creation*
 
         for position, block_def in enumerate(block_definitions):
-            block_def['position'] = position # Ensure position is set
-            # Use the block's name from the definition if available, otherwise use position
+            block_def['position'] = position
             block_name = block_def.get('name', f'block_{position}')
             logger.info(f"Processing block {position}: {block_name}")
 
-            # Instantiate and run the block (remains synchronous for now)
-            # TODO: Consider if _instantiate_and_run_block should also be async if blocks do I/O
+            # Instantiate and run the block
             block_output_json, block_log_str = _instantiate_and_run_block(
                 block_def, report_params=params
             )
 
-            # --- 5. TODO: Create ReportBlock Record (In Memory or Directly to DB) ---
-            if block_output_json is not None:
-                block_outputs[block_name] = block_output_json # Still useful for context if needed later
-                # Prepare data for ReportBlock creation
-                report_block_data = {
-                    "reportId": report_id, # Link to the parent report
-                    "name": block_name,
-                    "position": position,
-                    "output": block_output_json, # Store the JSON output
-                    "log": block_log_str
-                }
-                report_block_records.append(report_block_data)
-                # Option 1: Create immediately (might be slow if many blocks)
-                # await asyncio.to_thread(
-                #     ReportBlock.create,
-                #     client=api_client,
-                #     **report_block_data
-                # )
-                # Option 2: Collect and batch create later (preferred)
+            # Prepare data for ReportBlock creation
+            # We create a record even if execution failed, storing the log/error
+            report_block_data = {
+                "reportId": report_id,
+                "name": block_name,
+                "position": position,
+                # Store output if successful, otherwise null/None might be appropriate
+                "output": block_output_json,
+                # Store log if available (could be execution log or error message)
+                "log": block_log_str
+            }
+            report_block_records_data.append(report_block_data) # Keep track of what we tried to save
 
-                if block_log_str:
-                    block_logs[block_name] = block_log_str
-            else:
+            # --- 5. Create ReportBlock Record Immediately ---
+            if block_output_json is None: # Mark block execution as failed
                 all_blocks_succeeded = False
-                logger.error(f"Block {position} ({block_name}) failed to generate output.")
-                # Store error information? Maybe update the Report record?
-                # TODO: Create ReportBlock record even on failure?
-                # ReportBlock.create(..., status='FAILED', log=block_log_str or "Unknown error") ?
+                logger.error(f"Block {position} ({block_name}) failed to generate output. Log: {block_log_str}")
+                # We still attempt to create the block record to store the failure log
 
-        # === 6. TODO: Batch Create ReportBlock Records ===
-        # if report_block_records:
-        #     # Use ReportBlock.batch_create(...) if implemented, or loop create
-        #     logger.info(f"Creating {len(report_block_records)} ReportBlock records...")
-        #     # await ReportBlock.batch_create(client=api_client, items=report_block_records) # Ideal
-        #     # Fallback: Loop create (less efficient)
-        #     for record_data in report_block_records:
-        #         try:
-        #             await asyncio.to_thread(ReportBlock.create, client=api_client, **record_data)
-        #         except Exception as block_create_err:
-        #             logger.error(f"Failed to create ReportBlock for {record_data.get('name')}: {block_create_err}")
+            try:
+                logger.debug(f"Creating ReportBlock record for block {position} ({block_name})...")
+                # Assuming ReportBlock.create uses client.execute which is synchronous
+                created_block = await asyncio.to_thread(
+                    ReportBlock.create,
+                    client=api_client,
+                    **report_block_data
+                )
+                logger.info(f"Successfully created ReportBlock record for block {position} ({block_name}) with ID: {created_block.id}")
+                # Store results for potential future inter-block communication (if needed)
+                if block_output_json is not None:
+                     block_outputs[block_name] = block_output_json # Store the actual JSON string
+                if block_log_str is not None:
+                     block_logs[block_name] = block_log_str
+
+            except Exception as block_create_err:
+                all_block_records_created = False # Mark record creation failure
+                logger.exception(f"Failed to create ReportBlock record for block {position} ({block_name}): {block_create_err}")
+                # Continue to the next block, but the overall report status will reflect this later
 
 
-        # === 7. Finalize Report Record ===
-        final_status = 'COMPLETED' if all_blocks_succeeded else 'FAILED' # Or 'PARTIAL'?
+        # === 6. (REMOVED) Batch Create ReportBlock Records ===
+        # We now create them individually inside the loop.
+
+        # === 7. Finalize Report Record (Success Path) ===
+        # Determine final status based on both block execution and record creation
+        if all_blocks_succeeded and all_block_records_created:
+             final_status = 'COMPLETED'
+        elif not all_blocks_succeeded and not all_block_records_created:
+             final_status = 'FAILED'
+             error_message = "One or more report blocks failed to generate and one or more block records failed to save."
+        elif not all_blocks_succeeded:
+             final_status = 'FAILED' # Or 'COMPLETED_WITH_ERRORS'? FAILED seems safer.
+             error_message = "One or more report blocks failed to generate."
+        else: # Implies all_blocks_succeeded is True, but all_block_records_created is False
+             final_status = 'FAILED' # Treat inability to save results as failure
+             error_message = "Successfully generated all block outputs, but failed to save one or more block records."
+
         logger.info(f"Report generation finished. Final status: {final_status}")
 
-        # Update the main Report record with the final status, completion time, and the *original* markdown
-        # report_update_data = {
-        #    "status": final_status,
-        #    "output": template_content_string, # Store the original Markdown per plan
-        #    "completedAt": datetime.utcnow().isoformat() + "Z",
-        # }
-        # if not all_blocks_succeeded:
-        #    report_update_data["errorMessage"] = "One or more report blocks failed to generate."
-        #    # report_update_data["errorDetails"] = json.dumps(block_logs or {"detail": "See block logs"})
-        
-        # Fetch the report object if created earlier, then call update
-        # report_obj = await asyncio.to_thread(Report.get_by_id, report_id, api_client)
-        # if report_obj:
-        #     await asyncio.to_thread(report_obj.update, **report_update_data)
-        # else:
-        #     logger.error(f"Could not find Report {report_id} to update final status.")
+        report_update_data = {
+           "status": final_status,
+           "output": template_content_string,
+           "completedAt": datetime.now(timezone.utc)
+        }
+        if final_status == 'FAILED':
+           report_update_data["errorMessage"] = error_message
+           # Optionally serialize block_logs for errorDetails
+           try:
+                # Include logs from successfully executed blocks
+                report_update_data["errorDetails"] = json.dumps(block_logs or {"detail": error_message})
+           except TypeError:
+                report_update_data["errorDetails"] = json.dumps({"error": "Could not serialize block logs.", "detail": error_message})
 
-        # Return the (mock) report ID for now
+        await asyncio.to_thread(created_report.update, **report_update_data)
+        logger.info(f"Successfully updated final status for Report {report_id} to {final_status}")
+
         return report_id
 
-    except ValueError as ve: # Catch specific config-not-found error
+    except ValueError as ve: # Catch specific config-not-found error (should be caught earlier now)
         logger.error(f"Configuration loading failed: {ve}")
-        # TODO: Update Report status to FAILED if it was created
+        # Update status if report was created before this error (unlikely now)
+        if created_report:
+             try:
+                 # Assuming Report.update uses client.execute which is synchronous
+                 await asyncio.to_thread(
+                     created_report.update,
+                     status='FAILED',
+                     errorMessage=f"Configuration loading failed: {ve}",
+                     completedAt=datetime.now(timezone.utc)
+                 )
+             except Exception as update_err:
+                  logger.error(f"Failed to update report {report_id} to FAILED after config load error: {update_err}")
         raise # Re-raise the ValueError
+
     except Exception as e:
-        logger.exception(f"Unhandled error during report generation for config {report_configuration_id}: {e}")
-        # --- TODO: Update Report record to FAILED status ---
-        # report_obj = await asyncio.to_thread(Report.get_by_id, report_id, api_client)
-        # if report_obj:
-        #     await asyncio.to_thread(
-        #         report_obj.update,
-        #         status='FAILED',
-        #         errorMessage=f"Unhandled exception: {type(e).__name__}",
-        #         errorDetails=traceback.format_exc(),
-        #         completedAt=datetime.utcnow().isoformat() + "Z"
-        #     )
-        # else:
-        #     logger.error(f"Could not find Report {report_id} to mark as FAILED after exception.")
-        raise # Re-raise the exception
+        logger.exception(f"Unhandled error during report generation for config {report_configuration_id} after initial report creation: {e}")
+        # --- Update Report record to FAILED status ---
+        if created_report: # Check if the report object exists
+            try:
+                # Assuming Report.update uses client.execute which is synchronous
+                await asyncio.to_thread(
+                    created_report.update,
+                    status='FAILED',
+                    errorMessage=f"Unhandled exception: {type(e).__name__}",
+                    errorDetails=traceback.format_exc(), # Store traceback
+                    completedAt=datetime.now(timezone.utc)
+                )
+                logger.info(f"Successfully updated Report {report_id} to FAILED status after exception.")
+            except Exception as update_err:
+                # Log secondary error during update attempt
+                logger.error(f"Failed to update report {report_id} to FAILED after exception {e}: {update_err}")
+        else:
+            # This case should be less likely now, but log if it happens
+             logger.error(f"Unhandled exception occurred but no 'created_report' object was available to update status.")
+
+        raise # Re-raise the original exception
 
 
 # --- Helper: Parse Configuration ---
