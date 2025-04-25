@@ -559,7 +559,7 @@ const schema = a.schema({
             description: a.string(),
             accountId: a.string().required(),
             account: a.belongsTo('Account', 'accountId'),
-            configuration: a.json().required(), // YAML/JSON definition
+            configuration: a.string().required(),
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
             reports: a.hasMany('Report', 'reportConfigurationId'),
