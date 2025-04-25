@@ -105,17 +105,18 @@ The reporting system will be built around three core concepts:
 ### Phase 2: Report Generation (Service & Triggering)
 
 *   ✅ **Implement Initial Block:** Implement a simple `ScoreInfoBlock` in Python. This block will take a `scoreId` and optional parameters (e.g., `include_variant`) and return mock JSON data representing basic information about that score.
-*   ⬜ **Develop Generation Service Core:** Create Python service logic (`plexus.reports.service`) that:
-    *   ⬜ Takes a `ReportConfiguration` ID and optional parameters.
-    *   ⬜ Loads the `ReportConfiguration` data (initially mocked or via basic GraphQL query).
-    *   ⬜ Parses the Markdown `configuration` field, extracting YAML from ```block``` sections (using libraries like `mistune` or `markdown-it` and `PyYAML`).
-    *   ⬜ Identifies `ReportBlock`s based on the extracted YAML (initially just handle the `ScoreInfoBlock`).
-    *   ⬜ Instantiates and calls the `generate` method for identified blocks.
-    *   ⬜ Assembles the results into a final `reportData` JSON.
+*   ✅ **Develop Generation Service Core:** Create Python service logic (`plexus.reports.service`) that:
+    *   ✅ Takes a `ReportConfiguration` ID and optional parameters.
+    *   ✅ Loads the `ReportConfiguration` data (initially mocked or via basic GraphQL query).
+    *   ✅ Parses the Markdown `configuration` field, extracting YAML from ```block``` sections (using libraries like `mistune` or `markdown-it` and `PyYAML`).
+    *   ✅ Identifies `ReportBlock`s based on the extracted YAML (initially just handle the `ScoreInfoBlock`).
+    *   ✅ Instantiates and calls the `generate` method for identified blocks.
+    *   ✅ Assembles the results into a final `reportData` JSON.
 *   ⬜ **Implement CLI Trigger:** Create the `plexus report run --config <config_id>` CLI command that:
     *   ⬜ Parses arguments.
     *   ⬜ Calls the generation service logic.
     *   ⬜ Creates/Updates the `Report` record via GraphQL mutation (initially just setting `status` to `PENDING`, then `COMPLETED`/`FAILED` and storing `reportData`).
+*   ⬜ **Add Unit Tests:** Implement unit tests for `plexus.reports.service` and `plexus.reports.blocks` (covering parsing, block execution, error handling, etc.).
 *   ⬜ **Basic Status Updates:** Ensure the `Report` record `status`, `startedAt`, `completedAt`, `errorMessage`, `reportData` are updated correctly by the CLI process.
 *   ⬜ **Implement Celery Task:** Wrap the generation service logic in a Celery task.
 *   ⬜ **Implement Celery Dispatch:** Create a mechanism (e.g., internal API call, GraphQL mutation triggered by frontend) to dispatch the Celery task for report generation.
