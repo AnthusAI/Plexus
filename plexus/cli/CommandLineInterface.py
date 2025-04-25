@@ -31,7 +31,6 @@ import textwrap
 from .DataCommands import data
 from .EvaluationCommands import evaluate, evaluations
 from .TrainingCommands import train
-from .ReportingCommands import report
 from .PredictionCommands import predict
 from .TuningCommands import tuning
 from .AnalyzeCommands import analyze
@@ -44,6 +43,7 @@ from .ScoreCommands import scores, score
 from .ResultCommands import results
 from .client_utils import create_client
 from .ScoreChatCommands import score_chat
+from .ReportCommands import report
 
 # Import dashboard-specific modules
 from plexus.dashboard.api.models.account import Account
@@ -93,7 +93,6 @@ def cli():
 cli.add_command(data)
 cli.add_command(evaluate)
 cli.add_command(train)
-cli.add_command(report)
 cli.add_command(predict)
 cli.add_command(tuning)
 cli.add_command(analyze)
@@ -108,6 +107,7 @@ cli.add_command(scorecards)
 cli.add_command(scores)
 cli.add_command(score)
 cli.add_command(results)
+cli.add_command(report)
 
 # Helper functions
 def format_scorecard_panel(scorecard, include_sections=False, detailed_scores=False):
