@@ -57,18 +57,24 @@ class ScoreInfo(BaseReportBlock):
         # if not include_variant and "variant" in mock_score_data:
         #     del mock_score_data["variant"]
 
-        # Structure the output data as a markdown JSON code block string
-        # output_data = {
-        #     "type": "ScoreInfo", # Identify the type of data for rendering
-        #     "data": mock_score_data,
-        # }
-        try:
-            json_output = json.dumps(final_data, indent=2)
-            markdown_output = f"```json\n{json_output}\n```\n"
-            return markdown_output
-        except TypeError as e:
-             logger.error(f"Failed to serialize score data to JSON for {score_identifier}: {e}")
-             # Return an error string that the service layer can embed
-             return f"<!-- Error: Failed to serialize score data for {score_identifier}: {e} -->"
+        # Structure the output data as a dictionary
+        # This dictionary will be serialized to JSON by the service layer.
+        output_data = {
+            "type": "ScoreInfo", # Identify the type of data for potential rendering hints
+            "data": final_data,
+        }
+        
+        # The service layer is responsible for JSON serialization.
+        # Just return the dictionary.
+        return output_data
+        
+        # try:
+        #     json_output = json.dumps(final_data, indent=2)
+        #     markdown_output = f"```json\n{json_output}\n```\n"
+        #     return markdown_output
+        # except TypeError as e:
+        #      logger.error(f"Failed to serialize score data to JSON for {score_identifier}: {e}")
+        #      # Return an error string that the service layer can embed
+        #      return f"<!-- Error: Failed to serialize score data for {score_identifier}: {e} -->"
 
         # return output_data 

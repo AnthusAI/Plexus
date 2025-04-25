@@ -131,8 +131,8 @@ The reporting system will be built around **four** core concepts:
 *   🟡 **Develop Generation Service Core:** Create Python service logic (`plexus.reports.service`) that:
     *   🟡 Takes a `ReportConfiguration` ID and optional parameters. *(Function signature and basic structure added)*
     *   🟡 Loads the `ReportConfiguration` data. *(Stub `_load_report_configuration` added and called)*
-    *   🟡 Parses the `configuration` field (Markdown/Jinja2) to identify static content, the main template structure, and ` ```block ... ``` ` definitions (including name, class, config, position). *(Stub `_parse_report_configuration` added and called, `ReportBlockExtractor` defined but not yet integrated - Now updated to return original Markdown)*
-    *   🟡 **Process Blocks First:** For each block definition (in order): Instantiates and calls the `generate` method for the specified Python `ReportBlock` class. Creates `ReportBlock` records storing the JSON `output`, `log`, `name`, and `position`. *(Stub `_instantiate_and_run_block` added and called in loop, DB TODO)*
+    *   ✅ Parses the `configuration` field (Markdown/Jinja2) to identify static content, the main template structure, and ` ```block ... ``` ` definitions (including name, class, config, position). *(Implementation using ReportBlockExtractor added, returns original Markdown)*
+    *   ✅ **Process Blocks First:** For each block definition (in order): Instantiates and calls the `generate` method for the specified Python `ReportBlock` class. Creates `ReportBlock` records storing the JSON `output`, `log`, `name`, and `position`. *(_instantiate_and_run_block implemented for basic execution and serialization, DB TODO)*
     *   🟡 **(Removed) Collect Block Results:** Gather the outputs from the executed blocks (e.g., into a dictionary accessible by block name or position). *(`block_outputs` dictionary created and populated from stub - This is still needed internally but not for `Report.output`)*
     *   🟡 **(Removed) Render Main Template Last:** Renders the main template using Jinja2, passing the collected block results (and other metadata/parameters) in the rendering context. Stores the final rendered string in `Report.output`. *(Jinja2 logic added, DB TODO - This step is removed, `Report.output` now stores original Markdown)*
 *   ⬜ **Implement CLI Trigger:** Create the `plexus report run --config <config_id>` CLI command that:
@@ -142,8 +142,8 @@ The reporting system will be built around **four** core concepts:
 *   🟡 **Basic Status Updates:** Ensure the `Report` record `status`, `startedAt`, `completedAt`, `errorMessage`, `output`, and `ReportBlock` records are updated/created correctly. *(Placeholders/TODOs exist)*
 *   ⬜ **Implement Celery Task:** Wrap the generation service logic in a Celery task.
 *   ⬜ **Implement Celery Dispatch:** Create a mechanism (e.g., internal API call, GraphQL mutation triggered by frontend) to dispatch the Celery task for report generation.
-*   🟡 **Add Error Handling:** Implement robust error handling in the generation service and Celery task to capture exceptions and update the `Report` record with `errorMessage` and `errorDetails`. *(Partial implementation with stubs and basic Jinja2 errors)*
-*   🟡 **Verify Phase 2:** Confirm reports can be generated via CLI, data is stored, status updates correctly. Test Celery task dispatch and execution. *(Basic tests passing with mocks)*
+*   🟡 **Add Error Handling:** Implement robust error handling in the generation service and Celery task to capture exceptions and update the `Report` record with `errorMessage` and `errorDetails`. *(Partial implementation in _instantiate_and_run_block, needs further work, e.g., for YAML/Jinja errors)*
+*   🟡 **Verify Phase 2:** Confirm reports can be generated via CLI, data is stored, status updates correctly. Test Celery task dispatch and execution. *(Basic tests passing for parsing and block execution happy path)*
 
 ### Phase 3: Frontend Basics (Management & Display)
 
