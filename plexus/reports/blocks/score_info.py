@@ -7,7 +7,7 @@ from .base import BaseReportBlock
 logger = logging.getLogger(__name__)
 
 
-class ScoreInfoBlock(BaseReportBlock):
+class ScoreInfo(BaseReportBlock):
     """
     Generates a block of information about a specific Score.
     
