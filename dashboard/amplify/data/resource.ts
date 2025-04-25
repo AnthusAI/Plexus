@@ -581,7 +581,7 @@ const schema = a.schema({
             startedAt: a.datetime(),
             completedAt: a.datetime(),
             parameters: a.json(), // Parameters used for this specific run
-            reportData: a.json(), // Generated report output
+            output: a.string(), // Generated report output
             errorMessage: a.string(),
             errorDetails: a.json(),
             accountId: a.string().required(),
