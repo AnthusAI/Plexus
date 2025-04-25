@@ -34,6 +34,7 @@ The reporting system will be built around **four** core concepts:
         *   Report Blocks to include, along with their specific parameters (e.g., `scorecardId`, `timeRange`, `pythonClass`).
         *   Layout or ordering information for the blocks.
     *   Standard metadata (`createdAt`, `updatedAt`, etc.).
+*   **API Access:** Use `plexus.dashboard.api.models.report_configuration.ReportConfiguration` model class.
 
 ### `Report`
 
@@ -51,6 +52,7 @@ The reporting system will be built around **four** core concepts:
     *   `reportBlocks`: A one-to-many relationship linking to the individual `ReportBlock` results generated for this report.
     *   `shareLinks`: Association for shareable URLs.
     *   Standard metadata (`updatedAt`).
+*   **API Access:** Use `plexus.dashboard.api.models.report.Report` model class.
 
 ### `ReportBlock`
 
@@ -65,8 +67,11 @@ The reporting system will be built around **four** core concepts:
 *   **Indexes:**
     *   `byReportAndName`: GSI to query blocks by `reportId` and `name`.
     *   `byReportAndPosition`: GSI to query blocks by `reportId` and `position`.
+*   **API Access:** Use `plexus.dashboard.api.models.report_block.ReportBlock` model class.
 
 ## Backend Implementation
+
+*(Note: The API client is available via `plexus.dashboard.api.client.PlexusDashboardClient`)*
 
 ### Python `ReportBlock` Framework
 
@@ -129,21 +134,21 @@ The reporting system will be built around **four** core concepts:
 
 *   ✅ **Use Existing Test Block:** Use the existing `ScoreInfo` block (in `plexus/reports/blocks/score_info.py`) for initial testing instead of creating a separate `HelloWorld` block. *(Renamed from ScoreInfoBlock)*
 *   🟡 **Develop Generation Service Core:** Create Python service logic (`plexus.reports.service`) that:
-    *   🟡 Takes a `ReportConfiguration` ID and optional parameters. *(Function signature and basic structure added)*
-    *   🟡 Loads the `ReportConfiguration` data. *(Stub `_load_report_configuration` added and called)*
+    *   ✅ Takes a `ReportConfiguration` ID and optional parameters. *(Function signature and basic structure added)*
+    *   ✅ Loads the `ReportConfiguration` data. *(Implemented using `ReportConfiguration.get_by_id`)*
     *   ✅ Parses the `configuration` field (Markdown/Jinja2) to identify static content, the main template structure, and ` ```block ... ``` ` definitions (including name, class, config, position). *(Implementation using ReportBlockExtractor added, returns original Markdown)*
-    *   ✅ **Process Blocks First:** For each block definition (in order): Instantiates and calls the `generate` method for the specified Python `ReportBlock` class. Creates `ReportBlock` records storing the JSON `output`, `log`, `name`, and `position`. *(_instantiate_and_run_block implemented for basic execution and serialization, DB TODO)*
+    *   ✅ **Process Blocks First:** For each block definition (in order): Instantiates and calls the `generate` method for the specified Python `ReportBlock` class. Creates `ReportBlock` records storing the JSON `output`, `log`, `name`, and `position`. *(_instantiate_and_run_block implemented for basic execution and serialization, DB persistence TODO)*
     *   🟡 **(Removed) Collect Block Results:** Gather the outputs from the executed blocks (e.g., into a dictionary accessible by block name or position). *(`block_outputs` dictionary created and populated from stub - This is still needed internally but not for `Report.output`)*
-    *   🟡 **(Removed) Render Main Template Last:** Renders the main template using Jinja2, passing the collected block results (and other metadata/parameters) in the rendering context. Stores the final rendered string in `Report.output`. *(Jinja2 logic added, DB TODO - This step is removed, `Report.output` now stores original Markdown)*
+    *   ✅ **(Removed) Render Main Template Last:** Renders the main template using Jinja2, passing the collected block results (and other metadata/parameters) in the rendering context. Stores the final rendered string in `Report.output`. *(Jinja2 logic removed, `Report.output` now stores original Markdown as planned)*
 *   ⬜ **Implement CLI Trigger:** Create the `plexus report run --config <config_id>` CLI command that:
     *   ⬜ Parses arguments.
     *   ⬜ Calls the generation service logic.
     *   ⬜ Creates/Updates the `Report` record (status, `output`) and associated `ReportBlock` records via GraphQL mutations.
-*   🟡 **Basic Status Updates:** Ensure the `Report` record `status`, `startedAt`, `completedAt`, `errorMessage`, `output`, and `ReportBlock` records are updated/created correctly. *(Placeholders/TODOs exist)*
+*   🟡 **Basic Status Updates:** Ensure the `Report` record `status`, `startedAt`, `completedAt`, `errorMessage`, `output`, and `ReportBlock` records are updated/created correctly. *(Placeholders/TODOs exist for creating/updating `Report` and `ReportBlock` records via API)*
 *   ⬜ **Implement Celery Task:** Wrap the generation service logic in a Celery task.
 *   ⬜ **Implement Celery Dispatch:** Create a mechanism (e.g., internal API call, GraphQL mutation triggered by frontend) to dispatch the Celery task for report generation.
-*   🟡 **Add Error Handling:** Implement robust error handling in the generation service and Celery task to capture exceptions and update the `Report` record with `errorMessage` and `errorDetails`. *(Partial implementation in _instantiate_and_run_block, needs further work, e.g., for YAML/Jinja errors)*
-*   🟡 **Verify Phase 2:** Confirm reports can be generated via CLI, data is stored, status updates correctly. Test Celery task dispatch and execution. *(Basic tests passing for parsing and block execution happy path)*
+*   🟡 **Add Error Handling:** Implement robust error handling in the generation service and Celery task to capture exceptions and update the `Report` record with `errorMessage` and `errorDetails`. *(Partial implementation in _instantiate_and_run_block and generate_report try/except blocks, needs DB persistence integration)*
+*   🟡 **Verify Phase 2:** Confirm reports can be generated via CLI, data is stored, status updates correctly. Test Celery task dispatch and execution. *(Basic tests passing for parsing and block execution happy path; DB persistence and CLI trigger needed for full verification)*
 
 ### Phase 3: Frontend Basics (Management & Display)
 
