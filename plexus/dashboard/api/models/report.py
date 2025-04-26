@@ -17,15 +17,11 @@ class Report(BaseModel):
     reportConfigurationId: str
     accountId: str
     name: str
-    status: str
+    taskId: str
     createdAt: datetime
     updatedAt: datetime
-    startedAt: Optional[datetime] = None
-    completedAt: Optional[datetime] = None
     parameters: Optional[Dict[str, Any]] = field(default_factory=dict)
-    output: Optional[str] = None  # Changed from reportData to output
-    errorMessage: Optional[str] = None
-    errorDetails: Optional[str] = None # Store as string, potentially JSON
+    output: Optional[str] = None
 
     def __init__(
         self,
@@ -33,30 +29,22 @@ class Report(BaseModel):
         reportConfigurationId: str,
         accountId: str,
         name: str,
-        status: str,
+        taskId: str,
         createdAt: datetime,
         updatedAt: datetime,
-        startedAt: Optional[datetime] = None,
-        completedAt: Optional[datetime] = None,
         parameters: Optional[Dict[str, Any]] = None,
-        output: Optional[str] = None,  # Changed from reportData to output
-        errorMessage: Optional[str] = None,
-        errorDetails: Optional[str] = None,
+        output: Optional[str] = None,
         client: Optional[_BaseAPIClient] = None
     ):
         super().__init__(id, client)
         self.reportConfigurationId = reportConfigurationId
         self.accountId = accountId
         self.name = name
-        self.status = status
+        self.taskId = taskId
         self.createdAt = createdAt
         self.updatedAt = updatedAt
-        self.startedAt = startedAt
-        self.completedAt = completedAt
         self.parameters = parameters or {}
-        self.output = output  # Changed from reportData to output
-        self.errorMessage = errorMessage
-        self.errorDetails = errorDetails
+        self.output = output
 
     @classmethod
     def fields(cls) -> str:
@@ -66,64 +54,57 @@ class Report(BaseModel):
             reportConfigurationId
             accountId
             name
-            status
+            taskId
             createdAt
             updatedAt
-            startedAt
-            completedAt
             parameters # Assuming JSON string
-            output # Changed from reportData to output
-            errorMessage
-            errorDetails
+            output
         """
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any], client: _BaseAPIClient) -> 'Report':
         """Create an instance from a dictionary of data."""
         # Parse datetime fields
-        for date_field in ['createdAt', 'updatedAt', 'startedAt', 'completedAt']:
+        for date_field in ['createdAt', 'updatedAt']:
             if data.get(date_field):
                 try:
-                    # Handle potential ISO format strings from GraphQL
                     data[date_field] = datetime.fromisoformat(data[date_field].replace('Z', '+00:00'))
                 except (ValueError, TypeError) as e:
                     logger.warning(f"Could not parse date field '{date_field}': {data[date_field]}. Error: {e}")
-                    data[date_field] = None # Or handle as appropriate
+                    data[date_field] = None
 
         # Parse JSON string fields
-        for json_field in ['parameters']:  # Removed reportData from JSON parsing
+        for json_field in ['parameters']:
             if data.get(json_field) and isinstance(data[json_field], str):
                 try:
                     data[json_field] = json.loads(data[json_field])
                 except json.JSONDecodeError as e:
                     logger.warning(f"Could not parse JSON field '{json_field}': {e}. Data: {data[json_field]}")
-                    data[json_field] = None # Or set to {} or handle error
+                    data[json_field] = None
             elif data.get(json_field) is None:
                  data[json_field] = {}
-        
-        # Handle output specifically - default to None if needed
-        if 'output' not in data or data['output'] is None:
-             data['output'] = None # Default to None if missing/null
 
-        # Ensure required datetime fields have fallbacks if parsing failed or missing
+        if 'output' not in data or data['output'] is None:
+             data['output'] = None
+
         now = datetime.now(timezone.utc)
         data['createdAt'] = data.get('createdAt') or now
         data['updatedAt'] = data.get('updatedAt') or now
+
+        # Ensure taskId is present
+        if 'taskId' not in data:
+            raise ValueError("Missing required field 'taskId' in Report data")
 
         return cls(
             id=data['id'],
             reportConfigurationId=data['reportConfigurationId'],
             accountId=data['accountId'],
             name=data['name'],
-            status=data['status'],
+            taskId=data['taskId'],
             createdAt=data['createdAt'],
             updatedAt=data['updatedAt'],
-            startedAt=data.get('startedAt'),
-            completedAt=data.get('completedAt'),
             parameters=data.get('parameters'),
-            output=data.get('output'),  # Changed from reportData to output
-            errorMessage=data.get('errorMessage'),
-            errorDetails=data.get('errorDetails'),
+            output=data.get('output'),
             client=client
         )
 
@@ -133,11 +114,12 @@ class Report(BaseModel):
         client: _BaseAPIClient,
         reportConfigurationId: str,
         accountId: str,
+        taskId: str,
         name: str,
         parameters: Optional[Dict[str, Any]] = None,
-        status: str = 'PENDING' # Default status on creation
+        output: Optional[str] = None
     ) -> 'Report':
-        """Create a new Report record via GraphQL mutation."""
+        """Create a new Report record via GraphQL mutation, linked to a Task."""
         mutation = f"""
         mutation CreateReport($input: CreateReportInput!) {{
             createReport(input: $input) {{
@@ -149,11 +131,12 @@ class Report(BaseModel):
         input_data = {
             'reportConfigurationId': reportConfigurationId,
             'accountId': accountId,
+            'taskId': taskId,
             'name': name,
-            'status': status,
             'parameters': json.dumps(parameters or {})
-            # createdAt/updatedAt are usually set by the backend
         }
+        if output is not None:
+            input_data['output'] = output
 
         try:
             result = client.execute(mutation, {'input': input_data})
@@ -163,13 +146,19 @@ class Report(BaseModel):
                  raise Exception(error_msg)
             return cls.from_dict(result['createReport'], client)
         except Exception as e:
-            logger.exception(f"Error creating Report for config {reportConfigurationId}: {e}")
+            logger.exception(f"Error creating Report for config {reportConfigurationId}, task {taskId}: {e}")
             raise
 
     def update(self, **kwargs) -> 'Report':
         """Update an existing Report record via GraphQL mutation."""
         if not self._client:
             raise ValueError("Cannot update report without an associated API client.")
+
+        # Prevent updating fields managed by Task or immutable fields
+        forbidden_fields = ['status', 'startedAt', 'completedAt', 'errorMessage', 'errorDetails', 'taskId', 'accountId', 'reportConfigurationId', 'createdAt']
+        for field in forbidden_fields:
+             if field in kwargs:
+                 raise ValueError(f"Cannot update field '{field}' directly on Report model. It is either immutable or managed by the associated Task.")
 
         mutation = f"""
         mutation UpdateReport($input: UpdateReportInput!) {{
@@ -184,24 +173,16 @@ class Report(BaseModel):
         # Prepare fields for update, serializing JSON and formatting dates
         for key, value in kwargs.items():
             if key in ['parameters']:
-                input_data[key] = json.dumps(value or {}) # Only dump parameters
+                input_data[key] = json.dumps(value or {})
             elif key == 'output':
-                 input_data[key] = value # Pass output string directly
-            elif isinstance(value, datetime):
-                input_data[key] = value.isoformat().replace('+00:00', 'Z')
-            elif key == 'errorDetails': # Special handling for errorDetails
-                if value is not None:
-                    # Ensure errorDetails is always stored as a JSON-encoded string
-                    # This handles newlines and special characters safely for GraphQL transport
-                    try:
-                        input_data[key] = json.dumps(str(value)) 
-                    except TypeError as json_err:
-                        logger.error(f"Could not JSON-encode errorDetails: {json_err}. Storing raw string representation.")
-                        input_data[key] = repr(value) # Fallback to repr
-                else:
-                    input_data[key] = None # Pass None if value is None
-            elif value is not None: # Include other non-None fields directly
                  input_data[key] = value
+            # No datetime fields are updatable anymore except updatedAt (handled automatically)
+            elif value is not None:
+                 input_data[key] = value
+
+        if not input_data:
+            logger.warning(f"Update called for Report {self.id} with no updatable fields.")
+            return self # No changes needed
 
         try:
             result = self._client.execute(mutation, {'input': input_data})
@@ -216,10 +197,10 @@ class Report(BaseModel):
 
             # Manually update fields of the current instance to reflect changes
             for field_name in self.__dataclass_fields__:
-                if field_name != 'client': # Don't overwrite client
+                if field_name != 'client' and hasattr(updated_instance, field_name):
                     setattr(self, field_name, getattr(updated_instance, field_name))
 
-            return self # Return the updated instance
+            return self
         except Exception as e:
             logger.exception(f"Error updating Report {self.id} with data {input_data}: {e}")
             raise
@@ -245,10 +226,9 @@ class Report(BaseModel):
                 limit: $limit, 
                 sortDirection: $sortDirection,
                 nextToken: $nextToken
-                # Cannot filter by name directly in this query
             ) {{
                 items {{
-                    {cls.fields()} # Fetch all fields needed for filtering and construction
+                    {cls.fields()} # Fetch fields including taskId now
                 }}
                 nextToken
             }}

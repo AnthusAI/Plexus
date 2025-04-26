@@ -36,7 +36,7 @@ type DatasetProfileIndexFields = "datasetId" | "datasetVersionId";
 type ShareLinkIndexFields = "token" | "resourceType" | "resourceId" | "accountId";
 type ScoreVersionIndexFields = "scoreId" | "versionNumber" | "isFeatured";
 type ReportConfigurationIndexFields = "accountId" | "name";
-type ReportIndexFields = "accountId" | "reportConfigurationId" | "status" | "createdAt" | "updatedAt";
+type ReportIndexFields = "accountId" | "reportConfigurationId" | "createdAt" | "updatedAt" | "taskId";
 type ReportBlockIndexFields = "reportId" | "name" | "position";
 
 // Define the share token handler function
@@ -408,7 +408,8 @@ const schema = a.schema({
             celeryTaskId: a.string(),
             workerNodeId: a.string(),
             updatedAt: a.datetime(),
-            evaluation: a.hasOne('Evaluation', 'taskId')
+            evaluation: a.hasOne('Evaluation', 'taskId'),
+            report: a.hasOne('Report', 'taskId')
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
@@ -577,20 +578,17 @@ const schema = a.schema({
     Report: a
         .model({
             name: a.string(), // Can be auto-generated or user-defined
-            status: a.string().required(), // PENDING, RUNNING, COMPLETED, FAILED
             createdAt: a.datetime().required(),
-            startedAt: a.datetime(),
-            completedAt: a.datetime(),
             parameters: a.json(), // Parameters used for this specific run
-            output: a.string(), // Generated report output
-            errorMessage: a.string(),
-            errorDetails: a.json(),
+            output: a.string(), // Generated report output (original markdown template)
             accountId: a.string().required(),
             account: a.belongsTo('Account', 'accountId'),
             reportConfigurationId: a.string().required(),
             reportConfiguration: a.belongsTo('ReportConfiguration', 'reportConfigurationId'),
             reportBlocks: a.hasMany('ReportBlock', 'reportId'), // Link to ReportBlock
             updatedAt: a.datetime().required(),
+            taskId: a.string().required(), // Add required link to Task
+            task: a.belongsTo('Task', 'taskId') // Add required link to Task
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
@@ -599,7 +597,7 @@ const schema = a.schema({
         .secondaryIndexes((idx: (field: ReportIndexFields) => any) => [
             idx("accountId").sortKeys(["updatedAt"]),
             idx("reportConfigurationId").sortKeys(["createdAt"]),
-            idx("status")
+            idx("taskId") // Add index by taskId
         ]),
 
     ReportBlock: a
