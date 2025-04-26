@@ -63,31 +63,67 @@ report.add_command(block)
 def list_configs(account_identifier: Optional[str], limit: int): # Renamed function
     """List available Report Configurations for an account."""
     client = create_client()
-    
     account_id = None
-    if account_identifier:
-        # Attempt to resolve provided identifier (could be key or ID)
-        # We might need a shared resolver utility like in ScorecardCommands eventually
-        try:
-            account_id = client._resolve_account_id(account_key=account_identifier) # Assuming _resolve takes optional key
-        except Exception as e:
-            # Fallback: Try direct ID lookup if key lookup fails or method doesn't exist
-            try:
-                acc = Account.get_by_id(account_identifier, client)
-                account_id = acc.id
-            except Exception:
-                 console.print(f"[red]Error: Could not resolve account identifier '{account_identifier}': {e}[/red]")
-                 return
-    else:
-        # Resolve from context/env var if no specific account provided
-        try:
-            account_id = client._resolve_account_id()
-        except Exception as e:
-            console.print(f"[red]Error resolving default account: {e}. Is PLEXUS_ACCOUNT_KEY set?[/red]")
-            return
+    account_display_name = "default account"
 
+    if account_identifier:
+        account_display_name = f"identifier '{account_identifier}'"
+        # User provided an identifier - try resolving by key first, then ID
+        try:
+            console.print(f"[dim]Attempting to resolve account by key: {account_identifier}...[/dim]")
+            account_obj = Account.get_by_key(key=account_identifier, client=client)
+            if account_obj:
+                account_id = account_obj.id
+                console.print(f"[dim]Resolved account ID by key: {account_id}[/dim]")
+            else:
+                console.print(f"[dim]Account key '{account_identifier}' not found. Trying as ID...[/dim]")
+                try:
+                    # Fallback: Try treating it as an ID
+                    account_obj_by_id = Account.get_by_id(account_identifier, client)
+                    if account_obj_by_id:
+                        account_id = account_obj_by_id.id
+                        console.print(f"[dim]Resolved account ID directly: {account_id}[/dim]")
+                    else:
+                         # Should be caught by get_by_id exception, but handle just in case
+                         console.print(f"[red]Error: Could not resolve account identifier '{account_identifier}' as ID.[/red]")
+                         return
+                except Exception as id_e:
+                    console.print(f"[red]Error: Could not resolve account identifier '{account_identifier}' as key or ID: {id_e}[/red]")
+                    return
+        except Exception as key_e:
+            # Error during get_by_key, maybe transient or invalid key format?
+            # Still attempt fallback to ID lookup
+            console.print(f"[yellow]Warning: Error during key lookup for '{account_identifier}' ({key_e}). Trying as ID...[/yellow]")
+            try:
+                 account_obj_by_id = Account.get_by_id(account_identifier, client)
+                 if account_obj_by_id:
+                     account_id = account_obj_by_id.id
+                     console.print(f"[dim]Resolved account ID directly after key lookup error: {account_id}[/dim]")
+                 else:
+                     console.print(f"[red]Error: Could not resolve '{account_identifier}' as ID after key lookup error.[/red]")
+                     return
+            except Exception as final_id_e:
+                console.print(f"[red]Error: Failed to resolve '{account_identifier}' as key or ID. Key Error: {key_e}, ID Error: {final_id_e}[/red]")
+                return
+    else:
+        # No identifier provided, use client's internal resolution (uses context/env var)
+        account_display_name = "default account (from environment)"
+        console.print(f"[dim]Attempting to resolve default account from environment...[/dim]")
+        try:
+            account_id = client._resolve_account_id() # Correct method call for default
+            if account_id:
+                 console.print(f"[dim]Resolved default account ID: {account_id}[/dim]")
+            else:
+                # This case might not be reachable if _resolve_account_id raises error on failure
+                console.print(f"[red]Error: client._resolve_account_id() returned None. Is PLEXUS_ACCOUNT_KEY set and valid?[/red]")
+                return
+        except Exception as e:
+             console.print(f"[red]Error resolving default account: {e}. Is PLEXUS_ACCOUNT_KEY set and valid?[/red]")
+             return
+
+    # Final check
     if not account_id:
-        console.print("[red]Error: Could not determine Account ID.[/red]")
+        console.print(f"[red]Error: Could not determine Account ID for {account_display_name}.[/red]")
         return
 
     console.print(f"[cyan]Listing Report Configurations for Account ID: {account_id}[/cyan]")
@@ -1006,10 +1042,127 @@ def list_blocks(report_id: str, limit: int):
         console.print(f"[bold red]Error listing report blocks for report {report_id}: {e}[/bold red]")
         logger.error(f"Failed to list report blocks for {report_id}: {e}\n{traceback.format_exc()}")
 
-# --- TODO: Add other commands from Phase 3 Plan ---
-# - plexus report config show <id_or_name>
-# - plexus report list [--config <id_or_name>]
-# - plexus report show <id_or_name>
-# - plexus report last
-# - plexus report block list <report_id>
-# - plexus report block show <report_id> <block_identifier> 
+@block.command(name="show")
+@click.argument('report_id', type=str)
+@click.argument('block_identifier', type=str)
+def show_block(report_id: str, block_identifier: str):
+    """Show details for a specific Report Block within a Report.
+
+    BLOCK_IDENTIFIER can be the block's position (integer) or its name (string).
+    """
+    client = create_client()
+
+    # Validate Report ID format
+    try:
+        uuid.UUID(report_id)
+    except ValueError:
+        console.print(f"[red]Error: Invalid Report ID format. Please provide a valid UUID.[/red]")
+        return
+
+    console.print(f"[cyan]Fetching Report Block '{block_identifier}' for Report ID: {report_id}[/cyan]")
+
+    try:
+        # Fetch all blocks for the report first (less efficient, but needed for name/pos lookup)
+        # TODO: Ideally, the API would support get_by_report_and_position or get_by_report_and_name
+        block_data = ReportBlock.list_by_report_id(report_id, client, limit=500) # Assume reasonable limit
+        all_blocks = block_data.get('items', [])
+
+        if not all_blocks:
+            console.print(f"[yellow]No blocks found for Report ID {report_id}. Cannot find block '{block_identifier}'.[/yellow]")
+            return
+
+        found_block = None
+        # Try to identify by position (integer)
+        try:
+            target_position = int(block_identifier)
+            for b in all_blocks:
+                if hasattr(b, 'position') and b.position == target_position:
+                    found_block = b
+                    console.print(f"[dim]Identified block by position: {target_position}[/dim]")
+                    break
+        except ValueError:
+            # If not an integer, assume it's a name
+            pass
+
+        # If not found by position, try by name
+        if not found_block:
+            console.print(f"[dim]Block identifier '{block_identifier}' not an integer position. Trying name lookup...[/dim]")
+            matched_by_name = []
+            for b in all_blocks:
+                if hasattr(b, 'name') and b.name == block_identifier:
+                    matched_by_name.append(b)
+            
+            if len(matched_by_name) == 1:
+                found_block = matched_by_name[0]
+                console.print(f"[dim]Identified block by name: '{block_identifier}'[/dim]")
+            elif len(matched_by_name) > 1:
+                 console.print(f"[yellow]Warning: Multiple blocks found with name '{block_identifier}'. Showing the first one found (by API order, then position).[/yellow]")
+                 # Sort by position if multiple have same name
+                 matched_by_name.sort(key=lambda b: getattr(b, 'position', float('inf')))
+                 found_block = matched_by_name[0]
+            else:
+                 console.print(f"[yellow]Block identifier '{block_identifier}' did not match any block name.[/yellow]")
+
+        if not found_block:
+            console.print(f"[red]Error: Could not find a block matching identifier '{block_identifier}' for Report ID {report_id}.[/red]")
+            return
+
+        # --- Display Block Details --- #
+        pos_str = str(found_block.position) if hasattr(found_block, 'position') else "N/A"
+        name_str = found_block.name if hasattr(found_block, 'name') and found_block.name else "(No Name)"
+        created_at_str = found_block.createdAt.strftime("%Y-%m-%d %H:%M:%S UTC") if hasattr(found_block, 'createdAt') and found_block.createdAt else 'N/A'
+        updated_at_str = found_block.updatedAt.strftime("%Y-%m-%d %H:%M:%S UTC") if hasattr(found_block, 'updatedAt') and found_block.updatedAt else 'N/A'
+        log_content = found_block.log if hasattr(found_block, 'log') and found_block.log else "[i](No log content)[/i]"
+
+        # Prepare output JSON for display
+        output_display = None
+        raw_output = getattr(found_block, 'output', None)
+        if raw_output:
+            try:
+                # Handle potential double-encoded JSON string
+                if isinstance(raw_output, str):
+                    try:
+                        output_data = json.loads(raw_output)
+                    except json.JSONDecodeError:
+                         # If it's a string but not JSON, display as plain text
+                         output_display = Syntax(raw_output, "text", theme="default", line_numbers=False, word_wrap=True)
+                         output_data = None # Mark as non-JSON
+                else:
+                    output_data = raw_output # Assume already decoded dict/list/etc.
+                
+                # If we have successfully decoded/retrieved structured data (dict/list)
+                if output_data is not None and output_display is None:
+                    pretty_output_str = json.dumps(output_data, indent=2)
+                    output_display = Syntax(pretty_output_str, "json", theme="default", line_numbers=True)
+
+            except Exception as e:
+                logger.error(f"Error formatting block output: {e}")
+                output_display = Panel(f"[red]Error formatting output: {e}[/red]", border_style="red")
+        else:
+            output_display = "[i](No output content)[/i]"
+
+        # Build Panel Content
+        panel_title = f"Report Block Details (Report: {report_id}) - Name: '{name_str}' Pos: {pos_str}"
+        
+        from rich.console import Group # Lazy import for Group
+        from rich.text import Text
+
+        content_group = Group(
+            Text.from_markup(f"[bold]Report ID:[/bold] {report_id}"),
+            Text.from_markup(f"[bold]Position:[/bold] {pos_str}"),
+            Text.from_markup(f"[bold]Name:[/bold] {name_str}"),
+            Text.from_markup(f"[bold]Created At:[/bold] {created_at_str}"),
+            Text.from_markup(f"[bold]Updated At:[/bold] {updated_at_str}"),
+            Text(""), # Spacer
+            Text.from_markup("[bold magenta]--- Output ---[/bold magenta]"),
+            output_display or Text.from_markup("[i](No output content)[/i]"),
+            Text(""), # Spacer
+            Text.from_markup("[bold magenta]--- Log ---[/bold magenta]"),
+            Panel(Text(log_content, overflow="fold"), border_style="dim") # Panel for log folding
+        )
+        
+        console.print(Panel(content_group, title=panel_title, border_style="green", expand=False))
+
+    except Exception as e:
+        console.print(f"[bold red]Error showing report block '{block_identifier}' for report {report_id}: {e}[/bold red]")
+        logger.error(f"Failed to show report block '{block_identifier}' for {report_id}: {e}\n{traceback.format_exc()}")

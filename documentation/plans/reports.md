@@ -172,11 +172,75 @@ The reporting system will be built around **four** core concepts:
 *   ✅ **Implement `plexus report list [--config <id_or_name>]`:** Create a CLI command to list `Report` records, including linked `taskId` and basic `Task` status. Use `rich` table output. Support optional filtering by `ReportConfiguration` (implementing ID/Name lookup for the filter value).
 *   ✅ **Implement `plexus report show <id_or_name>`:** Create a CLI command to display details of a specific `Report`, including parameters, output (rendered Markdown if possible), and associated `ReportBlock` summaries. Use `rich` panels. Implement ID/Name lookup.
 *   ✅ **Implement `plexus report last`:** Create a CLI command to show the details of the most recently created `Report` (equivalent to `plexus report show` for the latest report). Use `rich` panels.
-*   ⬜ **Implement `plexus report block list <report_id>`:** Create a CLI command to list `ReportBlock` records associated with a specific `Report`. Use `rich` for formatted table output. *Note: `<report_id>` here should strictly be the ID.* 
-*   ⬜ **Implement `plexus report block show <report_id> <block_identifier>`:** Create a CLI command to display the details (name, position, output JSON, log) of a specific `ReportBlock` (identified by position or name). Use `rich` panels/syntax highlighting. *Note: `<report_id>` here should strictly be the ID.* 
-*   ⬜ **Verify Phase 3:** Confirm these CLI commands function correctly, including filtering and ID/Name lookup, providing the necessary visibility into report data.
+*   ✅ **Implement `plexus report block list <report_id>`:** Create a CLI command to list `ReportBlock` records associated with a specific `Report`. Use `rich` for formatted table output. *Note: `<report_id>` here should strictly be the ID.* 
+*   ✅ **Implement `plexus report block show <report_id> <block_identifier>`:** Create a CLI command to display the details (name, position, output JSON, log) of a specific `ReportBlock` (identified by position or name). Use `rich` panels/syntax highlighting. *Note: `<report_id>` here should strictly be the ID.* 
+*   ✅ **Verify Phase 3:** Confirm these CLI commands function correctly, including filtering and ID/Name lookup, providing the necessary visibility into report data.
 
-### Phase 4: Frontend Basics (Management & Display)
+### Phase 4: Backend & CLI Testing
+
+*   ⬜ **Objective:** Verify the end-to-end functionality of report configuration management, generation triggering via CLI, Celery task execution, data storage, status tracking, and CLI inspection tools.
+*   ⬜ **Prerequisites:**
+    *   Ensure a Celery worker can be started (`python -m plexus.cli.CommandLineInterface command worker`).
+    *   Ensure necessary environment variables are set (e.g., `PLEXUS_ACCOUNT_KEY` in `.env`) and **loaded by the application**.
+    *   Ensure the database schema is up-to-date.
+*   ⬜ **Test Steps:**
+    1.  ✅ **`config list`:**
+        *   Run `python -m plexus.cli.CommandLineInterface report config list`. Verify existing configs are listed correctly for the default account.
+        *   Run `python -m plexus.cli.CommandLineInterface report config list --account call-criteria`. Verify filtering works.
+        *   Run `python -m plexus.cli.CommandLineInterface report config list --account <invalid_key/id>`. Verify appropriate error/empty message.
+    2.  ⬜ **`config create`:**
+        *   ✅ Run `python -m plexus.cli.CommandLineInterface report config create --name "CLI Test Config" --block-class ScoreInfo --block-param scorecard=cmg_edu_v1_0 --block-param score=Greeting`. Verify successful creation message (`Successfully created Report Configuration...`) and that the config appears in `config list` output.
+        *   ⬜ Attempt creation with missing required options (e.g., `--name`). Verify Click error. (`python -m plexus.cli.CommandLineInterface report config create --block-class ScoreInfo ...`)
+        *   ⬜ Attempt creation with invalid block params. Verify error message. (`python -m plexus.cli.CommandLineInterface report config create --name "Invalid Param Test" --block-class ScoreInfo --block-param invalid-param`)
+    3.  ⬜ **`config show`:**
+        *   Run `python -m plexus.cli.CommandLineInterface report config show "CLI Test Config"`. Verify details are displayed correctly using ID/Name lookup, including the JSON/Markdown configuration content with syntax highlighting.
+        *   Run `python -m plexus.cli.CommandLineInterface report config show <valid_config_id>`. Verify ID lookup works.
+        *   Run `python -m plexus.cli.CommandLineInterface report config show "NonExistent Config"`. Verify "not found" message.
+    4.  ⬜ **`report run` (Core Test):**
+        *   Run `python -m plexus.cli.CommandLineInterface report run --config "CLI Test Config"`. Verify:
+            *   Task creation message with Task ID is shown.
+            *   Task dispatch message is shown.
+        *   Run `python -m plexus.cli.CommandLineInterface report run --config <invalid_config_id_or_name>`. Verify error message (config resolution failure).
+        *   Run `python -m plexus.cli.CommandLineInterface report run --config "CLI Test Config" invalid_param=test`. Verify parameter parsing error or successful run with parameters logged in Task metadata.
+        *   **Monitor Celery Worker:** Start worker (`python -m plexus.cli.CommandLineInterface command worker`). Observe logs for:
+            *   Task reception (`generate_report_task` started with correct `task_id`).
+            *   Service execution (`plexus.reports.service` logs).
+            *   `Report` record creation log/message.
+            *   `ReportBlock` record creation log/message.
+            *   Task/Stage progress updates via `TaskProgressTracker`.
+            *   Successful completion or specific error logging.
+        *   **Check Task Status:** Use `python -m plexus.cli.CommandLineInterface task get --id <task_id_from_run>` to check final status (`COMPLETED` or `FAILED`), completion time, error messages (if any).
+        *   **Check Database:** (Optional) Manually inspect `Report` and `ReportBlock` tables to confirm data persistence.
+    5.  ⬜ **`report list`:**
+        *   Run `python -m plexus.cli.CommandLineInterface report list`. Verify the newly generated report appears with correct Config ID, Task ID, and fetched Task Status.
+        *   Run `python -m plexus.cli.CommandLineInterface report list --config "CLI Test Config"`. Verify filtering works (using ID/Name lookup for the config).
+        *   Run `python -m plexus.cli.CommandLineInterface report list --config "NonExistent Config"`. Verify appropriate "not found" or empty message.
+    6.  ⬜ **`report show`:**
+        *   Identify the ID or Name of the report generated in step 4.
+        *   Run `python -m plexus.cli.CommandLineInterface report show <report_id_or_name>`. Verify:
+            *   Correct Report details are shown.
+            *   Associated Task details (Status, Timestamps, Errors, Metadata) are fetched and displayed.
+            *   Report Output (Markdown template) is displayed.
+            *   Associated Report Blocks summary table is shown.
+            *   ID/Name lookup works for the report itself.
+        *   Run `python -m plexus.cli.CommandLineInterface report show <non_existent_report_id>`. Verify "not found" message.
+    7.  ⬜ **`report last`:**
+        *   Run `python -m plexus.cli.CommandLineInterface report last`. Verify it finds the most recently generated report (from step 4) and displays the same details as `report show` for that report.
+    8.  ⬜ **`block list`:**
+        *   Get the `report_id` from step 4.
+        *   Run `python -m plexus.cli.CommandLineInterface report block list <report_id>`. Verify the blocks created by the `ScoreInfo` class appear with correct position, name (if any), output summary, and log status.
+        *   Run `python -m plexus.cli.CommandLineInterface report block list <invalid_report_id>`. Verify "not found" or empty message.
+    9.  ⬜ **`block show`:**
+        *   Get the `report_id` and a `block_identifier` (position '0' or name if defined by the block) from the previous step.
+        *   Run `python -m plexus.cli.CommandLineInterface report block show <report_id> <block_identifier>`. Verify:
+            *   Correct block details (Position, Name, Timestamps) are shown.
+            *   Output JSON is fetched, parsed, and displayed with syntax highlighting.
+            *   Log content is fetched and displayed.
+            *   Lookup works by both position (e.g., '0') and name (if applicable).
+        *   Run `python -m plexus.cli.CommandLineInterface report block show <report_id> <invalid_identifier>`. Verify "not found" message.
+*   ⬜ **Verify Phase 4:** Confirm all test steps pass, demonstrating reliable backend processing and CLI interaction for the reports feature.
+
+### Phase 5: Frontend Basics (Management & Display)
 
 *   ⬜ **Create "Reports" Dashboard Section:** Add a new top-level section/route (e.g., `/reports`) in the Next.js dashboard.
 *   ⬜ **List Configurations:** Implement a UI table/list to display existing `ReportConfiguration`s fetched via GraphQL.
@@ -188,7 +252,7 @@ The reporting system will be built around **four** core concepts:
 *   ⬜ **Initial Dynamic Rendering:** Develop a Markdown renderer for `Report.output`. Implement basic display for `ReportBlock` data. **Display generation status/errors fetched from the linked `Task`.**
 *   ⬜ **Verify Phase 4:** Confirm basic UI for listing, creating configurations, triggering runs, and viewing simple reports works. **Verify status display reflects the linked Task.**
 
-### Phase 5: Advanced Features & Polish
+### Phase 6: Advanced Features & Polish
 
 *   ⬜ **Implement Core Report Blocks:**
     *   ⬜ Implement `FeedbackAnalysisBlock`.
