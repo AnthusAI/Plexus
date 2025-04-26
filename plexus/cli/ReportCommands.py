@@ -9,6 +9,8 @@ import traceback
 from datetime import datetime, timezone
 from typing import Optional, Tuple
 import sys
+import os # Added for file operations
+from pathlib import Path # Added for path handling
 
 from plexus.cli.console import console
 from plexus.dashboard.api.client import PlexusDashboardClient
@@ -23,6 +25,8 @@ from rich.pretty import pretty_repr
 from rich.syntax import Syntax # Added for JSON highlighting
 from dataclasses import asdict
 import uuid # Added for UUID validation
+from gql.transport.exceptions import TransportQueryError # Added import
+from gql import gql # Added import for gql function
 
 from plexus.cli.utils import parse_kv_pairs # Assume this exists
 
@@ -141,30 +145,31 @@ def list_configs(account_identifier: Optional[str], limit: int): # Renamed funct
             console.print(f"[yellow]No report configurations found for account {account_id}.[/yellow]")
             return
 
-        # Display results in a table
-        table = Table(title=f"Report Configurations (Account: {account_id})")
-        table.add_column("ID", style="cyan", no_wrap=True)
-        table.add_column("Name", style="magenta")
-        table.add_column("Description", style="green")
-        table.add_column("Created At", style="blue")
-        table.add_column("Updated At", style="blue")
-
-        for config_instance in items: # Iterate over ReportConfiguration instances
-            # Format datetimes if they exist, otherwise show N/A
-            # Assumes from_dict correctly parses them into datetime objects
-            # Adjust formatting as needed
-            created_at_str = config_instance.createdAt.strftime("%Y-%m-%d %H:%M:%S") if hasattr(config_instance, 'createdAt') and config_instance.createdAt else 'N/A' 
+        # --- Display results using Panels instead of Table ---
+        console.print(f"[bold]Found {len(items)} Report Configuration(s) for Account: {account_id}[/bold]")
+        for config_instance in items:
+            # Format datetimes
+            created_at_str = config_instance.createdAt.strftime("%Y-%m-%d %H:%M:%S") if hasattr(config_instance, 'createdAt') and config_instance.createdAt else 'N/A'
             updated_at_str = config_instance.updatedAt.strftime("%Y-%m-%d %H:%M:%S") if hasattr(config_instance, 'updatedAt') and config_instance.updatedAt else 'N/A'
-            
-            table.add_row(
-                config_instance.id, 
-                config_instance.name, 
-                config_instance.description or '-', 
-                created_at_str, 
-                updated_at_str
+
+            # Build panel content string
+            panel_content = (
+                f"[bold cyan]ID:[/bold cyan]          {config_instance.id}\n"
+                f"[bold green]Description:[/bold green] {config_instance.description or '-'}\n"
+                f"[bold blue]Created At:[/bold blue]  {created_at_str}\n"
+                f"[bold blue]Updated At:[/bold blue]  {updated_at_str}"
             )
 
-        console.print(table)
+            # Create and print the panel
+            console.print(
+                Panel(
+                    panel_content,
+                    title=f"[magenta]{config_instance.name}[/magenta]",
+                    border_style="blue",
+                    expand=False # Don't expand panel width unnecessarily
+                )
+            )
+        # --- End Panel Display ---
 
     except Exception as e:
         console.print(f"[bold red]Error listing report configurations: {e}[/bold red]")
@@ -319,32 +324,29 @@ def run(config_identifier: str, params: Tuple[str]):
         # Potentially exit with non-zero status
         # sys.exit(1)
 
-@config.command(name="create") # Changed from @report.command(name="create-config") to @config.command(name="create")
+@config.command(name="create")
 @click.option('--name', required=True, help='Name for the new Report Configuration.')
 @click.option('--description', default="", help='Optional description.')
 @click.option('--account', 'account_identifier', default=None, help='Account key or ID to associate with. Defaults to PLEXUS_ACCOUNT_KEY.')
-# --- Simplified config creation for now ---
-# Example: Assume configuration is just a simple dict for testing
-# Replace these options with actual config building logic later
-@click.option('--block-class', required=True, help='Python class for the report block (e.g., ScoreInfo).')
-@click.option('--block-param', 'block_params', multiple=True, help='Key=value parameters for the block.')
-# @click.option('--scorecard', 'scorecard_identifier', required=True, help='Scorecard identifier (name, key, or ID) for the ScoreInfo block.')
-# @click.option('--score', 'score_identifier', required=True, help='Score name for the ScoreInfo block.')
-def create_config(name: str, description: str, account_identifier: Optional[str], block_class: str, block_params: Tuple[str]): # Renamed function, updated signature
-    """Create a new Report Configuration."""
+@click.option('--file', 'config_file_path', type=click.Path(exists=True, dir_okay=False, readable=True), required=True, help='Path to the Markdown file containing the report configuration content.')
+def create_config(name: str, description: str, account_identifier: Optional[str], config_file_path: str):
+    """Create a new Report Configuration from a Markdown file."""
     client = create_client()
     account_id = None
-    # Reuse account resolution logic 
+
+    # --- Account Resolution Logic (copied from list_configs for brevity) ---
+    # Resolve account ID (use the same robust logic as in list_configs)
     if account_identifier:
         try:
-            account_id = client._resolve_account_id(account_key=account_identifier)
+            account_obj = Account.get_by_key(key=account_identifier, client=client)
+            if account_obj:
+                account_id = account_obj.id
+            else: # Try ID
+                account_obj_by_id = Account.get_by_id(account_identifier, client)
+                if account_obj_by_id: account_id = account_obj_by_id.id
         except Exception as e:
-            try:
-                acc = Account.get_by_id(account_identifier, client)
-                account_id = acc.id
-            except Exception:
-                 console.print(f"[red]Error: Could not resolve account identifier '{account_identifier}': {e}[/red]")
-                 return
+             console.print(f"[red]Error resolving account identifier \'{account_identifier}\': {e}[/red]")
+             return
     else:
         try:
             account_id = client._resolve_account_id()
@@ -355,116 +357,98 @@ def create_config(name: str, description: str, account_identifier: Optional[str]
     if not account_id:
         console.print("[red]Error: Could not determine Account ID.[/red]")
         return
+    # --- End Account Resolution ---
+
+    console.print(f"[cyan]Creating Report Configuration \'{name}\' for Account ID: {account_id}...[/cyan]")
 
     try:
-        # Parse block parameters
-        block_parameters = parse_kv_pairs(block_params)
-        
-        # Construct a simple configuration JSON string
-        # TODO: Enhance this to support proper Markdown/Jinja templating later
-        config_content = {
-            "blocks": [
-                {
-                    "class": block_class,
-                    "parameters": block_parameters
-                    # We might add 'name' and 'position' here if needed by the config format
-                }
-            ]
-            # Add static content fields if necessary based on final config structure
-        }
-        config_json = json.dumps(config_content) # Store as JSON string
+        # Read the configuration content from the file
+        with open(config_file_path, 'r', encoding='utf-8') as f:
+            configuration_content = f.read()
 
-        console.print(f"Creating Report Configuration '{name}' for Account ID: {account_id}")
-        
-        # Call the model's create method
+        # Validate if the content is not empty (basic check)
+        if not configuration_content.strip():
+             console.print(f"[red]Error: Configuration file \'{config_file_path}\' is empty.[/red]")
+             return
+
+        # --- Example Block Parsing (Placeholder/Illustrative) ---
+        # You might want basic validation or parsing here depending on requirements
+        # For now, we store the raw Markdown content.
+        # If JSON storage is preferred, you'd parse/validate here.
+        # Example: try parsing blocks, though we don't use --block-class/-param anymore
+        # parsed_blocks = parse_markdown_blocks(configuration_content) # Fictional function
+        # if not parsed_blocks:
+        #    console.print("[yellow]Warning: No report blocks found in the configuration file.[/yellow]")
+        # --- End Example Parsing ---
+
+        # Create the ReportConfiguration instance using the API client or model method
+        # Assume ReportConfiguration.create() exists and takes these parameters
         new_config = ReportConfiguration.create(
             client=client,
-            accountId=account_id,
+            account_id=account_id,
             name=name,
             description=description,
-            configuration=config_json # Pass the JSON string
+            configuration=configuration_content # Use file content here
         )
 
-        console.print(f"[green]Successfully created Report Configuration:[/green]")
-        console.print(f"  ID: [cyan]{new_config.id}[/cyan]")
-        console.print(f"  Name: {new_config.name}")
-        console.print(f"  Account ID: {new_config.accountId}")
-        # Optionally print the config JSON back
-        # console.print(f"  Configuration: {new_config.configuration}") 
+        if new_config:
+            console.print(f"[bold green]Successfully created Report Configuration:[/bold]")
+            console.print(f"  ID: {new_config.id}")
+            console.print(f"  Name: {new_config.name}")
+            console.print(f"  Account ID: {new_config.accountId}")
+        else:
+            # Handle case where creation method returns None or raises an expected error
+            console.print(f"[red]Error: Failed to create report configuration \'{name}\'. API returned no object.[/red]")
 
-    except ValueError as e:
-         console.print(f"[bold red]Error parsing block parameters:[/bold red] {e}")
+    except FileNotFoundError:
+         console.print(f"[red]Error: Configuration file not found at path: {config_file_path}[/red]")
+    except IOError as e:
+         console.print(f"[red]Error reading configuration file \'{config_file_path}\': {e}[/red]")
     except Exception as e:
-        console.print(f"[bold red]Error creating report configuration '{name}': {e}[/bold red]")
-        logger.error(f"Failed to create report configuration: {e}\n{traceback.format_exc()}")
+        console.print(f"[bold red]Error creating report configuration: {e}[/bold red]")
+        logger.error(f"Failed to create report configuration \'{name}\': {e}\\n{traceback.format_exc()}")
 
-# Helper function for intelligent ID/Name lookup for ReportConfiguration
+# --- Helper function for ID/Name resolution (Copied from show_config) ---
 def _resolve_report_config(identifier: str, account_id: str, client: PlexusDashboardClient) -> Optional[ReportConfiguration]:
-    """Attempts to fetch a ReportConfiguration by ID or name, trying intelligently."""
-    is_uuid_like = False
+    """Attempts to resolve a ReportConfiguration by ID first, then by name within the account."""
+    config = None
+    is_uuid = False
     try:
         uuid.UUID(identifier)
-        is_uuid_like = True
+        is_uuid = True
     except ValueError:
-        pass # Not a valid UUID format
+        pass # Not a UUID
 
-    config = None
-    if is_uuid_like:
-        # Try ID first
+    if is_uuid:
+        console.print(f"[dim]Attempting to resolve Report Configuration by ID: {identifier}...[/dim]")
         try:
-            logger.debug(f"Attempting to fetch ReportConfiguration by ID: {identifier}")
-            config = ReportConfiguration.get_by_id(id=identifier, client=client)
+            config = ReportConfiguration.get_by_id(identifier, client)
             if config:
-                logger.debug(f"Found ReportConfiguration by ID: {identifier}")
-                # Verify account matches if possible (optional, depends on model method)
-                if hasattr(config, 'accountId') and config.accountId != account_id:
-                    logger.warning(f"Resolved config {identifier} belongs to different account ({config.accountId}) than context ({account_id}).")
-                    # Decide whether to return it or None based on requirements
-                    # For now, let's return it but log the warning
-                    # return None 
-                return config
-        except Exception as e:
-            logger.debug(f"Failed to fetch ReportConfiguration by ID '{identifier}': {e}")
-            pass # Ignore error, proceed to try by name
-        
-        # Try name second
+                 console.print(f"[dim]Resolved by ID.[/dim]")
+                 return config # Found by ID
+            else:
+                 console.print(f"[dim]ID \'{identifier}\' not found. Trying as name...[/dim]")
+        except Exception as id_e:
+            console.print(f"[yellow]Warning: Error during ID lookup for \'{identifier}\' ({id_e}). Trying as name...[/yellow]")
+            # Fall through to name lookup even if ID lookup fails unexpectedly
+
+    # Try resolving by name (either because it wasn't a UUID or ID lookup failed)
+    if not config: # Only try name if ID lookup didn't succeed
+        console.print(f"[dim]Attempting to resolve Report Configuration by name: \'{identifier}\' in account {account_id}...[/dim]")
         try:
-            logger.debug(f"Attempting to fetch ReportConfiguration by name (fallback): {identifier}")
             config = ReportConfiguration.get_by_name(name=identifier, account_id=account_id, client=client)
             if config:
-                logger.debug(f"Found ReportConfiguration by name (fallback): {identifier}")
-                return config
-        except Exception as e:
-            logger.debug(f"Failed to fetch ReportConfiguration by name '{identifier}' (fallback): {e}")
-            pass
-    else:
-        # Try name first
-        try:
-            logger.debug(f"Attempting to fetch ReportConfiguration by name: {identifier}")
-            config = ReportConfiguration.get_by_name(name=identifier, account_id=account_id, client=client)
-            if config:
-                logger.debug(f"Found ReportConfiguration by name: {identifier}")
-                return config
-        except Exception as e:
-            logger.debug(f"Failed to fetch ReportConfiguration by name '{identifier}': {e}")
-            pass # Ignore error, proceed to try by ID
+                console.print(f"[dim]Resolved by name.[/dim]")
+                return config # Found by name
+            else:
+                console.print(f"[dim]Name \'{identifier}\' not found in account {account_id}.[/dim]")
+                return None # Not found by name either
+        except Exception as name_e:
+            console.print(f"[red]Error during name lookup for \'{identifier}\': {name_e}[/red]")
+            return None # Error during name lookup
 
-        # Try ID second
-        try:
-            logger.debug(f"Attempting to fetch ReportConfiguration by ID (fallback): {identifier}")
-            config = ReportConfiguration.get_by_id(id=identifier, client=client)
-            if config:
-                 logger.debug(f"Found ReportConfiguration by ID (fallback): {identifier}")
-                 # Verify account matches if possible
-                 if hasattr(config, 'accountId') and config.accountId != account_id:
-                    logger.warning(f"Resolved config {identifier} belongs to different account ({config.accountId}) than context ({account_id}).")
-                    # return None
-                 return config
-        except Exception as e:
-             logger.debug(f"Failed to fetch ReportConfiguration by ID '{identifier}' (fallback): {e}")
-             pass
-             
-    return None # Not found by either method
+    # This part should technically not be reached if logic above is sound
+    return config # Return whatever was found, or None
 
 @config.command(name="show")
 @click.argument('id_or_name', type=str)
@@ -582,8 +566,107 @@ def show_config(id_or_name: str, account_identifier: Optional[str]):
         console.print(Panel("\n".join(str(p) for p in panel_content), title=f"Report Configuration: {config_instance.name}", border_style="blue"))
 
     except Exception as e:
-        console.print(f"[bold red]Error retrieving report configuration '{id_or_name}': {e}[/bold red]")
-        logger.error(f"Failed to get report configuration '{id_or_name}': {e}\\n{traceback.format_exc()}")
+        console.print(f"[bold red]Error showing report configuration: {e}[/bold red]")
+        logger.error(f"Failed to show report configuration \'{id_or_name}\': {e}\\n{traceback.format_exc()}")
+
+# --- New Delete Command ---
+@config.command(name="delete")
+@click.argument('id_or_name', type=str)
+@click.option('--account', 'account_identifier', default=None, help='Account key or ID context (needed for name lookup). Defaults to PLEXUS_ACCOUNT_KEY.')
+@click.option('--yes', is_flag=True, callback=lambda ctx, param, value: console.print("[yellow]Skipping confirmation prompt due to --yes flag.[/yellow]") if value else None, expose_value=True, help='Skip confirmation prompt.')
+def delete_config(id_or_name: str, account_identifier: Optional[str], yes: bool):
+    """Delete a Report Configuration by its ID or name."""
+    client = create_client()
+    account_id = None
+
+    # Resolve account ID (reuse logic from list_configs/create_config)
+    if account_identifier:
+        try:
+            account_obj = Account.get_by_key(key=account_identifier, client=client)
+            if account_obj: account_id = account_obj.id
+            else:
+                account_obj_by_id = Account.get_by_id(account_identifier, client)
+                if account_obj_by_id: account_id = account_obj_by_id.id
+        except Exception as e:
+            console.print(f"[red]Error resolving account identifier \'{account_identifier}\': {e}[/red]")
+            return
+    else:
+        try:
+            account_id = client._resolve_account_id()
+        except Exception as e:
+            console.print(f"[red]Error resolving default account: {e}. Is PLEXUS_ACCOUNT_KEY set?[/red]")
+            return
+
+    if not account_id:
+        console.print("[red]Error: Could not determine Account ID.[/red]")
+        return
+
+    console.print(f"[cyan]Attempting to delete Report Configuration \'{id_or_name}\' in Account ID: {account_id}...[/cyan]")
+
+    # Resolve the configuration using the helper function
+    config_to_delete = _resolve_report_config(id_or_name, account_id, client)
+
+    if not config_to_delete:
+        console.print(f"[red]Error: Report Configuration \'{id_or_name}\' not found.[/red]")
+        return
+
+    console.print(f"[yellow]Found Report Configuration:[/yellow]")
+    console.print(f"  ID: {config_to_delete.id}")
+    console.print(f"  Name: {config_to_delete.name}")
+
+    # Confirmation prompt
+    if not yes:
+        if not click.confirm(f"Are you sure you want to delete Report Configuration '{config_to_delete.name}' (ID: {config_to_delete.id})?"):
+            console.print("[cyan]Deletion aborted.[/cyan]")
+            return
+
+    # Proceed with deletion
+    try:
+        console.print(f"[dim]Sending delete request for ID: {config_to_delete.id}...[/dim]")
+
+        # --- Define the GraphQL Mutation --- 
+        mutation_string = """
+            mutation DeleteReportConfiguration($input: DeleteReportConfigurationInput!) {
+                deleteReportConfiguration(input: $input) {
+                    id # Request the ID back to confirm deletion
+                }
+            }
+        """
+
+        # --- Define the Input Variables ---
+        variables = {
+            "input": {
+                "id": config_to_delete.id
+            }
+        }
+
+        # --- Execute the Mutation --- 
+        # client.execute returns the result dict or raises TransportQueryError
+        result = client.execute(mutation_string, variables=variables)
+        
+        # --- Check Result --- 
+        # If execute didn't raise an error and we got here, deletion was likely successful.
+        # We can optionally check the result structure.
+        deleted_id = result.get('deleteReportConfiguration', {}).get('id')
+        if deleted_id == config_to_delete.id:
+             console.print(f"[bold green]Successfully deleted Report Configuration \'{config_to_delete.name}\' (ID: {config_to_delete.id}).[/bold green]")
+        else:
+             # This case might indicate a partial success or unexpected response format
+             console.print(f"[yellow]Warning: Delete mutation executed but confirmation ID mismatch or missing in response. Response: {result}[/yellow]")
+             # Consider treating this as success anyway if no error was raised
+             console.print(f"[bold green](Assuming success) Deleted Report Configuration \'{config_to_delete.name}\' (ID: {config_to_delete.id}).[/bold green]")
+
+    except TransportQueryError as e:
+        # Handle GraphQL specific errors more gracefully
+        error_message = "Unknown GraphQL error"
+        if hasattr(e, 'errors') and e.errors:
+             error_message = e.errors[0].get('message', str(e.errors[0]))
+        console.print(f"[bold red]Error deleting report configuration (GraphQL Error): {error_message}[/bold red]")
+        logger.error(f"Failed to delete report configuration ID \'{config_to_delete.id}\' via GraphQL: {e.errors if hasattr(e, 'errors') else e}")
+    except Exception as e:
+        # Catch other potential exceptions (network errors, etc.)
+        console.print(f"[bold red]Error deleting report configuration: {e}[/bold red]")
+        logger.error(f"Failed to delete report configuration ID \'{config_to_delete.id}\': {e}\\n{traceback.format_exc()}")
 
 @report.command(name="list")
 @click.option('--config', 'config_identifier', default=None, help='Filter reports by a specific configuration ID or name.')

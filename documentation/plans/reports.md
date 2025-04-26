@@ -183,18 +183,39 @@ The reporting system will be built around **four** core concepts:
     *   Ensure a Celery worker can be started (`python -m plexus.cli.CommandLineInterface command worker`).
     *   Ensure necessary environment variables are set (e.g., `PLEXUS_ACCOUNT_KEY` in `.env`) and **loaded by the application**.
     *   Ensure the database schema is up-to-date.
+    *   ⬜ **Create Test Config File:** Create a file named `test_config.md` with sample Markdown content, e.g.:
+        ```markdown
+        # Test Report Header
+
+        This is a sample configuration.
+
+        ```block name="Score Info Block"
+        class: ScoreInfo
+        scorecard: cmg_edu_v1_0
+        score: Greeting
+        ```
+        ```
 *   ⬜ **Test Steps:**
     1.  ✅ **`config list`:**
         *   Run `python -m plexus.cli.CommandLineInterface report config list`. Verify existing configs are listed correctly for the default account (resolved via `.env`).
     2.  ✅ **`config create`:**
-        *   ✅ Run `python -m plexus.cli.CommandLineInterface report config create --name "CLI Test Config" --block-class ScoreInfo --block-param scorecard=cmg_edu_v1_0 --block-param score=Greeting`. Verify successful creation message (`Successfully created Report Configuration...`) and that the config appears in `config list` output.
-        *   ✅ Attempt creation with missing required options (e.g., `--name`). Verify Click error. (`python -m plexus.cli.CommandLineInterface report config create --block-class ScoreInfo ...`)
-        *   ✅ Attempt creation with invalid block params. Verify error message. (`python -m plexus.cli.CommandLineInterface report config create --name "Invalid Param Test" --block-class ScoreInfo --block-param invalid-param`)
-    3.  ⬜ **`config show`:**
-        *   ✅ Run `python -m plexus.cli.CommandLineInterface report config show "CLI Test Config"`. Verify details are displayed correctly using ID/Name lookup, including the JSON/Markdown configuration content with syntax highlighting.
-        *   ⬜ Run `python -m plexus.cli.CommandLineInterface report config show cd2f671b-2c4c-451c-8c2f-4ea988c7efb1`. Verify ID lookup works.
-        *   ⬜ Run `python -m plexus.cli.CommandLineInterface report config show "NonExistent Config"`. Verify "not found" message.
-    4.  ⬜ **`report run` (Core Test):**
+        *   ✅ Run `python -m plexus.cli.CommandLineInterface report config create --name "CLI Test Config" --file test_config.md`. Verify successful creation message (`Successfully created Report Configuration...`) and that the config appears in `config list` output.
+        *   ⬜ Attempt creation with missing required options (e.g., `--name` or `--file`). Verify Click error. (`python -m plexus.cli.CommandLineInterface report config create --name "Missing File"`)
+        *   ⬜ Attempt creation with a non-existent file path. Verify error message. (`python -m plexus.cli.CommandLineInterface report config create --name "Bad File Path" --file non_existent_file.md`)
+        *   ✅ **Delete by Name (with prompt):** Run `python -m plexus.cli.CommandLineInterface report config delete "CLI Test Config"`. Verify: 
+            *   It finds the correct config (shows ID/Name).
+            *   It prompts for confirmation (`Are you sure...?`). 
+            *   Respond 'y'. Verify success message. 
+            *   Run `config list` again and verify "CLI Test Config" is gone.
+        *   ⬜ **Recreate for next test:** Run `python -m plexus.cli.CommandLineInterface report config create --name "CLI Test Config Temp" --file test_config.md`. Get the new ID.
+        *   ⬜ **Delete by ID (skip prompt):** Run `python -m plexus.cli.CommandLineInterface report config delete <new_ID_from_recreate> --yes`. Verify:
+            *   It finds the correct config.
+            *   It prints the "Skipping confirmation" message.
+            *   It prints the success message.
+            *   Run `config list` again and verify the config with `<new_ID_from_recreate>` is gone.
+        *   ⬜ **Delete Non-Existent:** Run `python -m plexus.cli.CommandLineInterface report config delete "NonExistent Config"`. Verify "not found" message.
+        *   ⬜ **Recreate final test config:** Run `python -m plexus.cli.CommandLineInterface report config create --name "CLI Test Config" --file test_config.md`.
+    5.  ⬜ **`report run` (Core Test):**
         *   Run `python -m plexus.cli.CommandLineInterface report run --config "CLI Test Config"`. Verify:
             *   Task creation message with Task ID is shown.
             *   Task dispatch message is shown.
@@ -209,11 +230,11 @@ The reporting system will be built around **four** core concepts:
             *   Successful completion or specific error logging.
         *   **Check Task Status:** Use `python -m plexus.cli.CommandLineInterface task get --id <task_id_from_run>` to check final status (`COMPLETED` or `FAILED`), completion time, error messages (if any).
         *   **Check Database:** (Optional) Manually inspect `Report` and `ReportBlock` tables to confirm data persistence.
-    5.  ⬜ **`report list`:**
+    6.  ⬜ **`report list`:**
         *   Run `python -m plexus.cli.CommandLineInterface report list`. Verify the newly generated report appears with correct Config ID, Task ID, and fetched Task Status.
         *   Run `python -m plexus.cli.CommandLineInterface report list --config "CLI Test Config"`. Verify filtering works (using ID/Name lookup for the config).
         *   Run `python -m plexus.cli.CommandLineInterface report list --config "NonExistent Config"`. Verify appropriate "not found" or empty message.
-    6.  ⬜ **`report show`:**
+    7.  ⬜ **`report show`:**
         *   Identify the ID or Name of the report generated in step 4.
         *   Run `python -m plexus.cli.CommandLineInterface report show <report_id_or_name>`. Verify:
             *   Correct Report details are shown.
@@ -222,13 +243,13 @@ The reporting system will be built around **four** core concepts:
             *   Associated Report Blocks summary table is shown.
             *   ID/Name lookup works for the report itself.
         *   Run `python -m plexus.cli.CommandLineInterface report show <non_existent_report_id>`. Verify "not found" message.
-    7.  ⬜ **`report last`:**
+    8.  ⬜ **`report last`:**
         *   Run `python -m plexus.cli.CommandLineInterface report last`. Verify it finds the most recently generated report (from step 4) and displays the same details as `report show` for that report.
-    8.  ⬜ **`block list`:**
+    9.  ⬜ **`block list`:**
         *   Get the `report_id` from step 4.
         *   Run `python -m plexus.cli.CommandLineInterface report block list <report_id>`. Verify the blocks created by the `ScoreInfo` class appear with correct position, name (if any), output summary, and log status.
         *   Run `python -m plexus.cli.CommandLineInterface report block list <invalid_report_id>`. Verify "not found" or empty message.
-    9.  ⬜ **`block show`:**
+    10. ⬜ **`block show`:**
         *   Get the `report_id` and a `block_identifier` (position '0' or name if defined by the block) from the previous step.
         *   Run `python -m plexus.cli.CommandLineInterface report block show <report_id> <block_identifier>`. Verify:
             *   Correct block details (Position, Name, Timestamps) are shown.
