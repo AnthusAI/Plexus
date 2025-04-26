@@ -532,7 +532,7 @@ def show_config(id_or_name: str, account_identifier: Optional[str]):
                 details_content,
                 title="[bold]Report Configuration Details[/bold]",
                 border_style="blue",
-                expand=False
+                expand=True
             )
         )
 
