@@ -28,6 +28,7 @@ from plexus.cli.utils import parse_kv_pairs # Assume this exists
 
 # Import Account model for resolving ID
 from plexus.dashboard.api.models.account import Account
+from plexus.dashboard.api.models.report_block import ReportBlock # Added for fetching blocks
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +47,15 @@ def config():
 
 # Add the 'config' subgroup to the 'report' group
 report.add_command(config)
+
+# Define the 'block' subgroup
+@click.group()
+def block():
+    """Manage report blocks within a specific report."""
+    pass
+
+# Add the 'block' subgroup to the 'report' group
+report.add_command(block)
 
 @config.command(name="list") # Changed from @report.command to @config.command
 @click.option('--account', 'account_identifier', help='Optional account key or ID to filter by.', default=None)
@@ -631,6 +641,370 @@ def list_reports(config_identifier: Optional[str], account_identifier: Optional[
     except Exception as e:
         console.print(f"[bold red]Error listing reports: {e}[/bold red]")
         logger.error(f"Failed to list reports: {e}\\n{traceback.format_exc()}")
+
+@report.command(name="show")
+@click.argument('id_or_name', type=str)
+@click.option('--account', 'account_identifier', help='Optional account key or ID for context (needed for name lookup).', default=None)
+def show_report(id_or_name: str, account_identifier: Optional[str]):
+    """Show details for a specific Report, including its associated Task and Blocks."""
+    client = create_client()
+
+    # --- Account Resolution (Standard) ---
+    account_id = None
+    if account_identifier:
+        try:
+            account_id = client._resolve_account_id(account_key=account_identifier)
+        except Exception as e:
+            try:
+                acc = Account.get_by_id(account_identifier, client)
+                account_id = acc.id
+            except Exception:
+                 console.print(f"[red]Error: Could not resolve account identifier '{account_identifier}': {e}[/red]")
+                 return
+    else:
+        try:
+            account_id = client._resolve_account_id()
+        except Exception as e:
+            console.print(f"[red]Error resolving default account: {e}. Is PLEXUS_ACCOUNT_KEY set?[/red]")
+            return
+    if not account_id:
+        console.print("[red]Error: Could not determine Account ID.[/red]")
+        return
+
+    # --- Report Resolution --- #
+    report_instance = _resolve_report(id_or_name, account_id, client)
+
+    if not report_instance:
+        console.print(f"[red]Report '{id_or_name}' not found for account {account_id}.[/red]")
+        return
+
+    console.print(f"[cyan]Showing details for Report ID: {report_instance.id} (Name: '{report_instance.name}')[/cyan]")
+
+    # --- Fetch Associated Task --- #
+    task_instance = None
+    task_status = "N/A"
+    started_at_str = "N/A"
+    completed_at_str = "N/A"
+    error_message_str = "N/A"
+    error_details_str = "N/A"
+    task_metadata_str = "N/A"
+
+    if hasattr(report_instance, 'taskId') and report_instance.taskId:
+        try:
+            task_instance = Task.get_by_id(report_instance.taskId, client)
+            if task_instance:
+                task_status = task_instance.status or "UNKNOWN"
+                started_at_str = task_instance.startedAt.strftime("%Y-%m-%d %H:%M:%S UTC") if task_instance.startedAt else 'N/A'
+                completed_at_str = task_instance.completedAt.strftime("%Y-%m-%d %H:%M:%S UTC") if task_instance.completedAt else 'N/A'
+                error_message_str = task_instance.errorMessage or 'None'
+                error_details_str = task_instance.errorDetails or 'None'
+                # Safely parse and format task metadata
+                try:
+                    metadata_dict = json.loads(task_instance.metadata) if task_instance.metadata else {}
+                    task_metadata_str = pretty_repr(metadata_dict)
+                except json.JSONDecodeError:
+                    task_metadata_str = task_instance.metadata # Show raw if not JSON
+                except Exception as e:
+                    task_metadata_str = f"Error parsing metadata: {e}"
+
+            else:
+                task_status = "TASK_NOT_FOUND"
+        except Exception as e:
+            task_status = f"FETCH_ERROR: {e}"
+            console.print(f"[yellow]Warning: Could not fetch associated Task {report_instance.taskId}: {e}[/yellow]")
+    else:
+        task_status = "NO_TASK_ID"
+
+    # --- Fetch Associated Blocks --- #
+    blocks = []
+    try:
+        block_data = ReportBlock.list_by_report_id(report_instance.id, client)
+        blocks = block_data.get('items', [])
+        # Sort blocks by position
+        blocks.sort(key=lambda b: getattr(b, 'position', float('inf'))) # Sort by position, put items without position last
+    except Exception as e:
+        console.print(f"[yellow]Warning: Could not fetch report blocks: {e}[/yellow]")
+
+    # --- Display Report Details --- #
+    created_at_str = report_instance.createdAt.strftime("%Y-%m-%d %H:%M:%S UTC") if hasattr(report_instance, 'createdAt') and report_instance.createdAt else 'N/A'
+    updated_at_str = report_instance.updatedAt.strftime("%Y-%m-%d %H:%M:%S UTC") if hasattr(report_instance, 'updatedAt') and report_instance.updatedAt else 'N/A'
+    config_id_str = report_instance.reportConfigurationId if hasattr(report_instance, 'reportConfigurationId') else 'N/A'
+    params_str = pretty_repr(report_instance.parameters) if hasattr(report_instance, 'parameters') else 'N/A'
+    # Render output potentially as Markdown
+    # output_content = Syntax(report_instance.output, "markdown", theme="default", line_numbers=True) if hasattr(report_instance, 'output') and report_instance.output else "(No output content)"
+    # For now, just show the raw output string, Markdown rendering can be complex in terminal
+    output_str = report_instance.output if hasattr(report_instance, 'output') else 'N/A'
+
+    report_content = (
+        f"[bold]Report ID:[/bold] {report_instance.id}\n"
+        f"[bold]Name:[/bold] {report_instance.name}\n"
+        f"[bold]Account ID:[/bold] {report_instance.accountId}\n"
+        f"[bold]Configuration ID:[/bold] {config_id_str}\n"
+        f"[bold]Parameters:[/bold]\n{params_str}\n"
+        f"[bold]Created At:[/bold] {created_at_str}\n"
+        f"[bold]Updated At:[/bold] {updated_at_str}\n\n"
+        f"[bold magenta]--- Associated Task ---[/bold magenta]\n"
+        f"[bold]Task ID:[/bold] {report_instance.taskId or 'N/A'}\n"
+        f"[bold]Task Status:[/bold] {task_status}\n"
+        f"[bold]Task Started At:[/bold] {started_at_str}\n"
+        f"[bold]Task Completed At:[/bold] {completed_at_str}\n"
+        f"[bold]Task Error Message:[/bold] {error_message_str}\n"
+        f"[bold]Task Error Details:[/bold] {error_details_str}\n"
+        f"[bold]Task Metadata:[/bold]\n{task_metadata_str}\n\n"
+        f"[bold magenta]--- Report Output (Markdown) ---[/bold magenta]\n"
+        f"{output_str}\n\n"
+        f"[bold magenta]--- Report Blocks ({len(blocks)} found) ---[/bold magenta]\n"
+        f"(Use 'plexus report block list {report_instance.id}' or 'plexus report block show ...' for details)"
+    )
+
+    console.print(Panel(report_content, title=f"Report Details: {report_instance.name}", border_style="blue", expand=False))
+
+    # Optionally list block summaries here if desired
+    if blocks:
+        block_table = Table(title="Associated Report Blocks Summary")
+        block_table.add_column("Position", style="dim")
+        block_table.add_column("Name", style="cyan")
+        block_table.add_column("Output Keys", style="green") # Show keys of the JSON output
+        block_table.add_column("Log Exists?", style="yellow")
+
+        for block in blocks:
+            pos_str = str(block.position) if hasattr(block, 'position') else "N/A"
+            name_str = block.name if hasattr(block, 'name') else "(No Name)"
+            log_exists_str = "Yes" if hasattr(block, 'log') and block.log else "No"
+            output_keys_str = "N/A"
+            if hasattr(block, 'output') and block.output:
+                try:
+                    output_dict = json.loads(block.output) if isinstance(block.output, str) else block.output
+                    if isinstance(output_dict, dict):
+                         output_keys_str = ", ".join(output_dict.keys())
+                    else:
+                         output_keys_str = f"({type(output_dict).__name__})"
+                except Exception:
+                     output_keys_str = "(Error parsing)"
+            
+            block_table.add_row(pos_str, name_str, output_keys_str, log_exists_str)
+        
+        console.print(block_table)
+
+# --- Helper: Resolve ID or Name for Report ---
+def _resolve_report(identifier: str, account_id: str, client: PlexusDashboardClient) -> Optional[Report]:
+    """
+    Resolves a report identifier (ID or name) to a Report object.
+    Tries ID first, then name lookup within the account.
+    """
+    # Check if identifier looks like a UUID (potential ID)
+    is_potential_uuid = False
+    try:
+        uuid.UUID(identifier)
+        is_potential_uuid = True
+    except ValueError:
+        pass # Not a valid UUID format
+
+    found_report = None
+    # Strategy: Try ID first if it looks like one, otherwise try name first
+    if is_potential_uuid:
+        # Try getting by ID first
+        try:
+            console.print(f"Attempting to fetch Report by ID: {identifier}", style="dim")
+            found_report = Report.get_by_id(identifier, client)
+            if found_report:
+                # Verify account match if possible (assuming report has accountId)
+                if hasattr(found_report, 'accountId') and found_report.accountId == account_id:
+                    console.print(f"Found Report by ID.", style="dim green")
+                    return found_report
+                else:
+                     console.print(f"Found Report by ID, but account mismatch ({found_report.accountId} != {account_id}). Continuing search...", style="dim yellow")
+                     found_report = None # Reset if account doesn't match
+        except Exception as e:
+            console.print(f"Failed to fetch Report by ID: {e}", style="dim red")
+            pass # Ignore error and proceed to name lookup
+
+        # If ID lookup failed or account mismatch, try by name
+        if not found_report:
+            try:
+                console.print(f"Attempting to fetch Report by Name: {identifier} (Account: {account_id})", style="dim")
+                found_report = Report.get_by_name(name=identifier, account_id=account_id, client=client)
+                if found_report:
+                    console.print(f"Found Report by Name.", style="dim green")
+                    return found_report
+            except Exception as e:
+                console.print(f"Failed to fetch Report by Name: {e}", style="dim red")
+                pass
+    else:
+        # Try getting by name first
+        try:
+            console.print(f"Attempting to fetch Report by Name: {identifier} (Account: {account_id})", style="dim")
+            found_report = Report.get_by_name(name=identifier, account_id=account_id, client=client)
+            if found_report:
+                 console.print(f"Found Report by Name.", style="dim green")
+                 return found_report
+        except Exception as e:
+            console.print(f"Failed to fetch Report by Name: {e}", style="dim red")
+            pass # Ignore error and proceed to ID lookup
+
+        # If name lookup failed, try by ID (in case it wasn't UUID format but still an ID)
+        if not found_report:
+            try:
+                console.print(f"Attempting to fetch Report by ID: {identifier}", style="dim")
+                found_report = Report.get_by_id(identifier, client)
+                if found_report:
+                     # Verify account match if possible
+                    if hasattr(found_report, 'accountId') and found_report.accountId == account_id:
+                        console.print(f"Found Report by ID.", style="dim green")
+                        return found_report
+                    else:
+                        console.print(f"Found Report by ID, but account mismatch ({found_report.accountId} != {account_id}). Continuing search...", style="dim yellow")
+                        found_report = None # Reset if account doesn't match
+            except Exception as e:
+                console.print(f"Failed to fetch Report by ID: {e}", style="dim red")
+                pass
+
+    # If neither worked
+    console.print(f"Could not resolve Report identifier '{identifier}' (Account: {account_id}).", style="yellow")
+    return None
+
+@report.command(name="last")
+@click.option('--account', 'account_identifier', help='Optional account key or ID to specify the account context.', default=None)
+@click.pass_context # Pass the context to call other commands
+def show_last_report(ctx, account_identifier: Optional[str]):
+    """Show details for the most recently created Report for the account."""
+    client = create_client()
+
+    # --- Account Resolution (Standard) ---
+    account_id = None
+    if account_identifier:
+        try:
+            account_id = client._resolve_account_id(account_key=account_identifier)
+        except Exception as e:
+            try:
+                acc = Account.get_by_id(account_identifier, client)
+                account_id = acc.id
+            except Exception:
+                 console.print(f"[red]Error: Could not resolve account identifier '{account_identifier}': {e}[/red]")
+                 return
+    else:
+        try:
+            account_id = client._resolve_account_id()
+        except Exception as e:
+            console.print(f"[red]Error resolving default account: {e}. Is PLEXUS_ACCOUNT_KEY set?[/red]")
+            return
+    if not account_id:
+        console.print("[red]Error: Could not determine Account ID.[/red]")
+        return
+
+    console.print(f"[cyan]Fetching the most recent Report for Account ID: {account_id}[/cyan]")
+
+    try:
+        # List reports, sorted by createdAt descending, limit 1
+        # Assuming list_by_account_id supports sorting or returns sorted by default.
+        # If not, we might need a dedicated method or client-side sorting.
+        report_result_data = Report.list_by_account_id(
+            account_id=account_id,
+            client=client,
+            limit=1,
+            sort_direction='DESC' # Assuming sort direction parameter exists
+            # scan_index_forward=False # Alternative if using DynamoDB directly
+        )
+        reports = report_result_data.get('items', [])
+
+        if not reports:
+            console.print(f"[yellow]No reports found for account {account_id}.[/yellow]")
+            return
+
+        last_report = reports[0]
+        console.print(f"[green]Found last report:[/green] ID: {last_report.id}, Name: '{last_report.name}'")
+        
+        # Invoke the 'show' command logic with the found ID
+        # Pass necessary options (like account_id for context, although show might re-resolve)
+        ctx.invoke(show_report, id_or_name=last_report.id, account_identifier=account_id)
+
+    except Exception as e:
+        console.print(f"[bold red]Error fetching last report: {e}[/bold red]")
+        logger.error(f"Failed to fetch last report for account {account_id}: {e}\n{traceback.format_exc()}")
+
+@block.command(name="list")
+@click.argument('report_id', type=str)
+@click.option('--limit', type=int, default=100, help='Maximum number of blocks to list.')
+def list_blocks(report_id: str, limit: int):
+    """List Report Blocks associated with a specific Report ID."""
+    client = create_client()
+
+    # Validate Report ID format (basic check)
+    try:
+        uuid.UUID(report_id)
+    except ValueError:
+        console.print(f"[red]Error: Invalid Report ID format. Please provide a valid UUID.[/red]")
+        return
+
+    console.print(f"[cyan]Listing Report Blocks for Report ID: {report_id}[/cyan]")
+
+    try:
+        # Fetch the parent report first to ensure it exists (optional, but good practice)
+        try:
+            parent_report = Report.get_by_id(report_id, client)
+            if not parent_report:
+                 console.print(f"[yellow]Warning: Report with ID {report_id} not found.[/yellow]")
+                 # Continue anyway, list_by_report_id might still work or return empty
+        except Exception as report_e:
+             console.print(f"[yellow]Warning: Could not verify parent Report {report_id}: {report_e}[/yellow]")
+
+        # Fetch blocks associated with the report ID
+        block_data = ReportBlock.list_by_report_id(report_id, client, limit=limit)
+        blocks = block_data.get('items', [])
+        
+        if not blocks:
+            console.print(f"[yellow]No report blocks found for Report ID {report_id}.[/yellow]")
+            return
+
+        # Sort blocks by position
+        blocks.sort(key=lambda b: getattr(b, 'position', float('inf')))
+
+        # Display results in a table
+        table = Table(title=f"Report Blocks (Report ID: {report_id})")
+        table.add_column("Position", style="dim")
+        table.add_column("Name", style="cyan")
+        table.add_column("Output Keys/Type", style="green") # Show keys or type of the JSON output
+        table.add_column("Log Exists?", style="yellow")
+        table.add_column("Created At", style="blue")
+
+        for block_instance in blocks:
+            pos_str = str(block_instance.position) if hasattr(block_instance, 'position') else "N/A"
+            name_str = block_instance.name if hasattr(block_instance, 'name') and block_instance.name else "(No Name)"
+            log_exists_str = "Yes" if hasattr(block_instance, 'log') and block_instance.log else "No"
+            created_at_str = block_instance.createdAt.strftime("%Y-%m-%d %H:%M:%S") if hasattr(block_instance, 'createdAt') and block_instance.createdAt else 'N/A'
+            output_summary = "N/A"
+            if hasattr(block_instance, 'output') and block_instance.output:
+                try:
+                    # Handle potential double-encoded JSON
+                    output_val = block_instance.output
+                    if isinstance(output_val, str):
+                        try:
+                            output_dict = json.loads(output_val)
+                        except json.JSONDecodeError:
+                            output_dict = output_val # Keep as string if not valid JSON
+                    else:
+                         output_dict = output_val # Assume already decoded
+
+                    if isinstance(output_dict, dict):
+                        output_summary = ", ".join(output_dict.keys())
+                        if not output_summary: output_summary = "(Empty Dict)"
+                    elif isinstance(output_dict, list):
+                         output_summary = f"(List, len={len(output_dict)})"
+                    elif isinstance(output_dict, str):
+                         output_summary = f"(String, len={len(output_dict)})"
+                    else:
+                        output_summary = f"({type(output_dict).__name__})"
+                except Exception as parse_e:
+                    logger.warning(f"Error parsing block output summary: {parse_e}")
+                    output_summary = "(Error parsing)"
+            
+            table.add_row(pos_str, name_str, output_summary, log_exists_str, created_at_str)
+        
+        console.print(table)
+
+    except Exception as e:
+        console.print(f"[bold red]Error listing report blocks for report {report_id}: {e}[/bold red]")
+        logger.error(f"Failed to list report blocks for {report_id}: {e}\n{traceback.format_exc()}")
 
 # --- TODO: Add other commands from Phase 3 Plan ---
 # - plexus report config show <id_or_name>
