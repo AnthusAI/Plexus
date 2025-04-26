@@ -20,7 +20,9 @@ from plexus.tasks.reports import generate_report_task
 from rich.table import Table # Import Table for display
 from rich.panel import Panel
 from rich.pretty import pretty_repr
+from rich.syntax import Syntax # Added for JSON highlighting
 from dataclasses import asdict
+import uuid # Added for UUID validation
 
 from plexus.cli.utils import parse_kv_pairs # Assume this exists
 
@@ -36,10 +38,19 @@ def report():
     # print("--- Report command group loaded ---", file=sys.stderr) # Removed diagnostic print
     pass
 
-@report.command(name="list") # Add the list command
+# Define the 'config' subgroup
+@click.group()
+def config():
+    """Manage report configurations."""
+    pass
+
+# Add the 'config' subgroup to the 'report' group
+report.add_command(config)
+
+@config.command(name="list") # Changed from @report.command to @config.command
 @click.option('--account', 'account_identifier', help='Optional account key or ID to filter by.', default=None)
 @click.option('--limit', type=int, default=50, help='Maximum number of configurations to list.')
-def list_configurations(account_identifier: Optional[str], limit: int):
+def list_configs(account_identifier: Optional[str], limit: int): # Renamed function
     """List available Report Configurations for an account."""
     client = create_client()
     
@@ -156,28 +167,38 @@ def get(name: str, account_identifier: Optional[str]):
         # Format dates nicely
         created_at_str = report_instance.createdAt.strftime("%Y-%m-%d %H:%M:%S UTC") if report_instance.createdAt else 'N/A'
         updated_at_str = report_instance.updatedAt.strftime("%Y-%m-%d %H:%M:%S UTC") if report_instance.updatedAt else 'N/A'
-        started_at_str = report_instance.startedAt.strftime("%Y-%m-%d %H:%M:%S UTC") if report_instance.startedAt else 'N/A'
-        completed_at_str = report_instance.completedAt.strftime("%Y-%m-%d %H:%M:%S UTC") if report_instance.completedAt else 'N/A'
-
-        # Pretty print dicts/JSON fields
-        params_str = pretty_repr(report_instance.parameters)
-        # data_str = pretty_repr(report_instance.reportData) # OLD
+        
+        # --- Fields removed from Report model, fetch from Task ---
+        # started_at_str = report_instance.startedAt.strftime("%Y-%m-%d %H:%M:%S UTC") if report_instance.startedAt else 'N/A'
+        # completed_at_str = report_instance.completedAt.strftime("%Y-%m-%d %H:%M:%S UTC") if report_instance.completedAt else 'N/A'
+        # params_str = pretty_repr(report_instance.parameters) 
+        # error_message_str = report_instance.errorMessage or 'None'
+        # error_details_str = report_instance.errorDetails or 'None'
+        # status_str = report_instance.status
+        
+        # TODO: Fetch associated Task using report_instance.taskId to get status, start/end times, errors
+        task_status = "N/A (Task fetch TBD)"
+        started_at_str = "N/A (Task fetch TBD)"
+        completed_at_str = "N/A (Task fetch TBD)"
+        error_message_str = "N/A (Task fetch TBD)"
+        error_details_str = "N/A (Task fetch TBD)"
+        params_str = pretty_repr(report_instance.parameters) # Parameters might still be on Report or Task metadata
 
         content = (
             f"[bold]ID:[/bold] {report_instance.id}\n"
             f"[bold]Name:[/bold] {report_instance.name}\n"
             f"[bold]Account ID:[/bold] {report_instance.accountId}\n"
             f"[bold]Configuration ID:[/bold] {report_instance.reportConfigurationId}\n"
-            f"[bold]Status:[/bold] {report_instance.status}\n"
+            f"[bold]Task ID:[/bold] {report_instance.taskId}\n" # Added Task ID
+            f"[bold]Status (from Task):[/bold] {task_status}\n" # Changed label
             f"[bold]Created At:[/bold] {created_at_str}\n"
             f"[bold]Updated At:[/bold] {updated_at_str}\n"
-            f"[bold]Started At:[/bold] {started_at_str}\n"
-            f"[bold]Completed At:[/bold] {completed_at_str}\n"
+            f"[bold]Started At (from Task):[/bold] {started_at_str}\n" # Changed label
+            f"[bold]Completed At (from Task):[/bold] {completed_at_str}\n" # Changed label
             f"[bold]Parameters:[/bold]\n{params_str}\n"
-            f"[bold]Output:[/bold] (See full data with --show-data option - TBD)\n" # Changed from Report Data to Output
-            # f"[bold]Output:[/bold]\n{report_instance.output}\n" # Option to show full data
-            f"[bold]Error Message:[/bold] {report_instance.errorMessage or 'None'}\n"
-            f"[bold]Error Details:[/bold] {report_instance.errorDetails or 'None'}"
+            f"[bold]Output:[/bold] (See 'plexus report block list {report_instance.id}' or 'plexus report block show ...')\n" # Update help text
+            f"[bold]Error Message (from Task):[/bold] {error_message_str}\n" # Changed label
+            f"[bold]Error Details (from Task):[/bold] {error_details_str}" # Changed label
         )
 
         console.print(Panel(content, title=f"Report Details: {report_instance.name}", border_style="blue"))
@@ -207,8 +228,11 @@ def run(config_identifier: str, params: Tuple[str]):
         # For now, just store identifier and params in metadata
         # Assuming account context is handled by the client/API key
         # TODO: Potentially resolve config_identifier to get accountId and store in metadata
+        # TODO: Implement ID/Name lookup for config_identifier here!
+        resolved_config_id = config_identifier # Placeholder - needs actual resolution
+        
         task_metadata = {
-            "report_configuration_id": config_identifier, # Store the identifier used
+            "report_configuration_id": resolved_config_id, # Store the resolved ID
             "report_parameters": parameters,
             "trigger": "cli" # Indicate how the task was triggered
         }
@@ -216,11 +240,11 @@ def run(config_identifier: str, params: Tuple[str]):
 
         # --- Step 2: Create Task Record ---
         console.print(f"Creating Task record...")
-        task_description = f"Generate report from config '{config_identifier}'"
+        task_description = f"Generate report from config '{config_identifier}'" # Use original identifier in description
         new_task = Task.create(
             client=client,
             type="report_generation", # Task type identifier
-            target=config_identifier, # Use config identifier as target
+            target=resolved_config_id, # Use resolved config ID as target
             command="plexus report run", # Record the command used
             description=task_description,
             metadata=metadata_json,
@@ -249,69 +273,240 @@ def run(config_identifier: str, params: Tuple[str]):
         # Potentially exit with non-zero status
         # sys.exit(1)
 
-@report.command(name="create-config")
+@config.command(name="create") # Changed from @report.command(name="create-config") to @config.command(name="create")
 @click.option('--name', required=True, help='Name for the new Report Configuration.')
 @click.option('--description', default="", help='Optional description.')
 @click.option('--account', 'account_identifier', default=None, help='Account key or ID to associate with. Defaults to PLEXUS_ACCOUNT_KEY.')
-@click.option('--scorecard', 'scorecard_identifier', required=True, help='Scorecard identifier (name, key, or ID) for the ScoreInfo block.')
-@click.option('--score', 'score_identifier', required=True, help='Score name for the ScoreInfo block.')
-def create_configuration(name: str, description: str, account_identifier: Optional[str], scorecard_identifier: str, score_identifier: str):
-    """Create a simple test Report Configuration using the ScoreInfo block."""
+# --- Simplified config creation for now ---
+# Example: Assume configuration is just a simple dict for testing
+# Replace these options with actual config building logic later
+@click.option('--block-class', required=True, help='Python class for the report block (e.g., ScoreInfo).')
+@click.option('--block-param', 'block_params', multiple=True, help='Key=value parameters for the block.')
+# @click.option('--scorecard', 'scorecard_identifier', required=True, help='Scorecard identifier (name, key, or ID) for the ScoreInfo block.')
+# @click.option('--score', 'score_identifier', required=True, help='Score name for the ScoreInfo block.')
+def create_config(name: str, description: str, account_identifier: Optional[str], block_class: str, block_params: Tuple[str]): # Renamed function, updated signature
+    """Create a new Report Configuration."""
     client = create_client()
     account_id = None
-
-    # Resolve account ID (reusing logic from 'list')
-    try:
-        if account_identifier:
+    # Reuse account resolution logic 
+    if account_identifier:
+        try:
+            account_id = client._resolve_account_id(account_key=account_identifier)
+        except Exception as e:
             try:
-                account_id = client._resolve_account_id(account_key=account_identifier)
-            except Exception:
                 acc = Account.get_by_id(account_identifier, client)
-                account_id = acc.id if acc else None
-        else:
-            account_id = client._resolve_account_id() # Resolve from context
+                account_id = acc.id
+            except Exception:
+                 console.print(f"[red]Error: Could not resolve account identifier '{account_identifier}': {e}[/red]")
+                 return
+    else:
+        try:
+            account_id = client._resolve_account_id()
+        except Exception as e:
+            console.print(f"[red]Error resolving default account: {e}. Is PLEXUS_ACCOUNT_KEY set?[/red]")
+            return
 
-        if not account_id:
-             raise ValueError("Could not determine Account ID. Ensure PLEXUS_ACCOUNT_KEY is set or provide --account.")
-
-    except Exception as e:
-        console.print(f"[red]Error resolving account: {e}[/red]")
+    if not account_id:
+        console.print("[red]Error: Could not determine Account ID.[/red]")
         return
 
-    console.print(f"Creating Report Configuration '{name}' for Account ID: {account_id}")
-
-    # Define the configuration content using the ScoreInfo block
-    config_content = f"""
-This is a sample report configuration.
-
-```block name="Score Information"
-pythonClass: ScoreInfo
-config:
-  scorecard: {scorecard_identifier}
-  score: {score_identifier}
-```
-
-This concludes the sample report.
-"""
-
     try:
-        # Create the ReportConfiguration record
+        # Parse block parameters
+        block_parameters = parse_kv_pairs(block_params)
+        
+        # Construct a simple configuration JSON string
+        # TODO: Enhance this to support proper Markdown/Jinja templating later
+        config_content = {
+            "blocks": [
+                {
+                    "class": block_class,
+                    "parameters": block_parameters
+                    # We might add 'name' and 'position' here if needed by the config format
+                }
+            ]
+            # Add static content fields if necessary based on final config structure
+        }
+        config_json = json.dumps(config_content) # Store as JSON string
+
+        console.print(f"Creating Report Configuration '{name}' for Account ID: {account_id}")
+        
+        # Call the model's create method
         new_config = ReportConfiguration.create(
             client=client,
+            accountId=account_id,
             name=name,
             description=description,
-            accountId=account_id,
-            configuration=config_content # Store the Markdown content
+            configuration=config_json # Pass the JSON string
         )
+
         console.print(f"[green]Successfully created Report Configuration:[/green]")
         console.print(f"  ID: [cyan]{new_config.id}[/cyan]")
         console.print(f"  Name: {new_config.name}")
         console.print(f"  Account ID: {new_config.accountId}")
-        console.print("Configuration Content:")
-        console.print(Panel(config_content, border_style="dim"))
+        # Optionally print the config JSON back
+        # console.print(f"  Configuration: {new_config.configuration}") 
+
+    except ValueError as e:
+         console.print(f"[bold red]Error parsing block parameters:[/bold red] {e}")
+    except Exception as e:
+        console.print(f"[bold red]Error creating report configuration '{name}': {e}[/bold red]")
+        logger.error(f"Failed to create report configuration: {e}\n{traceback.format_exc()}")
+
+# Helper function for intelligent ID/Name lookup for ReportConfiguration
+def _resolve_report_config(identifier: str, account_id: str, client: PlexusDashboardClient) -> Optional[ReportConfiguration]:
+    """Attempts to fetch a ReportConfiguration by ID or name, trying intelligently."""
+    is_uuid_like = False
+    try:
+        uuid.UUID(identifier)
+        is_uuid_like = True
+    except ValueError:
+        pass # Not a valid UUID format
+
+    config = None
+    if is_uuid_like:
+        # Try ID first
+        try:
+            logger.debug(f"Attempting to fetch ReportConfiguration by ID: {identifier}")
+            config = ReportConfiguration.get_by_id(id=identifier, client=client)
+            if config:
+                logger.debug(f"Found ReportConfiguration by ID: {identifier}")
+                # Verify account matches if possible (optional, depends on model method)
+                if hasattr(config, 'accountId') and config.accountId != account_id:
+                    logger.warning(f"Resolved config {identifier} belongs to different account ({config.accountId}) than context ({account_id}).")
+                    # Decide whether to return it or None based on requirements
+                    # For now, let's return it but log the warning
+                    # return None 
+                return config
+        except Exception as e:
+            logger.debug(f"Failed to fetch ReportConfiguration by ID '{identifier}': {e}")
+            pass # Ignore error, proceed to try by name
+        
+        # Try name second
+        try:
+            logger.debug(f"Attempting to fetch ReportConfiguration by name (fallback): {identifier}")
+            config = ReportConfiguration.get_by_name(name=identifier, account_id=account_id, client=client)
+            if config:
+                logger.debug(f"Found ReportConfiguration by name (fallback): {identifier}")
+                return config
+        except Exception as e:
+            logger.debug(f"Failed to fetch ReportConfiguration by name '{identifier}' (fallback): {e}")
+            pass
+    else:
+        # Try name first
+        try:
+            logger.debug(f"Attempting to fetch ReportConfiguration by name: {identifier}")
+            config = ReportConfiguration.get_by_name(name=identifier, account_id=account_id, client=client)
+            if config:
+                logger.debug(f"Found ReportConfiguration by name: {identifier}")
+                return config
+        except Exception as e:
+            logger.debug(f"Failed to fetch ReportConfiguration by name '{identifier}': {e}")
+            pass # Ignore error, proceed to try by ID
+
+        # Try ID second
+        try:
+            logger.debug(f"Attempting to fetch ReportConfiguration by ID (fallback): {identifier}")
+            config = ReportConfiguration.get_by_id(id=identifier, client=client)
+            if config:
+                 logger.debug(f"Found ReportConfiguration by ID (fallback): {identifier}")
+                 # Verify account matches if possible
+                 if hasattr(config, 'accountId') and config.accountId != account_id:
+                    logger.warning(f"Resolved config {identifier} belongs to different account ({config.accountId}) than context ({account_id}).")
+                    # return None
+                 return config
+        except Exception as e:
+             logger.debug(f"Failed to fetch ReportConfiguration by ID '{identifier}' (fallback): {e}")
+             pass
+             
+    return None # Not found by either method
+
+@config.command(name="show")
+@click.argument('id_or_name', type=str)
+@click.option('--account', 'account_identifier', help='Optional account key or ID for context (needed for name lookup).', default=None)
+def show_config(id_or_name: str, account_identifier: Optional[str]):
+    """Show details for a specific Report Configuration by ID or name."""
+    client = create_client()
+    account_id = None
+    
+    # --- Account Resolution (Required for name lookup) ---
+    if account_identifier:
+        try:
+            account_id = client._resolve_account_id(account_key=account_identifier)
+        except Exception as e:
+            try:
+                acc = Account.get_by_id(account_identifier, client)
+                account_id = acc.id
+            except Exception:
+                 console.print(f"[red]Error: Could not resolve account identifier '{account_identifier}': {e}[/red]")
+                 return
+    else:
+        try:
+            account_id = client._resolve_account_id()
+        except Exception as e:
+            console.print(f"[red]Error resolving default account: {e}. Is PLEXUS_ACCOUNT_KEY set?[/red]")
+            return
+
+    if not account_id:
+        console.print("[red]Error: Could not determine Account ID (required for name lookup).[/red]")
+        return
+    # ---
+
+    console.print(f"[cyan]Fetching Report Configuration: '{id_or_name}' for Account ID: {account_id}[/cyan]")
+
+    try:
+        config_instance = _resolve_report_config(id_or_name, account_id, client)
+
+        if not config_instance:
+            console.print(f"[yellow]Report Configuration '{id_or_name}' not found for account {account_id} (tried ID and name).[/yellow]")
+            return
+
+        # Display the configuration details
+        created_at_str = config_instance.createdAt.strftime("%Y-%m-%d %H:%M:%S UTC") if hasattr(config_instance, 'createdAt') and config_instance.createdAt else 'N/A'
+        updated_at_str = config_instance.updatedAt.strftime("%Y-%m-%d %H:%M:%S UTC") if hasattr(config_instance, 'updatedAt') and config_instance.updatedAt else 'N/A'
+
+        # Prepare configuration content for display
+        config_str = config_instance.configuration
+        syntax = None
+        if config_str:
+            try:
+                # Attempt to parse as JSON for pretty printing
+                parsed_config = json.loads(config_str)
+                pretty_config_str = json.dumps(parsed_config, indent=2)
+                syntax = Syntax(pretty_config_str, "json", theme="default", line_numbers=True)
+            except json.JSONDecodeError:
+                # If not JSON, display as plain text (maybe it's Markdown?)
+                # For now, just display raw string. Could add Markdown rendering later.
+                 syntax = Syntax(config_str, "markdown", theme="default", line_numbers=True) # Assume markdown if not json
+        else:
+            config_str = "[i]No configuration content.[/i]"
+
+        # Build Panel Content
+        content = (
+            f"[bold]ID:[/bold] {config_instance.id}\n"
+            f"[bold]Name:[/bold] {config_instance.name}\n"
+            f"[bold]Account ID:[/bold] {config_instance.accountId}\n"
+            f"[bold]Description:[/bold] {config_instance.description or '-'}\n"
+            f"[bold]Created At:[/bold] {created_at_str}\n"
+            f"[bold]Updated At:[/bold] {updated_at_str}\n"
+            f"[bold]Configuration:[/bold]"
+        )
+        
+        panel_content = [content]
+        if syntax:
+             panel_content.append(syntax)
+        else:
+             panel_content.append(config_str)
+
+        console.print(Panel("\n".join(str(p) for p in panel_content), title=f"Report Configuration: {config_instance.name}", border_style="blue"))
 
     except Exception as e:
-        console.print(f"[bold red]Error creating report configuration: {e}[/bold red]")
-        logger.error(f"Failed to create report configuration '{name}': {e}\n{traceback.format_exc()}")
+        console.print(f"[bold red]Error retrieving report configuration '{id_or_name}': {e}[/bold red]")
+        logger.error(f"Failed to get report configuration '{id_or_name}': {e}\\n{traceback.format_exc()}")
 
-# Add other report-related commands as needed (e.g., create-config, delete-config, delete-report) 
+# --- TODO: Add other commands from Phase 3 Plan ---
+# - plexus report config show <id_or_name>
+# - plexus report list [--config <id_or_name>]
+# - plexus report show <id_or_name>
+# - plexus report last
+# - plexus report block list <report_id>
+# - plexus report block show <report_id> <block_identifier> 
