@@ -473,27 +473,63 @@ def show_config(id_or_name: str, account_identifier: Optional[str]):
     """Show details for a specific Report Configuration by ID or name."""
     client = create_client()
     account_id = None
+    account_display_name = "default account"
     
-    # --- Account Resolution (Required for name lookup) ---
+    # --- Account Resolution (Corrected Logic) ---
     if account_identifier:
+        account_display_name = f"identifier '{account_identifier}'"
+        # User provided an identifier - try resolving by key first, then ID
         try:
-            account_id = client._resolve_account_id(account_key=account_identifier)
-        except Exception as e:
+            console.print(f"[dim]Attempting to resolve account by key: {account_identifier}...[/dim]")
+            account_obj = Account.get_by_key(key=account_identifier, client=client)
+            if account_obj:
+                account_id = account_obj.id
+                console.print(f"[dim]Resolved account ID by key: {account_id}[/dim]")
+            else:
+                console.print(f"[dim]Account key '{account_identifier}' not found. Trying as ID...[/dim]")
+                try:
+                    # Fallback: Try treating it as an ID
+                    account_obj_by_id = Account.get_by_id(account_identifier, client)
+                    if account_obj_by_id:
+                        account_id = account_obj_by_id.id
+                        console.print(f"[dim]Resolved account ID directly: {account_id}[/dim]")
+                    else:
+                         console.print(f"[red]Error: Could not resolve account identifier '{account_identifier}' as ID.[/red]")
+                         return
+                except Exception as id_e:
+                    console.print(f"[red]Error: Could not resolve account identifier '{account_identifier}' as key or ID: {id_e}[/red]")
+                    return
+        except Exception as key_e:
+            console.print(f"[yellow]Warning: Error during key lookup for '{account_identifier}' ({key_e}). Trying as ID...[/yellow]")
             try:
-                acc = Account.get_by_id(account_identifier, client)
-                account_id = acc.id
-            except Exception:
-                 console.print(f"[red]Error: Could not resolve account identifier '{account_identifier}': {e}[/red]")
-                 return
+                 account_obj_by_id = Account.get_by_id(account_identifier, client)
+                 if account_obj_by_id:
+                     account_id = account_obj_by_id.id
+                     console.print(f"[dim]Resolved account ID directly after key lookup error: {account_id}[/dim]")
+                 else:
+                     console.print(f"[red]Error: Could not resolve '{account_identifier}' as ID after key lookup error.[/red]")
+                     return
+            except Exception as final_id_e:
+                console.print(f"[red]Error: Failed to resolve '{account_identifier}' as key or ID. Key Error: {key_e}, ID Error: {final_id_e}[/red]")
+                return
     else:
+        # No identifier provided, use client's internal resolution (uses context/env var)
+        account_display_name = "default account (from environment)"
+        console.print(f"[dim]Attempting to resolve default account from environment...[/dim]")
         try:
-            account_id = client._resolve_account_id()
+            account_id = client._resolve_account_id() # Correct method call for default
+            if account_id:
+                 console.print(f"[dim]Resolved default account ID: {account_id}[/dim]")
+            else:
+                console.print(f"[red]Error: client._resolve_account_id() returned None. Is PLEXUS_ACCOUNT_KEY set and valid?[/red]")
+                return
         except Exception as e:
-            console.print(f"[red]Error resolving default account: {e}. Is PLEXUS_ACCOUNT_KEY set?[/red]")
-            return
+             console.print(f"[red]Error resolving default account: {e}. Is PLEXUS_ACCOUNT_KEY set and valid?[/red]")
+             return
 
+    # Final check
     if not account_id:
-        console.print("[red]Error: Could not determine Account ID (required for name lookup).[/red]")
+        console.print(f"[red]Error: Could not determine Account ID for {account_display_name}.[/red]")
         return
     # ---
 
