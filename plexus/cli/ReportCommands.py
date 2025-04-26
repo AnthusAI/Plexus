@@ -15,7 +15,8 @@ from plexus.dashboard.api.client import PlexusDashboardClient
 from plexus.cli.client_utils import create_client
 from plexus.dashboard.api.models.report_configuration import ReportConfiguration
 from plexus.dashboard.api.models.report import Report
-from plexus.reports.service import generate_report
+from plexus.dashboard.api.models.task import Task
+from plexus.tasks.reports import generate_report_task
 from rich.table import Table # Import Table for display
 from rich.panel import Panel
 from rich.pretty import pretty_repr
@@ -194,32 +195,50 @@ def run(config_identifier: str, params: Tuple[str]):
     PARAMS should be key=value pairs to override or supplement configuration parameters.
     Example: plexus report run --config my_analysis start_date=2023-01-01 end_date=2023-12-31
     """
+    client = create_client() # Instantiate client
     try:
         # Parse key-value parameters
         parameters = parse_kv_pairs(params)
         console.print(f"Attempting to generate report from configuration: [cyan]'{config_identifier}'[/cyan] with parameters: {parameters}")
 
-        # Call the generation service
-        # The service now handles client creation, DB interactions, status updates, etc.
-        report_instance = generate_report(config_identifier=config_identifier, params=parameters)
+        # --- Step 1: Create Task Metadata ---
+        # Resolve ReportConfiguration to get name/accountId if needed for Task fields
+        # For now, just store identifier and params in metadata
+        # Assuming account context is handled by the client/API key
+        # TODO: Potentially resolve config_identifier to get accountId and store in metadata
+        task_metadata = {
+            "report_configuration_id": config_identifier, # Store the identifier used
+            "report_parameters": parameters,
+            "trigger": "cli" # Indicate how the task was triggered
+        }
+        metadata_json = json.dumps(task_metadata)
 
-        if report_instance:
-            console.print(f"[green]Report generation process initiated successfully.[/green]")
-            console.print(f"Report Name: [magenta]{report_instance.name}[/magenta]")
-            console.print(f"Report ID:   [magenta]{report_instance.id}[/magenta]")
-            console.print(f"Initial Status: [yellow]{report_instance.status}[/yellow]")
-            console.print(f"Monitor status using 'plexus report get --name \"{report_instance.name}\"' or 'plexus tasks list'.")
-        else:
-            # This case might occur if generate_report decides not to proceed (e.g., config not found)
-            # but doesn't raise an exception handled below.
-            console.print(f"[yellow]Report generation did not proceed. Check logs or configuration '{config_identifier}'.[/yellow]")
+        # --- Step 2: Create Task Record ---
+        console.print(f"Creating Task record...")
+        task_description = f"Generate report from config '{config_identifier}'"
+        new_task = Task.create(
+            client=client,
+            type="report_generation", # Task type identifier
+            target=config_identifier, # Use config identifier as target
+            command="plexus report run", # Record the command used
+            description=task_description,
+            metadata=metadata_json,
+            dispatchStatus="QUEUED", # Set initial dispatch status
+            status="PENDING" # Set initial task status
+            # accountId will be inferred by the backend/client if not explicitly set
+        )
+        console.print(f"[green]Successfully created Task:[/green] [cyan]{new_task.id}[/cyan]")
+
+        # --- Step 3: Dispatch Celery Task ---
+        console.print(f"Dispatching generation task to Celery worker...")
+        # Send the task_id to the Celery worker
+        generate_report_task.delay(task_id=new_task.id)
+        console.print(f"[green]Task dispatched successfully![/green]")
+        console.print(f"Monitor task progress using 'plexus task get --id {new_task.id}' or 'plexus task list'.")
 
     except ValueError as e:
         # Specifically catch errors from parse_kv_pairs
         console.print(f"[bold red]Error parsing parameters:[/bold red] {e}")
-    except FileNotFoundError as e:
-         # Catch errors if the configuration is not found by the service
-        console.print(f"[bold red]Error:[/bold red] {e}")
     except Exception as e:
         # Catch potential errors from the generate_report service call
         console.print(f"[bold red]An error occurred during report generation initiation:[/bold red]")
