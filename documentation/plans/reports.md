@@ -13,6 +13,8 @@ This document outlines the plan for implementing a flexible and extensible repor
 
 **Crucially, report generation will leverage the existing `Task` and `TaskStage` system for standardized status and progress tracking, ensuring consistency with other background jobs like Evaluations.**
 
+**Note on Running CLI Commands:** When working within this specific project checkout (maybe `Plexus`, maybe `Plexus_2`, there are multiple clones), run CLI commands using `python -m plexus.cli.CommandLineInterface [command] [args...]` from the project root directory. This ensures the local code is executed without interfering with the globally installed `plexus` module from a different repository.
+
 ## Core Concepts
 
 The reporting system will be built around **four** core concepts:
@@ -139,27 +141,28 @@ The reporting system will be built around **four** core concepts:
 ### Phase 2: Report Generation (Service & Triggering)
 
 *   ✅ **Use Existing Test Block:** Use the existing `ScoreInfo` block (in `plexus/reports/blocks/score_info.py`) for initial testing instead of creating a separate `HelloWorld` block. *(Renamed from ScoreInfoBlock)*
-*   🟡 **Develop Generation Service Core:** Create Python service logic (`plexus.reports.service`) that:
-    *   🟡 Takes a `task_id` as input.
-    *   🟡 Fetches the associated `Task` and loads `ReportConfiguration` and parameters.
-    *   🟡 **Integrate Task Progress:** Use `TaskProgressTracker` to update `Task` and `TaskStage` status (e.g., `RUNNING`, progress updates during block processing, `COMPLETED`/`FAILED`).
-    *   🟡 Creates the `Report` record linked to the `Task`.
-    *   🟡 Parses the `configuration` field (Markdown) to identify block definitions.
-    *   🟡 Processes Blocks: Instantiates and calls `generate` for each block. Creates `ReportBlock` records.
-    *   🟡 Stores the original Markdown template in `Report.output`.
-    *   ⬜ ***NEXT:*** *Refactor `plexus/reports/service.py` to implement the Task-based generation logic (accept only `task_id`, use `TaskProgressTracker`, create linked `Report`, remove direct status updates, etc.). The preliminary test failures blocking this are now resolved.*
+*   ✅ **Develop Generation Service Core:** Create Python service logic (`plexus.reports.service`) that:
+    *   ✅ Takes a `task_id` as input.
+    *   ✅ Fetches the associated `Task` and loads `ReportConfiguration` and parameters.
+    *   ✅ **Integrate Task Progress:** Use `TaskProgressTracker` to update `Task` and `TaskStage` status (e.g., `RUNNING`, progress updates during block processing, `COMPLETED`/`FAILED`).
+    *   ✅ Creates the `Report` record linked to the `Task`.
+    *   ✅ Parses the `configuration` field (Markdown) to identify block definitions.
+    *   ✅ Processes Blocks: Instantiates and calls `generate` for each block. Creates `ReportBlock` records.
+    *   ✅ Stores the original Markdown template in `Report.output`.
 *   ✅ **Implement CLI Trigger:** Create the `plexus report run --config <config_identifier> [params...]` CLI command that:
     *   ✅ Parses arguments.
-    *   ⬜ **Creates a `Task` record** for the report generation.
-    *   ⬜ Dispatches the Celery task (`generate_report_task`) using the created `task_id`.
-*   ⬜ **(Removed) Basic Status Updates:** Status updates are now handled via the `Task` model and `TaskProgressTracker`.
+    *   ✅ **Creates a `Task` record** for the report generation.
+    *   ✅ Dispatches the Celery task (`generate_report_task`) using the created `task_id`.
+*   ✅ **(Removed) Basic Status Updates:** Status updates are now handled via the `Task` model and `TaskProgressTracker`.
 *   ✅ **Implement Celery Task (`generate_report_task`):**
     *   ✅ Takes `task_id`.
     *   ✅ Calls the `plexus.reports.service.generate_report` service function, passing the `task_id`.
     *   ✅ **Handles top-level exceptions:** Catches errors from the service call and updates the corresponding `Task` record to `FAILED` with error details.
-*   ⬜ **Implement Celery Dispatch Mechanism:** Create a mechanism (e.g., internal API call, GraphQL mutation triggered by frontend) to **create the `Task` record** and dispatch the Celery task.
-*   ✅ **(Modified) Add Error Handling:** Error handling in the service should update the associated `Task` record. Celery task handles errors *calling* the service.
-*   🟡 **Verify Phase 2:** Confirm reports can be generated via CLI/Celery, data is stored correctly in `Report` and `ReportBlock`, and **Task/TaskStage status updates correctly**. *(Task/Stage verification pending)*
+*   ✅ **Implement Celery Dispatch Mechanism:** The `plexus report run` command handles Task creation and Celery dispatch.
+*   ✅ **(Modified) Add Error Handling:** Error handling in the service updates the associated `Task` record. Celery task handles errors *calling* the service.
+*   🟡 **Verify Phase 2:** Confirm reports can be generated via CLI/Celery, data is stored correctly in `Report` and `ReportBlock`, and **Task/TaskStage status updates correctly**.
+    *   *Status:* We have successfully created a test `ReportConfiguration` (`"Test ScoreInfo Report"`, ID: `f496664a-82ee-404d-a266-e3dc871a13b9`) using `python -m plexus.cli.CommandLineInterface report create-config --name 'Test ScoreInfo Report' --scorecard cmg_edu_v1_0 --score Greeting`. We then triggered the generation using `python -m plexus.cli.CommandLineInterface report run --config 'Test ScoreInfo Report'`, which created Task `4b688330-704e-485c-b7ca-8e0d95a16346`. The task is currently `PENDING`/`QUEUED`.
+    *   ***NEXT:*** *Start a Celery worker (`python -m plexus.cli.CommandLineInterface command worker`) and observe its logs to confirm it processes Task `4b688330-704e-485c-b7ca-8e0d95a16346` and updates its status/stages correctly. Check final status using `python -m plexus.cli.CommandLineInterface tasks info --id 4b688330-704e-485c-b7ca-8e0d95a16346`.*
 
 ### Phase 3: Frontend Basics (Management & Display)
 
