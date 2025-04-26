@@ -114,12 +114,80 @@ class ReportConfiguration(BaseModel):
             logger.exception(f"Error creating ReportConfiguration '{name}' for account {accountId}: {e}")
             raise
 
-    # Add other methods like get_by_name, create, update if needed later
-    # Example:
-    # @classmethod
-    # def get_by_name(cls, name: str, account_id: str, client: _BaseAPIClient) -> Optional['ReportConfiguration']:
-    #     # Implementation using listReportConfigurationsByName GSI if it exists
-    #     pass
+    @classmethod
+    def get_by_name(cls, name: str, account_id: str, client: _BaseAPIClient) -> Optional['ReportConfiguration']:
+        """Get a ReportConfiguration by its name within a specific account.
+
+        Uses the GSI 'byAccountIdAndName' (implicitly queried by listReportConfigurationByAccountIdAndUpdatedAt
+        with an eq filter on name, assuming the backend supports it, or filters client-side).
+        Returns the first match found.
+        """
+        # Try using the index optimized for accountId and name sorting first
+        # The actual query name might differ based on Amplify generation, but this is common pattern
+        query = f"""
+        query ListReportConfigByName(
+            $accountId: String!,
+            $name: ModelStringKeyConditionInput,
+            $limit: Int
+        ) {{
+            listReportConfigurationByAccountIdAndName(
+                accountId: $accountId,
+                name: $name,
+                limit: $limit
+            ) {{
+                items {{
+                    {cls.fields()}
+                }}
+                nextToken # Include for potential future pagination
+            }}
+        }}
+        """
+        variables = {
+            'accountId': account_id,
+            'name': { 'eq': name }, # Filter for exact name match
+            'limit': 1 # We only need one match
+        }
+        
+        try:
+            logger.debug(f"Querying ReportConfiguration by name '{name}' for account {account_id}")
+            result = client.execute(query, variables)
+            list_result = result.get('listReportConfigurationByAccountIdAndName', {})
+            items_data = list_result.get('items', [])
+            
+            if items_data:
+                logger.debug(f"Found ReportConfiguration by name via specific index.")
+                # Found using the specific index
+                return cls.from_dict(items_data[0], client)
+            else:
+                # If the specific index query fails or returns empty, try the broader list + filter
+                # This is a fallback in case the 'byAccountIdAndName' GSI isn't queryable this way
+                logger.warning(f"Query by name GSI failed or returned empty. Falling back to list + filter.")
+                list_result = cls.list_by_account_id(account_id=account_id, client=client, limit=1000) # Fetch many
+                items = list_result.get('items', [])
+                for item in items:
+                    if item.name == name:
+                         logger.debug(f"Found ReportConfiguration by name via list+filter fallback.")
+                         return item # Already an instance due to list_by_account_id
+                # If not found even in fallback
+                logger.debug(f"ReportConfiguration '{name}' not found in account {account_id} even after fallback.")
+                return None
+
+        except Exception as e:
+            # Log the specific error, but attempt fallback if appropriate
+            logger.error(f"Error querying ReportConfiguration by name '{name}' (GSI: byAccountIdAndName): {e}")
+            logger.info("Attempting fallback: Listing all for account and filtering...")
+            try:
+                 list_result = cls.list_by_account_id(account_id=account_id, client=client, limit=1000) # Fetch many
+                 items = list_result.get('items', [])
+                 for item in items:
+                    if item.name == name:
+                        logger.debug(f"Found ReportConfiguration by name via list+filter fallback after error.")
+                        return item # Already an instance
+                 logger.debug(f"ReportConfiguration '{name}' not found in account {account_id} even after fallback from error.")
+                 return None
+            except Exception as fallback_e:
+                logger.exception(f"Error during fallback list+filter for ReportConfiguration '{name}': {fallback_e}")
+                return None # Both primary and fallback failed
 
     @classmethod
     def list_by_account_id(

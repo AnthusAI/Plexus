@@ -185,17 +185,15 @@ The reporting system will be built around **four** core concepts:
     *   Ensure the database schema is up-to-date.
 *   ⬜ **Test Steps:**
     1.  ✅ **`config list`:**
-        *   Run `python -m plexus.cli.CommandLineInterface report config list`. Verify existing configs are listed correctly for the default account.
-        *   Run `python -m plexus.cli.CommandLineInterface report config list --account call-criteria`. Verify filtering works.
-        *   Run `python -m plexus.cli.CommandLineInterface report config list --account <invalid_key/id>`. Verify appropriate error/empty message.
-    2.  ⬜ **`config create`:**
+        *   Run `python -m plexus.cli.CommandLineInterface report config list`. Verify existing configs are listed correctly for the default account (resolved via `.env`).
+    2.  ✅ **`config create`:**
         *   ✅ Run `python -m plexus.cli.CommandLineInterface report config create --name "CLI Test Config" --block-class ScoreInfo --block-param scorecard=cmg_edu_v1_0 --block-param score=Greeting`. Verify successful creation message (`Successfully created Report Configuration...`) and that the config appears in `config list` output.
-        *   ⬜ Attempt creation with missing required options (e.g., `--name`). Verify Click error. (`python -m plexus.cli.CommandLineInterface report config create --block-class ScoreInfo ...`)
-        *   ⬜ Attempt creation with invalid block params. Verify error message. (`python -m plexus.cli.CommandLineInterface report config create --name "Invalid Param Test" --block-class ScoreInfo --block-param invalid-param`)
+        *   ✅ Attempt creation with missing required options (e.g., `--name`). Verify Click error. (`python -m plexus.cli.CommandLineInterface report config create --block-class ScoreInfo ...`)
+        *   ✅ Attempt creation with invalid block params. Verify error message. (`python -m plexus.cli.CommandLineInterface report config create --name "Invalid Param Test" --block-class ScoreInfo --block-param invalid-param`)
     3.  ⬜ **`config show`:**
-        *   Run `python -m plexus.cli.CommandLineInterface report config show "CLI Test Config"`. Verify details are displayed correctly using ID/Name lookup, including the JSON/Markdown configuration content with syntax highlighting.
-        *   Run `python -m plexus.cli.CommandLineInterface report config show <valid_config_id>`. Verify ID lookup works.
-        *   Run `python -m plexus.cli.CommandLineInterface report config show "NonExistent Config"`. Verify "not found" message.
+        *   ✅ Run `python -m plexus.cli.CommandLineInterface report config show "CLI Test Config"`. Verify details are displayed correctly using ID/Name lookup, including the JSON/Markdown configuration content with syntax highlighting.
+        *   ⬜ Run `python -m plexus.cli.CommandLineInterface report config show cd2f671b-2c4c-451c-8c2f-4ea988c7efb1`. Verify ID lookup works.
+        *   ⬜ Run `python -m plexus.cli.CommandLineInterface report config show "NonExistent Config"`. Verify "not found" message.
     4.  ⬜ **`report run` (Core Test):**
         *   Run `python -m plexus.cli.CommandLineInterface report run --config "CLI Test Config"`. Verify:
             *   Task creation message with Task ID is shown.
