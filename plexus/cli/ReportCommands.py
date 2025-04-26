@@ -464,122 +464,117 @@ def _resolve_report_config(identifier: str, account_id: str, client: PlexusDashb
 @click.argument('id_or_name', type=str)
 @click.option('--account', 'account_identifier', help='Optional account key or ID for context (needed for name lookup).', default=None)
 def show_config(id_or_name: str, account_identifier: Optional[str]):
-    """Show details for a specific Report Configuration by ID or name."""
+    """Display details of a specific Report Configuration."""
     client = create_client()
     account_id = None
     account_display_name = "default account"
     
-    # --- Account Resolution (Corrected Logic) ---
+    # --- Account Resolution ---
     if account_identifier:
         account_display_name = f"identifier '{account_identifier}'"
-        # User provided an identifier - try resolving by key first, then ID
         try:
-            console.print(f"[dim]Attempting to resolve account by key: {account_identifier}...[/dim]")
-            account_obj = Account.get_by_key(key=account_identifier, client=client)
+            console.print(f"[dim]Attempting to resolve account '{account_identifier}'...[/dim]")
+            account_obj = Account.resolve_by_key_or_id(account_identifier, client)
             if account_obj:
                 account_id = account_obj.id
-                console.print(f"[dim]Resolved account ID by key: {account_id}[/dim]")
+                console.print(f"[dim]Resolved account ID: {account_id}[/dim]")
             else:
-                console.print(f"[dim]Account key '{account_identifier}' not found. Trying as ID...[/dim]")
-                try:
-                    # Fallback: Try treating it as an ID
-                    account_obj_by_id = Account.get_by_id(account_identifier, client)
-                    if account_obj_by_id:
-                        account_id = account_obj_by_id.id
-                        console.print(f"[dim]Resolved account ID directly: {account_id}[/dim]")
-                    else:
-                         console.print(f"[red]Error: Could not resolve account identifier '{account_identifier}' as ID.[/red]")
-                         return
-                except Exception as id_e:
-                    console.print(f"[red]Error: Could not resolve account identifier '{account_identifier}' as key or ID: {id_e}[/red]")
-                    return
-        except Exception as key_e:
-            console.print(f"[yellow]Warning: Error during key lookup for '{account_identifier}' ({key_e}). Trying as ID...[/yellow]")
-            try:
-                 account_obj_by_id = Account.get_by_id(account_identifier, client)
-                 if account_obj_by_id:
-                     account_id = account_obj_by_id.id
-                     console.print(f"[dim]Resolved account ID directly after key lookup error: {account_id}[/dim]")
-                 else:
-                     console.print(f"[red]Error: Could not resolve '{account_identifier}' as ID after key lookup error.[/red]")
-                     return
-            except Exception as final_id_e:
-                console.print(f"[red]Error: Failed to resolve '{account_identifier}' as key or ID. Key Error: {key_e}, ID Error: {final_id_e}[/red]")
+                # Should be handled by resolve_by_key_or_id raising exception, but safety check
+                console.print(f"[red]Error: Could not resolve account identifier '{account_identifier}'.[/red]")
                 return
+        except Exception as e:
+            console.print(f"[red]Error resolving account '{account_identifier}': {e}[/red]")
+            return
     else:
-        # No identifier provided, use client's internal resolution (uses context/env var)
         account_display_name = "default account (from environment)"
         console.print(f"[dim]Attempting to resolve default account from environment...[/dim]")
         try:
-            account_id = client._resolve_account_id() # Correct method call for default
+            account_id = client._resolve_account_id()
             if account_id:
-                 console.print(f"[dim]Resolved default account ID: {account_id}[/dim]")
+                console.print(f"[dim]Resolved default account ID: {account_id}[/dim]")
             else:
                 console.print(f"[red]Error: client._resolve_account_id() returned None. Is PLEXUS_ACCOUNT_KEY set and valid?[/red]")
                 return
         except Exception as e:
-             console.print(f"[red]Error resolving default account: {e}. Is PLEXUS_ACCOUNT_KEY set and valid?[/red]")
-             return
+            console.print(f"[red]Error resolving default account: {e}. Is PLEXUS_ACCOUNT_KEY set and valid?[/red]")
+            return
 
-    # Final check
     if not account_id:
+        # This should ideally not be reached if logic above is correct
         console.print(f"[red]Error: Could not determine Account ID for {account_display_name}.[/red]")
         return
-    # ---
 
-    console.print(f"[cyan]Fetching Report Configuration: '{id_or_name}' for Account ID: {account_id}[/cyan]")
-
+    # --- Report Configuration Resolution ---
+    console.print(f"[cyan]Fetching Report Configuration '{id_or_name}' for Account ID: {account_id}[/cyan]")
     try:
         config_instance = _resolve_report_config(id_or_name, account_id, client)
 
         if not config_instance:
-            console.print(f"[yellow]Report Configuration '{id_or_name}' not found for account {account_id} (tried ID and name).[/yellow]")
+            console.print(f"[yellow]Report Configuration '{id_or_name}' not found for account {account_id}.[/yellow]")
             return
 
-        # Display the configuration details
-        created_at_str = config_instance.createdAt.strftime("%Y-%m-%d %H:%M:%S UTC") if hasattr(config_instance, 'createdAt') and config_instance.createdAt else 'N/A'
-        updated_at_str = config_instance.updatedAt.strftime("%Y-%m-%d %H:%M:%S UTC") if hasattr(config_instance, 'updatedAt') and config_instance.updatedAt else 'N/A'
+        # --- Display Details ---
+        created_at_str = config_instance.createdAt.strftime("%Y-%m-%d %H:%M:%S UTC") if config_instance.createdAt else 'N/A'
+        updated_at_str = config_instance.updatedAt.strftime("%Y-%m-%d %H:%M:%S UTC") if config_instance.updatedAt else 'N/A'
 
-        # Prepare configuration content for display
-        config_str = config_instance.configuration
-        syntax = None
-        if config_str:
-            try:
-                # Attempt to parse as JSON for pretty printing
-                parsed_config = json.loads(config_str)
-                pretty_config_str = json.dumps(parsed_config, indent=2)
-                syntax = Syntax(pretty_config_str, "json", theme="default", line_numbers=True)
-            except json.JSONDecodeError:
-                # If not JSON, display as plain text (maybe it's Markdown?)
-                # For now, just display raw string. Could add Markdown rendering later.
-                 syntax = Syntax(config_str, "markdown", theme="default", line_numbers=True) # Assume markdown if not json
-        else:
-            config_str = "[i]No configuration content.[/i]"
-
-        # Build Panel Content
-        content = (
-            f"[bold]ID:[/bold] {config_instance.id}\n"
-            f"[bold]Name:[/bold] {config_instance.name}\n"
-            f"[bold]Account ID:[/bold] {config_instance.accountId}\n"
-            f"[bold]Description:[/bold] {config_instance.description or '-'}\n"
-            f"[bold]Created At:[/bold] {created_at_str}\n"
-            f"[bold]Updated At:[/bold] {updated_at_str}\n"
-            f"[bold]Configuration:[/bold]"
+        # Prepare basic details
+        details_content = (
+            f"[bold magenta]Name:[/bold magenta]        {escape(config_instance.name)}\n"
+            f"[bold cyan]ID:[/bold cyan]          {config_instance.id}\n"
+            f"[bold green]Description:[/bold green] {escape(config_instance.description or '-')}\n"
+            f"[bold blue]Created At:[/bold blue]  {created_at_str}\n"
+            f"[bold blue]Updated At:[/bold blue]  {updated_at_str}\n"
+            f"[bold yellow]Account ID:[/bold yellow]  {config_instance.accountId}"
         )
-        
-        panel_content = [content]
-        if syntax:
-             panel_content.append(syntax)
-        else:
-             panel_content.append(config_str)
 
-        console.print(Panel("\n".join(str(p) for p in panel_content), title=f"Report Configuration: {config_instance.name}", border_style="blue"))
+        console.print(
+            Panel(
+                details_content,
+                title="[bold]Report Configuration Details[/bold]",
+                border_style="blue",
+                expand=False
+            )
+        )
+
+        # Display the configuration content with syntax highlighting
+        config_content_str = config_instance.configuration # Assuming it's a string (JSON or Markdown)
+        if not config_content_str:
+             config_content_str = "[dim](No configuration content stored)[/dim]"
+             syntax = config_content_str # Display as plain text if empty
+        else:
+            # Attempt to detect if JSON or assume Markdown
+            lexer = "markdown" # Default to markdown
+            try:
+                # Simple check: if it starts with { or [ and ends with } or ], assume JSON
+                if config_content_str.strip().startswith(("{", "[")) and config_content_str.strip().endswith(("}", "]")):
+                     # Try parsing as JSON to confirm
+                     json.loads(config_content_str)
+                     lexer = "json"
+            except json.JSONDecodeError:
+                 lexer = "markdown" # Fallback to markdown if JSON parse fails
+            except Exception:
+                 lexer = "markdown" # General fallback
+
+            syntax = Syntax(config_content_str, lexer, theme="default", line_numbers=True)
+
+
+        console.print(
+            Panel(
+                syntax,
+                title="[bold]Configuration Content[/bold]",
+                border_style="green",
+                expand=True # Allow this panel to expand
+            )
+        )
 
     except Exception as e:
-        console.print(f"[bold red]Error showing report configuration: {e}[/bold red]")
-        logger.error(f"Failed to show report configuration \'{id_or_name}\': {e}\\n{traceback.format_exc()}")
+        console.print(f"[bold red]Error fetching report configuration details: {e}[/bold red]")
+        logger.error(f"Failed to show report configuration '{id_or_name}': {e}\\n{traceback.format_exc()}")
 
-# --- New Delete Command ---
+
+# -------------------
+# config delete command
+# -------------------
 @config.command(name="delete")
 @click.argument('id_or_name', type=str)
 @click.option('--account', 'account_identifier', default=None, help='Account key or ID context (needed for name lookup). Defaults to PLEXUS_ACCOUNT_KEY.')
@@ -709,7 +704,6 @@ def list_reports(config_identifier: Optional[str], account_identifier: Optional[
     if not account_id:
         console.print("[red]Error: Could not determine Account ID.[/red]")
         return
-    # ---
     
     # --- Resolve Config Identifier if provided ---
     if config_identifier:
@@ -720,8 +714,7 @@ def list_reports(config_identifier: Optional[str], account_identifier: Optional[
             return
         resolved_config_id = config_instance.id
         console.print(f"[cyan]Filtering reports for Configuration ID: {resolved_config_id}[/cyan]")
-    # ---
-
+    
     console.print(f"[cyan]Listing Reports for Account ID: {account_id}[/cyan]" + (f" (Config ID: {resolved_config_id})" if resolved_config_id else ""))
 
     try:

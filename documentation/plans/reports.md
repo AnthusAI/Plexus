@@ -186,7 +186,7 @@ The reporting system will be built around **four** core concepts:
 *   ✅ **Implement `plexus report last`:** Create a CLI command to show the details of the most recently created `Report` (equivalent to `plexus report show` for the latest report). Use `rich` panels.
 *   ✅ **Implement `plexus report block list <report_id>`:** Create a CLI command to list `ReportBlock` records associated with a specific `Report`. Use `rich` for formatted table output. *Note: `<report_id>` here should strictly be the ID.* 
 *   ✅ **Implement `plexus report block show <report_id> <block_identifier>`:** Create a CLI command to display the details (name, position, output JSON, log) of a specific `ReportBlock` (identified by position or name). Use `rich` panels/syntax highlighting. *Note: `<report_id>` here should strictly be the ID.* 
-*   ✅ **Verify Phase 3:** Confirm these CLI commands function correctly, including filtering and ID/Name lookup, providing the necessary visibility into report data.
+*   ✅ **Verify Phase 3:** Confirm these CLI commands function correctly, including filtering and ID/Name lookup, providing the necessary visibility into report data. *(Verified config list & config show)*
 
 ### Phase 4: Backend & CLI Testing
 
