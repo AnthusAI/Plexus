@@ -168,7 +168,7 @@ def list_configs(account_identifier: Optional[str], limit: int): # Renamed funct
                     panel_content,
                     title="[bold]Report Configuration[/bold]", # Updated title to be static
                     border_style="blue",
-                    expand=False # Don't expand panel width unnecessarily
+                    expand=True # Don't expand panel width unnecessarily
                 )
             )
         # --- End Panel Display ---
