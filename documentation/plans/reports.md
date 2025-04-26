@@ -7,6 +7,18 @@
 
 ***Note on Testing:*** *Test files in this project are typically located directly adjacent to the source code file they are testing (e.g., `service.py` would have a corresponding `service_test.py` in the same directory).*
 
+---
+**CRITICAL INSTRUCTIONS FOR AI ASSISTANTS WORKING ON THIS FEATURE:**
+
+1.  **DO NOT RUN `plexus` COMMANDS DIRECTLY.** This project often exists alongside other clones. The globally installed `plexus` command likely points to a different repository. **ALWAYS** run CLI commands using the local Python module structure from the project root:
+    ```bash
+    python -m plexus.cli.CommandLineInterface [command] [args...]
+    ```
+    This ensures you are executing the code currently being worked on.
+
+2.  **NEVER ASSUME A COMMAND WORKED BECAUSE IT PRODUCED NO OUTPUT.** This is a dangerous and incorrect assumption. Terminal commands, especially in this project, may succeed silently or fail silently (or with errors that are missed if you don't wait). **YOU MUST ALWAYS WAIT FOR THE COMMAND TO COMPLETE AND CAREFULLY ANALYZE ITS ACTUAL OUTPUT AND EXIT CODE.** If a command appears to produce no output, verify its success through subsequent commands (e.g., listing created items, checking status) before proceeding. Failure to do this will lead to incorrect actions and wasted effort.
+---
+
 ## Introduction
 
 This document outlines the plan for implementing a flexible and extensible reporting system within the Plexus platform. The goal is to provide a standardized way to define, generate, store, and view various types of reports and analyses without requiring bespoke dashboard pages or API schema changes for each new report type. This system will support reports like feedback analysis, topic modeling, score performance summaries, and more.
@@ -161,7 +173,7 @@ The reporting system will be built around **four** core concepts:
 *   ✅ **Implement Celery Dispatch Mechanism:** The `plexus report run` command handles Task creation and Celery dispatch.
 *   ✅ **(Modified) Add Error Handling:** Error handling in the service updates the associated `Task` record. Celery task handles errors *calling* the service.
 *   🟡 **Verify Phase 2:** Confirm reports can be generated via CLI/Celery, data is stored correctly in `Report` and `ReportBlock`, and **Task/TaskStage status updates correctly**.
-    *   *Status:* We have successfully created a test `ReportConfiguration` (`"Test ScoreInfo Report"`, ID: `f496664a-82ee-404d-a266-e3dc871a13b9`) using `python -m plexus.cli.CommandLineInterface report create-config --name 'Test ScoreInfo Report' --scorecard cmg_edu_v1_0 --score Greeting`. We then triggered the generation using `python -m plexus.cli.CommandLineInterface report run --config 'Test ScoreInfo Report'`, which created Task `4b688330-704e-485c-b7ca-8e0d95a16346`. The task is currently `PENDING`/`QUEUED`.
+    *   *Status:* We have successfully created test `ReportConfiguration`s via the CLI (`create-config` and `report config create --file ...`). We have also successfully triggered generation using `report run`, which created Task `4b688330-704e-485c-b7ca-8e0d95a16346`. The task is currently `PENDING`/`QUEUED`.
     *   ***NEXT:*** *Start a Celery worker (`python -m plexus.cli.CommandLineInterface command worker`) and observe its logs to confirm it processes Task `4b688330-704e-485c-b7ca-8e0d95a16346` and updates its status/stages correctly. Check final status using `python -m plexus.cli.CommandLineInterface tasks info --id 4b688330-704e-485c-b7ca-8e0d95a16346`.*
 
 ### Phase 3: CLI Inspection Tools (Pre-UI Validation)
@@ -202,10 +214,10 @@ The reporting system will be built around **four** core concepts:
         *   ✅ Run `python -m plexus.cli.CommandLineInterface report config create --name "CLI Test Config" --file test_config.md`. Verify successful creation message (`Successfully created Report Configuration...`) and that the config appears in `config list` output.
         *   ⬜ Attempt creation with missing required options (e.g., `--name` or `--file`). Verify Click error. (`python -m plexus.cli.CommandLineInterface report config create --name "Missing File"`)
         *   ⬜ Attempt creation with a non-existent file path. Verify error message. (`python -m plexus.cli.CommandLineInterface report config create --name "Bad File Path" --file non_existent_file.md`)
-        *   ✅ **Delete by Name (with prompt):** Run `python -m plexus.cli.CommandLineInterface report config delete "CLI Test Config"`. Verify: 
+        *   ✅ **Delete by Name (with prompt):** Run `python -m plexus.cli.CommandLineInterface report config delete "CLI Test Config"`. Verify:
             *   It finds the correct config (shows ID/Name).
-            *   It prompts for confirmation (`Are you sure...?`). 
-            *   Respond 'y'. Verify success message. 
+            *   It prompts for confirmation (`Are you sure...?`).
+            *   Respond 'y'. Verify success message.
             *   Run `config list` again and verify "CLI Test Config" is gone.
         *   ⬜ **Recreate for next test:** Run `python -m plexus.cli.CommandLineInterface report config create --name "CLI Test Config Temp" --file test_config.md`. Get the new ID.
         *   ⬜ **Delete by ID (skip prompt):** Run `python -m plexus.cli.CommandLineInterface report config delete <new_ID_from_recreate> --yes`. Verify:
