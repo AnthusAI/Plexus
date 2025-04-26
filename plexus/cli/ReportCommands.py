@@ -503,6 +503,135 @@ def show_config(id_or_name: str, account_identifier: Optional[str]):
         console.print(f"[bold red]Error retrieving report configuration '{id_or_name}': {e}[/bold red]")
         logger.error(f"Failed to get report configuration '{id_or_name}': {e}\\n{traceback.format_exc()}")
 
+@report.command(name="list")
+@click.option('--config', 'config_identifier', default=None, help='Filter reports by a specific configuration ID or name.')
+@click.option('--account', 'account_identifier', help='Optional account key or ID to filter by.', default=None)
+@click.option('--limit', type=int, default=50, help='Maximum number of reports to list.')
+def list_reports(config_identifier: Optional[str], account_identifier: Optional[str], limit: int):
+    """List generated Reports, optionally filtering by configuration."""
+    client = create_client()
+    account_id = None
+    resolved_config_id = None
+
+    # --- Account Resolution ---
+    if account_identifier:
+        try:
+            account_id = client._resolve_account_id(account_key=account_identifier)
+        except Exception as e:
+            try:
+                acc = Account.get_by_id(account_identifier, client)
+                account_id = acc.id
+            except Exception:
+                 console.print(f"[red]Error: Could not resolve account identifier '{account_identifier}': {e}[/red]")
+                 return
+    else:
+        try:
+            account_id = client._resolve_account_id()
+        except Exception as e:
+            console.print(f"[red]Error resolving default account: {e}. Is PLEXUS_ACCOUNT_KEY set?[/red]")
+            return
+
+    if not account_id:
+        console.print("[red]Error: Could not determine Account ID.[/red]")
+        return
+    # ---
+    
+    # --- Resolve Config Identifier if provided ---
+    if config_identifier:
+        console.print(f"[cyan]Resolving configuration filter: '{config_identifier}'...[/cyan]")
+        config_instance = _resolve_report_config(config_identifier, account_id, client)
+        if not config_instance:
+            console.print(f"[yellow]Could not resolve Report Configuration '{config_identifier}' to filter by.[/yellow]")
+            return
+        resolved_config_id = config_instance.id
+        console.print(f"[cyan]Filtering reports for Configuration ID: {resolved_config_id}[/cyan]")
+    # ---
+
+    console.print(f"[cyan]Listing Reports for Account ID: {account_id}[/cyan]" + (f" (Config ID: {resolved_config_id})" if resolved_config_id else ""))
+
+    try:
+        # TODO: Update Report.list_by_account_id or create new method 
+        # to support filtering by reportConfigurationId if resolved_config_id is not None.
+        # For now, assume it fetches all and we filter client-side (inefficient).
+        report_result_data = Report.list_by_account_id(
+            account_id=account_id,
+            client=client,
+            limit=limit * 2 # Fetch more initially if filtering client-side
+        )
+        reports = report_result_data.get('items', [])
+
+        # --- Client-side filtering (replace with API filter later) ---
+        if resolved_config_id:
+             filtered_reports = [r for r in reports if hasattr(r, 'reportConfigurationId') and r.reportConfigurationId == resolved_config_id]
+             reports = filtered_reports[:limit] # Apply limit after filtering
+        else:
+             reports = reports[:limit] # Apply limit directly
+        # ---
+
+        if not reports:
+            filter_msg = f" for configuration '{config_identifier}'" if config_identifier else ""
+            console.print(f"[yellow]No reports found for account {account_id}{filter_msg}.[/yellow]")
+            return
+
+        # --- Fetch associated Task statuses (inefficiently) ---
+        # TODO: Optimize this - batch fetch tasks or include in report list API call
+        task_statuses = {}
+        report_task_ids = [r.taskId for r in reports if hasattr(r, 'taskId') and r.taskId]
+        if report_task_ids:
+            try:
+                # Assuming a Task.batch_get_by_ids exists or similar
+                # tasks_data = Task.batch_get_by_ids(task_ids=report_task_ids, client=client)
+                # tasks = tasks_data.get('items', [])
+                # for task in tasks:
+                #     task_statuses[task.id] = task.status
+                # For now, fetch individually (very slow!)
+                console.print(f"[dim]Fetching task statuses for {len(report_task_ids)} reports...[/dim]")
+                for task_id in report_task_ids:
+                    try:
+                        task = Task.get_by_id(task_id, client)
+                        if task and hasattr(task, 'status'):
+                           task_statuses[task_id] = task.status
+                        else:
+                           task_statuses[task_id] = "[dim]Not Found[/dim]"
+                    except Exception as task_e:
+                        logger.warning(f"Failed to fetch task {task_id}: {task_e}")
+                        task_statuses[task_id] = "[red]Error[/red]"
+            except Exception as batch_e:
+                 logger.error(f"Failed to fetch task statuses: {batch_e}")
+                 # Indicate error for all tasks if batch fails
+                 for task_id in report_task_ids: task_statuses[task_id] = "[red]Fetch Error[/red]"
+        # ---
+
+        # Display results in a table
+        table = Table(title=f"Generated Reports (Account: {account_id})" + (f" - Config: {config_identifier}" if config_identifier else ""))
+        table.add_column("Report ID", style="cyan", no_wrap=True)
+        table.add_column("Report Name", style="magenta")
+        table.add_column("Config ID", style="green", no_wrap=True)
+        table.add_column("Task ID", style="yellow", no_wrap=True)
+        table.add_column("Task Status", style="blue")
+        table.add_column("Created At", style="blue")
+
+        for report_instance in reports: # Iterate over Report instances
+            created_at_str = report_instance.createdAt.strftime("%Y-%m-%d %H:%M:%S") if hasattr(report_instance, 'createdAt') and report_instance.createdAt else 'N/A'
+            task_id = getattr(report_instance, 'taskId', 'N/A')
+            task_status = task_statuses.get(task_id, "[dim]N/A[/dim]") if task_id != 'N/A' else "[dim]-[/dim]"
+            config_id = getattr(report_instance, 'reportConfigurationId', 'N/A')
+            
+            table.add_row(
+                report_instance.id, 
+                getattr(report_instance, 'name', '[i]No Name[/i]'), 
+                config_id,
+                task_id,
+                task_status,
+                created_at_str
+            )
+
+        console.print(table)
+
+    except Exception as e:
+        console.print(f"[bold red]Error listing reports: {e}[/bold red]")
+        logger.error(f"Failed to list reports: {e}\\n{traceback.format_exc()}")
+
 # --- TODO: Add other commands from Phase 3 Plan ---
 # - plexus report config show <id_or_name>
 # - plexus report list [--config <id_or_name>]
