@@ -4,6 +4,7 @@ ReportConfiguration Model - Python representation of the GraphQL ReportConfigura
 
 from typing import Optional, Dict, Any
 from dataclasses import dataclass
+from datetime import datetime
 from .base import BaseModel
 from ..client import _BaseAPIClient
 import traceback
@@ -17,6 +18,8 @@ class ReportConfiguration(BaseModel):
     accountId: str
     configuration: str  # Stored as Markdown text
     description: Optional[str] = None
+    createdAt: Optional[datetime] = None
+    updatedAt: Optional[datetime] = None
     # Add createdAt, updatedAt if needed, assuming they are handled by base or not directly used often
 
     def __init__(
@@ -26,8 +29,8 @@ class ReportConfiguration(BaseModel):
         accountId: str,
         configuration: str,
         description: Optional[str] = None,
-        # createdAt: Optional[str] = None, # Assuming managed by DB
-        # updatedAt: Optional[str] = None, # Assuming managed by DB
+        createdAt: Optional[datetime] = None,
+        updatedAt: Optional[datetime] = None,
         client: Optional[_BaseAPIClient] = None,
     ):
         super().__init__(id, client)
@@ -35,9 +38,8 @@ class ReportConfiguration(BaseModel):
         self.accountId = accountId
         self.configuration = configuration
         self.description = description
-        # self.createdAt = createdAt # Store if needed
-        # self.updatedAt = updatedAt # Store if needed
-
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
 
     @classmethod
     def fields(cls) -> str:
@@ -59,6 +61,24 @@ class ReportConfiguration(BaseModel):
         # Example:
         # created_at = datetime.fromisoformat(data['createdAt'].replace('Z', '+00:00')) if data.get('createdAt') else None
         # updated_at = datetime.fromisoformat(data['updatedAt'].replace('Z', '+00:00')) if data.get('updatedAt') else None
+        # Parse createdAt and updatedAt from ISO 8601 format
+        created_at = None
+        if data.get('createdAt'):
+            try:
+                # Handle potential timezone 'Z' (UTC)
+                ts_str = data['createdAt'].replace('Z', '+00:00')
+                created_at = datetime.fromisoformat(ts_str)
+            except ValueError:
+                logger.warning(f"Could not parse createdAt timestamp: {data.get('createdAt')}")
+
+        updated_at = None
+        if data.get('updatedAt'):
+            try:
+                # Handle potential timezone 'Z' (UTC)
+                ts_str = data['updatedAt'].replace('Z', '+00:00')
+                updated_at = datetime.fromisoformat(ts_str)
+            except ValueError:
+                logger.warning(f"Could not parse updatedAt timestamp: {data.get('updatedAt')}")
 
         return cls(
             id=data['id'],
@@ -66,8 +86,8 @@ class ReportConfiguration(BaseModel):
             accountId=data['accountId'],
             configuration=data['configuration'],
             description=data.get('description'),
-            # createdAt=created_at, # Pass parsed date if needed
-            # updatedAt=updated_at, # Pass parsed date if needed
+            createdAt=created_at,
+            updatedAt=updated_at,
             client=client
         )
 

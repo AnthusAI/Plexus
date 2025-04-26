@@ -150,22 +150,23 @@ def list_configs(account_identifier: Optional[str], limit: int): # Renamed funct
         console.print(f"[bold]Found {len(items)} Report Configuration(s) for Account: {account_id}[/bold]")
         for config_instance in items:
             # Format datetimes
-            created_at_str = config_instance.createdAt.strftime("%Y-%m-%d %H:%M:%S") if hasattr(config_instance, 'createdAt') and config_instance.createdAt else 'N/A'
-            updated_at_str = config_instance.updatedAt.strftime("%Y-%m-%d %H:%M:%S") if hasattr(config_instance, 'updatedAt') and config_instance.updatedAt else 'N/A'
+            created_at_str = config_instance.createdAt.strftime("%Y-%m-%d %H:%M:%S UTC") if config_instance.createdAt else 'N/A'
+            updated_at_str = config_instance.updatedAt.strftime("%Y-%m-%d %H:%M:%S UTC") if config_instance.updatedAt else 'N/A'
 
-            # Build panel content string
+            # Build panel content string (Name first)
             panel_content = (
+                f"[bold magenta]Name:[/bold magenta]        {config_instance.name}\n"
                 f"[bold cyan]ID:[/bold cyan]          {config_instance.id}\n"
                 f"[bold green]Description:[/bold green] {config_instance.description or '-'}\n"
                 f"[bold blue]Created At:[/bold blue]  {created_at_str}\n"
                 f"[bold blue]Updated At:[/bold blue]  {updated_at_str}"
             )
 
-            # Create and print the panel
+            # Create and print the panel with updated title
             console.print(
                 Panel(
                     panel_content,
-                    title=f"[magenta]{config_instance.name}[/magenta]",
+                    title="[bold]Report Configuration[/bold]", # Updated title to be static
                     border_style="blue",
                     expand=False # Don't expand panel width unnecessarily
                 )
