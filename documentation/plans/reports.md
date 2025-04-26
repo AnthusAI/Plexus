@@ -140,10 +140,10 @@ The reporting system will be built around **four** core concepts:
     *   ✅ **Process Blocks First:** For each block definition (in order): Instantiates and calls the `generate` method for the specified Python `ReportBlock` class. Creates `ReportBlock` records storing the JSON `output`, `log`, `name`, and `position`. *(_instantiate_and_run_block implemented including DB persistence via API calls)*
     *   ✅ **(Removed) Collect Block Results:** Gather the outputs from the executed blocks (e.g., into a dictionary accessible by block name or position). *(Internal `block_outputs` used, but not for Report.output)*
     *   ✅ **(Removed) Render Main Template Last:** Renders the main template using Jinja2, passing the collected block results (and other metadata/parameters) in the rendering context. Stores the final rendered string in `Report.output`. *(Jinja2 logic removed, `Report.output` now stores original Markdown as planned)*
-*   ⬜ **Implement CLI Trigger:** Create the `plexus report run --config <config_id>` CLI command that:
-    *   ⬜ Parses arguments.
-    *   ⬜ Calls the generation service logic.
-    *   ⬜ Creates/Updates the `Report` record (status, `output`) and associated `ReportBlock` records via GraphQL mutations. *(Service now handles this; CLI just needs to call service)*
+*   ✅ **Implement CLI Trigger:** Create the `plexus report run --config <config_identifier> [params...]` CLI command that:
+    *   ✅ Parses the configuration identifier (`--config`) and key-value pair arguments (`params...`).
+    *   ✅ Calls the `plexus.reports.service.generate_report` service function.
+    *   ✅ *(Note: The generation service handles the creation/update of `Report` and `ReportBlock` records, not the CLI command directly).*
 *   ✅ **Basic Status Updates:** Ensure the `Report` record `status`, `startedAt`, `completedAt`, `errorMessage`, `output`, and `ReportBlock` records are updated/created correctly. *(Implemented within `generate_report` service function)*
 *   ⬜ **Implement Celery Task:** Wrap the generation service logic in a Celery task.
 *   ⬜ **Implement Celery Dispatch:** Create a mechanism (e.g., internal API call, GraphQL mutation triggered by frontend) to dispatch the Celery task for report generation.
