@@ -686,40 +686,53 @@ def safequote(value: str) -> str:
         return ""
     return quote(str(value))
 
+# Define OrderCommands class here
+class OrderCommands(click.Group):
+    def list_commands(self, ctx: click.Context) -> list[str]:
+        return list(self.commands)
+
 def create_cli():
     """Create and configure the command line interface."""
-    from plexus.cli import CommandLineInterface
-    cli = CommandLineInterface.cli
+    # Remove the import of CommandLineInterface
+    # from plexus.cli import CommandLineInterface 
+    
+    # Define the base cli group here
+    @click.group(cls=OrderCommands)
+    def cli():
+        """
+        Plexus CLI for managing scorecards, scores, and evaluations.
+        """
+        pass
     
     # Import and register commands
     from plexus.cli.ScoreCommands import score
-    from plexus.cli.ScorecardCommands import scorecard
-    from plexus.cli.EvaluationCommands import evaluation
+    from plexus.cli.ScorecardCommands import scorecards
+    from plexus.cli.EvaluationCommands import evaluate
     from plexus.cli.DataCommands import data
     from plexus.cli.BatchCommands import batch
-    from plexus.cli.TaskCommands import task
-    from plexus.cli.ResultCommands import result
+    from plexus.cli.TaskCommands import tasks
+    from plexus.cli.ResultCommands import results
     from plexus.cli.AnalyzeCommands import analyze
-    from plexus.cli.DataLakeCommands import datalake
-    from plexus.cli.TrainingCommands import training
+    from plexus.cli.DataLakeCommands import lake_group as datalake
+    from plexus.cli.TrainingCommands import train
     from plexus.cli.TuningCommands import tuning
-    from plexus.cli.PredictionCommands import prediction
+    from plexus.cli.PredictionCommands import predict
     from plexus.cli.ScoreChatCommands import score_chat
     from plexus.cli.ReportCommands import report # Import the new command group
     
     # Add top-level commands
     cli.add_command(score)
-    cli.add_command(scorecard)
-    cli.add_command(evaluation)
+    cli.add_command(scorecards)
+    cli.add_command(evaluate)
     cli.add_command(data)
     cli.add_command(batch)
-    cli.add_command(task)
-    cli.add_command(result)
+    cli.add_command(tasks)
+    cli.add_command(results)
     cli.add_command(analyze)
     cli.add_command(datalake)
-    cli.add_command(training)
+    cli.add_command(train)
     cli.add_command(tuning)
-    cli.add_command(prediction)
+    cli.add_command(predict)
     cli.add_command(score_chat)
     cli.add_command(report) # Register the new command group
     cli.add_command(command)

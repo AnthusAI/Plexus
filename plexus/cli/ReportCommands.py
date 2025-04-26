@@ -24,6 +24,9 @@ from dataclasses import asdict
 
 from plexus.cli.utils import parse_kv_pairs # Assume this exists
 
+# Import Account model for resolving ID
+from plexus.dashboard.api.models.account import Account
+
 logger = logging.getLogger(__name__)
 
 @click.group()
@@ -49,7 +52,6 @@ def list_configurations(account_identifier: Optional[str], limit: int):
         except Exception as e:
             # Fallback: Try direct ID lookup if key lookup fails or method doesn't exist
             try:
-                from plexus.dashboard.api.models.account import Account
                 acc = Account.get_by_id(account_identifier, client)
                 account_id = acc.id
             except Exception:
@@ -125,7 +127,6 @@ def get(name: str, account_identifier: Optional[str]):
             account_id = client._resolve_account_id(account_key=account_identifier)
         except Exception as e:
             try:
-                from plexus.dashboard.api.models.account import Account
                 acc = Account.get_by_id(account_identifier, client)
                 account_id = acc.id
             except Exception:
@@ -247,5 +248,70 @@ def run(config_identifier: str, params: Tuple[str]):
         console.print("Check service logs for more details.")
         # Potentially exit with non-zero status
         # sys.exit(1)
+
+@report.command(name="create-config")
+@click.option('--name', required=True, help='Name for the new Report Configuration.')
+@click.option('--description', default="", help='Optional description.')
+@click.option('--account', 'account_identifier', default=None, help='Account key or ID to associate with. Defaults to PLEXUS_ACCOUNT_KEY.')
+@click.option('--scorecard', 'scorecard_identifier', required=True, help='Scorecard identifier (name, key, or ID) for the ScoreInfo block.')
+@click.option('--score', 'score_identifier', required=True, help='Score name for the ScoreInfo block.')
+def create_configuration(name: str, description: str, account_identifier: Optional[str], scorecard_identifier: str, score_identifier: str):
+    """Create a simple test Report Configuration using the ScoreInfo block."""
+    client = create_client()
+    account_id = None
+
+    # Resolve account ID (reusing logic from 'list')
+    try:
+        if account_identifier:
+            try:
+                account_id = client._resolve_account_id(account_key=account_identifier)
+            except Exception:
+                acc = Account.get_by_id(account_identifier, client)
+                account_id = acc.id if acc else None
+        else:
+            account_id = client._resolve_account_id() # Resolve from context
+
+        if not account_id:
+             raise ValueError("Could not determine Account ID. Ensure PLEXUS_ACCOUNT_KEY is set or provide --account.")
+
+    except Exception as e:
+        console.print(f"[red]Error resolving account: {e}[/red]")
+        return
+
+    console.print(f"Creating Report Configuration '{name}' for Account ID: {account_id}")
+
+    # Define the configuration content using the ScoreInfo block
+    config_content = f"""
+This is a sample report configuration.
+
+```block name="Score Information"
+pythonClass: ScoreInfo
+config:
+  scorecard: {scorecard_identifier}
+  score: {score_identifier}
+```
+
+This concludes the sample report.
+"""
+
+    try:
+        # Create the ReportConfiguration record
+        new_config = ReportConfiguration.create(
+            client=client,
+            name=name,
+            description=description,
+            accountId=account_id,
+            configuration=config_content # Store the Markdown content
+        )
+        console.print(f"[green]Successfully created Report Configuration:[/green]")
+        console.print(f"  ID: [cyan]{new_config.id}[/cyan]")
+        console.print(f"  Name: {new_config.name}")
+        console.print(f"  Account ID: {new_config.accountId}")
+        console.print("Configuration Content:")
+        console.print(Panel(config_content, border_style="dim"))
+
+    except Exception as e:
+        console.print(f"[bold red]Error creating report configuration: {e}[/bold red]")
+        logger.error(f"Failed to create report configuration '{name}': {e}\n{traceback.format_exc()}")
 
 # Add other report-related commands as needed (e.g., create-config, delete-config, delete-report) 

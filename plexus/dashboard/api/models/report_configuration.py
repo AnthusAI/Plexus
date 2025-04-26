@@ -73,6 +73,47 @@ class ReportConfiguration(BaseModel):
 
     # get_by_id is inherited from BaseModel
 
+    @classmethod
+    def create(
+        cls,
+        client: _BaseAPIClient,
+        name: str,
+        accountId: str,
+        configuration: str,
+        description: Optional[str] = None
+    ) -> 'ReportConfiguration':
+        """Create a new ReportConfiguration record via GraphQL mutation."""
+        mutation = f"""
+        mutation CreateReportConfiguration($input: CreateReportConfigurationInput!) {{
+            createReportConfiguration(input: $input) {{
+                {cls.fields()}
+            }}
+        }}
+        """
+
+        input_data = {
+            'name': name,
+            'accountId': accountId,
+            'configuration': configuration,
+            'description': description
+            # createdAt/updatedAt are set by the backend automatically
+        }
+        # Remove optional fields if None
+        input_data = {k: v for k, v in input_data.items() if v is not None}
+
+        try:
+            logger.debug(f"Creating ReportConfiguration with input: {input_data}")
+            result = client.execute(mutation, {'input': input_data})
+            if not result or 'createReportConfiguration' not in result or not result['createReportConfiguration']:
+                error_msg = f"Failed to create ReportConfiguration. Response: {result}"
+                logger.error(error_msg)
+                raise Exception(error_msg)
+            # Convert the response dict back using from_dict
+            return cls.from_dict(result['createReportConfiguration'], client)
+        except Exception as e:
+            logger.exception(f"Error creating ReportConfiguration '{name}' for account {accountId}: {e}")
+            raise
+
     # Add other methods like get_by_name, create, update if needed later
     # Example:
     # @classmethod
@@ -129,6 +170,6 @@ class ReportConfiguration(BaseModel):
 
             return list_result # Return the whole structure including nextToken
         except Exception as e:
-            logger.error(f"Error listing Report Configurations for account {account_id}: {e}\\n{traceback.format_exc()}")
+            logger.error(f"Error listing Report Configurations for account {account_id}: {e}\\\n{traceback.format_exc()}")
             # Re-raise or return an empty structure based on desired error handling
             raise # Re-raise for now to let caller handle 
