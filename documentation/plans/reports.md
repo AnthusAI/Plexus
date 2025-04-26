@@ -179,7 +179,7 @@ The reporting system will be built around **four** core concepts:
 ### Phase 3: CLI Inspection Tools (Pre-UI Validation)
 
 *   **Note on ID/Name Lookup:** Commands accepting `<id_or_name>` should intelligently attempt lookup: Check if input looks like a UUID. If yes, try ID first, then name. If no, try name first, then ID. Always try both before failing.
-*   ✅ **Implement `plexus report config list`:** Create a CLI command to list `ReportConfiguration` records. Use `rich` for formatted table output.
+*   ✅ **Implement `plexus report config list`:** Create a CLI command to list `ReportConfiguration` records. Use `rich` for formatted table output. *(Verified)*
 *   ✅ **Implement `plexus report config show <id_or_name>`:** Create a CLI command to display details of a specific `ReportConfiguration`. Use `rich` panels/syntax highlighting. Implement ID/Name lookup.
 *   ✅ **Implement `plexus report list [--config <id_or_name>]`:** Create a CLI command to list `Report` records, including linked `taskId` and basic `Task` status. Use `rich` table output. Support optional filtering by `ReportConfiguration` (implementing ID/Name lookup for the filter value).
 *   ✅ **Implement `plexus report show <id_or_name>`:** Create a CLI command to display details of a specific `Report`, including parameters, output (rendered Markdown if possible), and associated `ReportBlock` summaries. Use `rich` panels. Implement ID/Name lookup.
