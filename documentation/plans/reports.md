@@ -164,6 +164,15 @@ The reporting system will be built around **four** core concepts:
     *   *Status:* We have successfully created a test `ReportConfiguration` (`"Test ScoreInfo Report"`, ID: `f496664a-82ee-404d-a266-e3dc871a13b9`) using `python -m plexus.cli.CommandLineInterface report create-config --name 'Test ScoreInfo Report' --scorecard cmg_edu_v1_0 --score Greeting`. We then triggered the generation using `python -m plexus.cli.CommandLineInterface report run --config 'Test ScoreInfo Report'`, which created Task `4b688330-704e-485c-b7ca-8e0d95a16346`. The task is currently `PENDING`/`QUEUED`.
     *   ***NEXT:*** *Start a Celery worker (`python -m plexus.cli.CommandLineInterface command worker`) and observe its logs to confirm it processes Task `4b688330-704e-485c-b7ca-8e0d95a16346` and updates its status/stages correctly. Check final status using `python -m plexus.cli.CommandLineInterface tasks info --id 4b688330-704e-485c-b7ca-8e0d95a16346`.*
 
+### Phase 2.5: CLI Inspection Tools (Pre-UI Validation)
+
+*   ⬜ **Implement `report list-configs`:** Create a CLI command to list `ReportConfiguration` records. Use `rich` for formatted table output.
+*   ⬜ **Implement `report show-config <id>`:** Create a CLI command to display details of a specific `ReportConfiguration`. Use `rich` panels/syntax highlighting for the configuration content.
+*   ⬜ **Implement `report list`:** Create a CLI command to list `Report` records, including their linked `taskId` and basic `Task` status. Use `rich` for formatted table output.
+*   ⬜ **Implement `report show <id>`:** Create a CLI command to display details of a specific `Report`, including its parameters, output (rendered Markdown if possible), and associated `ReportBlock` summaries. Use `rich` panels.
+*   ⬜ **Implement `report show-blocks <report_id>`:** Create a CLI command to list and display the details (name, position, output JSON, log) of all `ReportBlock` records associated with a specific `Report`. Use `rich` panels/syntax highlighting for JSON output.
+*   ⬜ **Verify Phase 2.5:** Confirm these CLI commands function correctly and provide the necessary visibility into the report data for backend validation purposes.
+
 ### Phase 3: Frontend Basics (Management & Display)
 
 *   ⬜ **Create "Reports" Dashboard Section:** Add a new top-level section/route (e.g., `/reports`) in the Next.js dashboard.
