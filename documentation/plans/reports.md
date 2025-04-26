@@ -164,16 +164,19 @@ The reporting system will be built around **four** core concepts:
     *   *Status:* We have successfully created a test `ReportConfiguration` (`"Test ScoreInfo Report"`, ID: `f496664a-82ee-404d-a266-e3dc871a13b9`) using `python -m plexus.cli.CommandLineInterface report create-config --name 'Test ScoreInfo Report' --scorecard cmg_edu_v1_0 --score Greeting`. We then triggered the generation using `python -m plexus.cli.CommandLineInterface report run --config 'Test ScoreInfo Report'`, which created Task `4b688330-704e-485c-b7ca-8e0d95a16346`. The task is currently `PENDING`/`QUEUED`.
     *   ***NEXT:*** *Start a Celery worker (`python -m plexus.cli.CommandLineInterface command worker`) and observe its logs to confirm it processes Task `4b688330-704e-485c-b7ca-8e0d95a16346` and updates its status/stages correctly. Check final status using `python -m plexus.cli.CommandLineInterface tasks info --id 4b688330-704e-485c-b7ca-8e0d95a16346`.*
 
-### Phase 2.5: CLI Inspection Tools (Pre-UI Validation)
+### Phase 3: CLI Inspection Tools (Pre-UI Validation)
 
-*   ⬜ **Implement `report list-configs`:** Create a CLI command to list `ReportConfiguration` records. Use `rich` for formatted table output.
-*   ⬜ **Implement `report show-config <id>`:** Create a CLI command to display details of a specific `ReportConfiguration`. Use `rich` panels/syntax highlighting for the configuration content.
-*   ⬜ **Implement `report list`:** Create a CLI command to list `Report` records, including their linked `taskId` and basic `Task` status. Use `rich` for formatted table output.
-*   ⬜ **Implement `report show <id>`:** Create a CLI command to display details of a specific `Report`, including its parameters, output (rendered Markdown if possible), and associated `ReportBlock` summaries. Use `rich` panels.
-*   ⬜ **Implement `report show-blocks <report_id>`:** Create a CLI command to list and display the details (name, position, output JSON, log) of all `ReportBlock` records associated with a specific `Report`. Use `rich` panels/syntax highlighting for JSON output.
-*   ⬜ **Verify Phase 2.5:** Confirm these CLI commands function correctly and provide the necessary visibility into the report data for backend validation purposes.
+*   **Note on ID/Name Lookup:** Commands accepting `<id_or_name>` should intelligently attempt lookup: Check if input looks like a UUID. If yes, try ID first, then name. If no, try name first, then ID. Always try both before failing.
+*   ✅ **Implement `plexus report config list`:** Create a CLI command to list `ReportConfiguration` records. Use `rich` for formatted table output.
+*   ✅ **Implement `plexus report config show <id_or_name>`:** Create a CLI command to display details of a specific `ReportConfiguration`. Use `rich` panels/syntax highlighting. Implement ID/Name lookup.
+*   ⬜ **Implement `plexus report list [--config <id_or_name>]`:** Create a CLI command to list `Report` records, including linked `taskId` and basic `Task` status. Use `rich` table output. Support optional filtering by `ReportConfiguration` (implementing ID/Name lookup for the filter value).
+*   ⬜ **Implement `plexus report show <id_or_name>`:** Create a CLI command to display details of a specific `Report`, including parameters, output (rendered Markdown if possible), and associated `ReportBlock` summaries. Use `rich` panels. Implement ID/Name lookup.
+*   ⬜ **Implement `plexus report last`:** Create a CLI command to show the details of the most recently created `Report` (equivalent to `plexus report show` for the latest report). Use `rich` panels.
+*   ⬜ **Implement `plexus report block list <report_id>`:** Create a CLI command to list `ReportBlock` records associated with a specific `Report`. Use `rich` for formatted table output. *Note: `<report_id>` here should strictly be the ID.* 
+*   ⬜ **Implement `plexus report block show <report_id> <block_identifier>`:** Create a CLI command to display the details (name, position, output JSON, log) of a specific `ReportBlock` (identified by position or name). Use `rich` panels/syntax highlighting. *Note: `<report_id>` here should strictly be the ID.* 
+*   ⬜ **Verify Phase 3:** Confirm these CLI commands function correctly, including filtering and ID/Name lookup, providing the necessary visibility into report data.
 
-### Phase 3: Frontend Basics (Management & Display)
+### Phase 4: Frontend Basics (Management & Display)
 
 *   ⬜ **Create "Reports" Dashboard Section:** Add a new top-level section/route (e.g., `/reports`) in the Next.js dashboard.
 *   ⬜ **List Configurations:** Implement a UI table/list to display existing `ReportConfiguration`s fetched via GraphQL.
@@ -183,9 +186,9 @@ The reporting system will be built around **four** core concepts:
 *   ⬜ **Basic Report View:** Create a dedicated route/page (e.g., `/reports/[reportId]`).
 *   ⬜ **Fetch Report Data:** Implement logic on the report view page to fetch the `Report` record (including `output`), its associated `ReportBlock` records, **and the associated `Task` record (for status/metadata).**
 *   ⬜ **Initial Dynamic Rendering:** Develop a Markdown renderer for `Report.output`. Implement basic display for `ReportBlock` data. **Display generation status/errors fetched from the linked `Task`.**
-*   ⬜ **Verify Phase 3:** Confirm basic UI for listing, creating configurations, triggering runs, and viewing simple reports works. **Verify status display reflects the linked Task.**
+*   ⬜ **Verify Phase 4:** Confirm basic UI for listing, creating configurations, triggering runs, and viewing simple reports works. **Verify status display reflects the linked Task.**
 
-### Phase 4: Advanced Features & Polish
+### Phase 5: Advanced Features & Polish
 
 *   ⬜ **Implement Core Report Blocks:**
     *   ⬜ Implement `FeedbackAnalysisBlock`.
@@ -196,7 +199,7 @@ The reporting system will be built around **four** core concepts:
 *   ⬜ **Integrate Sharing:** Connect the `Report` model to the `ShareLink` system.
 *   ⬜ **Improve Configuration Editor:** Consider a more user-friendly UI beyond raw YAML/JSON/Markdown editing (future enhancement).
 *   ⬜ **Refine Print Styles:** Ensure the `@media print` styles produce a high-quality printed report, handling block rendering appropriately.
-*   ⬜ **Verify Phase 4:** Test complex reports with various blocks, ensure proper visualization, sharing, and printing.
+*   ⬜ **Verify Phase 5:** Test complex reports with various blocks, ensure proper visualization, sharing, and printing.
 
 ## Example Report Configuration
 
