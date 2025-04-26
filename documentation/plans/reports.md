@@ -178,6 +178,7 @@ The reporting system will be built around **four** core concepts:
 
 ### Phase 3: CLI Inspection Tools (Pre-UI Validation)
 
+*   **CLI Output Style:** For consistency, prefer using `rich.panel.Panel` with `expand=True` for displaying multi-line details in CLI command outputs.
 *   **Note on ID/Name Lookup:** Commands accepting `<id_or_name>` should intelligently attempt lookup: Check if input looks like a UUID. If yes, try ID first, then name. If no, try name first, then ID. Always try both before failing.
 *   ✅ **Implement `plexus report config list`:** Create a CLI command to list `ReportConfiguration` records. Use `rich` for formatted table output. *(Verified)*
 *   ✅ **Implement `plexus report config show <id_or_name>`:** Create a CLI command to display details of a specific `ReportConfiguration`. Use `rich` panels/syntax highlighting. Implement ID/Name lookup.
