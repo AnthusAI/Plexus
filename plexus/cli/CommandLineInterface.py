@@ -27,6 +27,7 @@ from sklearn.metrics import (
     accuracy_score
 )
 import textwrap
+from rich.markup import escape
 
 from .DataCommands import data
 from .EvaluationCommands import evaluate, evaluations
@@ -86,7 +87,8 @@ def main():
     except click.exceptions.Exit:
         pass
     except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
+        escaped_error = escape(str(e))
+        console.print(f"[red]Error: {escaped_error}[/red]")
         sys.exit(1)
 
 if __name__ == '__main__':

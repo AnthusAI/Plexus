@@ -27,6 +27,7 @@ from dataclasses import asdict
 import uuid # Added for UUID validation
 from gql.transport.exceptions import TransportQueryError # Added import
 from gql import gql # Added import for gql function
+from rich.markup import escape # Added escape import
 
 from plexus.cli.utils import parse_kv_pairs # Assume this exists
 
@@ -385,17 +386,23 @@ def create_config(name: str, description: str, account_identifier: Optional[str]
         # Assume ReportConfiguration.create() exists and takes these parameters
         new_config = ReportConfiguration.create(
             client=client,
-            account_id=account_id,
+            accountId=account_id,  # Corrected keyword argument case
             name=name,
             description=description,
             configuration=configuration_content # Use file content here
         )
 
         if new_config:
-            console.print(f"[bold green]Successfully created Report Configuration:[/bold]")
-            console.print(f"  ID: {new_config.id}")
-            console.print(f"  Name: {new_config.name}")
-            console.print(f"  Account ID: {new_config.accountId}")
+            # Escape potentially problematic values before printing with Rich
+            escaped_id = escape(str(new_config.id))
+            escaped_name = escape(str(new_config.name))
+            escaped_account_id = escape(str(new_config.accountId))
+            
+            # Simplified markup
+            console.print(f"[bold]Successfully created Report Configuration:[/bold]")
+            console.print(f"  ID: {escaped_id}")
+            console.print(f"  Name: {escaped_name}")
+            console.print(f"  Account ID: {escaped_account_id}")
         else:
             # Handle case where creation method returns None or raises an expected error
             console.print(f"[red]Error: Failed to create report configuration \'{name}\'. API returned no object.[/red]")
@@ -405,7 +412,9 @@ def create_config(name: str, description: str, account_identifier: Optional[str]
     except IOError as e:
          console.print(f"[red]Error reading configuration file \'{config_file_path}\': {e}[/red]")
     except Exception as e:
-        console.print(f"[bold red]Error creating report configuration: {e}[/bold red]")
+        # Escape the error message to prevent Rich parsing issues
+        escaped_error = escape(str(e))
+        console.print(f"[bold red]Error creating report configuration: {escaped_error}[/bold red]")
         logger.error(f"Failed to create report configuration \'{name}\': {e}\\n{traceback.format_exc()}")
 
 # --- Helper function for ID/Name resolution (Copied from show_config) ---
