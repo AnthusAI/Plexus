@@ -408,7 +408,8 @@ const schema = a.schema({
             celeryTaskId: a.string(),
             workerNodeId: a.string(),
             updatedAt: a.datetime(),
-            evaluation: a.hasOne('Evaluation', 'taskId')
+            evaluation: a.hasOne('Evaluation', 'taskId'),
+            report: a.hasOne('Report', 'taskId')
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
@@ -591,6 +592,8 @@ const schema = a.schema({
             reportConfiguration: a.belongsTo('ReportConfiguration', 'reportConfigurationId'),
             reportBlocks: a.hasMany('ReportBlock', 'reportId'), // Link to ReportBlock
             updatedAt: a.datetime().required(),
+            taskId: a.string(), // Add foreign key for Task
+            task: a.belongsTo('Task', 'taskId'), // Add relationship to Task
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
