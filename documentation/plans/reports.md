@@ -109,6 +109,28 @@ The reporting system will be built around **four** core concepts:
     7.  **Store Original Markdown:** Store the reconstructed, original Markdown string (from step 5) into the `Report.output` field.
     8.  **Update Final Task Status:** Upon successful completion or failure, update the associated `Task` record's final `status`, `completedAt`, `errorMessage`, `errorDetails` etc. **The `Report` record itself is not directly updated with status information.**
 
+### Synchronous vs. Asynchronous Execution (Clarification)
+
+Initial testing and discussion revealed the need for two distinct report generation execution paths, while ensuring core logic reuse and consistent progress tracking:
+
+1.  **Synchronous Execution (CLI):**
+    *   The `plexus report run` CLI command **MUST** execute the report generation process *synchronously* within the same process.
+    *   It **MUST** create a `Task` record to represent the job and use `TaskProgressTracker` to manage status and stages.
+    *   It **MUST NOT** dispatch the job to Celery. It should directly invoke the core report generation logic.
+    *   The CLI command will wait for the generation to complete and report the final `Task` status and the resulting `Report` ID.
+    *   This path is primarily intended for direct user interaction, testing, and scenarios where immediate feedback is desired without relying on background workers.
+
+2.  **Asynchronous Execution (via Celery Worker):** The core report generation logic is executed by a standard Celery worker (`plexus command worker`) processing the `generate_report_task`. This task can be dispatched in two primary ways:
+    *   **a) Direct Celery Dispatch:** A user or script can directly dispatch the `generate_report_task` using `plexus command dispatch [task_id] [other_args...]`. The worker receives this directly via the Celery queue.
+    *   **b) API/Lambda Trigger:**
+        *   A `Task` record is created via the GraphQL API (e.g., initiated by the dashboard) with metadata indicating a report generation request (including the `report_configuration_id`).
+        *   A separate process (e.g., an AWS Lambda function triggered by DynamoDB stream events on the `Task` table) detects the creation of this new `Task` record configured for report generation.
+        *   This trigger process then dispatches the actual `generate_report_task` to the Celery queue, passing the `task_id`.
+        *   A Celery worker then picks up this dispatched task and executes the generation.
+    *   In both asynchronous scenarios, the Celery task handler (the Python function decorated with `@celery.task`, likely calling `generate_report(task_id)`) uses the `task_id` to initialize `TaskProgressTracker` and invokes the *same core report generation logic* as the synchronous path. This ensures consistency regardless of how the job was initiated.
+
+**Implementation Note:** This requires refactoring `plexus.reports.service` to isolate the core generation logic into a function (e.g., `_generate_report_core`) that accepts necessary parameters and an optional `TaskProgressTracker`. The existing `generate_report(task_id)` function (called by Celery) and the `plexus report run` command (running synchronously) will both ultimately call this core function after setting up the `Task` and `TaskProgressTracker` appropriately.
+
 ## Frontend Implementation (Dashboard)
 
 ### Management Interface
