@@ -29,6 +29,10 @@ from gql.transport.exceptions import TransportQueryError # Added import
 from gql import gql # Added import for gql function
 from rich.markup import escape # Added escape import
 
+# Import the refactored service function and tracker
+from plexus.reports.service import _generate_report_core
+from plexus.cli.task_progress_tracker import TaskProgressTracker, StageConfig # Restore full import
+
 from plexus.cli.utils import parse_kv_pairs # Assume this exists
 
 # Import Account model for resolving ID
@@ -182,66 +186,159 @@ def list_configs(account_identifier: Optional[str], limit: int): # Renamed funct
 @click.argument('params', nargs=-1)
 def run(config_identifier: str, params: Tuple[str]):
     """
-    Generate a new report instance from a ReportConfiguration.
+    Generate a new report instance from a ReportConfiguration synchronously.
 
     PARAMS should be key=value pairs to override or supplement configuration parameters.
     Example: plexus report run --config my_analysis start_date=2023-01-01 end_date=2023-12-31
     """
     client = create_client() # Instantiate client
-    try:
-        # Parse key-value parameters
-        parameters = parse_kv_pairs(params)
-        console.print(f"Attempting to generate report from configuration: [cyan]'{config_identifier}'[/cyan] with parameters: {parameters}")
+    tracker = None # Initialize tracker variable
+    task_id = None # Initialize task_id variable
 
-        # --- Step 1: Create Task Metadata ---
-        # Resolve ReportConfiguration to get name/accountId if needed for Task fields
-        # For now, just store identifier and params in metadata
-        # Assuming account context is handled by the client/API key
-        # TODO: Potentially resolve config_identifier to get accountId and store in metadata
-        # TODO: Implement ID/Name lookup for config_identifier here!
-        resolved_config_id = config_identifier # Placeholder - needs actual resolution
-        
+    try:
+        # --- Step 1: Parse Parameters & Resolve Account ---
+        run_parameters = parse_kv_pairs(params)
+        console.print(f"Attempting to run report from configuration: [cyan]'{config_identifier}'[/cyan] with parameters: {run_parameters}")
+
+        # Resolve account ID first (needed for config lookup by name)
+        try:
+            account_id = client._resolve_account_id()
+            if not account_id:
+                 raise RuntimeError("Could not resolve default account ID. Is PLEXUS_ACCOUNT_KEY set?")
+            console.print(f"[dim]Using Account ID: {account_id}[/dim]")
+        except Exception as e:
+            console.print(f"[red]Error resolving account: {e}[/red]")
+            raise click.Abort()
+
+        # --- Step 2: Resolve Report Configuration ---
+        console.print(f"Resolving Report Configuration: [cyan]'{config_identifier}'[/cyan]...")
+        report_config = _resolve_report_config(config_identifier, account_id, client)
+        if not report_config:
+            console.print(f"[red]Error: Report Configuration '{config_identifier}' not found for account {account_id}.[/red]")
+            raise click.Abort()
+        resolved_config_id = report_config.id
+        console.print(f"Resolved to Configuration ID: [cyan]{resolved_config_id}[/cyan] (Name: {report_config.name})")
+
+        # --- Step 3: Create Task Record ---
+        console.print(f"Creating Task record for synchronous run...")
         task_metadata = {
-            "report_configuration_id": resolved_config_id, # Store the resolved ID
-            "report_parameters": parameters,
-            "trigger": "cli" # Indicate how the task was triggered
+            "report_configuration_id": resolved_config_id,
+            "report_parameters": run_parameters,
+            "account_id": account_id, # Include account ID in metadata
+            "trigger": "cli_sync" # Indicate synchronous trigger
         }
         metadata_json = json.dumps(task_metadata)
+        task_description = f"Synchronously generate report from config '{report_config.name}' ({resolved_config_id})"
 
-        # --- Step 2: Create Task Record ---
-        console.print(f"Creating Task record...")
-        task_description = f"Generate report from config '{config_identifier}'" # Use original identifier in description
         new_task = Task.create(
             client=client,
-            type="report_generation", # Task type identifier
-            target=resolved_config_id, # Use resolved config ID as target
-            command="plexus report run", # Record the command used
+            accountId=account_id, # Explicitly set account ID
+            type="report_generation",
+            target=resolved_config_id,
+            command="plexus report run (sync)",
             description=task_description,
             metadata=metadata_json,
-            dispatchStatus="QUEUED", # Set initial dispatch status
-            status="PENDING" # Set initial task status
-            # accountId will be inferred by the backend/client if not explicitly set
+            dispatchStatus="SYNC", # Indicate synchronous execution
+            status="PENDING" # Initial status, will be updated by tracker
         )
-        console.print(f"[green]Successfully created Task:[/green] [cyan]{new_task.id}[/cyan]")
+        task_id = new_task.id # Store task_id for potential error reporting
+        console.print(f"Created Task: [cyan]{task_id}[/cyan]")
 
-        # --- Step 3: Dispatch Celery Task ---
-        console.print(f"Dispatching generation task to Celery worker...")
-        # Send the task_id to the Celery worker
-        generate_report_task.delay(task_id=new_task.id)
-        console.print(f"[green]Task dispatched successfully![/green]")
-        console.print(f"Monitor task progress using 'plexus task get --id {new_task.id}' or 'plexus task list'.")
+        # --- Step 4: Initialize Task Progress Tracker ---
+        console.print(f"Initializing progress tracker for Task [cyan]{task_id}[/cyan]...")
+        # Define stages consistent with the service
+        stage_configs = {
+            "Loading Configuration": StageConfig(order=1, status_message="Loading report configuration details."),
+            "Initializing Report Record": StageConfig(order=2, status_message="Creating initial database entry for the report."),
+            "Parsing Configuration": StageConfig(order=3, status_message="Analyzing report structure and block definitions."),
+            "Processing Report Blocks": StageConfig(order=4, status_message="Executing individual report block components.", total_items=0), # total_items set dynamically in core
+            "Finalizing Report": StageConfig(order=5, status_message="Saving results and completing generation."),
+        }
+        # Use the correct initialization based on the class definition, passing the task object
+        tracker = TaskProgressTracker(
+            # task_id=task_id,              # Provide the existing task ID (alternative)
+            task_object=new_task,         # Pass the created Task object directly
+            stage_configs=stage_configs,  # Provide the stage definitions
+            total_items=0,                # Provide a default total_items (can be updated by set_total_items later)
+            prevent_new_task=True,        # Explicitly prevent creating another task
+            client=client                 # Pass the existing client instance
+        )
+        console.print("Tracker initialized.")
+
+        # --- Step 5: Execute Report Generation Synchronously ---
+        console.print(f"Executing report generation synchronously for Task [cyan]{task_id}[/cyan]...")
+        log_prefix = f"[ReportGenCLI task_id={task_id}]" # Custom log prefix for CLI context
+
+        report_id = _generate_report_core(
+            report_config_id=resolved_config_id,
+            account_id=account_id,
+            run_parameters=run_parameters,
+            client=client,
+            tracker=tracker, # Pass the initialized tracker
+            log_prefix_override=log_prefix # Pass custom log prefix
+        )
+
+        # --- Step 6: Mark Task as Completed ---
+        console.print(f"[green]Report generation successful![/green]")
+        console.print(f"  Report ID: [magenta]{report_id}[/magenta]")
+        console.print(f"  Task ID:   [cyan]{task_id}[/cyan]")
+        tracker.complete()
+        console.print(f"Task [cyan]{task_id}[/cyan] marked as COMPLETED.")
 
     except ValueError as e:
         # Specifically catch errors from parse_kv_pairs
         console.print(f"[bold red]Error parsing parameters:[/bold red] {e}")
+        # No task created yet, just abort.
+        raise click.Abort()
+    except click.Abort:
+         # Handle Abort exceptions raised previously (e.g., config not found)
+         console.print("[yellow]Aborting report run.[/yellow]")
+         # Attempt to mark task FAILED if it was created before aborting
+         if tracker:
+             try:
+                 tracker.fail("Report run aborted by user or prerequisite failure.")
+                 console.print(f"[yellow]Task {task_id} marked as FAILED due to abort.[/yellow]")
+             except Exception as tracker_err:
+                 console.print(f"[red]Error marking task {task_id} as FAILED after abort: {tracker_err}[/red]")
+         elif task_id: # Task created but tracker failed? Less likely
+              try:
+                 task = Task.get_by_id(task_id, client)
+                 if task:
+                     task.update(status="FAILED", errorMessage="Report run aborted before tracker initialization.", completedAt=datetime.now(timezone.utc).isoformat())
+                     console.print(f"[yellow]Task {task_id} marked as FAILED via direct update due to abort.[/yellow]")
+              except Exception as update_err:
+                 console.print(f"[red]Error marking task {task_id} as FAILED via direct update after abort: {update_err}[/red]")
+         # Let click handle the exit
     except Exception as e:
-        # Catch potential errors from the generate_report service call
-        console.print(f"[bold red]An error occurred during report generation initiation:[/bold red]")
+        # Catch potential errors during Task creation or _generate_report_core execution
+        error_msg = f"An error occurred during synchronous report generation"
+        detailed_error = traceback.format_exc()
+        console.print(f"[bold red]{error_msg}:[/bold red]")
         console.print(f"{type(e).__name__}: {e}")
-        logger.error(f"CLI trigger failed for report generation: {e}\n{traceback.format_exc()}")
-        console.print("Check service logs for more details.")
-        # Potentially exit with non-zero status
-        # sys.exit(1)
+        logger.error(f"CLI synchronous report run failed for Task {task_id or 'N/A'}: {e}\n{detailed_error}")
+
+        if tracker:
+            # If tracker exists, use it to mark the task as failed
+            try:
+                tracker.fail(f"{error_msg}: {e}\nDetails:\n{detailed_error}")
+                console.print(f"[red]Task {task_id} marked as FAILED via tracker.[/red]")
+            except Exception as tracker_fail_err:
+                console.print(f"[red]Error marking task {task_id} as FAILED via tracker after primary error: {tracker_fail_err}[/red]")
+                # Fallback? Direct update might be risky if tracker failed badly.
+        elif task_id:
+            # If task was created but tracker failed or error occurred before tracker init
+             try:
+                 task = Task.get_by_id(task_id, client)
+                 if task:
+                     task.update(status="FAILED", errorMessage=f"{error_msg}: {e}", errorDetails=detailed_error, completedAt=datetime.now(timezone.utc).isoformat())
+                     console.print(f"[red]Task {task_id} marked as FAILED via direct update.[/red]")
+             except Exception as final_update_err:
+                 console.print(f"[red]CRITICAL: Failed to mark task {task_id} as FAILED via any method after error: {final_update_err}[/red]")
+        else:
+            console.print("[red]No Task ID available to mark as failed.[/red]")
+
+        # Exit with non-zero status
+        sys.exit(1)
 
 @config.command(name="create")
 @click.option('--name', required=True, help='Name for the new Report Configuration.')
@@ -423,110 +520,78 @@ def _resolve_report_config(identifier: str, account_id: str, client: PlexusDashb
 def show_config(id_or_name: str, account_identifier: Optional[str]):
     """Display details of a specific Report Configuration."""
     client = create_client()
-    account_id = None
-    account_display_name = "default account"
-    
-    # --- Account Resolution ---
+    resolved_account_id = account_identifier # Placeholder, need actual resolution logic if name lookup needed
+
+    # If account_identifier is provided, resolve it. Otherwise, use default client context.
+    acc_id_for_lookup = None
+    account_display_name = "default account (from environment)"
     if account_identifier:
         account_display_name = f"identifier '{account_identifier}'"
+        # Resolve the provided identifier
         try:
-            console.print(f"[dim]Attempting to resolve account '{account_identifier}'...[/dim]")
-            account_obj = Account.resolve_by_key_or_id(account_identifier, client)
-            if account_obj:
-                account_id = account_obj.id
-                console.print(f"[dim]Resolved account ID: {account_id}[/dim]")
+            acc_obj = Account.get_by_key_or_id(account_identifier, client)
+            if acc_obj:
+                acc_id_for_lookup = acc_obj.id
             else:
-                # Should be handled by resolve_by_key_or_id raising exception, but safety check
                 console.print(f"[red]Error: Could not resolve account identifier '{account_identifier}'.[/red]")
-                return
+                raise click.Abort()
         except Exception as e:
             console.print(f"[red]Error resolving account '{account_identifier}': {e}[/red]")
-            return
+            raise click.Abort()
     else:
-        account_display_name = "default account (from environment)"
-        console.print(f"[dim]Attempting to resolve default account from environment...[/dim]")
+        # Use default account ID from client
         try:
-            account_id = client._resolve_account_id()
-            if account_id:
-                console.print(f"[dim]Resolved default account ID: {account_id}[/dim]")
-            else:
-                console.print(f"[red]Error: client._resolve_account_id() returned None. Is PLEXUS_ACCOUNT_KEY set and valid?[/red]")
-                return
+            acc_id_for_lookup = client._resolve_account_id()
+            if not acc_id_for_lookup:
+                raise RuntimeError("Could not resolve default account ID.")
         except Exception as e:
-            console.print(f"[red]Error resolving default account: {e}. Is PLEXUS_ACCOUNT_KEY set and valid?[/red]")
-            return
+             console.print(f"[red]Error resolving default account: {e}. Is PLEXUS_ACCOUNT_KEY set?[/red]")
+             raise click.Abort()
 
-    if not account_id:
-        # This should ideally not be reached if logic above is correct
-        console.print(f"[red]Error: Could not determine Account ID for {account_display_name}.[/red]")
-        return
+    console.print(f"Showing Report Configuration '{id_or_name}' for account: [cyan]{acc_id_for_lookup}[/cyan] ({account_display_name})")
 
-    # --- Report Configuration Resolution ---
-    console.print(f"[cyan]Fetching Report Configuration '{id_or_name}' for Account ID: {account_id}[/cyan]")
     try:
-        config_instance = _resolve_report_config(id_or_name, account_id, client)
+        # Use the helper function to resolve by ID or Name
+        config_instance = _resolve_report_config(id_or_name, acc_id_for_lookup, client)
 
         if not config_instance:
-            console.print(f"[yellow]Report Configuration '{id_or_name}' not found for account {account_id}.[/yellow]")
+            console.print(f"[yellow]Report Configuration '{id_or_name}' not found for account {acc_id_for_lookup}.[/yellow]")
             return
 
-        # --- Display Details ---
+        # --- Display using Panel ---
         created_at_str = config_instance.createdAt.strftime("%Y-%m-%d %H:%M:%S UTC") if config_instance.createdAt else 'N/A'
         updated_at_str = config_instance.updatedAt.strftime("%Y-%m-%d %H:%M:%S UTC") if config_instance.updatedAt else 'N/A'
 
-        # Prepare basic details
-        details_content = (
-            f"[bold magenta]Name:[/bold magenta]        {escape(config_instance.name)}\n"
-            f"[bold cyan]ID:[/bold cyan]          {config_instance.id}\n"
-            f"[bold green]Description:[/bold green] {escape(config_instance.description or '-')}\n"
-            f"[bold blue]Created At:[/bold blue]  {created_at_str}\n"
-            f"[bold blue]Updated At:[/bold blue]  {updated_at_str}\n"
-            f"[bold yellow]Account ID:[/bold yellow]  {config_instance.accountId}"
+        panel_content = (
+            f"[bold magenta]Name:[/bold magenta]        {escape(config_instance.name)}\\n"
+            f"[bold cyan]ID:[/bold cyan]          {config_instance.id}\\n"
+            f"[bold green]Description:[/bold green] {escape(config_instance.description or '-')}\\n"
+            f"[bold blue]Created At:[/bold blue]  {created_at_str}\\n"
+            f"[bold blue]Updated At:[/bold blue]  {updated_at_str}\\n\\n"
+            f"[bold yellow]Configuration Content:[/bold yellow]"
         )
 
         console.print(
             Panel(
-                details_content,
-                title="[bold]Report Configuration Details[/bold]",
+                panel_content,
+                title=f"[bold]Report Configuration Details[/bold]",
                 border_style="blue",
                 expand=True
             )
         )
 
-        # Display the configuration content with syntax highlighting
-        config_content_str = config_instance.configuration # Assuming it's a string (JSON or Markdown)
-        if not config_content_str:
-             config_content_str = "[dim](No configuration content stored)[/dim]"
-             syntax = config_content_str # Display as plain text if empty
+        # Display configuration content with Markdown syntax highlighting
+        if config_instance.configuration:
+             syntax = Syntax(config_instance.configuration, "markdown", theme="default", line_numbers=True)
+             console.print(syntax)
         else:
-            # Attempt to detect if JSON or assume Markdown
-            lexer = "markdown" # Default to markdown
-            try:
-                # Simple check: if it starts with { or [ and ends with } or ], assume JSON
-                if config_content_str.strip().startswith(("{", "[")) and config_content_str.strip().endswith(("}", "]")):
-                     # Try parsing as JSON to confirm
-                     json.loads(config_content_str)
-                     lexer = "json"
-            except json.JSONDecodeError:
-                 lexer = "markdown" # Fallback to markdown if JSON parse fails
-            except Exception:
-                 lexer = "markdown" # General fallback
+            console.print("[dim]Configuration content is empty.[/dim]")
+        # --- End Panel Display ---
 
-            syntax = Syntax(config_content_str, lexer, theme="default", line_numbers=True)
-
-
-        console.print(
-            Panel(
-                syntax,
-                title="[bold]Configuration Content[/bold]",
-                border_style="green",
-                expand=True # Allow this panel to expand
-            )
-        )
 
     except Exception as e:
-        console.print(f"[bold red]Error fetching report configuration details: {e}[/bold red]")
-        logger.error(f"Failed to show report configuration '{id_or_name}': {e}\\n{traceback.format_exc()}")
+        console.print(f"[bold red]Error retrieving report configuration '{id_or_name}': {e}[/bold red]")
+        logger.error(f"Failed to show report configuration: {e}\\n{traceback.format_exc()}")
 
 
 # -------------------

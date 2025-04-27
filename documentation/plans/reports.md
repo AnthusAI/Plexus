@@ -129,7 +129,32 @@ Initial testing and discussion revealed the need for two distinct report generat
         *   A Celery worker then picks up this dispatched task and executes the generation.
     *   In both asynchronous scenarios, the Celery task handler (the Python function decorated with `@celery.task`, likely calling `generate_report(task_id)`) uses the `task_id` to initialize `TaskProgressTracker` and invokes the *same core report generation logic* as the synchronous path. This ensures consistency regardless of how the job was initiated.
 
-**Implementation Note:** This requires refactoring `plexus.reports.service` to isolate the core generation logic into a function (e.g., `_generate_report_core`) that accepts necessary parameters and an optional `TaskProgressTracker`. The existing `generate_report(task_id)` function (called by Celery) and the `plexus report run` command (running synchronously) will both ultimately call this core function after setting up the `Task` and `TaskProgressTracker` appropriately.
+**Implementation Note:** This requires refactoring `plexus.reports.service` to:
+
+1.  **Isolate Core Logic:** Create a new private function, `_generate_report_core`, that encapsulates the primary report generation steps (loading config, creating `Report` record, parsing markdown, running blocks, creating `ReportBlock` records, updating progress, setting final status).
+2.  **Define `_generate_report_core` Parameters:** This function will accept direct inputs:
+    *   `report_config_id: str`
+    *   `account_id: str`
+    *   `run_parameters: dict`
+    *   `client: PlexusDashboardClient`
+    *   `tracker: TaskProgressTracker` (This is crucial for linking to the `Task` and updating progress/status).
+    *   It should return the ID of the created `Report` record upon success, or raise an exception on failure (allowing the caller to handle final Task status updates via the tracker).
+3.  **Adapt `generate_report(task_id)`:** Modify the existing function (used by Celery workers):
+    *   It will retain its `task_id: str` signature.
+    *   Fetch the `Task` record using the `task_id`.
+    *   Extract `report_config_id`, `account_id`, and `run_parameters` from `Task.metadata`.
+    *   Initialize the `TaskProgressTracker` using the `task_id`.
+    *   Wrap the call to `_generate_report_core` in a `try...except` block.
+    *   Call `_generate_report_core` with the extracted parameters and the tracker.
+    *   On success, ensure the tracker marks the task as `COMPLETED`.
+    *   On exception during the `_generate_report_core` call, use the tracker to mark the task as `FAILED` with the error details.
+4.  **Adapt `plexus report run` CLI (Next Step):** This CLI command will be modified *after* the service refactoring to:
+    *   Create a new `Task` record.
+    *   Initialize `TaskProgressTracker`.
+    *   Directly call `_generate_report_core` synchronously, passing the necessary parameters and the tracker.
+    *   It will *not* involve Celery dispatch.
+
+This refactoring ensures the core report generation logic is DRY and consistently uses the `TaskProgressTracker`, while supporting both synchronous CLI execution and asynchronous Celery-based execution.
 
 ## Frontend Implementation (Dashboard)
 
@@ -186,14 +211,16 @@ Initial testing and discussion revealed the need for two distinct report generat
 *   ✅ **Implement CLI Trigger:** Create the `plexus report run --config <config_identifier> [params...]` CLI command that:
     *   ✅ Parses arguments.
     *   ✅ **Creates a `Task` record** for the report generation.
-    *   ✅ Dispatches the Celery task (`generate_report_task`) using the created `task_id`.
+    *   ✅ **Initializes `TaskProgressTracker`** using the created `task_id`.
+    *   ✅ **Directly calls the core generation logic** (e.g., `_generate_report_core`) synchronously.
+    *   ✅ **Waits for completion** and reports final `Task` status and `Report` ID.
+    *   ✅ **Does NOT dispatch to Celery.**
 *   ✅ **(Removed) Basic Status Updates:** Status updates are now handled via the `Task` model and `TaskProgressTracker`.
 *   ✅ **Implement Celery Task (`generate_report_task`):**
     *   ✅ Takes `task_id`.
-    *   ✅ Calls the `plexus.reports.service.generate_report` service function, passing the `task_id`.
+    *   ✅ Calls the `plexus.reports.service.generate_report` service function, passing the `task_id`. (This function now wraps `_generate_report_core` and handles task loading/tracker init).
     *   ✅ **Handles top-level exceptions:** Catches errors from the service call and updates the corresponding `Task` record to `FAILED` with error details.
-*   ✅ **Implement Celery Dispatch Mechanism:** The `plexus report run` command handles Task creation and Celery dispatch.
-*   ✅ **(Modified) Add Error Handling:** Error handling in the service updates the associated `Task` record. Celery task handles errors *calling* the service.
+*   ✅ **(Removed/Clarified) Implement Celery Dispatch Mechanism:** Celery dispatch is now primarily handled by API/Lambda triggers based on `Task` creation, or manually via `plexus command dispatch`, *not* by the `plexus report run` command itself.
 *   🟡 **Verify Phase 2:** Confirm reports can be generated via CLI/Celery, data is stored correctly in `Report` and `ReportBlock`, and **Task/TaskStage status updates correctly**.
     *   *Status:* We have successfully created test `ReportConfiguration`s via the CLI (`create-config` and `report config create --file ...`). We have also successfully triggered generation using `report run`, which created Task `4b688330-704e-485c-b7ca-8e0d95a16346`. The task is currently `PENDING`/`QUEUED`.
     *   ***NEXT:*** *Start a Celery worker (`python -m plexus.cli.CommandLineInterface command worker`) and observe its logs to confirm it processes Task `4b688330-704e-485c-b7ca-8e0d95a16346` and updates its status/stages correctly. Check final status using `python -m plexus.cli.CommandLineInterface tasks info --id 4b688330-704e-485c-b7ca-8e0d95a16346`.*
@@ -207,8 +234,6 @@ Initial testing and discussion revealed the need for two distinct report generat
 *   ✅ **Implement `plexus report list [--config <id_or_name>]`:** Create a CLI command to list `Report` records, including linked `taskId` and basic `Task` status. Use `rich` table output. Support optional filtering by `ReportConfiguration` (implementing ID/Name lookup for the filter value).
 *   ✅ **Implement `plexus report show <id_or_name>`:** Create a CLI command to display details of a specific `Report`, including parameters, output (rendered Markdown if possible), and associated `ReportBlock` summaries. Use `rich` panels. Implement ID/Name lookup.
 *   ✅ **Implement `plexus report last`:** Create a CLI command to show the details of the most recently created `Report` (equivalent to `plexus report show` for the latest report). Use `rich` panels.
-*   ✅ **Implement `plexus report block list <report_id>`:** Create a CLI command to list `ReportBlock` records associated with a specific `Report`. Use `rich` for formatted table output. *Note: `<report_id>` here should strictly be the ID.* 
-*   ✅ **Implement `plexus report block show <report_id> <block_identifier>`:** Create a CLI command to display the details (name, position, output JSON, log) of a specific `ReportBlock` (identified by position or name). Use `rich` panels/syntax highlighting. *Note: `<report_id>` here should strictly be the ID.* 
 *   🟡 **Verify Phase 3:** Confirm these CLI commands function correctly, including filtering and ID/Name lookup, providing the necessary visibility into report data. *(Verified config list, config show, config create, config delete manually. Report and Block commands remain.)*
 
 ### Phase 4: Backend & CLI Testing
@@ -254,17 +279,14 @@ Initial testing and discussion revealed the need for two distinct report generat
     5.  ⬜ **`report run` (Core Test):**
         *   Run `python -m plexus.cli.CommandLineInterface report run --config "CLI Test Config"`. Verify:
             *   Task creation message with Task ID is shown.
-            *   Task dispatch message is shown.
+            *   Messages indicating synchronous execution and progress updates are shown (e.g., block processing logs, final status).
+            *   **No Celery dispatch message is shown.**
+            *   The command waits for completion before returning the prompt.
+            *   Final `Task` status and `Report` ID are printed upon completion.
         *   Run `python -m plexus.cli.CommandLineInterface report run --config <invalid_config_id_or_name>`. Verify error message (config resolution failure).
         *   Run `python -m plexus.cli.CommandLineInterface report run --config "CLI Test Config" invalid_param=test`. Verify parameter parsing error or successful run with parameters logged in Task metadata.
-        *   **Monitor Celery Worker:** Start worker (`python -m plexus.cli.CommandLineInterface command worker`). Observe logs for:
-            *   Task reception (`generate_report_task` started with correct `task_id`).
-            *   Service execution (`plexus.reports.service` logs).
-            *   `Report` record creation log/message.
-            *   `ReportBlock` record creation log/message.
-            *   Task/Stage progress updates via `TaskProgressTracker`.
-            *   Successful completion or specific error logging.
-        *   **Check Task Status:** Use `python -m plexus.cli.CommandLineInterface task get --id <task_id_from_run>` to check final status (`COMPLETED` or `FAILED`), completion time, error messages (if any).
+        *   **(Removed) Monitor Celery Worker:** Worker monitoring is not needed for synchronous CLI execution testing. (Worker testing should happen separately for async paths).
+        *   **Check Task Status:** Use `python -m plexus.cli.CommandLineInterface task get --id <task_id_from_run>` to check final status (`COMPLETED` or `FAILED`), completion time, error messages (if any). Verify this matches the status reported by the `report run` command directly.
         *   **Check Database:** (Optional) Manually inspect `Report` and `ReportBlock` tables to confirm data persistence.
     6.  ⬜ **`report list`:**
         *   Run `python -m plexus.cli.CommandLineInterface report list`. Verify the newly generated report appears with correct Config ID, Task ID, and fetched Task Status.
@@ -317,7 +339,7 @@ Initial testing and discussion revealed the need for two distinct report generat
 *   ⬜ **Basic Report View:** Create a dedicated route/page (e.g., `/reports/[reportId]`).
 *   ⬜ **Fetch Report Data:** Implement logic on the report view page to fetch the `Report` record (including `output`), its associated `ReportBlock` records, **and the associated `Task` record (for status/metadata).**
 *   ⬜ **Initial Dynamic Rendering:** Develop a Markdown renderer for `Report.output`. Implement basic display for `ReportBlock` data. **Display generation status/errors fetched from the linked `Task`.**
-*   ⬜ **Verify Phase 4:** Confirm basic UI for listing, creating configurations, triggering runs, and viewing simple reports works. **Verify status display reflects the linked Task.**
+*   ⬜ **Verify Phase 5:** Confirm basic UI for listing, creating configurations, triggering runs, and viewing simple reports works. **Verify status display reflects the linked Task.**
 
 ### Phase 6: Advanced Features & Polish
 
@@ -330,7 +352,7 @@ Initial testing and discussion revealed the need for two distinct report generat
 *   ⬜ **Integrate Sharing:** Connect the `Report` model to the `ShareLink` system.
 *   ⬜ **Improve Configuration Editor:** Consider a more user-friendly UI beyond raw YAML/JSON/Markdown editing (future enhancement).
 *   ⬜ **Refine Print Styles:** Ensure the `@media print` styles produce a high-quality printed report, handling block rendering appropriately.
-*   ⬜ **Verify Phase 5:** Test complex reports with various blocks, ensure proper visualization, sharing, and printing.
+*   ⬜ **Verify Phase 6:** Test complex reports with various blocks, ensure proper visualization, sharing, and printing.
 
 ## Example Report Configuration
 
