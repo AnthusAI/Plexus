@@ -36,7 +36,7 @@ type DatasetProfileIndexFields = "datasetId" | "datasetVersionId";
 type ShareLinkIndexFields = "token" | "resourceType" | "resourceId" | "accountId";
 type ScoreVersionIndexFields = "scoreId" | "versionNumber" | "isFeatured";
 type ReportConfigurationIndexFields = "accountId" | "name";
-type ReportIndexFields = "accountId" | "reportConfigurationId" | "status" | "createdAt" | "updatedAt";
+type ReportIndexFields = "accountId" | "reportConfigurationId" | "createdAt" | "updatedAt" | "taskId";
 type ReportBlockIndexFields = "reportId" | "name" | "position";
 
 // Define the share token handler function
@@ -578,14 +578,9 @@ const schema = a.schema({
     Report: a
         .model({
             name: a.string(), // Can be auto-generated or user-defined
-            status: a.string().required(), // PENDING, RUNNING, COMPLETED, FAILED
             createdAt: a.datetime().required(),
-            startedAt: a.datetime(),
-            completedAt: a.datetime(),
             parameters: a.json(), // Parameters used for this specific run
-            output: a.string(), // Generated report output
-            errorMessage: a.string(),
-            errorDetails: a.json(),
+            output: a.string(), // Generated report output (original markdown template)
             accountId: a.string().required(),
             account: a.belongsTo('Account', 'accountId'),
             reportConfigurationId: a.string().required(),
@@ -602,7 +597,7 @@ const schema = a.schema({
         .secondaryIndexes((idx: (field: ReportIndexFields) => any) => [
             idx("accountId").sortKeys(["updatedAt"]),
             idx("reportConfigurationId").sortKeys(["createdAt"]),
-            idx("status")
+            idx("taskId") // Add index by taskId
         ]),
 
     ReportBlock: a
