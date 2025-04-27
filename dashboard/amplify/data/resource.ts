@@ -587,8 +587,8 @@ const schema = a.schema({
             reportConfiguration: a.belongsTo('ReportConfiguration', 'reportConfigurationId'),
             reportBlocks: a.hasMany('ReportBlock', 'reportId'), // Link to ReportBlock
             updatedAt: a.datetime().required(),
-            taskId: a.string().required(), // Add required link to Task
-            task: a.belongsTo('Task', 'taskId') // Add required link to Task
+            taskId: a.string(), // Add foreign key for Task
+            task: a.belongsTo('Task', 'taskId'), // Add relationship to Task
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),

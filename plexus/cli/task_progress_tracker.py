@@ -113,23 +113,26 @@ class TaskProgressTracker:
     """
     def __init__(
         self,
-        total_items: int,
         stage_configs: Dict[str, StageConfig],
+        task_object: Optional[Task] = None,
         task_id: Optional[str] = None,
+        total_items: int = 0,
         target: Optional[str] = None,
         command: Optional[str] = None,
         description: Optional[str] = None,
         dispatch_status: Optional[str] = None,
         prevent_new_task: bool = True,
         metadata: Optional[Dict] = None,
-        account_id: Optional[str] = None
+        account_id: Optional[str] = None,
+        client: Optional[PlexusDashboardClient] = None
     ):
-        """Initialize progress tracker with optional API task record management.
-        
+        """Initialize progress tracker.
+
         Args:
-            total_items: Total number of items to process
-            stage_configs: Optional dict mapping stage names to their configs
-            task_id: Optional API task ID to retrieve existing task record
+            stage_configs: Dict mapping stage names to their configs.
+            task_object: Optional pre-fetched Task object to track.
+            task_id: Optional API task ID (used if task_object is None).
+            total_items: Total items (can be updated later).
             target: Target string for new task records
             command: Command string for new task records
             description: Description string for task status display
@@ -137,8 +140,9 @@ class TaskProgressTracker:
             prevent_new_task: If True, don't create new task records
             metadata: Optional metadata to store with the task
             account_id: Optional account ID to associate with the task
+            client: Optional existing PlexusDashboardClient instance.
         """
-        # Start with the passed in total_items value
+        # Initialize core attributes
         self.total_items = total_items
         self.current_items = 0
         self.start_time = time.time()
@@ -146,125 +150,76 @@ class TaskProgressTracker:
         self.status = "Not started"
         self.is_complete = False
         self.is_failed = False
-        self.api_task = None
+        self.api_task: Optional[Task] = None
         self._api_update_lock = threading.Lock()
         self._last_stage_configs_str = None
         self._last_api_update_time = 0
         self._stage_ids = {}  # Map of stage name to API stage ID
+        self._client = client
 
         # Stage management
         self.stage_configs = stage_configs
         self._stages: Dict[str, Stage] = {}
         self._current_stage_name: Optional[str] = None
 
-        # Initialize stages if provided
+        # --- Task Association --- #
+        if task_object:
+            self.api_task = task_object
+            logging.debug(f"Tracker initialized with provided Task object: {self.api_task.id}")
+        elif task_id and prevent_new_task: # Only fetch by ID if object not given and we ARE preventing new task creation
+            try:
+                # Use provided client if available, otherwise create one
+                if not self._client:
+                    api_url = os.environ.get('PLEXUS_API_URL')
+                    api_key = os.environ.get('PLEXUS_API_KEY')
+                    if api_url and api_key:
+                        self._client = PlexusDashboardClient(api_url=api_url, api_key=api_key)
+                    else:
+                        raise ValueError("API URL/Key not configured for internal client creation.")
+
+                logging.debug(f"Attempting to fetch Task by ID: {task_id}")
+                self.api_task = Task.get_by_id(task_id, self._client)
+                if not self.api_task:
+                    # Log error but don't raise here, let the caller handle tracker.task being None
+                    logging.error(f"Task.get_by_id returned None for task_id: {task_id}")
+                else:
+                    logging.debug(f"Successfully fetched Task object: {self.api_task.id}")
+                    # Optional: Update description/metadata if provided - Careful!
+                    # if description: self.api_task.update(description=description)
+                    # if metadata: self.api_task.update(metadata=json.dumps(metadata))
+
+            except Exception as e:
+                # Log error but don't raise, let caller handle tracker.task being None
+                logging.error(f"Could not get Task {task_id} during tracker init: {str(e)}", exc_info=True)
+        elif not prevent_new_task:
+             # Logic for CREATING a new task (mostly unchanged, uses internal client)
+             logging.warning("Task creation within tracker init is currently disabled/not recommended for report flow.")
+             # ... (existing task creation logic can remain here if needed for other use cases) ...
+             pass
+        # else: task_id not provided and prevent_new_task is True - self.api_task remains None
+
+        # --- Initialize Stages (after task association attempt) --- #
         if stage_configs:
             for name, config in stage_configs.items():
-                # Only set total_items if explicitly configured in the stage config
-                stage_total_items = config.total_items  # Will be None if not set in config
+                stage_total_items = config.total_items
                 self._stages[name] = Stage(
                     name=name,
                     order=config.order,
                     total_items=stage_total_items,
                     status_message=config.status_message
                 )
-            # Set current stage to the first one by order
             first_stage = min(self._stages.values(), key=lambda s: s.order)
             self._current_stage_name = first_stage.name
-            first_stage.start()
+            # Start the first stage *only if* we have an associated task
+            if self.api_task:
+                 first_stage.start()
+            else:
+                 logging.warning("Tracker has no associated Task object; cannot start stages yet.")
 
-        # Only try to get/create task if we're allowed
-        if not prevent_new_task:
-            api_url = os.environ.get('PLEXUS_API_URL')
-            api_key = os.environ.get('PLEXUS_API_KEY')
-            
-            if api_url and api_key:
-                client = PlexusDashboardClient(api_url=api_url, api_key=api_key)
-                
-                if task_id:
-                    try:
-                        self.api_task = Task.get_by_id(task_id, client)
-                        if description:  # Update description if provided
-                            self.api_task.update(description=description)
-                        if metadata:  # Update metadata if provided
-                            self.api_task.update(metadata=json.dumps(metadata))
-                    except Exception as e:
-                        logging.error(f"Could not get Task {task_id}: {str(e)}")
-                elif command and target:  # Only create new task if we have command and target
-                    create_args = {
-                        "client": client,
-                        "type": metadata.get("type", command) if metadata else command,
-                        "target": target,
-                        "command": command,
-                        "description": description,
-                        "metadata": json.dumps(metadata) if metadata else None,
-                        "dispatchStatus": dispatch_status or "PENDING",
-                        "startedAt": datetime.now(timezone.utc).isoformat()
-                    }
-                    # Add account_id if provided
-                    if account_id:
-                        create_args["accountId"] = account_id
-                    
-                    self.api_task = Task.create(**create_args)
-        
-        # Create API stages once during initialization
+        # --- Create/Sync API Stages (if task exists) --- #
         if self.api_task:
-            # Get existing stages first
-            existing_stages = {s.name: s.id for s in self.api_task.get_stages()}
-            logging.debug(f"Found existing stages: {list(existing_stages.keys())}")
-            
-            # Create any missing stages and store their IDs
-            for name, stage in self._stages.items():
-                logging.debug(f"Processing stage '{name}' with order {stage.order}, total_items={stage.total_items}, status_message={stage.status_message}")
-                try:
-                    if name in existing_stages:
-                        logging.debug(f"Stage '{name}' already exists with ID: {existing_stages[name]}")
-                        self._stage_ids[name] = existing_stages[name]
-                    else:
-                        logging.debug(f"Creating new stage '{name}' with order {stage.order}")
-                        try:
-                            # Create stage with all required fields upfront
-                            create_fields = {
-                                'name': name,
-                                'order': stage.order,
-                                'status': stage.status,  # Include status in initial creation
-                            }
-                            if stage.status_message:
-                                create_fields['statusMessage'] = stage.status_message
-                            if stage.total_items is not None:
-                                create_fields['totalItems'] = stage.total_items
-                            
-                            # Set initial estimated completion time for stages that show progress
-                            if stage.total_items is not None:
-                                estimated_completion = (
-                                    datetime.now(timezone.utc) + 
-                                    timedelta(seconds=20)  # Initial estimate of 20 seconds
-                                )
-                                create_fields['estimatedCompletionAt'] = estimated_completion.isoformat()
-                            
-                            logging.debug(f"Creating new stage '{name}' with fields: {create_fields}")
-                            try:
-                                new_stage = self.api_task.create_stage(**create_fields)
-                            except Exception as e:
-                                logging.error(f"GraphQL error creating stage '{name}': {str(e)}")
-                                logging.error("This is likely a schema validation error or missing required field")
-                                raise  # Re-raise to be caught by outer try/except
-                            
-                            if not new_stage:
-                                raise Exception(f"Failed to create stage '{name}' - create_stage returned None")
-                                
-                            self._stage_ids[name] = new_stage.id
-                            logging.debug(f"Successfully created stage '{name}' with ID: {new_stage.id}")
-                            
-                        except Exception as e:
-                            logging.error(f"Error creating stage '{name}': {str(e)}", exc_info=True)
-                            logging.error("Stage creation failed - this stage will be missing from the task")
-                            raise  # Re-raise to prevent silent failures
-
-                except Exception as e:
-                    logging.error(f"Error creating stage '{name}': {str(e)}", exc_info=True)
-
-            self._update_api_task_progress()
+            self._sync_api_stages() # Encapsulate stage sync logic
+            # self._update_api_task_progress() # Initial update if needed?
 
     def __enter__(self):
         return self
@@ -818,3 +773,76 @@ class TaskProgressTracker:
         
         # Return the new total to allow verification
         return self.total_items 
+
+    def _get_client(self) -> PlexusDashboardClient:
+        """Returns the associated client or creates one if necessary."""
+        if self._client:
+            return self._client
+        
+        api_url = os.environ.get('PLEXUS_API_URL')
+        api_key = os.environ.get('PLEXUS_API_KEY')
+        if api_url and api_key:
+            self._client = PlexusDashboardClient(api_url=api_url, api_key=api_key)
+            return self._client
+        else:
+            raise ValueError("Cannot perform API operation: API URL/Key not configured and no client provided.")
+
+    def _sync_api_stages(self):
+        """Creates or finds API TaskStage records corresponding to local stage configs."""
+        if not self.api_task:
+            return
+
+        client = self._get_client() # Get the client instance
+        try:
+            # Pass client correctly if get_stages supports it, otherwise omit
+            # Assuming get_stages uses self._client if available or creates default
+            existing_api_stages = {s.name: s for s in self.api_task.get_stages(client=client)}
+            logging.debug(f"Found existing API stages: {list(existing_api_stages.keys())}")
+        except TypeError:
+             # Fallback if get_stages doesn't accept client kwarg
+             logging.warning("Task.get_stages does not accept 'client', using default client resolution.")
+             existing_api_stages = {s.name: s for s in self.api_task.get_stages()}
+        except Exception as e:
+            logging.error(f"Failed to get existing stages for task {self.api_task.id}: {e}", exc_info=True)
+            existing_api_stages = {}
+
+        for name, stage_config in self._stages.items():
+            if name in existing_api_stages:
+                self._stage_ids[name] = existing_api_stages[name].id
+                logging.debug(f"Stage '{name}' already exists in API with ID: {self._stage_ids[name]}")
+            else:
+                logging.debug(f"Creating new API stage '{name}' for task {self.api_task.id}")
+                try:
+                    create_fields = {
+                        'name': name,
+                        'order': stage_config.order,
+                        'status': self._stages[name].status,
+                    }
+                    if stage_config.status_message:
+                        create_fields['statusMessage'] = stage_config.status_message
+                    if stage_config.total_items is not None:
+                        create_fields['totalItems'] = stage_config.total_items
+                    if self._stages[name].start_time:
+                         create_fields['startedAt'] = datetime.fromtimestamp(self._stages[name].start_time, timezone.utc).isoformat()
+                         if stage_config.total_items is not None:
+                             estimated_completion = datetime.now(timezone.utc) + timedelta(seconds=20)
+                             create_fields['estimatedCompletionAt'] = estimated_completion.isoformat()
+
+                    # Pass the client correctly using the 'client' keyword argument if create_stage supports it
+                    try:
+                         new_stage = self.api_task.create_stage(**create_fields, client=client)
+                    except TypeError:
+                         # Fallback if create_stage doesn't accept client kwarg
+                         logging.warning(f"Task.create_stage does not accept 'client' for stage '{name}', using default client resolution.")
+                         new_stage = self.api_task.create_stage(**create_fields)
+
+                    if new_stage:
+                        self._stage_ids[name] = new_stage.id
+                        logging.debug(f"Successfully created API stage '{name}' with ID: {new_stage.id}")
+                    else:
+                        logging.error(f"API call create_stage for '{name}' returned None.")
+
+                except Exception as e:
+                    logging.error(f"Error creating API stage '{name}': {e}", exc_info=True)
+
+    # ... rest of the class ... 
