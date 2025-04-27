@@ -91,10 +91,10 @@ def list_configs(account_identifier: Optional[str], limit: int): # Renamed funct
                     else:
                          # Should be caught by get_by_id exception, but handle just in case
                          console.print(f"[red]Error: Could not resolve account identifier '{account_identifier}' as ID.[/red]")
-                         return
+                         raise click.Abort()
                 except Exception as id_e:
                     console.print(f"[red]Error: Could not resolve account identifier '{account_identifier}' as key or ID: {id_e}[/red]")
-                    return
+                    raise click.Abort()
         except Exception as key_e:
             # Error during get_by_key, maybe transient or invalid key format?
             # Still attempt fallback to ID lookup
@@ -106,10 +106,10 @@ def list_configs(account_identifier: Optional[str], limit: int): # Renamed funct
                      console.print(f"[dim]Resolved account ID directly after key lookup error: {account_id}[/dim]")
                  else:
                      console.print(f"[red]Error: Could not resolve '{account_identifier}' as ID after key lookup error.[/red]")
-                     return
+                     raise click.Abort()
             except Exception as final_id_e:
                 console.print(f"[red]Error: Failed to resolve '{account_identifier}' as key or ID. Key Error: {key_e}, ID Error: {final_id_e}[/red]")
-                return
+                raise click.Abort()
     else:
         # No identifier provided, use client's internal resolution (uses context/env var)
         account_display_name = "default account (from environment)"
@@ -121,15 +121,15 @@ def list_configs(account_identifier: Optional[str], limit: int): # Renamed funct
             else:
                 # This case might not be reachable if _resolve_account_id raises error on failure
                 console.print(f"[red]Error: client._resolve_account_id() returned None. Is PLEXUS_ACCOUNT_KEY set and valid?[/red]")
-                return
+                raise click.Abort()
         except Exception as e:
              console.print(f"[red]Error resolving default account: {e}. Is PLEXUS_ACCOUNT_KEY set and valid?[/red]")
-             return
+             raise click.Abort()
 
     # Final check
     if not account_id:
         console.print(f"[red]Error: Could not determine Account ID for {account_display_name}.[/red]")
-        return
+        raise click.Abort()
 
     console.print(f"[cyan]Listing Report Configurations for Account ID: {account_id}[/cyan]")
 
@@ -176,89 +176,6 @@ def list_configs(account_identifier: Optional[str], limit: int): # Renamed funct
     except Exception as e:
         console.print(f"[bold red]Error listing report configurations: {e}[/bold red]")
         logger.error(f"Failed to list report configurations: {e}\n{traceback.format_exc()}")
-
-@report.command()
-@click.option('--name', required=True, help='The name of the Report to retrieve.')
-@click.option('--account', 'account_identifier', help='Optional account key or ID to filter by.', default=None)
-def get(name: str, account_identifier: Optional[str]):
-    """Get details for a specific Report by its name."""
-    client = create_client()
-
-    account_id = None
-    # Reuse account resolution logic from 'list' command
-    if account_identifier:
-        try:
-            account_id = client._resolve_account_id(account_key=account_identifier)
-        except Exception as e:
-            try:
-                acc = Account.get_by_id(account_identifier, client)
-                account_id = acc.id
-            except Exception:
-                 console.print(f"[red]Error: Could not resolve account identifier '{account_identifier}': {e}[/red]")
-                 return
-    else:
-        try:
-            account_id = client._resolve_account_id()
-        except Exception as e:
-            console.print(f"[red]Error resolving default account: {e}. Is PLEXUS_ACCOUNT_KEY set?[/red]")
-            return
-
-    if not account_id:
-        console.print("[red]Error: Could not determine Account ID.[/red]")
-        return
-
-    console.print(f"[cyan]Fetching Report named '{name}' for Account ID: {account_id}[/cyan]")
-
-    try:
-        report_instance = Report.get_by_name(name=name, account_id=account_id, client=client)
-
-        if not report_instance:
-            console.print(f"[yellow]Report named '{name}' not found for account {account_id}.[/yellow]")
-            return
-
-        # Display the report details
-        # Format dates nicely
-        created_at_str = report_instance.createdAt.strftime("%Y-%m-%d %H:%M:%S UTC") if report_instance.createdAt else 'N/A'
-        updated_at_str = report_instance.updatedAt.strftime("%Y-%m-%d %H:%M:%S UTC") if report_instance.updatedAt else 'N/A'
-        
-        # --- Fields removed from Report model, fetch from Task ---
-        # started_at_str = report_instance.startedAt.strftime("%Y-%m-%d %H:%M:%S UTC") if report_instance.startedAt else 'N/A'
-        # completed_at_str = report_instance.completedAt.strftime("%Y-%m-%d %H:%M:%S UTC") if report_instance.completedAt else 'N/A'
-        # params_str = pretty_repr(report_instance.parameters) 
-        # error_message_str = report_instance.errorMessage or 'None'
-        # error_details_str = report_instance.errorDetails or 'None'
-        # status_str = report_instance.status
-        
-        # TODO: Fetch associated Task using report_instance.taskId to get status, start/end times, errors
-        task_status = "N/A (Task fetch TBD)"
-        started_at_str = "N/A (Task fetch TBD)"
-        completed_at_str = "N/A (Task fetch TBD)"
-        error_message_str = "N/A (Task fetch TBD)"
-        error_details_str = "N/A (Task fetch TBD)"
-        params_str = pretty_repr(report_instance.parameters) # Parameters might still be on Report or Task metadata
-
-        content = (
-            f"[bold]ID:[/bold] {report_instance.id}\n"
-            f"[bold]Name:[/bold] {report_instance.name}\n"
-            f"[bold]Account ID:[/bold] {report_instance.accountId}\n"
-            f"[bold]Configuration ID:[/bold] {report_instance.reportConfigurationId}\n"
-            f"[bold]Task ID:[/bold] {report_instance.taskId}\n" # Added Task ID
-            f"[bold]Status (from Task):[/bold] {task_status}\n" # Changed label
-            f"[bold]Created At:[/bold] {created_at_str}\n"
-            f"[bold]Updated At:[/bold] {updated_at_str}\n"
-            f"[bold]Started At (from Task):[/bold] {started_at_str}\n" # Changed label
-            f"[bold]Completed At (from Task):[/bold] {completed_at_str}\n" # Changed label
-            f"[bold]Parameters:[/bold]\n{params_str}\n"
-            f"[bold]Output:[/bold] (See 'plexus report block list {report_instance.id}' or 'plexus report block show ...')\n" # Update help text
-            f"[bold]Error Message (from Task):[/bold] {error_message_str}\n" # Changed label
-            f"[bold]Error Details (from Task):[/bold] {error_details_str}" # Changed label
-        )
-
-        console.print(Panel(content, title=f"Report Details: {report_instance.name}", border_style="blue"))
-
-    except Exception as e:
-        console.print(f"[bold red]Error retrieving report '{name}': {e}[/bold red]")
-        logger.error(f"Failed to get report '{name}': {e}\n{traceback.format_exc()}")
 
 @report.command()
 @click.option('--config', 'config_identifier', required=True, help='ID or name of the ReportConfiguration to use.')
@@ -346,19 +263,23 @@ def create_config(name: str, description: str, account_identifier: Optional[str]
             else: # Try ID
                 account_obj_by_id = Account.get_by_id(account_identifier, client)
                 if account_obj_by_id: account_id = account_obj_by_id.id
+                # If still no account_id after trying both key and ID
+                elif not account_id:
+                     console.print(f"[red]Error: Could not resolve account identifier '{account_identifier}' as key or ID.[/red]")
+                     raise click.Abort()
         except Exception as e:
-             console.print(f"[red]Error resolving account identifier \'{account_identifier}\': {e}[/red]")
-             return
+             console.print(f"[red]Error resolving account identifier '{account_identifier}': {e}[/red]")
+             raise click.Abort() # Use Abort
     else:
         try:
             account_id = client._resolve_account_id()
         except Exception as e:
             console.print(f"[red]Error resolving default account: {e}. Is PLEXUS_ACCOUNT_KEY set?[/red]")
-            return
+            raise click.Abort() # Use Abort
 
     if not account_id:
         console.print("[red]Error: Could not determine Account ID.[/red]")
-        return
+        raise click.Abort() # Use Abort
     # --- End Account Resolution ---
 
     console.print(f"[cyan]Creating Report Configuration \'{name}\' for Account ID: {account_id}...[/cyan]")
@@ -371,7 +292,41 @@ def create_config(name: str, description: str, account_identifier: Optional[str]
         # Validate if the content is not empty (basic check)
         if not configuration_content.strip():
              console.print(f"[red]Error: Configuration file \'{config_file_path}\' is empty.[/red]")
-             return
+             raise click.Abort()
+
+        # --- Check for Duplicates ---
+        console.print(f"[dim]Checking for existing configurations named \'{name}\' in account {account_id}...[/dim]")
+        existing_config = None
+        try:
+            # Use get_by_name which should return one or None if name is unique per account
+            # If names aren't unique, this needs adjustment to list_by_name or similar
+            existing_config = ReportConfiguration.get_by_name(name=name, account_id=account_id, client=client)
+        except Exception as e:
+            # Log the error but proceed, assuming no duplicate if lookup fails
+            logger.warning(f"Failed to check for existing configuration named \'{name}\': {e}")
+            # Optionally, inform the user about the failed check?
+            # console.print(f"[yellow]Warning: Could not check for existing configurations due to an error: {e}[/yellow]")
+
+        if existing_config:
+            console.print(f"[yellow]Found existing configuration with the same name:[/yellow]")
+            console.print(f"  ID: {existing_config.id}")
+            console.print(f"  Name: {existing_config.name}")
+            
+            # Compare content (assuming existing_config.configuration holds the content)
+            if hasattr(existing_config, 'configuration') and existing_config.configuration == configuration_content:
+                console.print(f"[bold yellow]Warning: An existing configuration with the name '{name}' and identical content already exists.[/bold yellow]")
+                if not click.confirm("Do you want to proceed and create a duplicate configuration?", default=False):
+                    console.print("[cyan]Operation cancelled by user.[/cyan]")
+                    raise click.Abort() # Use Abort for user cancellation
+            else:
+                console.print(f"[bold yellow]Warning: An existing configuration with the name '{name}' but different content already exists.[/bold yellow]")
+                if not click.confirm("Do you want to proceed and create a new configuration with this name?", default=False):
+                    console.print("[cyan]Operation cancelled by user.[/cyan]")
+                    raise click.Abort() # Use Abort for user cancellation
+        else:
+             console.print(f"[dim]No existing configuration found with the name '{name}'. Proceeding...[/dim]")
+        # --- End Duplicate Check ---
+
 
         # --- Example Block Parsing (Placeholder/Illustrative) ---
         # You might want basic validation or parsing here depending on requirements
@@ -412,6 +367,8 @@ def create_config(name: str, description: str, account_identifier: Optional[str]
          console.print(f"[red]Error: Configuration file not found at path: {config_file_path}[/red]")
     except IOError as e:
          console.print(f"[red]Error reading configuration file \'{config_file_path}\': {e}[/red]")
+    except click.Abort: # Explicitly handle/re-raise Abort
+        raise # Re-raise the abort to let Click handle it
     except Exception as e:
         # Escape the error message to prevent Rich parsing issues
         escaped_error = escape(str(e))
