@@ -52,7 +52,8 @@ function AuthWrapper({ children }: { children: React.ReactNode }) {
     '/documentation/methods/add-edit-scorecard',
     '/documentation/methods/add-edit-score',
     '/documentation/methods/evaluate-score',
-    '/documentation/methods/monitor-tasks'
+    '/documentation/methods/monitor-tasks',
+    '/documentation/concepts/reports',
   ];
   
   // Check if we should direct users straight to login
