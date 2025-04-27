@@ -187,11 +187,11 @@ The reporting system will be built around **four** core concepts:
 *   ✅ **Implement `plexus report last`:** Create a CLI command to show the details of the most recently created `Report` (equivalent to `plexus report show` for the latest report). Use `rich` panels.
 *   ✅ **Implement `plexus report block list <report_id>`:** Create a CLI command to list `ReportBlock` records associated with a specific `Report`. Use `rich` for formatted table output. *Note: `<report_id>` here should strictly be the ID.* 
 *   ✅ **Implement `plexus report block show <report_id> <block_identifier>`:** Create a CLI command to display the details (name, position, output JSON, log) of a specific `ReportBlock` (identified by position or name). Use `rich` panels/syntax highlighting. *Note: `<report_id>` here should strictly be the ID.* 
-*   ✅ **Verify Phase 3:** Confirm these CLI commands function correctly, including filtering and ID/Name lookup, providing the necessary visibility into report data. *(Verified config list & config show)*
+*   🟡 **Verify Phase 3:** Confirm these CLI commands function correctly, including filtering and ID/Name lookup, providing the necessary visibility into report data. *(Verified config list, config show, config create, config delete manually. Report and Block commands remain.)*
 
 ### Phase 4: Backend & CLI Testing
 
-*   ⬜ **Objective:** Verify the end-to-end functionality of report configuration management, generation triggering via CLI, Celery task execution, data storage, status tracking, and CLI inspection tools.
+*   🟡 **Objective:** Verify the end-to-end functionality of report configuration management, generation triggering via CLI, Celery task execution, data storage, status tracking, and CLI inspection tools.
 *   ⬜ **Prerequisites:**
     *   Ensure a Celery worker can be started (`python -m plexus.cli.CommandLineInterface command worker`).
     *   Ensure necessary environment variables are set (e.g., `PLEXUS_ACCOUNT_KEY` in `.env`) and **loaded by the application**.
@@ -211,19 +211,20 @@ The reporting system will be built around **four** core concepts:
 *   ⬜ **Test Steps:**
     1.  ✅ **`config list`:**
         *   Run `python -m plexus.cli.CommandLineInterface report config list`. Verify existing configs are listed correctly for the default account (resolved via `.env`).
-    2.  ✅ **`config create`:**
-        *   ✅ Run `python -m plexus.cli.CommandLineInterface report config create --name "CLI Test Config" --file test_config.md`. Verify successful creation message (`Successfully created Report Configuration...`) and that the config appears in `config list` output.
+    2.  🟡 **`config create`:** *(Manually Tested - See notes below)*
+        *   ✅ Run `python -m plexus.cli.CommandLineInterface report config create --name "CLI Test Config" --file test_config.md`. Verify successful creation message (`Successfully created Report Configuration...`) and that the config appears in `config list` output. *(Verified manually)*
         *   ⬜ Attempt creation with missing required options (e.g., `--name` or `--file`). Verify Click error. (`python -m plexus.cli.CommandLineInterface report config create --name "Missing File"`)
         *   ⬜ Attempt creation with a non-existent file path. Verify error message. (`python -m plexus.cli.CommandLineInterface report config create --name "Bad File Path" --file non_existent_file.md`)
+    3.  🟡 **`config delete`:** *(Manually Tested - See notes below)*
         *   ✅ **Delete by Name (with prompt):** Run `python -m plexus.cli.CommandLineInterface report config delete "CLI Test Config"`. Verify:
             *   It finds the correct config (shows ID/Name).
             *   It prompts for confirmation (`Are you sure...?`).
             *   Respond 'y'. Verify success message.
-            *   Run `config list` again and verify "CLI Test Config" is gone.
+            *   Run `config list` again and verify "CLI Test Config" is gone. *(Verified manually)*
         *   ⬜ **Recreate for next test:** Run `python -m plexus.cli.CommandLineInterface report config create --name "CLI Test Config Temp" --file test_config.md`. Get the new ID.
-        *   ⬜ **Delete by ID (skip prompt):** Run `python -m plexus.cli.CommandLineInterface report config delete <new_ID_from_recreate> --yes`. Verify:
+        *   🟡 **Delete by ID (skip prompt):** Run `python -m plexus.cli.CommandLineInterface report config delete <new_ID_from_recreate> --yes`. Verify:
             *   It finds the correct config.
-            *   It prints the "Skipping confirmation" message.
+            *   It prints the "Skipping confirmation" message. *(Issue: Still prompts - needs fix)*
             *   It prints the success message.
             *   Run `config list` again and verify the config with `<new_ID_from_recreate>` is gone.
         *   ⬜ **Delete Non-Existent:** Run `python -m plexus.cli.CommandLineInterface report config delete "NonExistent Config"`. Verify "not found" message.
@@ -270,7 +271,19 @@ The reporting system will be built around **four** core concepts:
             *   Log content is fetched and displayed.
             *   Lookup works by both position (e.g., '0') and name (if applicable).
         *   Run `python -m plexus.cli.CommandLineInterface report block show <report_id> <invalid_identifier>`. Verify "not found" message.
-*   ⬜ **Verify Phase 4:** Confirm all test steps pass, demonstrating reliable backend processing and CLI interaction for the reports feature.
+*   🟡 **Verify Phase 4:** Confirm all test steps pass, demonstrating reliable backend processing and CLI interaction for the reports feature.
+    *   **Notes (2025-04-27):**
+        *   Manually tested `report config create` with `--description` and duplicate name scenarios (different/identical content prompts).
+        *   Findings:
+            *   Creation with description works.
+            *   Duplicate check (different content) prompt/abort/proceed works as expected.
+            *   Duplicate check (identical content) logic is present and passes unit tests, but the current `ReportConfiguration.get_by_name` implementation prevents it from being triggered correctly when multiple configs share the same name (it only compares against one existing config).
+        *   Manually tested `report config delete`.
+        *   Findings:
+            *   Deletion by name works (including handling multiple matches sequentially).
+            *   The `--yes` flag does not correctly suppress the confirmation prompt and needs fixing.
+        *   **TODO:** Refine `ReportConfiguration.get_by_name` or the duplicate check logic in `create_config` to handle multiple existing configurations with the same name correctly (currently only compares against one match).
+        *   **TODO:** Fix `--yes` flag in `report config delete` command to correctly bypass the confirmation prompt.
 
 ### Phase 5: Frontend Basics (Management & Display)
 
