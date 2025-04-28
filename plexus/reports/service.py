@@ -425,7 +425,7 @@ def _generate_report_core(
                 position=result["position"],
                 name=result["name"],
                 # Store output as JSON string, handle None case
-                output=json.dumps(result["output"]) if result["output"] is not None else None,
+                output=result["output"], # Assume result["output"] is already a JSON string or None
                 log=result["log"], # Store log or error message
                 _client=client
             )
@@ -517,7 +517,21 @@ def generate_report(task_id: str):
             task_metadata = json.loads(task.metadata)
             report_config_id = task_metadata.get("report_configuration_id")
             account_id = task_metadata.get("account_id")
-            run_parameters = task_metadata.get("report_parameters", {}) # Get params from metadata
+            # Ensure run_parameters is treated as dict, even if empty in metadata
+            run_parameters = task_metadata.get("report_parameters") 
+            if run_parameters is None:
+                run_parameters = {}
+            elif isinstance(run_parameters, str): # Handle accidental string storage
+                try:
+                    run_parameters = json.loads(run_parameters)
+                except json.JSONDecodeError:
+                    logger.warning(f"{log_prefix} 'report_parameters' in metadata was a non-JSON string. Treating as empty dict.")
+                    run_parameters = {}
+            
+            if not isinstance(run_parameters, dict):
+                 logger.warning(f"{log_prefix} 'report_parameters' in metadata was not a dict or JSON string. Treating as empty dict. Type: {type(run_parameters)}")
+                 run_parameters = {}
+
             if not report_config_id:
                 raise ValueError("'report_configuration_id' not found in Task metadata.")
             if not account_id:
