@@ -264,4 +264,80 @@ class Report(BaseModel):
             logger.exception(f"Error listing reports for account {account_id} while searching for name '{name}': {e}")
             return None
 
+    @classmethod
+    def list_by_account_id(
+        cls,
+        account_id: str,
+        client: _BaseAPIClient,
+        limit: int = 100, # Default limit per request
+        max_items: Optional[int] = None # Optional total max items to fetch
+    ) -> list['Report']:
+        """List Reports for a specific account using pagination.
+
+        Uses the 'listReportByAccountIdAndUpdatedAt' index.
+
+        Args:
+            account_id: The ID of the account to list reports for.
+            client: The API client instance.
+            limit: The number of items to fetch per page.
+            max_items: Optional limit on the total number of items to return.
+
+        Returns:
+            A list of Report instances.
+        """
+        query = f"""
+        query ListReportByAccountIdAndUpdatedAt(
+            $accountId: String!,
+            $limit: Int,
+            $sortDirection: ModelSortDirection,
+            $nextToken: String
+        ) {{
+            listReportByAccountIdAndUpdatedAt(
+                accountId: $accountId,
+                limit: $limit,
+                sortDirection: $sortDirection,
+                nextToken: $nextToken
+            ) {{
+                items {{
+                    {cls.fields()}
+                }}
+                nextToken
+            }}
+        }}
+        """
+
+        reports = []
+        next_token = None
+        items_fetched = 0
+
+        while True:
+            variables = {
+                'accountId': account_id,
+                'limit': limit,
+                'sortDirection': 'DESC', # Get most recent first
+                'nextToken': next_token
+            }
+
+            try:
+                result = client.execute(query, variables)
+                list_result = result.get('listReportByAccountIdAndUpdatedAt', {})
+                items_data = list_result.get('items', [])
+
+                for item_data in items_data:
+                    reports.append(cls.from_dict(item_data, client))
+                    items_fetched += 1
+                    if max_items is not None and items_fetched >= max_items:
+                        return reports # Reached max items limit
+
+                next_token = list_result.get('nextToken')
+                if not next_token:
+                    break # No more pages
+
+            except Exception as e:
+                logger.exception(f"Error listing reports for account {account_id} on page with nextToken {next_token}: {e}")
+                # Depending on desired behavior, we might break, continue, or raise
+                break # Stop fetching on error
+
+        return reports
+
     # get_by_id is inherited from BaseModel 

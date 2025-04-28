@@ -748,7 +748,8 @@ def list_reports(config_identifier: Optional[str], account_identifier: Optional[
             client=client,
             limit=limit * 2 # Fetch more initially if filtering client-side
         )
-        reports = report_result_data.get('items', [])
+        # The list_by_account_id method now returns a list directly
+        reports = report_result_data 
 
         # --- Client-side filtering (replace with API filter later) ---
         if resolved_config_id:
@@ -898,11 +899,13 @@ def show_report(id_or_name: str, account_identifier: Optional[str]):
     # --- Fetch Associated Blocks --- #
     blocks = []
     try:
+        # list_by_report_id now returns a list directly
         block_data = ReportBlock.list_by_report_id(report_instance.id, client)
-        blocks = block_data.get('items', [])
+        blocks = block_data # Assign the list directly
         # Sort blocks by position
         blocks.sort(key=lambda b: getattr(b, 'position', float('inf'))) # Sort by position, put items without position last
     except Exception as e:
+        # The warning should now reflect the actual error if list_by_report_id fails
         console.print(f"[yellow]Warning: Could not fetch report blocks: {e}[/yellow]")
 
     # --- Display Report Details --- #
@@ -1081,11 +1084,10 @@ def show_last_report(ctx, account_identifier: Optional[str]):
         report_result_data = Report.list_by_account_id(
             account_id=account_id,
             client=client,
-            limit=1,
-            sort_direction='DESC' # Assuming sort direction parameter exists
-            # scan_index_forward=False # Alternative if using DynamoDB directly
+            limit=1 # Fetch only the most recent one
         )
-        reports = report_result_data.get('items', [])
+        # list_by_account_id returns a list directly
+        reports = report_result_data 
 
         if not reports:
             console.print(f"[yellow]No reports found for account {account_id}.[/yellow]")

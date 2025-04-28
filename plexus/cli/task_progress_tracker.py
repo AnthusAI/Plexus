@@ -269,9 +269,13 @@ class TaskProgressTracker:
 
         # --- Create/Sync API Stages (if task exists) --- #
         if self.api_task:
-            self._sync_api_stages() # This should now run if task was created/fetched
-            # Consider an initial update call here if needed, but _sync might cover it?
-            # self._update_api_task_progress()
+            # Sync stages asynchronously to avoid blocking init
+            threading.Thread(target=self._sync_api_stages, daemon=True).start()
+            # self._sync_api_stages() # Synchronous version for debugging
+            
+            # Set initial task status if we created it
+            if task_created_internally:
+                self.update(current_items=0, status='RUNNING') # Signal the task has started
 
     def __enter__(self):
         return self
@@ -618,8 +622,9 @@ class TaskProgressTracker:
             # Add variables for each stage
             for stage in stages:
                 if stage.name in stage_configs:
+                    sanitized_name = self._sanitize_graphql_name(stage.name)
                     mutation += f"""
-                    ${stage.name}Input: UpdateTaskStageInput!"""
+                    ${sanitized_name}Input: UpdateTaskStageInput!"""
             
             mutation += """) {
                 # Update task estimated completion if provided
@@ -660,8 +665,9 @@ class TaskProgressTracker:
             # Add update operations for each stage
             for stage in stages:
                 if stage.name in stage_configs:
+                    sanitized_name = self._sanitize_graphql_name(stage.name)
                     mutation += f"""
-                    update{stage.name}Stage: updateTaskStage(input: ${stage.name}Input) {{
+                    update{sanitized_name}Stage: updateTaskStage(input: ${sanitized_name}Input) {{
                         id
                         taskId
                         name
@@ -700,7 +706,8 @@ class TaskProgressTracker:
                     if 'status' not in config:       # Ensure status is included
                         config['status'] = stage.status
                     
-                    variables[f"{stage.name}Input"] = config
+                    sanitized_name = self._sanitize_graphql_name(stage.name)
+                    variables[f"{sanitized_name}Input"] = config
             
             # Log the mutation and variables
             logging.debug(json.dumps({
@@ -718,6 +725,17 @@ class TaskProgressTracker:
                 "error": str(e),
                 "traceback": traceback.format_exc()
             }))
+
+    def _sanitize_graphql_name(self, name: str) -> str:
+        """Sanitize a string to be a valid GraphQL name (remove spaces, etc.)."""
+        # Basic sanitization: remove spaces and non-alphanumeric chars
+        # Consider a more robust regex if needed
+        import re
+        sanitized = re.sub(r'\W+', '', name)
+        # Ensure it starts with a letter or underscore if it's not empty
+        if sanitized and not sanitized[0].isalpha() and sanitized[0] != '_':
+            sanitized = '_' + sanitized
+        return sanitized or 'sanitizedStageName' # Fallback if empty
 
     def _generate_status_message(self) -> str:
         if self.is_complete:

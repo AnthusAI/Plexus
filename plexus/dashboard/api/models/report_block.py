@@ -143,4 +143,83 @@ class ReportBlock(BaseModel):
             raise
 
     # get_by_id is inherited from BaseModel
-    # TODO: Implement list methods using GSI (byReportAndName, byReportAndPosition) if needed 
+    # TODO: Implement list methods using GSI (byReportAndName, byReportAndPosition) if needed
+
+    @classmethod
+    def list_by_report_id(
+        cls,
+        report_id: str,
+        client: _BaseAPIClient,
+        limit: int = 100,
+        max_items: Optional[int] = None
+    ) -> list['ReportBlock']:
+        """List ReportBlocks for a specific report using pagination.
+
+        Assumes a GraphQL query 'listReportBlocksByReportIdAndPosition' exists, 
+        using an index like 'byReportIdAndPosition'.
+
+        Args:
+            report_id: The ID of the Report to list blocks for.
+            client: The API client instance.
+            limit: The number of items to fetch per page.
+            max_items: Optional limit on the total number of items to return.
+
+        Returns:
+            A list of ReportBlock instances, sorted by position ascending.
+        """
+        # TODO: Verify the actual GraphQL query name and index name from schema
+        query = f"""
+        query ListReportBlocksByReportIdAndPosition(
+            $reportId: String!,
+            $limit: Int,
+            $sortDirection: ModelSortDirection,
+            $nextToken: String
+        ) {{
+            listReportBlockByReportIdAndPosition(
+                reportId: $reportId,
+                limit: $limit,
+                sortDirection: $sortDirection, # ASC to sort by position
+                nextToken: $nextToken
+            ) {{
+                items {{
+                    {cls.fields()}
+                }}
+                nextToken
+            }}
+        }}
+        """
+
+        blocks = []
+        next_token = None
+        items_fetched = 0
+
+        while True:
+            variables = {
+                'reportId': report_id,
+                'limit': limit,
+                'sortDirection': 'ASC', # Sort by position ascending
+                'nextToken': next_token
+            }
+
+            try:
+                result = client.execute(query, variables)
+                # TODO: Verify the actual response structure matches the assumed query name
+                list_result = result.get('listReportBlockByReportIdAndPosition', {})
+                items_data = list_result.get('items', [])
+
+                for item_data in items_data:
+                    blocks.append(cls.from_dict(item_data, client))
+                    items_fetched += 1
+                    if max_items is not None and items_fetched >= max_items:
+                        return blocks # Reached max items limit
+
+                next_token = list_result.get('nextToken')
+                if not next_token:
+                    break # No more pages
+
+            except Exception as e:
+                logger.exception(f"Error listing report blocks for report {report_id} on page with nextToken {next_token}: {e}")
+                # Depending on desired behavior, we might break, continue, or raise
+                break # Stop fetching on error
+
+        return blocks 
