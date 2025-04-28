@@ -3,6 +3,7 @@ import { Task, TaskHeader, TaskContent, BaseTaskProps } from '@/components/Task'
 import { FileBarChart, Clock } from 'lucide-react'
 import { format, formatDistanceToNow } from 'date-fns'
 import { Timestamp } from '@/components/ui/timestamp'
+import ReactMarkdown from 'react-markdown'
 
 // Define the data structure for report tasks
 export interface ReportTaskData {
@@ -17,6 +18,10 @@ export interface ReportTaskData {
    * This is preferred over task.time when available
    */
   updatedAt?: string | null;
+  /** 
+   * Markdown content of the report - shown in detail view 
+   */
+  output?: string | null;
 }
 
 // Props for the ReportTask component
@@ -55,7 +60,8 @@ const ReportTask: React.FC<ReportTaskProps> = ({
     configName: task.data?.configName || null,
     configDescription: task.data?.configDescription || null,
     createdAt: task.data?.createdAt || null,
-    updatedAt: task.data?.updatedAt || null
+    updatedAt: task.data?.updatedAt || null,
+    output: task.data?.output || null
   };
 
   return (
@@ -86,7 +92,31 @@ const ReportTask: React.FC<ReportTaskProps> = ({
       )}
       renderContent={(props) => (
         <TaskContent {...props} hideTaskStatus={true}>
-          {/* Removed redundant "Last updated" timestamp section */}
+          {variant === 'detail' && task.data?.output && (
+            <div className="mt-4 p-4 prose dark:prose-invert max-w-none">
+              <ReactMarkdown
+                components={{
+                  p: ({node, ...props}) => <p className="mb-2" {...props} />,
+                  strong: ({node, ...props}) => <strong className="font-semibold" {...props} />,
+                  ul: ({node, ...props}) => <ul className="list-disc pl-5 mb-2" {...props} />,
+                  li: ({node, ...props}) => <li className="mb-1" {...props} />,
+                  h1: ({node, ...props}) => <h1 className="text-2xl font-bold mt-4 mb-2" {...props} />,
+                  h2: ({node, ...props}) => <h2 className="text-xl font-bold mt-4 mb-2" {...props} />,
+                  h3: ({node, ...props}) => <h3 className="text-lg font-bold mt-3 mb-1" {...props} />,
+                  h4: ({node, ...props}) => <h4 className="text-base font-bold mt-2 mb-1" {...props} />,
+                  code: ({node, ...props}) => <code className="bg-muted px-1 py-0.5 rounded" {...props} />,
+                  pre: ({node, ...props}) => <pre className="bg-muted p-2 rounded overflow-x-auto my-2" {...props} />,
+                }}
+              >
+                {task.data.output}
+              </ReactMarkdown>
+            </div>
+          )}
+          {variant === 'detail' && !task.data?.output && (
+            <div className="mt-4 p-4 text-muted-foreground">
+              No report content available.
+            </div>
+          )}
         </TaskContent>
       )}
     />

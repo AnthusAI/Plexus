@@ -50,6 +50,7 @@ type ReportDisplayData = {
   name?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
+  output?: string | null;
   reportConfiguration?: {
     id: string;
     name?: string | null;
@@ -211,6 +212,7 @@ function transformReportData(report: Report): ReportDisplayData | null {
     name: report.name || (configInfo?.name) || `Report ${report.id.substring(0, 6)}`,
     createdAt: report.createdAt,
     updatedAt: report.updatedAt,
+    output: report.output || null,
     reportConfiguration: configInfo,
     task: taskData as Task | null
   };
@@ -441,8 +443,6 @@ export default function ReportsDashboard({
     const report = reports.find(r => r.id === selectedReportId);
     if (!report) return null; // Report might not be loaded yet
 
-    console.log('Rendering selected report:', report);
-
     // Safely extract stages
     const stages = [];
     if (report.task && 'stages' in report.task && report.task.stages) {
@@ -489,7 +489,8 @@ export default function ReportsDashboard({
             configName: report.reportConfiguration?.name,
             configDescription: report.reportConfiguration?.description,
             createdAt: report.createdAt,
-            updatedAt: report.updatedAt
+            updatedAt: report.updatedAt,
+            output: report.output // Pass the output field to display markdown
           },
           stages: stages,
           status: report.task?.status as any || 'PENDING',
