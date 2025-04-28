@@ -327,16 +327,27 @@ This refactoring ensures the core report generation logic is DRY and consistentl
 
 ### Phase 5: Frontend Basics (Management & Display)
 
-*   ⬜ **Create "Reports" Dashboard Section:** Add a new top-level section/route (e.g., `/reports`) in the Next.js dashboard.
+*   🟡 **Create "Reports" Dashboard Section:** Add a new top-level section/route (e.g., `/reports`) in the Next.js dashboard.
+    *   ✅ Basic dashboard page structure created
+    *   ✅ Navigation routing implemented
+    *   ✅ Layout with reports list and detail view areas
+*   ✅ **List Reports:** Implement a UI list to display existing `Report`s.
+    *   ✅ Successfully showing reports with timestamps and configuration info
+    *   ✅ Correctly fetching the associated `Task` record to display status information
+    *   ✅ Card-based layout consistent with other dashboards
+    *   ✅ Removed redundant progress indicators and timestamps for cleaner UI
+*   ✅ **Basic Report View:** Create a dedicated area to display a selected `Report`.
+    *   ✅ Successfully showing report details when a report is selected
+    *   ✅ Report cards display appropriate metadata
+    *   ✅ Selection behavior working correctly
 *   ⬜ **List Configurations:** Implement a UI table/list to display existing `ReportConfiguration`s fetched via GraphQL.
-*   ⬜ **List Reports:** Implement a UI table/list to display existing `Report`s. **Fetch the associated `Task` record to display the generation status.**
 *   ⬜ **Basic Configuration Editor:** Create a simple form/modal to create/edit `ReportConfiguration`s.
 *   ⬜ **Trigger Generation from UI:** Add a button on the `ReportConfiguration` list/view to trigger a new report run **(invoking the Task creation/Celery dispatch mechanism from Phase 2)**.
-*   ⬜ **Basic Report View:** Create a dedicated route/page (e.g., `/reports/[reportId]`).
 *   ⬜ **Fetch Report Data:** Implement logic on the report view page to fetch the `Report` record (including `output`), its associated `ReportBlock` records, **and the associated `Task` record (for status/metadata).**
-*   ⬜ **Initial Dynamic Rendering:** Develop a Markdown renderer for `Report.output`. Implement basic display for `ReportBlock` data. **Display generation status/errors fetched from the linked `Task`.**
+*   ⬜ **Create Markdown Renderer:** Develop a component to render the report's Markdown content from `Report.output`.
+*   ⬜ **Implement Block Reference System:** Create a system to identify and replace block references in the Markdown with corresponding block components.
+*   ⬜ **Develop Block-Specific Components:** Create React components that render the JSON data from each `ReportBlock` type appropriately.
 *   ⬜ **Verify Phase 5:** Confirm basic UI for listing, creating configurations, triggering runs, and viewing simple reports works. **Verify status display reflects the linked Task.**
-    *   **NEXT:** Phase 6 - Celery/Async Testing
 
 ### Phase 6: Asynchronous Generation Testing (Celery)
 
