@@ -149,7 +149,8 @@ class ReportBlockExtractor(mistune.BaseRenderer):
                     "type": "block_config",
                     "class_name": class_name,
                     "config": block_params,
-                    "block_name": block_name # Use the resolved block name
+                    "block_name": block_name, # Use the resolved block name
+                    "content": f"```block{attrs_str}\n{code}\n```" # STORE ORIGINAL RAW CONTENT
                 })
                 logger.debug("[Extractor] Appended block_config to extracted_content.")
                 return "" # Indicate successful block processing
@@ -244,8 +245,8 @@ def _parse_report_configuration(config_markdown: str) -> Tuple[str, List[Dict[st
             item["position"] = block_position
             block_definitions.append(item)
             block_position += 1
-            # Reconstruct the block definition comment for the template
-            original_markdown_list.append(f"```block name=\"{item.get('block_name', '')}\"\nclass: {item['class_name']}\n... # Configuration omitted\n```")
+            # Append the ORIGINAL block content, not the placeholder
+            original_markdown_list.append(item["content"]) # Use original content
         elif item["type"] == "error":
             logger.error(f"Error encountered during config parsing: {item['message']}")
             # Include error placeholder in the template? Or handle differently?
@@ -285,7 +286,11 @@ def _instantiate_and_run_block(
         # Find the class in the registry
         block_class = BLOCK_CLASSES.get(class_name)
         if not block_class:
-            raise ValueError(f"Report block class '{class_name}' not found or registered.")
+            # Simplify the error message
+            error_msg = f"Report block class '{class_name}' not found."
+            logger.error(f"{log_prefix} {error_msg}")
+            # Return None for data, and the error message as the log
+            return None, error_msg
 
         # Instantiate the block
         logger.debug(f"{log_prefix} Instantiating with config: {block_config}")
@@ -324,7 +329,7 @@ def _generate_report_core(
     client: PlexusDashboardClient,
     tracker: TaskProgressTracker,
     log_prefix_override: Optional[str] = None # For CLI context
-) -> str:
+) -> Tuple[str, Optional[str]]:
     """
     Core logic for generating a report. Assumes Task exists and tracker is initialized.
 
@@ -337,149 +342,195 @@ def _generate_report_core(
         log_prefix_override: Optional prefix for logs (e.g., for CLI context).
 
     Returns:
-        The ID of the generated Report record.
+        A tuple containing:
+        - report_id (str): The ID of the generated Report record.
+        - first_error_message (Optional[str]): The first specific error encountered during block
+                                               processing, or None if all blocks succeeded.
 
     Raises:
-        Exception: If any critical step fails (config load, parsing, block execution, DB update).
-                   The caller is responsible for catching these and updating the final Task status via the tracker.
+        Exception: If any critical step fails (config load, parsing, DB update).
     """
     log_prefix = log_prefix_override or f"[ReportGen task_id={tracker.task_id}]"
     logger.info(f"{log_prefix} Starting core report generation logic.")
+    report_id = None # Initialize report_id
+    first_block_error_message: Optional[str] = None
 
-    # === 1. Load ReportConfiguration ===
-    # Stage 1: Loading Configuration (Implicitly started by tracker init)
-    report_config_model = _load_report_configuration(client, report_config_id)
-    if not report_config_model:
-        raise ValueError(f"ReportConfiguration not found or failed to load: {report_config_id}")
-
-    config_markdown = report_config_model.configuration
-    report_config_name = report_config_model.name
-    logger.info(f"{log_prefix} Loaded ReportConfiguration: {report_config_name} ({report_config_id})")
-
-    # Verify accountId consistency (owner of config vs. owner of triggering task/report)
-    if account_id != report_config_model.accountId:
-        logger.warning(f"{log_prefix} Report account_id ({account_id}) differs from Configuration's accountId ({report_config_model.accountId}). Proceeding with Report's accountId.")
-        # Keep the account_id provided to this function (originating from Task or CLI)
-
-    tracker.advance_stage() # Advance to next stage (Initializing Report Record)
-
-    # === 2. Create Report Record ===
-    # Stage 2: Initializing Report Record
-    report_name = f"{report_config_name} - {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}"
-    logger.info(f"{log_prefix} Creating Report DB record: '{report_name}'")
     try:
-        report = Report.create(
-            client=client,
-            name=report_name,
-            accountId=account_id,
-            reportConfigurationId=report_config_id,
-            taskId=tracker.task.id,
-            parameters=run_parameters,
-            output=config_markdown
-        )
-        report_id = report.id
-        logger.info(f"{log_prefix} Successfully created Report record with ID: {report_id}")
-    except Exception as e:
-        logger.exception(f"{log_prefix} Failed to create Report database record: {e}")
-        raise RuntimeError(f"Failed to create Report database record: {e}") from e
-    tracker.advance_stage() # Advance to next stage (Parsing Configuration)
+        # === 1. Load ReportConfiguration ===
+        # Stage 1: Loading Configuration (Implicitly started by tracker init)
+        report_config_model = _load_report_configuration(client, report_config_id)
+        if not report_config_model:
+            raise ValueError(f"ReportConfiguration not found or failed to load: {report_config_id}")
 
-    # === 3. Parse Configuration Markdown ===
-    # Stage 3: Parsing Configuration
-    logger.info(f"{log_prefix} Parsing configuration markdown to extract template and blocks.")
-    try:
-        original_markdown_template, block_definitions = _parse_report_configuration(config_markdown)
-        logger.info(f"{log_prefix} Found {len(block_definitions)} blocks to process.")
-        report.update(output=original_markdown_template)
-        logger.info(f"{log_prefix} Updated Report record with initial markdown template.")
-    except Exception as e:
-        logger.exception(f"{log_prefix} Failed to parse report configuration markdown: {e}")
+        config_markdown = report_config_model.configuration
+        report_config_name = report_config_model.name
+        logger.info(f"{log_prefix} Loaded ReportConfiguration: {report_config_name} ({report_config_id})")
+
+        # Verify accountId consistency (owner of config vs. owner of triggering task/report)
+        if account_id != report_config_model.accountId:
+            logger.warning(f"{log_prefix} Report account_id ({account_id}) differs from Configuration's accountId ({report_config_model.accountId}). Proceeding with Report's accountId.")
+            # Keep the account_id provided to this function (originating from Task or CLI)
+
+        tracker.advance_stage() # Advance to next stage (Initializing Report Record)
+
+        # === 2. Create Report Record ===
+        # Stage 2: Initializing Report Record
+        report_name = f"{report_config_name} - {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}"
+        logger.info(f"{log_prefix} Creating Report DB record: '{report_name}'")
         try:
-            report.update(output=f"# Report Generation Failed\\n\\nError parsing configuration: {e}")
-        except Exception as update_err:
-            logger.error(f"{log_prefix} Additionally failed to update report output after parsing error: {update_err}")
-        raise RuntimeError(f"Failed to parse report configuration markdown: {e}") from e
-    tracker.advance_stage() # Advance to next stage (Processing Report Blocks)
-
-    # === 4. Process Report Blocks ===
-    # Stage 4: Processing Report Blocks
-    num_blocks = len(block_definitions)
-    logger.info(f"{log_prefix} Starting processing of {num_blocks} report blocks.")
-    # Set the total items for the current stage (Processing Report Blocks)
-    tracker.set_total_items(num_blocks)
-
-    all_blocks_succeeded = True
-    block_results = []
-
-    for i, block_def in enumerate(block_definitions):
-        position = block_def.get("position", i)
-        block_name = block_def.get("block_name", f"Block at position {position}")
-        logger.info(f"{log_prefix} Processing block {i+1}/{num_blocks}: {block_name} (Pos: {position})")
-
-        output_json, log_string = _instantiate_and_run_block(
-            block_def=block_def,
-            report_params=run_parameters,
-            api_client=client
-        )
-
-        block_results.append({
-            "position": position,
-            "name": block_def.get("block_name"),
-            "output": output_json,
-            "log": log_string
-        })
-
-        if output_json is None:
-            all_blocks_succeeded = False
-            logger.error(f"{log_prefix} Block {i+1}/{num_blocks} ({block_name}) failed. See logs for details. Log/Error: {log_string}")
-        else:
-            logger.info(f"{log_prefix} Block {i+1}/{num_blocks} ({block_name}) completed successfully.")
-
-        # Update progress after processing each block
-        tracker.update(current_items=i + 1)
-
-    tracker.advance_stage() # Advance to next stage (Finalizing Report)
-
-    # === 5. Create ReportBlock Records ===
-    # Note: This happens *after* the block processing stage has technically advanced.
-    # Consider if this should be part of the finalizing stage or block processing stage update.
-    logger.info(f"{log_prefix} Creating ReportBlock database records for {len(block_results)} blocks.")
-    try:
-        created_block_ids = []
-        for result in block_results:
-            # Ensure output is a JSON string before passing to GraphQL
-            output_json_str = json.dumps(result["output"]) if result["output"] is not None else None
-            
-            block_record = ReportBlock.create(
-                reportId=report_id,
-                position=result["position"],
-                name=result["name"],
-                output=output_json_str, # Pass the JSON string
-                log=result["log"], # Store log or error message
-                client=client
+            report = Report.create(
+                client=client,
+                name=report_name,
+                accountId=account_id,
+                reportConfigurationId=report_config_id,
+                taskId=tracker.task.id,
+                parameters=run_parameters,
+                output=config_markdown
             )
-            created_block_ids.append(block_record.id)
-        logger.info(f"{log_prefix} Successfully created {len(created_block_ids)} ReportBlock records.")
+            report_id = report.id
+            logger.info(f"{log_prefix} Successfully created Report record with ID: {report_id}")
+        except Exception as e:
+            logger.exception(f"{log_prefix} Failed to create Report database record: {e}")
+            raise RuntimeError(f"Failed to create Report database record: {e}") from e
+        tracker.advance_stage() # Advance to next stage (Parsing Configuration)
+
+        # === 3. Parse Configuration Markdown ===
+        logger.info(f"{log_prefix} Parsing configuration markdown to extract template and blocks.")
+        try:
+            original_markdown_template, block_definitions = _parse_report_configuration(config_markdown)
+            logger.info(f"{log_prefix} Found {len(block_definitions)} blocks to process.")
+            # Ensure report object exists before updating
+            if report_id:
+                 report_to_update = Report.get_by_id(report_id, client) # Refetch to ensure object exists
+                 if report_to_update:
+                     report_to_update.update(output=original_markdown_template)
+                     logger.info(f"{log_prefix} Updated Report record with initial markdown template.")
+                 else:
+                     logger.warning(f"{log_prefix} Could not re-fetch report {report_id} to update template.")
+            else:
+                 logger.error(f"{log_prefix} Cannot update report template, report ID is missing.")
+
+        except Exception as e:
+            logger.exception(f"{log_prefix} Failed to parse report configuration markdown: {e}")
+            try:
+                if report_id:
+                     report_to_update = Report.get_by_id(report_id, client) # Refetch
+                     if report_to_update:
+                         report_to_update.update(output=f"# Report Generation Failed\\n\\nError parsing configuration: {e}")
+                     else:
+                         logger.error(f"{log_prefix} Could not re-fetch report {report_id} to update with parsing error.")
+                else:
+                    logger.error(f"{log_prefix} Cannot update report with parsing error, report ID is missing.")
+            except Exception as update_err:
+                logger.error(f"{log_prefix} Additionally failed to update report output after parsing error: {update_err}")
+            raise RuntimeError(f"Failed to parse report configuration markdown: {e}") from e
+        tracker.advance_stage() # Advance to next stage (Processing Report Blocks)
+
+        # === 4. Process Report Blocks ===
+        num_blocks = len(block_definitions)
+        logger.info(f"{log_prefix} Starting processing of {num_blocks} report blocks.")
+        tracker.set_total_items(num_blocks)
+
+        block_results = []
+        for i, block_def in enumerate(block_definitions):
+            position = block_def.get("position", i)
+            block_name = block_def.get("block_name", f"Block at position {position}")
+            logger.info(f"{log_prefix} Processing block {i+1}/{num_blocks}: {block_name} (Pos: {position})")
+
+            output_json, log_string = _instantiate_and_run_block(
+                block_def=block_def,
+                report_params=run_parameters,
+                api_client=client
+            )
+
+            block_results.append({
+                "position": position,
+                "name": block_def.get("block_name"),
+                "output": output_json,
+                "log": log_string
+            })
+
+            if output_json is None:
+                block_error = log_string or f"Block {i+1}/{num_blocks} ({block_name}) failed with unspecified error."
+                if first_block_error_message is None:
+                    first_block_error_message = block_error # Capture the first error
+                logger.error(f"{log_prefix} Block {i+1}/{num_blocks} ({block_name}) failed. Error: {block_error}")
+            else:
+                logger.info(f"{log_prefix} Block {i+1}/{num_blocks} ({block_name}) completed successfully.")
+
+            tracker.update(current_items=i + 1)
+
+        tracker.advance_stage() # Advance to next stage (Finalizing Report)
+
+        # === 5. Create ReportBlock Records ===
+        if report_id:
+            logger.info(f"{log_prefix} Creating ReportBlock database records for {len(block_results)} blocks.")
+            try:
+                created_block_ids = []
+                for result in block_results:
+                    try:
+                        output_json_str = json.dumps(result["output"] if result["output"] is not None else {})
+                        block_record = ReportBlock.create(
+                            reportId=report_id,
+                            position=result["position"],
+                            name=result["name"],
+                            output=output_json_str,
+                            log=result["log"],
+                            client=client
+                        )
+                        created_block_ids.append(block_record.id)
+                    except Exception as e:
+                        logger.exception(f"{log_prefix} Failed to create ReportBlock record for block at pos {result.get('position')}: {e}")
+                        if first_block_error_message is None:
+                            first_block_error_message = f"Failed to save results for block at pos {result.get('position')}: {e}"
+                        # Don't raise here, try to save other blocks, but ensure overall failure is recorded
+                logger.info(f"{log_prefix} Finished creating ReportBlock records (attempted {len(block_results)}, created {len(created_block_ids)})." )
+            except Exception as e: # Catch broader errors during the loop setup itself
+                logger.exception(f"{log_prefix} Error during ReportBlock creation loop: {e}")
+                if first_block_error_message is None:
+                    first_block_error_message = f"Error saving block results: {e}"
+        else:
+             logger.error(f"{log_prefix} Cannot create ReportBlock records because Report ID is missing.")
+             if first_block_error_message is None:
+                  first_block_error_message = "Failed to create initial Report record."
+
+        # === 6. Finalize ===
+        logger.info(f"{log_prefix} Report generation core logic finished.")
+
+        if first_block_error_message:
+            logger.warning(f"{log_prefix} Report generation completed with errors. First error: {first_block_error_message}")
+        else:
+            logger.info(f"{log_prefix} All report blocks completed and results saved successfully.")
+
+        # Return the report_id and the first specific error message (or None if successful)
+        return report_id, first_block_error_message
+
     except Exception as e:
-        logger.exception(f"{log_prefix} Failed to create one or more ReportBlock database records: {e}")
-        # This is a partial failure, but the report might still be useful.
-        # Mark the overall task as failed, but don't raise here?
-        # Or raise to indicate a storage failure prevented completion. Let's raise.
-        all_blocks_succeeded = False # Ensure failure is marked
-        raise RuntimeError(f"Failed to create ReportBlock records: {e}") from e
+        # This catches critical errors from Task fetching, Tracker init, Metadata extraction, OR core logic.
+        final_error_msg = f"Report generation failed: {e}"
+        detailed_error = traceback.format_exc()
+        logger.exception(f"{log_prefix} {final_error_msg}")
 
-    # === 6. Finalize ===
-    # Stage 5: Finalizing Report
-    logger.info(f"{log_prefix} Report generation core logic finished.")
+        if tracker:
+            try:
+                tracker.fail(f"{final_error_msg}\\nDetails:\\n{detailed_error}")
+                logger.info(f"{log_prefix} Task status set to FAILED via tracker.")
+            except Exception as tracker_fail_err:
+                logger.error(f"{log_prefix} Additionally failed to set FAILED status via tracker: {tracker_fail_err}")
+                try:
+                    # Refetch task for direct update as fallback
+                    task_fallback = Task.get_by_id(task_id, api_client)
+                    if task_fallback:
+                        task_fallback.update(status="FAILED", errorMessage=final_error_msg, errorDetails=detailed_error, completedAt=datetime.now(timezone.utc).isoformat())
+                        logger.error(f"{log_prefix} Set Task status to FAILED via direct update as fallback.")
+                except Exception as final_update_err:
+                    logger.error(f"{log_prefix} CRITICAL: Failed to set task status to FAILED via any method after error: {final_update_err}")
+        else:
+            # Handle case where tracker wasn't initialized (e.g., initial Task fetch failed)
+            logger.error(f"{log_prefix} Cannot set final task status as tracker was not initialized.")
 
-    if not all_blocks_succeeded:
-        logger.error(f"{log_prefix} One or more report blocks failed during generation.")
-        raise RuntimeError("One or more report blocks failed during generation.")
-
-    logger.info(f"{log_prefix} Report generation completed successfully. Report ID: {report_id}")
-    # No need to call complete_stage or advance_stage here. The caller (generate_report or CLI runner) will call tracker.complete().
-
-    return report_id
+        # Return None for report_id and the first error message
+        return None, first_block_error_message
 
 
 # Updated function signature for Celery task
@@ -575,7 +626,7 @@ def generate_report(task_id: str):
 
         # === 4. Call Core Generation Logic ===
         logger.info(f"{log_prefix} Calling _generate_report_core...")
-        report_id = _generate_report_core(
+        report_id, first_block_error_message = _generate_report_core(
             report_config_id=report_config_id,
             account_id=account_id,
             run_parameters=run_parameters,
@@ -583,14 +634,19 @@ def generate_report(task_id: str):
             tracker=tracker,
             log_prefix_override=log_prefix
         )
-        logger.info(f"{log_prefix} _generate_report_core completed successfully. Report ID: {report_id}")
+        logger.info(f"{log_prefix} _generate_report_core finished. Report ID: {report_id}, First Error: {first_block_error_message}")
 
-        # === 5. Mark Task as COMPLETED ===
-        tracker.complete()
-        logger.info(f"{log_prefix} Report generation task finished successfully.")
+        # === 5. Mark Task Status based on Core Logic Result ===
+        if first_block_error_message is None:
+            tracker.complete()
+            logger.info(f"{log_prefix} Report generation task finished successfully.")
+        else:
+            # Use the specific error message from the core logic
+            tracker.fail(first_block_error_message)
+            logger.error(f"{log_prefix} Report generation task finished with errors: {first_block_error_message}")
 
     except Exception as e:
-        # This catches errors from Task fetching, Tracker init, Metadata extraction, OR core logic.
+        # This catches critical errors from Task fetching, Tracker init, Metadata extraction, OR core logic.
         final_error_msg = f"Report generation failed: {e}"
         detailed_error = traceback.format_exc()
         logger.exception(f"{log_prefix} {final_error_msg}")

@@ -138,76 +138,24 @@ class ReportConfiguration(BaseModel):
     def get_by_name(cls, name: str, account_id: str, client: _BaseAPIClient) -> Optional['ReportConfiguration']:
         """Get a ReportConfiguration by its name within a specific account.
 
-        Uses the GSI 'byAccountIdAndName' (implicitly queried by listReportConfigurationByAccountIdAndUpdatedAt
-        with an eq filter on name, assuming the backend supports it, or filters client-side).
-        Returns the first match found.
+        Uses the GSI 'byAccountIdAndName'. Returns the first match found.
         """
-        # Try using the index optimized for accountId and name sorting first
-        # The actual query name might differ based on Amplify generation, but this is common pattern
-        query = f"""
-        query ListReportConfigByName(
-            $accountId: String!,
-            $name: ModelStringKeyConditionInput,
-            $limit: Int
-        ) {{
-            listReportConfigurationByAccountIdAndName(
-                accountId: $accountId,
-                name: $name,
-                limit: $limit
-            ) {{
-                items {{
-                    {cls.fields()}
-                }}
-                nextToken # Include for potential future pagination
-            }}
-        }}
-        """
-        variables = {
-            'accountId': account_id,
-            'name': { 'eq': name }, # Filter for exact name match
-            'limit': 1 # We only need one match
-        }
-        
         try:
-            logger.debug(f"Querying ReportConfiguration by name '{name}' for account {account_id}")
-            result = client.execute(query, variables)
-            list_result = result.get('listReportConfigurationByAccountIdAndName', {})
-            items_data = list_result.get('items', [])
-            
-            if items_data:
-                logger.debug(f"Found ReportConfiguration by name via specific index.")
-                # Found using the specific index
-                return cls.from_dict(items_data[0], client)
+            logger.debug(f"Querying ReportConfiguration by name '{name}' for account {account_id} using dedicated GSI method.")
+            # Use the specific method that queries the GSI
+            results = cls.list_by_account_and_name(account_id=account_id, name=name, client=client, limit=1)
+            items = results.get('items', [])
+
+            if items:
+                logger.debug(f"Found ReportConfiguration by name via list_by_account_and_name.")
+                return items[0] # Return the first match
             else:
-                # If the specific index query fails or returns empty, try the broader list + filter
-                # This is a fallback in case the 'byAccountIdAndName' GSI isn't queryable this way
-                logger.warning(f"Query by name GSI failed or returned empty. Falling back to list + filter.")
-                list_result = cls.list_by_account_id(account_id=account_id, client=client, limit=1000) # Fetch many
-                items = list_result.get('items', [])
-                for item in items:
-                    if item.name == name:
-                         logger.debug(f"Found ReportConfiguration by name via list+filter fallback.")
-                         return item # Already an instance due to list_by_account_id
-                # If not found even in fallback
-                logger.debug(f"ReportConfiguration '{name}' not found in account {account_id} even after fallback.")
+                logger.debug(f"ReportConfiguration '{name}' not found in account {account_id} using list_by_account_and_name.")
                 return None
 
         except Exception as e:
-            # Log the specific error, but attempt fallback if appropriate
-            logger.error(f"Error querying ReportConfiguration by name '{name}' (GSI: byAccountIdAndName): {e}")
-            logger.info("Attempting fallback: Listing all for account and filtering...")
-            try:
-                 list_result = cls.list_by_account_id(account_id=account_id, client=client, limit=1000) # Fetch many
-                 items = list_result.get('items', [])
-                 for item in items:
-                    if item.name == name:
-                        logger.debug(f"Found ReportConfiguration by name via list+filter fallback after error.")
-                        return item # Already an instance
-                 logger.debug(f"ReportConfiguration '{name}' not found in account {account_id} even after fallback from error.")
-                 return None
-            except Exception as fallback_e:
-                logger.exception(f"Error during fallback list+filter for ReportConfiguration '{name}': {fallback_e}")
-                return None # Both primary and fallback failed
+            logger.error(f"Error querying ReportConfiguration by name '{name}' using list_by_account_and_name: {e}\\n{traceback.format_exc()}")
+            return None # Failed to query
 
     @classmethod
     def list_by_account_id(
@@ -260,4 +208,100 @@ class ReportConfiguration(BaseModel):
         except Exception as e:
             logger.error(f"Error listing Report Configurations for account {account_id}: {e}\\\n{traceback.format_exc()}")
             # Re-raise or return an empty structure based on desired error handling
-            raise # Re-raise for now to let caller handle 
+            raise # Re-raise for now to let caller handle
+
+    @classmethod
+    def list_by_account_and_name(
+        cls,
+        account_id: str,
+        name: str,
+        client: _BaseAPIClient,
+        limit: int = 50,
+        next_token: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """List Report Configurations for a specific account matching a name using the GSI."""
+        # Assumes the GSI query is named listReportConfigurationsByAccountIdAndName based on Amplify convention
+        # for the index: idx("accountId").sortKeys(["name"])
+        query = f"""
+        query ListReportConfigurationsByAccountIdAndName(
+            $accountId: String!,
+            $name: ModelStringKeyConditionInput,
+            $limit: Int,
+            $nextToken: String
+        ) {{
+            listReportConfigurationByAccountIdAndName(
+                accountId: $accountId,
+                name: $name,
+                limit: $limit,
+                nextToken: $nextToken
+            ) {{
+                items {{
+                    {cls.fields()}
+                }}
+                nextToken
+            }}
+        }}
+        """
+        variables = {
+            'accountId': account_id,
+            'name': { 'eq': name }, # Filter for exact name match
+            'limit': limit,
+            'nextToken': next_token
+        }
+
+        try:
+            logger.debug(f"Executing listReportConfigurationsByAccountIdAndName query for account {account_id}, name '{name}'")
+            result = client.execute(query, variables)
+            list_result = result.get('listReportConfigurationByAccountIdAndName', {})
+
+            # Convert raw item dicts to ReportConfiguration instances if items exist
+            items_data = list_result.get('items', [])
+            if items_data:
+                list_result['items'] = [cls.from_dict(item, client) for item in items_data]
+            else:
+                 list_result['items'] = [] # Ensure items is always a list
+
+            return list_result # Return the whole structure including nextToken
+        except Exception as e:
+            logger.error(f"Error listing Report Configurations for account {account_id} by name '{name}': {e}\\n{traceback.format_exc()}")
+            raise # Re-raise for now to let caller handle
+
+    def update(
+        self,
+        client: _BaseAPIClient,
+        name: str,
+        accountId: str,
+        configuration: str,
+        description: Optional[str] = None
+    ) -> 'ReportConfiguration':
+        """Update the ReportConfiguration record."""
+        mutation = f"""
+        mutation UpdateReportConfiguration($input: UpdateReportConfigurationInput!) {{
+            updateReportConfiguration(input: $input) {{
+                {cls.fields()}
+            }}
+        }}
+        """
+
+        input_data = {
+            'id': self.id,
+            'name': name,
+            'accountId': accountId,
+            'configuration': configuration,
+            'description': description
+        }
+        # Remove optional fields if None
+        input_data = {k: v for k, v in input_data.items() if v is not None}
+
+        try:
+            logger.debug(f"Updating ReportConfiguration with input: {input_data}")
+            result = client.execute(mutation, {'input': input_data})
+            if not result or 'updateReportConfiguration' not in result or not result['updateReportConfiguration']:
+                error_msg = f"Failed to update ReportConfiguration. Response: {result}"
+                logger.error(error_msg)
+                raise Exception(error_msg)
+            # Convert the response dict back using from_dict
+            return cls.from_dict(result['updateReportConfiguration'], client)
+        except Exception as e:
+            logger.exception(f"Error updating ReportConfiguration '{self.name}' for account {self.accountId}: {e}")
+            raise 
