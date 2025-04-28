@@ -260,6 +260,7 @@ This refactoring ensures the core report generation logic is DRY and consistentl
         *   Run `python -m plexus.cli.CommandLineInterface report config list`. Verify existing configs are listed correctly for the default account (resolved via `.env`).
     2.  🟡 **`config create`:** *(Manually Tested - See notes below)*
         *   ✅ Run `python -m plexus.cli.CommandLineInterface report config create --name "CLI Test Config" --file test_config.md`. Verify successful creation message (`Successfully created Report Configuration...`) and that the config appears in `config list` output. *(Verified manually)*
+        *   ✅ **Update (2025-04-28):** Fixed `test_config.md` format (name inside YAML block). Re-ran create, **currently paused awaiting confirmation [y/N] to overwrite.**
         *   ⬜ Attempt creation with missing required options (e.g., `--name` or `--file`). Verify Click error. (`python -m plexus.cli.CommandLineInterface report config create --name "Missing File"`)
         *   ⬜ Attempt creation with a non-existent file path. Verify error message. (`python -m plexus.cli.CommandLineInterface report config create --name "Bad File Path" --file non_existent_file.md`)
     3.  🟡 **`config delete`:** *(Manually Tested - See notes below)*
@@ -276,23 +277,25 @@ This refactoring ensures the core report generation logic is DRY and consistentl
             *   Run `config list` again and verify the config with `<new_ID_from_recreate>` is gone.
         *   ⬜ **Delete Non-Existent:** Run `python -m plexus.cli.CommandLineInterface report config delete "NonExistent Config"`. Verify "not found" message.
         *   ⬜ **Recreate final test config:** Run `python -m plexus.cli.CommandLineInterface report config create --name "CLI Test Config" --file test_config.md`.
-    5.  ⬜ **`report run` (Core Test):**
+    5.  ✅ **`report run` (Core Test):**
         *   Run `python -m plexus.cli.CommandLineInterface report run --config "CLI Test Config"`. Verify:
             *   Task creation message with Task ID is shown.
             *   Messages indicating synchronous execution and progress updates are shown (e.g., block processing logs, final status).
             *   **No Celery dispatch message is shown.**
             *   The command waits for completion before returning the prompt.
             *   Final `Task` status and `Report` ID are printed upon completion.
-        *   Run `python -m plexus.cli.CommandLineInterface report run --config <invalid_config_id_or_name>`. Verify error message (config resolution failure).
-        *   Run `python -m plexus.cli.CommandLineInterface report run --config "CLI Test Config" invalid_param=test`. Verify parameter parsing error or successful run with parameters logged in Task metadata.
+            *   ✅ **Verified (2025-04-28):** Command runs successfully after multiple fixes (missing methods, tracker errors, GraphQL issues). Note: Initial run did not process blocks due to config format issue.
+        *   ⬜ Run `python -m plexus.cli.CommandLineInterface report run --config <invalid_config_id_or_name>`. Verify error message (config resolution failure).
+        *   ⬜ Run `python -m plexus.cli.CommandLineInterface report run --config "CLI Test Config" invalid_param=test`. Verify parameter parsing error or successful run with parameters logged in Task metadata.
         *   **(Removed) Monitor Celery Worker:** Worker monitoring is not needed for synchronous CLI execution testing. (Worker testing should happen separately for async paths).
-        *   **Check Task Status:** Use `python -m plexus.cli.CommandLineInterface task get --id <task_id_from_run>` to check final status (`COMPLETED` or `FAILED`), completion time, error messages (if any). Verify this matches the status reported by the `report run` command directly.
-        *   **Check Database:** (Optional) Manually inspect `Report` and `ReportBlock` tables to confirm data persistence.
-    6.  ⬜ **`report list`:**
+        *   ✅ **Check Task Status:** Use `python -m plexus.cli.CommandLineInterface task get --id <task_id_from_run>` to check final status (`COMPLETED` or `FAILED`), completion time, error messages (if any). Verify this matches the status reported by the `report run` command directly. *(Verified status matches)*
+        *   ✅ **Check Database:** (Optional) Manually inspect `Report` and `ReportBlock` tables to confirm data persistence. *(Verified Report created, ReportBlock not created in initial run)*
+    6.  ✅ **`report list`:**
         *   Run `python -m plexus.cli.CommandLineInterface report list`. Verify the newly generated report appears with correct Config ID, Task ID, and fetched Task Status.
         *   Run `python -m plexus.cli.CommandLineInterface report list --config "CLI Test Config"`. Verify filtering works (using ID/Name lookup for the config).
         *   Run `python -m plexus.cli.CommandLineInterface report list --config "NonExistent Config"`. Verify appropriate "not found" or empty message.
-    7.  ⬜ **`report show`:**
+        *   ✅ **Verified (2025-04-28):** Command works after fixing list handling in CLI command code.
+    7.  ✅ **`report show`:**
         *   Identify the ID or Name of the report generated in step 4.
         *   Run `python -m plexus.cli.CommandLineInterface report show <report_id_or_name>`. Verify:
             *   Correct Report details are shown.
@@ -300,9 +303,11 @@ This refactoring ensures the core report generation logic is DRY and consistentl
             *   Report Output (Markdown template) is displayed.
             *   Associated Report Blocks summary table is shown.
             *   ID/Name lookup works for the report itself.
+            *   ✅ **Verified (2025-04-28):** Command works after fixing list handling for blocks.
         *   Run `python -m plexus.cli.CommandLineInterface report show <non_existent_report_id>`. Verify "not found" message.
-    8.  ⬜ **`report last`:**
+    8.  ✅ **`report last`:**
         *   Run `python -m plexus.cli.CommandLineInterface report last`. Verify it finds the most recently generated report (from step 4) and displays the same details as `report show` for that report.
+        *   ✅ **Verified (2025-04-28):** Command works after fixing sort parameter and list handling.
     9.  ⬜ **`block list`:**
         *   Get the `report_id` from step 4.
         *   Run `python -m plexus.cli.CommandLineInterface report block list <report_id>`. Verify the blocks created by the `ScoreInfo` class appear with correct position, name (if any), output summary, and log status.
@@ -316,6 +321,15 @@ This refactoring ensures the core report generation logic is DRY and consistentl
             *   Lookup works by both position (e.g., '0') and name (if applicable).
         *   Run `python -m plexus.cli.CommandLineInterface report block show <report_id> <invalid_identifier>`. Verify "not found" message.
 *   🟡 **Verify Phase 4:** Confirm all test steps pass, demonstrating reliable backend processing and CLI interaction for the reports feature.
+    *   **Notes (2025-04-28):**
+        *   Successfully tested `report config` commands (list, show, create, delete). `delete --yes` needs fix.
+        *   Successfully tested `report run` (sync) after fixing several Python client model issues (missing methods, wrong args, list handling, GraphQL naming/types) and TaskProgressTracker issues (task ID access, stage name sanitization).
+        *   Successfully tested `report list`, `show`, `last` after fixing list handling.
+        *   Identified config format issue preventing block generation in initial `report run` test.
+        *   Updated `test_config.md` format.
+        *   Ran `report config create --name "CLI Test Config" --file test_config.md` again.
+        *   **CURRENT STATUS:** Paused, awaiting user confirmation (`[y/N]`) to overwrite the "CLI Test Config" in the database.
+        *   **NEXT STEPS:** Confirm overwrite (y), re-run `report run --config "CLI Test Config"`, then test `report block list` and `report block show` using the *new* report ID.
     *   **Notes (2025-04-27):**
         *   Manually tested `report config create` with `--description` and duplicate name scenarios (different/identical content prompts).
         *   Findings:

@@ -342,13 +342,13 @@ def _generate_report_core(
     logger.info(f"{log_prefix} Creating Report DB record: '{report_name}'")
     try:
         report = Report.create(
+            client=client,
             name=report_name,
             accountId=account_id,
             reportConfigurationId=report_config_id,
-            taskId=tracker.task_id,
-            parameters=json.dumps(run_parameters),
-            output="Report generation in progress...",
-            _client=client
+            taskId=tracker.task.id,
+            parameters=run_parameters,
+            output=config_markdown
         )
         report_id = report.id
         logger.info(f"{log_prefix} Successfully created Report record with ID: {report_id}")
