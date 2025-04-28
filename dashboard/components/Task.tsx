@@ -111,14 +111,6 @@ const Task = <TData extends BaseTaskData = BaseTaskData>({
   // Force isSelected to true in detail mode
   const effectiveIsSelected = variant === 'detail' ? true : isSelected;
 
-  // Add debug logging for onClose prop
-  console.log('Task component received props:', {
-    variant,
-    taskId: task.id,
-    hasOnClose: !!onClose,
-    hasRenderHeader: !!renderHeader
-  });
-
   const childProps: TaskChildProps<TData> = {
     variant,
     task,

@@ -83,20 +83,25 @@ class ReportBlockExtractor(mistune.BaseRenderer):
 
     def text(self, token, state):
         self._current_markdown_buffer += token["raw"]
-        return token["raw"]
+        # return token["raw"] # MODIFIED: Don't return, just buffer
 
     def paragraph(self, token, state):
         # Instead of rendering <p>, just accumulate the inner text
-        # We might lose some structure here, but it avoids the default HTML
-        inner_text = self.render_tokens(token["children"], state)
-        # Add paragraph breaks for potentially better formatting later
-        self._current_markdown_buffer += inner_text + "\n\n" 
-        return inner_text # Return value might not be used if we capture directly
+        # Process children to ensure their content is added to the buffer
+        self.render_tokens(token["children"], state)
+        # Add paragraph breaks AFTER children content for potentially better formatting later
+        self._current_markdown_buffer += "\\n\\n"
+        # return inner_text # MODIFIED: Don't return, just buffer
 
     def block_code(self, token, state):
         lang_info = token["attrs"].get("info") if token.get("attrs") else None
         lang_info = lang_info.strip() if lang_info else ""
         code = token["raw"]
+        # Use token metadata if available (Mistune v3+) for more robust raw extraction
+        start_pos = token.get('start_pos')
+        end_pos = token.get('end_pos')
+        input_markdown = getattr(state, '_raw', None) if state else None
+
         logger.debug(f"[Extractor] block_code called. Lang Info: '{lang_info}'")
 
         # Check if the language info starts with 'block'
@@ -145,51 +150,95 @@ class ReportBlockExtractor(mistune.BaseRenderer):
                     logger.error("[Extractor] `class` key not found in combined block config.")
                     raise ValueError("`class` not specified in block definition (either YAML or attributes).")
 
+                # --- Determine original raw content for storage ---
+                # Prefer using start/end pos if available for accuracy
+                original_block_content = ""
+                if start_pos is not None and end_pos is not None and input_markdown:
+                    original_block_content = input_markdown[start_pos:end_pos].strip()
+                else: # Fallback to reconstructing
+                    original_block_content = f"```block{attrs_str}\\n{code}\\n```"
+                # --- End Original Content Determination ---
+
+
                 self.extracted_content.append({
                     "type": "block_config",
                     "class_name": class_name,
                     "config": block_params,
                     "block_name": block_name, # Use the resolved block name
-                    "content": f"```block{attrs_str}\n{code}\n```" # STORE ORIGINAL RAW CONTENT
+                    # "content": f"```block{attrs_str}\\n{code}\\n```" # STORE ORIGINAL RAW CONTENT
+                    "content": original_block_content # Store potentially more accurate raw content
                 })
                 logger.debug("[Extractor] Appended block_config to extracted_content.")
-                return "" # Indicate successful block processing
+                return "" # Indicate successful block processing (no return needed for buffer)
 
             except (yaml.YAMLError, ValueError, re.error) as e: # Added re.error
                 logger.error(f"[Extractor] Error parsing report block definition: {e}", exc_info=True)
+                # Try to get raw block content even on error for reconstruction
+                raw_content_on_error = ""
+                if start_pos is not None and end_pos is not None and input_markdown:
+                    raw_content_on_error = input_markdown[start_pos:end_pos].strip()
+                else:
+                    raw_content_on_error = f"```block {lang_info}\\n{code}\\n```" # Best guess
+
                 self.extracted_content.append({
                     "type": "error",
-                    "message": f"Error parsing block definition: {e}"
+                    "message": f"Error parsing block definition: {e}",
+                    "content": raw_content_on_error # Store raw content even on error
                 })
-                return "<!-- Error parsing block -->"
+                # return "<!-- Error parsing block -->" # Don't return
+                return "" # Still return empty string
+
         else:
             # Treat as regular markdown code block
             logger.debug(f"[Extractor] Non-'block' language prefix ('{lang_info}'). Treating as regular markdown.")
-            rendered_code = f"```{(lang_info or '')}\\n{code}\\n```\\n"
-            self._current_markdown_buffer += rendered_code
-            return rendered_code # Return the formatted code
+            # Reconstruct the raw code block markdown accurately if possible
+            if start_pos is not None and end_pos is not None and input_markdown:
+                 raw_code_md = input_markdown[start_pos:end_pos].strip()
+                 self._current_markdown_buffer += raw_code_md + "\\n\\n" # Add spacing
+            else: # Fallback
+                 rendered_code = f"```{(lang_info or '')}\\n{code}\\n```\\n"
+                 self._current_markdown_buffer += rendered_code
+            # return rendered_code # MODIFIED: Don't return, just buffer
+            return "" # Return empty string
 
     # Handle other elements by accumulating their raw content or rendering children
-    # We might need to add more handlers (heading, list, etc.) 
+    # We might need to add more handlers (heading, list, etc.)
     # if we want to preserve more structure in the markdown parts.
     def heading(self, token, state):
         level = token["attrs"]["level"]
-        inner_text = self.render_tokens(token["children"], state)
-        md_header = '#' * level + ' ' + inner_text + '\n\n'
-        self._current_markdown_buffer += md_header
-        return md_header
+        # Use token metadata if available (Mistune v3+) for more robust raw extraction
+        start_pos = token.get('start_pos')
+        end_pos = token.get('end_pos')
+        input_markdown = getattr(state, '_raw', None) if state else None
+
+        # Try to reconstruct raw markdown directly for simplicity and accuracy
+        if start_pos is not None and end_pos is not None and input_markdown:
+             raw_heading_md = input_markdown[start_pos:end_pos].strip()
+             # Ensure reasonable spacing after the heading
+             self._current_markdown_buffer += raw_heading_md + "\\n\\n"
+        else: # Fallback if raw isn't easily available
+             # Fallback involves processing children, which might be less accurate
+             # if text handler is modified
+             self._current_markdown_buffer += '#' * level + ' '
+             self.render_tokens(token["children"], state) # Process children to buffer text
+             self._current_markdown_buffer += "\\n\\n" # Add spacing
+        # return md_header # MODIFIED: Don't return, just buffer
 
     def render_tokens(self, tokens, state):
-        # Helper to render child tokens
-        result = ""
+        # Helper to render child tokens - MODIFIED
+        # result = "" # No longer accumulate result
         for tok in tokens:
             # Dynamically call the method based on token type
             method = getattr(self, tok["type"], None)
             if method:
-                result += method(tok, state)
+                # result += method(tok, state) # Don't accumulate result
+                method(tok, state) # Just call the method to process it (and modify buffer)
             elif "raw" in tok: # Fallback for unhandled tokens with raw text
-                result += tok["raw"]
-        return result
+                # result += tok["raw"] # Don't accumulate result
+                # Append raw content from unhandled tokens directly to buffer
+                # This might be needed for things like inline code, emphasis, etc.
+                self._current_markdown_buffer += tok["raw"]
+        # return result # Don't return anything
 
     def finalize(self, data):
          # This method is called at the end by BaseRenderer
@@ -206,57 +255,37 @@ class ReportBlockExtractor(mistune.BaseRenderer):
 # For now, assume v2 style initialization works or adapt as needed
 markdown_parser = mistune.create_markdown(renderer=ReportBlockExtractor())
 
-def _parse_report_configuration(config_markdown: str) -> Tuple[str, List[Dict[str, Any]]]:
+def _parse_report_configuration(config_markdown: str) -> List[Dict[str, Any]]:
     """
-    Parses the ReportConfiguration Markdown content to extract the original
-    Markdown template and a list of defined block configurations.
+    Parses the ReportConfiguration Markdown content to extract a list of defined block configurations.
+    The original Markdown template is no longer reconstructed here.
 
     Args:
         config_markdown: The Markdown string from ReportConfiguration.configuration.
 
     Returns:
-        A tuple containing:
-        - original_markdown_template (str): The Markdown content excluding block definitions.
         - block_definitions (List[Dict]): A list of dictionaries, each representing a block to run.
     """
-    logger.debug("Parsing report configuration markdown...")
-    # Use the custom renderer instance to parse
-    # Note: mistune.create_markdown returns a callable parsing function in v3
-    # parsed_data = markdown_parser(config_markdown) # Assuming v3 style
-
-    # --- Using the Extractor directly (closer to original logic) ---
+    logger.debug("Parsing report configuration markdown to extract blocks...")
     extractor = ReportBlockExtractor()
-    # Mistune v2/v3 might require different invocation, adapt as necessary
-    # This simulates calling the renderer's methods via parsing
     mistune.create_markdown(renderer=extractor)(config_markdown)
-    parsed_data = extractor.finalize(None) # Trigger finalize explicitly
-    # --- End Extractor direct use ---
+    parsed_data = extractor.finalize(None)
 
-
-    original_markdown_list = []
     block_definitions = []
     block_position = 0
 
     for item in parsed_data:
-        if item["type"] == "markdown":
-            original_markdown_list.append(item["content"])
-        elif item["type"] == "block_config":
-            # Add position to the block definition
+        if item["type"] == "block_config":
             item["position"] = block_position
             block_definitions.append(item)
             block_position += 1
-            # Append the ORIGINAL block content, not the placeholder
-            original_markdown_list.append(item["content"]) # Use original content
         elif item["type"] == "error":
             logger.error(f"Error encountered during config parsing: {item['message']}")
-            # Include error placeholder in the template? Or handle differently?
-            original_markdown_list.append(f"<!-- Error parsing block: {item['message']} -->")
+            # If parsing fails, we might want to raise an error here instead of just logging
+            # For now, just log and continue extraction if possible, but don't include in template
 
-
-    original_markdown_template = "\n\n".join(original_markdown_list).strip()
     logger.debug(f"Parsed {len(block_definitions)} blocks.")
-    logger.debug(f"Original Markdown Template:\n{original_markdown_template[:500]}...") # Log snippet
-    return original_markdown_template, block_definitions
+    return block_definitions
 
 
 def _instantiate_and_run_block(
@@ -378,6 +407,15 @@ def _generate_report_core(
         report_name = f"{report_config_name} - {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}"
         logger.info(f"{log_prefix} Creating Report DB record: '{report_name}'")
         try:
+            # --- DEBUG: Inspect config_markdown before saving --- #
+            logger.info(f"{log_prefix} repr(config_markdown) before Report.create:\n{repr(config_markdown)}")
+            # Add actual content logging
+            logger.info(f"{log_prefix} Actual content (first 100 chars): {config_markdown[:100]}")
+            has_literal_newlines = "\\n" in config_markdown
+            has_actual_newlines = "\n" in config_markdown
+            logger.info(f"{log_prefix} Content contains literal newlines: {has_literal_newlines}")
+            logger.info(f"{log_prefix} Content contains actual newlines: {has_actual_newlines}")
+            # --- END DEBUG --- #
             report = Report.create(
                 client=client,
                 name=report_name,
@@ -385,9 +423,15 @@ def _generate_report_core(
                 reportConfigurationId=report_config_id,
                 taskId=tracker.task.id,
                 parameters=run_parameters,
-                output=config_markdown
+                output=config_markdown # Store original config markdown directly
             )
             report_id = report.id
+            # Log content after report creation
+            logger.info(f"{log_prefix} Report content after creation (first 100 chars): {report.output[:100]}")
+            has_literal_newlines = "\\n" in report.output
+            has_actual_newlines = "\n" in report.output
+            logger.info(f"{log_prefix} Report content contains literal newlines: {has_literal_newlines}")
+            logger.info(f"{log_prefix} Report content contains actual newlines: {has_actual_newlines}")
             logger.info(f"{log_prefix} Successfully created Report record with ID: {report_id}")
         except Exception as e:
             logger.exception(f"{log_prefix} Failed to create Report database record: {e}")
@@ -395,34 +439,37 @@ def _generate_report_core(
         tracker.advance_stage() # Advance to next stage (Parsing Configuration)
 
         # === 3. Parse Configuration Markdown ===
-        logger.info(f"{log_prefix} Parsing configuration markdown to extract template and blocks.")
+        logger.info(f"{log_prefix} Parsing configuration markdown to extract blocks.") # Updated log message
         try:
-            original_markdown_template, block_definitions = _parse_report_configuration(config_markdown)
+            # original_markdown_template, block_definitions = _parse_report_configuration(config_markdown)
+            block_definitions = _parse_report_configuration(config_markdown) # Get only block definitions
             logger.info(f"{log_prefix} Found {len(block_definitions)} blocks to process.")
             # Ensure report object exists before updating
-            if report_id:
-                 report_to_update = Report.get_by_id(report_id, client) # Refetch to ensure object exists
-                 if report_to_update:
-                     report_to_update.update(output=original_markdown_template)
-                     logger.info(f"{log_prefix} Updated Report record with initial markdown template.")
-                 else:
-                     logger.warning(f"{log_prefix} Could not re-fetch report {report_id} to update template.")
-            else:
-                 logger.error(f"{log_prefix} Cannot update report template, report ID is missing.")
+            # REMOVED: No longer need to update report output here, it was set during creation.
+            # if report_id:
+            #      report_to_update = Report.get_by_id(report_id, client) # Refetch to ensure object exists
+            #      if report_to_update:
+            #          report_to_update.update(output=original_markdown_template)
+            #          logger.info(f"{log_prefix} Updated Report record with initial markdown template.")
+            #      else:
+            #          logger.warning(f"{log_prefix} Could not re-fetch report {report_id} to update template.")
+            # else:
+            #      logger.error(f"{log_prefix} Cannot update report template, report ID is missing.")
 
         except Exception as e:
             logger.exception(f"{log_prefix} Failed to parse report configuration markdown: {e}")
-            try:
-                if report_id:
-                     report_to_update = Report.get_by_id(report_id, client) # Refetch
-                     if report_to_update:
-                         report_to_update.update(output=f"# Report Generation Failed\\n\\nError parsing configuration: {e}")
-                     else:
-                         logger.error(f"{log_prefix} Could not re-fetch report {report_id} to update with parsing error.")
-                else:
-                    logger.error(f"{log_prefix} Cannot update report with parsing error, report ID is missing.")
-            except Exception as update_err:
-                logger.error(f"{log_prefix} Additionally failed to update report output after parsing error: {update_err}")
+            # If parsing fails, we still have the original markdown stored, but should mark task as failed.
+            # try:
+            #     if report_id:
+            #          report_to_update = Report.get_by_id(report_id, client) # Refetch
+            #          if report_to_update:
+            #              report_to_update.update(output=f"# Report Generation Failed\n\nError parsing configuration: {e}")
+            #          else:
+            #              logger.error(f"{log_prefix} Could not re-fetch report {report_id} to update with parsing error.")
+            #     else:
+            #         logger.error(f"{log_prefix} Cannot update report with parsing error, report ID is missing.")
+            # except Exception as update_err:
+            #     logger.error(f"{log_prefix} Additionally failed to update report output after parsing error: {update_err}")
             raise RuntimeError(f"Failed to parse report configuration markdown: {e}") from e
         tracker.advance_stage() # Advance to next stage (Processing Report Blocks)
 

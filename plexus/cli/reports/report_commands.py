@@ -453,10 +453,10 @@ def show_report(id_or_name: str, account_identifier: Optional[str]):
 
         # Report Output Panel
         report_output_panel = Panel(
-             report_instance.output or "[dim]No output generated.[/dim]",
-             title="[bold]Raw Report Output[/bold]",
-             border_style="magenta",
-             expand=True
+            report_instance.output or "[dim]No output generated.[/dim]",
+            title="[bold]Raw Report Output[/bold]",
+            border_style="magenta",
+            expand=True
         )
 
         # Report Blocks Panel

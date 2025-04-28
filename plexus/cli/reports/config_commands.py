@@ -124,6 +124,12 @@ def create_config(name: str, description: str, account_identifier: Optional[str]
         # Read the configuration content from the file
         with open(config_file_path, 'r', encoding='utf-8') as f:
             configuration_content = f.read()
+            # Log the actual content
+            logger.info(f"Raw file content (first 100 chars): {configuration_content[:100]}")
+            backslash_n = r'\n'
+            newline = '\n'
+            logger.info(f"Raw file content contains backslash-n: {backslash_n in configuration_content}")
+            logger.info(f"Raw file content contains actual newlines: {newline in configuration_content}")
 
         # Validate if the content is not empty (basic check)
         if not configuration_content.strip():
@@ -169,6 +175,10 @@ def create_config(name: str, description: str, account_identifier: Optional[str]
         )
 
         if new_config:
+            # Log the content after creation
+            logger.info(f"Config content after creation (first 100 chars): {new_config.configuration[:100]}")
+            logger.info(f"Config content contains backslash-n: {backslash_n in new_config.configuration}")
+            logger.info(f"Config content contains actual newlines: {newline in new_config.configuration}")
             escaped_id = escape(str(new_config.id))
             escaped_name = escape(str(new_config.name))
             escaped_account_id = escape(str(new_config.accountId))
