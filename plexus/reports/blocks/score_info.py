@@ -19,7 +19,7 @@ class ScoreInfo(BaseReportBlock):
                                          Defaults to False.
     """
 
-    async def generate(
+    def generate(
         self # config/params/client accessed via self
     ) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         """Fetches (mock) Score data and returns it with logs."""
@@ -40,7 +40,6 @@ class ScoreInfo(BaseReportBlock):
             # Replace with actual async API call using self.api_client
             # score_data = await self.api_client.get_score_by_identifier(score_identifier)
             # For now, use mock data:
-            await asyncio.sleep(0.01) # Simulate async work
             mock_score_data = {
                 "id": score_identifier,
                 "name": f"Mock Score {score_identifier[:4]}...",
@@ -68,7 +67,7 @@ class ScoreInfo(BaseReportBlock):
 
         except ValueError as ve:
             # Log specific config errors
-             self._log(f"Configuration Error: {ve}")
+            self._log(f"Configuration Error: {ve}")
             # final_output_data remains None
         except Exception as e:
             # Log unexpected errors during generation

@@ -600,100 +600,175 @@ def show_config(id_or_name: str, account_identifier: Optional[str]):
 @config.command(name="delete")
 @click.argument('id_or_name', type=str)
 @click.option('--account', 'account_identifier', default=None, help='Account key or ID context (needed for name lookup). Defaults to PLEXUS_ACCOUNT_KEY.')
-@click.option('--yes', is_flag=True, callback=lambda ctx, param, value: console.print("[yellow]Skipping confirmation prompt due to --yes flag.[/yellow]") if value else None, expose_value=True, help='Skip confirmation prompt.')
+@click.option('--yes', is_flag=True, expose_value=True, help='Skip confirmation prompt.')
 def delete_config(id_or_name: str, account_identifier: Optional[str], yes: bool):
-    """Delete a Report Configuration by its ID or name."""
+    """Delete a specific Report Configuration by ID or Name."""
     client = create_client()
     account_id = None
+    account_display_name = "default account"
 
-    # Resolve account ID (reuse logic from list_configs/create_config)
+    # Resolve account context first (Simplified logic, assuming create_client handles default)
     if account_identifier:
+        account_display_name = f"identifier '{account_identifier}'"
         try:
-            account_obj = Account.get_by_key(key=account_identifier, client=client)
-            if account_obj: account_id = account_obj.id
+            account_obj = Account.get_by_key_or_id(account_identifier, client)
+            if account_obj:
+                account_id = account_obj.id
+                console.print(f"[dim]Resolved account context: {account_id}[/dim]")
             else:
-                account_obj_by_id = Account.get_by_id(account_identifier, client)
-                if account_obj_by_id: account_id = account_obj_by_id.id
+                console.print(f"[red]Error: Could not resolve account identifier '{account_identifier}'.[/red]")
+                raise click.Abort()
         except Exception as e:
-            console.print(f"[red]Error resolving account identifier \'{account_identifier}\': {e}[/red]")
-            return
+            console.print(f"[red]Error resolving account '{account_identifier}': {e}[/red]")
+            raise click.Abort()
     else:
+        account_display_name = "default account (from environment)"
         try:
             account_id = client._resolve_account_id()
+            if account_id:
+                console.print(f"[dim]Using default account context: {account_id}[/dim]")
+            else:
+                console.print(f"[red]Error: Could not resolve default account ID. Is PLEXUS_ACCOUNT_KEY set?[/red]")
+                raise click.Abort()
         except Exception as e:
-            console.print(f"[red]Error resolving default account: {e}. Is PLEXUS_ACCOUNT_KEY set?[/red]")
-            return
+            console.print(f"[red]Error resolving default account: {e}[/red]")
+            raise click.Abort()
 
     if not account_id:
-        console.print("[red]Error: Could not determine Account ID.[/red]")
-        return
+        console.print("[red]Error: Failed to determine account context.[/red]")
+        raise click.Abort()
 
-    console.print(f"[cyan]Attempting to delete Report Configuration \'{id_or_name}\' in Account ID: {account_id}...[/cyan]")
+    console.print(f"Attempting to delete Report Configuration: [cyan]'{id_or_name}'[/cyan] in Account [cyan]{account_id}[/cyan]...")
 
-    # Resolve the configuration using the helper function
-    config_to_delete = _resolve_report_config(id_or_name, account_id, client)
-
-    if not config_to_delete:
-        console.print(f"[red]Error: Report Configuration \'{id_or_name}\' not found.[/red]")
-        return
-
-    console.print(f"[yellow]Found Report Configuration:[/yellow]")
-    console.print(f"  ID: {config_to_delete.id}")
-    console.print(f"  Name: {config_to_delete.name}")
-
-    # Confirmation prompt
-    if not yes:
-        if not click.confirm(f"Are you sure you want to delete Report Configuration '{config_to_delete.name}' (ID: {config_to_delete.id})?"):
-            console.print("[cyan]Deletion aborted.[/cyan]")
-            return
-
-    # Proceed with deletion
+    # --- Resolve the configuration(s) to be deleted --- START REVISED LOGIC 2 ---
+    configs_to_delete = []
+    is_uuid = False
     try:
-        console.print(f"[dim]Sending delete request for ID: {config_to_delete.id}...[/dim]")
+        uuid.UUID(id_or_name)
+        is_uuid = True
+    except ValueError:
+        pass # Not a UUID
 
-        # --- Define the GraphQL Mutation --- 
-        mutation_string = """
-            mutation DeleteReportConfiguration($input: DeleteReportConfigurationInput!) {
-                deleteReportConfiguration(input: $input) {
-                    id # Request the ID back to confirm deletion
-                }
-            }
-        """
+    try:
+        if is_uuid:
+            console.print(f"[dim]Attempting to resolve by ID: {id_or_name}...[/dim]")
+            config_by_id = ReportConfiguration.get_by_id(id_or_name, client)
+            if config_by_id:
+                if hasattr(config_by_id, 'accountId') and config_by_id.accountId == account_id:
+                    configs_to_delete.append(config_by_id)
+                    console.print(f"[dim]Found matching config by ID.[/dim]")
+                else:
+                    console.print(f"[yellow]Config found by ID, but belongs to a different account ({getattr(config_by_id, 'accountId', 'N/A')}).[/yellow]")
+            else:
+                 console.print(f"[dim]ID '{id_or_name}' not found.[/dim]")
+                 # If ID not found, DO NOT proceed to name check if it was a UUID
+                 # A specific ID was requested and not found.
+                 console.print(f"[yellow]Report Configuration ID '{id_or_name}' not found in account {account_id}.[/yellow]")
+                 return # Exit gracefully
 
-        # --- Define the Input Variables ---
-        variables = {
-            "input": {
-                "id": config_to_delete.id
+        # If not a UUID, resolve by name using list_by_account_id + filter
+        else: # if not is_uuid
+            console.print(f"[dim]Identifier is not a UUID. Resolving by name using list and filter: '{id_or_name}'...[/dim]")
+            # Fetch all (or a reasonable limit) configs for the account
+            # Note: This could be inefficient for accounts with many configs.
+            # A dedicated API filter/GSI for name would be better.
+            all_configs_data = ReportConfiguration.list_by_account_id(account_id=account_id, client=client, limit=1000) # Fetch up to 1000
+            all_configs_items = []
+            if isinstance(all_configs_data, dict):
+                 all_configs_items = all_configs_data.get('items', [])
+            elif isinstance(all_configs_data, list):
+                 all_configs_items = all_configs_data # Assume direct list return
+            
+            # Filter by name
+            for config_item in all_configs_items:
+                if hasattr(config_item, 'name') and config_item.name == id_or_name:
+                    configs_to_delete.append(config_item)
+            
+            if configs_to_delete:
+                console.print(f"[dim]Found {len(configs_to_delete)} config(s) matching name '{id_or_name}'.[/dim]")
+            else:
+                console.print(f"[yellow]Report Configuration name '{id_or_name}' not found in account {account_id}.[/yellow]")
+                return # Exit gracefully if name not found
+
+    except Exception as e:
+        console.print(f"[bold red]Error resolving report configuration '{id_or_name}': {e}[/bold red]")
+        logger.error(f"Failed to resolve report configuration for deletion: {e}\n{traceback.format_exc()}")
+        raise click.Abort() # Abort on resolution error
+    # --- Resolve the configuration(s) to be deleted --- END REVISED LOGIC 2 ---
+
+    # This check is likely redundant now but kept for safety
+    if not configs_to_delete:
+         console.print(f"[yellow]Report Configuration '{id_or_name}' not found in account {account_id}.[/yellow]")
+         return
+
+    console.print(f"[yellow]Found {len(configs_to_delete)} configuration(s) matching '{id_or_name}'.[/yellow]")
+
+    # Process deletions (summary logic remains the same)
+    success_count = 0
+    fail_count = 0
+    skip_count = 0
+
+    # Define the GraphQL Mutation String Once
+    delete_mutation_string = """
+        mutation DeleteReportConfiguration($input: DeleteReportConfigurationInput!) {
+            deleteReportConfiguration(input: $input) {
+                id # Request the ID back to confirm deletion
             }
         }
+    """
 
-        # --- Execute the Mutation --- 
-        # client.execute returns the result dict or raises TransportQueryError
-        result = client.execute(mutation_string, variables=variables)
-        
-        # --- Check Result --- 
-        # If execute didn't raise an error and we got here, deletion was likely successful.
-        # We can optionally check the result structure.
-        deleted_id = result.get('deleteReportConfiguration', {}).get('id')
-        if deleted_id == config_to_delete.id:
-             console.print(f"[bold green]Successfully deleted Report Configuration \'{config_to_delete.name}\' (ID: {config_to_delete.id}).[/bold green]")
+    for config_instance in configs_to_delete:
+        console.print(f"Processing configuration: [bold]{config_instance.name}[/bold] (ID: {config_instance.id})")
+
+        # Confirmation prompt logic
+        if not yes: # Check the boolean flag directly
+            if not click.confirm(f"  -> Delete this configuration?", default=False):
+                console.print("  [yellow]Skipping deletion.[/yellow]")
+                skip_count += 1
+                continue # Skip to the next configuration
         else:
-             # This case might indicate a partial success or unexpected response format
-             console.print(f"[yellow]Warning: Delete mutation executed but confirmation ID mismatch or missing in response. Response: {result}[/yellow]")
-             # Consider treating this as success anyway if no error was raised
-             console.print(f"[bold green](Assuming success) Deleted Report Configuration \'{config_to_delete.name}\' (ID: {config_to_delete.id}).[/bold green]")
+            # Print message indicating skipping confirmation *only* when --yes is used
+            if success_count == 0 and fail_count == 0 and skip_count == 0:
+                 console.print("[yellow]Skipping confirmation prompt for all items due to --yes flag.[/yellow]")
 
-    except TransportQueryError as e:
-        # Handle GraphQL specific errors more gracefully
-        error_message = "Unknown GraphQL error"
-        if hasattr(e, 'errors') and e.errors:
-             error_message = e.errors[0].get('message', str(e.errors[0]))
-        console.print(f"[bold red]Error deleting report configuration (GraphQL Error): {error_message}[/bold red]")
-        logger.error(f"Failed to delete report configuration ID \'{config_to_delete.id}\' via GraphQL: {e.errors if hasattr(e, 'errors') else e}")
-    except Exception as e:
-        # Catch other potential exceptions (network errors, etc.)
-        console.print(f"[bold red]Error deleting report configuration: {e}[/bold red]")
-        logger.error(f"Failed to delete report configuration ID \'{config_to_delete.id}\': {e}\\n{traceback.format_exc()}")
+        # Perform the deletion using GraphQL client
+        try:
+            variables = {
+                "input": {
+                    "id": config_instance.id
+                }
+            }
+            console.print(f"  [dim]Sending delete request for ID: {config_instance.id}...[/dim]")
+            result = client.execute(delete_mutation_string, variables=variables)
+            
+            # Check result - GraphQL deletion usually returns the ID of the deleted item
+            deleted_id = result.get('deleteReportConfiguration', {}).get('id')
+            if deleted_id == config_instance.id:
+                 console.print(f"  [green]Successfully deleted.[/green]")
+                 success_count += 1
+            else:
+                 console.print(f"  [yellow]Deletion mutation succeeded but response confirmation missing/mismatched. Result: {result}[/yellow]")
+                 # Treat as success if no error, but log warning
+                 logger.warning(f"Deletion confirmation mismatch for {config_instance.id}. Response: {result}")
+                 success_count += 1 # Or should this be fail_count? Let's assume success for now.
+        except TransportQueryError as gql_err:
+            # Handle GraphQL specific errors
+            error_message = "Unknown GraphQL error"
+            if hasattr(gql_err, 'errors') and gql_err.errors:
+                error_message = gql_err.errors[0].get('message', str(gql_err.errors[0]))
+            console.print(f"  [bold red]Error deleting (GraphQL): {error_message}[/bold red]")
+            logger.error(f"Failed GraphQL deletion for {config_instance.id}: {gql_err.errors if hasattr(gql_err, 'errors') else gql_err}")
+            fail_count += 1
+        except Exception as e:
+            console.print(f"  [bold red]Error deleting: {e}[/bold red]")
+            logger.error(f"Failed to delete report configuration {config_instance.id}: {e}\n{traceback.format_exc()}")
+            fail_count += 1
+
+    # Print summary
+    console.print("--- Deletion Summary ---")
+    console.print(f"Successfully deleted: {success_count}")
+    console.print(f"Skipped: {skip_count}")
+    console.print(f"Failed: {fail_count}")
 
 @report.command(name="list")
 @click.option('--config', 'config_identifier', default=None, help='Filter reports by a specific configuration ID or name.')
@@ -764,33 +839,33 @@ def list_reports(config_identifier: Optional[str], account_identifier: Optional[
             console.print(f"[yellow]No reports found for account {account_id}{filter_msg}.[/yellow]")
             return
 
-        # --- Fetch associated Task statuses (inefficiently) ---
+        # --- Fetch associated Task statuses (inefficiently) --- COMMENTED OUT
         # TODO: Optimize this - batch fetch tasks or include in report list API call
-        task_statuses = {}
-        report_task_ids = [r.taskId for r in reports if hasattr(r, 'taskId') and r.taskId]
-        if report_task_ids:
-            try:
+        # task_statuses = {}
+        # report_task_ids = [r.taskId for r in reports if hasattr(r, 'taskId') and r.taskId]
+        # if report_task_ids:
+            # try:
                 # Assuming a Task.batch_get_by_ids exists or similar
                 # tasks_data = Task.batch_get_by_ids(task_ids=report_task_ids, client=client)
                 # tasks = tasks_data.get('items', [])
                 # for task in tasks:
                 #     task_statuses[task.id] = task.status
                 # For now, fetch individually (very slow!)
-                console.print(f"[dim]Fetching task statuses for {len(report_task_ids)} reports...[/dim]")
-                for task_id in report_task_ids:
-                    try:
-                        task = Task.get_by_id(task_id, client)
-                        if task and hasattr(task, 'status'):
-                           task_statuses[task_id] = task.status
-                        else:
-                           task_statuses[task_id] = "[dim]Not Found[/dim]"
-                    except Exception as task_e:
-                        logger.warning(f"Failed to fetch task {task_id}: {task_e}")
-                        task_statuses[task_id] = "[red]Error[/red]"
-            except Exception as batch_e:
-                 logger.error(f"Failed to fetch task statuses: {batch_e}")
-                 # Indicate error for all tasks if batch fails
-                 for task_id in report_task_ids: task_statuses[task_id] = "[red]Fetch Error[/red]"
+                # console.print(f"[dim]Fetching task statuses for {len(report_task_ids)} reports...[/dim]")
+                # for task_id in report_task_ids:
+                    # try:
+                        # task = Task.get_by_id(task_id, client)
+                        # if task and hasattr(task, 'status'):
+                        #    task_statuses[task_id] = task.status
+                        # else:
+                        #    task_statuses[task_id] = "[dim]Not Found[/dim]"
+                    # except Exception as task_e:
+                        # logger.warning(f"Failed to fetch task {task_id}: {task_e}")
+                        # task_statuses[task_id] = "[red]Error[/red]"
+            # except Exception as batch_e:
+            #      logger.error(f"Failed to fetch task statuses: {batch_e}")
+            #      # Indicate error for all tasks if batch fails
+            #      for task_id in report_task_ids: task_statuses[task_id] = "[red]Fetch Error[/red]"
         # ---
 
         # Display results in a table
@@ -799,21 +874,21 @@ def list_reports(config_identifier: Optional[str], account_identifier: Optional[
         table.add_column("Report Name", style="magenta")
         table.add_column("Config ID", style="green", no_wrap=True)
         table.add_column("Task ID", style="yellow", no_wrap=True)
-        table.add_column("Task Status", style="blue")
+        # table.add_column("Task Status", style="blue") # Column REMOVED
         table.add_column("Created At", style="blue")
 
         for report_instance in reports: # Iterate over Report instances
             created_at_str = report_instance.createdAt.strftime("%Y-%m-%d %H:%M:%S") if hasattr(report_instance, 'createdAt') and report_instance.createdAt else 'N/A'
             task_id = getattr(report_instance, 'taskId', 'N/A')
-            task_status = task_statuses.get(task_id, "[dim]N/A[/dim]") if task_id != 'N/A' else "[dim]-[/dim]"
+            # task_status = task_statuses.get(task_id, "[dim]N/A[/dim]") if task_id != 'N/A' else "[dim]-[/dim]" # Status lookup REMOVED
             config_id = getattr(report_instance, 'reportConfigurationId', 'N/A')
             
             table.add_row(
                 report_instance.id, 
-                getattr(report_instance, 'name', '[i]No Name[/i]'), 
+                getattr(report_instance, 'name', '[i]No Name[/i]'),
                 config_id,
                 task_id,
-                task_status,
+                # task_status, # Status value REMOVED
                 created_at_str
             )
 
@@ -899,257 +974,27 @@ def show_report(id_or_name: str, account_identifier: Optional[str]):
     # --- Fetch Associated Blocks --- #
     blocks = []
     try:
-        # list_by_report_id now returns a list directly
-        block_data = ReportBlock.list_by_report_id(report_instance.id, client)
-        blocks = block_data # Assign the list directly
-        # Sort blocks by position
-        blocks.sort(key=lambda b: getattr(b, 'position', float('inf'))) # Sort by position, put items without position last
-    except Exception as e:
-        # The warning should now reflect the actual error if list_by_report_id fails
-        console.print(f"[yellow]Warning: Could not fetch report blocks: {e}[/yellow]")
-
-    # --- Display Report Details --- #
-    created_at_str = report_instance.createdAt.strftime("%Y-%m-%d %H:%M:%S UTC") if hasattr(report_instance, 'createdAt') and report_instance.createdAt else 'N/A'
-    updated_at_str = report_instance.updatedAt.strftime("%Y-%m-%d %H:%M:%S UTC") if hasattr(report_instance, 'updatedAt') and report_instance.updatedAt else 'N/A'
-    config_id_str = report_instance.reportConfigurationId if hasattr(report_instance, 'reportConfigurationId') else 'N/A'
-    params_str = pretty_repr(report_instance.parameters) if hasattr(report_instance, 'parameters') else 'N/A'
-    # Render output potentially as Markdown
-    # output_content = Syntax(report_instance.output, "markdown", theme="default", line_numbers=True) if hasattr(report_instance, 'output') and report_instance.output else "(No output content)"
-    # For now, just show the raw output string, Markdown rendering can be complex in terminal
-    output_str = report_instance.output if hasattr(report_instance, 'output') else 'N/A'
-
-    report_content = (
-        f"[bold]Report ID:[/bold] {report_instance.id}\n"
-        f"[bold]Name:[/bold] {report_instance.name}\n"
-        f"[bold]Account ID:[/bold] {report_instance.accountId}\n"
-        f"[bold]Configuration ID:[/bold] {config_id_str}\n"
-        f"[bold]Parameters:[/bold]\n{params_str}\n"
-        f"[bold]Created At:[/bold] {created_at_str}\n"
-        f"[bold]Updated At:[/bold] {updated_at_str}\n\n"
-        f"[bold magenta]--- Associated Task ---[/bold magenta]\n"
-        f"[bold]Task ID:[/bold] {report_instance.taskId or 'N/A'}\n"
-        f"[bold]Task Status:[/bold] {task_status}\n"
-        f"[bold]Task Started At:[/bold] {started_at_str}\n"
-        f"[bold]Task Completed At:[/bold] {completed_at_str}\n"
-        f"[bold]Task Error Message:[/bold] {error_message_str}\n"
-        f"[bold]Task Error Details:[/bold] {error_details_str}\n"
-        f"[bold]Task Metadata:[/bold]\n{task_metadata_str}\n\n"
-        f"[bold magenta]--- Report Output (Markdown) ---[/bold magenta]\n"
-        f"{output_str}\n\n"
-        f"[bold magenta]--- Report Blocks ({len(blocks)} found) ---[/bold magenta]\n"
-        f"(Use 'plexus report block list {report_instance.id}' or 'plexus report block show ...' for details)"
-    )
-
-    console.print(Panel(report_content, title=f"Report Details: {report_instance.name}", border_style="blue", expand=False))
-
-    # Optionally list block summaries here if desired
-    if blocks:
-        block_table = Table(title="Associated Report Blocks Summary")
-        block_table.add_column("Position", style="dim")
-        block_table.add_column("Name", style="cyan")
-        block_table.add_column("Output Keys", style="green") # Show keys of the JSON output
-        block_table.add_column("Log Exists?", style="yellow")
-
-        for block in blocks:
-            pos_str = str(block.position) if hasattr(block, 'position') else "N/A"
-            name_str = block.name if hasattr(block, 'name') else "(No Name)"
-            log_exists_str = "Yes" if hasattr(block, 'log') and block.log else "No"
-            output_keys_str = "N/A"
-            if hasattr(block, 'output') and block.output:
-                try:
-                    output_dict = json.loads(block.output) if isinstance(block.output, str) else block.output
-                    if isinstance(output_dict, dict):
-                         output_keys_str = ", ".join(output_dict.keys())
-                    else:
-                         output_keys_str = f"({type(output_dict).__name__})"
-                except Exception:
-                     output_keys_str = "(Error parsing)"
-            
-            block_table.add_row(pos_str, name_str, output_keys_str, log_exists_str)
+        # Fetch all blocks for the report first (less efficient, but needed for name/pos lookup)
+        # TODO: Ideally, the API would support get_by_report_and_position or get_by_report_and_name
+        block_data = ReportBlock.list_by_report_id(report_instance.id, client, limit=500) # Assume reasonable limit
+        all_blocks = block_data # Assign the list directly
         
-        console.print(block_table)
-
-# --- Helper: Resolve ID or Name for Report ---
-def _resolve_report(identifier: str, account_id: str, client: PlexusDashboardClient) -> Optional[Report]:
-    """
-    Resolves a report identifier (ID or name) to a Report object.
-    Tries ID first, then name lookup within the account.
-    """
-    # Check if identifier looks like a UUID (potential ID)
-    is_potential_uuid = False
-    try:
-        uuid.UUID(identifier)
-        is_potential_uuid = True
-    except ValueError:
-        pass # Not a valid UUID format
-
-    found_report = None
-    # Strategy: Try ID first if it looks like one, otherwise try name first
-    if is_potential_uuid:
-        # Try getting by ID first
-        try:
-            console.print(f"Attempting to fetch Report by ID: {identifier}", style="dim")
-            found_report = Report.get_by_id(identifier, client)
-            if found_report:
-                # Verify account match if possible (assuming report has accountId)
-                if hasattr(found_report, 'accountId') and found_report.accountId == account_id:
-                    console.print(f"Found Report by ID.", style="dim green")
-                    return found_report
-                else:
-                     console.print(f"Found Report by ID, but account mismatch ({found_report.accountId} != {account_id}). Continuing search...", style="dim yellow")
-                     found_report = None # Reset if account doesn't match
-        except Exception as e:
-            console.print(f"Failed to fetch Report by ID: {e}", style="dim red")
-            pass # Ignore error and proceed to name lookup
-
-        # If ID lookup failed or account mismatch, try by name
-        if not found_report:
-            try:
-                console.print(f"Attempting to fetch Report by Name: {identifier} (Account: {account_id})", style="dim")
-                found_report = Report.get_by_name(name=identifier, account_id=account_id, client=client)
-                if found_report:
-                    console.print(f"Found Report by Name.", style="dim green")
-                    return found_report
-            except Exception as e:
-                console.print(f"Failed to fetch Report by Name: {e}", style="dim red")
-                pass
-    else:
-        # Try getting by name first
-        try:
-            console.print(f"Attempting to fetch Report by Name: {identifier} (Account: {account_id})", style="dim")
-            found_report = Report.get_by_name(name=identifier, account_id=account_id, client=client)
-            if found_report:
-                 console.print(f"Found Report by Name.", style="dim green")
-                 return found_report
-        except Exception as e:
-            console.print(f"Failed to fetch Report by Name: {e}", style="dim red")
-            pass # Ignore error and proceed to ID lookup
-
-        # If name lookup failed, try by ID (in case it wasn't UUID format but still an ID)
-        if not found_report:
-            try:
-                console.print(f"Attempting to fetch Report by ID: {identifier}", style="dim")
-                found_report = Report.get_by_id(identifier, client)
-                if found_report:
-                     # Verify account match if possible
-                    if hasattr(found_report, 'accountId') and found_report.accountId == account_id:
-                        console.print(f"Found Report by ID.", style="dim green")
-                        return found_report
-                    else:
-                        console.print(f"Found Report by ID, but account mismatch ({found_report.accountId} != {account_id}). Continuing search...", style="dim yellow")
-                        found_report = None # Reset if account doesn't match
-            except Exception as e:
-                console.print(f"Failed to fetch Report by ID: {e}", style="dim red")
-                pass
-
-    # If neither worked
-    console.print(f"Could not resolve Report identifier '{identifier}' (Account: {account_id}).", style="yellow")
-    return None
-
-@report.command(name="last")
-@click.option('--account', 'account_identifier', help='Optional account key or ID to specify the account context.', default=None)
-@click.pass_context # Pass the context to call other commands
-def show_last_report(ctx, account_identifier: Optional[str]):
-    """Show details for the most recently created Report for the account."""
-    client = create_client()
-
-    # --- Account Resolution (Standard) ---
-    account_id = None
-    if account_identifier:
-        try:
-            account_id = client._resolve_account_id(account_key=account_identifier)
-        except Exception as e:
-            try:
-                acc = Account.get_by_id(account_identifier, client)
-                account_id = acc.id
-            except Exception:
-                 console.print(f"[red]Error: Could not resolve account identifier '{account_identifier}': {e}[/red]")
-                 return
-    else:
-        try:
-            account_id = client._resolve_account_id()
-        except Exception as e:
-            console.print(f"[red]Error resolving default account: {e}. Is PLEXUS_ACCOUNT_KEY set?[/red]")
-            return
-    if not account_id:
-        console.print("[red]Error: Could not determine Account ID.[/red]")
-        return
-
-    console.print(f"[cyan]Fetching the most recent Report for Account ID: {account_id}[/cyan]")
-
-    try:
-        # List reports, sorted by createdAt descending, limit 1
-        # Assuming list_by_account_id supports sorting or returns sorted by default.
-        # If not, we might need a dedicated method or client-side sorting.
-        report_result_data = Report.list_by_account_id(
-            account_id=account_id,
-            client=client,
-            limit=1 # Fetch only the most recent one
-        )
-        # list_by_account_id returns a list directly
-        reports = report_result_data 
-
-        if not reports:
-            console.print(f"[yellow]No reports found for account {account_id}.[/yellow]")
-            return
-
-        last_report = reports[0]
-        console.print(f"[green]Found last report:[/green] ID: {last_report.id}, Name: '{last_report.name}'")
-        
-        # Invoke the 'show' command logic with the found ID
-        # Pass necessary options (like account_id for context, although show might re-resolve)
-        ctx.invoke(show_report, id_or_name=last_report.id, account_identifier=account_id)
-
-    except Exception as e:
-        console.print(f"[bold red]Error fetching last report: {e}[/bold red]")
-        logger.error(f"Failed to fetch last report for account {account_id}: {e}\n{traceback.format_exc()}")
-
-@block.command(name="list")
-@click.argument('report_id', type=str)
-@click.option('--limit', type=int, default=100, help='Maximum number of blocks to list.')
-def list_blocks(report_id: str, limit: int):
-    """List Report Blocks associated with a specific Report ID."""
-    client = create_client()
-
-    # Validate Report ID format (basic check)
-    try:
-        uuid.UUID(report_id)
-    except ValueError:
-        console.print(f"[red]Error: Invalid Report ID format. Please provide a valid UUID.[/red]")
-        return
-
-    console.print(f"[cyan]Listing Report Blocks for Report ID: {report_id}[/cyan]")
-
-    try:
-        # Fetch the parent report first to ensure it exists (optional, but good practice)
-        try:
-            parent_report = Report.get_by_id(report_id, client)
-            if not parent_report:
-                 console.print(f"[yellow]Warning: Report with ID {report_id} not found.[/yellow]")
-                 # Continue anyway, list_by_report_id might still work or return empty
-        except Exception as report_e:
-             console.print(f"[yellow]Warning: Could not verify parent Report {report_id}: {report_e}[/yellow]")
-
-        # Fetch blocks associated with the report ID
-        block_data = ReportBlock.list_by_report_id(report_id, client, limit=limit)
-        blocks = block_data.get('items', [])
-        
-        if not blocks:
-            console.print(f"[yellow]No report blocks found for Report ID {report_id}.[/yellow]")
+        if not all_blocks:
+            console.print(f"[yellow]No blocks found for Report ID {report_instance.id}. Cannot find block '{id_or_name}'.[/yellow]")
             return
 
         # Sort blocks by position
-        blocks.sort(key=lambda b: getattr(b, 'position', float('inf')))
+        all_blocks.sort(key=lambda b: getattr(b, 'position', float('inf')))
 
         # Display results in a table
-        table = Table(title=f"Report Blocks (Report ID: {report_id})")
+        table = Table(title=f"Report Blocks (Report ID: {report_instance.id})")
         table.add_column("Position", style="dim")
         table.add_column("Name", style="cyan")
         table.add_column("Output Keys/Type", style="green") # Show keys or type of the JSON output
         table.add_column("Log Exists?", style="yellow")
         table.add_column("Created At", style="blue")
 
-        for block_instance in blocks:
+        for block_instance in all_blocks:
             pos_str = str(block_instance.position) if hasattr(block_instance, 'position') else "N/A"
             name_str = block_instance.name if hasattr(block_instance, 'name') and block_instance.name else "(No Name)"
             log_exists_str = "Yes" if hasattr(block_instance, 'log') and block_instance.log else "No"
@@ -1185,8 +1030,8 @@ def list_blocks(report_id: str, limit: int):
         console.print(table)
 
     except Exception as e:
-        console.print(f"[bold red]Error listing report blocks for report {report_id}: {e}[/bold red]")
-        logger.error(f"Failed to list report blocks for {report_id}: {e}\n{traceback.format_exc()}")
+        console.print(f"[bold red]Error listing report blocks for report {report_instance.id}: {e}[/bold red]")
+        logger.error(f"Failed to list report blocks for {report_instance.id}: {e}\n{traceback.format_exc()}")
 
 @block.command(name="show")
 @click.argument('report_id', type=str)
@@ -1211,7 +1056,7 @@ def show_block(report_id: str, block_identifier: str):
         # Fetch all blocks for the report first (less efficient, but needed for name/pos lookup)
         # TODO: Ideally, the API would support get_by_report_and_position or get_by_report_and_name
         block_data = ReportBlock.list_by_report_id(report_id, client, limit=500) # Assume reasonable limit
-        all_blocks = block_data.get('items', [])
+        all_blocks = block_data # Assign the list directly
 
         if not all_blocks:
             console.print(f"[yellow]No blocks found for Report ID {report_id}. Cannot find block '{block_identifier}'.[/yellow]")

@@ -86,17 +86,23 @@ class ReportBlock(BaseModel):
                  logger.error(f"Invalid type for 'position' field in ReportBlock data: {data.get('id')}")
                  position = -1 # Or raise
 
-        return cls(
-            id=data['id'],
+        # Instantiate using fields defined in ReportBlock dataclass
+        # Client is likely handled by BaseModel internally or not needed here.
+        instance = cls(
             reportId=data['reportId'],
             position=position,
             output=output_data, # Store the parsed dict/None
             name=name,
             log=log,
             createdAt=data['createdAt'],
-            updatedAt=data['updatedAt'],
-            client=client
+            updatedAt=data['updatedAt']
+            # Removed: client=client
         )
+        # Set the ID after initialization
+        instance.id = data.get('id') # Use .get() for safety
+        # TODO: Verify if client needs to be attached to the instance, e.g., instance._client = client
+        instance._client = client # Assume BaseModel stores client like this
+        return instance
 
     @classmethod
     def create(
