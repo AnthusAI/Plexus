@@ -94,50 +94,77 @@ class ReportBlockExtractor(mistune.BaseRenderer):
         return inner_text # Return value might not be used if we capture directly
 
     def block_code(self, token, state):
-        lang = token["attrs"].get("info") if token.get("attrs") else None
-        lang = lang.strip() if lang else None
+        lang_info = token["attrs"].get("info") if token.get("attrs") else None
+        lang_info = lang_info.strip() if lang_info else ""
         code = token["raw"]
-        logger.debug(f"[Extractor] block_code called. Lang: '{lang}'") # DEBUG LOG
+        logger.debug(f"[Extractor] block_code called. Lang Info: '{lang_info}'")
 
-        if lang == "block":
-            logger.debug(f"[Extractor] Found 'block' language. Flushing buffer.") # DEBUG LOG
+        # Check if the language info starts with 'block'
+        if lang_info.startswith("block"):
+            logger.debug("[Extractor] Found 'block' prefix. Processing as report block.")
             self._flush_markdown_buffer() # Add preceding Markdown first
-            try:
-                logger.debug(f"[Extractor] Parsing YAML:\n{code}") # DEBUG LOG
-                block_config = yaml.safe_load(code)
-                logger.debug(f"[Extractor] YAML parsed successfully: {block_config}") # DEBUG LOG
-                if not isinstance(block_config, dict):
-                    logger.error("[Extractor] Parsed YAML is not a dictionary.") # DEBUG LOG
-                    raise ValueError("Block YAML must be a dictionary.")
 
-                class_name = block_config.get("class") # Standardize to 'class' from 'pythonClass'
-                block_params = block_config.get("config", {})
-                block_name = block_config.get("name") # Optional name for the block instance
-                logger.debug(f"[Extractor] Extracted class='{class_name}', name='{block_name}', config={block_params}") # DEBUG LOG
+            # --- Extract attributes from lang_info (e.g., name) ---
+            # Simple regex to find key="value" pairs after 'block'
+            attrs_str = lang_info[len("block"):].strip()
+            attrs = {}
+            # Regex: find key= followed by either "quoted value" or unquoted_value
+            pattern = re.compile(r'(\\w+)\\s*=\\s*(?:"([^"]*)"|(\\S+))')
+            for match in pattern.finditer(attrs_str):
+                key = match.group(1)
+                # Value can be in group 2 (quoted) or group 3 (unquoted)
+                value = match.group(2) if match.group(2) is not None else match.group(3)
+                attrs[key] = value
+            logger.debug(f"[Extractor] Extracted attributes from lang info: {attrs}")
+            # --- End Attribute Extraction ---
+
+            try:
+                logger.debug(f"[Extractor] Parsing YAML content:\\n{code}")
+                yaml_config = yaml.safe_load(code)
+                logger.debug(f"[Extractor] YAML parsed successfully: {yaml_config}")
+
+                if not isinstance(yaml_config, dict):
+                    logger.error("[Extractor] Parsed YAML is not a dictionary.")
+                    raise ValueError("Block YAML content must be a dictionary.")
+
+                # Combine attributes from lang info and YAML content
+                # YAML content takes precedence if keys overlap (e.g., 'name' defined in both)
+                block_config = {**attrs, **yaml_config}
+                logger.debug(f"[Extractor] Combined block config: {block_config}")
+
+                # --- Extract core properties (class, config, name) ---
+                class_name = block_config.get("class") # Still expect 'class' key
+                # Use 'config' sub-dict if present, otherwise use the whole dict excluding 'class' and 'name'
+                block_params = block_config.get("config", {k: v for k, v in block_config.items() if k not in ["class", "name"]})
+                block_name = block_config.get("name") # Name can come from attrs or YAML
+                # --- End Core Property Extraction ---
+
+                logger.debug(f"[Extractor] Final extracted properties: class='{class_name}', name='{block_name}', config={block_params}")
 
                 if not class_name:
-                     logger.error("[Extractor] `class` key not found in parsed YAML.") # DEBUG LOG
-                     raise ValueError("`class` not specified in block YAML.")
+                    logger.error("[Extractor] `class` key not found in combined block config.")
+                    raise ValueError("`class` not specified in block definition (either YAML or attributes).")
 
                 self.extracted_content.append({
                     "type": "block_config",
                     "class_name": class_name,
                     "config": block_params,
-                    "block_name": block_name # Extract optional block name
+                    "block_name": block_name # Use the resolved block name
                 })
-                logger.debug(f"[Extractor] Appended block_config to extracted_content.") # DEBUG LOG
-                return ""
+                logger.debug("[Extractor] Appended block_config to extracted_content.")
+                return "" # Indicate successful block processing
 
-            except (yaml.YAMLError, ValueError) as e:
-                logger.error(f"[Extractor] Error parsing report block YAML: {e}", exc_info=True) # Add exc_info
+            except (yaml.YAMLError, ValueError, re.error) as e: # Added re.error
+                logger.error(f"[Extractor] Error parsing report block definition: {e}", exc_info=True)
                 self.extracted_content.append({
-                     "type": "error",
-                     "message": f"Error parsing block: {e}"
+                    "type": "error",
+                    "message": f"Error parsing block definition: {e}"
                 })
                 return "<!-- Error parsing block -->"
         else:
-            logger.debug(f"[Extractor] Non-'block' language ('{lang}'). Treating as regular markdown.") # DEBUG LOG
-            rendered_code = f"```{(lang or '')}\n{code}\n```\n"
+            # Treat as regular markdown code block
+            logger.debug(f"[Extractor] Non-'block' language prefix ('{lang_info}'). Treating as regular markdown.")
+            rendered_code = f"```{(lang_info or '')}\\n{code}\\n```\\n"
             self._current_markdown_buffer += rendered_code
             return rendered_code # Return the formatted code
 
@@ -262,7 +289,7 @@ def _instantiate_and_run_block(
 
         # Instantiate the block
         logger.debug(f"{log_prefix} Instantiating with config: {block_config}")
-        block_instance = block_class(config=block_config, report_params=report_params, api_client=api_client)
+        block_instance = block_class(config=block_config, params=report_params, api_client=api_client)
 
         # Run the block's generate method
         logger.debug(f"{log_prefix} Calling generate method...")
@@ -420,14 +447,16 @@ def _generate_report_core(
     try:
         created_block_ids = []
         for result in block_results:
+            # Ensure output is a JSON string before passing to GraphQL
+            output_json_str = json.dumps(result["output"]) if result["output"] is not None else None
+            
             block_record = ReportBlock.create(
                 reportId=report_id,
                 position=result["position"],
                 name=result["name"],
-                # Store output as JSON string, handle None case
-                output=result["output"], # Assume result["output"] is already a JSON string or None
+                output=output_json_str, # Pass the JSON string
                 log=result["log"], # Store log or error message
-                _client=client
+                client=client
             )
             created_block_ids.append(block_record.id)
         logger.info(f"{log_prefix} Successfully created {len(created_block_ids)} ReportBlock records.")

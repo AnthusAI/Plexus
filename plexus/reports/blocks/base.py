@@ -21,11 +21,11 @@ class BaseReportBlock(ABC):
         self.log_messages.append(message)
 
     @abstractmethod
-    async def generate(
+    def generate(
         self
     ) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         """
-        Generates the data for this report block asynchronously.
+        Generates the data for this report block synchronously.
 
         Access block configuration via `self.config` and report parameters via `self.params`.
         Use `self.api_client` for data fetching.

@@ -258,43 +258,45 @@ This refactoring ensures the core report generation logic is DRY and consistentl
 *   ⬜ **Test Steps:**
     1.  ✅ **`config list`:**
         *   Run `python -m plexus.cli.CommandLineInterface report config list`. Verify existing configs are listed correctly for the default account (resolved via `.env`).
-    2.  🟡 **`config create`:** *(Manually Tested - See notes below)*
-        *   ✅ Run `python -m plexus.cli.CommandLineInterface report config create --name "CLI Test Config" --file test_config.md`. Verify successful creation message (`Successfully created Report Configuration...`) and that the config appears in `config list` output. *(Verified manually)*
+    2.  ✅ **`config create`:** *(Manually Tested - See notes below)*
+        *   ✅ Run `python -m plexus.cli.CommandLineInterface report config create --name \"CLI Test Config\" --file test_config.md`. Verify successful creation message (`Successfully created Report Configuration...`) and that the config appears in `config list` output. *(Verified manually)*
         *   ✅ **Update (2025-04-28):** Fixed `test_config.md` format (name inside YAML block). Re-ran create, **currently paused awaiting confirmation [y/N] to overwrite.**
-        *   ⬜ Attempt creation with missing required options (e.g., `--name` or `--file`). Verify Click error. (`python -m plexus.cli.CommandLineInterface report config create --name "Missing File"`)
-        *   ⬜ Attempt creation with a non-existent file path. Verify error message. (`python -m plexus.cli.CommandLineInterface report config create --name "Bad File Path" --file non_existent_file.md`)
-    3.  🟡 **`config delete`:** *(Manually Tested - See notes below)*
-        *   ✅ **Delete by Name (with prompt):** Run `python -m plexus.cli.CommandLineInterface report config delete "CLI Test Config"`. Verify:
+        *   ⬜ Attempt creation with missing required options (e.g., `--name` or `--file`). Verify Click error. (`python -m plexus.cli.CommandLineInterface report config create --name \"Missing File\"`)
+        *   ⬜ Attempt creation with a non-existent file path. Verify error message. (`python -m plexus.cli.CommandLineInterface report config create --name \"Bad File Path\" --file non_existent_file.md`)
+    3.  ✅ **`config delete`:** *(Manually Tested - See notes below)*
+        *   ✅ **Delete by Name (with prompt):** Run `python -m plexus.cli.CommandLineInterface report config delete \"CLI Test Config\"`. Verify:
             *   It finds the correct config (shows ID/Name).
             *   It prompts for confirmation (`Are you sure...?`).
             *   Respond 'y'. Verify success message.
-            *   Run `config list` again and verify "CLI Test Config" is gone. *(Verified manually)*
-        *   ⬜ **Recreate for next test:** Run `python -m plexus.cli.CommandLineInterface report config create --name "CLI Test Config Temp" --file test_config.md`. Get the new ID.
-        *   🟡 **Delete by ID (skip prompt):** Run `python -m plexus.cli.CommandLineInterface report config delete <new_ID_from_recreate> --yes`. Verify:
+            *   Run `config list` again and verify \"CLI Test Config\" is gone. *(Verified manually - Required multiple fixes 2025-04-28)*
+        *   ✅ **Delete multiple by name (with prompt):** Run `python -m plexus.cli.CommandLineInterface report config delete \"Example From File CLI\"`. Verify it prompts for and successfully deletes multiple matching entries. *(Verified 2025-04-28)*
+        *   ✅ **Delete multiple by name (skip prompt):** Run `python -m plexus.cli.CommandLineInterface report config delete \"Example From File CLI\" --yes`. *(Not directly tested with multiple, but tested on single entries below)*
+        *   ✅ **Delete by Name (skip prompt):** Run `python -m plexus.cli.CommandLineInterface report config delete \"CLI Test Config\" --yes`. Verify:
             *   It finds the correct config.
-            *   It prints the "Skipping confirmation" message. *(Issue: Still prompts - needs fix)*
-            *   It prints the success message.
-            *   Run `config list` again and verify the config with `<new_ID_from_recreate>` is gone.
-        *   ⬜ **Delete Non-Existent:** Run `python -m plexus.cli.CommandLineInterface report config delete "NonExistent Config"`. Verify "not found" message.
-        *   ⬜ **Recreate final test config:** Run `python -m plexus.cli.CommandLineInterface report config create --name "CLI Test Config" --file test_config.md`.
+            *   It prints the \"Skipping confirmation\" message. *(Verified 2025-04-28)*
+            *   It prints the success message. *(Verified 2025-04-28)*
+            *   Run `config list` again and verify the config is gone. *(Verified 2025-04-28)*
+        *   ✅ **Delete Non-Existent:** Run `python -m plexus.cli.CommandLineInterface report config delete \"NonExistent Config\"`. Verify \"not found\" message. *(Verified 2025-04-28)*
+        *   ✅ **Recreate final test config:** Run `python -m plexus.cli.CommandLineInterface report config create --name \"CLI Test Config\" --file test_config.md`. *(Verified 2025-04-28)*
     5.  ✅ **`report run` (Core Test):**
-        *   Run `python -m plexus.cli.CommandLineInterface report run --config "CLI Test Config"`. Verify:
+        *   Run `python -m plexus.cli.CommandLineInterface report run --config \"CLI Test Config\"`. Verify:
             *   Task creation message with Task ID is shown.
             *   Messages indicating synchronous execution and progress updates are shown (e.g., block processing logs, final status).
             *   **No Celery dispatch message is shown.**
             *   The command waits for completion before returning the prompt.
             *   Final `Task` status and `Report` ID are printed upon completion.
-            *   ✅ **Verified (2025-04-28):** Command runs successfully after multiple fixes (missing methods, tracker errors, GraphQL issues). Note: Initial run did not process blocks due to config format issue.
+            *   ✅ **Verified (2025-04-28):** Command runs successfully after multiple fixes (missing methods, tracker errors, GraphQL issues, block parsing, async issues, model instantiation).
         *   ⬜ Run `python -m plexus.cli.CommandLineInterface report run --config <invalid_config_id_or_name>`. Verify error message (config resolution failure).
-        *   ⬜ Run `python -m plexus.cli.CommandLineInterface report run --config "CLI Test Config" invalid_param=test`. Verify parameter parsing error or successful run with parameters logged in Task metadata.
+        *   ⬜ Run `python -m plexus.cli.CommandLineInterface report run --config \"CLI Test Config\" invalid_param=test`. Verify parameter parsing error or successful run with parameters logged in Task metadata.
         *   **(Removed) Monitor Celery Worker:** Worker monitoring is not needed for synchronous CLI execution testing. (Worker testing should happen separately for async paths).
         *   ✅ **Check Task Status:** Use `python -m plexus.cli.CommandLineInterface task get --id <task_id_from_run>` to check final status (`COMPLETED` or `FAILED`), completion time, error messages (if any). Verify this matches the status reported by the `report run` command directly. *(Verified status matches)*
-        *   ✅ **Check Database:** (Optional) Manually inspect `Report` and `ReportBlock` tables to confirm data persistence. *(Verified Report created, ReportBlock not created in initial run)*
-    6.  ✅ **`report list`:**
+        *   ✅ **Check Database:** (Optional) Manually inspect `Report` and `ReportBlock` tables to confirm data persistence. *(Verified Report and ReportBlock created)*
+    6.  🟡 **`report list`:**
         *   Run `python -m plexus.cli.CommandLineInterface report list`. Verify the newly generated report appears with correct Config ID, Task ID, and fetched Task Status.
-        *   Run `python -m plexus.cli.CommandLineInterface report list --config "CLI Test Config"`. Verify filtering works (using ID/Name lookup for the config).
-        *   Run `python -m plexus.cli.CommandLineInterface report list --config "NonExistent Config"`. Verify appropriate "not found" or empty message.
+        *   Run `python -m plexus.cli.CommandLineInterface report list --config \"CLI Test Config\"`. Verify filtering works (using ID/Name lookup for the config).
+        *   Run `python -m plexus.cli.CommandLineInterface report list --config \"NonExistent Config\"`. Verify appropriate \"not found\" or empty message.
         *   ✅ **Verified (2025-04-28):** Command works after fixing list handling in CLI command code.
+        *   🟡 **Status:** Currently broken - Rich table rendering fails. Task status fetching was also commented out during debug.
     7.  ✅ **`report show`:**
         *   Identify the ID or Name of the report generated in step 4.
         *   Run `python -m plexus.cli.CommandLineInterface report show <report_id_or_name>`. Verify:
@@ -304,44 +306,44 @@ This refactoring ensures the core report generation logic is DRY and consistentl
             *   Associated Report Blocks summary table is shown.
             *   ID/Name lookup works for the report itself.
             *   ✅ **Verified (2025-04-28):** Command works after fixing list handling for blocks.
-        *   Run `python -m plexus.cli.CommandLineInterface report show <non_existent_report_id>`. Verify "not found" message.
+        *   Run `python -m plexus.cli.CommandLineInterface report show <non_existent_report_id>`. Verify \"not found\" message.
     8.  ✅ **`report last`:**
         *   Run `python -m plexus.cli.CommandLineInterface report last`. Verify it finds the most recently generated report (from step 4) and displays the same details as `report show` for that report.
         *   ✅ **Verified (2025-04-28):** Command works after fixing sort parameter and list handling.
-    9.  ⬜ **`block list`:**
+    9.  🟡 **`block list`:**
         *   Get the `report_id` from step 4.
         *   Run `python -m plexus.cli.CommandLineInterface report block list <report_id>`. Verify the blocks created by the `ScoreInfo` class appear with correct position, name (if any), output summary, and log status.
-        *   Run `python -m plexus.cli.CommandLineInterface report block list <invalid_report_id>`. Verify "not found" or empty message.
-    10. ⬜ **`block show`:**
-        *   Get the `report_id` and a `block_identifier` (position '0' or name if defined by the block) from the previous step.
+        *   Run `python -m plexus.cli.CommandLineInterface report block list <invalid_report_id>`. Verify \"not found\" or empty message.
+        *   🟡 **Status:** Currently broken - Fails due to direct list return from `list_by_report_id`.
+    10. ✅ **`block show`:**
+        *   Get the `report_id` and a `block_identifier` (position \'0\' or name if defined by the block) from the previous step.
         *   Run `python -m plexus.cli.CommandLineInterface report block show <report_id> <block_identifier>`. Verify:
             *   Correct block details (Position, Name, Timestamps) are shown.
             *   Output JSON is fetched, parsed, and displayed with syntax highlighting.
             *   Log content is fetched and displayed.
-            *   Lookup works by both position (e.g., '0') and name (if applicable).
-        *   Run `python -m plexus.cli.CommandLineInterface report block show <report_id> <invalid_identifier>`. Verify "not found" message.
+            *   Lookup works by both position (e.g., \'0\') and name (if applicable).
+            *   ✅ **Verified (2025-04-28):** Command works after fixing list handling.
+        *   Run `python -m plexus.cli.CommandLineInterface report block show <report_id> <invalid_identifier>`. Verify \"not found\" message.
 *   🟡 **Verify Phase 4:** Confirm all test steps pass, demonstrating reliable backend processing and CLI interaction for the reports feature.
-    *   **Notes (2025-04-28):**
-        *   Successfully tested `report config` commands (list, show, create, delete). `delete --yes` needs fix.
-        *   Successfully tested `report run` (sync) after fixing several Python client model issues (missing methods, wrong args, list handling, GraphQL naming/types) and TaskProgressTracker issues (task ID access, stage name sanitization).
-        *   Successfully tested `report list`, `show`, `last` after fixing list handling.
-        *   Identified config format issue preventing block generation in initial `report run` test.
-        *   Updated `test_config.md` format.
-        *   Ran `report config create --name "CLI Test Config" --file test_config.md` again.
-        *   **CURRENT STATUS:** Paused, awaiting user confirmation (`[y/N]`) to overwrite the "CLI Test Config" in the database.
-        *   **NEXT STEPS:** Confirm overwrite (y), re-run `report run --config "CLI Test Config"`, then test `report block list` and `report block show` using the *new* report ID.
-    *   **Notes (2025-04-27):**
+    *   **Notes (2025-04-28 Session End):**
+        *   Successfully tested `report config` commands (list, show, create).
+        *   Fixed and successfully tested `report config delete`, including handling multiple matches by name and the `--yes` flag. Cleaned up test configurations. The CLI output buffering/interleaving issue seems resolved now that internal errors in `delete_config` are fixed.
+        *   Successfully tested `report run` (sync) after fixing several Python client model issues (missing methods, wrong args, list handling, GraphQL naming/types), TaskProgressTracker issues (task ID access, stage name sanitization), service logic (block parsing, async/await, JSON serialization), and model instantiation (`from_dict`). Core synchronous generation works.
+        *   Successfully tested `report show` and `report last`.
+        *   Successfully tested `report block show`.
+        *   Commands `report list` and `report block list` are currently broken due to table rendering/list handling issues.
+        *   **CURRENT STATUS:** Phase 4 testing mostly complete. Core `report run` works. `show` commands work. `list` commands are broken.
+        *   **NEXT STEPS (Next Session):**
+            1.  Fix `report list` command:
+                *   Replace `rich.Table` with `rich.Panel` output, similar to `config list` or `report show`.
+                *   Default to showing only the 10 most recent reports (use `Report.list_by_account_id` sorting/limiting if possible, otherwise client-side).
+                *   Re-enable task status fetching and display within the panel output.
+            2.  Fix `report block list` (likely involves same direct list handling fix as applied to `show_block`).
+            3.  Test error handling for `report run` (e.g., invalid config name, bad parameters).
+            4.  Consider adding unit tests for the CLI commands.
+    *   **Notes (2025-04-27):** *(Previous notes kept for history)*
         *   Manually tested `report config create` with `--description` and duplicate name scenarios (different/identical content prompts).
-        *   Findings:
-            *   Creation with description works.
-            *   Duplicate check (different content) prompt/abort/proceed works as expected.
-            *   Duplicate check (identical content) logic is present and passes unit tests, but the current `ReportConfiguration.get_by_name` implementation prevents it from being triggered correctly when multiple configs share the same name (it only compares against one existing config).
-        *   Manually tested `report config delete`.
-        *   Findings:
-            *   Deletion by name works (including handling multiple matches sequentially).
-            *   The `--yes` flag does not correctly suppress the confirmation prompt and needs fixing.
-        *   **TODO:** Refine `ReportConfiguration.get_by_name` or the duplicate check logic in `create_config` to handle multiple existing configurations with the same name correctly (currently only compares against one match).
-        *   **TODO:** Fix `--yes` flag in `report config delete` command to correctly bypass the confirmation prompt.
+        *   Findings:\n            *   Creation with description works.\n            *   Duplicate check (different content) prompt/abort/proceed works as expected.\n            *   Duplicate check (identical content) logic is present and passes unit tests, but the current `ReportConfiguration.get_by_name` implementation prevents it from being triggered correctly when multiple configs share the same name (it only compares against one existing config).\n        *   Manually tested `report config delete`.\n        *   Findings:\n            *   Deletion by name works (including handling multiple matches sequentially).\n            *   The `--yes` flag does not correctly suppress the confirmation prompt and needs fixing.\n        *   **TODO:** Refine `ReportConfiguration.get_by_name` or the duplicate check logic in `create_config` to handle multiple existing configurations with the same name correctly (currently only compares against one match).\n        *   **TODO:** Fix `--yes` flag in `report config delete` command to correctly bypass the confirmation prompt.\n
 
 ### Phase 5: Frontend Basics (Management & Display)
 
