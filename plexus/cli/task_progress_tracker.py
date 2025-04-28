@@ -49,6 +49,12 @@ class Stage:
     end_time: Optional[float] = None
     status: str = 'PENDING'
 
+    # Override default dataclass __eq__ to prevent infinite recursion
+    def __eq__(self, other):
+        if not isinstance(other, Stage):
+            return False
+        return self.name == other.name and self.order == other.order
+
     def start(self):
         """Start this stage."""
         self.start_time = time.time()
@@ -163,6 +169,7 @@ class TaskProgressTracker:
         self._current_stage_name: Optional[str] = None
 
         # --- Task Association --- #
+        task_created_internally = False # Flag to track if we created the task
         if task_object:
             self.api_task = task_object
             logging.debug(f"Tracker initialized with provided Task object: {self.api_task.id}")
@@ -175,28 +182,61 @@ class TaskProgressTracker:
                     if api_url and api_key:
                         self._client = PlexusDashboardClient(api_url=api_url, api_key=api_key)
                     else:
-                        raise ValueError("API URL/Key not configured for internal client creation.")
-
-                logging.debug(f"Attempting to fetch Task by ID: {task_id}")
-                self.api_task = Task.get_by_id(task_id, self._client)
-                if not self.api_task:
-                    # Log error but don't raise here, let the caller handle tracker.task being None
-                    logging.error(f"Task.get_by_id returned None for task_id: {task_id}")
+                        # Don't raise, but log clearly - we might operate without API
+                        logging.error("API URL/Key not configured for internal client creation during task fetch.")
+                        self._client = None # Ensure client is None if config missing
+                
+                if self._client: # Only attempt fetch if client is available
+                    logging.debug(f"Attempting to fetch Task by ID: {task_id}")
+                    # Ensure Task class is accessible
+                    from plexus.dashboard.api.models.task import Task
+                    self.api_task = Task.get_by_id(task_id, self._client)
+                    if not self.api_task:
+                        logging.error(f"Task.get_by_id returned None for task_id: {task_id}")
+                    else:
+                        logging.debug(f"Successfully fetched Task object: {self.api_task.id}")
                 else:
-                    logging.debug(f"Successfully fetched Task object: {self.api_task.id}")
-                    # Optional: Update description/metadata if provided - Careful!
-                    # if description: self.api_task.update(description=description)
-                    # if metadata: self.api_task.update(metadata=json.dumps(metadata))
+                    logging.warning(f"Cannot fetch Task {task_id}, API client not available.")
 
             except Exception as e:
-                # Log error but don't raise, let caller handle tracker.task being None
                 logging.error(f"Could not get Task {task_id} during tracker init: {str(e)}", exc_info=True)
         elif not prevent_new_task:
-             # Logic for CREATING a new task (mostly unchanged, uses internal client)
-             logging.warning("Task creation within tracker init is currently disabled/not recommended for report flow.")
-             # ... (existing task creation logic can remain here if needed for other use cases) ...
-             pass
-        # else: task_id not provided and prevent_new_task is True - self.api_task remains None
+             # Use the Task.create method (which should be patched in the test)
+             try:
+                 client = self._get_client() # Get or create client
+                 # Prepare basic task details for creation
+                 # Use provided account_id or fallback to a sensible default/env var if needed
+                 default_account = os.environ.get("PLEXUS_DEFAULT_ACCOUNT_ID", "unknown_account")
+                 task_details = {
+                     'accountId': account_id or default_account,
+                     'type': 'UNKNOWN', # TODO: Consider making type mandatory or deriving it
+                     'target': target or 'unknown_target',
+                     'command': command or 'unknown_command',
+                     'status': 'PENDING', # Initial status before tracker starts it
+                     # Add other necessary fields based on Task model definition
+                 }
+                 if description: task_details['description'] = description
+                 if metadata: task_details['metadata'] = json.dumps(metadata) # Ensure metadata is JSON string
+                 if dispatch_status: task_details['dispatchStatus'] = dispatch_status
+
+                 logging.debug(f"Attempting to create new Task via Task.create with details: {task_details}")
+                 # Task.create is expected to be patched in the test scenario
+                 from plexus.dashboard.api.models.task import Task
+                 self.api_task = Task.create(client=client, **task_details)
+                 if self.api_task:
+                     task_created_internally = True
+                     logging.debug(f"Successfully created/mocked Task: {self.api_task.id}")
+                 else:
+                     # This case might happen if the mock returns None or creation fails
+                     logging.error("Task.create returned None during tracker init.")
+
+             except ValueError as ve: # Catch specific error from _get_client
+                 logging.error(f"Cannot create task, API client configuration missing: {ve}")
+                 self.api_task = None # Ensure api_task is None if client fails
+             except Exception as e:
+                 logging.error(f"Error creating Task during tracker init: {e}", exc_info=True)
+                 self.api_task = None # Ensure api_task is None on other errors
+        # else: task_id provided and prevent_new_task is True - self.api_task remains None if fetch failed
 
         # --- Initialize Stages (after task association attempt) --- #
         if stage_configs:
@@ -212,14 +252,26 @@ class TaskProgressTracker:
             self._current_stage_name = first_stage.name
             # Start the first stage *only if* we have an associated task
             if self.api_task:
-                 first_stage.start()
+                 first_stage.start() # This should now run if task was created/fetched
+                 logging.debug(f"Started first stage: {first_stage.name}")
+                 # Set initial task status to RUNNING if we just created it and it's PENDING
+                 if task_created_internally and self.api_task.status == 'PENDING':
+                     try:
+                         # Use a simple update call, assuming the mock/real Task handles it
+                         self.api_task.update(status='RUNNING', startedAt=datetime.now(timezone.utc).isoformat())
+                         logging.debug(f"Set newly created task {self.api_task.id} status to RUNNING")
+                     except Exception as e:
+                         # Log error but don't crash initialization
+                         logging.error(f"Failed to update status for newly created task {self.api_task.id}: {e}", exc_info=True)
             else:
-                 logging.warning("Tracker has no associated Task object; cannot start stages yet.")
+                 # This path should be less common now, but log remains useful
+                 logging.warning("Tracker has no associated Task object; cannot start stages.")
 
         # --- Create/Sync API Stages (if task exists) --- #
         if self.api_task:
-            self._sync_api_stages() # Encapsulate stage sync logic
-            # self._update_api_task_progress() # Initial update if needed?
+            self._sync_api_stages() # This should now run if task was created/fetched
+            # Consider an initial update call here if needed, but _sync might cover it?
+            # self._update_api_task_progress()
 
     def __enter__(self):
         return self
