@@ -95,37 +95,38 @@ export function ReportConfigurationsDashboard() {
     fetchAccountId()
   }, [])
 
-  // Fetch report configurations
-  useEffect(() => {
-    const fetchConfigurations = async () => {
-      if (!accountId) return
+  // Define fetchConfigurations function outside useEffect
+  const fetchConfigurations = async () => {
+    if (!accountId) return
 
-      setIsLoading(true)
-      setError(null)
-      try {
-        const response = await getClient().graphql<GraphQLResult<{
-          listReportConfigurations: {
-            items: ReportConfiguration[]
-          }
-        }>>({
-          query: LIST_REPORT_CONFIGURATIONS,
-          variables: {
-            accountId
-          }
-        })
-
-        if ('data' in response && response.data?.listReportConfigurations?.items) {
-          setConfigurations(response.data.listReportConfigurations.items)
+    setIsLoading(true)
+    setError(null)
+    try {
+      const response = await getClient().graphql<GraphQLResult<{
+        listReportConfigurations: {
+          items: ReportConfiguration[]
         }
-      } catch (err: any) {
-        console.error('Error fetching report configurations:', err)
-        setError(`Error fetching report configurations: ${err.message}`)
-      } finally {
-        setIsLoading(false)
-      }
-    }
+      }>>({
+        query: LIST_REPORT_CONFIGURATIONS,
+        variables: {
+          accountId
+        }
+      })
 
-    fetchConfigurations()
+      if ('data' in response && response.data?.listReportConfigurations?.items) {
+        setConfigurations(response.data.listReportConfigurations.items)
+      }
+    } catch (err: any) {
+      console.error('Error fetching report configurations:', err)
+      setError(`Error fetching report configurations: ${err.message}`)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // Fetch report configurations on mount or when accountId changes
+  useEffect(() => {
+    fetchConfigurations() // Call the function defined above
   }, [accountId])
 
   const handleCreate = () => {
