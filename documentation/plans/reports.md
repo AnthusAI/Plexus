@@ -396,70 +396,65 @@ When the report is generated, each report block in the report will generate stru
 
 ## Current Work (2025-04-28)
 
-### Block Rendering Implementation
+#### Block Rendering Implementation (2024-03-19 Update)
 
-We are currently working on implementing the block rendering system in the reports feature. The goal is to replace code blocks in the markdown output with custom React components that can render the block's data in a more interactive and visually appealing way.
+✅ **Successfully Implemented Basic Block Rendering:**
+- Created `BaseBlock` component with fuchsia dashed border for visual debugging
+- Implemented lazy loading of report blocks when a report is selected
+- Successfully replaced markdown code blocks with custom components
+- Verified block matching and output display is working
 
-#### Key Components:
-- `dashboard/components/blocks/BaseBlock.tsx`: Base component and interfaces for all block types
-- `dashboard/components/blocks/BlockRegistry.tsx`: Registry system for block components
-- `dashboard/components/blocks/TextBlock.tsx`: Example block implementation
-- `dashboard/components/ReportTask.tsx`: Component that renders the report and handles block replacement
+**Key Learnings:**
+1. Block replacement requires careful handling of ReactMarkdown's component system
+2. The `code` component in ReactMarkdown is the key to intercepting and replacing blocks
+3. Block matching needs to happen at the component level, not just in the renderer
+4. The output from the backend is already parsed JSON, no need for additional parsing
 
-#### Current Status:
-- Basic block registry system is in place
-- ReportTask component has been modified to use a custom code block renderer
-- Block detection is based on the `language-block` class in markdown code blocks
-- Visual indicators (green/red borders) have been added to help debug block rendering
-
-#### Block Data Loading Strategy:
-1. **Initial Report List Load:**
-   - Reports are loaded without their associated blocks to keep the initial data load efficient
-   - Each report in the list shows basic metadata (name, timestamps, configuration info)
-   - Task status is fetched to show progress/status information
-
-2. **Detail View Block Loading:**
-   - When a report is selected for detail view, we fetch its associated blocks
-   - Blocks are fetched using the `reportBlocks` relationship
-   - Each block contains:
-     - `name`: Optional identifier for the block
-     - `position`: Order in the report
-     - `output`: The actual data to be rendered (JSON)
-     - `log`: Optional execution logs
-     - `type`: The type of block (e.g., 'ScoreInfo', 'TopicModel', etc.)
-
-3. **Block Rendering Flow:**
-   - When a code block is detected in the markdown:
-     1. Parse the block's configuration from the markdown
-     2. Find the corresponding block data from the fetched blocks
-     3. Pass the block's `output` data to the appropriate component
-     4. Render the component with the data
-
-4. **Component Hierarchy:**
-   - `BaseBlock`: Common styling and structure for all blocks
-   - `MonacoBlock`: Default block type that shows raw data in a Monaco editor
-   - Specialized blocks (e.g., `ScoreInfoBlock`, `TopicModelBlock`) that extend `BaseBlock`
-
-5. **Data Flow:**
-   ```
-   Report List
-   └─ Report (selected)
-      └─ Report Blocks (lazy loaded)
-         └─ Block Output (JSON)
-            └─ Block Component
-               └─ Rendered Content
-   ```
+**Current Implementation:**
+```typescript
+// In ReactMarkdown components:
+code: ({node, className, children, ...props}: any) => {
+  const match = /language-(\w+)/.exec(className || '');
+  const language = match ? match[1] : '';
+  
+  if (language === 'block') {
+    return customCodeBlockRenderer({ node, className, children, ...props });
+  }
+  
+  return <code className="bg-muted px-1 py-0.5 rounded" {...props}>{children}</code>;
+}
+```
 
 #### Next Steps:
-1. Implement lazy loading of report blocks when a report is selected
-2. Create the `MonacoBlock` component as the default renderer
-3. Set up the block registry to map block types to components
-4. Implement the block matching logic in the markdown renderer
-5. Add error handling for missing or malformed blocks
+
+1. **Create Specialized Block Components:**
+   - Create `ScoreInfoBlock` component for score information
+   - Create `TopicModelBlock` component for topic modeling results
+   - Each component should extend `BaseBlock` and handle its specific data type
+
+2. **Implement Block Registry:**
+   - Create a registry to map block types to their components
+   - Allow dynamic loading of block components
+   - Provide fallback to `BaseBlock` for unknown types
+
+3. **Enhance Block Styling:**
+   - Remove debug styling (fuchsia border)
+   - Add proper styling for each block type
+   - Implement responsive layouts for block content
+
+4. **Add Error Handling:**
+   - Handle missing or malformed blocks
+   - Show appropriate error states
+   - Add loading states for block content
+
+5. **Improve Block Matching:**
+   - Add support for block parameters
+   - Implement more sophisticated matching logic
+   - Add validation for block configurations
 
 #### Known Issues:
-- Block replacement is not currently working in the UI
-- Need to verify the format of block data in the report output
-- May need to adjust the block detection logic
-- Need to implement proper error states for missing blocks
+- Currently using debug styling (fuchsia border)
+- No specialized components for different block types
+- Basic error handling only
+- No loading states for block content
 

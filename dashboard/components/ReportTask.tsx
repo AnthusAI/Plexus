@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import { Task, TaskHeader, TaskContent, BaseTaskProps } from '@/components/Task'
 import { FileBarChart, Clock } from 'lucide-react'
 import { format, formatDistanceToNow } from 'date-fns'
@@ -6,6 +6,7 @@ import { Timestamp } from '@/components/ui/timestamp'
 import ReactMarkdown from 'react-markdown'
 import { BlockRenderer } from './blocks/BlockRegistry'
 import { BaseBlock } from './blocks/BaseBlock'
+import { getClient } from '@/utils/amplify-client'
 
 // Define the data structure for report tasks
 export interface ReportTaskData {
@@ -40,6 +41,18 @@ export interface ReportTaskData {
 // Props for the ReportTask component
 export interface ReportTaskProps extends BaseTaskProps<ReportTaskData> {}
 
+// Add interface for report blocks
+interface ReportBlock {
+  id: string
+  name?: string | null
+  position: number
+  output: {
+    data: Record<string, any>
+    type: string
+  }
+  log?: string | null
+}
+
 const ReportTask: React.FC<ReportTaskProps> = ({ 
   variant, 
   task, 
@@ -49,6 +62,64 @@ const ReportTask: React.FC<ReportTaskProps> = ({
   onToggleFullWidth,
   onClose
 }) => {
+  // Add state for report blocks
+  const [reportBlocks, setReportBlocks] = useState<ReportBlock[]>([])
+  const [isLoadingBlocks, setIsLoadingBlocks] = useState(false)
+  const [blockError, setBlockError] = useState<string | null>(null)
+
+  // Function to fetch report blocks
+  const fetchReportBlocks = async (reportId: string) => {
+    console.log('Starting to fetch blocks for report:', reportId)
+    setIsLoadingBlocks(true)
+    setBlockError(null)
+    try {
+      const response = await getClient().graphql({
+        query: `
+          query GetReportBlocks($reportId: ID!) {
+            getReport(id: $reportId) {
+              reportBlocks {
+                items {
+                  id
+                  name
+                  position
+                  output
+                  log
+                }
+              }
+            }
+          }
+        `,
+        variables: { reportId }
+      })
+
+      console.log('Received response for report blocks:', response)
+
+      if ('data' in response && response.data?.getReport?.reportBlocks?.items) {
+        const blocks = response.data.getReport.reportBlocks.items.map((block: any) => ({
+          ...block,
+          output: JSON.parse(block.output)
+        }))
+        console.log('Found blocks:', blocks)
+        setReportBlocks(blocks)
+      } else {
+        console.log('No blocks found in response')
+      }
+    } catch (err: any) {
+      console.error('Error fetching report blocks:', err)
+      setBlockError(err.message || 'Failed to load report blocks')
+    } finally {
+      setIsLoadingBlocks(false)
+    }
+  }
+
+  // Fetch blocks when report is selected and we're in detail view
+  useEffect(() => {
+    if (variant === 'detail' && task.data?.id) {
+      console.log('Effect triggered - fetching blocks for report:', task.data.id)
+      fetchReportBlocks(task.data.id)
+    }
+  }, [variant, task.data?.id])
+
   // Format the timestamp for detail view display
   const formattedDetailTimestamp = task.data?.updatedAt 
     ? format(new Date(task.data.updatedAt), 'MMM d, yyyy h:mm a')
@@ -78,14 +149,61 @@ const ReportTask: React.FC<ReportTaskProps> = ({
     reportBlocks: task.data?.reportBlocks || []
   };
 
-  // Update the customCodeBlockRenderer to use BaseBlock
+  // Update the customCodeBlockRenderer to use the fetched blocks
   const customCodeBlockRenderer = ({ node, inline, className, children, ...props }: any) => {
     // If it's an inline code block, render normally
     if (inline) {
       return <code className={className} {...props}>{children}</code>;
     }
     
-    // For block code, use our base component
+    // For block code, find the corresponding block and use its output
+    const match = /language-(\w+)/.exec(className || '');
+    const language = match ? match[1] : '';
+    
+    console.log('Processing code block:', {
+      language,
+      className,
+      children: String(children).trim(),
+      availableBlocks: reportBlocks
+    });
+    
+    // Check if this is a report block by looking for the language-block class
+    if (language === 'block') {
+      const content = String(children).trim();
+      
+      // Parse the YAML-like content
+      const lines = content.split('\n');
+      const blockConfig: Record<string, any> = {};
+      
+      lines.forEach(line => {
+        const [key, value] = line.split(':').map(s => s.trim());
+        if (key && value) {
+          blockConfig[key] = value;
+        }
+      });
+      
+      console.log('Parsed block config:', blockConfig);
+      
+      // Find the corresponding block data from reportBlocks
+      const blockData = reportBlocks.find(block => {
+        console.log('Checking block:', {
+          blockType: block.output.type,
+          configClass: blockConfig.class,
+          matches: block.output.type === blockConfig.class
+        });
+        return block.output.type === blockConfig.class;
+      });
+      
+      if (blockData) {
+        console.log('Found matching block:', blockData);
+        // Pass the output object to BaseBlock
+        return <BaseBlock output={blockData.output} />;
+      } else {
+        console.log('No matching block found for config:', blockConfig);
+      }
+    }
+    
+    // If not a report block or no matching block found, render as normal code block
     return <BaseBlock>{children}</BaseBlock>;
   };
 
@@ -129,8 +247,17 @@ const ReportTask: React.FC<ReportTaskProps> = ({
                   h2: ({node, ...props}) => <h2 className="text-xl font-bold mt-4 mb-2" {...props} />,
                   h3: ({node, ...props}) => <h3 className="text-lg font-bold mt-3 mb-1" {...props} />,
                   h4: ({node, ...props}) => <h4 className="text-base font-bold mt-2 mb-1" {...props} />,
-                  code: ({node, ...props}) => <code className="bg-muted px-1 py-0.5 rounded" {...props} />,
-                  pre: customCodeBlockRenderer,
+                  code: ({node, className, children, ...props}: any) => {
+                    const match = /language-(\w+)/.exec(className || '');
+                    const language = match ? match[1] : '';
+                    
+                    if (language === 'block') {
+                      return customCodeBlockRenderer({ node, className, children, ...props });
+                    }
+                    
+                    return <code className="bg-muted px-1 py-0.5 rounded" {...props}>{children}</code>;
+                  },
+                  pre: ({node, children, ...props}: any) => <div {...props}>{children}</div>,
                 }}
               >
                 {task.data.output}
