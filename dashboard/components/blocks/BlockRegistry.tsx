@@ -1,5 +1,5 @@
 import React from 'react'
-import { BlockComponent } from './BaseBlock'
+import { BlockComponent, BaseBlock } from './BaseBlock'
 
 // Registry of block components
 const blockRegistry = new Map<string, BlockComponent>()
@@ -33,35 +33,58 @@ export function getRegisteredBlockTypes(): string[] {
 }
 
 /**
- * Block component that renders the appropriate block based on type
+ * Default block renderer for when a specific block component isn't available
  */
-export function BlockRenderer(props: {
+const DefaultBlock: React.FC<Omit<BlockRendererProps, 'type'>> = (props) => {
+  return (
+    <BaseBlock
+      output={props.output}
+      name={props.name}
+      log={props.log}
+    />
+  )
+}
+
+export interface BlockRendererProps {
   type: string
   config: Record<string, any>
   output: Record<string, any>
   log?: string
   name?: string
   position: number
-}) {
+}
+
+/**
+ * Block component that renders the appropriate block based on type
+ */
+export function BlockRenderer(props: BlockRendererProps) {
   const { type, ...blockProps } = props
   const BlockComponent = getBlock(type)
 
   if (!BlockComponent) {
     console.warn(`No block component registered for type: ${type}`)
     return (
-      <div className="border-2 border-red-500 bg-red-50 p-4 rounded-lg">
+      <div className="border-2 border-red-500 bg-red-50 p-4 rounded-lg w-full min-w-0 max-w-full overflow-hidden">
         <div className="text-red-700 font-semibold">Block Type Not Found: {type}</div>
-        <pre className="mt-2 text-sm text-red-600">
-          {JSON.stringify(blockProps, null, 2)}
-        </pre>
+        <div className="mt-2 w-full min-w-0 max-w-full overflow-hidden">
+          <div className="bg-muted rounded p-2 w-full min-w-0 max-w-full overflow-x-auto">
+            <pre className="text-xs whitespace-pre-wrap break-all w-full min-w-0 max-w-full">
+              {JSON.stringify(blockProps.output, null, 2)}
+            </pre>
+          </div>
+        </div>
       </div>
     )
   }
 
+  // Use DefaultBlock component as a fallback if the BlockComponent isn't properly initialized
   return (
-    <div className="border-2 border-green-500 bg-green-50 p-4 rounded-lg">
-      <div className="text-green-700 font-semibold">Block Type: {type}</div>
-      <BlockComponent {...blockProps} />
+    <div className="w-full min-w-0 max-w-full overflow-hidden">
+      {type === 'default' ? (
+        <DefaultBlock {...blockProps} />
+      ) : (
+        <BlockComponent {...blockProps} />
+      )}
     </div>
   )
 } 

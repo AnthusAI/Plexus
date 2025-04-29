@@ -28,31 +28,45 @@ export interface BaseBlockProps {
   children?: React.ReactNode
   className?: string
   output?: string | Record<string, any>
+  name?: string
+  log?: string
 }
 
 /**
  * Base component that all block components should extend.
  * Provides common functionality and styling.
  */
-export const BaseBlock: React.FC<BaseBlockProps> = ({ children, className = '', output }) => {
-  // If we have output, display it as raw JSON
-  if (output) {
-    const outputString = typeof output === 'string' ? output : JSON.stringify(output, null, 2)
-    return (
-      <div className={`border-4 border-dashed border-fuchsia-500 p-4 my-4 ${className}`}>
-        <pre className="bg-muted p-2 rounded font-mono text-sm whitespace-pre-wrap">
-          {outputString}
-        </pre>
-      </div>
-    )
-  }
-
-  // Otherwise, display children as before
+export const BaseBlock: React.FC<BaseBlockProps> = ({ 
+  children, 
+  className = '', 
+  output,
+  name,
+  log
+}) => {
   return (
-    <div className={`border-4 border-dashed border-fuchsia-500 p-4 my-4 ${className}`}>
-      <pre className="bg-muted p-2 rounded">
-        <code>{children}</code>
-      </pre>
+    <div className="border rounded-lg p-4 my-4 w-full min-w-0 max-w-full overflow-hidden">
+      {/* Block Header */}
+      {name && (
+        <div className="font-semibold mb-2">{name}</div>
+      )}
+      
+      {children ? (
+        // Render custom content if provided
+        children
+      ) : (
+        // Default content rendering - just show raw output
+        <div className="w-full min-w-0 max-w-full">
+          {output && (
+            <div className="w-full min-w-0 max-w-full overflow-hidden">
+              <div className="bg-muted rounded p-2 w-full min-w-0 max-w-full overflow-x-auto">
+                <pre className="text-xs whitespace-pre-wrap break-all w-full min-w-0 max-w-full">
+                  {JSON.stringify(output, null, 2)}
+                </pre>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 } 
