@@ -1,7 +1,7 @@
 import React from 'react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Square, Columns2, X, Activity, FlaskConical, FlaskRound, TestTubes } from 'lucide-react'
+import { Square, Columns2, X, Activity, FlaskConical, FlaskRound, TestTubes, FileText, FileBarChart } from 'lucide-react'
 import { CardButton } from '@/components/CardButton'
 import { TaskStatus, TaskStageConfig } from './ui/task-status'
 import { BaseTaskData } from '@/types/base'
@@ -13,10 +13,11 @@ export interface BaseTaskProps<TData extends BaseTaskData = BaseTaskData> {
   task: {
     id: string
     type: string
+    name?: string
+    description?: string
     scorecard: string
     score: string
     time: string
-    description?: string
     command?: string
     data?: TData
     stages?: TaskStageConfig[]
@@ -66,6 +67,11 @@ const getTaskIcon = (type: string) => {
   // Convert to lowercase for case-insensitive comparison
   const taskType = type.toLowerCase()
   
+  // Add check for Report type
+  if (taskType.includes('report')) {
+    return <FileBarChart className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
+  }
+  
   if (taskType.includes('evaluation')) {
     if (taskType.includes('accuracy')) {
       return <FlaskConical className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
@@ -104,14 +110,6 @@ const Task = <TData extends BaseTaskData = BaseTaskData>({
 }: TaskComponentProps<TData>) => {
   // Force isSelected to true in detail mode
   const effectiveIsSelected = variant === 'detail' ? true : isSelected;
-
-  // Add debug logging for onClose prop
-  console.log('Task component received props:', {
-    variant,
-    taskId: task.id,
-    hasOnClose: !!onClose,
-    hasRenderHeader: !!renderHeader
-  });
 
   const childProps: TaskChildProps<TData> = {
     variant,
@@ -213,8 +211,18 @@ const TaskHeader = <TData extends BaseTaskData = BaseTaskData>({
     )}>
       <div className="flex justify-between items-start w-full">
         <div className="flex flex-col pb-1 leading-none">
-          <div className="font-semibold text-sm truncate max-w-[200px]">{task.scorecard || '\u00A0'}</div>
-          <div className="font-semibold text-sm truncate max-w-[200px]">{task.score || '\u00A0'}</div>
+          {task.name && (
+            <div className="font-semibold text-sm truncate max-w-[200px]">{task.name}</div>
+          )}
+          {task.description && (
+            <div className="font-semibold text-sm truncate max-w-[200px]">{task.description}</div>
+          )}
+          {task.scorecard && task.scorecard.trim() !== '' && (
+            <div className="font-semibold text-sm truncate max-w-[200px]">{task.scorecard}</div>
+          )}
+          {task.score && task.score.trim() !== '' && (
+            <div className="font-semibold text-sm truncate max-w-[200px]">{task.score}</div>
+          )}
           {variant !== 'grid' && (
             <div className="text-sm text-muted-foreground">{task.type}</div>
           )}
