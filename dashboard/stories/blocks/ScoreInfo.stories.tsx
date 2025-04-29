@@ -1,17 +1,25 @@
 import React from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
+import { BlockRenderer } from '@/components/blocks/BlockRegistry';
 import ScoreInfo from '@/components/blocks/ScoreInfo';
 
-const meta: Meta<typeof ScoreInfo> = {
+const meta: Meta<typeof BlockRenderer> = {
   title: 'Report Blocks/ScoreInfo',
-  component: ScoreInfo,
+  component: BlockRenderer,
   parameters: {
     layout: 'padded',
   },
+  decorators: [
+    (Story) => (
+      <div className="bg-card p-6 rounded-lg">
+        <Story />
+      </div>
+    ),
+  ],
 };
 
 export default meta;
-type Story = StoryObj<typeof ScoreInfo>;
+type Story = StoryObj<typeof BlockRenderer>;
 
 export const Basic: Story = {
   args: {
@@ -48,7 +56,7 @@ export const GoodPerformance: Story = {
       },
       type: 'ScoreInfo'
     },
-    position: 0,
+    position: 1,
     config: {
       class: 'ScoreInfo',
       scorecard: 'customer_service_v2',
@@ -70,7 +78,7 @@ export const MediumPerformance: Story = {
       },
       type: 'ScoreInfo'
     },
-    position: 0,
+    position: 2,
     config: {
       class: 'ScoreInfo',
       scorecard: 'customer_service_v2',
@@ -92,7 +100,7 @@ export const PoorPerformance: Story = {
       },
       type: 'ScoreInfo'
     },
-    position: 0,
+    position: 3,
     config: {
       class: 'ScoreInfo',
       scorecard: 'customer_service_v2',
@@ -108,12 +116,11 @@ export const MissingData: Story = {
       data: {
         name: 'Follow-up Quality',
         description: 'Evaluates the quality of follow-up communication',
-        // Missing accuracy and value
         updatedAt: '2023-10-20T11:45:00Z',
       },
       type: 'ScoreInfo'
     },
-    position: 0,
+    position: 4,
     config: {
       class: 'ScoreInfo',
       scorecard: 'customer_service_v2',

@@ -1,10 +1,12 @@
 "use client"
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react"
+// Import the setup file for its side effects
+import "@/components/blocks/registrySetup"; 
 import type { Schema } from "@/amplify/data/resource"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Square, Columns2, X, MoreHorizontal, Trash2, Share, Pencil } from "lucide-react"
+import { Square, Columns2, X, MoreHorizontal, Trash2, Share, Pencil, Play } from "lucide-react"
 import { format, formatDistanceToNow, parseISO } from "date-fns"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -71,7 +73,7 @@ interface TaskConfigType {
 const reportsConfig: TaskConfigType = {
   taskType: 'REPORT_GENERATION', // Example
   label: 'Generate Report',
-  icon: Pencil,
+  icon: Play,
   requiredContext: ['reportConfigurationId'], // Example
   getTaskMetadata: (context: Record<string, any>) => ({
     reportConfigurationId: context.reportConfigurationId,
@@ -302,6 +304,11 @@ export default function ReportsDashboard({
 }: {
   initialSelectedReportId?: string | null,
 } = {}) {
+  // Add a useEffect to potentially log when setup runs relative to mount
+  useEffect(() => {
+    console.log("ReportsDashboard mounted. Block registry setup should have run.");
+  }, []); 
+
   const { user } = useAuthenticator()
   const router = useRouter()
   const pathname = usePathname()
@@ -690,11 +697,14 @@ export default function ReportsDashboard({
             <h1 className="text-xl font-semibold">Reports</h1>
             {error && <p className="text-xs text-destructive">{error}</p>}
           </div>
-          {/* Placeholder for Generate Button - Requires Report Config Selection */}
-          {/* <TaskDispatchButton config={reportsConfig} context={{ reportConfigurationId: 'some-config-id' }}/> */}
-          <Button disabled>
-             <Pencil className="mr-2 h-4 w-4"/> Generate Report
-          </Button>
+          <div className="flex gap-2">
+            <Button disabled>
+              <Play className="mr-2 h-4 w-4"/> Run Report
+            </Button>
+            <Button disabled>
+              <Pencil className="mr-2 h-4 w-4"/> Edit Reports
+            </Button>
+          </div>
         </div>
       </div>
 
