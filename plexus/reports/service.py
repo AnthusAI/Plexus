@@ -493,6 +493,7 @@ def _generate_report_core(
             block_results.append({
                 "position": position,
                 "name": block_def.get("block_name"),
+                "type": block_def["class_name"],  # Use the class_name as the type
                 "output": output_json,
                 "log": log_string
             })
@@ -521,6 +522,7 @@ def _generate_report_core(
                             reportId=report_id,
                             position=result["position"],
                             name=result["name"],
+                            type=result["type"],  # Use the class name directly as the type
                             output=output_json_str,
                             log=result["log"],
                             client=client

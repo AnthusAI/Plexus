@@ -14,8 +14,8 @@ const ScoreInfo: React.FC<ReportBlockProps> = ({
   position,
   children
 }) => {
-  // Extract data from output
-  const data = output?.data || {};
+  // Extract data from output (now directly from output since we removed data nesting)
+  const data = output || {};
   
   // Format a percentage display with 1 decimal place
   const formatPercent = (value: number | undefined) => {

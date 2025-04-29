@@ -45,11 +45,10 @@ interface ReportBlock {
   id: string
   name?: string | null
   position: number
-  output: {
-    data: Record<string, any>
-    type: string
-  }
+  type: string
+  output: Record<string, any>
   log?: string | null
+  config?: Record<string, any>  // Add config field
 }
 
 const ReportTask: React.FC<ReportTaskProps> = ({ 
@@ -81,6 +80,7 @@ const ReportTask: React.FC<ReportTaskProps> = ({
                   id
                   name
                   position
+                  type
                   output
                   log
                 }
@@ -96,7 +96,8 @@ const ReportTask: React.FC<ReportTaskProps> = ({
       if ('data' in response && response.data?.getReport?.reportBlocks?.items) {
         const blocks = response.data.getReport.reportBlocks.items.map((block: any) => ({
           ...block,
-          output: JSON.parse(block.output)
+          output: JSON.parse(block.output),
+          config: {}  // Add empty config object by default
         }))
         console.log('Found blocks:', blocks)
         setReportBlocks(blocks)
@@ -186,27 +187,25 @@ const ReportTask: React.FC<ReportTaskProps> = ({
       // Find the corresponding block data from reportBlocks
       const blockData = reportBlocks.find(block => {
         console.log('Checking block:', {
-          blockType: block.output.type,
+          blockType: block.type,
           configClass: blockConfig.class,
-          matches: block.output.type === blockConfig.class
+          matches: block.type === blockConfig.class
         });
-        return block.output.type === blockConfig.class;
+        return block.type === blockConfig.class;
       });
       
       if (blockData) {
         console.log('Found matching block:', blockData);
         
-        // Show the raw output directly without any processing
         return (
           <BlockRenderer
-            config={{ 
-              ...blockConfig,
-              class: blockData.output.type || 'default'  
-            }}
+            key={blockData.id}
+            config={blockData.config || {}}
             output={blockData.output}
             log={blockData.log || undefined}
             name={blockData.name || blockConfig.name || undefined}
             position={blockData.position}
+            type={blockData.type}
           />
         );
       }
