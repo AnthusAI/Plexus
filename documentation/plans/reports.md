@@ -18,6 +18,11 @@
 
 2.  **NEVER ASSUME A COMMAND WORKED BECAUSE IT PRODUCED NO OUTPUT.** This is a dangerous and incorrect assumption. Terminal commands, especially in this project, may succeed silently or fail silently (or with errors that are missed if you don't wait). **YOU MUST ALWAYS WAIT FOR THE COMMAND TO COMPLETE AND CAREFULLY ANALYZE ITS ACTUAL OUTPUT AND EXIT CODE.** If a command appears to produce no output, verify its success through subsequent commands (e.g., listing created items, checking status) before proceeding. Failure to do this will lead to incorrect actions and wasted effort.
 ---
+**🚨 CRITICAL NOTE FOR TOMORROW (or next work session) 🚨**
+
+A required `type: string` field was added to the `ReportBlock` model after the last work session. This is currently a **BLOCKER** for report generation, as the backend service does not yet populate this field when creating `ReportBlock` records. Additionally, the frontend needs to be updated to use this field for determining which component to render, instead of parsing the `output` JSON.
+
+**➡️ Action Item:** Prioritize implementing the backend and frontend changes outlined in Phase 5 under the new "Implement `ReportBlock.type` Handling" item before proceeding with other tasks.
 
 ## Introduction
 

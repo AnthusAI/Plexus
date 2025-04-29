@@ -606,6 +606,7 @@ const schema = a.schema({
             report: a.belongsTo('Report', 'reportId'),
             name: a.string(), // Optional name for the block
             position: a.integer().required(), // Required position for ordering
+            type: a.string().required(), // Required type for the block
             output: a.json().required(), // JSON output from the block's execution
             log: a.string(), // Optional log output from the block
             createdAt: a.datetime().required(),
