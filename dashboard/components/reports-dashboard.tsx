@@ -160,6 +160,68 @@ const LIST_REPORTS = `
   }
 `
 
+// GraphQL query to get a single report with its blocks
+const GET_REPORT_WITH_BLOCKS = `
+  query GetReport($id: ID!) {
+    getReport(id: $id) {
+      id
+      name
+      createdAt
+      updatedAt
+      parameters
+      output
+      accountId
+      reportConfigurationId
+      reportConfiguration {
+        id
+        name
+        description
+      }
+      taskId
+      task {
+        id
+        type
+        status
+        target
+        command
+        description
+        dispatchStatus
+        metadata
+        createdAt
+        startedAt
+        completedAt
+        estimatedCompletionAt
+        errorMessage
+        errorDetails
+        currentStageId
+        stages {
+          items {
+            id
+            name
+            order
+            status
+            statusMessage
+            startedAt
+            completedAt
+            estimatedCompletionAt
+            processedItems
+            totalItems
+          }
+        }
+      }
+      reportBlocks {
+        items {
+          id
+          name
+          position
+          output
+          log
+        }
+      }
+    }
+  }
+`
+
 interface ListAccountResponse {
   listAccounts: {
     items: Array<{
@@ -174,6 +236,23 @@ interface ListReportsResponse {
     items: Report[];
     nextToken: string | null;
   };
+}
+
+interface GetReportResponse {
+  getReport: Report & {
+    reportBlocks: {
+      items: RawReportBlock[];
+    };
+  };
+}
+
+// Add a type for the raw block data from the API
+interface RawReportBlock {
+  id: string;
+  name?: string | null;
+  position: number;
+  output: Record<string, any>;
+  log?: string | null;
 }
 
 // Function to safely access nested properties in objects
@@ -239,6 +318,14 @@ export default function ReportsDashboard({
   const [isShareModalOpen, setIsShareModalOpen] = useState(false)
   const [shareUrl, setShareUrl] = useState<string | null>(null)
   const [nextToken, setNextToken] = useState<string | null>(null); // For pagination
+  const [selectedReportBlocks, setSelectedReportBlocks] = useState<Array<{
+    type: string;
+    config: Record<string, any>;
+    output: Record<string, any>;
+    log?: string;
+    name?: string;
+    position: number;
+  }> | null>(null);
 
   // Fetch account ID
   useEffect(() => {
@@ -320,6 +407,41 @@ export default function ReportsDashboard({
     }
   }, [accountId, dataHasLoadedOnce, fetchReports]); // Add fetchReports to dependencies
 
+  // Fetch report blocks when a report is selected
+  useEffect(() => {
+    const fetchReportBlocks = async (reportId: string) => {
+      try {
+        const response = await getClient().graphql<GetReportResponse>({
+          query: GET_REPORT_WITH_BLOCKS,
+          variables: { id: reportId }
+        });
+
+        if ('data' in response && response.data?.getReport?.reportBlocks?.items) {
+          // Transform the blocks to match the expected structure
+          const transformedBlocks = response.data.getReport.reportBlocks.items.map((block: RawReportBlock) => ({
+            type: block.output.class || 'unknown', // Extract type from output.class
+            config: block.output, // Use output as config
+            output: block.output,
+            log: block.log || undefined,
+            name: block.name || undefined,
+            position: block.position
+          }));
+          setSelectedReportBlocks(transformedBlocks);
+        } else {
+          setSelectedReportBlocks([]);
+        }
+      } catch (err: any) {
+        console.error('Error fetching report blocks:', err);
+        setSelectedReportBlocks([]);
+      }
+    };
+
+    if (selectedReportId) {
+      fetchReportBlocks(selectedReportId);
+    } else {
+      setSelectedReportBlocks(null);
+    }
+  }, [selectedReportId]);
 
   // Handle deep linking and browser navigation (similar to evaluations)
   useEffect(() => {
@@ -490,14 +612,15 @@ export default function ReportsDashboard({
             configDescription: report.reportConfiguration?.description,
             createdAt: report.createdAt,
             updatedAt: report.updatedAt,
-            output: report.output // Pass the output field to display markdown
+            output: report.output,
+            reportBlocks: selectedReportBlocks || [] // Add the report blocks here
           },
           stages: stages,
           status: report.task?.status as any || 'PENDING',
           currentStageName: currentStageName,
           errorMessage: report.task?.errorMessage || undefined
         }}
-        onClick={() => {}} // No-op for detail view
+        onClick={() => {}}
         controlButtons={
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -520,7 +643,7 @@ export default function ReportsDashboard({
         onClose={handleCloseReport}
       />
     );
-  }, [selectedReportId, reports, isFullWidth, handleCloseReport, handleDelete, copyLinkToClipboard]); // Dependencies
+  }, [selectedReportId, reports, selectedReportBlocks, isFullWidth, handleCloseReport, handleDelete, copyLinkToClipboard]); // Dependencies
 
   // Memoized click handler factory
   const getReportClickHandler = useCallback((reportId: string) => {

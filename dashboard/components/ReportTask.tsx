@@ -4,6 +4,8 @@ import { FileBarChart, Clock } from 'lucide-react'
 import { format, formatDistanceToNow } from 'date-fns'
 import { Timestamp } from '@/components/ui/timestamp'
 import ReactMarkdown from 'react-markdown'
+import { BlockRenderer } from './blocks/BlockRegistry'
+import { BaseBlock } from './blocks/BaseBlock'
 
 // Define the data structure for report tasks
 export interface ReportTaskData {
@@ -22,6 +24,17 @@ export interface ReportTaskData {
    * Markdown content of the report - shown in detail view 
    */
   output?: string | null;
+  /**
+   * Report blocks data from the backend
+   */
+  reportBlocks?: Array<{
+    type: string;
+    config: Record<string, any>;
+    output: Record<string, any>;
+    log?: string;
+    name?: string;
+    position: number;
+  }>;
 }
 
 // Props for the ReportTask component
@@ -61,7 +74,19 @@ const ReportTask: React.FC<ReportTaskProps> = ({
     configDescription: task.data?.configDescription || null,
     createdAt: task.data?.createdAt || null,
     updatedAt: task.data?.updatedAt || null,
-    output: task.data?.output || null
+    output: task.data?.output || null,
+    reportBlocks: task.data?.reportBlocks || []
+  };
+
+  // Update the customCodeBlockRenderer to use BaseBlock
+  const customCodeBlockRenderer = ({ node, inline, className, children, ...props }: any) => {
+    // If it's an inline code block, render normally
+    if (inline) {
+      return <code className={className} {...props}>{children}</code>;
+    }
+    
+    // For block code, use our base component
+    return <BaseBlock>{children}</BaseBlock>;
   };
 
   return (
@@ -105,7 +130,7 @@ const ReportTask: React.FC<ReportTaskProps> = ({
                   h3: ({node, ...props}) => <h3 className="text-lg font-bold mt-3 mb-1" {...props} />,
                   h4: ({node, ...props}) => <h4 className="text-base font-bold mt-2 mb-1" {...props} />,
                   code: ({node, ...props}) => <code className="bg-muted px-1 py-0.5 rounded" {...props} />,
-                  pre: ({node, ...props}) => <pre className="bg-muted p-2 rounded overflow-x-auto my-2" {...props} />,
+                  pre: customCodeBlockRenderer,
                 }}
               >
                 {task.data.output}
