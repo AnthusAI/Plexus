@@ -1,6 +1,9 @@
 import React from 'react'
 
-export interface BlockProps {
+/**
+ * Props for all report block components
+ */
+export interface ReportBlockProps {
   /** The block's configuration from the markdown */
   config: Record<string, any>
   /** The block's output data from the backend */
@@ -13,38 +16,35 @@ export interface BlockProps {
   position: number
   /** Child components */
   children?: React.ReactNode
+  /** Optional className for styling */
+  className?: string
 }
 
 /**
- * Base interface for all report block components.
- * Each block type should implement this interface.
+ * Interface for block component classes
+ * Each specialized block type should implement this interface
  */
-export interface BlockComponent extends React.FC<BlockProps> {
+export interface BlockComponent extends React.FC<ReportBlockProps> {
   /** The block class name this component handles */
   blockClass: string
 }
 
-export interface BaseBlockProps {
-  children?: React.ReactNode
-  className?: string
-  output?: string | Record<string, any>
-  name?: string
-  log?: string
-}
-
 /**
- * Base component that all block components should extend.
- * Provides common functionality and styling.
+ * ReportBlock component serves as the default renderer for unknown block types.
+ * Renders the internal content, assuming the BlockRenderer provides the outer container.
  */
-export const BaseBlock: React.FC<BaseBlockProps> = ({ 
+const ReportBlock: BlockComponent = ({ 
   children, 
-  className = '', 
+  className = '', // className might still be useful for internal styling
   output,
   name,
-  log
+  log,
+  config,
+  position
 }) => {
+  // Return only the inner content structure
   return (
-    <div className="border rounded-lg p-4 my-4 w-full min-w-0 max-w-full overflow-hidden">
+    <>
       {/* Block Header */}
       {name && (
         <div className="font-semibold mb-2">{name}</div>
@@ -55,10 +55,10 @@ export const BaseBlock: React.FC<BaseBlockProps> = ({
         children
       ) : (
         // Default content rendering - just show raw output
-        <div className="w-full min-w-0 max-w-full">
+        <div className={`w-full min-w-0 max-w-full ${className}`}> {/* Apply className here if needed */}
           {output && (
             <div className="w-full min-w-0 max-w-full overflow-hidden">
-              <div className="bg-muted rounded p-2 w-full min-w-0 max-w-full overflow-x-auto">
+              <div className="w-full min-w-0 max-w-full overflow-x-auto">
                 <pre className="text-xs whitespace-pre-wrap break-all w-full min-w-0 max-w-full">
                   {JSON.stringify(output, null, 2)}
                 </pre>
@@ -67,6 +67,11 @@ export const BaseBlock: React.FC<BaseBlockProps> = ({
           )}
         </div>
       )}
-    </div>
+    </>
   )
-} 
+}
+
+// Set the blockClass to indicate this is the default block handler
+ReportBlock.blockClass = 'default'
+
+export default ReportBlock 

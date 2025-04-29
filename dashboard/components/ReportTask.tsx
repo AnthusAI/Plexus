@@ -5,7 +5,6 @@ import { format, formatDistanceToNow } from 'date-fns'
 import { Timestamp } from '@/components/ui/timestamp'
 import ReactMarkdown from 'react-markdown'
 import { BlockRenderer } from './blocks/BlockRegistry'
-import { BaseBlock } from './blocks/BaseBlock'
 import { getClient } from '@/utils/amplify-client'
 
 // Define the data structure for report tasks
@@ -200,8 +199,10 @@ const ReportTask: React.FC<ReportTaskProps> = ({
         // Show the raw output directly without any processing
         return (
           <BlockRenderer
-            type="default"
-            config={blockConfig}
+            config={{ 
+              ...blockConfig,
+              class: blockData.output.type || 'default'  
+            }}
             output={blockData.output}
             log={blockData.log || undefined}
             name={blockData.name || blockConfig.name || undefined}
@@ -250,7 +251,7 @@ const ReportTask: React.FC<ReportTaskProps> = ({
       renderContent={(props) => (
         <TaskContent {...props} hideTaskStatus={true}>
           {variant === 'detail' && task.data?.output && (
-            <div className="mt-4 p-4 prose dark:prose-invert max-w-none">
+            <div className="prose dark:prose-invert max-w-none">
               <ReactMarkdown
                 components={{
                   p: ({node, ...props}) => <p className="mb-2" {...props} />,
@@ -289,7 +290,7 @@ const ReportTask: React.FC<ReportTaskProps> = ({
             </div>
           )}
           {variant === 'detail' && !task.data?.output && (
-            <div className="mt-4 p-4 text-muted-foreground">
+            <div className="text-muted-foreground">
               No report content available.
             </div>
           )}

@@ -343,11 +343,14 @@ This refactoring ensures the core report generation logic is DRY and consistentl
 *   ⬜ **List Configurations:** Implement a UI table/list to display existing `ReportConfiguration`s fetched via GraphQL.
 *   ⬜ **Basic Configuration Editor:** Create a simple form/modal to create/edit `ReportConfiguration`s.
 *   ⬜ **Trigger Generation from UI:** Add a button on the `ReportConfiguration` list/view to trigger a new report run **(invoking the Task creation/Celery dispatch mechanism from Phase 2)**.
-*   ⬜ **Fetch Report Data:** Implement logic on the report view page to fetch the `Report` record (including `output`), its associated `ReportBlock` records, **and the associated `Task` record (for status/metadata).**
-*   ⬜ **Create Markdown Renderer:** Develop a component to render the report's Markdown content from `Report.output`.
-*   ⬜ **Implement Block Reference System:** Create a system to identify and replace block references in the Markdown with corresponding block components.
-*   ⬜ **Develop Block-Specific Components:** Create React components that render the JSON data from each `ReportBlock` type appropriately.
-*   ⬜ **Verify Phase 5:** Confirm basic UI for listing, creating configurations, triggering runs, and viewing simple reports works. **Verify status display reflects the linked Task.**
+*   ✅ **Fetch Report Data:** Implement logic on the report view page to fetch the `Report` record (including `output`), its associated `ReportBlock` records, **and the associated `Task` record (for status/metadata).** *(Fetching logic implemented, blocks are loaded)*
+*   ✅ **Create Markdown Renderer:** Develop a component to render the report's Markdown content from `Report.output`. *(Basic rendering working in ReportTask)*
+*   ✅ **Implement Block Reference System:** Create a system to identify and replace block references in the Markdown with corresponding block components. *(Initial version implemented via BlockRegistry and BlockRenderer)*
+*   🟡 **Develop Block-Specific Components:** Create React components that render the JSON data from each `ReportBlock` type appropriately.
+    *   ✅ `ScoreInfo` component created and successfully rendering block data in the UI.
+    *   ⬜ `FeedbackAnalysis` component.
+    *   ⬜ `TopicModel` component.
+*   🟡 **Verify Phase 5:** Confirm basic UI for listing, creating configurations, triggering runs, and viewing simple reports works. **Verify status display reflects the linked Task.** *(Progressing well, core block rendering is functional)*
 
 ### Phase 6: Asynchronous Generation Testing (Celery)
 
@@ -394,73 +397,71 @@ When the report is generated, each report block in the report will generate stru
 
 *(Note: The example above shows `ScoreInformation`. We should ensure consistency with the actual class name, which we intend to be `ScoreInfo`.)*
 
-## Current Work (2025-04-28)
+## Current Work (2025-05-01)
 
-#### Block Rendering Implementation (2024-03-19 Update)
+### Block Rendering Implementation Updates
 
-✅ **Successfully Implemented Basic Block Rendering:**
-- Created `BaseBlock` component with fuchsia dashed border for visual debugging
-- Implemented lazy loading of report blocks when a report is selected
-- Successfully replaced markdown code blocks with custom components
-- Verified block matching and output display is working
+✅ **Fixed Critical Layout Issue with Code Blocks:**
+- Successfully resolved the layout issues with preformatted code blocks
+- Implemented proper text wrapping and horizontal scrolling without breaking the containing layout
+- Used a combination of CSS properties to ensure blocks don't expand beyond their container:
+  - `min-w-0` to allow flex items to shrink below their content size
+  - `max-w-full` to prevent overflow
+  - `whitespace-pre-wrap` and `break-all` for text wrapping
+  - `overflow-x-auto` for horizontal scrolling when needed
 
-**Key Learnings:**
-1. Block replacement requires careful handling of ReactMarkdown's component system
-2. The `code` component in ReactMarkdown is the key to intercepting and replacing blocks
-3. Block matching needs to happen at the component level, not just in the renderer
-4. The output from the backend is already parsed JSON, no need for additional parsing
+✅ **Implemented Component Structure for Report Blocks:**
+- Created minimalist `ReportBlock` component (default fallback)
+- Implemented `BlockRegistry` and `BlockRenderer` system for registering and retrieving specialized block components.
+- `BlockRenderer` now wraps blocks in a standard container (`rounded-lg bg-background p-4 my-4`).
+- Resolved circular dependency issues with registration by creating `registrySetup.ts` and importing it in both the dashboard and Storybook preview.
+- `BlockRenderer` now gracefully handles unknown block types by rendering the default `ReportBlock` with an error message title.
+- Established proper component hierarchy and interfaces
+- Set up efficient data flow from report to blocks
 
-**Current Implementation:**
-```typescript
-// In ReactMarkdown components:
-code: ({node, className, children, ...props}: any) => {
-  const match = /language-(\w+)/.exec(className || '');
-  const language = match ? match[1] : '';
-  
-  if (language === 'block') {
-    return customCodeBlockRenderer({ node, className, children, ...props });
-  }
-  
-  return <code className="bg-muted px-1 py-0.5 rounded" {...props}>{children}</code>;
-}
-```
+✅ **Created First Specialized Block (`ScoreInfo`):**
+- Implemented `ScoreInfo` component for score information display.
+- Added colorful badges for visualizing metrics (accuracy, value).
+- Properly formatted dates and percentages.
+- Used Shadcn UI components for consistent styling.
+- Named component to match Python class name for consistency.
+- **Successfully integrated and displayed `ScoreInfo` component within the main Reports Dashboard UI, rendering data from fetched `ReportBlock` records.**
 
-#### Next Steps:
+✅ **Added Storybook Stories for Block Development:**
+- Created dedicated block stories directory.
+- Updated stories to use `BlockRenderer` as the main component.
+- Added decorator for `bg-card` background to improve visibility of blocks.
+- Added comprehensive story examples with various data scenarios:
+  - Basic rendering
+  - Long content handling
+  - Very long JSON content
+  - Blocks within a ReportTask context
+  - Performance levels (good/medium/poor metrics)
+  - Missing data handling
+  - Unknown block type handling (renders default block with error title).
 
-1. **Create Specialized Block Components:**
-   - Create `ScoreInfoBlock` component for score information
-   - Create `TopicModelBlock` component for topic modeling results
-   - Each component should extend `BaseBlock` and handle its specific data type
+### Next Steps
 
-2. **Implement Block Registry:**
-   - Create a registry to map block types to their components
-   - Allow dynamic loading of block components
-   *   Provide fallback to `BaseBlock` for unknown types
+1. **Implement Additional Specialized Blocks:**
+   - Create `FeedbackAnalysis` component
+   - Create `TopicModel` component
+   - Each component should follow the established pattern
 
-3. **Enhance Block Styling:**
-   - Remove debug styling (fuchsia border)
-   - Add proper styling for each block type
-   - Implement responsive layouts for block content
+2. **Enhance Visual Design:**
+   - Improve styling to match Plexus design system
+   - Add animations for loading states
+   - Consider better visualizations for different data types
 
-4. **Add Error Handling:**
-   - Handle missing or malformed blocks
-   - Show appropriate error states
-   - Add loading states for block content
+3. **Improve Content Loading:**
+   - Add proper loading indicators
+   - Implement more robust error handling
+   - Add empty state designs
 
-5. **Improve Block Matching:**
-   - Add support for block parameters
-   - Implement more sophisticated matching logic
-   - Add validation for block configurations
+4. **Integration:**
+   - Ensure proper registration of all block types
+   - Test with real data from backend
+   - Optimize for performance
 
-#### Known Issues:
-- Currently using debug styling (fuchsia border)
-- No specialized components for different block types
-- Basic error handling only
-- No loading states for block content
-
-**CURRENT BLOCKER (2025-04-28 PM):**
-- **Layout Issue:** Significant time has been wasted attempting to prevent preformatted code blocks (specifically the JSON output in the `BlockRenderer` error state and `DefaultBlock`) from expanding their parent container's width and breaking the overall layout.
-- **Problem:** The `pre` tag containing the JSON output forces the width of its container to expand, despite various CSS attempts (`overflow-x-auto`, `max-w-full`, `w-full`, `block`) on the `pre` tag and its parent containers.
-- **Impact:** This prevents proper horizontal scrolling and breaks the visual layout of the `ReportTask` component.
-- **Status:** Unresolved. Unable to find a working CSS solution after multiple attempts. Further investigation or external help (e.g., web search, CSS expertise) is required to proceed with block rendering.
+**RESOLVED BLOCKER (2025-05-01):**
+The critical layout issue with preformatted code blocks has been resolved. By implementing a combination of CSS techniques and restructuring the component hierarchy, we now have a robust system for rendering report blocks with proper text wrapping and horizontal scrolling without breaking the overall layout.
 
