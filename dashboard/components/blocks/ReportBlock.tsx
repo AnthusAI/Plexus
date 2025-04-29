@@ -14,6 +14,8 @@ export interface ReportBlockProps {
   name?: string
   /** The block's position in the report */
   position: number
+  /** The block's type */
+  type: string
   /** Child components */
   children?: React.ReactNode
   /** Optional className for styling */

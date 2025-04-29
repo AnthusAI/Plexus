@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 class ReportBlock(BaseModel):
     reportId: str
     position: int
+    type: str  # Add required type field
     output: Optional[Dict[str, Any]] = field(default_factory=dict) # Store parsed JSON
     name: Optional[str] = None
     log: Optional[str] = None
@@ -34,6 +35,7 @@ class ReportBlock(BaseModel):
             reportId
             name
             position
+            type
             output # Expecting JSON string from API
             log
             createdAt
@@ -91,6 +93,7 @@ class ReportBlock(BaseModel):
         instance = cls(
             reportId=data['reportId'],
             position=position,
+            type=data['type'],
             output=output_data, # Store the parsed dict/None
             name=name,
             log=log,
@@ -110,6 +113,7 @@ class ReportBlock(BaseModel):
         client: _BaseAPIClient,
         reportId: str,
         position: int,
+        type: str,  # Add required type parameter
         output: Optional[str] = None, # Expecting JSON string as input here
         name: Optional[str] = None,
         log: Optional[str] = None,
@@ -126,6 +130,7 @@ class ReportBlock(BaseModel):
         input_data = {
             'reportId': reportId,
             'position': position,
+            'type': type,  # Add type to input data
             # Pass output as a string, ensure None is handled
             'output': output, 
             'name': name,

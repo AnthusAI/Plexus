@@ -692,17 +692,16 @@ export default function ReportsDashboard({
       {/* Header Area - TODO: Add filtering/sorting controls */}
       <div className="flex-none p-1.5">
         <div className="flex justify-between items-start">
-          {/* Placeholder for Filters/Context */}
           <div>
             <h1 className="text-xl font-semibold">Reports</h1>
             {error && <p className="text-xs text-destructive">{error}</p>}
           </div>
           <div className="flex gap-2">
-            <Button disabled>
-              <Play className="mr-2 h-4 w-4"/> Run Report
+            <Button onClick={() => router.push('/lab/reports/edit')}>
+              <Pencil className="mr-2 h-4 w-4"/> Edit Configurations
             </Button>
             <Button disabled>
-              <Pencil className="mr-2 h-4 w-4"/> Edit Reports
+              <Play className="mr-2 h-4 w-4"/> Run Report
             </Button>
           </div>
         </div>

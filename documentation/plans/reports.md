@@ -20,9 +20,7 @@
 ---
 **🚨 CRITICAL NOTE FOR TOMORROW (or next work session) 🚨**
 
-A required `type: string` field was added to the `ReportBlock` model after the last work session. This is currently a **BLOCKER** for report generation, as the backend service does not yet populate this field when creating `ReportBlock` records. Additionally, the frontend needs to be updated to use this field for determining which component to render, instead of parsing the `output` JSON.
-
-**➡️ Action Item:** Prioritize implementing the backend and frontend changes outlined in Phase 5 under the new "Implement `ReportBlock.type` Handling" item before proceeding with other tasks.
+✅ **Implement `ReportBlock.type` Handling:** The `type` field has been successfully implemented in both the backend and frontend. The backend now properly sets the `type` field when creating `ReportBlock` records, and the frontend uses this field directly for component selection instead of parsing the output JSON.
 
 ## Introduction
 
@@ -332,7 +330,7 @@ This refactoring ensures the core report generation logic is DRY and consistentl
 
 ### Phase 5: Frontend Basics (Management & Display)
 
-*   🟡 **Create "Reports" Dashboard Section:** Add a new top-level section/route (e.g., `/reports`) in the Next.js dashboard.
+*   ✅ **Create "Reports" Dashboard Section:** Add a new top-level section/route (e.g., `/reports`) in the Next.js dashboard.
     *   ✅ Basic dashboard page structure created
     *   ✅ Navigation routing implemented
     *   ✅ Layout with reports list and detail view areas
@@ -345,8 +343,16 @@ This refactoring ensures the core report generation logic is DRY and consistentl
     *   ✅ Successfully showing report details when a report is selected
     *   ✅ Report cards display appropriate metadata
     *   ✅ Selection behavior working correctly
-*   ⬜ **List Configurations:** Implement a UI table/list to display existing `ReportConfiguration`s fetched via GraphQL.
-*   ⬜ **Basic Configuration Editor:** Create a simple form/modal to create/edit `ReportConfiguration`s.
+*   ✅ **List Configurations:** Implement a UI table/list to display existing `ReportConfiguration`s fetched via GraphQL.
+    *   ✅ Created dedicated route at `/lab/reports/edit`
+    *   ✅ Implemented grid view of report configurations
+    *   ✅ Added create/edit/delete functionality
+    *   ✅ Flat styling consistent with Plexus design system
+*   ✅ **Basic Configuration Editor:** Create a simple form/modal to create/edit `ReportConfiguration`s.
+    *   ✅ Created dedicated route at `/lab/reports/edit/[id]`
+    *   ✅ Implemented Monaco editor for YAML configuration
+    *   ✅ Added name and description fields
+    *   ✅ Proper error handling and loading states
 *   ⬜ **Trigger Generation from UI:** Add a button on the `ReportConfiguration` list/view to trigger a new report run **(invoking the Task creation/Celery dispatch mechanism from Phase 2)**.
 *   ✅ **Fetch Report Data:** Implement logic on the report view page to fetch the `Report` record (including `output`), its associated `ReportBlock` records, **and the associated `Task` record (for status/metadata).** *(Fetching logic implemented, blocks are loaded)*
 *   ✅ **Create Markdown Renderer:** Develop a component to render the report's Markdown content from `Report.output`. *(Basic rendering working in ReportTask)*

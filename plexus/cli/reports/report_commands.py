@@ -379,17 +379,18 @@ def show_report(id_or_name: str, account_identifier: Optional[str]):
         # --- Prepare Display Data ---
         config_display = f"{config_instance.name} (ID: {config_instance.id})" if config_instance else "N/A"
         if config_error:
-            config_display = f"[red]{config_error}[/red]"
+            config_display = f"[red]Config Error[/red]"
 
         task_status_display = task_instance.status if task_instance else "N/A"
         if task_error and not task_instance:
-             task_status_display = f"[red]{task_error}[/red]"
+             task_status_display = f"[red]Task Error[/red]"
 
         created_at_str = report_instance.createdAt.strftime("%Y-%m-%d %H:%M:%S UTC") if report_instance.createdAt else 'N/A'
         updated_at_str = report_instance.updatedAt.strftime("%Y-%m-%d %H:%M:%S UTC") if report_instance.updatedAt else 'N/A'
         params_str = json.dumps(report_instance.parameters, indent=4) if report_instance.parameters else "{}"
 
         # --- Build Panels ---
+        # First create all content dictionaries
         report_info_content = {
             "Report Name": report_instance.name,
             "Report ID": report_instance.id,
@@ -401,19 +402,10 @@ def show_report(id_or_name: str, account_identifier: Optional[str]):
             "Updated At": updated_at_str,
             "Run Parameters": params_str
         }
-        max_report_key_len = max(len(k) for k in report_info_content.keys())
-        report_info_panel_content = Group(*(
-            format_kv(k, v, max_report_key_len) for k, v in report_info_content.items()
-        ))
-        report_info_panel = Panel(
-            report_info_panel_content,
-            title="[bold]Report Information[/bold]",
-            border_style="blue",
-            expand=True
-        )
 
-        task_details_panel = Panel("[dim]No Task associated or Task details could not be fetched.[/dim]", title="[bold]Associated Task Details[/bold]", border_style="yellow", expand=True)
+        task_content = {}
         if task_instance:
+            # Calculate task-related strings
             task_created_str = task_instance.createdAt.strftime("%Y-%m-%d %H:%M:%S UTC") if task_instance.createdAt else 'N/A'
             task_updated_str = task_instance.updatedAt.strftime("%Y-%m-%d %H:%M:%S UTC") if task_instance.updatedAt else 'N/A'
             task_started_str = task_instance.startedAt.strftime("%Y-%m-%d %H:%M:%S UTC") if task_instance.startedAt else 'N/A'
@@ -438,9 +430,30 @@ def show_report(id_or_name: str, account_identifier: Optional[str]):
                 "Error": task_instance.errorMessage or "None",
                 "Metadata": metadata_str
             }
-            max_task_key_len = max(len(k) for k in task_content.keys())
+
+        # Now calculate max key length after all content is defined
+        max_key_len = max(
+            max(len(k) for k in report_info_content.keys()) if report_info_content else 0,
+            max(len(k) for k in task_content.keys()) if task_content else 0,
+            10  # Minimum width for block headers
+        )
+
+        # Report Info Panel
+        report_info_panel_content = Group(*(
+            format_kv(k, v, max_key_len) for k, v in report_info_content.items()
+        ))
+        report_info_panel = Panel(
+            report_info_panel_content,
+            title="[bold]Report Information[/bold]",
+            border_style="blue",
+            expand=True
+        )
+
+        # Task Details Panel
+        task_details_panel = Panel("[dim]No Task associated or Task details could not be fetched.[/dim]", title="[bold]Associated Task Details[/bold]", border_style="yellow", expand=True)
+        if task_instance:
             task_details_panel_content = Group(*(
-                 format_kv(k, v, max_task_key_len) for k, v in task_content.items()
+                format_kv(k, v, max_key_len) for k, v in task_content.items()
             ))
             task_details_panel = Panel(
                 task_details_panel_content,
@@ -449,7 +462,7 @@ def show_report(id_or_name: str, account_identifier: Optional[str]):
                 expand=True
             )
         elif task_error:
-             task_details_panel = Panel(f"[red]{task_error}[/red]", title="[bold]Associated Task Details[/bold]", border_style="red", expand=True)
+            task_details_panel = Panel(f"[red]{task_error}[/red]", title="[bold]Associated Task Details[/bold]", border_style="red", expand=True)
 
         # Report Output Panel
         report_output_panel = Panel(
@@ -464,28 +477,50 @@ def show_report(id_or_name: str, account_identifier: Optional[str]):
         if blocks_error:
             blocks_panel_content = f"[red]{blocks_error}[/red]"
         elif blocks:
-            table = Table(title="Block Summary", show_header=True, header_style="bold cyan", expand=True)
-            table.add_column("Pos", style="dim", width=5)
-            table.add_column("Name", style="magenta")
-            table.add_column("Output Preview", style="green", no_wrap=False)
-            table.add_column("Log Status", style="yellow")
+            # Create a list of block panels
+            block_panels = []
+            for block_instance in blocks:
+                # Block header panel with name, position, and type
+                header_content = Group(
+                    format_kv("Name", block_instance.name or "[No Name]", max_key_len),
+                    format_kv("Position", str(block_instance.position), max_key_len),
+                    format_kv("Type", block_instance.type or "[No Type]", max_key_len)
+                )
+                header_panel = Panel(
+                    header_content,
+                    title=f"[bold]Block {block_instance.position}[/bold]",
+                    border_style="blue",
+                    expand=True
+                )
 
-            for block_instance in blocks: # Renamed loop variable
-                output_preview = "[dim]No output[/dim]"
+                # Log panel (now first)
+                log_content = block_instance.log or "[dim]No log messages[/dim]"
+                log_panel = Panel(
+                    log_content,
+                    title="[bold]Log[/bold]",
+                    border_style="yellow",
+                    expand=True
+                )
+
+                # Output panel (now second)
+                output_content = "[dim]No output[/dim]"
                 if block_instance.output:
                     try:
-                        output_preview = escape(pretty_repr(block_instance.output, max_width=60))
+                        output_content = pretty_repr(block_instance.output, max_width=80)
                     except Exception:
-                        output_preview = "[red]Error rendering output[/red]"
-
-                log_status = "Present" if block_instance.log else "None"
-                table.add_row(
-                    str(block_instance.position),
-                    block_instance.name or "[No Name]",
-                    output_preview,
-                    log_status
+                        output_content = "[red]Error rendering output[/red]"
+                output_panel = Panel(
+                    output_content,
+                    title="[bold]Output[/bold]",
+                    border_style="green",
+                    expand=True
                 )
-            blocks_panel_content = table
+
+                # Combine all panels for this block
+                block_panels.extend([header_panel, log_panel, output_panel])
+
+            # Create the main blocks panel containing all block panels
+            blocks_panel_content = Group(*block_panels)
         else:
             blocks_panel_content = "[dim]No report blocks found or loaded.[/dim]"
 
@@ -563,6 +598,8 @@ def show_last_report(account_identifier: Optional[str]):
                                 [stage for stage in task_stages_data if stage],
                                 key=lambda s: getattr(s, 'createdAt', datetime.min.replace(tzinfo=timezone.utc))
                             )
+                        else:
+                            console.print(f"[dim]Task {task_instance.id} has no associated stages.[/dim]")
                     except Exception as stage_e:
                         task_error = f"Error fetching stages for task {task_instance.id}: {stage_e}"
                         logger.error(f"{task_error}\n{traceback.format_exc()}") # Log only
@@ -613,6 +650,7 @@ def show_last_report(account_identifier: Optional[str]):
         params_str = json.dumps(report_instance.parameters, indent=4) if report_instance.parameters else "{}"
 
         # --- Build Panels ---
+        # First create all content dictionaries
         report_info_content = {
             "Report Name": report_instance.name,
             "Report ID": report_instance.id,
@@ -624,19 +662,10 @@ def show_last_report(account_identifier: Optional[str]):
             "Updated At": updated_at_str,
             "Run Parameters": params_str
         }
-        max_report_key_len = max(len(k) for k in report_info_content.keys()) if report_info_content else 0
-        report_info_panel_content = Group(*(
-            format_kv(k, v, max_report_key_len) for k, v in report_info_content.items()
-        ))
-        report_info_panel = Panel(
-            report_info_panel_content,
-            title="[bold]Report Information (Last)[/bold]",
-            border_style="blue",
-            expand=True
-        )
 
-        task_details_panel = Panel("[dim]No Task associated or Task details could not be fetched.[/dim]", title="[bold]Associated Task Details[/bold]", border_style="yellow", expand=True)
+        task_content = {}
         if task_instance:
+            # Calculate task-related strings
             task_created_str = task_instance.createdAt.strftime("%Y-%m-%d %H:%M:%S UTC") if task_instance.createdAt else 'N/A'
             task_updated_str = task_instance.updatedAt.strftime("%Y-%m-%d %H:%M:%S UTC") if task_instance.updatedAt else 'N/A'
             task_started_str = task_instance.startedAt.strftime("%Y-%m-%d %H:%M:%S UTC") if task_instance.startedAt else 'N/A'
@@ -648,7 +677,7 @@ def show_last_report(account_identifier: Optional[str]):
             if not current_stage_name:
                 current_stage_name = f"({task_instance.status})"
             elif task_error and "stage" in task_error.lower():
-                 current_stage_name += " [Error Fetching Stages]"
+                current_stage_name += " [Error Fetching Stages]"
 
             task_content = {
                 "Task Status": task_instance.status or "N/A",
@@ -661,9 +690,30 @@ def show_last_report(account_identifier: Optional[str]):
                 "Error": task_instance.errorMessage or "None",
                 "Metadata": metadata_str
             }
-            max_task_key_len = max(len(k) for k in task_content.keys()) if task_content else 0
+
+        # Now calculate max key length after all content is defined
+        max_key_len = max(
+            max(len(k) for k in report_info_content.keys()) if report_info_content else 0,
+            max(len(k) for k in task_content.keys()) if task_content else 0,
+            10  # Minimum width for block headers
+        )
+
+        # Report Info Panel
+        report_info_panel_content = Group(*(
+            format_kv(k, v, max_key_len) for k, v in report_info_content.items()
+        ))
+        report_info_panel = Panel(
+            report_info_panel_content,
+            title="[bold]Report Information (Last)[/bold]",
+            border_style="blue",
+            expand=True
+        )
+
+        # Task Details Panel
+        task_details_panel = Panel("[dim]No Task associated or Task details could not be fetched.[/dim]", title="[bold]Associated Task Details[/bold]", border_style="yellow", expand=True)
+        if task_instance:
             task_details_panel_content = Group(*(
-                format_kv(k, v, max_task_key_len) for k, v in task_content.items()
+                format_kv(k, v, max_key_len) for k, v in task_content.items()
             ))
             task_details_panel = Panel(
                 task_details_panel_content,
@@ -685,30 +735,52 @@ def show_last_report(account_identifier: Optional[str]):
         # Report Blocks Panel
         blocks_panel_content = None
         if blocks_error:
-            blocks_panel_content = f"[red]Error fetching blocks[/red]"
+            blocks_panel_content = f"[red]{blocks_error}[/red]"
         elif blocks:
-            table = Table(title="Block Summary", show_header=True, header_style="bold cyan", expand=True)
-            table.add_column("Pos", style="dim", width=5)
-            table.add_column("Name", style="magenta")
-            table.add_column("Output Preview", style="green", no_wrap=False)
-            table.add_column("Log Status", style="yellow")
+            # Create a list of block panels
+            block_panels = []
+            for block_instance in blocks:
+                # Block header panel with name, position, and type
+                header_content = Group(
+                    format_kv("Name", block_instance.name or "[No Name]", max_key_len),
+                    format_kv("Position", str(block_instance.position), max_key_len),
+                    format_kv("Type", block_instance.type or "[No Type]", max_key_len)
+                )
+                header_panel = Panel(
+                    header_content,
+                    title=f"[bold]Block {block_instance.position}[/bold]",
+                    border_style="blue",
+                    expand=True
+                )
 
-            for block_instance in blocks: # Renamed loop variable
-                output_preview = "[dim]No output[/dim]"
+                # Log panel (now first)
+                log_content = block_instance.log or "[dim]No log messages[/dim]"
+                log_panel = Panel(
+                    log_content,
+                    title="[bold]Log[/bold]",
+                    border_style="yellow",
+                    expand=True
+                )
+
+                # Output panel (now second)
+                output_content = "[dim]No output[/dim]"
                 if block_instance.output:
                     try:
-                        output_preview = escape(pretty_repr(block_instance.output, max_width=60))
+                        output_content = pretty_repr(block_instance.output, max_width=80)
                     except Exception:
-                        output_preview = "[red]Error rendering output[/red]"
-
-                log_status = "Present" if block_instance.log else "None"
-                table.add_row(
-                    str(block_instance.position),
-                    block_instance.name or "[No Name]",
-                    output_preview,
-                    log_status
+                        output_content = "[red]Error rendering output[/red]"
+                output_panel = Panel(
+                    output_content,
+                    title="[bold]Output[/bold]",
+                    border_style="green",
+                    expand=True
                 )
-            blocks_panel_content = table
+
+                # Combine all panels for this block
+                block_panels.extend([header_panel, log_panel, output_panel])
+
+            # Create the main blocks panel containing all block panels
+            blocks_panel_content = Group(*block_panels)
         else:
             blocks_panel_content = "[dim]No report blocks found or loaded."
 
