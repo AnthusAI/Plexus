@@ -435,7 +435,7 @@ code: ({node, className, children, ...props}: any) => {
 2. **Implement Block Registry:**
    - Create a registry to map block types to their components
    - Allow dynamic loading of block components
-   - Provide fallback to `BaseBlock` for unknown types
+   *   Provide fallback to `BaseBlock` for unknown types
 
 3. **Enhance Block Styling:**
    - Remove debug styling (fuchsia border)
@@ -457,4 +457,10 @@ code: ({node, className, children, ...props}: any) => {
 - No specialized components for different block types
 - Basic error handling only
 - No loading states for block content
+
+**CURRENT BLOCKER (2025-04-28 PM):**
+- **Layout Issue:** Significant time has been wasted attempting to prevent preformatted code blocks (specifically the JSON output in the `BlockRenderer` error state and `DefaultBlock`) from expanding their parent container's width and breaking the overall layout.
+- **Problem:** The `pre` tag containing the JSON output forces the width of its container to expand, despite various CSS attempts (`overflow-x-auto`, `max-w-full`, `w-full`, `block`) on the `pre` tag and its parent containers.
+- **Impact:** This prevents proper horizontal scrolling and breaks the visual layout of the `ReportTask` component.
+- **Status:** Unresolved. Unable to find a working CSS solution after multiple attempts. Further investigation or external help (e.g., web search, CSS expertise) is required to proceed with block rendering.
 

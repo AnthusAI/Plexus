@@ -149,7 +149,7 @@ const ReportTask: React.FC<ReportTaskProps> = ({
     reportBlocks: task.data?.reportBlocks || []
   };
 
-  // Update the customCodeBlockRenderer to use the fetched blocks
+  // Update the customCodeBlockRenderer function to extract data correctly
   const customCodeBlockRenderer = ({ node, inline, className, children, ...props }: any) => {
     // If it's an inline code block, render normally
     if (inline) {
@@ -196,15 +196,29 @@ const ReportTask: React.FC<ReportTaskProps> = ({
       
       if (blockData) {
         console.log('Found matching block:', blockData);
-        // Pass the output object to BaseBlock
-        return <BaseBlock output={blockData.output} />;
-      } else {
-        console.log('No matching block found for config:', blockConfig);
+        
+        // Show the raw output directly without any processing
+        return (
+          <BlockRenderer
+            type="default"
+            config={blockConfig}
+            output={blockData.output}
+            log={blockData.log || undefined}
+            name={blockData.name || blockConfig.name || undefined}
+            position={blockData.position}
+          />
+        );
       }
     }
     
-    // If not a report block or no matching block found, render as normal code block
-    return <BaseBlock>{children}</BaseBlock>;
+    // If not a report block or no matching block found, render as normal code block with proper wrapping
+    return (
+      <div className="w-full min-w-0 max-w-full overflow-x-auto">
+        <code className="bg-muted px-1 py-0.5 rounded block w-full min-w-0 max-w-full whitespace-pre-wrap break-all" {...props}>
+          {children}
+        </code>
+      </div>
+    );
   };
 
   return (
@@ -255,9 +269,19 @@ const ReportTask: React.FC<ReportTaskProps> = ({
                       return customCodeBlockRenderer({ node, className, children, ...props });
                     }
                     
-                    return <code className="bg-muted px-1 py-0.5 rounded" {...props}>{children}</code>;
+                    return (
+                      <div className="w-full min-w-0 max-w-full overflow-x-auto">
+                        <code className="bg-muted px-1 py-0.5 rounded block whitespace-pre-wrap break-all" {...props}>
+                          {children}
+                        </code>
+                      </div>
+                    );
                   },
-                  pre: ({node, children, ...props}: any) => <div {...props}>{children}</div>,
+                  pre: ({node, children, ...props}: any) => (
+                    <div className="w-full min-w-0 max-w-full overflow-x-auto">
+                      <div className="w-full min-w-0 max-w-full" {...props}>{children}</div>
+                    </div>
+                  ),
                 }}
               >
                 {task.data.output}
