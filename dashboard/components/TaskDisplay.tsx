@@ -240,24 +240,35 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
     id: displayId,
     type: displayType,
     time: displayTime,
-    startedAt: processedTask?.startedAt || task?.startedAt || evaluationData?.startedAt,
-    completedAt: processedTask?.completedAt || task?.completedAt,
-    estimatedCompletionAt: processedTask?.estimatedCompletionAt || task?.estimatedCompletionAt,
+    startedAt: (processedTask?.startedAt || task?.startedAt || evaluationData?.startedAt) ?? undefined,
+    completedAt: (processedTask?.completedAt || task?.completedAt) ?? undefined,
+    estimatedCompletionAt: (processedTask?.estimatedCompletionAt || task?.estimatedCompletionAt) ?? undefined,
     status: (processedTask?.status || task?.status || evaluationData?.status || 'PENDING') as TaskStatus,
-    stages: processedTask ? {
-      items: processedTask.stages.map((stage: ProcessedTaskStage) => ({
+    stages: processedTask ? processedTask.stages.map((stage: ProcessedTaskStage) => {
+      const isCompleted = stage.status === 'COMPLETED';
+      const isRunning = stage.status === 'RUNNING';
+      const isFailed = stage.status === 'FAILED';
+
+      return {
         id: stage.id,
+        key: stage.name,
+        label: stage.name,
+        color: isCompleted ? 'bg-primary' :
+               isRunning ? 'bg-secondary' :
+               isFailed ? 'bg-false' :
+               'bg-neutral',
         name: stage.name,
         order: stage.order,
-        status: stage.status,
+        status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
         statusMessage: stage.statusMessage,
         startedAt: stage.startedAt,
         completedAt: stage.completedAt,
         estimatedCompletionAt: stage.estimatedCompletionAt,
         processedItems: stage.processedItems,
-        totalItems: stage.totalItems
-      }))
-    } : null,
+        totalItems: stage.totalItems,
+        completed: isCompleted
+      };
+    }) : undefined,
     title: displayTitle,
     command: processedTask?.command,
     description: processedTask?.description,
@@ -265,8 +276,8 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
     metadata: processedTask?.metadata,
     errorMessage: processedTask?.errorMessage || (task ? (task.errorMessage || evaluationData?.errorMessage) : evaluationData?.errorMessage) || undefined,
     errorDetails: processedTask?.errorDetails || (task ? (task.errorDetails || evaluationData?.errorDetails) : evaluationData?.errorDetails) || undefined,
-    celeryTaskId: processedTask?.celeryTaskId || task?.celeryTaskId,
-    workerNodeId: processedTask?.workerNodeId || task?.workerNodeId,
+    celeryTaskId: (processedTask?.celeryTaskId || task?.celeryTaskId) ?? undefined,
+    workerNodeId: (processedTask?.workerNodeId || task?.workerNodeId) ?? undefined,
   };
 
   // Conditionally render EvaluationTask or ReportTask
@@ -343,11 +354,21 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
 
   } else if (reportData) {
     // Construct props for ReportTask
+    const reportStatusRaw = commonTaskProps.status;
+    const reportStatusValue = reportStatusRaw ? reportStatusRaw.toUpperCase() : 'PENDING';
+    const reportStatusFinal = ['PENDING', 'RUNNING', 'COMPLETED', 'FAILED'].includes(reportStatusValue)
+      ? reportStatusValue as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
+      : undefined;
+      
     const reportTaskProps = {
       task: {
         ...commonTaskProps,
+        status: reportStatusFinal, // Override status with the validated/refined one
+        scorecard: '-',
+        score: '-',
         data: {
             id: reportData.id,
+            title: displayTitle,
             name: reportData.name,
             createdAt: reportData.createdAt,
             updatedAt: reportData.updatedAt
