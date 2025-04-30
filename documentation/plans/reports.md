@@ -357,13 +357,32 @@ This refactoring ensures the core report generation logic is DRY and consistentl
 *   ✅ **Fetch Report Data:** Implement logic on the report view page to fetch the `Report` record (including `output`), its associated `ReportBlock` records, **and the associated `Task` record (for status/metadata).** *(Fetching logic implemented, blocks are loaded)*
 *   ✅ **Create Markdown Renderer:** Develop a component to render the report's Markdown content from `Report.output`. *(Basic rendering working in ReportTask)*
 *   ✅ **Implement Block Reference System:** Create a system to identify and replace block references in the Markdown with corresponding block components. *(Initial version implemented via BlockRegistry and BlockRenderer)*
-*   🟡 **Develop Block-Specific Components:** Create React components that render the JSON data from each `ReportBlock` type appropriately.
-    *   ✅ `ScoreInfo` component created and successfully rendering block data in the UI.
-    *   ⬜ `FeedbackAnalysis` component.
-    *   ⬜ `TopicModel` component.
 *   🟡 **Verify Phase 5:** Confirm basic UI for listing, creating configurations, triggering runs, and viewing simple reports works. **Verify status display reflects the linked Task.** *(Progressing well, core block rendering is functional)*
 
-### Phase 6: Asynchronous Generation Testing (Celery)
+### Phase 6: Feedback Analysis Integration
+
+*   **Objective:** Integrate the feedback analysis logic (from `commands/data/feedback/analyze.py`) into the Plexus platform, storing results in the database and making them viewable, potentially as a specialized Report type or standalone feature.
+*   ⬜ **Define Feedback Analysis Models:**
+    *   ⬜ Add `FeedbackAnalysis` model in `resource.ts`: To store overall results of an analysis run (e.g., scorecardId, date range, overall AC1).
+    *   ⬜ Add `FeedbackItem` model in `resource.ts`: To store aggregated results for a specific form/question combo within an analysis (e.g., formId, questionId, initial answer/comment, final answer/comment, AC1 for item). Link to `FeedbackAnalysis`.
+    *   ⬜ Add `FeedbackChangeDetail` model in `resource.ts`: To store individual change records (response, score, calibration) contributing to a `FeedbackItem` (e.g., change type, timestamp, original DB record ID, previous value, new value). Link to `FeedbackItem`.
+    *   ⬜ Define relationships (e.g., `FeedbackAnalysis` -> `FeedbackItem`, `FeedbackItem` -> `FeedbackChangeDetail`).
+    *   ⬜ Define necessary secondary indexes (e.g., on `FeedbackAnalysis` by scorecard/date, on `FeedbackItem` by analysis/question, on `FeedbackChangeDetail` by item/timestamp).
+*   ⬜ **Implement Backend Feedback Analysis Service:**
+    *   ⬜ Create a new service/logic (potentially a `ReportBlock` subclass like `FeedbackAnalysisBlock`) that performs the analysis similar to `analyze.py`.
+    *   ⬜ This service should populate the new `FeedbackAnalysis`, `FeedbackItem`, and `FeedbackChangeDetail` models.
+    *   ⬜ Integrate with the `Task` system for progress tracking if run asynchronously.
+*   ⬜ **Implement CLI for Feedback Analysis:**
+    *   ⬜ Create CLI commands (e.g., `plexus feedback analyze run ...`, `plexus feedback analyze list`, `plexus feedback analyze show ...`) to trigger analysis and view results stored in the new models. Use `rich` for output.
+*   ⬜ **Implement Frontend for Feedback Analysis:**
+    *   ⬜ Create dashboard components to trigger feedback analysis runs (likely via `Task` creation).
+    *   ⬜ Create dashboard components to display `FeedbackAnalysis` results, potentially listing `FeedbackItem`s with their aggregated changes and linking to view the detailed `FeedbackChangeDetail` records.
+    *   ⬜ Consider if this should be a dedicated dashboard section or integrated into the Report viewing UI (if using a `FeedbackAnalysisBlock`).
+*   ⬜ **Add Testing:**
+    *   ⬜ Write tests for the new models, backend service logic, CLI commands, and frontend components.
+*   ⬜ **Verify Phase 6:** Confirm end-to-end functionality: triggering analysis, storing data correctly, and viewing results via CLI and UI.
+
+### Phase 7: Asynchronous Generation Testing (Celery)
 
 *   ⬜ **Objective:** Verify that report generation can be successfully triggered asynchronously via the Celery task (`generate_report_task`) and that Task status updates correctly.
 *   ⬜ **Prerequisites:**
@@ -376,10 +395,10 @@ This refactoring ensures the core report generation logic is DRY and consistentl
     3.  Use `plexus task get <task_id>` and `plexus report list/show` to monitor the Task status and the creation/population of the Report record.
     4.  Verify the Task progresses through stages and reaches a final `COMPLETED` status (or `FAILED` with appropriate error message from the Celery task handler).
     5.  Confirm the generated `Report` and `ReportBlock` data is correct.
-*   ⬜ **Verify Phase 6:** Confirm asynchronous report generation via Celery works reliably and integrates correctly with the Task system.
-    *   **NEXT:** Phase 7 - Advanced Features & Polish
+*   ⬜ **Verify Phase 7:** Confirm asynchronous report generation via Celery works reliably and integrates correctly with the Task system.
+    *   **NEXT:** Phase 8 - Advanced Features & Polish
 
-### Phase 7: Advanced Features & Polish
+### Phase 8: Advanced Features & Polish
 
 *   ⬜ **Implement Core Report Blocks:**
     *   ⬜ Implement `FeedbackAnalysisBlock`.
@@ -390,7 +409,7 @@ This refactoring ensures the core report generation logic is DRY and consistentl
 *   ⬜ **Integrate Sharing:** Connect the `Report` model to the `ShareLink` system.
 *   ⬜ **Improve Configuration Editor:** Consider a more user-friendly UI beyond raw YAML/JSON/Markdown editing (future enhancement).
 *   ⬜ **Refine Print Styles:** Ensure the `@media print` styles produce a high-quality printed report, handling block rendering appropriately.
-*   ⬜ **Verify Phase 7:** Test complex reports with various blocks, ensure proper visualization, sharing, and printing.
+*   ⬜ **Verify Phase 8:** Test complex reports with various blocks, ensure proper visualization, sharing, and printing.
 
 ## Example Report Configuration
 
