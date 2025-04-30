@@ -363,7 +363,41 @@ This refactoring ensures the core report generation logic is DRY and consistentl
     *   ⬜ `TopicModel` component.
 *   🟡 **Verify Phase 5:** Confirm basic UI for listing, creating configurations, triggering runs, and viewing simple reports works. **Verify status display reflects the linked Task.** *(Progressing well, core block rendering is functional)*
 
-### Phase 6: Asynchronous Generation Testing (Celery)
+### Phase 6: Feedback Analysis Integration
+
+*   **Objective:** Refactor the feedback analysis logic from `commands/data/feedback/analyze.py` to separate data extraction from analysis. Implement a new `capture` command for data extraction, preparing for integration with the Plexus database models. **This phase will proceed in small, verifiable steps with testing after each refactoring change.**
+*   ⬜ **Define Feedback Analysis Models:**
+    *   ⬜ Add `FeedbackItem` model in `resource.ts`: To store aggregated results for a specific form/question combo (e.g., accountId, scorecardId, scoreId, externalId, initial/final answer/comment). Link to `FeedbackChangeDetail`.
+    *   ⬜ Add `FeedbackChangeDetail` model in `resource.ts`: To store individual change records (response, score, calibration) contributing to a `FeedbackItem` (e.g., change type, timestamp, externalId, initial/final value). Link to `FeedbackItem`.
+    *   ⬜ Define relationships (e.g., `FeedbackItem` -> `FeedbackChangeDetail`).
+    *   ⬜ Define necessary secondary indexes (e.g., on `FeedbackItem` by account/scorecard/score/externalId, on `FeedbackChangeDetail` by item/timestamp).
+    *   ✅ *Status: Schema definitions completed and refined.* 
+*   ⬜ **Refactor Data Extraction Logic in `analyze.py`:**
+    *   ✅ **Isolate Data Fetching Function:** Define a new function `fetch_feedback_change_data(session, scorecard_id, start_date, end_date, include_calibrations, score_id)` that encapsulates the SQL queries for response, score, and calibration changes. This function returns a dictionary containing the raw database results:
+        ```python
+        {
+            'response_changes': [...],
+            'score_changes': [...],
+            'calibration_changes': [...]
+        }
+        ```
+        *This step is now complete. The function was successfully implemented and tested on May 3, 2025. The data extraction logic was cleanly separated from the analysis logic.*
+    *   ⬜ **Refactor `analyze_feedback` to Use Fetch Function:** Modify the main `analyze_feedback` function within `analyze.py` to call the new `fetch_feedback_change_data` function instead of executing the queries directly. Ensure the rest of the analysis logic (AC1 calculation, display) uses the data structure returned by the new function.
+    *   ✅ **Test `analyze` Command:** Run the `analyze` command (`python -m plexus.cli.CommandLineInterface ... analyze ...`) and verify that it produces the **exact same output** as before the refactoring. **Stop and verify before proceeding.**
+*   ⬜ **Implement `capture` CLI Command:**
+    *   ⬜ **Create `capture` Command Stub:** Add a new Click command named `capture` to `analyze.py`. This command should accept similar parameters as `analyze` (scorecard, date range, etc.).
+    *   ⬜ **Integrate Data Fetching:** Implement the `capture` command to initialize the database connection (similar to `analyze` and `trends`) and call the `fetch_feedback_change_data` function.
+    *   ⬜ **Display Raw Data (Initial):** For the initial verification step, have the `capture` command simply print or log the raw data structure returned by the fetching function.
+    *   ✅ **Test `capture` Command:** Run the `capture` command (`python -m plexus.cli.CommandLineInterface ... capture ...`) and verify that it successfully fetches and displays the raw change data for the specified parameters. **Stop and verify before proceeding.**
+*   ⬜ **(Future Step) Format Data for API:** Modify the `capture` command to process the raw data structure returned by `fetch_feedback_change_data` and format it into lists of objects matching the `FeedbackItem` and `FeedbackChangeDetail` GraphQL models defined in the schema.
+*   ⬜ **(Future Step) Implement API Posting:** Add logic to the `capture` command to use the `PlexusDashboardClient` to create/update `FeedbackItem` and `FeedbackChangeDetail` records in the backend.
+*   ⬜ **(Future Step) Implement Frontend for Feedback Analysis:**
+    *   ⬜ Create dashboard components to display `FeedbackItem` results, potentially listing `FeedbackChangeDetail` records.
+*   ⬜ **Add Testing:**
+    *   ⬜ Write tests for the refactored data fetching logic, the new `capture` command, and future API interaction/frontend components.
+*   ⬜ **Verify Phase 6:** Confirm refactoring is complete, `capture` command fetches data correctly. Subsequent steps will handle API posting and UI.
+
+### Phase 7: Asynchronous Generation Testing (Celery)
 
 *   ⬜ **Objective:** Verify that report generation can be successfully triggered asynchronously via the Celery task (`generate_report_task`) and that Task status updates correctly.
 *   ⬜ **Prerequisites:**
