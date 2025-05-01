@@ -62,6 +62,7 @@ const schema = a.schema({
             tasks: a.hasMany('Task', 'accountId'),
             reportConfigurations: a.hasMany('ReportConfiguration', 'accountId'),
             reports: a.hasMany('Report', 'accountId'),
+            feedbackItems: a.hasMany('FeedbackItem', 'accountId'),
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
@@ -85,6 +86,7 @@ const schema = a.schema({
             scoreResults: a.hasMany('ScoreResult', 'scorecardId'),
             tasks: a.hasMany('Task', 'scorecardId'),
             datasets: a.hasMany('Dataset', 'scorecardId'),
+            feedbackItems: a.hasMany('FeedbackItem', 'scorecardId'),
             externalId: a.string(),
             itemId: a.string(),
             item: a.belongsTo('Item', 'itemId'),
@@ -138,6 +140,7 @@ const schema = a.schema({
             versions: a.hasMany('ScoreVersion', 'scoreId'),
             items: a.hasMany('Item', 'scoreId'),
             scoreResults: a.hasMany('ScoreResult', 'scoreId'),
+            feedbackItems: a.hasMany('FeedbackItem', 'scoreId'),
             championVersionId: a.string(),
             championVersion: a.belongsTo('ScoreVersion', 'championVersionId'),
             externalId: a.string().required()
