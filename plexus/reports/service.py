@@ -422,7 +422,7 @@ def _generate_report_core(
                 accountId=account_id,
                 reportConfigurationId=report_config_id,
                 taskId=tracker.task.id,
-                parameters=run_parameters,
+                parameters=json.dumps(run_parameters),
                 output=config_markdown # Store original config markdown directly
             )
             report_id = report.id

@@ -38,6 +38,8 @@ type ScoreVersionIndexFields = "scoreId" | "versionNumber" | "isFeatured";
 type ReportConfigurationIndexFields = "accountId" | "name";
 type ReportIndexFields = "accountId" | "reportConfigurationId" | "createdAt" | "updatedAt" | "taskId";
 type ReportBlockIndexFields = "reportId" | "name" | "position";
+type FeedbackItemIndexFields = "accountId" | "scorecardId" | "scoreId" | "externalId" | "updatedAt"; // UPDATED: Renamed formId to externalId
+type FeedbackChangeDetailIndexFields = "feedbackItemId" | "changedAt";
 
 // New index types for Feedback Analysis
 // type FeedbackAnalysisIndexFields = "accountId" | "scorecardId" | "createdAt"; // REMOVED
@@ -65,6 +67,7 @@ const schema = a.schema({
             tasks: a.hasMany('Task', 'accountId'),
             reportConfigurations: a.hasMany('ReportConfiguration', 'accountId'),
             reports: a.hasMany('Report', 'accountId'),
+            feedbackItems: a.hasMany('FeedbackItem', 'accountId'),
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
@@ -88,6 +91,7 @@ const schema = a.schema({
             scoreResults: a.hasMany('ScoreResult', 'scorecardId'),
             tasks: a.hasMany('Task', 'scorecardId'),
             datasets: a.hasMany('Dataset', 'scorecardId'),
+            feedbackItems: a.hasMany('FeedbackItem', 'scorecardId'),
             externalId: a.string(),
             itemId: a.string(),
             item: a.belongsTo('Item', 'itemId'),
@@ -141,6 +145,7 @@ const schema = a.schema({
             versions: a.hasMany('ScoreVersion', 'scoreId'),
             items: a.hasMany('Item', 'scoreId'),
             scoreResults: a.hasMany('ScoreResult', 'scoreId'),
+            feedbackItems: a.hasMany('FeedbackItem', 'scoreId'),
             championVersionId: a.string(),
             championVersion: a.belongsTo('ScoreVersion', 'championVersionId'),
             externalId: a.string().required()
@@ -625,8 +630,6 @@ const schema = a.schema({
             idx("reportId").sortKeys(["name"]).name("byReportAndName"),
             idx("reportId").sortKeys(["position"]).name("byReportAndPosition")
         ]),
-
-    // FeedbackAnalysis Model REMOVED
 
     FeedbackItem: a
         .model({

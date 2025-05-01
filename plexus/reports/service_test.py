@@ -101,15 +101,15 @@ def test_generate_report_success(
         {"class_name": "ScoreInfo", "config": {"scoreId": "score-test-123", "include_variant": False}, "block_name": "block_0", "position": 1},
         {"class_name": "ScoreInfo", "config": {"scoreId": "score-test-456"}, "block_name": "block_1", "position": 2}
     ]
-    mock_parse_config.return_value = (reconstructed_markdown, mock_block_defs)
+    mock_parse_config.return_value = mock_block_defs
 
     # --- Mock ReportBlock Creation ---
     mock_block_create.return_value = MagicMock(spec=ReportBlock, id="mock-block-id-123")
 
     # --- Configure the mock for _instantiate_and_run_block ---
     mock_run_block.side_effect = [
-        (json.dumps({"id": "score-test-123", "name": "Mock Score 1"}), "Log for block 1"), # Return tuple directly
-        (json.dumps({"id": "score-test-456", "name": "Mock Score 2"}), "Log for block 2"), # Return tuple directly
+        ({"id": "score-test-123", "name": "Mock Score 1"}, "Log for block 1"), # Return tuple with raw dict
+        ({"id": "score-test-456", "name": "Mock Score 2"}, "Log for block 2"), # Return tuple with raw dict
     ]
 
     # --- Mock TaskProgressTracker --- 
@@ -118,6 +118,10 @@ def test_generate_report_success(
     mock_tracker_instance.__enter__.return_value = mock_tracker_instance
     mock_tracker_instance.__exit__.return_value = None # Simulate clean exit
     mock_tracker_instance.task_id = "task-123" # <<< ADDED: Configure mock task_id
+    # Create a mock task object with id property
+    mock_task = MagicMock()
+    mock_task.id = "task-123"
+    mock_tracker_instance.task = mock_task
     MockTaskProgressTracker.return_value = mock_tracker_instance
 
     # === Call the service function ===
@@ -179,26 +183,26 @@ def test_generate_report_success(
     assert block_create_call_1_kwargs['reportId'] == mock_created_report_obj.id
     assert block_create_call_1_kwargs['position'] == 1 # Now 1-based
     assert block_create_call_1_kwargs['name'] == mock_block_defs[0]['block_name']
-    assert block_create_call_1_kwargs['output'] == json.dumps({"id": "score-test-123", "name": "Mock Score 1"})
+    assert json.loads(block_create_call_1_kwargs['output']) == {"id": "score-test-123", "name": "Mock Score 1"}
     assert block_create_call_1_kwargs['log'] == "Log for block 1"
     block_create_call_2_kwargs = mock_block_create.call_args_list[1].kwargs
     assert block_create_call_2_kwargs['reportId'] == mock_created_report_obj.id
     assert block_create_call_2_kwargs['position'] == 2 # Now 1-based
     assert block_create_call_2_kwargs['name'] == mock_block_defs[1]['block_name']
-    assert block_create_call_2_kwargs['output'] == json.dumps({"id": "score-test-456", "name": "Mock Score 2"})
+    assert json.loads(block_create_call_2_kwargs['output']) == {"id": "score-test-456", "name": "Mock Score 2"}
     assert block_create_call_2_kwargs['log'] == "Log for block 2"
 
     # 8. Tracker Progress Update calls are no longer applicable within generate_report
     # mock_tracker_instance.update.assert_any_call(current_items=1)
     # mock_tracker_instance.update.assert_any_call(current_items=2)
 
-    # 9. Final Report Update (Saving Markdown)
-    mock_created_report_obj.update.assert_called_once()
-    _ , update_call_kwargs = mock_created_report_obj.update.call_args
+    # 9. Final Report Update (Saving Markdown) - this is no longer done in the implementation
+    # mock_created_report_obj.update.assert_called_once()
+    # _ , update_call_kwargs = mock_created_report_obj.update.call_args
     # Check that ONLY output field is updated
-    assert update_call_kwargs['output'] == reconstructed_markdown
+    # assert update_call_kwargs['output'] == reconstructed_markdown
     # Verify only 'output' key exists in the update call kwargs
-    assert list(update_call_kwargs.keys()) == ['output']
+    # assert list(update_call_kwargs.keys()) == ['output']
 
     # 10. No return value from generate_report
 
