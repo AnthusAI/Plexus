@@ -19,7 +19,7 @@ class ScoreInfo(BaseReportBlock):
                                          Defaults to False.
     """
 
-    def generate(
+    async def generate(
         self # config/params/client accessed via self
     ) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         """Fetches (mock) Score data and returns it with logs."""
@@ -59,7 +59,10 @@ class ScoreInfo(BaseReportBlock):
             final_data = {k: v for k, v in mock_score_data.items() if v is not None}
 
             # Structure the output data dictionary
-            final_output_data = final_data
+            final_output_data = {
+                "type": "ScoreInfo",
+                "data": final_data
+            }
             self._log("ScoreInfo block generation successful.")
 
         except ValueError as ve:
