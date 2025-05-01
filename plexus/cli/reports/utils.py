@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Optional, Tuple, List
 import json
 import logging
+import os
 
 from rich.table import Table
 from rich.panel import Panel
@@ -83,6 +84,8 @@ def resolve_report_config(identifier: str, account_id: str, client: PlexusDashbo
     Helper to find a ReportConfiguration by ID or name within an account.
     Tries ID first if it looks like a UUID, otherwise tries name first.
     """
+    # No special case for testing - let the mocks handle it directly
+    
     is_uuid = False
     config: Optional[ReportConfiguration] = None
     try:
