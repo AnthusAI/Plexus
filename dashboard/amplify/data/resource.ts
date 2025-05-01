@@ -62,6 +62,7 @@ const schema = a.schema({
             tasks: a.hasMany('Task', 'accountId'),
             reportConfigurations: a.hasMany('ReportConfiguration', 'accountId'),
             reports: a.hasMany('Report', 'accountId'),
+            feedbackItems: a.hasMany('FeedbackItem', 'accountId'),
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
