@@ -162,7 +162,7 @@ def create_config(name: str, description: str, account_identifier: Optional[str]
                     console.print("[cyan]Operation cancelled by user.[/cyan]")
                     raise click.Abort()
         else:
-             console.print(f"[dim]No existing configuration found with the name '{name}'. Proceeding...[/dim]")
+             console.print(f"[dim]No existing configuration found. Proceeding...[/dim]")
         # --- End Duplicate Check ---
 
         # Create the ReportConfiguration instance using the API client or model method

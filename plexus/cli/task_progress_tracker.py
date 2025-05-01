@@ -61,6 +61,8 @@ class Stage:
         self.status = 'RUNNING'
         if self.total_items is not None:
             self.processed_items = 0  # Only initialize processed_items if total_items is set
+        else:
+            self.processed_items = None  # Explicitly set processed_items to None when total_items is None
         logging.debug(f"Starting stage {self.name} with total_items={self.total_items}")
 
     def complete(self):
@@ -76,10 +78,15 @@ class Stage:
             current_count: The current total count of processed items
         """
         if current_count < 0:
-            logging.warning(f"Stage {self.name}: Received negative count {current_count}")
+            logging.warning(f"Stage {self.name}: Received negative count {current_count}, clamping to 0")
+            current_count = 0
+            
+        if self.total_items is None:
+            # Don't update processed_items if total_items is None
+            logging.debug(f"Stage {self.name}: Not updating processed count because total_items is None")
             return
             
-        if self.total_items is not None and current_count > self.total_items:
+        if current_count > self.total_items:
             logging.warning(f"Stage {self.name}: Count {current_count} exceeds total items {self.total_items}")
             current_count = self.total_items
             
@@ -246,6 +253,7 @@ class TaskProgressTracker:
                     name=name,
                     order=config.order,
                     total_items=stage_total_items,
+                    processed_items=None,  # Always initialize processed_items to None
                     status_message=config.status_message
                 )
             first_stage = min(self._stages.values(), key=lambda s: s.order)
@@ -285,56 +293,34 @@ class TaskProgressTracker:
             self.complete()
 
     def update(self, current_items: int, status: Optional[str] = None):
-        """Update progress and optionally the API task record.
-        
+        """Update progress with current count and optional status message.
+
         Args:
-            current_items: The current total count of processed items
-            status: Optional status message to update
-            
-        Raises:
-            ValueError: If current_items is negative or exceeds total_items
+            current_items: Current number of items processed.
+            status: Optional status message.
         """
-        
-        # Don't update if the task has failed
-        if self.is_failed:
-            logging.debug("Task has failed, skipping update")
-            return
-
         if current_items < 0:
-            raise ValueError("Current items cannot be negative")
-            
-        if current_items > self.total_items:
-            raise ValueError(f"Current items ({current_items}) cannot exceed total items ({self.total_items})")
+            logging.warning(f"Received negative count {current_items}, clamping to 0")
+            current_items = 0
 
-        # Log the actual count we're using for this update
-        logging.info(f"Updating progress with count: {current_items}/{self.total_items}")
-        
-        # Store the count we're using for this update
+        if current_items > self.total_items and self.total_items > 0:
+            logging.warning(f"Count {current_items} exceeds total items {self.total_items}")
+            current_items = self.total_items
+
+        # Always update the tracker's overall count
         self.current_items = current_items
-        
-        # Update current stage if we have stages
-        if self.current_stage:
-            # Don't update progress if the stage is in a terminal state
-            if self.current_stage.status not in ['FAILED', 'COMPLETED']:
-                if self.current_stage.name.lower() != 'finalizing':
-                    self.current_stage.processed_items = current_items
-                    logging.info(f"Set stage {self.current_stage.name} processed count to {current_items}")
-                else:
-                    logging.debug(f"Skipping progress update for finalizing stage")
-            else:
-                logging.debug(f"Skipping progress update for {self.current_stage.status} stage {self.current_stage.name}")
+        logging.info(f"Updating progress with count: {current_items}/{self.total_items}")
 
-        # Update status message
+        # Only update the current stage if it has total_items set (i.e., it's showing a progress bar)
+        if self.current_stage and self.current_stage.total_items is not None:
+            self.current_stage.update_processed_count(current_items)
+            logging.info(f"Set stage {self.current_stage.name} processed count to {current_items}")
+
         if status:
             self.status = status
-            if self.current_stage:
-                self.current_stage.status_message = status
-        else:
-            self.status = self._generate_status_message()
 
-        # Update API task if we have one and task hasn't failed
-        if self.api_task and not self.is_failed:
-            self._update_api_task_progress()
+        # Update API task if we have one
+        self._update_api_task_progress()
 
     def advance_stage(self):
         """Advance to next stage and update API task if we have one."""
@@ -373,21 +359,19 @@ class TaskProgressTracker:
             self._update_api_task_progress()
 
     def complete(self):
-        """Complete tracking and update API task if we have one.
-        
-        Raises:
-            RuntimeError: If attempting to complete before all stages are processed
-        """
+        """Complete tracking and update API task if we have one."""
         if self._stages:
-            # First verify all stages have been started (have a start_time)
+            # Auto-start any unstarted stages
             unstarted_stages = [
-                s.name for s in self._stages.values()
+                s for s in self._stages.values()
                 if not s.start_time
             ]
-            if unstarted_stages:
-                raise RuntimeError(
-                    f"Cannot complete task: stages not started: {unstarted_stages}"
-                )
+            for stage in unstarted_stages:
+                logging.warning(f"Auto-starting unstarted stage '{stage.name}' during completion")
+                stage.start()
+                # If this stage has a total_items, set processed_items to match
+                if stage.total_items is not None:
+                    stage.processed_items = stage.total_items
 
             # Complete current stage if it exists
             if self.current_stage:
@@ -738,18 +722,23 @@ class TaskProgressTracker:
         return sanitized or 'sanitizedStageName' # Fallback if empty
 
     def _generate_status_message(self) -> str:
-        if self.is_complete:
-            return "Complete"
-
-        # Use stage status message if available
+        """Generate a status message based on current progress."""
+        if self.total_items <= 0:
+            return "Processing items"
+            
+        percentage = int(100 * self.current_items / self.total_items)
+        
         if self.current_stage and self.current_stage.status_message:
-            return self.current_stage.status_message
-
-        progress = self.progress
-        if progress == 0:
-            return "Starting..."
+            # If stage has a status message, use that with percentage
+            return f"{self.current_stage.status_message} ({percentage}%)"
+            
+        # Default status based on percentage
+        if percentage <= 0:
+            return "Starting processing... (0%)"
+        elif percentage < 100:
+            return f"Processing items ({percentage}%)"
         else:
-            return f"{progress}%"
+            return "Processing complete (100%)"
 
     @property
     def task(self) -> Optional['Task']:
