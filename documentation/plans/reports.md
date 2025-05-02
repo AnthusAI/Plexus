@@ -367,6 +367,19 @@ This refactoring ensures the core report generation logic is DRY and consistentl
 
 *   **Objective:** Integrate feedback analysis as a core report type. This involves extracting historical feedback change data from the source system (Call Criteria DB) into standardized Plexus API models (`FeedbackItem`, `FeedbackChangeDetail`) and then implementing a Plexus report block to perform analysis (e.g., agreement scores like Gwet's AC1) directly on this Plexus data.
 *   **Status (May, 2025):** Data extraction and API posting is complete. The `capture` command in `Call-Criteria-Python` successfully fetches change data, processes it, determines initial/final states, and upserts `FeedbackItem` and `FeedbackChangeDetail` records into the Plexus API via the `PlexusDashboardClient`. **Focus now shifts to implementing the analysis within Plexus.**
+
+*   ⬜ **Refactor Feedback Analysis Code:**
+    *   ⬜ **Problem:** The current `analyze.py` file (1900+ lines) is too large for effective development and AI assistance sessions.
+    *   ⬜ **Approach:** Break the file into smaller, modular components:
+        *   ⬜ Create `utils.py` for shared utilities like `fetch_feedback_change_data`, `debug_log`, and database connection functions.
+        *   ⬜ Create `analyze_cmd.py` specifically for the `analyze` feedback command.
+        *   ⬜ Create `trends_cmd.py` for the `trends` command functionality.
+        *   ⬜ Create `capture_cmd.py` for the `capture` command logic.
+        *   ⬜ Refactor the CLI registration to import from these new modules.
+        *   ⬜ Ensure all imports and dependencies are correctly managed in the new file structure.
+        *   ⬜ Thoroughly test each refactored command to ensure functionality is preserved.
+    *   ⬜ **Benefits:** Improved code maintainability, easier for AI sessions to process, better separation of concerns.
+
 *   ✅ **Define Feedback Analysis Models:**
     *   ✅ Add `FeedbackItem` model in `resource.ts`.
     *   ✅ Add `FeedbackChangeDetail` model in `resource.ts`.
