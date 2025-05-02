@@ -365,37 +365,49 @@ This refactoring ensures the core report generation logic is DRY and consistentl
 
 ### Phase 6: Feedback Analysis Integration
 
-*   **Objective:** Refactor the feedback analysis logic from `commands/data/feedback/analyze.py` to separate data extraction from analysis. Implement a new `capture` command for data extraction, preparing for integration with the Plexus database models. **This phase will proceed in small, verifiable steps with testing after each refactoring change.**
-*   ⬜ **Define Feedback Analysis Models:**
-    *   ⬜ Add `FeedbackItem` model in `resource.ts`: To store aggregated results for a specific form/question combo (e.g., accountId, scorecardId, scoreId, externalId, initial/final answer/comment). Link to `FeedbackChangeDetail`.
-    *   ⬜ Add `FeedbackChangeDetail` model in `resource.ts`: To store individual change records (response, score, calibration) contributing to a `FeedbackItem` (e.g., change type, timestamp, externalId, initial/final value). Link to `FeedbackItem`.
-    *   ⬜ Define relationships (e.g., `FeedbackItem` -> `FeedbackChangeDetail`).
-    *   ⬜ Define necessary secondary indexes (e.g., on `FeedbackItem` by account/scorecard/score/externalId, on `FeedbackChangeDetail` by item/timestamp).
-    *   ✅ *Status: Schema definitions completed and refined.* 
-*   ⬜ **Refactor Data Extraction Logic in `analyze.py`:**
-    *   ✅ **Isolate Data Fetching Function:** Define a new function `fetch_feedback_change_data(session, scorecard_id, start_date, end_date, include_calibrations, score_id)` that encapsulates the SQL queries for response, score, and calibration changes. This function returns a dictionary containing the raw database results:
-        ```python
-        {
-            'response_changes': [...],
-            'score_changes': [...],
-            'calibration_changes': [...]
-        }
-        ```
-        *This step is now complete. The function was successfully implemented and tested on May 3, 2025. The data extraction logic was cleanly separated from the analysis logic.*
-    *   ⬜ **Refactor `analyze_feedback` to Use Fetch Function:** Modify the main `analyze_feedback` function within `analyze.py` to call the new `fetch_feedback_change_data` function instead of executing the queries directly. Ensure the rest of the analysis logic (AC1 calculation, display) uses the data structure returned by the new function.
-    *   ✅ **Test `analyze` Command:** Run the `analyze` command (`python -m plexus.cli.CommandLineInterface ... analyze ...`) and verify that it produces the **exact same output** as before the refactoring. **Stop and verify before proceeding.**
-*   ⬜ **Implement `capture` CLI Command:**
-    *   ⬜ **Create `capture` Command Stub:** Add a new Click command named `capture` to `analyze.py`. This command should accept similar parameters as `analyze` (scorecard, date range, etc.).
-    *   ⬜ **Integrate Data Fetching:** Implement the `capture` command to initialize the database connection (similar to `analyze` and `trends`) and call the `fetch_feedback_change_data` function.
-    *   ⬜ **Display Raw Data (Initial):** For the initial verification step, have the `capture` command simply print or log the raw data structure returned by the fetching function.
-    *   ✅ **Test `capture` Command:** Run the `capture` command (`python -m plexus.cli.CommandLineInterface ... capture ...`) and verify that it successfully fetches and displays the raw change data for the specified parameters. **Stop and verify before proceeding.**
-*   ⬜ **(Future Step) Format Data for API:** Modify the `capture` command to process the raw data structure returned by `fetch_feedback_change_data` and format it into lists of objects matching the `FeedbackItem` and `FeedbackChangeDetail` GraphQL models defined in the schema.
-*   ⬜ **(Future Step) Implement API Posting:** Add logic to the `capture` command to use the `PlexusDashboardClient` to create/update `FeedbackItem` and `FeedbackChangeDetail` records in the backend.
-*   ⬜ **(Future Step) Implement Frontend for Feedback Analysis:**
-    *   ⬜ Create dashboard components to display `FeedbackItem` results, potentially listing `FeedbackChangeDetail` records.
+*   **Objective:** Integrate feedback analysis as a core report type. This involves extracting historical feedback change data from the source system (Call Criteria DB) into standardized Plexus API models (`FeedbackItem`, `FeedbackChangeDetail`) and then implementing a Plexus report block to perform analysis (e.g., agreement scores like Gwet's AC1) directly on this Plexus data.
+*   **Status (May, 2025):** Data extraction and API posting is complete. The `capture` command in `Call-Criteria-Python` successfully fetches change data, processes it, determines initial/final states, and upserts `FeedbackItem` and `FeedbackChangeDetail` records into the Plexus API via the `PlexusDashboardClient`. **Focus now shifts to implementing the analysis within Plexus.**
+*   ✅ **Define Feedback Analysis Models:**
+    *   ✅ Add `FeedbackItem` model in `resource.ts`.
+    *   ✅ Add `FeedbackChangeDetail` model in `resource.ts`.
+    *   ✅ Define relationships.
+    *   ✅ Define necessary secondary indexes.
+*   ✅ **Refactor Data Extraction Logic in `analyze.py`:**
+    *   ✅ Isolate Data Fetching Function (`fetch_feedback_change_data`).
+    *   ✅ Refactor `analyze_feedback` to Use Fetch Function.
+    *   ✅ Test `analyze` Command post-refactor.
+*   ✅ **Implement `capture` CLI Command (Call-Criteria-Python):**
+    *   ✅ Create `capture` command stub.
+    *   ✅ Integrate Data Fetching (`fetch_feedback_change_data`).
+    *   ✅ Display Raw Data Summary.
+    *   ✅ Register with Main CLI.
+    *   ✅ Test `capture` command fetching.
+*   ✅ **Add Client-Side Models to `Plexus_2`:**
+    *   ✅ Create Python model classes (`FeedbackItem`, `FeedbackChangeDetail`) in `Plexus_2/plexus/dashboard/api/models/`.
+    *   ✅ Update `Plexus_2/plexus/dashboard/api/models/__init__.py`.
+*   ✅ **Implement API Posting Logic in `capture` Command:**
+    *   ✅ Initialize `PlexusDashboardClient`.
+    *   ✅ Resolve `account_id`.
+    *   ✅ Process Fetched Data (Grouping, Initial/Final State Derivation).
+    *   ✅ Format Data for API (`FeedbackItem`, `FeedbackChangeDetail` payloads).
+    *   ✅ Implement **Upsert Logic:** Query for existing records via `list()` and use `update()` or `create()` accordingly for both `FeedbackItem` and `FeedbackChangeDetail`.
+    *   ✅ **Detailed Logging:** Use `rich.panel.Panel` with `rich.table.Table` for aligned key-value display of payloads being upserted. Include `None` values for comment fields.
+*   ⬜ **Implement `FeedbackAnalysisBlock` (Plexus Python):**
+    *   ⬜ Create new report block class `plexus.reports.blocks.FeedbackAnalysisBlock(BaseReportBlock)`.
+    *   ⬜ Implement `generate(config, params)` method.
+    *   ⬜ **Input Parameters:** Accept parameters like `scorecardId`, `dateRange` (start/end dates) via `params`.
+    *   ⬜ **API Querying:** Use `PlexusDashboardClient` within the block to query the Plexus API for relevant `FeedbackItem` records matching the input parameters (filtering by `accountId`, `scorecardId`, and potentially date range if timestamps are added to `FeedbackItem` or derived from `FeedbackChangeDetail`).
+    *   ⬜ **Analysis Logic:** Implement analysis logic (e.g., Gwet's AC1 calculation) using the fetched `FeedbackItem` data (comparing `initialAnswerValue` and `finalAnswerValue`). Group results by `scoreId` (Plexus Score ID).
+    *   ⬜ **JSON Output:** Return a JSON-serializable dictionary containing the analysis results (e.g., overall AC1, per-score AC1, mismatch counts, total items analyzed). This JSON will be stored in the corresponding `ReportBlock.output` field.
+*   ⬜ **Implement Frontend Component (`FeedbackAnalysis`):**
+    *   ⬜ Create a new React component (e.g., `FeedbackAnalysis.tsx`) specifically for rendering the output of the `FeedbackAnalysisBlock`.
+    *   ⬜ Register this component with the `BlockRegistry`.
+    *   ⬜ The component will receive the `output` JSON from the `ReportBlock` record as props.
+    *   ⬜ Render the analysis results effectively using tables, summary statistics, and potentially charts (similar style to the output of the original `analyze.py` command but driven by the structured JSON data).
 *   ⬜ **Add Testing:**
-    *   ⬜ Write tests for the refactored data fetching logic, the new `capture` command, and future API interaction/frontend components.
-*   ⬜ **Verify Phase 6:** Confirm refactoring is complete, `capture` command fetches data correctly. Subsequent steps will handle API posting and UI.
+    *   ⬜ Write unit/integration tests for `FeedbackAnalysisBlock`.
+    *   ⬜ Add Storybook stories and potentially integration tests for the `FeedbackAnalysis` React component.
+*   ⬜ **Verify Phase 6:** Confirm the `FeedbackAnalysisBlock` correctly queries the Plexus API, performs the analysis, stores results, and the frontend component renders the results accurately within a generated report.
 
 ### Phase 7: Asynchronous Generation Testing (Celery)
 
@@ -416,10 +428,12 @@ This refactoring ensures the core report generation logic is DRY and consistentl
 ### Phase 7: Advanced Features & Polish
 
 *   ⬜ **Implement Core Report Blocks:**
-    *   ⬜ Implement `FeedbackAnalysisBlock`.
+    *   🟡 Implement `FeedbackAnalysisBlock` *(Moved details to Phase 6)*.
     *   ⬜ Implement `ScorePerformanceBlock`.
     *   ⬜ Implement `TopicModelBlock` (if applicable).
-*   ⬜ **Develop Corresponding React Components:** Create specific React components to visualize the data from `ReportBlock.output` JSON (e.g., charts for performance, tables for feedback, topic lists).
+*   ⬜ **Develop Corresponding React Components:**
+    *   🟡 Implement `FeedbackAnalysis` component *(Moved details to Phase 6)*.
+    *   ⬜ Develop components for other core blocks (ScorePerformance, TopicModel).
 *   ⬜ **Enhance Dynamic Rendering:** Improve the report viewing component to intelligently select and render the appropriate React component based on the structure/type information within the `ReportBlock.output` JSON.
 *   ⬜ **Integrate Sharing:** Connect the `Report` model to the `ShareLink` system.
 *   ⬜ **Improve Configuration Editor:** Consider a more user-friendly UI beyond raw YAML/JSON/Markdown editing (future enhancement).
