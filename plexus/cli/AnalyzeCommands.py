@@ -135,7 +135,10 @@ def feedback(
 @click.option('--transform', type=click.Choice(['chunk', 'llm', 'itemize']), default='chunk', 
               help='Transformation method: chunk (default), llm, or itemize')
 @click.option('--prompt-template', type=str, help='Path to prompt template file for LLM transformation (JSON format)')
-@click.option('--llm-model', default='gemma3:27b', help='Ollama model to use for LLM transformation (default: gemma3:27b)')
+@click.option('--llm-model', default='gemma3:27b', help='LLM model to use for transformation (default: gemma3:27b)')
+@click.option('--provider', default='ollama', type=click.Choice(['ollama', 'openai']), 
+              help='LLM provider to use (default: ollama)')
+@click.option('--openai-api-key', help='OpenAI API key (if provider is openai)')
 @click.option('--fresh', is_flag=True, help='Force regeneration of cached files')
 @click.option('--max-retries', type=int, default=2, help='Maximum number of retries for parsing failures (itemize mode only)')
 def topics(
@@ -153,6 +156,8 @@ def topics(
     transform: str,
     prompt_template: str,
     llm_model: str,
+    provider: str,
+    openai_api_key: str,
     fresh: bool,
     max_retries: int,
 ):
@@ -168,12 +173,19 @@ def topics(
       - llm: Use a language model to transform/summarize transcripts
       - itemize: Use a language model to extract structured items, creating multiple rows per transcript
     
+    LLM Providers:
+      - ollama: Use local Ollama models (default)
+      - openai: Use OpenAI API models (requires API key)
+    
     Examples:
         # Default chunking transformation
         plexus analyze topics --input-file path/to/transcripts.parquet
         
-        # LLM-based transformation with custom prompt template
-        plexus analyze topics --input-file path/to/transcripts.parquet --transform llm --prompt-template prompts/summary.json
+        # LLM-based transformation with Ollama
+        plexus analyze topics --input-file path/to/transcripts.parquet --transform llm --llm-model gemma3:27b
+        
+        # LLM-based transformation with OpenAI
+        plexus analyze topics --input-file path/to/transcripts.parquet --transform llm --provider openai --llm-model gpt-3.5-turbo
         
         # Itemized extraction with structured output
         plexus analyze topics --input-file path/to/transcripts.parquet --transform itemize --max-retries 3
@@ -197,7 +209,7 @@ def topics(
     try:
         # Process the transcripts based on transform method
         if transform == 'itemize':
-            logging.info(f"Using itemized LLM transformation with model: {llm_model}")
+            logging.info(f"Using itemized LLM transformation with {provider} model: {llm_model}")
             if prompt_template:
                 logging.info(f"Using prompt template from: {prompt_template}")
             
@@ -207,6 +219,8 @@ def topics(
                     content_column=content_column,
                     prompt_template_file=prompt_template,
                     model=llm_model,
+                    provider=provider,
+                    openai_api_key=openai_api_key,
                     fresh=fresh,
                     max_retries=max_retries
                 )
@@ -216,9 +230,9 @@ def topics(
                 logging.error(f"FULL TRACEBACK:\n{traceback.format_exc()}")
                 raise
             
-            transform_suffix = "itemize"
+            transform_suffix = f"itemize-{provider}"
         elif transform == 'llm':
-            logging.info(f"Using LLM transformation with model: {llm_model}")
+            logging.info(f"Using LLM transformation with {provider} model: {llm_model}")
             if prompt_template:
                 logging.info(f"Using prompt template from: {prompt_template}")
             
@@ -227,9 +241,11 @@ def topics(
                 content_column=content_column,
                 prompt_template_file=prompt_template,
                 model=llm_model,
+                provider=provider,
+                openai_api_key=openai_api_key,
                 fresh=fresh
             )
-            transform_suffix = "llm"
+            transform_suffix = f"llm-{provider}"
         else:  # Default chunking method
             logging.info("Using default chunking transformation")
             _, text_file_path = transform_transcripts(
@@ -264,35 +280,80 @@ def topics(
         return
 
 @analyze.command()
-@click.option('--model', default='gemma3:27b', help='Ollama model to use (default: gemma3:27b)')
+@click.option('--model', default='gemma3:27b', help='Model to use (default: gemma3:27b)')
 @click.option('--prompt', default='Why is the sky blue?', help='Prompt to send to the model')
+@click.option('--provider', default='ollama', type=click.Choice(['ollama', 'openai']), 
+              help='LLM provider to use (default: ollama)')
+@click.option('--openai-api-key', help='OpenAI API key (if provider is openai)')
 def test_ollama(
     model: str,
-    prompt: str
+    prompt: str,
+    provider: str,
+    openai_api_key: str
 ):
     """
-    Test Ollama LLM integration.
+    Test LLM integration.
     
-    This command sends a test request to the Ollama API to verify it's working correctly.
+    This command sends a test request to the specified LLM provider to verify it's working correctly.
     The response from the model will be printed to the console.
     
     Example:
+        # Test with Ollama
         plexus analyze test-ollama --model gemma3:27b --prompt "Explain quantum computing in simple terms"
+        
+        # Test with OpenAI
+        plexus analyze test-ollama --provider openai --model gpt-3.5-turbo --prompt "Explain quantum computing in simple terms"
     """
-    logging.info(f"Testing Ollama integration with model: {model}")
+    logging.info(f"Testing LLM integration with {provider} model: {model}")
     
     try:
-        # Call the test function
-        response = test_ollama_chat(model=model, prompt=prompt)
+        if provider.lower() == 'ollama':
+            # Call the Ollama test function
+            response = test_ollama_chat(model=model, prompt=prompt)
+        elif provider.lower() == 'openai':
+            # We need to use OpenAI via LangChain for consistency
+            try:
+                from langchain_openai import ChatOpenAI
+                
+                # Use provided API key or environment variable
+                api_key = openai_api_key or os.environ.get("OPENAI_API_KEY")
+                if not api_key:
+                    logging.error("OpenAI API key not provided. Set OPENAI_API_KEY environment variable or pass --openai-api-key")
+                    return
+                
+                from langchain.prompts import ChatPromptTemplate
+                
+                # Create a simple prompt
+                prompt_template = ChatPromptTemplate.from_template("{text}")
+                
+                # Initialize the OpenAI LLM
+                llm = ChatOpenAI(model=model, openai_api_key=api_key)
+                
+                # Run LLM on the prompt
+                response = llm.invoke(prompt_template.format(text=prompt))
+                
+                # Extract content from AIMessage for OpenAI responses
+                if hasattr(response, 'content'):
+                    response = response.content
+                
+            except ImportError:
+                logging.error("OpenAI package not installed. Install with: pip install langchain-openai")
+                return
+            except Exception as e:
+                logging.error(f"Error calling OpenAI API: {e}")
+                return
+        else:
+            logging.error(f"Unsupported provider: {provider}")
+            return
         
         # Print the response
-        print("\n--- Ollama Response ---")
+        print(f"\n--- {provider.capitalize()} Response ---")
         print(response)
         print("----------------------\n")
         
-        logging.info("Ollama test completed successfully")
+        logging.info(f"{provider.capitalize()} test completed successfully")
     except Exception as e:
-        logging.error(f"Error testing Ollama: {e}")
+        logging.error(f"Error testing {provider}: {e}")
         return
 
 class PromptAnalyzer:
