@@ -53,6 +53,58 @@ class FeedbackItem(BaseModel):
     }
 
     @classmethod
+    def from_dict(cls, data: Dict[str, Any], client: Optional['PlexusDashboardClient'] = None) -> 'FeedbackItem':
+        """
+        Create a FeedbackItem instance from a dictionary.
+        
+        Args:
+            data: Dictionary containing the FeedbackItem data.
+            client: Optional API client to associate with the instance.
+            
+        Returns:
+            A new FeedbackItem instance.
+        """
+        # Handle datetime fields
+        if 'createdAt' in data and data['createdAt'] and isinstance(data['createdAt'], str):
+            data['createdAt'] = datetime.fromisoformat(data['createdAt'].replace('Z', '+00:00'))
+        if 'updatedAt' in data and data['updatedAt'] and isinstance(data['updatedAt'], str):
+            data['updatedAt'] = datetime.fromisoformat(data['updatedAt'].replace('Z', '+00:00'))
+            
+        # Create instance with data
+        instance = cls(
+            id=data.get('id'),
+            accountId=data.get('accountId'),
+            scorecardId=data.get('scorecardId'),
+            externalId=data.get('externalId'),
+            scoreId=data.get('scoreId'),
+            initialAnswerValue=data.get('initialAnswerValue'),
+            finalAnswerValue=data.get('finalAnswerValue'),
+            initialCommentValue=data.get('initialCommentValue'),
+            finalCommentValue=data.get('finalCommentValue'),
+            isMismatch=data.get('isMismatch'),
+            createdAt=data.get('createdAt'),
+            updatedAt=data.get('updatedAt')
+        )
+        
+        # Set client and raw data
+        instance._client = client
+        instance._raw_data = data
+        
+        # Handle relationships if present
+        if 'changeDetails' in data and data['changeDetails'] and 'items' in data['changeDetails']:
+            # Wrap in try block to prevent errors if change detail data is incomplete
+            try:
+                instance.changeDetails = [
+                    FeedbackChangeDetail.from_dict(item, client) 
+                    for item in data['changeDetails']['items']
+                ]
+            except Exception as e:
+                logger.warning(f"Error loading changeDetails for FeedbackItem {instance.id}: {e}")
+                instance.changeDetails = []
+        
+        return instance
+
+    @classmethod
     def _build_query(
         cls, 
         fields: Optional[List[str]] = None, 
@@ -121,6 +173,11 @@ class FeedbackItem(BaseModel):
     ) -> (List['FeedbackItem'], Optional[str]):
         """List FeedbackItems with optional filtering."""
         query_name = "listFeedbackItems"
+        
+        # Fixed for accounts - corrected the field name to match schema
+        if account_id and not (scorecard_id or score_id or external_id):
+            query_name = "listFeedbackItemByAccountIdAndUpdatedAt"  # Fixed field name
+            
         query_body_items = cls._build_query(fields, relationship_fields)
         query_body = f"""
             {{
@@ -129,42 +186,55 @@ class FeedbackItem(BaseModel):
             }}
         """
         
-        filters = {}
-        if account_id:
-            filters["accountId"] = {"eq": account_id}
-        if scorecard_id:
-            filters["scorecardId"] = {"eq": scorecard_id}
-        if score_id:
-            filters["scoreId"] = {"eq": score_id}
-        if external_id:
-            filters["externalId"] = {"eq": external_id}
+        # Prepare variables based on query type
+        variables = {}
+        if query_name == "listFeedbackItemByAccountIdAndUpdatedAt":
+            variables = {
+                "accountId": account_id,
+                "limit": limit,
+                "nextToken": next_token
+            }
+            # Construct query string for account-based list
+            query_string = f"""
+                query ListFeedbackItemsByAccount($accountId: String!, $limit: Int, $nextToken: String) {{
+                    {query_name}(accountId: $accountId, limit: $limit, nextToken: $nextToken) {query_body}
+                }}
+            """
+        else:
+            # Standard filtering logic for regular list
+            filters = {}
+            if account_id:
+                filters["accountId"] = {"eq": account_id}
+            if scorecard_id:
+                filters["scorecardId"] = {"eq": scorecard_id}
+            if score_id:
+                filters["scoreId"] = {"eq": score_id}
+            if external_id:
+                filters["externalId"] = {"eq": external_id}
+                
+            variables = {
+                "filter": filters if filters else None,
+                "limit": limit,
+                "nextToken": next_token
+            }
             
-        arguments = {
-            "filter": filters if filters else None,
-            "limit": limit,
-            "nextToken": next_token
-        }
+            # Construct the full query string with arguments for standard list
+            query_string = f"""
+                query ListFeedbackItems(
+                    $filter: ModelFeedbackItemFilterInput, 
+                    $limit: Int, 
+                    $nextToken: String
+                ) {{
+                    {query_name}(filter: $filter, limit: $limit, nextToken: $nextToken) {query_body}
+                }}
+            """
         
-        # Remove None values from arguments
-        arguments = {k: v for k, v in arguments.items() if v is not None}
-
-        # Construct the full query string with arguments
-        # Argument definition depends on exact schema (e.g., $filter: ModelFeedbackItemFilterInput)
-        # We'll construct a simple version assuming direct variable passing works
-        # A more robust approach might involve generating argument definitions
-        query_string = f"""
-            query ListFeedbackItems(
-                $filter: ModelFeedbackItemFilterInput, 
-                $limit: Int, 
-                $nextToken: String
-            ) {{
-                {query_name}(filter: $filter, limit: $limit, nextToken: $nextToken) {query_body}
-            }}
-        """
+        # Remove None values from variables
+        variables = {k: v for k, v in variables.items() if v is not None}
         
-        logger.debug(f"Executing GraphQL query: {query_string} with variables: {arguments}")
+        logger.debug(f"Executing GraphQL query: {query_string} with variables: {variables}")
         # Call client.execute directly
-        response = client.execute(query=query_string, variables=arguments)
+        response = client.execute(query=query_string, variables=variables)
         
         items = []
         new_next_token = None
@@ -241,3 +311,94 @@ class FeedbackItem(BaseModel):
     # Add similar load methods for account, scorecard, score if needed
 
     # Update/Delete methods would follow a similar pattern if needed 
+    
+    @classmethod
+    def count_by_account_id(cls, account_id: str, client: 'PlexusDashboardClient') -> int:
+        """
+        Count the number of FeedbackItem records for a specific account.
+        
+        Args:
+            account_id: The ID of the account to count records for.
+            client: The API client to use.
+            
+        Returns:
+            int: The number of FeedbackItem records for the account.
+        """
+        # Use the list method with a limit but only count items
+        items, next_token = cls.list(
+            client=client,
+            account_id=account_id,
+            limit=1000,  # Use a large limit to minimize pagination
+            fields=['id']  # Only fetch ID to minimize data transfer
+        )
+        
+        total_count = len(items)
+        
+        # Handle pagination
+        while next_token:
+            items, next_token = cls.list(
+                client=client,
+                account_id=account_id,
+                limit=1000,
+                next_token=next_token,
+                fields=['id']
+            )
+            total_count += len(items)
+            
+        return total_count
+    
+    @classmethod
+    def delete_all_by_account_id(cls, account_id: str, client: 'PlexusDashboardClient') -> int:
+        """
+        Delete all FeedbackItem records for a specific account.
+        
+        Args:
+            account_id: The ID of the account to delete records for.
+            client: The API client to use.
+            
+        Returns:
+            int: The number of records deleted.
+        """
+        deleted_count = 0
+        batch_size = 50  # Delete in batches to avoid overwhelming the API
+        
+        # First, fetch IDs in batches
+        next_token = None
+        
+        while True:
+            # Fetch a batch of IDs
+            items, next_token = cls.list(
+                client=client,
+                account_id=account_id,
+                limit=batch_size,
+                next_token=next_token,
+                fields=['id']  # Only fetch ID to minimize data transfer
+            )
+            
+            if not items:
+                break
+                
+            # Delete each item in the batch
+            for item in items:
+                try:
+                    mutation = """
+                    mutation DeleteFeedbackItem($input: DeleteFeedbackItemInput!) {
+                        deleteFeedbackItem(input: $input) {
+                            id
+                        }
+                    }
+                    """
+                    result = client.execute(mutation, {'input': {'id': item.id}})
+                    
+                    if result and 'deleteFeedbackItem' in result and result['deleteFeedbackItem']:
+                        deleted_count += 1
+                    else:
+                        logger.warning(f"Failed to delete FeedbackItem {item.id}. Response: {result}")
+                except Exception as e:
+                    logger.error(f"Error deleting FeedbackItem {item.id}: {e}")
+            
+            # If no next token, we've reached the end
+            if not next_token:
+                break
+                
+        return deleted_count 
