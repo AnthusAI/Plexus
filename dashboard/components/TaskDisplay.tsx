@@ -5,6 +5,7 @@ import type { EvaluationTaskProps } from '@/types/tasks/evaluation'
 import type { TaskStatus } from '@/types/shared'
 import EvaluationTask from '@/components/EvaluationTask'
 import { Task, TaskHeader, TaskContent } from '@/components/Task'
+import ReportTask from '@/components/ReportTask'
 
 interface ProcessedTaskStage {
   id: string;
@@ -52,6 +53,12 @@ interface TaskDisplayProps {
     isPredictedClassDistributionBalanced?: boolean | null
     scoreResults?: any // Accept any type for score results - we'll standardize it internally
   }
+  reportData?: {
+    id: string
+    name: string
+    createdAt: string
+    updatedAt?: string
+  }
   controlButtons?: React.ReactNode
   isFullWidth?: boolean
   onToggleFullWidth?: () => void
@@ -71,6 +78,7 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
   variant = 'grid',
   task,
   evaluationData,
+  reportData,
   onClick,
   controlButtons,
   isFullWidth,
@@ -85,7 +93,7 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
   // Add debug logging for onClose prop
   console.log('TaskDisplay component received props:', {
     variant,
-    taskId: evaluationData.id,
+    taskId: reportData?.id || evaluationData?.id,
     hasOnClose: !!onClose,
     hasOnToggleFullWidth: !!onToggleFullWidth
   });
@@ -93,15 +101,16 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
   const [processedTask, setProcessedTask] = useState<ProcessedTask | null>(null)
   const [commandDisplay, setCommandDisplay] = useState(initialCommandDisplay)
 
-  // Add detailed logging for evaluationData
-  console.log('TaskDisplay received evaluationData:', {
-    id: evaluationData.id,
-    hasScoreResults: !!evaluationData.scoreResults,
-    scoreResultsType: evaluationData.scoreResults ? typeof evaluationData.scoreResults : 'undefined',
-    scoreResultsItemsType: evaluationData.scoreResults?.items ? typeof evaluationData.scoreResults.items : 'undefined',
-    scoreResultsItemsLength: evaluationData.scoreResults?.items?.length ?? 0,
-    scoreResultsItemsIsArray: Array.isArray(evaluationData.scoreResults?.items),
-    firstScoreResult: evaluationData.scoreResults?.items?.[0],
+  // Add detailed logging for evaluationData or reportData
+  console.log('TaskDisplay received data:', {
+    id: reportData?.id || evaluationData?.id,
+    type: reportData ? 'Report' : evaluationData?.type,
+    hasScoreResults: !!evaluationData?.scoreResults,
+    scoreResultsType: evaluationData?.scoreResults ? typeof evaluationData.scoreResults : 'undefined',
+    scoreResultsItemsType: evaluationData?.scoreResults?.items ? typeof evaluationData.scoreResults.items : 'undefined',
+    scoreResultsItemsLength: evaluationData?.scoreResults?.items?.length ?? 0,
+    scoreResultsItemsIsArray: Array.isArray(evaluationData?.scoreResults?.items),
+    firstScoreResult: evaluationData?.scoreResults?.items?.[0],
     variant
   });
 
@@ -109,8 +118,8 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
     async function processTaskData() {
       if (!task) {
         console.debug('TaskDisplay: No task data provided', {
-          evaluationId: evaluationData.id,
-          evaluationStatus: evaluationData.status
+          dataId: reportData?.id || evaluationData?.id,
+          evaluationStatus: evaluationData?.status
         });
         setProcessedTask(null);
         return;
@@ -129,6 +138,8 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
 
   // Memoize score results transformation
   const transformedScoreResults = useMemo(() => {
+    if (!evaluationData) return [];
+
     console.log('TaskDisplay transforming score results:', {
       hasResults: !!evaluationData.scoreResults,
       scoreResultsType: evaluationData.scoreResults ? typeof evaluationData.scoreResults : 'undefined',
@@ -216,93 +227,168 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
     });
 
     return transformed;
-  }, [evaluationData.scoreResults]);
+  }, [evaluationData]);
 
-  const taskProps = {
-    task: {
-      id: evaluationData.id,
-      type: evaluationData.type,
-      scorecard: evaluationData.scorecard?.name || '-',
-      score: evaluationData.score?.name || '-',
-      time: evaluationData.createdAt || new Date().toISOString(),
-      startedAt: processedTask?.startedAt || task?.startedAt || evaluationData.startedAt,
-      completedAt: processedTask?.completedAt || task?.completedAt,
-      estimatedCompletionAt: processedTask?.estimatedCompletionAt || task?.estimatedCompletionAt,
-      status: (processedTask?.status || task?.status || evaluationData.status || 'PENDING') as TaskStatus,
-      data: {
-        id: evaluationData.id,
-        title: `${evaluationData.scorecard?.name || '-'} - ${evaluationData.score?.name || '-'}`,
-        metrics: typeof evaluationData.metrics === 'string' ? 
-          JSON.parse(evaluationData.metrics).map((m: any) => ({
-            name: m.name || 'Unknown',
-            value: m.value || 0,
-            unit: m.unit,
-            maximum: m.maximum,
-            priority: m.priority || false
-          })) : (evaluationData.metrics || []).map((m: any) => ({
-            name: m.name || 'Unknown',
-            value: m.value || 0,
-            unit: m.unit,
-            maximum: m.maximum,
-            priority: m.priority || false
-          })),
-        accuracy: evaluationData.accuracy || null,
-        processedItems: Number(evaluationData.processedItems || 0),
-        totalItems: Number(evaluationData.totalItems || 0),
-        progress: calculateProgress(evaluationData.processedItems, evaluationData.totalItems),
-        inferences: Number(evaluationData.inferences || 0),
-        cost: evaluationData.cost ?? null,
-        status: (processedTask?.status || task?.status || evaluationData.status || 'PENDING') as TaskStatus,
-        elapsedSeconds: evaluationData.elapsedSeconds ?? null,
-        estimatedRemainingSeconds: evaluationData.estimatedRemainingSeconds ?? null,
-        startedAt: processedTask?.startedAt || task?.startedAt || evaluationData.startedAt,
-        completedAt: processedTask?.completedAt || task?.completedAt,
-        estimatedCompletionAt: processedTask?.estimatedCompletionAt || task?.estimatedCompletionAt,
-        errorMessage: evaluationData.errorMessage || undefined,
-        errorDetails: evaluationData.errorDetails || undefined,
-        confusionMatrix: typeof evaluationData.confusionMatrix === 'string' ? 
-          JSON.parse(evaluationData.confusionMatrix) : evaluationData.confusionMatrix,
-        metricsExplanation: evaluationData.metricsExplanation || null,
-        scoreGoal: evaluationData.scoreGoal || null,
-        datasetClassDistribution: typeof evaluationData.datasetClassDistribution === 'string' ? 
-          JSON.parse(evaluationData.datasetClassDistribution) : evaluationData.datasetClassDistribution,
-        isDatasetClassDistributionBalanced: evaluationData.isDatasetClassDistributionBalanced ?? null,
-        predictedClassDistribution: typeof evaluationData.predictedClassDistribution === 'string' ? 
-          JSON.parse(evaluationData.predictedClassDistribution) : evaluationData.predictedClassDistribution,
-        isPredictedClassDistributionBalanced: evaluationData.isPredictedClassDistributionBalanced ?? null,
-        scoreResults: transformedScoreResults,
-        task: processedTask ? {
-          ...processedTask,
-          accountId: evaluationData.id,
-          stages: {
-            items: processedTask.stages.map((stage: ProcessedTaskStage) => ({
-              id: stage.id,
-              name: stage.name,
-              order: stage.order,
-              status: stage.status,
-              statusMessage: stage.statusMessage,
-              startedAt: stage.startedAt,
-              completedAt: stage.completedAt,
-              estimatedCompletionAt: stage.estimatedCompletionAt,
-              processedItems: stage.processedItems,
-              totalItems: stage.totalItems
-            }))
-          }
-        } : null
-      }
-    },
-    onClick,
-    controlButtons,
-    isFullWidth,
-    onToggleFullWidth,
-    onClose,
-    isSelected,
-    extra,
-    selectedScoreResultId,
-    onSelectScoreResult
-  } as EvaluationTaskProps
+  // Define base properties, prefer reportData if available
+  const displayId = reportData?.id || evaluationData?.id || 'unknown-id';
+  const displayType = reportData ? 'Report' : evaluationData?.type || 'Unknown';
+  const displayTime = reportData?.createdAt || evaluationData?.createdAt || new Date().toISOString();
+  const displayTitle = reportData?.name || (evaluationData ? `${evaluationData.scorecard?.name || '-'} - ${evaluationData.score?.name || '-'}` : 'Report');
 
-  return <EvaluationTask {...taskProps} variant={variant} />
+  // Construct props common to both EvaluationTask and ReportTask
+  const commonTaskProps = {
+    id: displayId,
+    type: displayType,
+    time: displayTime,
+    startedAt: (processedTask?.startedAt || task?.startedAt || evaluationData?.startedAt) ?? undefined,
+    completedAt: (processedTask?.completedAt || task?.completedAt) ?? undefined,
+    estimatedCompletionAt: (processedTask?.estimatedCompletionAt || task?.estimatedCompletionAt) ?? undefined,
+    status: (processedTask?.status || task?.status || evaluationData?.status || 'PENDING') as TaskStatus,
+    stages: processedTask ? processedTask.stages.map((stage: ProcessedTaskStage) => {
+      const isCompleted = stage.status === 'COMPLETED';
+      const isRunning = stage.status === 'RUNNING';
+      const isFailed = stage.status === 'FAILED';
+
+      return {
+        id: stage.id,
+        key: stage.name,
+        label: stage.name,
+        color: isCompleted ? 'bg-primary' :
+               isRunning ? 'bg-secondary' :
+               isFailed ? 'bg-false' :
+               'bg-neutral',
+        name: stage.name,
+        order: stage.order,
+        status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+        statusMessage: stage.statusMessage,
+        startedAt: stage.startedAt,
+        completedAt: stage.completedAt,
+        estimatedCompletionAt: stage.estimatedCompletionAt,
+        processedItems: stage.processedItems,
+        totalItems: stage.totalItems,
+        completed: isCompleted
+      };
+    }) : undefined,
+    title: displayTitle,
+    command: processedTask?.command,
+    description: processedTask?.description,
+    dispatchStatus: processedTask?.dispatchStatus,
+    metadata: processedTask?.metadata,
+    errorMessage: processedTask?.errorMessage || (task ? (task.errorMessage || evaluationData?.errorMessage) : evaluationData?.errorMessage) || undefined,
+    errorDetails: processedTask?.errorDetails || (task ? (task.errorDetails || evaluationData?.errorDetails) : evaluationData?.errorDetails) || undefined,
+    celeryTaskId: (processedTask?.celeryTaskId || task?.celeryTaskId) ?? undefined,
+    workerNodeId: (processedTask?.workerNodeId || task?.workerNodeId) ?? undefined,
+  };
+
+  // Conditionally render EvaluationTask or ReportTask
+  if (evaluationData) {
+    // Construct props specific to EvaluationTask
+    const evaluationTaskProps = {
+      task: {
+        ...commonTaskProps,
+        scorecard: evaluationData.scorecard?.name || '-',
+        score: evaluationData.score?.name || '-',
+        data: {
+          id: displayId,
+          title: displayTitle,
+          metrics: typeof evaluationData.metrics === 'string' ?
+            JSON.parse(evaluationData.metrics).map((m: any) => ({
+              name: m.name || 'Unknown',
+              value: m.value || 0,
+              unit: m.unit,
+              maximum: m.maximum,
+              priority: m.priority || false
+            })) : (evaluationData.metrics || []).map((m: any) => ({
+              name: m.name || 'Unknown',
+              value: m.value || 0,
+              unit: m.unit,
+              maximum: m.maximum,
+              priority: m.priority || false
+            })),
+          accuracy: evaluationData.accuracy || null,
+          processedItems: Number(evaluationData.processedItems || 0),
+          totalItems: Number(evaluationData.totalItems || 0),
+          progress: calculateProgress(evaluationData.processedItems, evaluationData.totalItems),
+          inferences: Number(evaluationData.inferences || 0),
+          cost: evaluationData.cost ?? null,
+          status: commonTaskProps.status,
+          elapsedSeconds: evaluationData.elapsedSeconds ?? null,
+          estimatedRemainingSeconds: evaluationData.estimatedRemainingSeconds ?? null,
+          startedAt: commonTaskProps.startedAt,
+          completedAt: commonTaskProps.completedAt,
+          estimatedCompletionAt: commonTaskProps.estimatedCompletionAt,
+          errorMessage: commonTaskProps.errorMessage,
+          errorDetails: commonTaskProps.errorDetails,
+          confusionMatrix: typeof evaluationData.confusionMatrix === 'string' ?
+            JSON.parse(evaluationData.confusionMatrix) : evaluationData.confusionMatrix,
+          metricsExplanation: evaluationData.metricsExplanation || null,
+          scoreGoal: evaluationData.scoreGoal || null,
+          datasetClassDistribution: typeof evaluationData.datasetClassDistribution === 'string' ?
+            JSON.parse(evaluationData.datasetClassDistribution) : evaluationData.datasetClassDistribution,
+          isDatasetClassDistributionBalanced: evaluationData.isDatasetClassDistributionBalanced ?? null,
+          predictedClassDistribution: typeof evaluationData.predictedClassDistribution === 'string' ?
+            JSON.parse(evaluationData.predictedClassDistribution) : evaluationData.predictedClassDistribution,
+          isPredictedClassDistributionBalanced: evaluationData.isPredictedClassDistributionBalanced ?? null,
+          scoreResults: transformedScoreResults,
+          task: processedTask ? { 
+              id: processedTask.id,
+              status: processedTask.status,
+              stages: commonTaskProps.stages,
+              errorMessage: commonTaskProps.errorMessage,
+              errorDetails: commonTaskProps.errorDetails
+          } : null
+        }
+      },
+      onClick,
+      controlButtons,
+      isFullWidth,
+      onToggleFullWidth,
+      onClose,
+      isSelected,
+      extra,
+      selectedScoreResultId,
+      onSelectScoreResult
+    } as EvaluationTaskProps;
+
+    return <EvaluationTask {...evaluationTaskProps} variant={variant} />;
+
+  } else if (reportData) {
+    // Construct props for ReportTask
+    const reportStatusRaw = commonTaskProps.status;
+    const reportStatusValue = reportStatusRaw ? reportStatusRaw.toUpperCase() : 'PENDING';
+    const reportStatusFinal = ['PENDING', 'RUNNING', 'COMPLETED', 'FAILED'].includes(reportStatusValue)
+      ? reportStatusValue as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
+      : undefined;
+      
+    const reportTaskProps = {
+      task: {
+        ...commonTaskProps,
+        status: reportStatusFinal, // Override status with the validated/refined one
+        scorecard: '-',
+        score: '-',
+        data: {
+            id: reportData.id,
+            title: displayTitle,
+            name: reportData.name,
+            createdAt: reportData.createdAt,
+            updatedAt: reportData.updatedAt
+        }
+      },
+      variant,
+      isSelected,
+      onClick,
+      controlButtons,
+      isFullWidth,
+      onToggleFullWidth,
+      onClose,
+      extra
+    };
+    return <ReportTask {...reportTaskProps} />;
+  }
+
+  // Fallback or loading state if neither data type is provided
+  console.warn("TaskDisplay rendered without evaluationData or reportData");
+  return <div>Loading...</div>;
 }, (prevProps, nextProps) => {
   // Custom comparison function to prevent unnecessary re-renders
   // Only re-render if these specific props change

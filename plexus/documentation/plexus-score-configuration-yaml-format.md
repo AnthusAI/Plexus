@@ -139,6 +139,20 @@ Segment text into "before" and "after" parts based on a found quote:
     before_quote: before  # Text before the quote
     after_quote: after    # Text after the quote
 ```
+## Extractor Usage
+
+```yaml
+      - name: metadata_extractor
+        class: Extractor
+        trust_model_output: true
+        batch: false
+        system_message: |-
+          Your job is to extract XYZ from the transcript
+        user_message: |-
+          {{text}}
+        output:
+          extracted_text: extracted_text
+```
 
 ## LogicalClassifier Usage
 

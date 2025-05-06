@@ -256,6 +256,19 @@ class LangGraphScore(Score, LangChainUser):
                                   if node['name'] == previous_node), None)
                 
                 if node_config:
+                    # Handle output field in node config directly - this is critical for node-level output aliasing
+                    if 'output' in node_config:
+                        value_setter_name = f"{previous_node}_value_setter"
+                        workflow.add_node(
+                            value_setter_name,
+                            LangGraphScore.create_value_setter_node(
+                                node_config['output']
+                            )
+                        )
+                        workflow.add_edge(previous_node, value_setter_name)
+                        workflow.add_edge(value_setter_name, node_name)
+                        continue  # Skip other edge processing for this node
+                        
                     # Handle edge clause - direct routing with output aliasing
                     if 'edge' in node_config:
                         edge = node_config['edge']
@@ -794,14 +807,19 @@ class LangGraphScore(Score, LangChainUser):
             # Add aliased values
             for alias, original in output_mapping.items():
                 if hasattr(state, original):
-                    new_state[alias] = getattr(state, original)
-                    value = str(getattr(state, original))
+                    original_value = getattr(state, original)
+                    new_state[alias] = original_value
+                    # Also directly set on the state object to ensure it's accessible
+                    setattr(state, alias, original_value)
+                    value = str(original_value)
                     if len(value) > 80:
                         value = value[:77] + "..."
                     logging.info(f"Added alias {alias}={value} from {original}")
                 else:
                     # If the original isn't a state variable, treat it as a literal value
                     new_state[alias] = original
+                    # Also directly set on the state object
+                    setattr(state, alias, original)
                     logging.info(f"Added literal value {alias}={original}")
             
             # Create new state with extra fields allowed
@@ -924,14 +942,19 @@ class LangGraphScore(Score, LangChainUser):
             # Add aliased values
             for alias, original in output_mapping.items():
                 if hasattr(state, original):
-                    new_state[alias] = getattr(state, original)
-                    value = str(getattr(state, original))
+                    original_value = getattr(state, original)
+                    new_state[alias] = original_value
+                    # Also directly set on the state object to ensure it's accessible
+                    setattr(state, alias, original_value)
+                    value = str(original_value)
                     if len(value) > 80:
                         value = value[:77] + "..."
                     logging.info(f"Added alias {alias}={value} from {original}")
                 else:
                     # If the original isn't a state variable, treat it as a literal value
                     new_state[alias] = original
+                    # Also directly set on the state object
+                    setattr(state, alias, original)
                     logging.info(f"Added literal value {alias}={original}")
             
             # Create new state with extra fields allowed
@@ -1028,6 +1051,11 @@ class LangGraphScore(Score, LangChainUser):
                     'source': graph_result.get('source')
                 }
             )
+            
+            # Include ALL fields from graph_result in the metadata
+            for key, value in graph_result.items():
+                if key not in ['value', 'metadata'] and key not in result.metadata:
+                    result.metadata[key] = value
             
             # If metadata with trace exists in graph_result, add it to the result metadata
             if 'metadata' in graph_result and graph_result['metadata'] is not None:

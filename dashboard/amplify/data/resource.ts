@@ -35,6 +35,11 @@ type DatasetVersionIndexFields = "datasetId";
 type DatasetProfileIndexFields = "datasetId" | "datasetVersionId";
 type ShareLinkIndexFields = "token" | "resourceType" | "resourceId" | "accountId";
 type ScoreVersionIndexFields = "scoreId" | "versionNumber" | "isFeatured";
+type ReportConfigurationIndexFields = "accountId" | "name";
+type ReportIndexFields = "accountId" | "reportConfigurationId" | "createdAt" | "updatedAt" | "taskId";
+type ReportBlockIndexFields = "reportId" | "name" | "position";
+type FeedbackItemIndexFields = "accountId" | "scorecardId" | "scoreId" | "externalId" | "updatedAt"; // UPDATED: Renamed formId to externalId
+type FeedbackChangeDetailIndexFields = "feedbackItemId" | "changedAt";
 
 // Define the share token handler function
 const getResourceByShareTokenHandler = defineFunction({
@@ -55,6 +60,9 @@ const schema = a.schema({
             scoringJobs: a.hasMany('ScoringJob', 'accountId'),
             scoreResults: a.hasMany('ScoreResult', 'accountId'),
             tasks: a.hasMany('Task', 'accountId'),
+            reportConfigurations: a.hasMany('ReportConfiguration', 'accountId'),
+            reports: a.hasMany('Report', 'accountId'),
+            feedbackItems: a.hasMany('FeedbackItem', 'accountId'),
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
@@ -78,6 +86,7 @@ const schema = a.schema({
             scoreResults: a.hasMany('ScoreResult', 'scorecardId'),
             tasks: a.hasMany('Task', 'scorecardId'),
             datasets: a.hasMany('Dataset', 'scorecardId'),
+            feedbackItems: a.hasMany('FeedbackItem', 'scorecardId'),
             externalId: a.string(),
             itemId: a.string(),
             item: a.belongsTo('Item', 'itemId'),
@@ -116,6 +125,7 @@ const schema = a.schema({
             description: a.string(),
             order: a.integer().required(),
             type: a.string().required(),
+            targetAgreement: a.float(),
             accuracy: a.float(),
             version: a.string(),
             aiProvider: a.string(),
@@ -130,6 +140,7 @@ const schema = a.schema({
             versions: a.hasMany('ScoreVersion', 'scoreId'),
             items: a.hasMany('Item', 'scoreId'),
             scoreResults: a.hasMany('ScoreResult', 'scoreId'),
+            feedbackItems: a.hasMany('FeedbackItem', 'scoreId'),
             championVersionId: a.string(),
             championVersion: a.belongsTo('ScoreVersion', 'championVersionId'),
             externalId: a.string().required()
@@ -402,7 +413,8 @@ const schema = a.schema({
             celeryTaskId: a.string(),
             workerNodeId: a.string(),
             updatedAt: a.datetime(),
-            evaluation: a.hasOne('Evaluation', 'taskId')
+            evaluation: a.hasOne('Evaluation', 'taskId'),
+            report: a.hasOne('Report', 'taskId')
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
@@ -546,7 +558,126 @@ const schema = a.schema({
             allow.publicApiKey(),
             allow.authenticated()
         ])
-        .handler(a.handler.function(getResourceByShareTokenHandler))
+        .handler(a.handler.function(getResourceByShareTokenHandler)),
+
+    ReportConfiguration: a
+        .model({
+            name: a.string().required(),
+            description: a.string(),
+            accountId: a.string().required(),
+            account: a.belongsTo('Account', 'accountId'),
+            configuration: a.string().required(),
+            createdAt: a.datetime().required(),
+            updatedAt: a.datetime().required(),
+            reports: a.hasMany('Report', 'reportConfigurationId'),
+        })
+        .authorization((allow: AuthorizationCallback) => [
+            allow.publicApiKey(),
+            allow.authenticated()
+        ])
+        .secondaryIndexes((idx: (field: ReportConfigurationIndexFields) => any) => [
+            idx("accountId").sortKeys(["updatedAt"]),
+            idx("accountId").sortKeys(["name"])
+        ]),
+
+    Report: a
+        .model({
+            name: a.string(), // Can be auto-generated or user-defined
+            createdAt: a.datetime().required(),
+            parameters: a.json(), // Parameters used for this specific run
+            output: a.string(), // Generated report output (original markdown template)
+            accountId: a.string().required(),
+            account: a.belongsTo('Account', 'accountId'),
+            reportConfigurationId: a.string().required(),
+            reportConfiguration: a.belongsTo('ReportConfiguration', 'reportConfigurationId'),
+            reportBlocks: a.hasMany('ReportBlock', 'reportId'), // Link to ReportBlock
+            updatedAt: a.datetime().required(),
+            taskId: a.string(), // Add foreign key for Task
+            task: a.belongsTo('Task', 'taskId'), // Add relationship to Task
+        })
+        .authorization((allow: AuthorizationCallback) => [
+            allow.publicApiKey(),
+            allow.authenticated()
+        ])
+        .secondaryIndexes((idx: (field: ReportIndexFields) => any) => [
+            idx("accountId").sortKeys(["updatedAt"]),
+            idx("reportConfigurationId").sortKeys(["createdAt"]),
+            idx("taskId") // Add index by taskId
+        ]),
+
+    ReportBlock: a
+        .model({
+            reportId: a.string().required(),
+            report: a.belongsTo('Report', 'reportId'),
+            name: a.string(), // Optional name for the block
+            position: a.integer().required(), // Required position for ordering
+            type: a.string().required(), // Required type for the block
+            output: a.json().required(), // JSON output from the block's execution
+            log: a.string(), // Optional log output from the block
+            createdAt: a.datetime().required(),
+            updatedAt: a.datetime().required(),
+        })
+        .authorization((allow: AuthorizationCallback) => [
+            allow.publicApiKey(),
+            allow.authenticated()
+        ])
+        .secondaryIndexes((idx: (field: ReportBlockIndexFields) => any) => [
+            idx("reportId").sortKeys(["name"]).name("byReportAndName"),
+            idx("reportId").sortKeys(["position"]).name("byReportAndPosition")
+        ]),
+
+    FeedbackItem: a
+        .model({
+            accountId: a.string().required(),
+            account: a.belongsTo('Account', 'accountId'),
+            scorecardId: a.string().required(),
+            scorecard: a.belongsTo('Scorecard', 'scorecardId'),
+            externalId: a.string().required(),
+            scoreId: a.string().required(),
+            score: a.belongsTo('Score', 'scoreId'),
+            initialAnswerValue: a.string(),
+            finalAnswerValue: a.string(),
+            initialCommentValue: a.string(),
+            finalCommentValue: a.string(),
+            isMismatch: a.boolean(),
+            changeDetails: a.hasMany('FeedbackChangeDetail', 'feedbackItemId'),
+            createdAt: a.datetime().required(),
+            updatedAt: a.datetime().required(),
+        })
+        .authorization((allow: AuthorizationCallback) => [
+            allow.publicApiKey(),
+            allow.authenticated()
+        ])
+        .secondaryIndexes((idx: (field: FeedbackItemIndexFields) => any) => [
+            idx("accountId").sortKeys(["scorecardId", "scoreId", "externalId"]).name("byAccountScorecardScoreExternalId"),
+            idx("accountId").sortKeys(["updatedAt"]),
+            idx("scoreId").sortKeys(["externalId"]),
+            idx("externalId")
+        ]),
+
+    FeedbackChangeDetail: a
+        .model({
+            feedbackItemId: a.string().required(),
+            feedbackItem: a.belongsTo('FeedbackItem', 'feedbackItemId'),
+            changeType: a.enum(['Response', 'Score', 'Calibration']), // Type of change record
+            externalId: a.string().required(), // RENAMED from originalDbRecordId
+            changedAt: a.datetime().required(),
+            changedBy: a.string(),
+            initialAnswerValue: a.string(), // RENAMED from previousAnswerValue
+            finalAnswerValue: a.string(), // RENAMED from newAnswerValue
+            initialCommentValue: a.string(), // RENAMED from previousCommentValue
+            finalCommentValue: a.string(), // RENAMED from newCommentValue
+            editCommentValue: a.string(), // Specific to score changes
+            createdAt: a.datetime().required(),
+            updatedAt: a.datetime().required(), // ADDED
+        })
+        .authorization((allow: AuthorizationCallback) => [
+            allow.publicApiKey(),
+            allow.authenticated()
+        ])
+        .secondaryIndexes((idx: (field: FeedbackChangeDetailIndexFields) => any) => [
+            idx("feedbackItemId").sortKeys(["changedAt"])
+        ]),
 });
 
 export type Schema = ClientSchema<typeof schema>;
