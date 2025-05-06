@@ -87,8 +87,10 @@ def main():
     except click.exceptions.Exit:
         pass
     except Exception as e:
-        escaped_error = escape(str(e))
-        console.print(f"[red]Error: {escaped_error}[/red]")
+        import traceback
+        console.print(f"[red]Error: {escape(str(e))}[/red]")
+        console.print(f"[red]Traceback:[/red]")
+        console.print(traceback.format_exc())
         sys.exit(1)
 
 if __name__ == '__main__':

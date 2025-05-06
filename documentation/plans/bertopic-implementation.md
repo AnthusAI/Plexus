@@ -1,7 +1,7 @@
 # BERTopic Implementation Plan
 
 ## Overview
-Implement topic modeling on call transcripts using BERTopic, focusing on customer speaking turns. The implementation will process Parquet files containing call transcripts into manageable chunks for analysis.
+Implement topic modeling on call transcripts using BERTopic, focusing on customer speaking turns. The implementation will process Parquet files containing call transcripts into manageable chunks for analysis, with options for LLM-based transformation including direct question extraction.
 
 ## Command Examples
 ### Basic Usage
@@ -17,6 +17,33 @@ plexus analyze topics --input-file <path> --content-column text
 
 # Specify output directory
 plexus analyze topics --input-file <path> --output-dir ./output
+```
+
+### LLM Transformation (New)
+```bash
+# Use LLM to transform transcripts (with default prompt)
+plexus analyze topics --input-file <path> --transform llm
+
+# Use custom prompt template
+plexus analyze topics --input-file <path> --transform llm --prompt-template plexus/cli/bertopic/prompts/summary.json
+
+# Specify LLM model
+plexus analyze topics --input-file <path> --transform llm --llm-model gemma3:27b
+
+# Force regeneration of cached files
+plexus analyze topics --input-file <path> --transform llm --fresh
+```
+
+### Customer Question Extraction (New)
+```bash
+# Extract direct customer questions from transcripts
+plexus analyze topics --input-file <path> --transform itemize
+
+# Use custom prompt template for question extraction
+plexus analyze topics --input-file <path> --transform itemize --prompt-template plexus/cli/bertopic/prompts/itemize.json
+
+# Customize retry behavior for parsing failures
+plexus analyze topics --input-file <path> --transform itemize --max-retries 3
 ```
 
 ### File Inspection
@@ -56,13 +83,13 @@ plexus analyze topics \
 plexus analyze test-ollama
 
 # Test with a specific model
-plexus analyze test-ollama --model llama3:8b
+plexus analyze test-ollama --model gemma3:27b
 
 # Test with a custom prompt
 plexus analyze test-ollama --prompt "Explain the concept of topic modeling in simple terms"
 
 # Test with both custom model and prompt
-plexus analyze test-ollama --model codellama:7b --prompt "Write a Python function to calculate Fibonacci numbers"
+plexus analyze test-ollama --model llama3:8b --prompt "Write a Python function to calculate Fibonacci numbers"
 ```
 
 ## Progress
@@ -75,6 +102,8 @@ plexus analyze test-ollama --model codellama:7b --prompt "Write a Python functio
    - ✅ Implemented `transformer.py` with:
      - ✅ `extract_speaking_turns()` function
      - ✅ `transform_transcripts()` function
+     - ✅ `transform_transcripts_llm()` function
+     - ✅ `transform_transcripts_itemize()` function
      - ✅ `inspect_data()` utility
    - ✅ Successfully extracts customer speaking turns
    - ✅ Preserves metadata in Parquet file
@@ -86,26 +115,29 @@ plexus analyze test-ollama --model codellama:7b --prompt "Write a Python functio
    - ✅ Added data inspection option
    - ✅ Implemented content column configuration
    - ✅ Added `test-ollama` command for LLM integration testing
+   - ✅ Added LLM-based transformation option
+   - ✅ Added customer question extraction option
 
 4. Verification
    - ✅ Inspected transformed Parquet file
    - ✅ Checked text file format
    - ✅ Validated customer turn extraction
 
-### In Progress
-1. LLM Integration
+5. LLM Integration
    - ✅ Added Ollama test command
-   - [ ] Set up environment for LLM usage
-   - [ ] Test various Ollama models
+   - ✅ Integrated LLM-based transformation with Ollama and LangChain
+   - ✅ Added prompt template support
+   - ✅ Added robust JSON parsing for LLM outputs
+   - ✅ Implemented customer question extraction with structured output
 
-2. BERTopic Integration
+### In Progress
+1. BERTopic Integration
    - [ ] Configure BERTopic with default settings
    - [ ] Generate topic visualizations
    - [ ] Add analysis to CLI command
 
-3. Enhancements
+2. Enhancements
    - [ ] Add progress tracking
-   - [ ] Improve error handling
    - [ ] Add more CLI options (e.g., BERTopic parameters)
    - [ ] Integrate LLM for topic labeling
 
@@ -119,6 +151,9 @@ plexus/
 │       ├── transformer.py
 │       ├── analyzer.py
 │       ├── ollama_test.py
+│       ├── prompts/
+│       │   ├── itemize.json
+│       │   └── summary.json
 │       └── test_inspect.py
 ```
 
@@ -132,27 +167,66 @@ plexus/
   - Splits on "Agent:" and "Customer:" markers
   - Filters out very short turns (< 2 words)
   - Preserves all metadata in Parquet file
+- LLM-based transformation:
+  - Processes entire transcripts through Ollama LLM
+  - Uses configurable prompt templates via JSON files
+  - Creates more concise, focused text for topic analysis
+  - Preserves metadata in Parquet file
+- Customer question extraction:
+  - Uses structured output parsing with Pydantic models
+  - Extracts direct questions asked by customers from transcripts
+  - Creates a separate row for each extracted question
+  - Includes retry logic for parsing failures
+  - Handles JSON parsing with robust error handling
+  - Preserves all metadata from original rows
 
 ### BERTopic Configuration
 - Use default settings for proof-of-concept
 - Focus on customer speaking turns only
 - Generate basic visualizations
 
+## Prompt Template Format
+LLM transformation uses JSON files for prompt templates:
+
+```json
+{
+  "template": "Extract the main topics from this call transcript. For each topic, provide 1-2 concise sentences in bullet point format. Focus on customer issues, product mentions, and key discussion points only.\n\n{text}\n\nTopics:"
+}
+```
+
+The template must include a `{text}` placeholder where the transcript will be inserted.
+
+### Question Extraction Template Format
+Question extraction templates also use JSON files with escaped curly braces for JSON structure:
+
+```json
+{
+  "template": "You are a helpful assistant that extracts customer questions from call transcripts. Your task is to identify the direct questions that customers asked during the call.\n\nAnalyze this call transcript and identify 1-10 direct questions asked by the customer. Extract each question as a direct quote exactly as the customer phrased it.\n\nYou MUST return ONLY a valid JSON object without any explanation text or markdown formatting.\n\nThe JSON object MUST follow this EXACT structure:\n{{\n  \"items\": [\n    {{\n      \"quote\": \"How much was I charged for my recent purchase?\"\n    }},\n    {{\n      \"quote\": \"When will my order be delivered?\"\n    }}\n  ]\n}}\n\nTranscript:\n{text}\n\n{format_instructions}"
+}
+```
+
+The template must include `{text}` and `{format_instructions}` placeholders, and any JSON structure in the template must use double curly braces `{{` and `}}` to escape them in the string formatter.
+
 ## Testing Plan
 1. [x] Test data transformation
    - [x] Verify customer turn extraction
    - [x] Check metadata preservation
    - [x] Validate text file format
-2. [ ] Test BERTopic analysis
+2. [x] Test LLM integration
+   - [x] Verify Ollama connectivity
+   - [x] Test JSON parsing from LLM output
+   - [x] Test structured question extraction
+3. [ ] Test BERTopic analysis
    - [ ] Verify topic generation
    - [ ] Check visualization output
-3. [ ] Integration testing with CLI
+4. [ ] Integration testing with CLI
 
 ## Future Enhancements
 1. Customizable BERTopic parameters
 2. Advanced visualization options
 3. Topic labeling and interpretation
 4. Integration with dashboard
+5. Support for more LLM providers beyond Ollama
 
 ## Dependencies
 - pandas
@@ -160,3 +234,6 @@ plexus/
 - sentence-transformers
 - hdbscan
 - plotly
+- langchain
+- ollama
+- pydantic

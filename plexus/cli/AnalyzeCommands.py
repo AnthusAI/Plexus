@@ -11,7 +11,7 @@ from pyairtable.formulas import match
 import dotenv
 import os
 from pathlib import Path
-from plexus.cli.bertopic.transformer import transform_transcripts, inspect_data
+from plexus.cli.bertopic.transformer import transform_transcripts, inspect_data, transform_transcripts_llm, transform_transcripts_itemize
 from plexus.cli.bertopic.analyzer import analyze_topics
 from plexus.cli.bertopic.ollama_test import test_ollama_chat
 
@@ -132,6 +132,12 @@ def feedback(
 @click.option('--max-ngram', type=int, default=2, help='Maximum n-gram size (default: 2)')
 @click.option('--min-topic-size', type=int, default=10, help='Minimum size of topics (default: 10)')
 @click.option('--top-n-words', type=int, default=10, help='Number of words to represent each topic (default: 10)')
+@click.option('--transform', type=click.Choice(['chunk', 'llm', 'itemize']), default='chunk', 
+              help='Transformation method: chunk (default), llm, or itemize')
+@click.option('--prompt-template', type=str, help='Path to prompt template file for LLM transformation (JSON format)')
+@click.option('--llm-model', default='gemma3:27b', help='Ollama model to use for LLM transformation (default: gemma3:27b)')
+@click.option('--fresh', is_flag=True, help='Force regeneration of cached files')
+@click.option('--max-retries', type=int, default=2, help='Maximum number of retries for parsing failures (itemize mode only)')
 def topics(
     input_file: str,
     output_dir: str,
@@ -144,15 +150,33 @@ def topics(
     max_ngram: int,
     min_topic_size: int,
     top_n_words: int,
+    transform: str,
+    prompt_template: str,
+    llm_model: str,
+    fresh: bool,
+    max_retries: int,
 ):
     """
     Analyze topics in call transcripts using BERTopic.
     
-    This command processes call transcripts from a Parquet file, extracts customer speaking turns,
-    and performs topic modeling using BERTopic. The results are saved in the specified output directory.
+    This command processes call transcripts from a Parquet file, transforms them using 
+    one of several methods, and performs topic modeling using BERTopic.
+    The results are saved in the specified output directory.
     
-    Example:
-        plexus analyze topics --input-file ~/projects/Call-Criteria-Python/.plexus_training_data_cache/dataframes/1039_no_score_id_Start-Date_csv.parquet
+    Transformation methods:
+      - chunk: Split transcripts into chunks by speaker turns (default)
+      - llm: Use a language model to transform/summarize transcripts
+      - itemize: Use a language model to extract structured items, creating multiple rows per transcript
+    
+    Examples:
+        # Default chunking transformation
+        plexus analyze topics --input-file path/to/transcripts.parquet
+        
+        # LLM-based transformation with custom prompt template
+        plexus analyze topics --input-file path/to/transcripts.parquet --transform llm --prompt-template prompts/summary.json
+        
+        # Itemized extraction with structured output
+        plexus analyze topics --input-file path/to/transcripts.parquet --transform itemize --max-retries 3
     """
     logging.info(f"Starting topic analysis for file: {input_file}")
     
@@ -169,18 +193,57 @@ def topics(
         df = pd.read_parquet(input_path)
         inspect_data(df, content_column)
         return
-        
+    
     try:
-        # Process the transcripts
-        _, text_file_path = transform_transcripts(
-            input_file=str(input_path),
-            content_column=content_column
-        )
+        # Process the transcripts based on transform method
+        if transform == 'itemize':
+            logging.info(f"Using itemized LLM transformation with model: {llm_model}")
+            if prompt_template:
+                logging.info(f"Using prompt template from: {prompt_template}")
+            
+            try:
+                _, text_file_path = transform_transcripts_itemize(
+                    input_file=str(input_path),
+                    content_column=content_column,
+                    prompt_template_file=prompt_template,
+                    model=llm_model,
+                    fresh=fresh,
+                    max_retries=max_retries
+                )
+            except Exception as e:
+                import traceback
+                logging.error(f"Error during topic analysis: {str(e)}")
+                logging.error(f"FULL TRACEBACK:\n{traceback.format_exc()}")
+                raise
+            
+            transform_suffix = "itemize"
+        elif transform == 'llm':
+            logging.info(f"Using LLM transformation with model: {llm_model}")
+            if prompt_template:
+                logging.info(f"Using prompt template from: {prompt_template}")
+            
+            _, text_file_path = transform_transcripts_llm(
+                input_file=str(input_path),
+                content_column=content_column,
+                prompt_template_file=prompt_template,
+                model=llm_model,
+                fresh=fresh
+            )
+            transform_suffix = "llm"
+        else:  # Default chunking method
+            logging.info("Using default chunking transformation")
+            _, text_file_path = transform_transcripts(
+                input_file=str(input_path),
+                content_column=content_column,
+                fresh=fresh
+            )
+            transform_suffix = "chunk"
+            
         logging.info("Transcript transformation completed successfully")
         
         if not skip_analysis:
             # Create descriptive output directory
-            analysis_dir = f"topics_{min_ngram}-{max_ngram}gram_{num_topics if num_topics else 'auto'}"
+            analysis_dir = f"topics_{transform_suffix}_{min_ngram}-{max_ngram}gram_{num_topics if num_topics else 'auto'}"
             output_dir = str(output_path / analysis_dir)
             
             logging.info("Starting BERTopic analysis...")
