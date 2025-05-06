@@ -327,7 +327,17 @@ def _instantiate_and_run_block(
 
         # Run the block's generate method
         logger.debug(f"{log_prefix} Calling generate method...")
-        output_json, log_string = block_instance.generate()
+        
+        # Check if the generate method is a coroutine (async)
+        import inspect
+        if inspect.iscoroutinefunction(block_instance.generate):
+            logger.debug(f"{log_prefix} Detected async generate method, using asyncio.run")
+            import asyncio
+            output_json, log_string = asyncio.run(block_instance.generate())
+        else:
+            # Regular synchronous method
+            output_json, log_string = block_instance.generate()
+            
         logger.info(f"{log_prefix} Block execution finished successfully.")
         logger.debug(f"{log_prefix} Output JSON: {str(output_json)[:200]}...") # Log snippet
         logger.debug(f"{log_prefix} Log String: {log_string}")
