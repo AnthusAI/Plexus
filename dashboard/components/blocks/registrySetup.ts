@@ -9,10 +9,12 @@ import { registerBlock } from './BlockRegistry';
 import ScoreInfo from './ScoreInfo';
 import ReportBlock from './ReportBlock';
 import TextBlock from './TextBlock'; // Assuming TextBlock exists and should be registered
+import FeedbackAnalysis from './FeedbackAnalysis';
 
 // Register all block components
 console.log("Running Block Registry Setup..."); // Add log for debugging
 registerBlock('ScoreInfo', ScoreInfo as any); // Keep the 'as any' for now if it was there
+registerBlock('FeedbackAnalysis', FeedbackAnalysis as any);
 registerBlock('default', ReportBlock);
 // If TextBlock registers itself, remove its import and registration here.
 // Otherwise, ensure it's registered correctly:
