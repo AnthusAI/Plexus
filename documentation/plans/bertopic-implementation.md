@@ -50,6 +50,21 @@ plexus analyze topics \
   --top-n-words 8
 ```
 
+### LLM Integration Test
+```bash
+# Test Ollama LLM integration with default model and prompt
+plexus analyze test-ollama
+
+# Test with a specific model
+plexus analyze test-ollama --model llama3:8b
+
+# Test with a custom prompt
+plexus analyze test-ollama --prompt "Explain the concept of topic modeling in simple terms"
+
+# Test with both custom model and prompt
+plexus analyze test-ollama --model codellama:7b --prompt "Write a Python function to calculate Fibonacci numbers"
+```
+
 ## Progress
 ### Completed
 1. Basic Infrastructure
@@ -70,6 +85,7 @@ plexus analyze topics \
    - ✅ Configured input/output handling
    - ✅ Added data inspection option
    - ✅ Implemented content column configuration
+   - ✅ Added `test-ollama` command for LLM integration testing
 
 4. Verification
    - ✅ Inspected transformed Parquet file
@@ -77,15 +93,21 @@ plexus analyze topics \
    - ✅ Validated customer turn extraction
 
 ### In Progress
-1. BERTopic Integration
+1. LLM Integration
+   - ✅ Added Ollama test command
+   - [ ] Set up environment for LLM usage
+   - [ ] Test various Ollama models
+
+2. BERTopic Integration
    - [ ] Configure BERTopic with default settings
    - [ ] Generate topic visualizations
    - [ ] Add analysis to CLI command
 
-2. Enhancements
+3. Enhancements
    - [ ] Add progress tracking
    - [ ] Improve error handling
    - [ ] Add more CLI options (e.g., BERTopic parameters)
+   - [ ] Integrate LLM for topic labeling
 
 ## File Structure
 ```
@@ -96,6 +118,7 @@ plexus/
 │       ├── __init__.py
 │       ├── transformer.py
 │       ├── analyzer.py
+│       ├── ollama_test.py
 │       └── test_inspect.py
 ```
 

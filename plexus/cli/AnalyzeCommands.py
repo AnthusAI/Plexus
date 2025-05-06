@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 from plexus.cli.bertopic.transformer import transform_transcripts, inspect_data
 from plexus.cli.bertopic.analyzer import analyze_topics
+from plexus.cli.bertopic.ollama_test import test_ollama_chat
 
 # Configure logging
 logging.basicConfig(
@@ -197,6 +198,38 @@ def topics(
         
     except Exception as e:
         logging.error(f"Error during topic analysis: {e}")
+        return
+
+@analyze.command()
+@click.option('--model', default='gemma3:27b', help='Ollama model to use (default: gemma3:27b)')
+@click.option('--prompt', default='Why is the sky blue?', help='Prompt to send to the model')
+def test_ollama(
+    model: str,
+    prompt: str
+):
+    """
+    Test Ollama LLM integration.
+    
+    This command sends a test request to the Ollama API to verify it's working correctly.
+    The response from the model will be printed to the console.
+    
+    Example:
+        plexus analyze test-ollama --model gemma3:27b --prompt "Explain quantum computing in simple terms"
+    """
+    logging.info(f"Testing Ollama integration with model: {model}")
+    
+    try:
+        # Call the test function
+        response = test_ollama_chat(model=model, prompt=prompt)
+        
+        # Print the response
+        print("\n--- Ollama Response ---")
+        print(response)
+        print("----------------------\n")
+        
+        logging.info("Ollama test completed successfully")
+    except Exception as e:
+        logging.error(f"Error testing Ollama: {e}")
         return
 
 class PromptAnalyzer:

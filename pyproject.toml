@@ -68,7 +68,9 @@ dependencies = [
     "invoke>=2.2.0",
     "celery>=5.4.0",
     "pycurl>=7.45.4",
-    "SQLAlchemy[asyncio]==1.4.15"
+    "SQLAlchemy[asyncio]==1.4.15",
+    "ollama>=0.1.6",
+    "bertopic>=0.16.2"
 ]
 
 [project.scripts]
