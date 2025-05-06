@@ -56,7 +56,9 @@ from .reports.report_commands import (
     run as run_command,
     list_reports as list_reports_command,
     show_report as show_report_command,
-    show_last_report as show_last_command
+    show_last_report as show_last_command,
+    delete_report as delete_command,
+    purge_reports as purge_command
 )
 
 logger = logging.getLogger(__name__)
@@ -74,3 +76,5 @@ report.add_command(run_command)
 report.add_command(list_reports_command, name="list") # Explicitly name list
 report.add_command(show_report_command, name="show") # Explicitly name show
 report.add_command(show_last_command, name="last") # Explicitly name last
+report.add_command(delete_command, name="delete") # Register delete command
+report.add_command(purge_command, name="purge") # Register purge command

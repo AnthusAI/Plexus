@@ -4,7 +4,7 @@ Report Model - Python representation of the GraphQL Report type.
 
 import json
 import logging
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from .base import BaseModel
@@ -339,5 +339,114 @@ class Report(BaseModel):
                 break # Stop fetching on error
 
         return reports
+
+    def delete(self) -> bool:
+        """Delete this Report record and its associated ReportBlock records.
+        
+        Performs a GraphQL mutation to delete the report. The API is expected to
+        cascade delete all associated ReportBlock records.
+        
+        Returns:
+            bool: True if deletion was successful, False otherwise.
+            
+        Raises:
+            ValueError: If no client is associated with this instance.
+            Exception: If the GraphQL mutation returns an error.
+        """
+        if not self._client:
+            raise ValueError("Cannot delete report without an associated API client.")
+            
+        mutation = """
+        mutation DeleteReport($input: DeleteReportInput!) {
+            deleteReport(input: $input) {
+                id
+            }
+        }
+        """
+        
+        try:
+            logger.debug(f"Deleting Report {self.id}")
+            result = self._client.execute(mutation, {'input': {'id': self.id}})
+            
+            if not result or 'deleteReport' not in result or not result['deleteReport']:
+                error_msg = f"Failed to delete Report {self.id}. Response: {result}"
+                logger.error(error_msg)
+                raise Exception(error_msg)
+                
+            deleted_id = result['deleteReport'].get('id')
+            if deleted_id != self.id:
+                logger.warning(f"Deleted report ID mismatch. Expected {self.id}, got {deleted_id}")
+                
+            logger.info(f"Successfully deleted Report {self.id}")
+            return True
+            
+        except Exception as e:
+            logger.exception(f"Error deleting Report {self.id}: {e}")
+            raise
+    
+    @classmethod
+    def delete_by_id(cls, report_id: str, client: _BaseAPIClient) -> bool:
+        """Delete a Report by ID without first retrieving it.
+        
+        Args:
+            report_id: The ID of the report to delete.
+            client: The API client to use for the deletion.
+            
+        Returns:
+            bool: True if deletion was successful, False otherwise.
+            
+        Raises:
+            Exception: If the GraphQL mutation returns an error.
+        """
+        mutation = """
+        mutation DeleteReport($input: DeleteReportInput!) {
+            deleteReport(input: $input) {
+                id
+            }
+        }
+        """
+        
+        try:
+            logger.debug(f"Deleting Report {report_id} by ID")
+            result = client.execute(mutation, {'input': {'id': report_id}})
+            
+            if not result or 'deleteReport' not in result or not result['deleteReport']:
+                error_msg = f"Failed to delete Report {report_id}. Response: {result}"
+                logger.error(error_msg)
+                raise Exception(error_msg)
+                
+            deleted_id = result['deleteReport'].get('id')
+            if deleted_id != report_id:
+                logger.warning(f"Deleted report ID mismatch. Expected {report_id}, got {deleted_id}")
+                
+            logger.info(f"Successfully deleted Report {report_id}")
+            return True
+            
+        except Exception as e:
+            logger.exception(f"Error deleting Report {report_id}: {e}")
+            raise
+            
+    @classmethod
+    def delete_multiple(cls, report_ids: List[str], client: _BaseAPIClient) -> Dict[str, bool]:
+        """Delete multiple Reports by IDs.
+        
+        Args:
+            report_ids: A list of report IDs to delete.
+            client: The API client to use for the deletion.
+            
+        Returns:
+            Dict[str, bool]: A dictionary mapping report IDs to deletion success status.
+        """
+        results = {}
+        
+        for report_id in report_ids:
+            try:
+                success = cls.delete_by_id(report_id, client)
+                results[report_id] = success
+            except Exception as e:
+                logger.error(f"Failed to delete Report {report_id}: {e}")
+                results[report_id] = False
+                
+        return results
 
     # get_by_id is inherited from BaseModel 
