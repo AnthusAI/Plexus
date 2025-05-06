@@ -146,30 +146,34 @@ def transform_transcripts_llm(
     content_column: str = 'content',
     prompt_template_file: str = None,
     model: str = 'gemma3:27b',
+    provider: str = 'ollama',
     fresh: bool = False,
-    inspect: bool = True
+    inspect: bool = True,
+    openai_api_key: str = None
 ) -> Tuple[str, str]:
     """
     Transform transcript data using a language model.
     
-    This function processes each transcript through a language model (Ollama)
+    This function processes each transcript through a language model
     to extract key information or summarize content before topic analysis.
     
     Args:
         input_file: Path to input Parquet file
         content_column: Name of column containing transcript content
         prompt_template_file: Path to LangChain prompt template file (JSON)
-        model: Ollama model to use for transformation
+        model: Model to use for transformation (depends on provider)
+        provider: LLM provider to use ('ollama' or 'openai')
         fresh: Whether to force regeneration of cached files
         inspect: Whether to print sample data for inspection
+        openai_api_key: OpenAI API key (if provider is 'openai')
         
     Returns:
         Tuple of (cached_parquet_path, text_file_path)
     """
     # Generate output file paths with llm suffix to distinguish from chunking method
     base_path = os.path.splitext(input_file)[0]
-    cached_parquet_path = f"{base_path}-bertopic-llm.parquet"
-    text_file_path = f"{base_path}-bertopic-llm-text.txt"
+    cached_parquet_path = f"{base_path}-bertopic-llm-{provider}.parquet"
+    text_file_path = f"{base_path}-bertopic-llm-{provider}-text.txt"
     
     # Check if cached files exist and fresh is False
     if not fresh and os.path.exists(cached_parquet_path) and os.path.exists(text_file_path):
@@ -213,13 +217,33 @@ def transform_transcripts_llm(
     # Create prompt
     prompt = ChatPromptTemplate.from_template(template)
     
-    # Import ollama here to avoid dependency issues if not needed
-    try:
-        from langchain.llms import Ollama
-        llm = Ollama(model=model)
-    except ImportError:
-        logging.error("Ollama package not installed. Install with: pip install ollama")
-        raise
+    # Initialize the appropriate LLM based on provider
+    if provider.lower() == 'ollama':
+        try:
+            from langchain.llms import Ollama
+            llm = Ollama(model=model)
+            logging.info(f"Initialized Ollama LLM with model: {model}")
+        except ImportError:
+            logging.error("Ollama package not installed. Install with: pip install ollama")
+            raise
+    elif provider.lower() == 'openai':
+        try:
+            from langchain_openai import ChatOpenAI
+            
+            # Use provided API key or environment variable
+            api_key = openai_api_key or os.environ.get("OPENAI_API_KEY")
+            if not api_key:
+                logging.error("OpenAI API key not provided. Set OPENAI_API_KEY environment variable or pass openai_api_key parameter.")
+                raise ValueError("OpenAI API key not provided")
+            
+            llm = ChatOpenAI(model=model, openai_api_key=api_key)
+            logging.info(f"Initialized OpenAI LLM with model: {model}")
+        except ImportError:
+            logging.error("OpenAI package not installed. Install with: pip install langchain-openai")
+            raise
+    else:
+        logging.error(f"Unsupported provider: {provider}. Use 'ollama' or 'openai'.")
+        raise ValueError(f"Unsupported provider: {provider}. Use 'ollama' or 'openai'.")
     
     # Process each transcript with the LLM
     transformed_rows = []
@@ -240,18 +264,26 @@ def transform_transcripts_llm(
                 
                 # Log the response (truncate if too long)
                 max_log_length = 1000  # Limit log length to avoid flooding
-                log_response = response
+                
+                # Handle different response types based on provider
+                if provider.lower() == 'openai' and hasattr(response, 'content'):
+                    response_text = response.content
+                    log_response = response_text
+                else:
+                    response_text = response
+                    log_response = response_text
+                
                 if len(log_response) > max_log_length:
                     log_response = log_response[:max_log_length] + "... [truncated]"
                 logging.info(f"LLM Response {i+1}/{len(df)}:\n{log_response}\n")
                 
                 # Create new row with LLM response
                 new_row = row.copy()
-                new_row[content_column] = response
+                new_row[content_column] = response_text
                 transformed_rows.append(new_row)
                 
                 # Write to text file
-                f.write(f"{response}\n")
+                f.write(f"{response_text}\n")
                 
             except Exception as e:
                 logging.error(f"Error processing transcript {i+1}: {e}")
@@ -280,34 +312,38 @@ def transform_transcripts_itemize(
     content_column: str = 'content',
     prompt_template_file: str = None,
     model: str = 'gemma3:27b',
+    provider: str = 'ollama',
     fresh: bool = False,
     inspect: bool = True,
     max_retries: int = 2,
-    retry_delay: float = 1.0
+    retry_delay: float = 1.0,
+    openai_api_key: str = None
 ) -> Tuple[str, str]:
     """
     Transform transcript data using a language model with itemization.
     
-    This function processes each transcript through a language model (Ollama)
+    This function processes each transcript through a language model
     to extract structured items, creating multiple rows per transcript.
     
     Args:
         input_file: Path to input Parquet file
         content_column: Name of column containing transcript content
         prompt_template_file: Path to LangChain prompt template file (JSON)
-        model: Ollama model to use for transformation
+        model: Model to use for transformation (depends on provider)
+        provider: LLM provider to use ('ollama' or 'openai')
         fresh: Whether to force regeneration of cached files
         inspect: Whether to print sample data for inspection
         max_retries: Maximum number of retries for parsing failures
         retry_delay: Delay between retries in seconds
+        openai_api_key: OpenAI API key (if provider is 'openai')
         
     Returns:
         Tuple of (cached_parquet_path, text_file_path)
     """
     # Generate output file paths with itemize suffix
     base_path = os.path.splitext(input_file)[0]
-    cached_parquet_path = f"{base_path}-bertopic-itemize.parquet"
-    text_file_path = f"{base_path}-bertopic-itemize-text.txt"
+    cached_parquet_path = f"{base_path}-bertopic-itemize-{provider}.parquet"
+    text_file_path = f"{base_path}-bertopic-itemize-{provider}-text.txt"
     
     # Check if cached files exist and fresh is False
     if not fresh and os.path.exists(cached_parquet_path) and os.path.exists(text_file_path):
@@ -326,19 +362,38 @@ def transform_transcripts_itemize(
     parser = PydanticOutputParser(pydantic_object=TranscriptItems)
     logging.info(f"Parser format instructions:\n{parser.get_format_instructions()}")
     
-    # Initialize Ollama LLM first before creating the retry parser
-    try:
-        from langchain.llms import Ollama
-        llm = Ollama(model=model)
-        logging.info(f"Successfully initialized Ollama LLM with model: {model}")
-    except ImportError:
-        logging.error("Ollama package not installed. Install with: pip install ollama")
-        raise
+    # Initialize the appropriate LLM based on provider
+    if provider.lower() == 'ollama':
+        try:
+            from langchain.llms import Ollama
+            llm = Ollama(model=model)
+            logging.info(f"Initialized Ollama LLM with model: {model}")
+        except ImportError:
+            logging.error("Ollama package not installed. Install with: pip install ollama")
+            raise
+    elif provider.lower() == 'openai':
+        try:
+            from langchain_openai import ChatOpenAI
+            
+            # Use provided API key or environment variable
+            api_key = openai_api_key or os.environ.get("OPENAI_API_KEY")
+            if not api_key:
+                logging.error("OpenAI API key not provided. Set OPENAI_API_KEY environment variable or pass openai_api_key parameter.")
+                raise ValueError("OpenAI API key not provided")
+            
+            llm = ChatOpenAI(model=model, openai_api_key=api_key)
+            logging.info(f"Initialized OpenAI LLM with model: {model}")
+        except ImportError:
+            logging.error("OpenAI package not installed. Install with: pip install langchain-openai")
+            raise
+    else:
+        logging.error(f"Unsupported provider: {provider}. Use 'ollama' or 'openai'.")
+        raise ValueError(f"Unsupported provider: {provider}. Use 'ollama' or 'openai'.")
     
     # Create retry parser after LLM is initialized
     retry_parser = RetryWithErrorOutputParser.from_llm(
         parser=parser,
-        llm=llm,  # Now we're passing the initialized LLM
+        llm=llm,
         max_retries=max_retries
     )
     
@@ -415,8 +470,17 @@ def transform_transcripts_itemize(
                         
                         # Try to parse the JSON directly first
                         try:
+                            # Handle different response types based on provider
+                            if provider.lower() == 'openai':
+                                # For OpenAI, the response is an AIMessage object
+                                response_text = raw_response.content if hasattr(raw_response, 'content') else str(raw_response)
+                                logging.info(f"Extracted content from AIMessage: {response_text}")
+                            else:
+                                # For Ollama and others, it's already a string
+                                response_text = raw_response
+                            
                             # Try direct JSON parsing
-                            json_data = json.loads(raw_response)
+                            json_data = json.loads(response_text)
                             logging.info(f"PARSED JSON: {json_data}")
                             parsed_items = TranscriptItems(**json_data)
                             logging.info(f"SUCCESSFULLY CREATED PYDANTIC MODEL: {parsed_items}")
@@ -424,6 +488,10 @@ def transform_transcripts_itemize(
                         except json.JSONDecodeError:
                             # Try to extract JSON from markdown code blocks
                             logging.info("JSON PARSING FAILED, TRYING TO EXTRACT JSON FROM RESPONSE")
+                            
+                            # For OpenAI, get content from AIMessage if available
+                            if provider.lower() == 'openai' and hasattr(raw_response, 'content'):
+                                raw_response = raw_response.content
                             
                             # Look for JSON in code blocks
                             if "```json" in raw_response:

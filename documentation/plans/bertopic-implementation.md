@@ -27,8 +27,14 @@ plexus analyze topics --input-file <path> --transform llm
 # Use custom prompt template
 plexus analyze topics --input-file <path> --transform llm --prompt-template plexus/cli/bertopic/prompts/summary.json
 
-# Specify LLM model
+# Specify LLM model (default provider is Ollama)
 plexus analyze topics --input-file <path> --transform llm --llm-model gemma3:27b
+
+# Specify OpenAI as the provider with model
+plexus analyze topics --input-file <path> --transform llm --provider openai --llm-model gpt-3.5-turbo
+
+# Provide OpenAI API key directly (alternatively use OPENAI_API_KEY env var)
+plexus analyze topics --input-file <path> --transform llm --provider openai --llm-model gpt-3.5-turbo --openai-api-key YOUR_API_KEY
 
 # Force regeneration of cached files
 plexus analyze topics --input-file <path> --transform llm --fresh
@@ -36,8 +42,11 @@ plexus analyze topics --input-file <path> --transform llm --fresh
 
 ### Customer Question Extraction (New)
 ```bash
-# Extract direct customer questions from transcripts
+# Extract direct customer questions from transcripts (default with Ollama)
 plexus analyze topics --input-file <path> --transform itemize
+
+# Extract questions using OpenAI
+plexus analyze topics --input-file <path> --transform itemize --provider openai --llm-model gpt-3.5-turbo
 
 # Use custom prompt template for question extraction
 plexus analyze topics --input-file <path> --transform itemize --prompt-template plexus/cli/bertopic/prompts/itemize.json
@@ -85,6 +94,9 @@ plexus analyze test-ollama
 # Test with a specific model
 plexus analyze test-ollama --model gemma3:27b
 
+# Test OpenAI integration
+plexus analyze test-ollama --provider openai --model gpt-3.5-turbo
+
 # Test with a custom prompt
 plexus analyze test-ollama --prompt "Explain the concept of topic modeling in simple terms"
 
@@ -117,6 +129,7 @@ plexus analyze test-ollama --model llama3:8b --prompt "Write a Python function t
    - ✅ Added `test-ollama` command for LLM integration testing
    - ✅ Added LLM-based transformation option
    - ✅ Added customer question extraction option
+   - ✅ Added support for multiple LLM providers (Ollama, OpenAI)
 
 4. Verification
    - ✅ Inspected transformed Parquet file
@@ -126,6 +139,7 @@ plexus analyze test-ollama --model llama3:8b --prompt "Write a Python function t
 5. LLM Integration
    - ✅ Added Ollama test command
    - ✅ Integrated LLM-based transformation with Ollama and LangChain
+   - ✅ Added OpenAI integration via LangChain
    - ✅ Added prompt template support
    - ✅ Added robust JSON parsing for LLM outputs
    - ✅ Implemented customer question extraction with structured output
@@ -168,10 +182,11 @@ plexus/
   - Filters out very short turns (< 2 words)
   - Preserves all metadata in Parquet file
 - LLM-based transformation:
-  - Processes entire transcripts through Ollama LLM
+  - Processes entire transcripts through LLM (Ollama or OpenAI)
   - Uses configurable prompt templates via JSON files
   - Creates more concise, focused text for topic analysis
   - Preserves metadata in Parquet file
+  - Supports multiple LLM providers with appropriate model selection
 - Customer question extraction:
   - Uses structured output parsing with Pydantic models
   - Extracts direct questions asked by customers from transcripts
@@ -179,6 +194,7 @@ plexus/
   - Includes retry logic for parsing failures
   - Handles JSON parsing with robust error handling
   - Preserves all metadata from original rows
+  - Compatible with both Ollama and OpenAI providers
 
 ### BERTopic Configuration
 - Use default settings for proof-of-concept
@@ -207,6 +223,16 @@ Question extraction templates also use JSON files with escaped curly braces for 
 
 The template must include `{text}` and `{format_instructions}` placeholders, and any JSON structure in the template must use double curly braces `{{` and `}}` to escape them in the string formatter.
 
+## LLM Provider Configuration
+- Default provider is `ollama` for local LLM usage
+- OpenAI can be used with `--provider openai`
+- When using OpenAI, API key can be provided via:
+  - `--openai-api-key` parameter
+  - `OPENAI_API_KEY` environment variable
+- Appropriate model name must be provided for each provider:
+  - Ollama: `gemma3:27b`, `llama3:8b`, etc.
+  - OpenAI: `gpt-3.5-turbo`, `gpt-4`, etc.
+
 ## Testing Plan
 1. [x] Test data transformation
    - [x] Verify customer turn extraction
@@ -214,6 +240,7 @@ The template must include `{text}` and `{format_instructions}` placeholders, and
    - [x] Validate text file format
 2. [x] Test LLM integration
    - [x] Verify Ollama connectivity
+   - [x] Verify OpenAI connectivity
    - [x] Test JSON parsing from LLM output
    - [x] Test structured question extraction
 3. [ ] Test BERTopic analysis
@@ -226,7 +253,7 @@ The template must include `{text}` and `{format_instructions}` placeholders, and
 2. Advanced visualization options
 3. Topic labeling and interpretation
 4. Integration with dashboard
-5. Support for more LLM providers beyond Ollama
+5. Support for more LLM providers beyond Ollama and OpenAI
 
 ## Dependencies
 - pandas
@@ -235,5 +262,6 @@ The template must include `{text}` and `{format_instructions}` placeholders, and
 - hdbscan
 - plotly
 - langchain
-- ollama
+- ollama (for Ollama provider)
+- langchain-openai (for OpenAI provider)
 - pydantic
