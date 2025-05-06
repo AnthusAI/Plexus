@@ -6,8 +6,8 @@ import click
 import logging
 import json
 import traceback
-from datetime import datetime, timezone
-from typing import Optional, Tuple
+from datetime import datetime, timezone, timedelta
+from typing import Optional, Tuple, List
 import sys
 
 # Import necessary utilities and models
@@ -808,3 +808,151 @@ def show_last_report(account_identifier: Optional[str]):
     except Exception as e:
         console.print(f"[bold red]An unexpected error occurred: {e}[/bold red]")
         logger.error(f"Unexpected error in show_last_report: {e}\n{traceback.format_exc()}") 
+
+@click.command(name="delete")
+@click.argument('id_or_name', type=str)
+@click.option('--account', 'account_identifier', help='Optional account key or ID for context (needed for name lookup).', default=None)
+@click.option('--yes', is_flag=True, help='Skip confirmation prompt.')
+def delete_report(id_or_name: str, account_identifier: Optional[str], yes: bool):
+    """Delete a specific Report by ID or name.
+    
+    This command permanently deletes a report and all its associated blocks.
+    
+    Args:
+        id_or_name: The ID or name of the report to delete.
+        account_identifier: Optional account key or ID for context (required for name lookup).
+        yes: Skip confirmation prompt if set.
+    """
+    client = create_client()
+    account_id = resolve_account_id_for_command(client, account_identifier)
+
+    console.print(f"Finding report '{id_or_name}' for account: [cyan]{account_id}[/cyan]")
+
+    try:
+        # Resolve report by ID or name
+        report_instance = resolve_report(id_or_name, account_id, client)
+        if not report_instance:
+            console.print(f"[red]Error: Report '{id_or_name}' not found for account {account_id}.[/red]")
+            raise click.Abort()
+        
+        console.print(f"Found report: [cyan]{report_instance.name}[/cyan] (ID: {report_instance.id})")
+        
+        # Get confirmation unless --yes was passed
+        if not yes and not click.confirm(f"Are you sure you want to permanently delete this report and all its blocks?", default=False):
+            console.print("[yellow]Deletion cancelled.[/yellow]")
+            return
+        
+        # Perform the deletion
+        console.print(f"[dim]Deleting report {report_instance.id}...[/dim]")
+        success = report_instance.delete()
+        
+        if success:
+            console.print(f"[green]Successfully deleted report: {report_instance.name} (ID: {report_instance.id})[/green]")
+        else:
+            console.print(f"[yellow]Report deletion response did not indicate success.[/yellow]")
+            
+    except click.Abort:
+        raise
+    except Exception as e:
+        console.print(f"[bold red]Error deleting report: {e}[/bold red]")
+        logger.error(f"Failed to delete report '{id_or_name}': {e}\n{traceback.format_exc()}")
+        raise click.Abort()
+
+@click.command(name="purge")
+@click.option('--account', 'account_identifier', help='Account key or ID to purge reports from.', default=None)
+@click.option('--config', 'config_identifier', help='Filter reports by configuration ID or name.', default=None)
+@click.option('--older-than', 'older_than_days', type=int, help='Delete reports older than specified days.', default=None)
+@click.option('--limit', type=int, default=50, help='Maximum number of reports to delete.', show_default=True)
+@click.option('--yes', is_flag=True, help='Skip confirmation prompt.')
+def purge_reports(account_identifier: Optional[str], config_identifier: Optional[str], older_than_days: Optional[int], limit: int, yes: bool):
+    """Purge multiple reports based on criteria.
+    
+    This command permanently deletes multiple reports matching the specified criteria.
+    
+    Args:
+        account_identifier: Account key or ID to purge reports from.
+        config_identifier: Filter reports by configuration ID or name.
+        older_than_days: Delete reports older than specified days.
+        limit: Maximum number of reports to delete.
+        yes: Skip confirmation prompt if set.
+    """
+    client = create_client()
+    account_id = resolve_account_id_for_command(client, account_identifier)
+    resolved_config_id = None
+    
+    # Build the criteria message
+    criteria_parts = [f"account [cyan]{account_id}[/cyan]"]
+    
+    # Resolve configuration if provided
+    if config_identifier:
+        console.print(f"[dim]Resolving configuration filter: '{config_identifier}'...[/dim]")
+        config_instance = resolve_report_config(config_identifier, account_id, client)
+        if not config_instance:
+            console.print(f"[yellow]Could not resolve Report Configuration '{config_identifier}'.[/yellow]")
+            raise click.Abort()
+        resolved_config_id = config_instance.id
+        criteria_parts.append(f"configuration [cyan]{config_instance.name}[/cyan] (ID: {resolved_config_id})")
+    
+    # Add age criteria if provided
+    if older_than_days:
+        criteria_parts.append(f"older than [cyan]{older_than_days}[/cyan] days")
+    
+    criteria_str = ", ".join(criteria_parts)
+    console.print(f"Finding reports for {criteria_str}")
+    
+    try:
+        # Fetch reports matching criteria
+        console.print(f"[dim]Fetching reports...[/dim]")
+        reports = Report.list_by_account_id(account_id=account_id, client=client, limit=200)
+        
+        # Filter by configuration if specified
+        if resolved_config_id:
+            reports = [r for r in reports if r.reportConfigurationId == resolved_config_id]
+        
+        # Filter by age if specified
+        if older_than_days:
+            cutoff_date = datetime.now(timezone.utc) - timedelta(days=older_than_days)
+            reports = [r for r in reports if r.createdAt < cutoff_date]
+        
+        # Sort by creation date (oldest first)
+        reports.sort(key=lambda r: r.createdAt)
+        
+        # Apply limit
+        reports_to_delete = reports[:limit]
+        
+        if not reports_to_delete:
+            console.print(f"[yellow]No reports found matching the criteria.[/yellow]")
+            return
+        
+        # Display reports to be deleted
+        console.print(f"Found {len(reports_to_delete)} reports to delete:")
+        for idx, report in enumerate(reports_to_delete, 1):
+            created_str = report.createdAt.strftime("%Y-%m-%d %H:%M:%S UTC") if report.createdAt else 'Unknown'
+            console.print(f"  {idx}. [cyan]{report.name}[/cyan] (ID: {report.id}) - Created: {created_str}")
+        
+        # Get confirmation unless --yes was passed
+        if not yes and not click.confirm(f"Are you sure you want to permanently delete these {len(reports_to_delete)} reports and all their blocks?", default=False):
+            console.print("[yellow]Purge operation cancelled.[/yellow]")
+            return
+        
+        # Perform the deletions
+        console.print(f"[dim]Deleting {len(reports_to_delete)} reports...[/dim]")
+        report_ids = [r.id for r in reports_to_delete]
+        results = Report.delete_multiple(report_ids, client)
+        
+        # Count successes and failures
+        successes = sum(1 for success in results.values() if success)
+        failures = len(results) - successes
+        
+        console.print(f"[green]Successfully deleted {successes} reports.[/green]")
+        if failures > 0:
+            console.print(f"[yellow]Failed to delete {failures} reports.[/yellow]")
+            failed_ids = [rid for rid, success in results.items() if not success]
+            console.print(f"[yellow]Failed report IDs: {', '.join(failed_ids)}[/yellow]")
+        
+    except click.Abort:
+        raise
+    except Exception as e:
+        console.print(f"[bold red]Error purging reports: {e}[/bold red]")
+        logger.error(f"Failed to purge reports: {e}\n{traceback.format_exc()}")
+        raise click.Abort() 
