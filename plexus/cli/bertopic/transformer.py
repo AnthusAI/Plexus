@@ -23,18 +23,18 @@ from langchain.cache import SQLiteCache
 logger = logging.getLogger(__name__)
 
 # Initialize and set the Langchain LLM cache globally
-# This will cache results of LLM calls to speed up repeated processing
-# with the same inputs (model, prompt, etc.).
+# Cache file will be stored inside a directory named .langchain.db
+cache_dir_path = Path(".langchain.db")
+cache_db_file_path = cache_dir_path / "topic_analysis_llm_cache.db"
+
 try:
-    logger.info("Attempting to initialize Langchain LLM SQLite cache at .langchain.db")
-    set_llm_cache(SQLiteCache(database_path=".langchain.db"))
-    logger.info("Langchain LLM SQLite cache initialized successfully.")
+    # Ensure the cache directory exists
+    cache_dir_path.mkdir(parents=True, exist_ok=True)
+    logger.info(f"Attempting to initialize Langchain LLM SQLite cache at {cache_db_file_path}")
+    set_llm_cache(SQLiteCache(database_path=str(cache_db_file_path))) # Pass the full file path
+    logger.info(f"Langchain LLM SQLite cache initialized successfully at {cache_db_file_path}.")
 except Exception as e:
-    logger.warning(f"Could not initialize Langchain LLM SQLite cache ('.langchain.db'): {e}. LLM calls will not be cached across runs.")
-    # Optionally, fall back to InMemoryCache or no cache if SQLite fails and it's critical:
-    # from langchain.cache import InMemoryCache
-    # set_llm_cache(InMemoryCache())
-    # logger.info("Initialized Langchain LLM InMemoryCache as fallback.")
+    logger.warning(f"Could not initialize Langchain LLM SQLite cache (\'{cache_db_file_path}\'): {e}. LLM calls will not be cached across runs.")
 
 def inspect_data(df: pd.DataFrame, content_column: str, num_samples: int = 5) -> None:
     """
