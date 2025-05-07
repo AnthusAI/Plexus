@@ -98,9 +98,79 @@ def extract_speaking_turns(text: str) -> List[str]:
     
     return turns
 
+def extract_customer_only(text: str) -> str:
+    """
+    Extract only the customer utterances from transcript text.
+    
+    Args:
+        text: Raw transcript text
+        
+    Returns:
+        String containing only customer utterances concatenated together
+    """
+    # Add spaces around "Agent:" and "Customer:" for consistent splitting
+    text = re.sub(r'(?<![\s])(Agent:|Customer:)', r' \1', text)
+    text = re.sub(r'(Agent:|Customer:)(?![\s])', r'\1 ', text)
+    
+    # Split on Agent/Customer markers
+    parts = re.split(r'\s+(Agent:|Customer:)\s+', text)
+    
+    # First part might be empty or contain text before any marker
+    if parts and not (parts[0].startswith('Agent:') or parts[0].startswith('Customer:')):
+        parts = parts[1:]
+    
+    # Process in pairs (marker + text)
+    customer_parts = []
+    for i in range(0, len(parts), 2):
+        if i+1 < len(parts):
+            marker = parts[i]
+            content = parts[i+1]
+            if marker == 'Customer:':
+                customer_parts.append(content.strip())
+    
+    # Join customer parts with a space
+    return " ".join(customer_parts)
+
+def apply_customer_only_filter(df: pd.DataFrame, content_column: str, customer_only: bool) -> pd.DataFrame:
+    """
+    Apply customer-only filter to a DataFrame of transcripts if requested.
+    
+    Args:
+        df: DataFrame containing transcript data
+        content_column: Name of column containing transcript content
+        customer_only: Whether to filter for customer utterances only
+        
+    Returns:
+        DataFrame with filtered content if customer_only is True, otherwise original DataFrame
+    """
+    if not customer_only:
+        return df
+    
+    logging.info("Applying customer-only filter to transcripts")
+    filtered_df = df.copy()
+    
+    for i, row in filtered_df.iterrows():
+        try:
+            text = row[content_column]
+            if pd.isna(text) or not text:
+                continue
+                
+            filtered_text = extract_customer_only(text)
+            filtered_df.at[i, content_column] = filtered_text
+            
+            # Log a sample for verification (first few rows only)
+            if i < 2:
+                logging.info(f"Original text sample: {text[:100]}...")
+                logging.info(f"Filtered text sample: {filtered_text[:100]}...")
+        except Exception as e:
+            logging.error(f"Error filtering customer utterances in row {i}: {e}")
+    
+    return filtered_df
+
 def transform_transcripts(
     input_file: str,
     content_column: str = 'content',
+    customer_only: bool = False,
     fresh: bool = False,
     inspect: bool = True,
     sample_size: Optional[int] = None
@@ -111,6 +181,7 @@ def transform_transcripts(
     Args:
         input_file: Path to input Parquet file
         content_column: Name of column containing transcript content
+        customer_only: Whether to filter for customer utterances only
         fresh: Whether to force regeneration of cached files
         inspect: Whether to print sample data for inspection
         sample_size: Number of transcripts to sample from the dataset
@@ -120,8 +191,9 @@ def transform_transcripts(
     """
     # Generate output file paths
     base_path = os.path.splitext(input_file)[0]
-    cached_parquet_path = f"{base_path}-bertopic.parquet"
-    text_file_path = f"{base_path}-bertopic-text.txt"
+    suffix = "-customer-only" if customer_only else ""
+    cached_parquet_path = f"{base_path}-bertopic{suffix}.parquet"
+    text_file_path = f"{base_path}-bertopic{suffix}-text.txt"
     
     # Check if cached files exist and fresh is False
     if not fresh and os.path.exists(cached_parquet_path) and os.path.exists(text_file_path):
@@ -140,6 +212,10 @@ def transform_transcripts(
     # Inspect data if requested
     if inspect:
         inspect_data(df, content_column)
+    
+    # Apply customer-only filter if requested
+    if customer_only:
+        df = apply_customer_only_filter(df, content_column, customer_only)
     
     # Extract speaking turns and create new rows
     transformed_rows = []
@@ -250,6 +326,7 @@ async def transform_transcripts_llm(
     prompt_template_file: str = None,
     model: str = 'gemma3:27b',
     provider: str = 'ollama',
+    customer_only: bool = False,
     fresh: bool = False,
     inspect: bool = True,
     openai_api_key: str = None,
@@ -267,6 +344,7 @@ async def transform_transcripts_llm(
         prompt_template_file: Path to LangChain prompt template file (JSON)
         model: Model to use for transformation (depends on provider)
         provider: LLM provider to use ('ollama' or 'openai')
+        customer_only: Whether to filter for customer utterances only
         fresh: Whether to force regeneration of cached files
         inspect: Whether to print sample data for inspection
         openai_api_key: OpenAI API key (if provider is 'openai')
@@ -286,6 +364,7 @@ async def _transform_transcripts_llm_async(
     model: str = 'gemma3:27b',
     provider: str = 'ollama',
     fresh: bool = False,
+    customer_only: bool = False,
     inspect: bool = True,
     openai_api_key: str = None,
     sample_size: Optional[int] = None
@@ -294,8 +373,9 @@ async def _transform_transcripts_llm_async(
     Async implementation of transform_transcripts_llm.
     """
     base_path = os.path.splitext(input_file)[0]
-    cached_parquet_path = f"{base_path}-bertopic-llm-{provider}.parquet"
-    text_file_path = f"{base_path}-bertopic-llm-{provider}-text.txt"
+    suffix = "-customer-only" if customer_only else ""
+    cached_parquet_path = f"{base_path}-bertopic-llm-{provider}{suffix}.parquet"
+    text_file_path = f"{base_path}-bertopic-llm-{provider}{suffix}-text.txt"
     
     if not fresh and os.path.exists(cached_parquet_path) and os.path.exists(text_file_path):
         logging.info(f"Using cached files: {cached_parquet_path} and {text_file_path}")
@@ -303,6 +383,10 @@ async def _transform_transcripts_llm_async(
     
     logging.info(f"Loading transcript data from {input_file}")
     df = pd.read_parquet(input_file)
+    
+    # Apply customer-only filter if requested
+    if customer_only:
+        df = apply_customer_only_filter(df, content_column, customer_only)
     
     if sample_size is not None and sample_size > 0 and sample_size < len(df):
         logging.info(f"Sampling {sample_size} transcripts from the dataset.")
@@ -387,6 +471,34 @@ async def _transform_transcripts_llm_async(
                 if isinstance(response, Exception):
                     logging.error(f"Error processing transcript: {response}")
                     continue
+                
+                logging.info(f"Processing transcript {i+1}/{len(df)}")
+                
+                # Format the prompt with the transcript
+                formatted_prompt = prompt.format(text=text)
+                
+                # Log the complete formatted prompt
+                logging.info(f"COMPLETE FORMATTED PROMPT FOR TRANSCRIPT {i+1}:\n{formatted_prompt}\n")
+                
+                # Run LLM on transcript
+                response = llm.invoke(formatted_prompt)
+                
+                # Log the response (truncate if too long)
+                max_log_length = 1000  # Limit log length to avoid flooding
+                
+                # Handle different response types based on provider
+                if provider.lower() == 'openai' and hasattr(response, 'content'):
+                    response_text = response.content
+                    log_response = response_text
+                else:
+                    response_text = response
+                    log_response = response_text
+                
+                if len(log_response) > max_log_length:
+                    log_response = log_response[:max_log_length] + "... [truncated]"
+                logging.info(f"LLM Response {i+1}/{len(df)}:\n{log_response}\n")
+                
+                # Create new row with LLM response
                 new_row = row.copy()
                 new_row[content_column] = response
                 transformed_rows.append(new_row)
@@ -417,6 +529,7 @@ async def transform_transcripts_itemize(
     prompt_template_file: str = None,
     model: str = 'gemma3:27b',
     provider: str = 'ollama',
+    customer_only: bool = False,
     fresh: bool = False,
     inspect: bool = True,
     max_retries: int = 2,
@@ -436,6 +549,7 @@ async def transform_transcripts_itemize(
         prompt_template_file: Path to LangChain prompt template file (JSON)
         model: Model to use for transformation (depends on provider)
         provider: LLM provider to use ('ollama' or 'openai')
+        customer_only: Whether to filter for customer utterances only
         fresh: Whether to force regeneration of cached files
         inspect: Whether to print sample data for inspection
         max_retries: Maximum number of retries for parsing failures
@@ -617,8 +731,9 @@ async def _transform_transcripts_itemize_async(
     Async implementation of transform_transcripts_itemize.
     """
     base_path = os.path.splitext(input_file)[0]
-    cached_parquet_path = f"{base_path}-bertopic-itemize-{provider}.parquet"
-    text_file_path = f"{base_path}-bertopic-itemize-{provider}-text.txt"
+    suffix = "-customer-only" if customer_only else ""
+    cached_parquet_path = f"{base_path}-bertopic-itemize-{provider}{suffix}.parquet"
+    text_file_path = f"{base_path}-bertopic-itemize-{provider}{suffix}-text.txt"
 
     if not fresh and os.path.exists(cached_parquet_path) and os.path.exists(text_file_path):
         logging.info(f"Using cached files: {cached_parquet_path} and {text_file_path}")
@@ -627,6 +742,10 @@ async def _transform_transcripts_itemize_async(
     logging.info(f"Loading transcript data from {input_file}")
     df = pd.read_parquet(input_file)
 
+    # Apply customer-only filter if requested
+    if customer_only:
+        df = apply_customer_only_filter(df, content_column, customer_only)
+    
     if sample_size is not None and sample_size > 0 and sample_size < len(df):
         logging.info(f"Sampling {sample_size} transcripts from the dataset.")
         df = df.sample(n=sample_size, random_state=42)

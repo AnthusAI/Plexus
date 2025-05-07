@@ -7,77 +7,77 @@ Implement topic modeling on call transcripts using BERTopic, focusing on custome
 ### Basic Usage
 ```bash
 # Run topic analysis on a transcript file
-plexus analyze topics --input-file ~/projects/Call-Criteria-Python/.plexus_training_data_cache/dataframes/1039_no_score_id_Start-Date_csv.parquet
+python3 -m plexus.cli.CommandLineInterface analyze topics --input-file .plexus_training_data_cache/dataframes/1039_no_score_id_Start-Date_csv.parquet
 
 # Inspect data before processing
-plexus analyze topics --input-file ~/projects/Call-Criteria-Python/.plexus_training_data_cache/dataframes/1039_no_score_id_Start-Date_csv.parquet --inspect
+python3 -m plexus.cli.CommandLineInterface analyze topics --input-file .plexus_training_data_cache/dataframes/1039_no_score_id_Start-Date_csv.parquet --inspect
 
 # Specify custom content column
-plexus analyze topics --input-file <path> --content-column text
+python3 -m plexus.cli.CommandLineInterface analyze topics --input-file <path> --content-column text
+
+# Extract and analyze only customer utterances
+python3 -m plexus.cli.CommandLineInterface analyze topics --input-file .plexus_training_data_cache/dataframes/1039_no_score_id_Start-Date_csv.parquet --customer-only
 
 # Specify output directory
-plexus analyze topics --input-file <path> --output-dir ./output
+python3 -m plexus.cli.CommandLineInterface analyze topics --input-file <path> --output-dir ./output
 ```
 
 ### LLM Transformation (New)
 ```bash
-# Use LLM to transform transcripts (with default prompt)
-plexus analyze topics --input-file <path> --transform llm
+# Use LLM to transform transcripts with Ollama (default provider)
+python3 -m plexus.cli.CommandLineInterface analyze topics --input-file .plexus_training_data_cache/dataframes/1039_no_score_id_Start-Date_csv.parquet --transform llm
 
-# Use custom prompt template
-plexus analyze topics --input-file <path> --transform llm --prompt-template plexus/cli/bertopic/prompts/summary.json
+# Use custom prompt template with Ollama
+python3 -m plexus.cli.CommandLineInterface analyze topics --input-file .plexus_training_data_cache/dataframes/1039_no_score_id_Start-Date_csv.parquet --transform llm --prompt-template plexus/cli/bertopic/prompts/summary.json --llm-model gemma3:27b
 
-# Specify LLM model (default provider is Ollama)
-plexus analyze topics --input-file <path> --transform llm --llm-model gemma3:27b
+# Use OpenAI for transformation with custom model
+python3 -m plexus.cli.CommandLineInterface analyze topics --input-file .plexus_training_data_cache/dataframes/1039_no_score_id_Start-Date_csv.parquet --transform llm --provider openai --llm-model gpt-4o-mini
 
-# Specify OpenAI as the provider with model
-plexus analyze topics --input-file <path> --transform llm --provider openai --llm-model gpt-3.5-turbo
-
-# Provide OpenAI API key directly (alternatively use OPENAI_API_KEY env var)
-plexus analyze topics --input-file <path> --transform llm --provider openai --llm-model gpt-3.5-turbo --openai-api-key YOUR_API_KEY
+# Use OpenAI to analyze customer-only utterances
+python3 -m plexus.cli.CommandLineInterface analyze topics --input-file .plexus_training_data_cache/dataframes/1039_no_score_id_Start-Date_csv.parquet --transform llm --provider openai --llm-model gpt-4o-mini --customer-only
 
 # Force regeneration of cached files
-plexus analyze topics --input-file <path> --transform llm --fresh
+python3 -m plexus.cli.CommandLineInterface analyze topics --input-file .plexus_training_data_cache/dataframes/1039_no_score_id_Start-Date_csv.parquet --transform llm --fresh
 ```
 
 ### Customer Question Extraction (New)
 ```bash
-# Extract direct customer questions from transcripts (default with Ollama)
-plexus analyze topics --input-file <path> --transform itemize
+# Extract direct customer questions using Ollama
+python3 -m plexus.cli.CommandLineInterface analyze topics --input-file .plexus_training_data_cache/dataframes/1039_no_score_id_Start-Date_csv.parquet --transform itemize
 
-# Extract questions using OpenAI
-plexus analyze topics --input-file <path> --transform itemize --provider openai --llm-model gpt-3.5-turbo
+# Extract questions using OpenAI with custom prompt template (actual command in use)
+python3 -m plexus.cli.CommandLineInterface analyze topics --input-file .plexus_training_data_cache/dataframes/1039_no_score_id_Start-Date_csv.parquet --transform itemize --prompt-template plexus/cli/bertopic/prompts/itemize.json --fresh --provider openai --llm-model gpt-4o-mini
 
-# Use custom prompt template for question extraction
-plexus analyze topics --input-file <path> --transform itemize --prompt-template plexus/cli/bertopic/prompts/itemize.json
+# Extract customer questions using OpenAI (only on customer utterances)
+python3 -m plexus.cli.CommandLineInterface analyze topics --input-file .plexus_training_data_cache/dataframes/1039_no_score_id_Start-Date_csv.parquet --transform itemize --prompt-template plexus/cli/bertopic/prompts/itemize.json --provider openai --llm-model gpt-4o-mini --customer-only
 
 # Customize retry behavior for parsing failures
-plexus analyze topics --input-file <path> --transform itemize --max-retries 3
+python3 -m plexus.cli.CommandLineInterface analyze topics --input-file .plexus_training_data_cache/dataframes/1039_no_score_id_Start-Date_csv.parquet --transform itemize --max-retries 3
 ```
 
 ### File Inspection
 ```bash
 # View transformed Parquet file
-python -c "import pandas as pd; df = pd.read_parquet('1039_no_score_id_Start-Date_csv-bertopic.parquet'); print(df.head())"
+python -c "import pandas as pd; df = pd.read_parquet('1039_no_score_id_Start-Date_csv-bertopic-itemize-openai.parquet'); print(df.head())"
 
 # View BERTopic text file
-head -n 5 1039_no_score_id_Start-Date_csv-bertopic-text.txt
+head -n 5 1039_no_score_id_Start-Date_csv-bertopic-itemize-openai-text.txt
 ```
 
 ### Test Data Location
 ```bash
 # Small test dataset
-~/projects/Call-Criteria-Python/.plexus_training_data_cache/dataframes/1039_no_score_id_Start-Date_csv.parquet
+.plexus_training_data_cache/dataframes/1039_no_score_id_Start-Date_csv.parquet
 
 # Large test dataset
-~/projects/Call-Criteria-Python/.plexus_training_data_cache/dataframes/custom_555_60000_9627029a.parquet
+.plexus_training_data_cache/dataframes/custom_555_60000_9627029a.parquet
 ```
 
 ### Current Command
 ```bash
 # Run topic analysis with refined parameters
-plexus analyze topics \
-  --input-file ~/projects/Call-Criteria-Python/.plexus_training_data_cache/dataframes/custom_555_60000_9627029a.parquet \
+python3 -m plexus.cli.CommandLineInterface analyze topics \
+  --input-file .plexus_training_data_cache/dataframes/custom_555_60000_9627029a.parquet \
   --output-dir ./output \
   --num-topics 40 \
   --min-ngram 1 \
@@ -89,19 +89,16 @@ plexus analyze topics \
 ### LLM Integration Test
 ```bash
 # Test Ollama LLM integration with default model and prompt
-plexus analyze test-ollama
+python3 -m plexus.cli.CommandLineInterface analyze test-ollama
 
-# Test with a specific model
-plexus analyze test-ollama --model gemma3:27b
+# Test with a specific Ollama model
+python3 -m plexus.cli.CommandLineInterface analyze test-ollama --model gemma3:27b
 
 # Test OpenAI integration
-plexus analyze test-ollama --provider openai --model gpt-3.5-turbo
+python3 -m plexus.cli.CommandLineInterface analyze test-ollama --provider openai --model gpt-4o-mini
 
 # Test with a custom prompt
-plexus analyze test-ollama --prompt "Explain the concept of topic modeling in simple terms"
-
-# Test with both custom model and prompt
-plexus analyze test-ollama --model llama3:8b --prompt "Write a Python function to calculate Fibonacci numbers"
+python3 -m plexus.cli.CommandLineInterface analyze test-ollama --prompt "Explain the concept of topic modeling in simple terms"
 ```
 
 ## Progress
@@ -181,6 +178,11 @@ plexus/
   - Splits on "Agent:" and "Customer:" markers
   - Filters out very short turns (< 2 words)
   - Preserves all metadata in Parquet file
+- Customer-only filtering:
+  - Optional preprocessing step that extracts only customer utterances
+  - Removes all "Agent:" portions of the transcript
+  - Preserves only "Customer:" portions concatenated together
+  - Useful for focusing analysis specifically on customer language
 - LLM-based transformation:
   - Processes entire transcripts through LLM (Ollama or OpenAI)
   - Uses configurable prompt templates via JSON files
