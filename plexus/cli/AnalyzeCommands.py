@@ -145,6 +145,7 @@ def feedback(
 @click.option('--fresh', is_flag=True, help='Force regeneration of cached files')
 @click.option('--max-retries', type=int, default=2, help='Maximum number of retries for parsing failures (itemize mode only)')
 @click.option('--sample-size', type=int, default=None, help='Number of transcripts to sample (default: process all)')
+@click.option('--customer-only', is_flag=True, help='Extract and process only customer utterances from transcripts')
 def topics(
     input_file: str,
     output_dir: str,
@@ -165,6 +166,7 @@ def topics(
     fresh: bool,
     max_retries: int,
     sample_size: Optional[int],
+    customer_only: bool,
 ):
     """
     Analyze topics in call transcripts using BERTopic.
@@ -184,21 +186,27 @@ def topics(
     
     Examples:
         # Default chunking transformation
-        plexus analyze topics --input-file path/to/transcripts.parquet
+        python3 -m plexus.cli.CommandLineInterface analyze topics --input-file path/to/transcripts.parquet
         
         # LLM-based transformation with Ollama
-        plexus analyze topics --input-file path/to/transcripts.parquet --transform llm --llm-model gemma3:27b
+        python3 -m plexus.cli.CommandLineInterface analyze topics --input-file path/to/transcripts.parquet --transform llm --llm-model gemma3:27b
         
         # LLM-based transformation with OpenAI
-        plexus analyze topics --input-file path/to/transcripts.parquet --transform llm --provider openai --llm-model gpt-3.5-turbo
+        python3 -m plexus.cli.CommandLineInterface analyze topics --input-file path/to/transcripts.parquet --transform llm --provider openai --llm-model gpt-3.5-turbo
+        
+        # Extract only customer utterances for analysis
+        python3 -m plexus.cli.CommandLineInterface analyze topics --input-file path/to/transcripts.parquet --customer-only
         
         # Itemized extraction with structured output
-        plexus analyze topics --input-file path/to/transcripts.parquet --transform itemize --max-retries 3
+        python3 -m plexus.cli.CommandLineInterface analyze topics --input-file path/to/transcripts.parquet --transform itemize --max-retries 3
 
         # Process only 100 random transcripts
-        plexus analyze topics --input-file path/to/transcripts.parquet --sample-size 100
+        python3 -m plexus.cli.CommandLineInterface analyze topics --input-file path/to/transcripts.parquet --sample-size 100
     """
     logging.info(f"Starting topic analysis for file: {input_file}")
+    
+    if customer_only:
+        logging.info("Customer-only mode: Will extract and process only customer utterances")
     
     input_path = Path(input_file)
     output_path = Path(output_dir)
@@ -226,6 +234,7 @@ def topics(
                     prompt_template_file=prompt_template,
                     model=llm_model,
                     provider=provider,
+                    customer_only=customer_only,
                     openai_api_key=openai_api_key,
                     fresh=fresh,
                     max_retries=max_retries,
@@ -235,6 +244,8 @@ def topics(
                 logging.error(f"Error during itemize transformation: {str(e)}", exc_info=True)
                 raise
             transform_suffix = f"itemize-{provider}"
+            if customer_only:
+                transform_suffix += "-customer-only"
         elif transform == 'llm':
             logging.info(f"Using LLM transformation with {provider} model: {llm_model}")
             if prompt_template:
@@ -246,6 +257,7 @@ def topics(
                     prompt_template_file=prompt_template,
                     model=llm_model,
                     provider=provider,
+                    customer_only=customer_only,
                     openai_api_key=openai_api_key,
                     fresh=fresh,
                     sample_size=sample_size
@@ -254,12 +266,15 @@ def topics(
                 logging.error(f"Error during LLM transformation: {str(e)}", exc_info=True)
                 raise
             transform_suffix = f"llm-{provider}"
+            if customer_only:
+                transform_suffix += "-customer-only"
         else:  # Default chunking method
             logging.info("Using default chunking transformation")
             try:
                 _, text_file_path = transform_transcripts(
                     input_file=str(input_path),
                     content_column=content_column,
+                    customer_only=customer_only,
                     fresh=fresh,
                     sample_size=sample_size
                 )
@@ -267,6 +282,8 @@ def topics(
                 logging.error(f"Error during chunk transformation: {str(e)}", exc_info=True)
                 raise
             transform_suffix = "chunk"
+            if customer_only:
+                transform_suffix += "-customer-only"
             
         logging.info("Transcript transformation completed successfully")
         
@@ -382,11 +399,17 @@ def test_ollama(
                 # Create a simple prompt
                 prompt_template = ChatPromptTemplate.from_template("{text}")
                 
+                # Format the prompt
+                formatted_prompt = prompt_template.format(text=prompt)
+                
+                # Log the complete formatted prompt
+                logging.info(f"COMPLETE FORMATTED PROMPT FOR TEST:\n{formatted_prompt}\n")
+                
                 # Initialize the OpenAI LLM
                 llm = ChatOpenAI(model=model, openai_api_key=api_key)
                 
                 # Run LLM on the prompt
-                response = llm.invoke(prompt_template.format(text=prompt))
+                response = llm.invoke(formatted_prompt)
                 
                 # Extract content from AIMessage for OpenAI responses
                 if hasattr(response, 'content'):
