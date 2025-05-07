@@ -354,7 +354,16 @@ async def transform_transcripts_llm(
         Tuple of (cached_parquet_path, text_file_path)
     """
     return await _transform_transcripts_llm_async(
-        input_file, content_column, prompt_template_file, model, provider, fresh, inspect, openai_api_key, sample_size
+        input_file=input_file, 
+        content_column=content_column, 
+        prompt_template_file=prompt_template_file, 
+        model=model, 
+        provider=provider, 
+        customer_only=customer_only,
+        fresh=fresh, 
+        inspect=inspect,
+        openai_api_key=openai_api_key, 
+        sample_size=sample_size
     )
 
 async def _transform_transcripts_llm_async(
@@ -363,8 +372,8 @@ async def _transform_transcripts_llm_async(
     prompt_template_file: str = None,
     model: str = 'gemma3:27b',
     provider: str = 'ollama',
-    fresh: bool = False,
     customer_only: bool = False,
+    fresh: bool = False,
     inspect: bool = True,
     openai_api_key: str = None,
     sample_size: Optional[int] = None
@@ -560,11 +569,19 @@ async def transform_transcripts_itemize(
     Returns:
         Tuple of (cached_parquet_path, text_file_path)
     """
-    # Removed threading wrapper logic
-    # Directly await the async helper function
     return await _transform_transcripts_itemize_async(
-        input_file, content_column, prompt_template_file, model, provider, fresh, inspect, 
-        max_retries, retry_delay, openai_api_key, sample_size
+        input_file=input_file, 
+        content_column=content_column, 
+        prompt_template_file=prompt_template_file, 
+        model=model, 
+        provider=provider, 
+        customer_only=customer_only,
+        fresh=fresh, 
+        inspect=inspect,
+        max_retries=max_retries, 
+        retry_delay=retry_delay, 
+        openai_api_key=openai_api_key, 
+        sample_size=sample_size
     )
 
 async def _process_itemize_transcript_async(
@@ -720,6 +737,7 @@ async def _transform_transcripts_itemize_async(
     prompt_template_file: str = None,
     model: str = 'gemma3:27b',
     provider: str = 'ollama',
+    customer_only: bool = False,
     fresh: bool = False,
     inspect: bool = True,
     max_retries: int = 2,

@@ -145,7 +145,7 @@ def feedback(
 @click.option('--fresh', is_flag=True, help='Force regeneration of cached files')
 @click.option('--max-retries', type=int, default=2, help='Maximum number of retries for parsing failures (itemize mode only)')
 @click.option('--sample-size', type=int, default=None, help='Number of transcripts to sample (default: process all)')
-@click.option('--customer-only', is_flag=True, help='Extract and process only customer utterances from transcripts')
+@click.option('--customer-only', is_flag=True, default=False, help='Filter transcripts to include only customer utterances before processing')
 def topics(
     input_file: str,
     output_dir: str,
@@ -223,6 +223,8 @@ def topics(
     
     try:
         text_file_path = None
+        transform_suffix = ""
+
         if transform == 'itemize':
             logging.info(f"Using itemized LLM transformation with {provider} model: {llm_model}")
             if prompt_template:
@@ -235,14 +237,14 @@ def topics(
                     model=llm_model,
                     provider=provider,
                     customer_only=customer_only,
-                    openai_api_key=openai_api_key,
                     fresh=fresh,
                     max_retries=max_retries,
+                    openai_api_key=openai_api_key,
                     sample_size=sample_size
                 ))
             except Exception as e:
                 logging.error(f"Error during itemize transformation: {str(e)}", exc_info=True)
-                raise
+                raise 
             transform_suffix = f"itemize-{provider}"
             if customer_only:
                 transform_suffix += "-customer-only"
@@ -258,8 +260,8 @@ def topics(
                     model=llm_model,
                     provider=provider,
                     customer_only=customer_only,
-                    openai_api_key=openai_api_key,
                     fresh=fresh,
+                    openai_api_key=openai_api_key,
                     sample_size=sample_size
                 ))
             except Exception as e:
@@ -268,7 +270,7 @@ def topics(
             transform_suffix = f"llm-{provider}"
             if customer_only:
                 transform_suffix += "-customer-only"
-        else:  # Default chunking method
+        else:  # Default chunking method (transform == 'chunk')
             logging.info("Using default chunking transformation")
             try:
                 _, text_file_path = transform_transcripts(
@@ -291,33 +293,20 @@ def topics(
             if not text_file_path:
                 logging.error("Text file path not generated from transformation step. Skipping analysis.")
                 return
-                
+            
             # Define the hidden base directory for all plexus bertopic results
             hidden_base_output_dirname = ".plexus_bertopic_results"
-            # This is the parent directory for all sequentially numbered analysis folders
-            numbered_analysis_parent_dir = output_path / hidden_base_output_dirname
-            
-            # Ensure the parent directory for numbered analyses exists
-            numbered_analysis_parent_dir.mkdir(parents=True, exist_ok=True)
-            
-            # Determine the next analysis number
-            next_analysis_num = 1
-            if numbered_analysis_parent_dir.is_dir(): # Check if it exists and is a directory
-                max_existing_num = 0
-                for item_name in os.listdir(numbered_analysis_parent_dir):
-                    item_path = numbered_analysis_parent_dir / item_name
-                    if item_path.is_dir(): # Ensure it's a directory
-                        match = re.fullmatch(r"topic_analysis_(\d+)", item_name)
-                        if match:
-                            num = int(match.group(1))
-                            if num > max_existing_num:
-                                max_existing_num = num
-                next_analysis_num = max_existing_num + 1
-            
-            analysis_dir_name = f"topic_analysis_{next_analysis_num}"
+            # The parent directory for the analysis folder
+            analysis_parent_dir = output_path / hidden_base_output_dirname
+
+            # Ensure the parent directory exists
+            analysis_parent_dir.mkdir(parents=True, exist_ok=True)
+
+            # Use descriptive naming scheme based on parameters
+            analysis_dir_name = f"topics_{transform_suffix}_{min_ngram}-{max_ngram}gram_{num_topics if num_topics else 'auto'}"
             
             # Construct the full path for the specific analysis output
-            final_output_dir = numbered_analysis_parent_dir / analysis_dir_name
+            final_output_dir = analysis_parent_dir / analysis_dir_name
             output_dir_str = str(final_output_dir)
             
             logging.info(f"Preparing to start BERTopic analysis directly in the main process.")
