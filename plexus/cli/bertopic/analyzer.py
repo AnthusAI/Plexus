@@ -7,6 +7,7 @@ import stat
 import logging
 from typing import List, Optional, Tuple
 from bertopic import BERTopic
+from umap import UMAP
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -65,26 +66,72 @@ def analyze_topics(
     try:
         with open(text_file_path, 'r') as f:
             docs = [line.strip() for line in f if line.strip()]
-        logger.debug(f"Loaded {len(docs)} documents")
+        logger.debug(f"Loaded {len(docs)} documents from {text_file_path}")
+        
+        # Check if enough documents are loaded for analysis
+        min_docs_for_umap = 3 # UMAP generally needs n_neighbors < n_samples, and n_neighbors >= 2
+        if len(docs) < min_docs_for_umap:
+            error_msg = (
+                f"Insufficient number of documents ({len(docs)}) for BERTopic/UMAP analysis. "
+                f"Need at least {min_docs_for_umap} documents. "
+                f"This can happen if --sample-size is too small or input data is sparse."
+            )
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+            
+        logger.info(f"Successfully loaded {len(docs)} documents.")
     except Exception as e:
         logger.error(f"Failed to load text data from {text_file_path}: {e}", exc_info=True)
         raise
     
+    # Determine n_neighbors for UMAP dynamically
+    # Default desired n_neighbors is 15, but it must be < len(docs) and >= 2.
+    umap_n_neighbors = min(15, len(docs) - 1)
+    # Ensure n_neighbors is at least 2 (it will be if len(docs) >= 3 from check above)
+    umap_n_neighbors = max(2, umap_n_neighbors) 
+
+    logger.info(f"Initializing UMAP model with dynamically set n_neighbors={umap_n_neighbors} (and n_jobs=1).")
+    try:
+        umap_model = UMAP(
+            n_neighbors=umap_n_neighbors, 
+            n_components=5, 
+            min_dist=0.0, 
+            metric='cosine', 
+            random_state=42, 
+            n_jobs=1
+        )
+        logger.debug("UMAP model initialized successfully.")
+    except Exception as e:
+        logger.error(f"Failed to initialize UMAP model: {e}", exc_info=True)
+        raise
+
     # Initialize BERTopic model with n-gram range and other parameters
-    logger.info(f"Initializing BERTopic model with n-gram range {n_gram_range}")
+    logger.info(f"Initializing BERTopic model with n-gram range {n_gram_range} and custom UMAP model.")
     topic_model = BERTopic(
         n_gram_range=n_gram_range,
         min_topic_size=min_topic_size,
         top_n_words=top_n_words,
+        umap_model=umap_model,
         verbose=True
     )
+    logger.debug("BERTopic model initialized successfully.")
     
     # Fit and transform
     logger.info("Performing topic modeling")
     try:
         topics, probs = topic_model.fit_transform(docs)
+    except ValueError as ve:
+        logger.error(f"ValueError during topic_model.fit_transform: {ve}", exc_info=True)
+        logger.error(f"Number of documents at the time of error: {len(docs)}")
+        if docs:
+            logger.error(f"First few documents: {docs[:5]}")
+        # Potentially add check for n_neighbors vs len(docs) here if UMAP is the cause
+        # This check is now handled by dynamic n_neighbor setting and early exit for too few docs.
+        # if hasattr(topic_model, 'umap_model') and topic_model.umap_model.n_neighbors > len(docs):
+        #    logger.error(f"UMAP n_neighbors ({topic_model.umap_model.n_neighbors}) is greater than the number of documents ({len(docs)}). This can cause errors.")
+        raise
     except Exception as e:
-        logger.error("Failed to perform topic modeling", exc_info=True)
+        logger.error(f"Failed to perform topic modeling: {e}", exc_info=True)
         raise
     
     # Log initial topic info
@@ -92,53 +139,72 @@ def analyze_topics(
     logger.info(f"Found {n_topics} initial topics in the data")
     
     # Reduce topics if requested
-    if nr_topics is not None and nr_topics < n_topics:
+    if nr_topics is not None and n_topics > 0 and nr_topics < n_topics: # Also check n_topics > 0 before reducing
         logger.info(f"Reducing topics from {n_topics} to {nr_topics}")
         try:
             topic_model.reduce_topics(docs, nr_topics=nr_topics)
-            topics = topic_model.topics_
-            n_topics = len(set(topics)) - 1
+            topics = topic_model.topics_ # Update topics after reduction
+            n_topics = len(set(topics)) - 1 # Update n_topics after reduction
             logger.info(f"Reduced to {n_topics} topics")
         except Exception as e:
             logger.error("Failed to reduce topics", exc_info=True)
-            raise
+            # Do not re-raise here, allow to proceed with unreduced topics if reduction fails
+            logger.warning("Proceeding with unreduced topics after reduction failure.")
     
     # Save visualizations
     logger.info("Generating and saving visualizations")
     
-    try:
-        # Topic distribution
-        logger.info("Generating topic distribution visualization...")
-        fig = topic_model.visualize_topics()
-        dist_path = os.path.join(output_dir, "topic_distribution.html")
-        save_visualization(fig, dist_path)
-        logger.info(f"Saved topic distribution to {dist_path}")
-    except Exception as e:
-        logger.error(f"Failed to generate topic distribution: {e}", exc_info=True)
-    
-    try:
-        # Topic hierarchy
-        logger.info("Generating topic hierarchy visualization...")
-        fig = topic_model.visualize_hierarchy()
-        hier_path = os.path.join(output_dir, "topic_hierarchy.html")
-        save_visualization(fig, hier_path)
-        logger.info(f"Saved topic hierarchy to {hier_path}")
-    except Exception as e:
-        logger.error(f"Failed to generate topic hierarchy: {e}", exc_info=True)
-    
-    # Topic word clouds
-    logger.info("Generating topic word clouds...")
-    word_cloud_count = 0
-    for topic in set(topics):
-        if topic != -1:  # Skip outliers
+    if n_topics == 0:
+        logger.warning("No topics found. Skipping most visualizations.")
+        logger.warning(
+            "This might be due to the input data, the 'min_topic_size' parameter (currently set or defaulted in BERTopic), "
+            "or other BERTopic/HDBSCAN settings. Consider adjusting these or increasing --sample-size if more diverse data might help."
+        )
+    else:
+        # Minimum topics needed for visualize_topics scatter plot (due to internal UMAP n_neighbors=2)
+        min_topics_for_scatter_plot = 3
+        
+        if n_topics >= min_topics_for_scatter_plot:
             try:
-                logger.debug(f"Generating word cloud for topic {topic}")
-                fig = topic_model.visualize_barchart(topics=[topic])
-                cloud_path = os.path.join(output_dir, f"topic_{topic}_words.html")
-                save_visualization(fig, cloud_path)
-                word_cloud_count += 1
+                # Topic distribution
+                logger.info(f"Generating topic distribution visualization ({n_topics} topics >= {min_topics_for_scatter_plot})...")
+                fig = topic_model.visualize_topics()
+                dist_path = os.path.join(output_dir, "topic_distribution.html")
+                save_visualization(fig, dist_path)
+                logger.info(f"Saved topic distribution to {dist_path}")
             except Exception as e:
-                logger.error(f"Failed to generate word cloud for topic {topic}: {e}", exc_info=True)
-    
-    logger.info(f"Generated {word_cloud_count} word clouds")
+                logger.error(f"Failed to generate topic distribution: {e}", exc_info=True)
+        else:
+            logger.warning(
+                f"Skipping topic distribution visualization because the number of topics ({n_topics}) "
+                f"is less than the minimum required ({min_topics_for_scatter_plot}) for this specific plot."
+            )
+        
+        try:
+            # Topic hierarchy
+            logger.info("Generating topic hierarchy visualization...")
+            fig = topic_model.visualize_hierarchy()
+            hier_path = os.path.join(output_dir, "topic_hierarchy.html")
+            save_visualization(fig, hier_path)
+            logger.info(f"Saved topic hierarchy to {hier_path}")
+        except Exception as e:
+            logger.error(f"Failed to generate topic hierarchy: {e}", exc_info=True)
+        
+        # Topic word clouds
+        logger.info("Generating topic word clouds...")
+        word_cloud_count = 0
+        # Ensure topics are correctly referenced, especially after potential reduction
+        unique_topics = set(topic_model.topics_ if hasattr(topic_model, 'topics_') and topic_model.topics_ is not None else topics)
+        for topic_num in unique_topics:
+            if topic_num != -1:  # Skip outliers
+                try:
+                    logger.debug(f"Generating word cloud for topic {topic_num}")
+                    fig = topic_model.visualize_barchart(topics=[topic_num]) # Pass as a list
+                    cloud_path = os.path.join(output_dir, f"topic_{topic_num}_words.html")
+                    save_visualization(fig, cloud_path)
+                    word_cloud_count += 1
+                except Exception as e:
+                    logger.error(f"Failed to generate word cloud for topic {topic_num}: {e}", exc_info=True)
+        logger.info(f"Generated {word_cloud_count} word clouds")
+
     logger.info(f"Analysis complete. Results saved to {output_dir}") 

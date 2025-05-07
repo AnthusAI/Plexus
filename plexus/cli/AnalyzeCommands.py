@@ -10,10 +10,13 @@ from pyairtable import Api
 from pyairtable.formulas import match
 import dotenv
 import os
+import re
 from pathlib import Path
 from plexus.cli.bertopic.transformer import transform_transcripts, inspect_data, transform_transcripts_llm, transform_transcripts_itemize
 from plexus.cli.bertopic.analyzer import analyze_topics
 from plexus.cli.bertopic.ollama_test import test_ollama_chat
+from typing import Optional
+import asyncio
 
 # Configure logging
 logging.basicConfig(
@@ -141,6 +144,7 @@ def feedback(
 @click.option('--openai-api-key', help='OpenAI API key (if provider is openai)')
 @click.option('--fresh', is_flag=True, help='Force regeneration of cached files')
 @click.option('--max-retries', type=int, default=2, help='Maximum number of retries for parsing failures (itemize mode only)')
+@click.option('--sample-size', type=int, default=None, help='Number of transcripts to sample (default: process all)')
 def topics(
     input_file: str,
     output_dir: str,
@@ -160,6 +164,7 @@ def topics(
     openai_api_key: str,
     fresh: bool,
     max_retries: int,
+    sample_size: Optional[int],
 ):
     """
     Analyze topics in call transcripts using BERTopic.
@@ -189,10 +194,12 @@ def topics(
         
         # Itemized extraction with structured output
         plexus analyze topics --input-file path/to/transcripts.parquet --transform itemize --max-retries 3
+
+        # Process only 100 random transcripts
+        plexus analyze topics --input-file path/to/transcripts.parquet --sample-size 100
     """
     logging.info(f"Starting topic analysis for file: {input_file}")
     
-    # Convert paths to Path objects
     input_path = Path(input_file)
     output_path = Path(output_dir)
     
@@ -207,14 +214,13 @@ def topics(
         return
     
     try:
-        # Process the transcripts based on transform method
+        text_file_path = None
         if transform == 'itemize':
             logging.info(f"Using itemized LLM transformation with {provider} model: {llm_model}")
             if prompt_template:
                 logging.info(f"Using prompt template from: {prompt_template}")
-            
             try:
-                _, text_file_path = transform_transcripts_itemize(
+                _, text_file_path = asyncio.run(transform_transcripts_itemize(
                     input_file=str(input_path),
                     content_column=content_column,
                     prompt_template_file=prompt_template,
@@ -222,62 +228,112 @@ def topics(
                     provider=provider,
                     openai_api_key=openai_api_key,
                     fresh=fresh,
-                    max_retries=max_retries
-                )
+                    max_retries=max_retries,
+                    sample_size=sample_size
+                ))
             except Exception as e:
-                import traceback
-                logging.error(f"Error during topic analysis: {str(e)}")
-                logging.error(f"FULL TRACEBACK:\n{traceback.format_exc()}")
+                logging.error(f"Error during itemize transformation: {str(e)}", exc_info=True)
                 raise
-            
             transform_suffix = f"itemize-{provider}"
         elif transform == 'llm':
             logging.info(f"Using LLM transformation with {provider} model: {llm_model}")
             if prompt_template:
                 logging.info(f"Using prompt template from: {prompt_template}")
-            
-            _, text_file_path = transform_transcripts_llm(
-                input_file=str(input_path),
-                content_column=content_column,
-                prompt_template_file=prompt_template,
-                model=llm_model,
-                provider=provider,
-                openai_api_key=openai_api_key,
-                fresh=fresh
-            )
+            try:
+                _, text_file_path = asyncio.run(transform_transcripts_llm(
+                    input_file=str(input_path),
+                    content_column=content_column,
+                    prompt_template_file=prompt_template,
+                    model=llm_model,
+                    provider=provider,
+                    openai_api_key=openai_api_key,
+                    fresh=fresh,
+                    sample_size=sample_size
+                ))
+            except Exception as e:
+                logging.error(f"Error during LLM transformation: {str(e)}", exc_info=True)
+                raise
             transform_suffix = f"llm-{provider}"
         else:  # Default chunking method
             logging.info("Using default chunking transformation")
-            _, text_file_path = transform_transcripts(
-                input_file=str(input_path),
-                content_column=content_column,
-                fresh=fresh
-            )
+            try:
+                _, text_file_path = transform_transcripts(
+                    input_file=str(input_path),
+                    content_column=content_column,
+                    fresh=fresh,
+                    sample_size=sample_size
+                )
+            except Exception as e:
+                logging.error(f"Error during chunk transformation: {str(e)}", exc_info=True)
+                raise
             transform_suffix = "chunk"
             
         logging.info("Transcript transformation completed successfully")
         
         if not skip_analysis:
-            # Create descriptive output directory
-            analysis_dir = f"topics_{transform_suffix}_{min_ngram}-{max_ngram}gram_{num_topics if num_topics else 'auto'}"
-            output_dir = str(output_path / analysis_dir)
+            if not text_file_path:
+                logging.error("Text file path not generated from transformation step. Skipping analysis.")
+                return
+                
+            # Define the hidden base directory for all plexus bertopic results
+            hidden_base_output_dirname = ".plexus_bertopic_results"
+            # This is the parent directory for all sequentially numbered analysis folders
+            numbered_analysis_parent_dir = output_path / hidden_base_output_dirname
             
-            logging.info("Starting BERTopic analysis...")
-            analyze_topics(
-                text_file_path=text_file_path,
-                output_dir=output_dir,
-                nr_topics=num_topics,
-                n_gram_range=(min_ngram, max_ngram),
-                min_topic_size=min_topic_size,
-                top_n_words=top_n_words
-            )
-            logging.info("BERTopic analysis completed successfully")
+            # Ensure the parent directory for numbered analyses exists
+            numbered_analysis_parent_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Determine the next analysis number
+            next_analysis_num = 1
+            if numbered_analysis_parent_dir.is_dir(): # Check if it exists and is a directory
+                max_existing_num = 0
+                for item_name in os.listdir(numbered_analysis_parent_dir):
+                    item_path = numbered_analysis_parent_dir / item_name
+                    if item_path.is_dir(): # Ensure it's a directory
+                        match = re.fullmatch(r"topic_analysis_(\d+)", item_name)
+                        if match:
+                            num = int(match.group(1))
+                            if num > max_existing_num:
+                                max_existing_num = num
+                next_analysis_num = max_existing_num + 1
+            
+            analysis_dir_name = f"topic_analysis_{next_analysis_num}"
+            
+            # Construct the full path for the specific analysis output
+            final_output_dir = numbered_analysis_parent_dir / analysis_dir_name
+            output_dir_str = str(final_output_dir)
+            
+            logging.info(f"Preparing to start BERTopic analysis directly in the main process.")
+            logging.info(f"Output directory for analysis: {output_dir_str}")
+            
+            # Set OpenMP environment variables before calling analyze_topics
+            logging.info("Setting OpenMP environment variables for BERTopic analysis.")
+            os.environ["OMP_NUM_THREADS"] = "1"
+            os.environ["OPENBLAS_NUM_THREADS"] = "1"
+            os.environ["MKL_NUM_THREADS"] = "1"
+            os.environ["NUMEXPR_NUM_THREADS"] = "1"
+            logging.info(f"OMP_NUM_THREADS set to: {os.environ.get('OMP_NUM_THREADS')}")
+
+            try:
+                analyze_topics(
+                    text_file_path=text_file_path,
+                    output_dir=output_dir_str,
+                    nr_topics=num_topics,
+                    n_gram_range=(min_ngram, max_ngram),
+                    min_topic_size=min_topic_size,
+                    top_n_words=top_n_words
+                )
+                logging.info("BERTopic analysis completed successfully.")
+            except Exception as e:
+                logging.error(f"BERTopic analysis failed: {str(e)}", exc_info=True)
+                raise
         else:
             logging.info("Skipping BERTopic analysis as requested")
         
     except Exception as e:
-        logging.error(f"Error during topic analysis: {e}")
-        return
+        # This will catch errors re-raised from transformation or analysis steps
+        logging.error(f"Topic analysis command failed: {e}")
+        return # Exit gracefully
 
 @analyze.command()
 @click.option('--model', default='gemma3:27b', help='Model to use (default: gemma3:27b)')
