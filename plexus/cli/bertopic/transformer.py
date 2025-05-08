@@ -333,7 +333,10 @@ async def transform_transcripts_llm(
     sample_size: Optional[int] = None
 ) -> Tuple[str, str]:
     """
-    Transform transcript data using LLM for summarization/extraction.
+    Transform transcript data using a language model.
+    
+    This function processes each transcript through a language model
+    to extract key information or summarize content before topic analysis.
     
     Args:
         input_file: Path to input Parquet file
