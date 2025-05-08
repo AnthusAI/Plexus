@@ -142,8 +142,7 @@ const schema = a.schema({
             feedbackItems: a.hasMany('FeedbackItem', 'scoreId'),
             championVersionId: a.string(),
             championVersion: a.belongsTo('ScoreVersion', 'championVersionId'),
-            externalId: a.string().required(),
-            numberOfClasses: a.integer()
+            externalId: a.string().required()
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
@@ -165,6 +164,7 @@ const schema = a.schema({
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
             note: a.string(),
+            numberOfClasses: a.integer(),
             scoreResults: a.hasMany('ScoreResult', 'scoreVersionId'),
             scoresAsChampion: a.hasMany('Score', 'championVersionId'),
             parentVersionId: a.string(),
