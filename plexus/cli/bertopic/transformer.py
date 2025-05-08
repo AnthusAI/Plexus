@@ -333,10 +333,7 @@ async def transform_transcripts_llm(
     sample_size: Optional[int] = None
 ) -> Tuple[str, str]:
     """
-    Transform transcript data using a language model.
-    
-    This function processes each transcript through a language model
-    to extract key information or summarize content before topic analysis.
+    Transform transcript data using LLM for summarization/extraction.
     
     Args:
         input_file: Path to input Parquet file
@@ -353,18 +350,19 @@ async def transform_transcripts_llm(
     Returns:
         Tuple of (cached_parquet_path, text_file_path)
     """
-    return await _transform_transcripts_llm_async(
+    result = await _transform_transcripts_llm_async(
         input_file=input_file, 
         content_column=content_column, 
         prompt_template_file=prompt_template_file, 
         model=model, 
         provider=provider, 
-        customer_only=customer_only,
+        customer_only=customer_only, 
         fresh=fresh, 
         inspect=inspect,
-        openai_api_key=openai_api_key, 
+        openai_api_key=openai_api_key,
         sample_size=sample_size
     )
+    return result
 
 async def _transform_transcripts_llm_async(
     input_file: str,
@@ -481,42 +479,24 @@ async def _transform_transcripts_llm_async(
                     logging.error(f"Error processing transcript: {response}")
                     continue
                 
-                logging.info(f"Processing transcript {i+1}/{len(df)}")
-                
-                # Format the prompt with the transcript
-                formatted_prompt = prompt.format(text=text)
-                
-                # Log the complete formatted prompt
-                logging.info(f"COMPLETE FORMATTED PROMPT FOR TRANSCRIPT {i+1}:\n{formatted_prompt}\n")
-                
-                # Run LLM on transcript
-                response = llm.invoke(formatted_prompt)
-                
-                # Log the response (truncate if too long)
-                max_log_length = 1000  # Limit log length to avoid flooding
-                
-                # Handle different response types based on provider
+                # Format the response text
                 if provider.lower() == 'openai' and hasattr(response, 'content'):
                     response_text = response.content
-                    log_response = response_text
                 else:
                     response_text = response
-                    log_response = response_text
-                
-                if len(log_response) > max_log_length:
-                    log_response = log_response[:max_log_length] + "... [truncated]"
-                logging.info(f"LLM Response {i+1}/{len(df)}:\n{log_response}\n")
                 
                 # Create new row with LLM response
                 new_row = row.copy()
-                new_row[content_column] = response
+                new_row[content_column] = response_text
                 transformed_rows.append(new_row)
-                f.write(f"{response}\n")
+                
+                # Write to the file
+                f.write(f"{response_text}\n")
     else:
         logging.info("No valid transcripts found to process.")
         with open(text_file_path, 'w') as f:
             pass 
-
+    
     transformed_df = pd.DataFrame(transformed_rows)
     logging.info(f"Saving transformed data to {cached_parquet_path}")
     transformed_df.to_parquet(cached_parquet_path)
@@ -526,7 +506,8 @@ async def _transform_transcripts_llm_async(
 
 class TranscriptItem(BaseModel):
     """Model for a single item extracted from a transcript."""
-    quote: str = Field(description="A direct question asked by the customer, quoted verbatim")
+    question: str = Field(description="A direct question asked by the customer, quoted verbatim")
+    category: str = Field(default="OTHER", description="Category of the question (SCHEDULING, PRICING, PRODUCT, SERVICE, CONTACT, OTHER)")
 
 class TranscriptItems(BaseModel):
     """Model for a list of items extracted from a transcript."""
@@ -662,13 +643,23 @@ async def _process_itemize_transcript_async(
                 
                 if not success:
                     logging.info("ATTEMPTING RETRY PARSER")
-                    parsed_items = await retry_parser.aparse_with_prompt(str(raw_response), formatted_prompt) # Pass string of raw_response
+                    # Extract content properly based on the provider and response type
+                    if provider.lower() == 'openai' and hasattr(raw_response, 'content'):
+                        response_content = raw_response.content
+                    else:
+                        response_content = str(raw_response)
+                    parsed_items = await retry_parser.aparse_with_prompt(response_content, formatted_prompt)
                     logging.info("RETRY PARSER SUCCEEDED")
                     success = True
             except ValidationError as ve:
                 logging.error(f"VALIDATION ERROR: {ve}")
                 logging.info("ATTEMPTING RETRY PARSER")
-                parsed_items = await retry_parser.aparse_with_prompt(str(raw_response), formatted_prompt) # Pass string of raw_response
+                # Extract content properly based on the provider and response type
+                if provider.lower() == 'openai' and hasattr(raw_response, 'content'):
+                    response_content = raw_response.content
+                else:
+                    response_content = str(raw_response)
+                parsed_items = await retry_parser.aparse_with_prompt(response_content, formatted_prompt)
                 logging.info("RETRY PARSER SUCCEEDED")
                 success = True
             
@@ -725,8 +716,8 @@ async def _process_itemize_batch_async(
     
     batch_results = await asyncio.gather(*tasks, return_exceptions=True)
     
-    for result, row_item in zip(batch_results, rows):
-        results.append((result, row_item))
+    for result_pair, row_item in zip(batch_results, rows):
+        results.append((result_pair, row_item))
     
     gc.collect()
     return results
@@ -865,13 +856,18 @@ async def _transform_transcripts_itemize_async(
                 if success:
                     logging.info(f"SUCCESSFULLY PARSED {len(data.items)} ITEMS:")
                     for idx, item in enumerate(data.items):
-                        logging.info(f"ITEM {idx+1}: {item.quote}")
+                        logging.info(f"ITEM {idx+1}: {item.category}: {item.question}")
                     for item in data.items:
+                        # Create new row with item data
                         new_row = row.copy()
-                        combined_text = f"{item.quote}"
+                        new_row['category'] = item.category
+                        new_row['question'] = item.question
+                        combined_text = item.category + ": " + item.question
                         new_row[content_column] = combined_text
                         transformed_rows.append(new_row)
-                        f.write(f"{combined_text}\n")
+                        
+                        # Write to the text file
+                        f.write(f"{item.category}: {item.question}\n")
                 else:
                     new_row = row.copy()
                     new_row[content_column] = data
