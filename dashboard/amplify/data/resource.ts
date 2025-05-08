@@ -164,7 +164,7 @@ const schema = a.schema({
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
             note: a.string(),
-            numberOfClasses: a.integer(),
+            validClasses: a.json(),
             scoreResults: a.hasMany('ScoreResult', 'scoreVersionId'),
             scoresAsChampion: a.hasMany('Score', 'championVersionId'),
             parentVersionId: a.string(),
