@@ -432,4 +432,27 @@ def delete(task_id: Optional[str], account: Optional[str], status: Optional[str]
             client.execute(mutation, {'input': {'id': task.id}})
             deleted_count += 1
     
-    console.print(f"\n[green]Successfully deleted {deleted_count} tasks and {stage_count} associated stages[/green]") 
+    console.print(f"\n[green]Successfully deleted {deleted_count} tasks and {stage_count} associated stages[/green]")
+
+@tasks.command()
+@click.option('--id', required=True, help='Task ID to get information for.')
+def info(id: str):
+    """Get detailed information about a specific task by its ID."""
+    client = create_client()
+    console.print(f"Fetching details for Task ID: [cyan]{id}[/cyan]")
+    
+    try:
+        task = Task.get_by_id(id, client)
+        if not task:
+            console.print(f"[yellow]Task not found: {id}[/yellow]")
+            return
+        
+        # Format and display task details using the existing helper
+        task_content = format_task_content(task)
+        console.print(Panel(task_content, title=f"Task Details: {task.id}", border_style="blue"))
+        
+    except Exception as e:
+        console.print(f"[red]Error retrieving task {id}: {e}[/red]")
+        # Optionally log the full traceback
+        import traceback
+        print(traceback.format_exc()) 
