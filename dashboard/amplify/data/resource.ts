@@ -38,8 +38,7 @@ type ScoreVersionIndexFields = "scoreId" | "versionNumber" | "isFeatured";
 type ReportConfigurationIndexFields = "accountId" | "name";
 type ReportIndexFields = "accountId" | "reportConfigurationId" | "createdAt" | "updatedAt" | "taskId";
 type ReportBlockIndexFields = "reportId" | "name" | "position";
-type FeedbackItemIndexFields = "accountId" | "scorecardId" | "scoreId" | "externalId" | "updatedAt"; // UPDATED: Renamed formId to externalId
-type FeedbackChangeDetailIndexFields = "feedbackItemId" | "changedAt";
+type FeedbackItemIndexFields = "accountId" | "scorecardId" | "scoreId" | "cacheKey" | "updatedAt"; // UPDATED: Renamed externalId to cacheKey
 
 // New index types for Feedback Analysis
 // type FeedbackAnalysisIndexFields = "accountId" | "scorecardId" | "createdAt"; // REMOVED
@@ -637,15 +636,15 @@ const schema = a.schema({
             account: a.belongsTo('Account', 'accountId'),
             scorecardId: a.string().required(),
             scorecard: a.belongsTo('Scorecard', 'scorecardId'),
-            externalId: a.string().required(),
+            cacheKey: a.string().required(),
             scoreId: a.string().required(),
             score: a.belongsTo('Score', 'scoreId'),
             initialAnswerValue: a.string(),
             finalAnswerValue: a.string(),
             initialCommentValue: a.string(),
             finalCommentValue: a.string(),
-            isMismatch: a.boolean(),
-            changeDetails: a.hasMany('FeedbackChangeDetail', 'feedbackItemId'),
+            editCommentValue: a.string(),
+            isAgreement: a.boolean(),
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
         })
@@ -654,34 +653,10 @@ const schema = a.schema({
             allow.authenticated()
         ])
         .secondaryIndexes((idx: (field: FeedbackItemIndexFields) => any) => [
-            idx("accountId").sortKeys(["scorecardId", "scoreId", "externalId"]).name("byAccountScorecardScoreExternalId"),
+            idx("accountId").sortKeys(["scorecardId", "scoreId", "cacheKey"]).name("byAccountScorecardScoreCacheKey"),
             idx("accountId").sortKeys(["updatedAt"]),
-            idx("scoreId").sortKeys(["externalId"]),
-            idx("externalId")
-        ]),
-
-    FeedbackChangeDetail: a
-        .model({
-            feedbackItemId: a.string().required(),
-            feedbackItem: a.belongsTo('FeedbackItem', 'feedbackItemId'),
-            changeType: a.enum(['Response', 'Score', 'Calibration']), // Type of change record
-            externalId: a.string().required(), // RENAMED from originalDbRecordId
-            changedAt: a.datetime().required(),
-            changedBy: a.string(),
-            initialAnswerValue: a.string(), // RENAMED from previousAnswerValue
-            finalAnswerValue: a.string(), // RENAMED from newAnswerValue
-            initialCommentValue: a.string(), // RENAMED from previousCommentValue
-            finalCommentValue: a.string(), // RENAMED from newCommentValue
-            editCommentValue: a.string(), // Specific to score changes
-            createdAt: a.datetime().required(),
-            updatedAt: a.datetime().required(), // ADDED
-        })
-        .authorization((allow: AuthorizationCallback) => [
-            allow.publicApiKey(),
-            allow.authenticated()
-        ])
-        .secondaryIndexes((idx: (field: FeedbackChangeDetailIndexFields) => any) => [
-            idx("feedbackItemId").sortKeys(["changedAt"])
+            idx("scoreId").sortKeys(["cacheKey"]),
+            idx("cacheKey")
         ]),
 });
 

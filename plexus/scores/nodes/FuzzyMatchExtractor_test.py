@@ -7,6 +7,19 @@ from plexus.scores.nodes.FuzzyMatchExtractor import (
     FuzzyTargetGroup
 )
 from plexus.scores.nodes.BaseNode import BaseNode # For GraphState inheritance
+import unittest.mock as mock
+import os
+
+# Set environment variables for Azure OpenAI
+os.environ["AZURE_OPENAI_API_KEY"] = "test_api_key"
+os.environ["AZURE_OPENAI_ENDPOINT"] = "https://test-openai.openai.azure.com/"
+os.environ["OPENAI_API_VERSION"] = "2023-03-15-preview"
+os.environ["AZURE_OPENAI_DEPLOYMENT"] = "gpt-35-turbo"
+
+# Mock OpenAI API to prevent credential errors
+mock.patch('openai.OpenAI').start()
+mock.patch('openai.AzureOpenAI').start()
+mock.patch('langchain_community.chat_models.azure_openai.AzureChatOpenAI.__init__', return_value=None).start()
 
 # Define a compatible GraphState for testing if not directly importable/usable
 # Or ideally, import the actual GraphState if FuzzyMatchExtractor defines it

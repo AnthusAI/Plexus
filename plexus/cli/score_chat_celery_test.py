@@ -11,7 +11,35 @@ import json
 import click
 from typing import Optional
 from plexus.cli.score_chat_celery import generate_chat_id, process_chat_message, end_chat_session
-from plexus.cli.CommandDispatch import create_celery_app
+# Don't import get_celery_app which requires AWS credentials
+# from plexus.cli.CommandDispatch import get_celery_app
+
+# Mock Celery app for testing
+class MockCeleryTask:
+    def __init__(self, result):
+        self.result = result
+    
+    def get(self):
+        return self.result
+
+class MockCeleryApp:
+    def send_task(self, task_name, kwargs=None):
+        """Mock implementation that calls the appropriate function directly."""
+        if kwargs is None:
+            kwargs = {}
+        
+        if task_name == 'plexus.score_chat.message':
+            result = process_chat_message(**kwargs)
+            return MockCeleryTask(result)
+        elif task_name == 'plexus.score_chat.end_session':
+            result = end_chat_session(**kwargs)
+            return MockCeleryTask(result)
+        else:
+            raise ValueError(f"Unknown task: {task_name}")
+
+def get_mock_celery_app():
+    """Get a mock Celery app for testing."""
+    return MockCeleryApp()
 
 @click.group()
 def cli():
@@ -39,8 +67,8 @@ def run_test(scorecard: str, score: str, local: bool, num_messages: int):
             score=score
         )
     else:
-        # Use Celery for distributed testing
-        celery_app = create_celery_app()
+        # Use mock Celery for testing
+        celery_app = get_mock_celery_app()
         result = celery_app.send_task(
             'plexus.score_chat.message',
             kwargs={
@@ -75,7 +103,7 @@ def run_test(scorecard: str, score: str, local: bool, num_messages: int):
                 message=message
             )
         else:
-            # Use Celery for distributed testing
+            # Use mock Celery for testing
             result = celery_app.send_task(
                 'plexus.score_chat.message',
                 kwargs={
@@ -124,8 +152,8 @@ def send_message(scorecard: str, score: str, message: str, chat_id: Optional[str
             score=score
         )
     else:
-        # Use Celery for distributed testing
-        celery_app = create_celery_app()
+        # Use mock Celery for testing
+        celery_app = get_mock_celery_app()
         result = celery_app.send_task(
             'plexus.score_chat.message',
             kwargs={
@@ -147,7 +175,7 @@ def end_session(chat_id: str, local: bool):
     if local:
         result = end_chat_session(chat_id=chat_id)
     else:
-        celery_app = create_celery_app()
+        celery_app = get_mock_celery_app()
         result = celery_app.send_task(
             'plexus.score_chat.end_session',
             kwargs={'chat_id': chat_id}
