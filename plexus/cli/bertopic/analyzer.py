@@ -12,6 +12,8 @@ import numpy as np
 from bertopic import BERTopic
 import plotly.express as px
 from umap import UMAP
+from bertopic.representation import OpenAI
+import openai
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -150,7 +152,9 @@ def analyze_topics(
     nr_topics: Optional[int] = None,
     n_gram_range: Tuple[int, int] = (1, 2),
     min_topic_size: int = 10,
-    top_n_words: int = 10
+    top_n_words: int = 10,
+    use_representation_model: bool = True,
+    openai_api_key: Optional[str] = None
 ) -> None:
     """
     Perform BERTopic analysis on transformed transcripts.
@@ -162,6 +166,8 @@ def analyze_topics(
         n_gram_range: The lower and upper boundary of the n-gram range (default: (1, 2))
         min_topic_size: Minimum size of topics (default: 10)
         top_n_words: Number of words to represent each topic (default: 10)
+        use_representation_model: Whether to use OpenAI to generate better topic representations (default: True)
+        openai_api_key: OpenAI API key (if not provided, will use environment variable)
     """
     # Create output directory if it doesn't exist
     ensure_directory(output_dir)
@@ -210,6 +216,40 @@ def analyze_topics(
         logger.error(f"Failed to initialize UMAP model: {e}", exc_info=True)
         raise
 
+    # Initialize BERTopic model with representation model if requested
+    representation_model = None
+    if use_representation_model:
+        try:
+            # Use provided API key or environment variable
+            api_key = openai_api_key or os.environ.get("OPENAI_API_KEY")
+            if not api_key:
+                logger.warning("OpenAI API key not provided. Continuing without representation model.")
+            else:
+                logger.info("Initializing OpenAI representation model with gpt-4o-mini...")
+                client = openai.OpenAI(api_key=api_key)
+                
+                # Custom prompt that focuses on call center/customer service context
+                summarization_prompt = """
+                I have a topic from call center transcripts that is described by the following keywords: [KEYWORDS]
+                In this topic, these customer-agent conversations are representative examples:
+                [DOCUMENTS]
+
+                Based on the information above, provide a short, descriptive label for this topic in this format:
+                topic: <concise label that describes what this topic represents in customer interactions>
+                """
+                
+                representation_model = OpenAI(
+                    client=client, 
+                    model="gpt-4o-mini", 
+                    prompt=summarization_prompt,
+                    delay_in_seconds=0
+                )
+                logger.info("OpenAI representation model initialized successfully.")
+        except Exception as e:
+            logger.error(f"Failed to initialize OpenAI representation model: {e}", exc_info=True)
+            logger.warning("Continuing without representation model.")
+            representation_model = None
+
     # Initialize BERTopic model with n-gram range and other parameters
     logger.info(f"Initializing BERTopic model with n-gram range {n_gram_range} and custom UMAP model.")
     topic_model = BERTopic(
@@ -217,6 +257,7 @@ def analyze_topics(
         min_topic_size=min_topic_size,
         top_n_words=top_n_words,
         umap_model=umap_model,
+        representation_model=representation_model,
         verbose=True
     )
     logger.debug("BERTopic model initialized successfully.")
@@ -230,10 +271,6 @@ def analyze_topics(
         logger.error(f"Number of documents at the time of error: {len(docs)}")
         if docs:
             logger.error(f"First few documents: {docs[:5]}")
-        # Potentially add check for n_neighbors vs len(docs) here if UMAP is the cause
-        # This check is now handled by dynamic n_neighbor setting and early exit for too few docs.
-        # if hasattr(topic_model, 'umap_model') and topic_model.umap_model.n_neighbors > len(docs):
-        #    logger.error(f"UMAP n_neighbors ({topic_model.umap_model.n_neighbors}) is greater than the number of documents ({len(docs)}). This can cause errors.")
         raise
     except Exception as e:
         logger.error(f"Failed to perform topic modeling: {e}", exc_info=True)
@@ -242,6 +279,15 @@ def analyze_topics(
     # Log initial topic info
     n_topics = len(set(topics)) - 1  # Subtract 1 to exclude the -1 outlier topic
     logger.info(f"Found {n_topics} initial topics in the data")
+    
+    # Save original topic info
+    try:
+        topic_info = topic_model.get_topic_info()
+        topic_info_path = os.path.join(output_dir, "topic_info.csv")
+        topic_info.to_csv(topic_info_path, index=False)
+        logger.info(f"Saved topic info to {topic_info_path}")
+    except Exception as e:
+        logger.error(f"Failed to save topic info: {e}", exc_info=True)
     
     # Reduce topics if requested
     if nr_topics is not None and n_topics > 0 and nr_topics < n_topics: # Also check n_topics > 0 before reducing

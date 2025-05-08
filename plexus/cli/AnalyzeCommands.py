@@ -146,6 +146,8 @@ def feedback(
 @click.option('--max-retries', type=int, default=2, help='Maximum number of retries for parsing failures (itemize mode only)')
 @click.option('--sample-size', type=int, default=None, help='Number of transcripts to sample (default: process all)')
 @click.option('--customer-only', is_flag=True, default=False, help='Filter transcripts to include only customer utterances before processing')
+@click.option('--use-representation-model', is_flag=True, default=False, 
+              help='Use OpenAI to generate better topic representations (requires API key)')
 def topics(
     input_file: str,
     output_dir: str,
@@ -167,6 +169,7 @@ def topics(
     max_retries: int,
     sample_size: Optional[int],
     customer_only: bool,
+    use_representation_model: bool,
 ):
     """
     Analyze topics in call transcripts using BERTopic.
@@ -202,6 +205,9 @@ def topics(
 
         # Process only 100 random transcripts
         python3 -m plexus.cli.CommandLineInterface analyze topics --input-file path/to/transcripts.parquet --sample-size 100
+        
+        # Use OpenAI to generate better topic representations
+        python3 -m plexus.cli.CommandLineInterface analyze topics --input-file path/to/transcripts.parquet --use-representation-model --openai-api-key YOUR_API_KEY
     """
     logging.info(f"Starting topic analysis for file: {input_file}")
     
@@ -304,6 +310,8 @@ def topics(
 
             # Use descriptive naming scheme based on parameters
             analysis_dir_name = f"topics_{transform_suffix}_{min_ngram}-{max_ngram}gram_{num_topics if num_topics else 'auto'}"
+            if use_representation_model:
+                analysis_dir_name += "_with_representation"
             
             # Construct the full path for the specific analysis output
             final_output_dir = analysis_parent_dir / analysis_dir_name
@@ -327,7 +335,9 @@ def topics(
                     nr_topics=num_topics,
                     n_gram_range=(min_ngram, max_ngram),
                     min_topic_size=min_topic_size,
-                    top_n_words=top_n_words
+                    top_n_words=top_n_words,
+                    use_representation_model=use_representation_model,
+                    openai_api_key=openai_api_key
                 )
                 logging.info("BERTopic analysis completed successfully.")
             except Exception as e:

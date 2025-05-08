@@ -40,6 +40,18 @@ python3 -m plexus.cli.CommandLineInterface analyze topics --input-file .plexus_t
 python3 -m plexus.cli.CommandLineInterface analyze topics --input-file .plexus_training_data_cache/dataframes/1039_no_score_id_Start-Date_csv.parquet --transform llm --fresh
 ```
 
+### Topic Representation with OpenAI (New)
+```bash
+# Use OpenAI to generate better topic labels and representations
+python3 -m plexus.cli.CommandLineInterface analyze topics --input-file .plexus_training_data_cache/dataframes/1039_no_score_id_Start-Date_csv.parquet --use-representation-model
+
+# Combine with other parameters
+python3 -m plexus.cli.CommandLineInterface analyze topics --input-file .plexus_training_data_cache/dataframes/1039_no_score_id_Start-Date_csv.parquet --use-representation-model --num-topics 20 --min-topic-size 15
+
+# Use with transformed transcripts
+python3 -m plexus.cli.CommandLineInterface analyze topics --input-file .plexus_training_data_cache/dataframes/1039_no_score_id_Start-Date_csv.parquet --transform llm --provider openai --use-representation-model
+```
+
 ### Customer Question Extraction (New)
 ```bash
 # Extract direct customer questions using Ollama
@@ -83,7 +95,8 @@ python3 -m plexus.cli.CommandLineInterface analyze topics \
   --min-ngram 1 \
   --max-ngram 2 \
   --min-topic-size 15 \
-  --top-n-words 8
+  --top-n-words 8 \
+  --use-representation-model
 ```
 
 ### LLM Integration Test
@@ -140,6 +153,7 @@ python3 -m plexus.cli.CommandLineInterface analyze test-ollama --prompt "Explain
    - ✅ Added prompt template support
    - ✅ Added robust JSON parsing for LLM outputs
    - ✅ Implemented customer question extraction with structured output
+   - ✅ Integrated OpenAI for topic representation and labeling
 
 ### In Progress
 1. BERTopic Integration
@@ -150,7 +164,7 @@ python3 -m plexus.cli.CommandLineInterface analyze test-ollama --prompt "Explain
 2. Enhancements
    - [ ] Add progress tracking
    - [ ] Add more CLI options (e.g., BERTopic parameters)
-   - [ ] Integrate LLM for topic labeling
+   - [x] Integrate LLM for topic labeling
 
 ## File Structure
 ```
@@ -198,10 +212,44 @@ plexus/
   - Preserves all metadata from original rows
   - Compatible with both Ollama and OpenAI providers
 
+### OpenAI Topic Representation
+- How it works:
+  - After BERTopic generates topics and their keyword representations
+  - For each topic, the most representative documents and keywords are selected
+  - These are sent to OpenAI's gpt-4o-mini with a specialized prompt
+  - The LLM generates a human-readable label/description for each topic
+  - These labels replace the default keyword representations in visualizations and topic info
+- Technical implementation:
+  - Uses BERTopic's built-in representation_model feature
+  - Integrates with OpenAI API through the official client
+  - Custom prompt focuses specifically on call center contexts
+  - Uses the format "topic: <label>" for parsing the response
+  - Includes fallback mechanisms if the OpenAI API fails
+- Benefits over default keyword representation:
+  - More intuitive, human-readable topic labels
+  - Context-aware interpretation (understands call center terminology)
+  - Reduces need for manual review of topic keywords
+  - Makes visualizations more immediately interpretable
+  - Example transformations:
+    - "refund_payment_order" → "Customer Refund Processing Issues"
+    - "product_not_working_help" → "Technical Support for Product Malfunctions"
+    - "delivery_shipping_time" → "Shipping and Delivery Timeline Inquiries"
+- Implementation difference from transcript transformation:
+  - Transcript transformation occurs before topic modeling (preprocessing)
+  - Topic representation occurs after topic modeling (postprocessing)
+  - Both can use OpenAI but serve different purposes in the pipeline
+  - Can be used together to get maximum benefit from LLMs
+
 ### BERTopic Configuration
 - Use default settings for proof-of-concept
 - Focus on customer speaking turns only
 - Generate basic visualizations
+- OpenAI representation model integration:
+  - Uses gpt-4o-mini to generate human-readable topic labels
+  - Customized prompt focused on call center/customer service context
+  - Transforms keyword-based topics into meaningful descriptions
+  - Example: "refund_shipping_order" → "Customer Refund and Shipping Issues"
+  - Integration via the `--use-representation-model` flag with required API key
 
 ## Prompt Template Format
 LLM transformation uses JSON files for prompt templates:
@@ -233,7 +281,8 @@ The template must include `{text}` and `{format_instructions}` placeholders, and
   - `OPENAI_API_KEY` environment variable
 - Appropriate model name must be provided for each provider:
   - Ollama: `gemma3:27b`, `llama3:8b`, etc.
-  - OpenAI: `gpt-3.5-turbo`, `gpt-4`, etc.
+  - OpenAI: `gpt-3.5-turbo`, `gpt-4`, `gpt-4o-mini`, etc.
+- For topic representation, OpenAI API key is required with the `--use-representation-model` flag
 
 ## Testing Plan
 1. [x] Test data transformation
@@ -267,3 +316,4 @@ The template must include `{text}` and `{format_instructions}` placeholders, and
 - ollama (for Ollama provider)
 - langchain-openai (for OpenAI provider)
 - pydantic
+- openai (for OpenAI representation model)
