@@ -416,6 +416,19 @@ class LangGraphScore(Score, LangChainUser):
                                   if node['name'] == previous_node), None)
                 
                 if node_config:
+                    # Handle output field in node config directly - this is critical for node-level output aliasing
+                    if 'output' in node_config:
+                        value_setter_name = f"{previous_node}_value_setter"
+                        workflow.add_node(
+                            value_setter_name,
+                            LangGraphScore.create_value_setter_node(
+                                node_config['output']
+                            )
+                        )
+                        workflow.add_edge(previous_node, value_setter_name)
+                        workflow.add_edge(value_setter_name, node_name)
+                        continue  # Skip other edge processing for this node
+                        
                     # Handle edge clause - direct routing with output aliasing
                     if 'edge' in node_config:
                         edge = node_config['edge']
@@ -954,14 +967,19 @@ class LangGraphScore(Score, LangChainUser):
             # Add aliased values
             for alias, original in output_mapping.items():
                 if hasattr(state, original):
-                    new_state[alias] = getattr(state, original)
-                    value = str(getattr(state, original))
+                    original_value = getattr(state, original)
+                    new_state[alias] = original_value
+                    # Also directly set on the state object to ensure it's accessible
+                    setattr(state, alias, original_value)
+                    value = str(original_value)
                     if len(value) > 80:
                         value = value[:77] + "..."
                     logging.info(f"Added alias {alias}={value} from {original}")
                 else:
                     # If the original isn't a state variable, treat it as a literal value
                     new_state[alias] = original
+                    # Also directly set on the state object
+                    setattr(state, alias, original)
                     logging.info(f"Added literal value {alias}={original}")
             
             # Create new state with extra fields allowed
@@ -1084,14 +1102,19 @@ class LangGraphScore(Score, LangChainUser):
             # Add aliased values
             for alias, original in output_mapping.items():
                 if hasattr(state, original):
-                    new_state[alias] = getattr(state, original)
-                    value = str(getattr(state, original))
+                    original_value = getattr(state, original)
+                    new_state[alias] = original_value
+                    # Also directly set on the state object to ensure it's accessible
+                    setattr(state, alias, original_value)
+                    value = str(original_value)
                     if len(value) > 80:
                         value = value[:77] + "..."
                     logging.info(f"Added alias {alias}={value} from {original}")
                 else:
                     # If the original isn't a state variable, treat it as a literal value
                     new_state[alias] = original
+                    # Also directly set on the state object
+                    setattr(state, alias, original)
                     logging.info(f"Added literal value {alias}={original}")
             
             # Create new state with extra fields allowed
@@ -1241,63 +1264,12 @@ class LangGraphScore(Score, LangChainUser):
                     'source': graph_result.get('source')
                 }
             )
-
-            # Clean the result to ensure it's serializable
-            # Moved helper function definition outside predict for clarity if needed, or keep inline
-            def ensure_serializable(obj, _level=0): # Added level for nested calls debug
-                _indent = "  " * _level
-                logging.debug(f"{_indent}ensure_serializable called for type: {type(obj)}")
-
-                if obj is None:
-                    logging.debug(f"{_indent} -> None")
-                    return None
-                elif isinstance(obj, (str, int, float, bool)):
-                    logging.debug(f"{_indent} -> Basic type: {str(obj)[:50]}")
-                    return obj
-                elif inspect.ismethod(obj) or inspect.isfunction(obj) or callable(obj):
-                    try:
-                        name = obj.__qualname__ if hasattr(obj, '__qualname__') else str(obj)
-                        logging.debug(f"{_indent} -> Callable type: {name}")
-                        return f"<callable: {name}>"
-                    except Exception as e:
-                        logging.warning(f"{_indent}Error getting callable name: {e}")
-                        return "<callable: unknown>"
-                elif isinstance(obj, (list, tuple)):
-                    logging.debug(f"{_indent} -> List/Tuple, processing items...")
-                    return [ensure_serializable(item, _level + 1) for item in obj]
-                elif isinstance(obj, dict):
-                    logging.debug(f"{_indent} -> Dict, processing items...")
-                    return {k: ensure_serializable(v, _level + 1) for k, v in obj.items()}
-                elif hasattr(obj, '__dict__'):
-                    logging.debug(f"{_indent} -> Custom object: {obj.__class__.__name__}, processing attributes...")
-                    try:
-                        serializable_dict = {
-                            k: ensure_serializable(v, _level + 1)
-                            for k, v in obj.__dict__.items()
-                            if not k.startswith('_') and not callable(v)
-                        }
-                        serializable_dict['__class__'] = obj.__class__.__name__
-                        logging.debug(f"{_indent} -> Serialized custom object: {list(serializable_dict.keys())}")
-                        return serializable_dict
-                    except (TypeError, AttributeError, RecursionError) as e:
-                         logging.warning(f"{_indent}Could not serialize object attribute for {obj.__class__.__name__}: {e}")
-                         return f"<object: {obj.__class__.__name__} (serialization error)>"
-                else:
-                    logging.debug(f"{_indent} -> Fallback attempt for type: {type(obj)}")
-                    try:
-                        json.dumps(obj)
-                        logging.debug(f"{_indent} -> Fallback: Directly JSON serializable")
-                        return obj
-                    except (TypeError, OverflowError):
-                        logging.debug(f"{_indent} -> Fallback: Not directly JSON serializable, converting to string.")
-                        try:
-                            s = str(obj)
-                            logging.debug(f"{_indent} -> Fallback: Converted to string: {s[:50]}")
-                            return s
-                        except Exception as e_str:
-                            logging.warning(f"{_indent}Fallback: Could not convert object of type {type(obj)} to string: {e_str}")
-                            return f"<unserializable: {type(obj).__name__}>"
-
+            
+            # Include ALL fields from graph_result in the metadata
+            for key, value in graph_result.items():
+                if key not in ['value', 'metadata'] and key not in result.metadata:
+                    result.metadata[key] = value
+            
             # If metadata with trace exists in graph_result, add it to the result metadata
             if 'metadata' in graph_result and graph_result['metadata'] is not None:
                 logging.info("=== Processing graph_result['metadata'] ===")

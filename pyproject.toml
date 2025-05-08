@@ -34,7 +34,7 @@ dependencies = [
     "boto3",
     "graphviz",
     "ruamel.yaml>=0.18.10",
-    "mistune",
+    "mistune==3.0.2",
     "pyyaml",
     "sphinx",
     "sphinx-rtd-theme",

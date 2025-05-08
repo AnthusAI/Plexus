@@ -52,27 +52,41 @@ function AuthWrapper({ children }: { children: React.ReactNode }) {
     '/documentation/methods/add-edit-scorecard',
     '/documentation/methods/add-edit-score',
     '/documentation/methods/evaluate-score',
-    '/documentation/methods/monitor-tasks'
+    '/documentation/methods/monitor-tasks',
+    '/documentation/concepts/reports',
   ];
+  
+  // Check if we should direct users straight to login
+  const directToLogin = process.env.NEXT_PUBLIC_DIRECT_TO_LOGIN === 'true';
   
   // Only allow dynamic evaluation pages (with an ID) to be public
   const isPublicPath = publicPaths.includes(pathname) || 
     (pathname.startsWith('/evaluations/') && pathname.split('/').length === 3 && !pathname.startsWith('/evaluations/lab'));
+    
+  // If directToLogin is true, only /dashboard should be accessible for unauthenticated users
+  const isAccessiblePublicPath = directToLogin 
+    ? pathname === '/dashboard'
+    : isPublicPath;
   
   useEffect(() => {
     if (!authStatus) {
       return;  // Don't redirect while auth is still loading
     }
     
-    // Only redirect in two specific cases:
-    // 1. User is not authenticated and tries to access a protected page
-    // 2. User is authenticated and is on the root page
-    if (authStatus === 'unauthenticated' && !isPublicPath) {
-      router.push('/');
+    // Redirect logic based on authentication status and directToLogin setting
+    if (authStatus === 'unauthenticated') {
+      if (directToLogin && pathname !== '/dashboard') {
+        // When directToLogin is true, redirect all unauthenticated traffic to login page
+        router.push('/dashboard');
+      } else if (!isPublicPath) {
+        // Normal behavior: redirect to home if trying to access protected page
+        router.push('/');
+      }
     } else if (authStatus === 'authenticated' && pathname === '/') {
+      // Redirect authenticated users from home to lab/items
       router.push('/lab/items');
     }
-  }, [authStatus, router, pathname]);
+  }, [authStatus, router, pathname, directToLogin, isPublicPath]);
 
   // While auth is loading, render nothing
   if (!authStatus) {
@@ -80,7 +94,7 @@ function AuthWrapper({ children }: { children: React.ReactNode }) {
   }
 
   // For public paths
-  if (isPublicPath) {
+  if (isAccessiblePublicPath) {
     return children;
   }
 

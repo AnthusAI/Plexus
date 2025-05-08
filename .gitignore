@@ -3,7 +3,7 @@
 build/
 .coverage
 mlruns/
-reports/
+/reports/
 .DS_Store
 .env
 tmp/
