@@ -5,8 +5,12 @@ Module for performing BERTopic analysis on transformed transcripts.
 import os
 import stat
 import logging
+import re
 from typing import List, Optional, Tuple
+import pandas as pd
+import numpy as np
 from bertopic import BERTopic
+import plotly.express as px
 from umap import UMAP
 
 # Configure logging
@@ -38,6 +42,107 @@ def save_visualization(fig, filepath: str) -> None:
     except Exception as e:
         logger.error(f"Failed to save visualization to {filepath}: {e}", exc_info=True)
         raise
+
+def create_topics_per_class_visualization(
+    topic_model, 
+    topics, 
+    docs, 
+    output_dir=None
+):
+    """
+    Create a visualization showing topic distribution across different classes.
+    
+    Args:
+        topic_model: Fitted BERTopic model
+        topics: List of topic assignments
+        docs: List of documents
+        output_dir: Directory to save the visualization
+        
+    Returns:
+        Path to saved visualization or None if generation fails
+    """
+    logger.info("Generating Topics per Class visualization...")
+    
+    try:
+        # Extract class labels from document text
+        class_labels = []
+        for doc in docs:
+            # Try to extract class from document (e.g., "comp.sys.mac.hardware: text...")
+            match = re.match(r'^([a-zA-Z0-9_\.]+)[\s\:]+', doc)
+            if match:
+                class_labels.append(match.group(1))
+            else:
+                class_labels.append("unknown")
+        
+        # Get topic information
+        topic_info = topic_model.get_topic_info()
+        
+        # Filter out the -1 outlier topic
+        topic_info = topic_info[topic_info["Topic"] != -1]
+        
+        # Create dataframe to hold topic-class relationships
+        topic_class_data = []
+        for doc_idx, (topic_idx, doc) in enumerate(zip(topics, docs)):
+            if topic_idx != -1:  # Skip outlier topics
+                # Get class for this document
+                class_label = class_labels[doc_idx]
+                
+                # Get topic representation
+                topic_words = topic_model.get_topic(topic_idx)
+                if topic_words:  # Make sure we have words for this topic
+                    # Create a readable topic label
+                    topic_label = f"{topic_idx}_" + "_".join([word for word, _ in topic_words[:3]])
+                    
+                    # Add to our dataset
+                    topic_class_data.append({
+                        "Class": class_label,
+                        "Topic": topic_label,
+                        "Frequency": 1
+                    })
+        
+        # Convert to DataFrame
+        df = pd.DataFrame(topic_class_data)
+        
+        # If empty, return early
+        if len(df) == 0:
+            logger.warning("No valid topic-class data found for visualization")
+            return None
+        
+        # Aggregate by Class and Topic
+        agg_df = df.groupby(["Class", "Topic"]).sum().reset_index()
+        
+        # Create the visualization
+        fig = px.bar(
+            agg_df,
+            x="Frequency",
+            y="Class",
+            color="Topic",
+            orientation='h',
+            title="Topics per Class",
+            labels={"Frequency": "Frequency", "Class": "Class"},
+            height=800,  # Adjust based on number of classes
+        )
+        
+        # Update layout
+        fig.update_layout(
+            xaxis_title="Frequency",
+            yaxis_title="Class",
+            legend_title="Global Topic Representation",
+            barmode='stack'
+        )
+        
+        # Save visualization
+        if output_dir:
+            output_path = os.path.join(output_dir, "topics_per_class.html")
+            save_visualization(fig, output_path)
+            logger.info(f"Saved Topics per Class visualization to {output_path}")
+            return output_path
+        
+        return fig
+    
+    except Exception as e:
+        logger.error(f"Failed to generate Topics per Class visualization: {e}", exc_info=True)
+        return None
 
 def analyze_topics(
     text_file_path: str,
@@ -206,5 +311,17 @@ def analyze_topics(
                 except Exception as e:
                     logger.error(f"Failed to generate word cloud for topic {topic_num}: {e}", exc_info=True)
         logger.info(f"Generated {word_cloud_count} word clouds")
+        
+        # Topics per Class visualization (new)
+        try:
+            logger.info("Generating Topics per Class visualization...")
+            create_topics_per_class_visualization(
+                topic_model=topic_model,
+                topics=topics,
+                docs=docs,
+                output_dir=output_dir
+            )
+        except Exception as e:
+            logger.error(f"Failed to generate Topics per Class visualization: {e}", exc_info=True)
 
     logger.info(f"Analysis complete. Results saved to {output_dir}") 
