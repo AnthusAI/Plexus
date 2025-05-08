@@ -615,54 +615,87 @@ async def _process_itemize_transcript_async(
                 logging.info(f"  (LLM call for transcript {i+1}/{total_count} was very fast - likely from cache)")
 
             try:
-                if provider.lower() == 'openai':
-                    response_text = raw_response.content if hasattr(raw_response, 'content') else str(raw_response)
-                    logging.info(f"Extracted content from AIMessage: {response_text}")
+                if provider.lower() == 'openai' and hasattr(raw_response, 'content'):
+                    response_text = raw_response.content
+                    logging.info(f"Extracted content from AIMessage: {response_text[:200]}...")
                 else:
                     response_text = str(raw_response)
+                    logging.info(f"Raw response content: {response_text[:200]}...")
                 
-                json_data = json.loads(response_text)
-                logging.info(f"PARSED JSON: {json_data}")
-                parsed_items = TranscriptItems(**json_data)
-                logging.info(f"SUCCESSFULLY CREATED PYDANTIC MODEL: {parsed_items}")
-                success = True
-            except json.JSONDecodeError:
-                logging.info("JSON PARSING FAILED, TRYING TO EXTRACT JSON FROM RESPONSE")
-                current_response_text = raw_response.content if provider.lower() == 'openai' and hasattr(raw_response, 'content') else str(raw_response)
-                
-                if "```json" in current_response_text:
-                    import re
-                    match = re.search(r'```json\\s*(.*?)\\s*```', current_response_text, re.DOTALL)
-                    if match:
-                        extracted = match.group(1).strip()
-                        logging.info(f"EXTRACTED JSON FROM CODE BLOCK:\\n{extracted}")
-                        try:
-                            json_data = json.loads(extracted)
-                            logging.info(f"PARSED EXTRACTED JSON: {json_data}")
-                            parsed_items = TranscriptItems(**json_data)
-                            success = True
-                        except Exception as je:
-                            logging.error(f"FAILED TO PARSE EXTRACTED JSON: {je}")
-                
-                if not success:
-                    logging.info("ATTEMPTING RETRY PARSER")
-                    # Extract content properly based on the provider and response type
-                    if provider.lower() == 'openai' and hasattr(raw_response, 'content'):
-                        response_content = raw_response.content
-                    else:
-                        response_content = str(raw_response)
-                    parsed_items = await retry_parser.aparse_with_prompt(response_content, formatted_prompt)
-                    logging.info("RETRY PARSER SUCCEEDED")
+                # First attempt: direct JSON parsing
+                try:
+                    json_data = json.loads(response_text)
+                    logging.info(f"PARSED JSON DIRECTLY: {json_data}")
+                    parsed_items = TranscriptItems(**json_data)
+                    logging.info(f"SUCCESSFULLY CREATED PYDANTIC MODEL: {parsed_items}")
                     success = True
+                except json.JSONDecodeError as json_err:
+                    # If direct parsing fails, try extraction methods
+                    logging.info(f"DIRECT JSON PARSING FAILED: {str(json_err)}")
+                    
+                    # The response text might already be in the current_response_text variable
+                    # but let's make sure we're using the right one
+                    current_response_text = response_text
+                    
+                    # Try multiple patterns for extracting JSON
+                    json_extracted = False
+                    
+                    # Pattern 1: Standard markdown code block with json
+                    if "```json" in current_response_text:
+                        import re
+                        match = re.search(r'```json\s*(.*?)\s*```', current_response_text, re.DOTALL)
+                        if match:
+                            extracted = match.group(1).strip()
+                            logging.info(f"EXTRACTED JSON FROM CODE BLOCK: {extracted[:100]}...")
+                            try:
+                                json_data = json.loads(extracted)
+                                logging.info(f"PARSED EXTRACTED JSON: {json_data}")
+                                parsed_items = TranscriptItems(**json_data)
+                                success = True
+                                json_extracted = True
+                            except Exception as je:
+                                logging.error(f"FAILED TO PARSE EXTRACTED JSON: {je}")
+                    
+                    # Pattern 2: Any markdown code block (without specifying json)
+                    if not json_extracted and "```" in current_response_text:
+                        matches = re.findall(r'```(?:.*?)\s*(.*?)\s*```', current_response_text, re.DOTALL)
+                        for match in matches:
+                            try:
+                                json_data = json.loads(match.strip())
+                                logging.info(f"PARSED JSON FROM GENERIC CODE BLOCK: {json_data}")
+                                parsed_items = TranscriptItems(**json_data)
+                                success = True
+                                json_extracted = True
+                                break
+                            except Exception:
+                                continue
+                    
+                    # Pattern 3: Try to find JSON-like structure with curly braces
+                    if not json_extracted:
+                        try:
+                            # Look for content between outermost curly braces
+                            match = re.search(r'({.*})', current_response_text, re.DOTALL)
+                            if match:
+                                potential_json = match.group(1)
+                                json_data = json.loads(potential_json)
+                                logging.info(f"PARSED JSON FROM CURLY BRACES: {json_data}")
+                                parsed_items = TranscriptItems(**json_data)
+                                success = True
+                                json_extracted = True
+                        except Exception:
+                            pass
+                    
+                    # Fall back to retry parser if all extraction attempts fail
+                    if not json_extracted:
+                        logging.info("ALL JSON EXTRACTION ATTEMPTS FAILED, ATTEMPTING RETRY PARSER")
+                        parsed_items = await retry_parser.aparse_with_prompt(response_text, formatted_prompt)
+                        logging.info("RETRY PARSER SUCCEEDED")
+                        success = True
+                
             except ValidationError as ve:
                 logging.error(f"VALIDATION ERROR: {ve}")
                 logging.info("ATTEMPTING RETRY PARSER")
-                # Extract content properly based on the provider and response type
-                if provider.lower() == 'openai' and hasattr(raw_response, 'content'):
-                    response_content = raw_response.content
-                else:
-                    response_content = str(raw_response)
-                parsed_items = await retry_parser.aparse_with_prompt(response_content, formatted_prompt)
+                parsed_items = await retry_parser.aparse_with_prompt(response_text, formatted_prompt)
                 logging.info("RETRY PARSER SUCCEEDED")
                 success = True
             
