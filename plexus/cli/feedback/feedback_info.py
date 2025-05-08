@@ -14,7 +14,6 @@ from datetime import datetime
 from plexus.cli.console import console
 from plexus.cli.client_utils import create_client
 from plexus.dashboard.api.models.feedback_item import FeedbackItem
-from plexus.dashboard.api.models.feedback_change_detail import FeedbackChangeDetail
 from plexus.cli.reports.utils import resolve_account_id_for_command
 
 logger = logging.getLogger(__name__)
@@ -38,30 +37,25 @@ def get_feedback_stats(client, account_id: str) -> Dict[str, int]:
     # Count FeedbackItem records
     item_count = FeedbackItem.count_by_account_id(account_id, client)
     
-    # Count FeedbackChangeDetail records
-    change_detail_count = FeedbackChangeDetail.count_by_account_id(account_id, client)
-    
     return {
-        "items": item_count,
-        "change_details": change_detail_count
+        "items": item_count
     }
 
 def get_recent_feedback_items(client, account_id: str, limit: int = 3) -> List[FeedbackItem]:
-    """Get the most recent feedback items with their change details."""
+    """Get the most recent feedback items."""
     # Get the most recent feedback items
     items, _ = FeedbackItem.list(
         client=client,
         account_id=account_id,
         limit=limit,
-        fields=FeedbackItem.GRAPHQL_BASE_FIELDS,
-        relationship_fields={'changeDetails': FeedbackChangeDetail.GRAPHQL_BASE_FIELDS}
+        fields=FeedbackItem.GRAPHQL_BASE_FIELDS
     )
     
     # Sort by updatedAt descending (most recent first)
     return sorted(items, key=lambda item: item.updatedAt if item.updatedAt else datetime.min, reverse=True)
 
 def display_feedback_item(item: FeedbackItem) -> None:
-    """Display a FeedbackItem and its change details in rich format."""
+    """Display a FeedbackItem in rich format."""
     # Main item panel
     item_table = Table(box=box.SIMPLE, show_header=False, pad_edge=False)
     item_table.add_column("Field", style="cyan")
@@ -69,12 +63,13 @@ def display_feedback_item(item: FeedbackItem) -> None:
     
     # Add the basic fields
     item_table.add_row("ID", item.id)
-    item_table.add_row("External ID", item.externalId or "N/A")
+    item_table.add_row("Cache Key", item.cacheKey or "N/A")
     item_table.add_row("Initial Answer", item.initialAnswerValue or "N/A")
     item_table.add_row("Final Answer", item.finalAnswerValue or "N/A")
     item_table.add_row("Initial Comment", truncate_text(item.initialCommentValue))
     item_table.add_row("Final Comment", truncate_text(item.finalCommentValue))
-    item_table.add_row("Is Mismatch", "Yes" if item.isMismatch else "No")
+    item_table.add_row("Edit Comment", truncate_text(item.editCommentValue))
+    item_table.add_row("Is Agreement", "Yes" if item.isAgreement else "No")
     item_table.add_row("Created At", format_datetime(item.createdAt))
     item_table.add_row("Updated At", format_datetime(item.updatedAt))
     
@@ -85,43 +80,13 @@ def display_feedback_item(item: FeedbackItem) -> None:
         border_style="green"
     )
     console.print(main_panel)
-    
-    # Display change details if available
-    if item.changeDetails and len(item.changeDetails) > 0:
-        console.print(Text("  Change Details:", style="bold"))
-        
-        for change in item.changeDetails:
-            change_table = Table(box=box.SIMPLE, show_header=False, pad_edge=False)
-            change_table.add_column("Field", style="cyan")
-            change_table.add_column("Value")
-            
-            change_table.add_row("ID", change.id)
-            change_table.add_row("Change Type", change.changeType or "N/A")
-            change_table.add_row("External ID", change.externalId or "N/A")
-            change_table.add_row("Changed At", format_datetime(change.changedAt))
-            change_table.add_row("Changed By", change.changedBy or "N/A")
-            change_table.add_row("Initial Answer", change.initialAnswerValue or "N/A")
-            change_table.add_row("Final Answer", change.finalAnswerValue or "N/A")
-            change_table.add_row("Initial Comment", truncate_text(change.initialCommentValue))
-            change_table.add_row("Final Comment", truncate_text(change.finalCommentValue))
-            change_table.add_row("Edit Comment", truncate_text(change.editCommentValue))
-            
-            change_panel = Panel(
-                change_table,
-                title=f"Change Detail ({change.id})",
-                border_style="blue"
-            )
-            console.print("  ", change_panel)
-    else:
-        console.print(Text("  No change details available", style="italic"))
 
 @click.command(name="info")
 def feedback_info():
     """
     Display information about feedback data.
     
-    Shows counts of feedback items and change details, plus the most recent
-    feedback items with their associated change details.
+    Shows counts of feedback items and the most recent feedback items.
     """
     client = create_client()
     account_id = resolve_account_id_for_command(client, None)  # Use default account
@@ -136,7 +101,6 @@ def feedback_info():
         count_table.add_column("Count", justify="right")
         
         count_table.add_row("FeedbackItem", str(stats["items"]))
-        count_table.add_row("FeedbackChangeDetail", str(stats["change_details"]))
         
         console.print(count_table)
         console.print("")

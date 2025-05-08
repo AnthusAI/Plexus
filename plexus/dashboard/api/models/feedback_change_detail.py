@@ -289,7 +289,8 @@ class FeedbackChangeDetail(BaseModel):
             return 0
     
     @classmethod
-    def delete_all_by_account_id(cls, account_id: str, client: 'PlexusDashboardClient') -> int:
+    def delete_all_by_account_id(cls, account_id: str, client: 'PlexusDashboardClient', 
+                               progress=None, task_id=None) -> int:
         """
         Delete all FeedbackChangeDetail records associated with a specific account.
         
@@ -300,45 +301,156 @@ class FeedbackChangeDetail(BaseModel):
         Args:
             account_id: The ID of the account to delete records for.
             client: The API client to use.
+            progress: Optional progress bar instance to use for tracking progress.
+            task_id: Optional task ID within the progress bar to update.
             
         Returns:
             int: The number of records deleted.
         """
         from plexus.dashboard.api.models.feedback_item import FeedbackItem
+        import time
+        # Only import if we need to create our own progress bar
+        if progress is None:
+            from rich.progress import Progress, TextColumn, BarColumn, TimeElapsedColumn, TimeRemainingColumn, SpinnerColumn
         
         deleted_count = 0
-        batch_size = 50  # Process feedback items in batches
         
-        # Use FeedbackItem to get all items for the account
-        # Process in batches to avoid memory issues with large accounts
-        next_token = None
+        # First, get the total count for progress reporting
+        total_details = cls.count_by_account_id(account_id, client)
         
-        while True:
-            # Get a batch of FeedbackItems
-            items, next_token = FeedbackItem.list(
-                client=client,
-                account_id=account_id,
-                limit=batch_size,
-                next_token=next_token,
-                fields=['id']  # Only fetch ID to minimize data transfer
-            )
+        if total_details == 0:
+            logger.info("No FeedbackChangeDetail records found to delete.")
+            return 0
+        
+        # Determine if we need to create our own progress bar
+        use_external_progress = progress is not None and task_id is not None
+        internal_progress = None
+        detail_task = task_id
+        
+        try:
+            # Create our own progress bar if not provided
+            if not use_external_progress:
+                internal_progress = Progress(
+                    SpinnerColumn(),
+                    TextColumn("[bold blue]{task.description}"),
+                    BarColumn(bar_width=50),
+                    TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                    TextColumn("[cyan]{task.completed}/{task.total}"),
+                    TimeElapsedColumn(),
+                    TimeRemainingColumn(),
+                    expand=True
+                )
+                internal_progress.start()
+                detail_task = internal_progress.add_task(f"[cyan]Deleting FeedbackChangeDetail records", total=total_details)
+                # Use the internal progress from now on
+                progress = internal_progress
             
-            if not items:
-                break
+            # Get all feedback item IDs for this account
+            all_item_ids = []
+            item_next_token = None
+            
+            # Fetch batch size can be larger since we're just getting IDs
+            item_batch_size = 100
+            
+            progress.update(detail_task, description="[cyan]Collecting FeedbackItem IDs")
+            # Collect all FeedbackItem IDs first
+            while True:
+                # Get a batch of FeedbackItems
+                items, item_next_token = FeedbackItem.list(
+                    client=client,
+                    account_id=account_id,
+                    limit=item_batch_size,
+                    next_token=item_next_token,
+                    fields=['id']
+                )
                 
-            # For each FeedbackItem, delete all associated FeedbackChangeDetails
-            for item in items:
+                if not items:
+                    break
+                
+                all_item_ids.extend([item.id for item in items])
+                
+                # If no next token, we've reached the end of the FeedbackItems
+                if not item_next_token:
+                    break
+            
+            # Collect all detail IDs first - this is much more efficient
+            all_detail_ids = []
+            progress.update(detail_task, description=f"[cyan]Collecting detail IDs from {len(all_item_ids)} items")
+            
+            for idx, item_id in enumerate(all_item_ids):
                 try:
-                    # Fetch all change details for this item
-                    change_details, change_next_token = cls.list(
-                        client=client,
-                        feedback_item_id=item.id,
-                        limit=1000,
-                        fields=['id']
-                    )
+                    # Fetch all change details for this item (with pagination)
+                    detail_next_token = None
                     
-                    # Delete each change detail
-                    for change_detail in change_details:
+                    while True:
+                        change_details, detail_next_token = cls.list(
+                            client=client,
+                            feedback_item_id=item_id,
+                            limit=1000,  # Use larger limit to reduce API calls
+                            next_token=detail_next_token,
+                            fields=['id']
+                        )
+                        
+                        all_detail_ids.extend([detail.id for detail in change_details])
+                        
+                        # Update progress description to show collection progress
+                        progress.update(
+                            detail_task, 
+                            description=f"[cyan]Collecting detail IDs ({len(all_detail_ids)}/{total_details}, item {idx+1}/{len(all_item_ids)})"
+                        )
+                        
+                        if not detail_next_token:
+                            break
+                        
+                except Exception as e:
+                    logger.error(f"Error fetching FeedbackChangeDetails for FeedbackItem {item_id}: {e}")
+            
+            # Reset progress for deletion phase
+            progress.update(detail_task, completed=0, description="[cyan]Deleting FeedbackChangeDetail records")
+            
+            # Now delete all details in batches
+            batch_size = 25  # GraphQL has limits on mutation complexity
+            
+            for i in range(0, len(all_detail_ids), batch_size):
+                batch = all_detail_ids[i:i+batch_size]
+                
+                # Construct batch mutation with alias for each deletion
+                try:
+                    batch_operations = []
+                    for detail_id in batch:
+                        # Use clean ID (alphanumeric only) for the alias to avoid GraphQL errors
+                        clean_id = ''.join(c for c in detail_id if c.isalnum())
+                        batch_operations.append(
+                            f"""
+                            delete{clean_id}: deleteFeedbackChangeDetail(input: {{id: "{detail_id}"}}) {{
+                                id
+                            }}
+                            """
+                        )
+                    
+                    # Execute batch mutation if we have operations
+                    if batch_operations:
+                        mutation = f"""
+                        mutation BatchDeleteFeedbackChangeDetails {{
+                            {" ".join(batch_operations)}
+                        }}
+                        """
+                        
+                        result = client.execute(query=mutation)
+                        
+                        # Count successful deletions
+                        if result:
+                            for detail_id in batch:
+                                clean_id = ''.join(c for c in detail_id if c.isalnum())
+                                field_name = f"delete{clean_id}"
+                                if field_name in result and result[field_name] and result[field_name].get('id'):
+                                    deleted_count += 1
+                        
+                except Exception as e:
+                    # If batch deletion fails, fall back to individual deletions
+                    logger.warning(f"Batch deletion failed, falling back to individual deletions: {e}")
+                    
+                    for detail_id in batch:
                         try:
                             mutation = """
                             mutation DeleteFeedbackChangeDetail($input: DeleteFeedbackChangeDetailInput!) {
@@ -347,48 +459,25 @@ class FeedbackChangeDetail(BaseModel):
                                 }
                             }
                             """
-                            result = client.execute(mutation, {'input': {'id': change_detail.id}})
+                            result = client.execute(query=mutation, variables={'input': {'id': detail_id}})
                             
                             if result and 'deleteFeedbackChangeDetail' in result and result['deleteFeedbackChangeDetail']:
                                 deleted_count += 1
                             else:
-                                logger.warning(f"Failed to delete FeedbackChangeDetail {change_detail.id}. Response: {result}")
-                        except Exception as e:
-                            logger.error(f"Error deleting FeedbackChangeDetail {change_detail.id}: {e}")
-                    
-                    # Handle pagination for change details if needed
-                    while change_next_token:
-                        change_details, change_next_token = cls.list(
-                            client=client,
-                            feedback_item_id=item.id,
-                            limit=1000,
-                            next_token=change_next_token,
-                            fields=['id']
-                        )
-                        
-                        for change_detail in change_details:
-                            try:
-                                mutation = """
-                                mutation DeleteFeedbackChangeDetail($input: DeleteFeedbackChangeDetailInput!) {
-                                    deleteFeedbackChangeDetail(input: $input) {
-                                        id
-                                    }
-                                }
-                                """
-                                result = client.execute(mutation, {'input': {'id': change_detail.id}})
-                                
-                                if result and 'deleteFeedbackChangeDetail' in result and result['deleteFeedbackChangeDetail']:
-                                    deleted_count += 1
-                                else:
-                                    logger.warning(f"Failed to delete FeedbackChangeDetail {change_detail.id}. Response: {result}")
-                            except Exception as e:
-                                logger.error(f"Error deleting FeedbackChangeDetail {change_detail.id}: {e}")
-                    
-                except Exception as e:
-                    logger.error(f"Error processing FeedbackChangeDetails for FeedbackItem {item.id}: {e}")
-            
-            # If no next token, we've reached the end of the FeedbackItems
-            if not next_token:
-                break
+                                logger.warning(f"Failed to delete FeedbackChangeDetail {detail_id}. Response: {result}")
+                        except Exception as individual_e:
+                            logger.error(f"Error deleting FeedbackChangeDetail {detail_id}: {individual_e}")
                 
+                # Update progress after each batch
+                progress.update(detail_task, advance=len(batch))
+                
+                # Small delay to prevent API rate limiting
+                time.sleep(0.1)
+        
+        finally:
+            # Clean up if we created our own progress bar
+            if internal_progress is not None:
+                internal_progress.stop()
+        
+        logger.info(f"Deleted {deleted_count} FeedbackChangeDetail records for account {account_id}")
         return deleted_count 

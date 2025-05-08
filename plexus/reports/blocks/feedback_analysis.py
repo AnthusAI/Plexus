@@ -50,14 +50,26 @@ class FeedbackAnalysis(BaseReportBlock):
             # Parse date strings if provided
             start_date = self.config.get("start_date")
             if start_date:
-                start_date = datetime.strptime(start_date, "%Y-%m-%d")
+                if isinstance(start_date, str):
+                    start_date = datetime.strptime(start_date, "%Y-%m-%d")
+                elif not isinstance(start_date, datetime):
+                    self._log(f"WARNING: start_date has unexpected type: {type(start_date)}")
+                    # Try to convert to string first
+                    start_date = str(start_date)
+                    start_date = datetime.strptime(start_date, "%Y-%m-%d")
             else:
                 # Calculate based on days
                 start_date = datetime.now() - timedelta(days=days)
                 
             end_date = self.config.get("end_date")
             if end_date:
-                end_date = datetime.strptime(end_date, "%Y-%m-%d")
+                if isinstance(end_date, str):
+                    end_date = datetime.strptime(end_date, "%Y-%m-%d")
+                elif not isinstance(end_date, datetime):
+                    self._log(f"WARNING: end_date has unexpected type: {type(end_date)}")
+                    # Try to convert to string first
+                    end_date = str(end_date)
+                    end_date = datetime.strptime(end_date, "%Y-%m-%d")
             else:
                 end_date = datetime.now()
                 

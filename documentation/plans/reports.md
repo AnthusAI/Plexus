@@ -355,7 +355,7 @@ This refactoring ensures the core report generation logic is DRY and consistentl
     *   ✅ Proper error handling and loading states
 *   ⬜ **Trigger Generation from UI:** Add a button on the `ReportConfiguration` list/view to trigger a new report run **(invoking the Task creation/Celery dispatch mechanism from Phase 2)**.
 *   ✅ **Fetch Report Data:** Implement logic on the report view page to fetch the `Report` record (including `output`), its associated `ReportBlock` records, **and the associated `Task` record (for status/metadata).** *(Fetching logic implemented, blocks are loaded)*
-*   ✅ **Create Markdown Renderer:** Develop a component to render the report's Markdown content from `Report.output`. *(Basic rendering working in ReportTask)*
+*   ✅ **Create Markdown Renderer:** Develop a component to render the report\'s Markdown content from `Report.output`. *(Basic rendering working in ReportTask)*
 *   ✅ **Implement Block Reference System:** Create a system to identify and replace block references in the Markdown with corresponding block components. *(Initial version implemented via BlockRegistry and BlockRenderer)*
 *   ✅ **Develop Block-Specific Components:** Create React components that render the JSON data from each `ReportBlock` type appropriately.
     *   ✅ `ScoreInfo` component created and successfully rendering block data in the UI.
@@ -363,8 +363,8 @@ This refactoring ensures the core report generation logic is DRY and consistentl
 
 ### Phase 6: Feedback Analysis Integration
 
-*   **Objective:** Integrate feedback analysis as a core report type. This involves extracting historical feedback change data from the source system (Call Criteria DB) into standardized Plexus API models (`FeedbackItem`, `FeedbackChangeDetail`) and then implementing a Plexus report block to perform analysis (e.g., agreement scores like Gwet's AC1) directly on this Plexus data.
-*   **Status (May, 2025):** Data extraction and API posting is complete. The `capture` command in `Call-Criteria-Python` successfully fetches change data, processes it, determines initial/final states, and upserts `FeedbackItem` and `FeedbackChangeDetail` records into the Plexus API via the `PlexusDashboardClient`. **Focus now shifts to implementing the analysis within Plexus.**
+*   **Objective:** Integrate feedback analysis as a core report type. This involves extracting historical feedback change data from the source system (Call Criteria DB) into standardized Plexus API models (`FeedbackItem`) and then implementing a Plexus report block to perform analysis (e.g., agreement scores like Gwet\'s AC1) directly on this Plexus data.
+*   **Status (May, 2025):** Data extraction and API posting is complete. The `capture` command in `Call-Criteria-Python` successfully fetches change data, processes it, determines initial/final states, and upserts `FeedbackItem` records into the Plexus API via the `PlexusDashboardClient`. **Focus now shifts to implementing the analysis within Plexus.**
 
 *   ⬜ **Refactor Feedback Analysis Code:**
     *   ✅ **Problem:** The current `analyze.py` file (1900+ lines) is too large for effective development and AI assistance sessions.
@@ -372,7 +372,7 @@ This refactoring ensures the core report generation logic is DRY and consistentl
         *   ✅ Create `utils.py` for shared utilities like `fetch_feedback_change_data`, `debug_log`, and database connection functions.
         *   ✅ Create `analyze_cmd.py` specifically for the `analyze` feedback command.
         *   ⬜ Create `trends_cmd.py` for the `trends` command functionality.
-        *   ⬜ Create `capture_cmd.py` for the `capture` command logic.
+        *   ✅ Create `capture_cmd.py` for the `capture` command logic.
         *   ⬜ Refactor the CLI registration to import from these new modules.
         *   ⬜ Ensure all imports and dependencies are correctly managed in the new file structure.
         *   ✅ **Verification:** Thoroughly test each refactored command to ensure functionality is preserved. *(Verified `utils.py` and `analyze_cmd.py` split after troubleshooting import conflicts in `__init__.py` and `data.py`)*
@@ -380,7 +380,7 @@ This refactoring ensures the core report generation logic is DRY and consistentl
 
 *   ✅ **Define Feedback Analysis Models:**
     *   ✅ Add `FeedbackItem` model in `resource.ts`.
-    *   ✅ Add `FeedbackChangeDetail` model in `resource.ts`.
+    *   ✅ **(DONE)** ~~Add `FeedbackChangeDetail` model in `resource.ts`.~~ (Model removed)
     *   ✅ Define relationships.
     *   ✅ Define necessary secondary indexes.
 *   ✅ **Refactor Data Extraction Logic in `analyze.py`:**
@@ -408,7 +408,7 @@ This refactoring ensures the core report generation logic is DRY and consistentl
     *   ⬜ Implement `generate(config, params)` method.
     *   ⬜ **Input Parameters:** Accept parameters like `scorecardId`, `dateRange` (start/end dates) via `params`.
     *   ⬜ **API Querying:** Use `PlexusDashboardClient` within the block to query the Plexus API for relevant `FeedbackItem` records matching the input parameters (filtering by `accountId`, `scorecardId`, and potentially date range if timestamps are added to `FeedbackItem` or derived from `FeedbackChangeDetail`).
-    *   ⬜ **Analysis Logic:** Implement analysis logic (e.g., Gwet's AC1 calculation) using the fetched `FeedbackItem` data (comparing `initialAnswerValue` and `finalAnswerValue`). Group results by `scoreId` (Plexus Score ID).
+    *   ⬜ **Analysis Logic:** Implement analysis logic (e.g., Gwet\'s AC1 calculation) using the fetched `FeedbackItem` data (comparing `initialAnswerValue` and `finalAnswerValue`). Group results by `scoreId` (Plexus Score ID).
     *   ⬜ **JSON Output:** Return a JSON-serializable dictionary containing the analysis results (e.g., overall AC1, per-score AC1, mismatch counts, total items analyzed). This JSON will be stored in the corresponding `ReportBlock.output` field.
 *   ⬜ **Implement Frontend Component (`FeedbackAnalysis`):**
     *   ⬜ Create a new React component (e.g., `FeedbackAnalysis.tsx`) specifically for rendering the output of the `FeedbackAnalysisBlock`.
@@ -453,15 +453,15 @@ This refactoring ensures the core report generation logic is DRY and consistentl
 
 Here is an example of the content stored in the `ReportConfiguration.configuration` field:
 
-```block name="Term Life - Temperature Check - Score Information"
+\`\`\`block name="Term Life - Temperature Check - Score Information"
 class: ScoreInformation
 scorecard: termlifev1
 score: Temperature Check
-```
+\`\`\`
 
 The parameters for blocks work in the same way as parameters to the CLI tools: `scorecard` can be an ID, an external ID, a key, or a name. Same for `score`.
 
-When the report is generated, each report block in the report will generate structured JSON output that will be stored in a separate `ReportBlock` entry, linked to the `Report`. The JSON output for each block goes into `ReportBlock.output`. The block's execution logs can be stored in `ReportBlock.log`.
+When the report is generated, each report block in the report will generate structured JSON output that will be stored in a separate `ReportBlock` entry, linked to the `Report`. The JSON output for each block goes into `ReportBlock.output`. The block\'s execution logs can be stored in `ReportBlock.log`.
 
 *(Note: The example above shows `ScoreInformation`. We should ensure consistency with the actual class name, which we intend to be `ScoreInfo`.)*
 
@@ -474,6 +474,15 @@ When the report is generated, each report block in the report will generate stru
 - Fixed async function handling in the report engine to properly await async block methods
 - Successfully executed the feedback analysis report through the CLI
 - The code structure and execution now work properly, but no data is being found
+
+✅ **Completed Feedback Data Extraction and Processing:**
+- Successfully implemented and fixed both `analyze` and `capture` commands in the client project
+- Both commands now properly combine chronologically sorted changes to determine accurate initial/final values
+- Consistent behavior between commands ensures reliable feedback item record creation
+
+🟡 **Data Schema Changes Needed:**
+- ✅ Change `isMismatch` to `isAgreement` in the FeedbackItem schema (inverse meaning, more intuitive for analysis) *(was `agree`, now `isAgreement`)*
+- ✅ Remove the `FeedbackChangeDetail` model from the schema as it\'s not required
 
 🟡 **Data Access Challenges:**
 - The FeedbackAnalysis block is running but not finding any data when querying the API
@@ -500,7 +509,7 @@ When the report is generated, each report block in the report will generate stru
 ✅ **Fixed Critical Layout Issue with Code Blocks:**
 - Successfully resolved the layout issues with preformatted code blocks
 - Implemented proper text wrapping and horizontal scrolling without breaking the containing layout
-- Used a combination of CSS properties to ensure blocks don't expand beyond their container:
+- Used a combination of CSS properties to ensure blocks don\'t expand beyond their container:
   - `min-w-0` to allow flex items to shrink below their content size
   - `max-w-full` to prevent overflow
   - `whitespace-pre-wrap` and `break-all` for text wrapping
