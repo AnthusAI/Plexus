@@ -7,8 +7,22 @@ import os
 import sys
 import subprocess
 import json
+import argparse
+
+def parse_args():
+    """Parse command line arguments with support for --env-file."""
+    parser = argparse.ArgumentParser(description="Plexus MCP Server Wrapper")
+    parser.add_argument("--host", help="Host (passed to server)")
+    parser.add_argument("--port", type=int, help="Port (passed to server)")
+    parser.add_argument("--transport", default="stdio", choices=["stdio"], help="Transport (passed to server)")
+    parser.add_argument("--env-dir", help="Directory containing the .env file (passed to server)")
+    parser.add_argument("--env-file", help="Direct path to the .env file to load")
+    return parser.parse_known_args()
 
 def main():
+    # Parse known arguments, keeping other args to pass through to the server
+    args, unknown_args = parse_args()
+    
     # Get current script directory (now /Users/derek.norrbom/Capacity/Plexus/MCP/)
     script_dir = os.path.dirname(os.path.abspath(__file__))
     # Get the parent directory (now /Users/derek.norrbom/Capacity/Plexus/)
@@ -20,16 +34,78 @@ def main():
     # (e.g., /Users/derek.norrbom/Capacity/Plexus/MCP/plexus_mcp_server.py)
     server_script = os.path.join(script_dir, "plexus_mcp_server.py")
     
-    # Get all command line arguments to pass through
-    args = sys.argv[1:]
+    # Prepare arguments for the server process
+    server_args = []
+    
+    # Handle the --env-file argument (wrapper-specific)
+    env_file_path = None
+    if args.env_file:
+        env_file_path = os.path.abspath(args.env_file)
+        print(f"wrapper: Using specified .env file: {env_file_path}", file=sys.stderr)
+    else:
+        print("\n", file=sys.stderr)
+        print("===================== IMPORTANT =====================", file=sys.stderr)
+        print("No --env-file specified. API credentials may be missing.", file=sys.stderr)
+        print("If the server fails to find credentials, update your", file=sys.stderr)
+        print("Claude desktop config to include:", file=sys.stderr)
+        print('  "--env-file", "/path/to/your/.env"', file=sys.stderr)
+        print("=====================================================", file=sys.stderr)
+        print("\n", file=sys.stderr)
+    
+    # Pass through all known arguments except --env-file
+    if args.host:
+        server_args.extend(["--host", args.host])
+    if args.port:
+        server_args.extend(["--port", str(args.port)])
+    if args.transport:
+        server_args.extend(["--transport", args.transport])
+    if args.env_dir:
+        server_args.extend(["--env-dir", args.env_dir])
+    
+    # Add any unknown arguments
+    server_args.extend(unknown_args)
     
     # Set environment variables
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
-    # env["PYTHONPATH"] = script_dir # Keep commented out
+    
+    # Try to properly load environment variables from the specified .env file
+    if env_file_path:
+        if os.path.isfile(env_file_path):
+            try:
+                print(f"wrapper: loading environment from {env_file_path}", file=sys.stderr)
+                loaded_vars = []
+                with open(env_file_path, 'r') as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith('#'):
+                            try:
+                                key, value = line.split('=', 1)
+                                key = key.strip()
+                                value = value.strip().strip("'").strip('"')
+                                if key and value:
+                                    env[key] = value
+                                    loaded_vars.append(key)
+                            except ValueError:
+                                # Skip malformed lines
+                                pass
+                print(f"wrapper: loaded {len(loaded_vars)} variables", file=sys.stderr)
+                
+                # Check for specific Plexus variables
+                plexus_vars = ['PLEXUS_API_URL', 'PLEXUS_API_KEY']
+                for var_name in plexus_vars:
+                    if var_name in env:
+                        print(f"wrapper: found {var_name} in environment", file=sys.stderr)
+                    else:
+                        print(f"wrapper: {var_name} NOT FOUND in environment", file=sys.stderr)
+            except Exception as e:
+                print(f"wrapper WARNING: error loading .env file: {e}", file=sys.stderr)
+        else:
+            print(f"wrapper ERROR: Specified .env file not found: {env_file_path}", file=sys.stderr)
+            print("Please provide the correct path to your .env file using --env-file", file=sys.stderr)
     
     # Start the server, connecting stdin/stdout directly to allow MCP protocol communication
-    cmd = [sys.executable, server_script] + args
+    cmd = [sys.executable, server_script] + server_args
     
     # Print launch info to stderr
     print(f"wrapper argv: {' '.join(cmd)}", file=sys.stderr)
@@ -39,7 +115,7 @@ def main():
     if not os.path.isdir(target_cwd):
         print(f"wrapper ERROR: Target CWD does not exist: {target_cwd}", file=sys.stderr)
         return 1
-        
+    
     try:
         # Use Popen to connect I/O streams properly
         process = subprocess.Popen(

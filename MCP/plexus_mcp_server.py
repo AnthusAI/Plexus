@@ -78,11 +78,20 @@ def list_dashboard_scorecards(account=None, name=None, key=None, limit: Optional
     
     client = None # Initialize client to None
     try:
-        # Attempt to create client FIRST
-        client = create_dashboard_client()
+        # Check if we have the necessary credentials
+        api_url = os.environ.get('PLEXUS_API_URL', '')
+        api_key = os.environ.get('PLEXUS_API_KEY', '')
+        
+        if not api_url or not api_key:
+            logger.warning("Missing API credentials. Ensure .env file is loaded.")
+            return "Error: Missing API credentials. Use --env-file to specify your .env file path."
+        
+        # Create the client directly
+        from plexus.dashboard.api.client import PlexusDashboardClient
+        client = PlexusDashboardClient(api_url=api_url, api_key=api_key)
+            
         if not client:
-            # This error comes from our check, should be clean
-            return "Error: Could not create dashboard client (check configuration/credentials)."
+            return "Error: Could not create dashboard client."
 
         # Handle limit=None as fetching a large number (proxy for all)
         fetch_limit = limit if limit is not None else 1000 # Use 1000 if no limit specified
@@ -270,6 +279,19 @@ async def main():
         logging.root.addHandler(stderr_handler)
         logging.root.setLevel(log_level)
 
+    # Log startup information
+    logger.info(f"MCP Server starting")
+    logger.info(f"Server working directory: {os.getcwd()}")
+    
+    # Check for essential environment variables
+    api_url = os.environ.get('PLEXUS_API_URL')
+    api_key = os.environ.get('PLEXUS_API_KEY')
+    
+    if not api_url or not api_key:
+        logger.warning("API credentials missing. Ensure .env file is loaded with --env-file.")
+    else:
+        logger.info("API credentials found in environment.")
+
     logger.info(f"Starting MCP server ({server.name} v{server.version}) using mcp.server library...")
 
     # Create initialization options (library handles protocol version etc.)
@@ -287,22 +309,26 @@ async def main():
             logger.info(f"Attempting to load .env file from specified --env-dir: {dotenv_path}")
             # Check if the target directory exists before trying to load
             if not os.path.isdir(env_directory):
-                logger.warning(f"--env-dir directory does not exist: {env_directory}")
+                logger.error(f"--env-dir directory does not exist: {env_directory}")
                 dotenv_path = None # Prevent further attempts
             elif not os.path.isfile(dotenv_path):
-                logger.warning(f".env file not found at specified location: {dotenv_path}")
+                logger.error(f".env file not found at specified location: {dotenv_path}")
                 dotenv_path = None # Prevent further attempts
             else:
+                # File exists, try to load it
                 loaded = load_dotenv(dotenv_path=dotenv_path, override=True)
                 if loaded:
-                    logger.info(f".env file loaded successfully from {dotenv_path}.")
+                    logger.info(f".env file loaded successfully from {dotenv_path}")
+                    # Log environment variables (excluding any sensitive info)
+                    logger.info(f"Environment contains PLEXUS_DASHBOARD_API_URL: {'Yes' if os.environ.get('PLEXUS_DASHBOARD_API_URL') else 'No'}")
+                    logger.info(f"Environment contains PLEXUS_DASHBOARD_API_KEY: {'Yes' if os.environ.get('PLEXUS_DASHBOARD_API_KEY') else 'No'}")
                 else:
-                    logger.warning(f"dotenv.load_dotenv did not return True from {dotenv_path}, though file exists.")
+                    logger.error(f"Failed to load .env file from {dotenv_path} (load_dotenv returned False)")
         else:
             logger.warning("--env-dir argument not provided. Skipping .env file loading. Credentials must be available via environment.")
 
     except ImportError:
-        logger.warning("python-dotenv not found, cannot load .env file.")
+        logger.error("python-dotenv not found, cannot load .env file. Please install with: pip install python-dotenv")
     except Exception as env_err:
         env_path_str = f" from {dotenv_path}" if dotenv_path else ""
         logger.error(f"Error loading .env file{env_path_str}: {env_err}", exc_info=True)
