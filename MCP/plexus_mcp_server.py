@@ -6,11 +6,36 @@ import asyncio
 import logging
 import argparse
 from typing import Dict, Any, List, Union, Optional
+from io import StringIO
 
-# Use mcp.server library components
-from mcp.server import Server
-from mcp.server.stdio import stdio_server
-from mcp.types import Tool, TextContent
+# Temporarily capture stdout during module imports
+original_stdout = sys.stdout
+temp_stdout = StringIO()
+sys.stdout = temp_stdout
+
+# Safety measure: Monkey patch builtins.print to always use stderr
+# This prevents any imported libraries from accidentally writing to stdout
+original_print = print
+def safe_print(*args, **kwargs):
+    # If file is explicitly set, honor it; otherwise, force stderr
+    if 'file' not in kwargs:
+        kwargs['file'] = sys.stderr
+    return original_print(*args, **kwargs)
+print = safe_print
+
+# Create a custom ArgumentParser that writes to stderr
+class StderrArgumentParser(argparse.ArgumentParser):
+    """ArgumentParser that writes all output to stderr instead of stdout."""
+    def _print_message(self, message, file=None):
+        if message:
+            if file is None:
+                file = sys.stderr
+            file.write(message)
+    
+    def exit(self, status=0, message=None):
+        if message:
+            self._print_message(message, sys.stderr)
+        sys.exit(status)
 
 # Configure root logger EARLY and definitively to stderr
 # This should happen before any other module (like Plexus) tries to configure logging
@@ -25,49 +50,68 @@ logging.root.setLevel(log_level_main)
 # Get the logger for this module AFTER root configuration
 logger = logging.getLogger("plexus_mcp_server_lib")
 
-# --- Plexus Core Imports & Setup ---
-# Add Plexus project root to Python path if necessary
-plexus_root = os.path.dirname(os.path.abspath(__file__))
-if plexus_root not in sys.path:
-    sys.path.append(plexus_root)
-# Also add parent if running from within Plexus directory structure
-parent_dir = os.path.dirname(plexus_root)
-if parent_dir not in sys.path:
-     sys.path.append(parent_dir)
-
-# Initialize flags/dummies first
-PLEXUS_CORE_AVAILABLE = False
-def create_dashboard_client(): return None
-def resolve_account_identifier(client, identifier): return None
-def resolve_scorecard_identifier(client, identifier): return None
-
 try:
-    # Attempt to import Plexus modules for core functionality
-    # Plexus logging setup might conflict, rely on our root logger setup above
-    # from plexus.CustomLogging import setup_logging, set_log_group 
-    # setup_logging() # Avoid calling this if it might hijack stdout
-    from plexus.dashboard.api.client import PlexusDashboardClient
-    # Assign imported functions to pre-defined names
-    from plexus.cli.ScorecardCommands import create_client as _create_dashboard_client, resolve_account_identifier as _resolve_account_identifier
-    from plexus.cli.identifier_resolution import resolve_scorecard_identifier as _resolve_scorecard_identifier
-    create_dashboard_client = _create_dashboard_client
-    resolve_account_identifier = _resolve_account_identifier
-    resolve_scorecard_identifier = _resolve_scorecard_identifier
-    PLEXUS_CORE_AVAILABLE = True
-    logger.info("Plexus core modules imported successfully.")
-    # Try setting log group if function exists, but don't rely on setup_logging
-    # try:
-    #     from plexus.CustomLogging import set_log_group
-    #     set_log_group('plexus/mcp_server')
-    # except Exception as log_group_err:
-    #     logger.warning(f"Could not set log group: {log_group_err}")
-except ImportError as e:
-    logger.warning(f"Could not import core Plexus modules: {e}. Dashboard features will be unavailable.")
-    # Dummies are already defined, PLEXUS_CORE_AVAILABLE is already False
-except Exception as import_err:
-    # Catch other potential errors during import/setup
-    logger.error(f"Error during Plexus core module import/setup: {import_err}", exc_info=True)
+    # Use mcp.server library components
+    from mcp.server import Server
+    from mcp.server.stdio import stdio_server
+    from mcp.types import Tool, TextContent
+
+    # --- Plexus Core Imports & Setup ---
+    # Add Plexus project root to Python path if necessary
+    plexus_root = os.path.dirname(os.path.abspath(__file__))
+    if plexus_root not in sys.path:
+        sys.path.append(plexus_root)
+    # Also add parent if running from within Plexus directory structure
+    parent_dir = os.path.dirname(plexus_root)
+    if parent_dir not in sys.path:
+         sys.path.append(parent_dir)
+
+    # Initialize flags/dummies first
     PLEXUS_CORE_AVAILABLE = False
+    def create_dashboard_client(): return None
+    def resolve_account_identifier(client, identifier): return None
+    def resolve_scorecard_identifier(client, identifier): return None
+
+    try:
+        # Attempt to import Plexus modules for core functionality
+        # Plexus logging setup might conflict, rely on our root logger setup above
+        # from plexus.CustomLogging import setup_logging, set_log_group 
+        # setup_logging() # Avoid calling this if it might hijack stdout
+        from plexus.dashboard.api.client import PlexusDashboardClient
+        # Assign imported functions to pre-defined names
+        from plexus.cli.ScorecardCommands import create_client as _create_dashboard_client, resolve_account_identifier as _resolve_account_identifier
+        from plexus.cli.identifier_resolution import resolve_scorecard_identifier as _resolve_scorecard_identifier
+        create_dashboard_client = _create_dashboard_client
+        resolve_account_identifier = _resolve_account_identifier
+        resolve_scorecard_identifier = _resolve_scorecard_identifier
+        PLEXUS_CORE_AVAILABLE = True
+        logger.info("Plexus core modules imported successfully.")
+        # Try setting log group if function exists, but don't rely on setup_logging
+        # try:
+        #     from plexus.CustomLogging import set_log_group
+        #     set_log_group('plexus/mcp_server')
+        # except Exception as log_group_err:
+        #     logger.warning(f"Could not set log group: {log_group_err}")
+    except ImportError as e:
+        logger.warning(f"Could not import core Plexus modules: {e}. Dashboard features will be unavailable.")
+        # Dummies are already defined, PLEXUS_CORE_AVAILABLE is already False
+    except Exception as import_err:
+        # Catch other potential errors during import/setup
+        logger.error(f"Error during Plexus core module import/setup: {import_err}", exc_info=True)
+        PLEXUS_CORE_AVAILABLE = False
+        
+    # Check for and log any accidental stdout output from imports
+    stdout_captured = temp_stdout.getvalue()
+    if stdout_captured:
+        logger.warning(f"Captured unexpected stdout output during imports: {stdout_captured}")
+    
+    # Restore stdout for proper JSON-RPC communication
+    sys.stdout = original_stdout
+except Exception as e:
+    # Ensure stdout is restored in case of exception
+    sys.stdout = original_stdout
+    logger.error(f"Error during initialization: {e}", exc_info=True)
+    raise
 
 # --- Tool Implementation Functions (Plexus) ---
 
@@ -262,6 +306,9 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
 async def main():
     """Sets up logging and runs the MCP server."""
     global args # Access command line arguments if needed
+    
+    # Make sure we're not accidentally writing to stdout
+    sys.stdout.flush()
 
     # Configure logging properly before starting server
     log_level = logging.DEBUG if os.environ.get("MCP_DEBUG") else logging.INFO
@@ -336,12 +383,18 @@ async def main():
     # Run the server using stdio
     async with stdio_server() as (read_stream, write_stream):
         logger.info("MCP Server connected via stdio, waiting for initialize...")
-        await server.run(read_stream, write_stream, options, raise_exceptions=True)
-        logger.info("MCP Server finished.")
+        try:
+            # Flush stderr to ensure all logs are visible before starting protocol
+            sys.stderr.flush()
+            await server.run(read_stream, write_stream, options, raise_exceptions=True)
+            logger.info("MCP Server finished.")
+        except Exception as e:
+            logger.error(f"Error in server.run: {e}", exc_info=True)
+            raise
 
 if __name__ == "__main__":
     # Basic argument parsing primarily for compatibility with the wrapper script
-    parser = argparse.ArgumentParser(description="Plexus MCP Server (Library)")
+    parser = StderrArgumentParser(description="Plexus MCP Server (Library)")
     parser.add_argument("--host", help="Host (ignored for stdio)")
     parser.add_argument("--port", type=int, help="Port (ignored for stdio)")
     parser.add_argument("--transport", default="stdio", choices=["stdio"], help="Transport (only stdio supported)")
