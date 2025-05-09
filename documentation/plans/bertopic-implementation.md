@@ -50,6 +50,9 @@ python3 -m plexus.cli.CommandLineInterface analyze topics --input-file .plexus_t
 
 # Use with transformed transcripts
 python3 -m plexus.cli.CommandLineInterface analyze topics --input-file .plexus_training_data_cache/dataframes/1039_no_score_id_Start-Date_csv.parquet --transform llm --provider openai --use-representation-model
+
+# Use LangChain instead of direct OpenAI (enables more LLM options)
+python3 -m plexus.cli.CommandLineInterface analyze topics --input-file .plexus_training_data_cache/dataframes/1039_no_score_id_Start-Date_csv.parquet --use-representation-model --use-langchain
 ```
 
 ### Customer Question Extraction (New)
@@ -96,7 +99,8 @@ python3 -m plexus.cli.CommandLineInterface analyze topics \
   --max-ngram 2 \
   --min-topic-size 15 \
   --top-n-words 8 \
-  --use-representation-model
+  --use-representation-model \
+  --use-langchain
 ```
 
 ### LLM Integration Test
@@ -154,6 +158,7 @@ python3 -m plexus.cli.CommandLineInterface analyze test-ollama --prompt "Explain
    - ✅ Added robust JSON parsing for LLM outputs
    - ✅ Implemented customer question extraction with structured output
    - ✅ Integrated OpenAI for topic representation and labeling
+   - ✅ Added LangChain integration for topic representation as an alternative to direct OpenAI
 
 ### In Progress
 1. BERTopic Integration
@@ -221,7 +226,12 @@ plexus/
   - These labels replace the default keyword representations in visualizations and topic info
 - Technical implementation:
   - Uses BERTopic's built-in representation_model feature
-  - Integrates with OpenAI API through the official client
+  - Two implementation options:
+    1. Direct OpenAI integration (default with `--use-representation-model`)
+    2. LangChain integration (when using `--use-representation-model --use-langchain`)
+  - The LangChain implementation:
+    - Provides same functionality but through LangChain's abstraction layer
+    - Implements the same BERTopic representation model interface
   - Custom prompt focuses specifically on call center contexts
   - Uses the format "topic: <label>" for parsing the response
   - Includes fallback mechanisms if the OpenAI API fails
@@ -250,6 +260,7 @@ plexus/
   - Transforms keyword-based topics into meaningful descriptions
   - Example: "refund_shipping_order" → "Customer Refund and Shipping Issues"
   - Integration via the `--use-representation-model` flag with required API key
+  - Optional LangChain integration via `--use-langchain` flag for more flexibility
 
 ## Prompt Template Format
 LLM transformation uses JSON files for prompt templates:
@@ -283,6 +294,7 @@ The template must include `{text}` and `{format_instructions}` placeholders, and
   - Ollama: `gemma3:27b`, `llama3:8b`, etc.
   - OpenAI: `gpt-3.5-turbo`, `gpt-4`, `gpt-4o-mini`, etc.
 - For topic representation, OpenAI API key is required with the `--use-representation-model` flag
+- When using `--use-langchain`, the integration uses LangChain's abstraction layer instead of direct OpenAI API
 
 ## Testing Plan
 1. [x] Test data transformation

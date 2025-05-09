@@ -148,6 +148,8 @@ def feedback(
 @click.option('--customer-only', is_flag=True, default=False, help='Filter transcripts to include only customer utterances before processing')
 @click.option('--use-representation-model', is_flag=True, default=False, 
               help='Use OpenAI to generate better topic representations (requires API key)')
+@click.option('--use-langchain', is_flag=True, default=False,
+              help='Use LangChain for topic representation instead of direct OpenAI')
 def topics(
     input_file: str,
     output_dir: str,
@@ -170,6 +172,7 @@ def topics(
     sample_size: Optional[int],
     customer_only: bool,
     use_representation_model: bool,
+    use_langchain: bool,
 ):
     """
     Analyze topics in call transcripts using BERTopic.
@@ -207,7 +210,10 @@ def topics(
         python3 -m plexus.cli.CommandLineInterface analyze topics --input-file path/to/transcripts.parquet --sample-size 100
         
         # Use OpenAI to generate better topic representations
-        python3 -m plexus.cli.CommandLineInterface analyze topics --input-file path/to/transcripts.parquet --use-representation-model --openai-api-key YOUR_API_KEY
+        python3 -m plexus.cli.CommandLineInterface analyze topics --input-file path/to/transcripts.parquet --use-representation-model
+        
+        # Use LangChain for topic representation instead of direct OpenAI
+        python3 -m plexus.cli.CommandLineInterface analyze topics --input-file path/to/transcripts.parquet --use-representation-model --use-langchain
     """
     logging.info(f"Starting topic analysis for file: {input_file}")
     
@@ -311,7 +317,8 @@ def topics(
             # Use descriptive naming scheme based on parameters
             analysis_dir_name = f"topics_{transform_suffix}_{min_ngram}-{max_ngram}gram_{num_topics if num_topics else 'auto'}"
             if use_representation_model:
-                analysis_dir_name += "_with_representation"
+                repr_suffix = "langchain" if use_langchain else "openai"
+                analysis_dir_name += f"_with_{repr_suffix}"
             
             # Construct the full path for the specific analysis output
             final_output_dir = analysis_parent_dir / analysis_dir_name
@@ -337,7 +344,8 @@ def topics(
                     min_topic_size=min_topic_size,
                     top_n_words=top_n_words,
                     use_representation_model=use_representation_model,
-                    openai_api_key=openai_api_key
+                    openai_api_key=openai_api_key,
+                    use_langchain=use_langchain
                 )
                 logging.info("BERTopic analysis completed successfully.")
             except Exception as e:
