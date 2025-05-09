@@ -8,6 +8,7 @@ const blockRegistry = new Map<string, BlockComponent>()
  * Register a block component
  */
 export function registerBlock(type: string, component: BlockComponent) {
+  console.log(`Registering block component: ${type}`);
   blockRegistry.set(type, component)
 }
 
@@ -15,7 +16,9 @@ export function registerBlock(type: string, component: BlockComponent) {
  * Get a block component by type
  */
 export function getBlock(type: string): BlockComponent | undefined {
-  return blockRegistry.get(type)
+  const blockComponent = blockRegistry.get(type);
+  console.log(`Getting block component for type: ${type}, Found: ${!!blockComponent}`);
+  return blockComponent;
 }
 
 /**
