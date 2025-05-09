@@ -7,10 +7,10 @@ import { Gauge, Segment } from '@/components/gauge';
 // For type-safety, create an interface for the data structure
 interface ScoreData {
   id: string;
-  name: string;
-  external_id: string;
+  score_name: string;
+  cc_question_id: string;
   ac1: number | null;
-  total_comparisons: number;
+  item_count: number;
   mismatches: number;
   mismatch_percentage?: number;
   accuracy?: number;
@@ -86,13 +86,13 @@ const FeedbackAnalysis: React.FC<ReportBlockProps> = ({ name, output }) => {
           {feedbackData.scores
             .sort((a, b) => (b.ac1 === null ? -2 : b.ac1) - (a.ac1 === null ? -2 : a.ac1))
             .map((score) => {
-              const agreements = score.total_comparisons - score.mismatches;
+              const agreements = score.item_count - score.mismatches;
               return (
                 <Card key={score.id}>
                   <CardHeader>
-                    <CardTitle className="font-bold">{score.name}</CardTitle>
+                    <CardTitle className="font-bold">{score.score_name}</CardTitle>
                     <p className="text-sm text-muted-foreground">
-                      {agreements} agreement{agreements === 1 ? '' : 's'} / {score.total_comparisons} feedback item{score.total_comparisons === 1 ? '' : 's'}
+                      {agreements} agreement{agreements === 1 ? '' : 's'} / {score.item_count} feedback item{score.item_count === 1 ? '' : 's'}
                     </p>
                   </CardHeader>
                   <CardContent className="flex flex-col sm:flex-row justify-around items-center gap-4 pt-2 pb-4">

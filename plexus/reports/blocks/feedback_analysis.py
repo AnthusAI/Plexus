@@ -1,7 +1,7 @@
 from typing import Any, Dict, Optional, Tuple, List
 import logging
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from plexus.analysis.metrics import GwetAC1
 from plexus.analysis.metrics.metric import Metric
@@ -19,492 +19,397 @@ class FeedbackAnalysis(BaseReportBlock):
     Analyzes feedback data using Gwet's AC1 agreement coefficient.
     
     This block retrieves FeedbackItem records and compares initial and final answer values
-    to calculate agreement scores using Gwet's AC1, which is more robust than Cohen's Kappa
-    for highly imbalanced class distributions.
+    to calculate agreement scores using Gwet's AC1.
+
+    If a specific 'score_id' (Call Criteria Question ID) is provided in the config,
+    it analyzes only that score. Otherwise, it analyzes all scores associated with
+    the provided 'scorecard' (Call Criteria Scorecard ID) that have a mapping
+    to a Plexus Score with an externalId.
     
     Config:
-        scorecard (str): The ID or name of the Scorecard to analyze.
+        scorecard (str): Call Criteria Scorecard ID (e.g., "1438"). This is REQUIRED.
         days (int, optional): Number of days in the past to analyze (default: 14).
+                              FeedbackItems updated within this period will be considered.
         start_date (str, optional): Start date for analysis in YYYY-MM-DD format.
                                    If provided, overrides 'days'.
         end_date (str, optional): End date for analysis in YYYY-MM-DD format.
                                  Defaults to today if not specified.
-        score_id (str, optional): Specific Score ID to analyze.
+        score_id (str, optional): Specific Call Criteria Question ID to analyze.
                                  If specified, only this score will be analyzed.
     """
 
     async def generate(self) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
-        """Fetches feedback data and performs agreement analysis using Gwet's AC1."""
-        self.log_messages = []  # Reset logs for this run
-        final_output_data = None  # Default to None
+        """Fetches feedback data and performs agreement analysis."""
+        self.log_messages = []
+        final_output_data = None
 
         try:
             self._log("Starting FeedbackAnalysis block generation.")
-            
-            # Extract configuration parameters with defaults
-            scorecard_id = self.config.get("scorecard")
-            if not scorecard_id:
-                self._log("ERROR: 'scorecard' identifier missing in block configuration.")
+            self._log(f"Raw config: {self.config}")
+            self._log(f"Raw params: {self.params}")
+
+            # --- 1. Extract and Validate Configuration ---
+            cc_scorecard_id_param = self.config.get("scorecard")
+            if not cc_scorecard_id_param:
+                self._log("ERROR: 'scorecard' (Call Criteria Scorecard ID) missing in block configuration.")
                 raise ValueError("'scorecard' is required in the block configuration.")
-            
-            # Store the scorecard_id in the instance for later use in Score lookups
-            self.scorecard_id = scorecard_id
-            self._log(f"Set scorecard_id for lookups: {self.scorecard_id}")
-            
+            self._log(f"Call Criteria Scorecard ID from config: {cc_scorecard_id_param}")
+
             days = int(self.config.get("days", 14))
-            
-            # Parse date strings if provided
-            start_date = self.config.get("start_date")
-            if start_date:
-                if isinstance(start_date, str):
-                    start_date = datetime.strptime(start_date, "%Y-%m-%d")
-                elif not isinstance(start_date, datetime):
-                    self._log(f"WARNING: start_date has unexpected type: {type(start_date)}")
-                    # Try to convert to string first
-                    start_date = str(start_date)
-                    start_date = datetime.strptime(start_date, "%Y-%m-%d")
+            start_date_str = self.config.get("start_date")
+            end_date_str = self.config.get("end_date")
+            cc_question_id_param = self.config.get("score_id") # Optional CC Question ID
+
+            # Parse date strings
+            if start_date_str:
+                start_date = datetime.strptime(start_date_str, "%Y-%m-%d")
             else:
-                # Calculate based on days
                 start_date = datetime.now() - timedelta(days=days)
-                
-            end_date = self.config.get("end_date")
-            if end_date:
-                if isinstance(end_date, str):
-                    end_date = datetime.strptime(end_date, "%Y-%m-%d")
-                elif not isinstance(end_date, datetime):
-                    self._log(f"WARNING: end_date has unexpected type: {type(end_date)}")
-                    # Try to convert to string first
-                    end_date = str(end_date)
-                    end_date = datetime.strptime(end_date, "%Y-%m-%d")
+            # Make start_date UTC aware (assuming naive datetime is intended as UTC)
+            start_date = start_date.replace(tzinfo=timezone.utc)
+            
+            if end_date_str:
+                end_date = datetime.strptime(end_date_str, "%Y-%m-%d")
             else:
                 end_date = datetime.now()
-                
-            # Optional score filter
-            score_id = self.config.get("score_id")
             
-            self._log(f"Analyzing feedback for scorecard: {scorecard_id}")
-            self._log(f"Date range: {start_date.date()} to {end_date.date()}")
-            if score_id:
-                self._log(f"Filtering by score ID: {score_id}")
+            # Ensure end_date is at the end of the day for correct filtering
+            end_date = end_date.replace(hour=23, minute=59, second=59, microsecond=999999)
+            # Make end_date UTC aware (assuming naive datetime is intended as UTC)
+            end_date = end_date.replace(tzinfo=timezone.utc)
+
+            self._log(f"Effective date range for filtering FeedbackItems: {start_date.isoformat()} to {end_date.isoformat()}")
+            if cc_question_id_param:
+                self._log(f"Call Criteria Question ID from config: {cc_question_id_param}")
+
+            # --- 2. Resolve Plexus Scorecard ---
+            self._log(f"Resolving Plexus Scorecard for CC Scorecard ID: {cc_scorecard_id_param}...")
+            try:
+                plexus_scorecard_obj = await asyncio.to_thread(
+                    Scorecard.get_by_external_id,
+                    external_id=str(cc_scorecard_id_param),
+                    client=self.api_client
+                )
+                if not plexus_scorecard_obj:
+                    msg = f"Plexus Scorecard not found for Call Criteria Scorecard ID: {cc_scorecard_id_param}"
+                    self._log(f"ERROR: {msg}")
+                    raise ValueError(msg)
+                self._log(f"Found Plexus Scorecard: '{plexus_scorecard_obj.name}' (ID: {plexus_scorecard_obj.id})")
+            except Exception as e:
+                self._log(f"ERROR resolving Plexus Scorecard: {e}")
+                raise
+
+            # --- 3. Determine Plexus Score(s) to Process ---
+            scores_to_process = [] # List of {'plexus_score_id': str, 'plexus_score_name': str, 'cc_question_id': str}
             
-            # Fetch FeedbackItem records from the API
-            feedback_items = await self._fetch_feedback_items(scorecard_id, score_id)
-            self._log(f"Retrieved {len(feedback_items)} feedback items for analysis")
-            
-            if not feedback_items:
-                self._log("No feedback items found for the specified criteria.")
-                return {
-                    "overall_ac1": None,
-                    "scores": [],
-                    "total_items": 0,
-                    "total_mismatches": 0,
-                    "accuracy": 0,
-                    "date_range": {
-                        "start": start_date.isoformat(),
-                        "end": end_date.isoformat()
+            if cc_question_id_param:
+                self._log(f"Looking up specific Plexus Score for CC Question ID: {cc_question_id_param} on Plexus Scorecard: {plexus_scorecard_obj.id}")
+                try:
+                    plexus_score_obj = await asyncio.to_thread(
+                        Score.get_by_external_id,
+                        external_id=str(cc_question_id_param),
+                        scorecard_id=plexus_scorecard_obj.id,
+                        client=self.api_client
+                    )
+                    if plexus_score_obj:
+                        scores_to_process.append({
+                            'plexus_score_id': plexus_score_obj.id,
+                            'plexus_score_name': plexus_score_obj.name,
+                            'cc_question_id': str(cc_question_id_param)
+                        })
+                        self._log(f"Found specific Plexus Score: '{plexus_score_obj.name}' (ID: {plexus_score_obj.id})")
+                    else:
+                        self._log(f"WARNING: Plexus Score not found for CC Question ID: {cc_question_id_param} on Scorecard '{plexus_scorecard_obj.name}'. This score will be skipped.")
+                except Exception as e:
+                    self._log(f"ERROR looking up specific Plexus Score (CC Question ID: {cc_question_id_param}): {e}. This score will be skipped.")
+            else:
+                self._log(f"Fetching all Plexus Scores for Scorecard '{plexus_scorecard_obj.name}' (ID: {plexus_scorecard_obj.id}) to find mappable scores.")
+                scores_query = """
+                query GetScorecardScores($scorecardId: ID!) {
+                    getScorecard(id: $scorecardId) {
+                        id name
+                        sections { items { id scores { items { id name externalId } } } }
                     }
+                }
+                """
+                try:
+                    result = await asyncio.to_thread(self.api_client.execute, scores_query, {'scorecardId': plexus_scorecard_obj.id})
+                    scorecard_data = result.get('getScorecard')
+                    if scorecard_data and scorecard_data.get('sections') and scorecard_data['sections'].get('items'):
+                        for section in scorecard_data['sections']['items']:
+                            if section.get('scores') and section['scores'].get('items'):
+                                for score_item in section['scores']['items']:
+                                    if score_item.get('externalId'):
+                                        scores_to_process.append({
+                                            'plexus_score_id': score_item['id'],
+                                            'plexus_score_name': score_item['name'],
+                                            'cc_question_id': score_item['externalId']
+                                        })
+                                    else:
+                                        self._log(f"Plexus Score '{score_item.get('name')}' (ID: {score_item.get('id')}) is missing an externalId (CC Question ID). Skipping.")
+                    self._log(f"Identified {len(scores_to_process)} Plexus Scores with externalIds to process.")
+                except Exception as e:
+                    self._log(f"ERROR fetching scores for Plexus Scorecard '{plexus_scorecard_obj.name}': {e}")
+                    # Continue if some scores were found, otherwise this will be caught by the next check
+            
+            if not scores_to_process:
+                msg = "No Plexus Scores identified for analysis (either none found or none had a mappable CC Question ID)."
+                self._log(f"ERROR: {msg}")
+                # Return a structure indicating no data, but not an error state for the report block itself.
+                return {
+                    "overall_ac1": None, "total_items": 0, "total_mismatches": 0, "accuracy": 0,
+                    "scores": [],
+                    "total_feedback_items_retrieved": 0,
+                    "date_range": {"start": start_date.isoformat(), "end": end_date.isoformat()},
+                    "message": msg
                 }, "\n".join(self.log_messages)
+
+            # --- 4. Fetch and Analyze Feedback for Each Score ---
+            all_feedback_items_retrieved_count = 0
+            all_date_filtered_feedback_items = [] # For overall calculation
+            per_score_analysis_results = []
+
+            for score_info in scores_to_process:
+                self._log(f"--- Processing Score: '{score_info['plexus_score_name']}' (ID: {score_info['plexus_score_id']}, CC ID: {score_info['cc_question_id']}) ---")
+                
+                items_for_this_score = await self._fetch_feedback_items_for_score(
+                    plexus_scorecard_id=plexus_scorecard_obj.id,
+                    plexus_score_id=score_info['plexus_score_id']
+                )
+                all_feedback_items_retrieved_count += len(items_for_this_score)
+                self._log(f"Retrieved {len(items_for_this_score)} FeedbackItems for this score (before date filtering).")
+
+                # Date filter items for this score
+                date_filtered_items_for_score = [
+                    item for item in items_for_this_score
+                    if item.updatedAt and start_date <= item.updatedAt <= end_date
+                ]
+                self._log(f"{len(date_filtered_items_for_score)} items for this score within date range: {start_date.date()} - {end_date.date()}")
+                
+                all_date_filtered_feedback_items.extend(date_filtered_items_for_score)
+
+                if not date_filtered_items_for_score:
+                    self._log("No feedback items for this score within the date range.")
+                    analysis_for_this_score = {
+                        "score_id": score_info['plexus_score_id'],
+                        "score_name": score_info['plexus_score_name'],
+                        "cc_question_id": score_info['cc_question_id'],
+                        "ac1": None, "item_count": 0, "mismatches": 0, "accuracy": 0,
+                        "message": "No feedback items found in the specified date range."
+                    }
+                else:
+                    analysis_for_this_score = self._analyze_feedback_data_gwet(
+                        feedback_items=date_filtered_items_for_score,
+                        score_id_info=score_info['plexus_score_id'] # For logging within analysis
+                    )
+                    analysis_for_this_score["score_id"] = score_info['plexus_score_id']
+                    analysis_for_this_score["score_name"] = score_info['plexus_score_name']
+                    analysis_for_this_score["cc_question_id"] = score_info['cc_question_id']
+                
+                per_score_analysis_results.append(analysis_for_this_score)
+                self._log(f"Analysis for score '{score_info['plexus_score_name']}': {analysis_for_this_score}")
+
+            # --- 5. Calculate Overall Metrics ---
+            self._log(f"Calculating overall metrics from {len(all_date_filtered_feedback_items)} date-filtered feedback items across all processed scores.")
+            if not all_date_filtered_feedback_items:
+                overall_analysis = {"overall_ac1": None, "total_items": 0, "total_mismatches": 0, "accuracy": 0}
+                self._log("No date-filtered items available for overall analysis.")
+            else:
+                # Use a generic score_id_info for the overall log
+                overall_analysis = self._analyze_feedback_data_gwet(all_date_filtered_feedback_items, "Overall") 
             
-            # Process and analyze the feedback data
-            analysis_results = self._analyze_feedback(feedback_items)
-            self._log("Feedback analysis completed successfully")
-            
-            # Structure the output data with the new format
+            self._log(f"Overall analysis: {overall_analysis}")
+
+            # --- 6. Structure Final Output ---
             final_output_data = {
-                "overall_ac1": analysis_results.get("overall_ac1"),
-                "scores": analysis_results.get("scores", []),
-                "total_items": len(feedback_items),
-                "total_mismatches": analysis_results.get("total_mismatches", 0),
-                "accuracy": analysis_results.get("accuracy", 0),
+                "overall_ac1": overall_analysis.get("ac1"), # Renamed from overall_ac1
+                "total_items": overall_analysis.get("item_count"), # Renamed from item_count
+                "total_mismatches": overall_analysis.get("mismatches"), # Renamed from mismatches
+                "accuracy": overall_analysis.get("accuracy"), # Renamed from accuracy
+                "scores": per_score_analysis_results,
+                "total_feedback_items_retrieved": all_feedback_items_retrieved_count,
                 "date_range": {
                     "start": start_date.isoformat(),
                     "end": end_date.isoformat()
-                }
+                },
+                "message": f"Processed {len(scores_to_process)} score(s)." if scores_to_process else "No scores were processed."
             }
+            self._log(f"Final output data: {final_output_data}")
 
         except ValueError as ve:
-            # Log specific config errors
-            self._log(f"Configuration Error: {ve}")
-            # final_output_data remains None
+            self._log(f"Configuration or Value Error: {ve}")
+            # final_output_data remains None, or could be set to an error structure
+            final_output_data = {"error": str(ve), "scores": []}
         except Exception as e:
-            # Log unexpected errors during generation
             self._log(f"ERROR during FeedbackAnalysis generation: {str(e)}")
             import traceback
             self._log(traceback.format_exc())
-            # final_output_data remains None
+            final_output_data = {"error": str(e), "scores": []}
 
-        # Format and Return
         log_string = "\n".join(self.log_messages) if self.log_messages else None
         return final_output_data, log_string
     
-    async def _fetch_feedback_items(self, scorecard_id: str, score_id: Optional[str] = None) -> List[FeedbackItem]:
-        """
-        Fetch FeedbackItem records from the API.
+    async def _fetch_feedback_items_for_score(self, plexus_scorecard_id: str, plexus_score_id: str) -> List[FeedbackItem]:
+        """Fetches all FeedbackItem records for a specific Plexus Score on a Plexus Scorecard."""
+        self._log(f"Fetching feedback items for Plexus Scorecard ID: {plexus_scorecard_id}, Plexus Score ID: {plexus_score_id}")
         
-        Args:
-            scorecard_id: ID of the scorecard to analyze
-            score_id: Optional ID of the specific score to analyze
-            
-        Returns:
-            List of FeedbackItem objects
-        """
-        self._log(f"Fetching feedback items for scorecard ID: {scorecard_id}")
-        
-        # Start with an empty list
-        all_items = []
+        all_items_for_score = []
         next_token = None
-        
-        # Get the account_id from the current configuration
-        account_id = self.params.get("account_id")
+        account_id = self.params.get("account_id") # Assuming account_id is in self.params from Task context
+        if not account_id and hasattr(self.api_client, 'context') and self.api_client.context:
+             account_id = self.api_client.context.account_id # Try to get from client context
+
         if not account_id:
-            # Try to get it from the API client if available
+            # Attempt to resolve account_id if not directly available in params or context
             try:
-                account_id = self.api_client.account_id
-            except Exception:
-                self._log("WARNING: No account_id available. Using default filter.")
-        
-        # Make paginated API calls to get all feedback items
+                self._log("Attempting to resolve account_id via PlexusDashboardClient...")
+                # Ensure _resolve_account_id can be called or account_id is pre-resolved.
+                # This might require self.api_client to have context.account_key set.
+                if hasattr(self.api_client, '_resolve_account_id'):
+                    account_id = await asyncio.to_thread(self.api_client._resolve_account_id) 
+                elif hasattr(self.api_client, 'account_id'): # if it was resolved and stored
+                    account_id = self.api_client.account_id
+
+                if account_id:
+                    self._log(f"Resolved account_id: {account_id}")
+                else: # Final fallback if it cannot be resolved
+                    self._log("WARNING: account_id could not be resolved. FeedbackItem fetching might be incomplete or fail.")
+                    # Depending on API, not providing account_id might fetch for all accounts (bad) or fail.
+                    # For safety, we might choose to return empty list here if account_id is critical.
+                    # For now, proceed with None, and let FeedbackItem.list handle it.
+            except Exception as e:
+                self._log(f"Error resolving account_id: {e}. Proceeding with account_id as None.")
+                account_id = None # Ensure it's None if resolution fails
+        else:
+            self._log(f"Using account_id: {account_id}")
+
+
         while True:
             try:
-                items, next_token = FeedbackItem.list(
+                # Ensure all required args for FeedbackItem.list are provided.
+                # It's crucial that `FeedbackItem.list` can handle `score_id` being None if that's intended.
+                # However, in this method, `plexus_score_id` should always be provided.
+                self._log(f"Calling FeedbackItem.list with account_id='{account_id}', scorecard_id='{plexus_scorecard_id}', score_id='{plexus_score_id}', limit=100, next_token='{next_token}'")
+                
+                # Making FeedbackItem.list an async-compatible call
+                items, next_token = await asyncio.to_thread(
+                    FeedbackItem.list, # Assuming FeedbackItem.list is a static/class method
                     client=self.api_client,
-                    account_id=account_id,
-                    scorecard_id=scorecard_id,
-                    score_id=score_id,
+                    account_id=account_id, # Pass resolved or param account_id
+                    scorecard_id=plexus_scorecard_id,
+                    score_id=plexus_score_id, # Specific score for this fetch
                     limit=100,
                     next_token=next_token
                 )
-                all_items.extend(items)
-                self._log(f"Fetched {len(items)} items (total so far: {len(all_items)})")
+                all_items_for_score.extend(items)
+                self._log(f"Fetched {len(items)} items for this score (total for score: {len(all_items_for_score)})")
                 
                 if not next_token:
                     break
             except Exception as e:
-                self._log(f"Error fetching feedback items: {str(e)}")
-                break
+                self._log(f"Error during paginated fetch for score {plexus_score_id}: {str(e)}")
+                import traceback
+                self._log(traceback.format_exc())
+                break # Stop fetching for this score on error
                 
-        return all_items
+        return all_items_for_score
     
-    def _analyze_feedback(self, feedback_items: List[FeedbackItem]) -> Dict[str, Any]:
+    def _analyze_feedback_data_gwet(self, feedback_items: List[FeedbackItem], score_id_info: str) -> Dict[str, Any]:
         """
-        Analyze feedback items using Gwet's AC1.
+        Analyzes a list of feedback items using Gwet's AC1.
+        This function is generalized to work on any list of FeedbackItems.
         
         Args:
-            feedback_items: List of FeedbackItem objects to analyze
+            feedback_items: List of FeedbackItem objects to analyze.
+            score_id_info: Identifier string for the score (e.g., Plexus Score ID or "Overall") for logging.
             
         Returns:
-            Dictionary with analysis results
+            Dictionary with analysis results: {ac1, item_count, mismatches, accuracy}
         """
-        # Initialize results
-        results = {
-            "overall_ac1": None,
-            "question_ac1s": {},  # Keep using question_ac1s internally for processing
-            "total_mismatches": 0,
-            "accuracy": 0
-        }
+        self._log(f"Analyzing {len(feedback_items)} feedback items for: {score_id_info}")
         
         if not feedback_items:
-            self._log("No feedback items to analyze")
-            # Convert to new format before returning
-            return {
-                "overall_ac1": None,
-                "scores": [],
-                "total_mismatches": 0,
-                "accuracy": 0
-            }
+            self._log(f"No feedback items to analyze for {score_id_info}.")
+            return {"ac1": None, "item_count": 0, "mismatches": 0, "accuracy": 0}
             
-        # Organize data by question/score
-        items_by_score = {}
+        initial_values = [item.initialAnswerValue for item in feedback_items if item.initialAnswerValue is not None]
+        final_values = [item.finalAnswerValue for item in feedback_items if item.finalAnswerValue is not None]
+        
+        # Gwet's AC1 requires paired data. Ensure lists are of the same length by taking the minimum.
+        # This assumes items are already somewhat paired or we're comparing corresponding entries.
+        # A more robust pairing might be needed if items aren't implicitly paired.
+        valid_pairs_count = 0
+        paired_initial = []
+        paired_final = []
+
+        # Iterate based on the full list of feedback_items to ensure each item is considered once for pairing
+        processed_indices = set() # To avoid double counting if items are not perfectly one-to-one by index
+        
+        # For Gwet's AC1, we need a list of ratings from rater1 and rater2 for the *same set of items*.
+        # Here, 'initialAnswerValue' is rater1, 'finalAnswerValue' is rater2 for the same FeedbackItem.
         for item in feedback_items:
-            score_id = item.scoreId
-            if score_id not in items_by_score:
-                items_by_score[score_id] = []
-            items_by_score[score_id].append(item)
+            if item.initialAnswerValue is not None and item.finalAnswerValue is not None:
+                paired_initial.append(item.initialAnswerValue)
+                paired_final.append(item.finalAnswerValue)
+                valid_pairs_count +=1
         
-        # Prepare data for overall AC1 calculation
-        all_initial_values = []
-        all_final_values = []
-        total_mismatches = 0
+        self._log(f"Found {valid_pairs_count} valid initial/final pairs for analysis for {score_id_info}.")
+
+        if valid_pairs_count == 0:
+            self._log(f"No valid (non-None initial and final) pairs to analyze for {score_id_info}.")
+            return {"ac1": None, "item_count": 0, "mismatches": 0, "accuracy": 0}
+
+        # Calculate Gwet's AC1
+        try:
+            # Ensure GwetAC1 can handle the data format (e.g., list of strings)
+            # Convert values to string just in case they are not, as GwetAC1 might expect consistent types.
+            
+            # Corrected GwetAC1 usage:
+            gwet_ac1_calculator = GwetAC1() # Instantiate without arguments
+            
+            # Prepare reference and predictions lists
+            reference_list = [str(i) for i in paired_initial]
+            predictions_list = [str(f) for f in paired_final]
+            
+            # Create Metric.Input object
+            metric_input = Metric.Input(reference=reference_list, predictions=predictions_list)
+            
+            # Calculate Gwet's AC1
+            calculation_result = gwet_ac1_calculator.calculate(metric_input)
+            ac1_value = calculation_result.value # Get value from the result object
+
+            self._log(f"Gwet's AC1 for {score_id_info}: {ac1_value}")
+        except Exception as e:
+            self._log(f"Error calculating Gwet's AC1 for {score_id_info}: {e}")
+            import traceback
+            self._log(traceback.format_exc())
+            ac1_value = None
+            
+        # Calculate mismatches and accuracy based on the paired data
+        mismatches = sum(1 for i, f in zip(paired_initial, paired_final) if i != f)
+        accuracy_float = (valid_pairs_count - mismatches) / valid_pairs_count if valid_pairs_count > 0 else 0
+        accuracy_percentage = accuracy_float * 100 # Convert to percentage
         
-        # Process each question/score
-        for score_id, items in items_by_score.items():
-            # Get score name if available (future enhancement)
-            score_name = f"Score {score_id}"
-            
-            # Extract values for this score
-            initial_values = [item.initialAnswerValue for item in items if item.initialAnswerValue is not None]
-            final_values = [item.finalAnswerValue for item in items if item.finalAnswerValue is not None]
-            
-            # Ensure we have matching data points
-            valid_items = min(len(initial_values), len(final_values))
-            if valid_items < len(items):
-                self._log(f"Warning: {len(items) - valid_items} items for {score_name} have missing values")
-                
-            if valid_items > 0:
-                # Take only the valid range that has both initial and final values
-                initial_values = initial_values[:valid_items]
-                final_values = final_values[:valid_items]
-                
-                # Count mismatches
-                score_mismatches = sum(1 for i, f in zip(initial_values, final_values) if i != f)
-                total_mismatches += score_mismatches
-                
-                # Add to overall data
-                all_initial_values.extend(initial_values)
-                all_final_values.extend(final_values)
-                
-                # Calculate AC1 for this score
-                if len(initial_values) >= 2:  # Need at least 2 ratings
-                    try:
-                        # Create a GwetAC1 instance
-                        gwet_ac1 = GwetAC1()
-                        
-                        # Create a Metric.Input object
-                        metric_input = Metric.Input(
-                            reference=initial_values,
-                            predictions=final_values
-                        )
-                        
-                        # Calculate Gwet's AC1
-                        result = gwet_ac1.calculate(metric_input)
-                        
-                        # Calculate mismatch percentage and accuracy
-                        mismatch_percentage = (score_mismatches / valid_items) * 100 if valid_items > 0 else 0
-                        accuracy = 100 - mismatch_percentage
-                        
-                        # Store results for this score
-                        results["question_ac1s"][score_id] = {
-                            "ac1": result.value,
-                            "name": score_name,
-                            "total_comparisons": valid_items,
-                            "mismatches": score_mismatches,
-                            "accuracy": accuracy
-                        }
-                        
-                        self._log(f"Score {score_id}: Gwet AC1 = {result.value:.4f}, mismatches: {score_mismatches}/{valid_items}, accuracy: {accuracy:.1f}%")
-                    except Exception as e:
-                        self._log(f"Error calculating Gwet AC1 for score {score_id}: {str(e)}")
-                else:
-                    self._log(f"Skipping Gwet AC1 calculation for score {score_id} - insufficient data ({valid_items} items)")
+        self._log(f"Analysis for {score_id_info} - Items: {valid_pairs_count}, Mismatches: {mismatches}, Accuracy: {accuracy_percentage:.2f}%")
         
-        # Calculate overall AC1
-        total_items = len(all_initial_values)
-        if total_items >= 2:
-            try:
-                # Create a GwetAC1 instance
-                gwet_ac1 = GwetAC1()
-                
-                # Create a Metric.Input object
-                metric_input = Metric.Input(
-                    reference=all_initial_values,
-                    predictions=all_final_values
-                )
-                
-                # Calculate overall Gwet's AC1
-                result = gwet_ac1.calculate(metric_input)
-                
-                # Calculate mismatch_percentage and then convert to accuracy
-                mismatch_percentage = (total_mismatches / total_items) * 100 if total_items > 0 else 0
-                accuracy = 100 - mismatch_percentage
-                
-                # Store overall results
-                results["overall_ac1"] = result.value
-                results["total_mismatches"] = total_mismatches
-                results["accuracy"] = accuracy
-                
-                self._log(f"Overall Gwet AC1 = {result.value:.4f}, total mismatches: {total_mismatches}/{total_items}")
-                self._log(f"Accuracy: {accuracy:.1f}%")
-            except Exception as e:
-                self._log(f"Error calculating overall Gwet AC1: {str(e)}")
-        else:
-            self._log(f"Skipping overall Gwet AC1 calculation - insufficient data ({total_items} items)")
-        
-        # At the end of the method, before returning
-        # Convert question_ac1s to scores list and lookup actual score details
-        scores_list = []
-        
-        for score_id, score_data in results["question_ac1s"].items():
-            # Store the original metrics for later use
-            ac1_value = score_data.get("ac1")
-            total_comparisons = score_data.get("total_comparisons")
-            mismatches = score_data.get("mismatches")
-            accuracy = score_data.get("accuracy")
-            
-            # Log the original values
-            self._log(f"Original score metrics for {score_id}: ac1={ac1_value}, " +
-                     f"total_comparisons={total_comparisons}, " +
-                     f"mismatches={mismatches}, " +
-                     f"accuracy={accuracy}")
-            
-            # Look up the actual Score record to get the real name and externalId
-            score_name = score_data.get("name", f"Score {score_id}")
-            external_id = score_id
-            
-            try:
-                self._log(f"Attempting to look up Score record for ID: {score_id}")
-                
-                # Add API client check
-                if not self.api_client:
-                    self._log("WARNING: No API client available for Score lookup")
-                else:
-                    # Attempt the lookup with detailed logging
-                    try:
-                        # Execute the GraphQL query directly to help diagnose any issues
-                        query = """
-                        query GetScore($id: ID!) {
-                            getScore(id: $id) {
-                                id
-                                name
-                                externalId
-                            }
-                        }
-                        """
-                        
-                        self._log(f"Executing GraphQL query for Score {score_id}")
-                        result = self.api_client.execute(query, {'id': score_id})
-                        self._log(f"GraphQL result: {result}")
-                        
-                        if result and 'getScore' in result and result['getScore']:
-                            api_score_data = result['getScore']
-                            score_name = api_score_data.get('name', score_name)
-                            external_id = api_score_data.get('externalId', external_id)
-                            self._log(f"Successfully found score: {score_name} (external ID: {external_id})")
-                        else:
-                            self._log(f"Score lookup returned no data for ID {score_id}")
-                            
-                            # Fall back to using the Score model
-                            self._log("Trying fallback with Score.get_by_id")
-                            try:
-                                score_record = Score.get_by_id(score_id, self.api_client)
-                                score_name = score_record.name
-                                external_id = score_record.externalId
-                                self._log(f"Fallback succeeded - found score: {score_name} (external ID: {external_id})")
-                            except Exception as e:
-                                self._log(f"Score.get_by_id failed: {str(e)}")
-                                
-                                # If still not found, try alternative lookup methods
-                                if not score_name or score_name == f"Score {score_id}":
-                                    self._log("Direct lookup failed, trying alternative lookup methods")
-                                    
-                                    # Check if we have the scorecard_id stored from generate method
-                                    if hasattr(self, 'scorecard_id') and self.scorecard_id:
-                                        scorecard_id = self.scorecard_id
-                                        self._log(f"Using scorecard_id for lookup: {scorecard_id}")
-                                        
-                                        # Try getting scores for the section
-                                        try:
-                                            self._log("Attempting to list all scores for this scorecard")
-                                            
-                                            # Query to get score details (first try direct score search)
-                                            score_search_query = """
-                                            query GetScoresByName($name: String!) {
-                                                listScoreByName(name: $name) {
-                                                    items {
-                                                        id
-                                                        name
-                                                        externalId
-                                                        sectionId
-                                                    }
-                                                }
-                                            }
-                                            """
-                                            
-                                            # Try searching by ID as name (sometimes IDs are used as names)
-                                            score_search_result = self.api_client.execute(score_search_query, {'name': score_id})
-                                            self._log(f"Score search by name result: {score_search_result}")
-                                            
-                                            # Process search results
-                                            if (score_search_result and 'listScoreByName' in score_search_result and 
-                                                    score_search_result['listScoreByName']['items']):
-                                                for s in score_search_result['listScoreByName']['items']:
-                                                    if s['id'] == score_id:
-                                                        score_name = s['name']
-                                                        external_id = s['externalId']
-                                                        self._log(f"Found score via name search: {score_name} (external ID: {external_id})")
-                                                        break
-                                            
-                                            # Also try external ID search
-                                            if score_name == f"Score {score_id}":
-                                                external_id_query = """
-                                                query GetScoresByExternalId($externalId: String!) {
-                                                    listScoreByExternalId(externalId: $externalId) {
-                                                        items {
-                                                            id
-                                                            name
-                                                            externalId
-                                                        }
-                                                    }
-                                                }
-                                                """
-                                                
-                                                # Try searching by ID as externalId (sometimes IDs are used as externalIds)
-                                                ext_id_result = self.api_client.execute(external_id_query, {'externalId': score_id})
-                                                self._log(f"Score search by externalId result: {ext_id_result}")
-                                                
-                                                if (ext_id_result and 'listScoreByExternalId' in ext_id_result and 
-                                                        ext_id_result['listScoreByExternalId']['items']):
-                                                    for s in ext_id_result['listScoreByExternalId']['items']:
-                                                        if s['id'] == score_id:
-                                                            score_name = s['name']
-                                                            external_id = s['externalId']
-                                                            self._log(f"Found score via externalId search: {score_name} (external ID: {external_id})")
-                                                            break
-                                            
-                                            # Last resort: try direct listing of all scores
-                                            if score_name == f"Score {score_id}":
-                                                self._log("Falling back to direct score query")
-                                                direct_query = """
-                                                query ListAllScores {
-                                                    listScores(limit: 100) {
-                                                        items {
-                                                            id
-                                                            name
-                                                            externalId
-                                                        }
-                                                    }
-                                                }
-                                                """
-                                                direct_result = self.api_client.execute(direct_query, {})
-                                                self._log(f"Direct score listing result: {direct_result}")
-                                                
-                                                if direct_result and 'listScores' in direct_result:
-                                                    scores = direct_result['listScores']['items']
-                                                    for s in scores:
-                                                        if s['id'] == score_id:
-                                                            score_name = s['name']
-                                                            external_id = s['externalId']
-                                                            self._log(f"Found score via direct listing: {score_name} (external ID: {external_id})")
-                                                            break
-                                        except Exception as section_e:
-                                            self._log(f"Error listing scores for scorecard: {str(section_e)}")
-                    except Exception as inner_e:
-                        self._log(f"Error during Score lookup: {str(inner_e)}")
-                        import traceback
-                        self._log(traceback.format_exc())
-            except Exception as e:
-                self._log(f"Could not retrieve score record for ID {score_id}: {str(e)}")
-                self._log(f"Using fallback values: name='{score_name}', external_id='{external_id}'")
-            
-            score_entry = {
-                "id": score_id,
-                "name": score_name,
-                "external_id": external_id,
-                "ac1": ac1_value,
-                "total_comparisons": total_comparisons,
-                "mismatches": mismatches,
-                "accuracy": accuracy
-            }
-            
-            # Log the metric values to verify they're being preserved
-            self._log(f"Score metrics for {score_id}: ac1={ac1_value}, " +
-                     f"total_comparisons={total_comparisons}, " +
-                     f"mismatches={mismatches}, " +
-                     f"accuracy={accuracy}")
-            
-            scores_list.append(score_entry)
-        
-        # Replace question_ac1s with scores in the results
-        results["scores"] = scores_list
-        del results["question_ac1s"]
-        
-        return results 
+        return {
+            "ac1": ac1_value,
+            "item_count": valid_pairs_count, # Number of items used in AC1 calculation
+            "mismatches": mismatches,
+            "accuracy": accuracy_percentage # Return as percentage
+        }
+
+    def _log(self, message: str):
+        """Helper method to log messages and store them for the report block's log output."""
+        logger.info(f"[ReportBlock {self.config.get('name', 'Unnamed')} (FeedbackAnalysis)] {message}")
+        self.log_messages.append(f"{datetime.now().isoformat()} - {message}")
+
+# Example of how this block might be configured in a ReportConfiguration:
+"""
+```block name="Feedback Agreement Analysis"
+class: FeedbackAnalysis
+scorecard: "1438" # Call Criteria Scorecard ID
+days: 30 # Analyze feedback from the last 30 days
+# score_id: "44246" # Optional: Call Criteria Question ID to analyze a specific score
+```
+""" 
