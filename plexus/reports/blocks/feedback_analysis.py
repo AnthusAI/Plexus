@@ -6,6 +6,8 @@ from datetime import datetime, timedelta
 from plexus.analysis.metrics import GwetAC1
 from plexus.analysis.metrics.metric import Metric
 from plexus.dashboard.api.models.feedback_item import FeedbackItem
+from plexus.dashboard.api.models.score import Score
+from plexus.dashboard.api.models.scorecard import Scorecard
 
 from .base import BaseReportBlock
 
@@ -44,6 +46,10 @@ class FeedbackAnalysis(BaseReportBlock):
             if not scorecard_id:
                 self._log("ERROR: 'scorecard' identifier missing in block configuration.")
                 raise ValueError("'scorecard' is required in the block configuration.")
+            
+            # Store the scorecard_id in the instance for later use in Score lookups
+            self.scorecard_id = scorecard_id
+            self._log(f"Set scorecard_id for lookups: {self.scorecard_id}")
             
             days = int(self.config.get("days", 14))
             
@@ -88,17 +94,14 @@ class FeedbackAnalysis(BaseReportBlock):
             if not feedback_items:
                 self._log("No feedback items found for the specified criteria.")
                 return {
-                    "type": "FeedbackAnalysis",
-                    "data": {
-                        "overall_ac1": None,
-                        "question_ac1s": {},
-                        "total_items": 0,
-                        "analysis_date": datetime.now().isoformat(),
-                        "scorecard_id": scorecard_id,
-                        "date_range": {
-                            "start": start_date.isoformat(),
-                            "end": end_date.isoformat()
-                        }
+                    "overall_ac1": None,
+                    "scores": [],
+                    "total_items": 0,
+                    "total_mismatches": 0,
+                    "accuracy": 0,
+                    "date_range": {
+                        "start": start_date.isoformat(),
+                        "end": end_date.isoformat()
                     }
                 }, "\n".join(self.log_messages)
             
@@ -106,27 +109,18 @@ class FeedbackAnalysis(BaseReportBlock):
             analysis_results = self._analyze_feedback(feedback_items)
             self._log("Feedback analysis completed successfully")
             
-            # Structure the output data
+            # Structure the output data with the new format
             final_output_data = {
-                "type": "FeedbackAnalysis",
-                "data": {
-                    "overall_ac1": analysis_results.get("overall_ac1"),
-                    "question_ac1s": analysis_results.get("question_ac1s", {}),
-                    "total_items": len(feedback_items),
-                    "total_mismatches": analysis_results.get("total_mismatches", 0),
-                    "mismatch_percentage": analysis_results.get("mismatch_percentage", 0),
-                    "analysis_date": datetime.now().isoformat(),
-                    "scorecard_id": scorecard_id,
-                    "date_range": {
-                        "start": start_date.isoformat(),
-                        "end": end_date.isoformat()
-                    }
+                "overall_ac1": analysis_results.get("overall_ac1"),
+                "scores": analysis_results.get("scores", []),
+                "total_items": len(feedback_items),
+                "total_mismatches": analysis_results.get("total_mismatches", 0),
+                "accuracy": analysis_results.get("accuracy", 0),
+                "date_range": {
+                    "start": start_date.isoformat(),
+                    "end": end_date.isoformat()
                 }
             }
-            
-            # Add score_id to the output if one was specified
-            if score_id:
-                final_output_data["data"]["score_id"] = score_id
 
         except ValueError as ve:
             # Log specific config errors
@@ -204,14 +198,20 @@ class FeedbackAnalysis(BaseReportBlock):
         # Initialize results
         results = {
             "overall_ac1": None,
-            "question_ac1s": {},
+            "question_ac1s": {},  # Keep using question_ac1s internally for processing
             "total_mismatches": 0,
-            "mismatch_percentage": 0
+            "accuracy": 0
         }
         
         if not feedback_items:
             self._log("No feedback items to analyze")
-            return results
+            # Convert to new format before returning
+            return {
+                "overall_ac1": None,
+                "scores": [],
+                "total_mismatches": 0,
+                "accuracy": 0
+            }
             
         # Organize data by question/score
         items_by_score = {}
@@ -268,16 +268,20 @@ class FeedbackAnalysis(BaseReportBlock):
                         # Calculate Gwet's AC1
                         result = gwet_ac1.calculate(metric_input)
                         
+                        # Calculate mismatch percentage and accuracy
+                        mismatch_percentage = (score_mismatches / valid_items) * 100 if valid_items > 0 else 0
+                        accuracy = 100 - mismatch_percentage
+                        
                         # Store results for this score
                         results["question_ac1s"][score_id] = {
                             "ac1": result.value,
                             "name": score_name,
                             "total_comparisons": valid_items,
                             "mismatches": score_mismatches,
-                            "mismatch_percentage": (score_mismatches / valid_items) * 100 if valid_items > 0 else 0
+                            "accuracy": accuracy
                         }
                         
-                        self._log(f"Score {score_id}: Gwet AC1 = {result.value:.4f}, mismatches: {score_mismatches}/{valid_items}")
+                        self._log(f"Score {score_id}: Gwet AC1 = {result.value:.4f}, mismatches: {score_mismatches}/{valid_items}, accuracy: {accuracy:.1f}%")
                     except Exception as e:
                         self._log(f"Error calculating Gwet AC1 for score {score_id}: {str(e)}")
                 else:
@@ -299,15 +303,208 @@ class FeedbackAnalysis(BaseReportBlock):
                 # Calculate overall Gwet's AC1
                 result = gwet_ac1.calculate(metric_input)
                 
+                # Calculate mismatch_percentage and then convert to accuracy
+                mismatch_percentage = (total_mismatches / total_items) * 100 if total_items > 0 else 0
+                accuracy = 100 - mismatch_percentage
+                
                 # Store overall results
                 results["overall_ac1"] = result.value
                 results["total_mismatches"] = total_mismatches
-                results["mismatch_percentage"] = (total_mismatches / total_items) * 100 if total_items > 0 else 0
+                results["accuracy"] = accuracy
                 
                 self._log(f"Overall Gwet AC1 = {result.value:.4f}, total mismatches: {total_mismatches}/{total_items}")
+                self._log(f"Accuracy: {accuracy:.1f}%")
             except Exception as e:
                 self._log(f"Error calculating overall Gwet AC1: {str(e)}")
         else:
             self._log(f"Skipping overall Gwet AC1 calculation - insufficient data ({total_items} items)")
+        
+        # At the end of the method, before returning
+        # Convert question_ac1s to scores list and lookup actual score details
+        scores_list = []
+        
+        for score_id, score_data in results["question_ac1s"].items():
+            # Store the original metrics for later use
+            ac1_value = score_data.get("ac1")
+            total_comparisons = score_data.get("total_comparisons")
+            mismatches = score_data.get("mismatches")
+            accuracy = score_data.get("accuracy")
+            
+            # Log the original values
+            self._log(f"Original score metrics for {score_id}: ac1={ac1_value}, " +
+                     f"total_comparisons={total_comparisons}, " +
+                     f"mismatches={mismatches}, " +
+                     f"accuracy={accuracy}")
+            
+            # Look up the actual Score record to get the real name and externalId
+            score_name = score_data.get("name", f"Score {score_id}")
+            external_id = score_id
+            
+            try:
+                self._log(f"Attempting to look up Score record for ID: {score_id}")
+                
+                # Add API client check
+                if not self.api_client:
+                    self._log("WARNING: No API client available for Score lookup")
+                else:
+                    # Attempt the lookup with detailed logging
+                    try:
+                        # Execute the GraphQL query directly to help diagnose any issues
+                        query = """
+                        query GetScore($id: ID!) {
+                            getScore(id: $id) {
+                                id
+                                name
+                                externalId
+                            }
+                        }
+                        """
+                        
+                        self._log(f"Executing GraphQL query for Score {score_id}")
+                        result = self.api_client.execute(query, {'id': score_id})
+                        self._log(f"GraphQL result: {result}")
+                        
+                        if result and 'getScore' in result and result['getScore']:
+                            api_score_data = result['getScore']
+                            score_name = api_score_data.get('name', score_name)
+                            external_id = api_score_data.get('externalId', external_id)
+                            self._log(f"Successfully found score: {score_name} (external ID: {external_id})")
+                        else:
+                            self._log(f"Score lookup returned no data for ID {score_id}")
+                            
+                            # Fall back to using the Score model
+                            self._log("Trying fallback with Score.get_by_id")
+                            try:
+                                score_record = Score.get_by_id(score_id, self.api_client)
+                                score_name = score_record.name
+                                external_id = score_record.externalId
+                                self._log(f"Fallback succeeded - found score: {score_name} (external ID: {external_id})")
+                            except Exception as e:
+                                self._log(f"Score.get_by_id failed: {str(e)}")
+                                
+                                # If still not found, try alternative lookup methods
+                                if not score_name or score_name == f"Score {score_id}":
+                                    self._log("Direct lookup failed, trying alternative lookup methods")
+                                    
+                                    # Check if we have the scorecard_id stored from generate method
+                                    if hasattr(self, 'scorecard_id') and self.scorecard_id:
+                                        scorecard_id = self.scorecard_id
+                                        self._log(f"Using scorecard_id for lookup: {scorecard_id}")
+                                        
+                                        # Try getting scores for the section
+                                        try:
+                                            self._log("Attempting to list all scores for this scorecard")
+                                            
+                                            # Query to get score details (first try direct score search)
+                                            score_search_query = """
+                                            query GetScoresByName($name: String!) {
+                                                listScoreByName(name: $name) {
+                                                    items {
+                                                        id
+                                                        name
+                                                        externalId
+                                                        sectionId
+                                                    }
+                                                }
+                                            }
+                                            """
+                                            
+                                            # Try searching by ID as name (sometimes IDs are used as names)
+                                            score_search_result = self.api_client.execute(score_search_query, {'name': score_id})
+                                            self._log(f"Score search by name result: {score_search_result}")
+                                            
+                                            # Process search results
+                                            if (score_search_result and 'listScoreByName' in score_search_result and 
+                                                    score_search_result['listScoreByName']['items']):
+                                                for s in score_search_result['listScoreByName']['items']:
+                                                    if s['id'] == score_id:
+                                                        score_name = s['name']
+                                                        external_id = s['externalId']
+                                                        self._log(f"Found score via name search: {score_name} (external ID: {external_id})")
+                                                        break
+                                            
+                                            # Also try external ID search
+                                            if score_name == f"Score {score_id}":
+                                                external_id_query = """
+                                                query GetScoresByExternalId($externalId: String!) {
+                                                    listScoreByExternalId(externalId: $externalId) {
+                                                        items {
+                                                            id
+                                                            name
+                                                            externalId
+                                                        }
+                                                    }
+                                                }
+                                                """
+                                                
+                                                # Try searching by ID as externalId (sometimes IDs are used as externalIds)
+                                                ext_id_result = self.api_client.execute(external_id_query, {'externalId': score_id})
+                                                self._log(f"Score search by externalId result: {ext_id_result}")
+                                                
+                                                if (ext_id_result and 'listScoreByExternalId' in ext_id_result and 
+                                                        ext_id_result['listScoreByExternalId']['items']):
+                                                    for s in ext_id_result['listScoreByExternalId']['items']:
+                                                        if s['id'] == score_id:
+                                                            score_name = s['name']
+                                                            external_id = s['externalId']
+                                                            self._log(f"Found score via externalId search: {score_name} (external ID: {external_id})")
+                                                            break
+                                            
+                                            # Last resort: try direct listing of all scores
+                                            if score_name == f"Score {score_id}":
+                                                self._log("Falling back to direct score query")
+                                                direct_query = """
+                                                query ListAllScores {
+                                                    listScores(limit: 100) {
+                                                        items {
+                                                            id
+                                                            name
+                                                            externalId
+                                                        }
+                                                    }
+                                                }
+                                                """
+                                                direct_result = self.api_client.execute(direct_query, {})
+                                                self._log(f"Direct score listing result: {direct_result}")
+                                                
+                                                if direct_result and 'listScores' in direct_result:
+                                                    scores = direct_result['listScores']['items']
+                                                    for s in scores:
+                                                        if s['id'] == score_id:
+                                                            score_name = s['name']
+                                                            external_id = s['externalId']
+                                                            self._log(f"Found score via direct listing: {score_name} (external ID: {external_id})")
+                                                            break
+                                        except Exception as section_e:
+                                            self._log(f"Error listing scores for scorecard: {str(section_e)}")
+                    except Exception as inner_e:
+                        self._log(f"Error during Score lookup: {str(inner_e)}")
+                        import traceback
+                        self._log(traceback.format_exc())
+            except Exception as e:
+                self._log(f"Could not retrieve score record for ID {score_id}: {str(e)}")
+                self._log(f"Using fallback values: name='{score_name}', external_id='{external_id}'")
+            
+            score_entry = {
+                "id": score_id,
+                "name": score_name,
+                "external_id": external_id,
+                "ac1": ac1_value,
+                "total_comparisons": total_comparisons,
+                "mismatches": mismatches,
+                "accuracy": accuracy
+            }
+            
+            # Log the metric values to verify they're being preserved
+            self._log(f"Score metrics for {score_id}: ac1={ac1_value}, " +
+                     f"total_comparisons={total_comparisons}, " +
+                     f"mismatches={mismatches}, " +
+                     f"accuracy={accuracy}")
+            
+            scores_list.append(score_entry)
+        
+        # Replace question_ac1s with scores in the results
+        results["scores"] = scores_list
+        del results["question_ac1s"]
         
         return results 
