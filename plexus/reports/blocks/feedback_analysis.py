@@ -157,7 +157,7 @@ class FeedbackAnalysis(BaseReportBlock):
                 self._log(f"ERROR: {msg}")
                 # Return a structure indicating no data, but not an error state for the report block itself.
                 return {
-                    "overall_ac1": None, "total_items": 0, "total_mismatches": 0, "accuracy": 0,
+                    "overall_ac1": None, "total_items": 0, "total_mismatches": 0, "accuracy": None,
                     "scores": [],
                     "total_feedback_items_retrieved": 0,
                     "date_range": {"start": start_date.isoformat(), "end": end_date.isoformat()},
@@ -194,7 +194,7 @@ class FeedbackAnalysis(BaseReportBlock):
                         "score_id": score_info['plexus_score_id'],
                         "score_name": score_info['plexus_score_name'],
                         "cc_question_id": score_info['cc_question_id'],
-                        "ac1": None, "item_count": 0, "mismatches": 0, "accuracy": 0,
+                        "ac1": None, "item_count": 0, "mismatches": 0, "accuracy": None,
                         "message": "No feedback items found in the specified date range."
                     }
                 else:
@@ -212,7 +212,7 @@ class FeedbackAnalysis(BaseReportBlock):
             # --- 5. Calculate Overall Metrics ---
             self._log(f"Calculating overall metrics from {len(all_date_filtered_feedback_items)} date-filtered feedback items across all processed scores.")
             if not all_date_filtered_feedback_items:
-                overall_analysis = {"overall_ac1": None, "total_items": 0, "total_mismatches": 0, "accuracy": 0}
+                overall_analysis = {"ac1": None, "item_count": 0, "mismatches": 0, "accuracy": None}
                 self._log("No date-filtered items available for overall analysis.")
             else:
                 # Use a generic score_id_info for the overall log
@@ -330,7 +330,7 @@ class FeedbackAnalysis(BaseReportBlock):
         
         if not feedback_items:
             self._log(f"No feedback items to analyze for {score_id_info}.")
-            return {"ac1": None, "item_count": 0, "mismatches": 0, "accuracy": 0}
+            return {"ac1": None, "item_count": 0, "mismatches": 0, "accuracy": None}
             
         initial_values = [item.initialAnswerValue for item in feedback_items if item.initialAnswerValue is not None]
         final_values = [item.finalAnswerValue for item in feedback_items if item.finalAnswerValue is not None]
@@ -357,7 +357,7 @@ class FeedbackAnalysis(BaseReportBlock):
 
         if valid_pairs_count == 0:
             self._log(f"No valid (non-None initial and final) pairs to analyze for {score_id_info}.")
-            return {"ac1": None, "item_count": 0, "mismatches": 0, "accuracy": 0}
+            return {"ac1": None, "item_count": 0, "mismatches": 0, "accuracy": None}
 
         # Calculate Gwet's AC1
         try:
@@ -387,16 +387,20 @@ class FeedbackAnalysis(BaseReportBlock):
             
         # Calculate mismatches and accuracy based on the paired data
         mismatches = sum(1 for i, f in zip(paired_initial, paired_final) if i != f)
-        accuracy_float = (valid_pairs_count - mismatches) / valid_pairs_count if valid_pairs_count > 0 else 0
-        accuracy_percentage = accuracy_float * 100 # Convert to percentage
         
-        self._log(f"Analysis for {score_id_info} - Items: {valid_pairs_count}, Mismatches: {mismatches}, Accuracy: {accuracy_percentage:.2f}%")
+        if valid_pairs_count > 0:
+            accuracy_float = (valid_pairs_count - mismatches) / valid_pairs_count
+            accuracy_percentage = accuracy_float * 100
+        else:
+            accuracy_percentage = None # MODIFIED: Set to None if no valid pairs
+        
+        self._log(f"Analysis for {score_id_info} - Items: {valid_pairs_count}, Mismatches: {mismatches}, Accuracy: {f'{accuracy_percentage:.2f}%' if accuracy_percentage is not None else 'N/A'}") # MODIFIED Log
         
         return {
             "ac1": ac1_value,
             "item_count": valid_pairs_count, # Number of items used in AC1 calculation
             "mismatches": mismatches,
-            "accuracy": accuracy_percentage # Return as percentage
+            "accuracy": accuracy_percentage # Return as percentage or None
         }
 
     def _log(self, message: str):
