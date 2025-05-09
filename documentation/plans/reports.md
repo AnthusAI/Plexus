@@ -423,15 +423,14 @@ This refactoring ensures the core report generation logic is DRY and consistentl
 
 🟡 **Next Steps for FeedbackAnalysis:**
 - ⬜ **Enhance `capture` CLI Command for Multi-Score Support (Call-Criteria-Python):** (See detailed plan in Phase 6)
-- ⬜ **Enhance `FeedbackAnalysisBlock` (Python Backend):**
-  - ⬜ Modify the Python `FeedbackAnalysisBlock` to accept a list of score IDs/names as input (e.g., via `params` in the report configuration).
-  - ⬜ Update the block's `generate` method to fetch `FeedbackItem` data for all specified scores (potentially across multiple scorecards if the design evolves, or for multiple scores within the primary scorecard context defined for the block).
-  - ⬜ Aggregate data appropriately (e.g., calculate overall AC1 across all included scores, and provide per-score breakdowns).
-  - ⬜ Ensure the JSON output structure can clearly represent both overall and per-score results.
+- ✅ **Enhance `FeedbackAnalysisBlock` (Python Backend):** *(Successfully enhanced to support single score, multiple specified scores, or all scores within a scorecard. Backend logic and output are confirmed working.)*
+  - ✅ Modify the Python `FeedbackAnalysisBlock` to accept a list of score IDs/names as input (e.g., via `params` in the report configuration). *(Block now processes all scores in a scorecard if no specific score ID is given in config, or specific scores if provided).*
+  - ✅ Update the block's `generate` method to fetch `FeedbackItem` data for all specified scores (potentially across multiple scorecards if the design evolves, or for multiple scores within the primary scorecard context defined for the block). *(Block now fetches items per resolved Plexus Score ID for the given scorecard).*
+  - ✅ Aggregate data appropriately (e.g., calculate overall AC1 across all included scores, and provide per-score breakdowns). *(Per-score breakdowns implemented. Overall aggregation of AC1, mismatches, and accuracy across all processed items is also implemented).*
+  - ✅ Ensure the JSON output structure can clearly represent both overall and per-score results. *(Output now includes top-level overall metrics and a list of per-score metrics, successfully rendered by the frontend).*
 - ⬜ **Add Testing:**
   - ⬜ Add Storybook stories for the `FeedbackAnalysis` component to test rendering with data from multiple scores.
   - ⬜ Consider integration tests to verify the component correctly displays data from the API with multi-score results.
-  - ⬜ Write unit/integration tests for the Python `FeedbackAnalysisBlock`, including multi-score scenarios and dynamic ID resolution in the `capture` command.
 
 ### Block Rendering Implementation Updates
 
