@@ -42,7 +42,6 @@ type FeedbackItemIndexFields = "accountId" | "scorecardId" | "scoreId" | "cacheK
 
 // New index types for Feedback Analysis
 // type FeedbackAnalysisIndexFields = "accountId" | "scorecardId" | "createdAt"; // REMOVED
-type FeedbackItemIndexFields = "accountId" | "scorecardId" | "scoreId" | "externalId" | "updatedAt"; // UPDATED: Renamed formId to externalId
 type FeedbackChangeDetailIndexFields = "feedbackItemId" | "changedAt";
 
 // Define the share token handler function
