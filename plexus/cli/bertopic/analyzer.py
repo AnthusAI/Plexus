@@ -6,18 +6,25 @@ import os
 import stat
 import logging
 import re
-from typing import List, Optional, Tuple
+import time
+from typing import List, Tuple, Dict, Any, Optional
 import pandas as pd
 import numpy as np
 from bertopic import BERTopic
 import plotly.express as px
 from umap import UMAP
-from bertopic.representation import OpenAI
+from bertopic.representation import OpenAI, LangChain
 import openai
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
+
+# LangChain imports
+from langchain.prompts import ChatPromptTemplate
+from langchain.chains import LLMChain
+from langchain.chains.question_answering import load_qa_chain
+from langchain_openai import ChatOpenAI
 
 def ensure_directory(path: str) -> None:
     """Create directory with appropriate permissions if it doesn't exist."""
@@ -154,7 +161,8 @@ def analyze_topics(
     min_topic_size: int = 10,
     top_n_words: int = 10,
     use_representation_model: bool = True,
-    openai_api_key: Optional[str] = None
+    openai_api_key: Optional[str] = None,
+    use_langchain: bool = False
 ) -> None:
     """
     Perform BERTopic analysis on transformed transcripts.
@@ -168,6 +176,7 @@ def analyze_topics(
         top_n_words: Number of words to represent each topic (default: 10)
         use_representation_model: Whether to use OpenAI to generate better topic representations (default: True)
         openai_api_key: OpenAI API key (if not provided, will use environment variable)
+        use_langchain: Whether to use LangChain for representation model instead of direct OpenAI (default: False)
     """
     # Create output directory if it doesn't exist
     ensure_directory(output_dir)
@@ -216,7 +225,7 @@ def analyze_topics(
         logger.error(f"Failed to initialize UMAP model: {e}", exc_info=True)
         raise
 
-    # Initialize BERTopic model with representation model if requested
+    # Initialize representation model if requested
     representation_model = None
     if use_representation_model:
         try:
@@ -225,28 +234,54 @@ def analyze_topics(
             if not api_key:
                 logger.warning("OpenAI API key not provided. Continuing without representation model.")
             else:
-                logger.info("Initializing OpenAI representation model with gpt-4o-mini...")
-                client = openai.OpenAI(api_key=api_key)
-                
-                # Custom prompt that focuses on call center/customer service context
-                summarization_prompt = """
-                I have a topic from call center transcripts that is described by the following keywords: [KEYWORDS]
-                In this topic, these customer-agent conversations are representative examples:
-                [DOCUMENTS]
+                if use_langchain:
+                    # Using simplified LangChain integration directly from docs
+                    logger.info("Initializing LangChain representation model with gpt-4o-mini...")
+                    
+                    # Create a llm for LangChain
+                    llm = ChatOpenAI(
+                        model="gpt-4o-mini",
+                        temperature=0.0,
+                        openai_api_key=api_key
+                    )
+                    
+                    # Create a simple QA chain  
+                    chain = load_qa_chain(llm, chain_type="stuff")
+                    
+                    # Simple prompt as shown in the docs
+                    simple_prompt = """
+                    I have a topic from call center transcripts that is described by the following keywords: [KEYWORDS]
 
-                Based on the information above, provide a short, descriptive label for this topic in this format:
-                topic: <concise label that describes what this topic represents in customer interactions>
-                """
-                
-                representation_model = OpenAI(
-                    client=client, 
-                    model="gpt-4o-mini", 
-                    prompt=summarization_prompt,
-                    delay_in_seconds=0
-                )
-                logger.info("OpenAI representation model initialized successfully.")
+                    What is a short, descriptive label for this topic in customer service context? Return only the label, no other text or formatting.
+                    """
+                    
+                    # Create the representation model with the simple prompt
+                    representation_model = LangChain(chain=chain, prompt=simple_prompt)
+                    logger.info("LangChain representation model initialized successfully.")
+                else:
+                    # Using direct OpenAI integration
+                    logger.info("Initializing OpenAI representation model with gpt-4o-mini...")
+                    client = openai.OpenAI(api_key=api_key)
+                    
+                    # Custom prompt for OpenAI
+                    summarization_prompt = """
+                    I have a topic from call center transcripts that is described by the following keywords: [KEYWORDS]
+                    In this topic, these customer-agent conversations are representative examples:
+                    [DOCUMENTS]
+
+                    Based on the information above, provide a short, descriptive label for this topic in this format:
+                    topic: <concise label that describes what this topic represents in customer interactions>
+                    """
+                    
+                    representation_model = OpenAI(
+                        client=client, 
+                        model="gpt-4o-mini", 
+                        prompt=summarization_prompt,
+                        delay_in_seconds=1
+                    )
+                    logger.info("OpenAI representation model initialized successfully.")
         except Exception as e:
-            logger.error(f"Failed to initialize OpenAI representation model: {e}", exc_info=True)
+            logger.error(f"Failed to initialize representation model: {e}", exc_info=True)
             logger.warning("Continuing without representation model.")
             representation_model = None
 
