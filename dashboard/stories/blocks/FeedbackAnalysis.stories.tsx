@@ -11,7 +11,7 @@ const meta: Meta<typeof BlockRenderer> = {
   },
   decorators: [
     (Story) => (
-      <div className="bg-card p-6 rounded-lg">
+      <div className="bg-card p-6 rounded-lg max-w-3xl mx-auto">
         <Story />
       </div>
     ),
@@ -21,154 +21,112 @@ const meta: Meta<typeof BlockRenderer> = {
 export default meta;
 type Story = StoryObj<typeof BlockRenderer>;
 
-export const Basic: Story = {
+const baseFeedbackAnalysisData = {
+  total_items: 0, // Will be overridden
+  total_mismatches: 0, // Will be overridden
+  accuracy: 0, // Will be overridden
+  date_range: {
+    start: '2023-01-01T00:00:00Z',
+    end: '2023-01-31T23:59:59Z',
+  },
+};
+
+const scoreTemplate = (id: string, name: string, ac1: number | null, comparisons: number, mismatches: number, accuracy: number) => ({
+  id,
+  name,
+  external_id: `ext-${id}`,
+  ac1,
+  total_comparisons: comparisons,
+  mismatches,
+  accuracy,
+});
+
+export const SingleScore: Story = {
   args: {
-    name: 'Customer Feedback Analysis',
-    output: {
-      overall_ac1: 0.846,
-      question_ac1s: {
-        "score1": {
-          ac1: 0.927,
-          name: "Customer Greeting",
-          total_comparisons: 120,
-          mismatches: 5,
-          mismatch_percentage: 4.17
-        },
-        "score2": {
-          ac1: 0.813,
-          name: "Issue Identification",
-          total_comparisons: 118,
-          mismatches: 12,
-          mismatch_percentage: 10.17
-        },
-        "score3": {
-          ac1: 0.775,
-          name: "Solution Explanation",
-          total_comparisons: 115,
-          mismatches: 18,
-          mismatch_percentage: 15.65
-        }
-      },
-      total_items: 120,
-      total_mismatches: 35,
-      mismatch_percentage: 9.72,
-      date_range: {
-        start: '2025-04-01T00:00:00Z',
-        end: '2025-04-30T23:59:59Z'
-      }
-    },
+    name: 'Feedback Analysis - Single Score',
+    type: 'FeedbackAnalysis', // This type must match the key used in registerBlock
     position: 0,
-    config: {
-      class: 'FeedbackAnalysis',
-      scorecard: 'customer_service_v1',
-      days: 30
-    }
+    log: 'Log for single score analysis.',
+    config: { // Mock config passed to the block
+      class: 'FeedbackAnalysis', // This is what the python block's config would look like
+      scorecard: 'some-scorecard-id',
+      days: 30,
+    },
+    output: { // This is the actual data structure the component expects
+      ...baseFeedbackAnalysisData,
+      overall_ac1: 0.75,
+      scores: [
+        scoreTemplate('score1', 'Agent Empathy', 0.75, 50, 12, 76.0),
+      ],
+      total_items: 50,
+      total_mismatches: 12,
+      accuracy: 76.0,
+      // type: 'FeedbackAnalysis' // Not needed here as it's a prop of BlockRenderer args
+    },
   },
 };
 
-export const WithScoreFilter: Story = {
+export const MultipleScores: Story = {
   args: {
-    name: 'Customer Greeting Analysis',
-    output: {
-      overall_ac1: 0.927,
-      question_ac1s: {
-        "score1": {
-          ac1: 0.927,
-          name: "Customer Greeting",
-          total_comparisons: 120,
-          mismatches: 5,
-          mismatch_percentage: 4.17
-        }
-      },
-      total_items: 120,
-      total_mismatches: 5,
-      mismatch_percentage: 4.17,
-      date_range: {
-        start: '2025-04-01T00:00:00Z',
-        end: '2025-04-30T23:59:59Z'
-      }
-    },
+    name: 'Feedback Analysis - Multiple Scores',
+    type: 'FeedbackAnalysis',
     position: 1,
+    log: 'Log for multiple score analysis.',
     config: {
       class: 'FeedbackAnalysis',
-      scorecard: 'customer_service_v1',
-      score_id: 'score1',
-      days: 30
-    }
+      scorecard: 'another-scorecard-id',
+      days: 60,
+    },
+    output: {
+      ...baseFeedbackAnalysisData,
+      overall_ac1: 0.82,
+      scores: [
+        scoreTemplate('score1', 'Agent Empathy', 0.75, 50, 12, 76.0),
+        scoreTemplate('score2', 'Problem Resolution', 0.88, 60, 7, 88.3),
+        scoreTemplate('score3', 'Product Knowledge', 0.65, 45, 16, 64.4),
+        scoreTemplate('score4', 'Call Opening', null, 10, 5, 50.0), // Example with null AC1
+      ],
+      total_items: 165, // Sum of comparisons
+      total_mismatches: 40, // Sum of mismatches
+      accuracy: Number(((165 - 40) / 165 * 100).toFixed(1)), // Calculated accuracy
+      // type: 'FeedbackAnalysis'
+    },
   },
 };
 
-export const MixedPerformance: Story = {
+export const NoScores: Story = {
   args: {
-    name: 'Mixed Agreement Levels',
-    output: {
-      overall_ac1: 0.681,
-      question_ac1s: {
-        "score1": {
-          ac1: 0.892,
-          name: "Initial Greeting",
-          total_comparisons: 50,
-          mismatches: 3,
-          mismatch_percentage: 6.0
-        },
-        "score2": {
-          ac1: 0.743,
-          name: "Problem Identification",
-          total_comparisons: 50,
-          mismatches: 8,
-          mismatch_percentage: 16.0
-        },
-        "score3": {
-          ac1: 0.623,
-          name: "Solution Proposal",
-          total_comparisons: 50,
-          mismatches: 12,
-          mismatch_percentage: 24.0
-        },
-        "score4": {
-          ac1: 0.466,
-          name: "Closing Remarks",
-          total_comparisons: 50,
-          mismatches: 18,
-          mismatch_percentage: 36.0
-        }
-      },
-      total_items: 200,
-      total_mismatches: 41,
-      mismatch_percentage: 20.5,
-      date_range: {
-        start: '2025-04-01T00:00:00Z',
-        end: '2025-04-30T23:59:59Z'
-      }
-    },
+    name: 'Feedback Analysis - No Scores',
+    type: 'FeedbackAnalysis',
     position: 2,
     config: {
       class: 'FeedbackAnalysis',
-      scorecard: 'customer_service_v2',
-      days: 30
-    }
+      scorecard: 'empty-scorecard-id',
+    },
+    output: {
+      ...baseFeedbackAnalysisData,
+      overall_ac1: null,
+      scores: [],
+      total_items: 0,
+      total_mismatches: 0,
+      accuracy: 0,
+      // type: 'FeedbackAnalysis'
+    },
   },
 };
 
-export const NoData: Story = {
-  args: {
-    name: 'No Feedback Data',
-    output: {
-      overall_ac1: null,
-      question_ac1s: {},
-      total_items: 0,
-      total_mismatches: 0,
-      mismatch_percentage: 0,
-      date_range: {
-        start: '2025-04-01T00:00:00Z',
-        end: '2025-04-30T23:59:59Z'
-      }
-    },
-    position: 3,
+export const LoadingState: Story = {
+ args: {
+    name: 'Feedback Analysis - Loading',
+    type: 'FeedbackAnalysis',
+    position: 0,
     config: {
       class: 'FeedbackAnalysis',
-      scorecard: 'new_scorecard_v1',
-      days: 30
-    }
+    },
+    // To simulate loading, we pass null or an empty object for output
+    // The component itself should handle this gracefully.
+    // If the component had its own loading state prop, we would use that.
+    // For BlockRenderer, the `output` prop is key.
+    output: null as any, // or an empty object that would trigger its internal "No data" state
   },
 }; 

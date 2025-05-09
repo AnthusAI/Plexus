@@ -2,7 +2,7 @@ import React from 'react';
 import { ReportBlockProps } from './ReportBlock';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Gauge, Segment } from '@/components/gauge';
 
 // For type-safety, create an interface for the data structure
 interface ScoreData {
@@ -29,6 +29,15 @@ interface FeedbackAnalysisData {
   };
 }
 
+// Define AC1 segments (percentages of the -1 to 1 range)
+const ac1GaugeSegments: Segment[] = [
+  { start: 0, end: 50, color: 'var(--gauge-inviable)' },   // AC1: -1.0 to 0.0
+  { start: 50, end: 70, color: 'var(--gauge-converging)' }, // AC1: 0.0 to 0.4
+  { start: 70, end: 80, color: 'var(--gauge-almost)' },    // AC1: 0.4 to 0.6
+  { start: 80, end: 90, color: 'var(--gauge-viable)' },    // AC1: 0.6 to 0.8
+  { start: 90, end: 100, color: 'var(--gauge-great)' },   // AC1: 0.8 to 1.0
+];
+
 /**
  * Renders a Feedback Analysis block showing Gwet's AC1 agreement scores.
  * This component displays overall agreement and per-question breakdowns.
@@ -38,10 +47,14 @@ const FeedbackAnalysis: React.FC<ReportBlockProps> = ({ name, output }) => {
   const feedbackData = output as FeedbackAnalysisData;
   
   if (!feedbackData) {
-    return <p>No feedback analysis data available.</p>;
+    // It might be better to render a specific loading/empty state component
+    // or return a more structured empty block representation.
+    return <p>No feedback analysis data available or data is loading.</p>;
   }
 
-  const hasData = feedbackData.total_items > 0;
+  const hasData = feedbackData.scores && feedbackData.scores.length > 0;
+  const showSummary = hasData && feedbackData.scores.length > 1;
+
   const formattedDate = (dateStr: string) => {
     try {
       return new Date(dateStr).toLocaleDateString();
@@ -54,31 +67,62 @@ const FeedbackAnalysis: React.FC<ReportBlockProps> = ({ name, output }) => {
     if (ac1 === null) return { label: 'No Data', color: 'bg-muted text-muted-foreground' };
     if (ac1 >= 0.8) return { label: 'Strong', color: 'bg-green-700 text-white' };
     if (ac1 >= 0.6) return { label: 'Moderate', color: 'bg-yellow-600 text-white' };
-    return { label: 'Weak', color: 'bg-red-700 text-white' };
+    if (ac1 >= 0.4) return { label: 'Fair', color: 'bg-orange-500 text-white' }; 
+    if (ac1 >= 0.0) return { label: 'Slight', color: 'bg-red-400 text-white' };
+    return { label: 'Poor', color: 'bg-red-700 text-white' };
   };
 
-  const agreementLevel = getAgreementLevel(feedbackData.overall_ac1);
-
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-lg font-medium">
-            {name || 'Feedback Analysis'} 
-          </h3>
-          <div className="flex gap-2 items-center">
-            <span className="text-sm text-muted-foreground">
-              Overall Agreement:
-            </span>
-            <Badge className={agreementLevel.color}>
-              {hasData 
-                ? `${agreementLevel.label} (AC1: ${feedbackData.overall_ac1?.toFixed(4) || 'N/A'})`
-                : 'No Data'
-              }
-            </Badge>
-          </div>
-        </div>
+    <div className="space-y-6">
+      <div className="flex flex-col gap-2">
+        <h3 className="text-xl font-semibold">
+          {name || 'Feedback Analysis'} 
+        </h3>
+      </div>
 
+      {/* Score Cards Section */}
+      {hasData && feedbackData.scores.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {feedbackData.scores
+            .sort((a, b) => (b.ac1 === null ? -2 : b.ac1) - (a.ac1 === null ? -2 : a.ac1))
+            .map((score) => {
+              const agreements = score.total_comparisons - score.mismatches;
+              return (
+                <Card key={score.id}>
+                  <CardHeader>
+                    <CardTitle className="font-bold">{score.name}</CardTitle>
+                    <p className="text-sm text-muted-foreground">
+                      {agreements} agreement{agreements === 1 ? '' : 's'} / {score.total_comparisons} feedback item{score.total_comparisons === 1 ? '' : 's'}
+                    </p>
+                  </CardHeader>
+                  <CardContent className="flex flex-col sm:flex-row justify-around items-center gap-4 pt-2 pb-4">
+                    <div className="w-full sm:w-1/2 max-w-[200px] sm:max-w-none">
+                        <Gauge
+                            title="Agreement"
+                            value={score.ac1 ?? undefined}
+                            min={-1}
+                            max={1}
+                            segments={ac1GaugeSegments}
+                            valueFormatter={(v) => v.toFixed(3)}
+                            showTicks={false}
+                        />
+                    </div>
+                    <div className="w-full sm:w-1/2 max-w-[200px] sm:max-w-none">
+                        <Gauge
+                            title="Accuracy"
+                            value={score.accuracy ?? undefined}
+                            showTicks={false}
+                        />
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+        </div>
+      )}
+
+      {/* Summary Card - Conditionally Rendered */}
+      {showSummary && (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Summary</CardTitle>
@@ -95,98 +139,53 @@ const FeedbackAnalysis: React.FC<ReportBlockProps> = ({ name, output }) => {
                 <p className="text-sm font-medium">Items Analyzed</p>
                 <p className="text-sm">{feedbackData.total_items}</p>
               </div>
-              {hasData && (
-                <>
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium">Total Mismatches</p>
-                    <p className="text-sm">
-                      {feedbackData.total_mismatches} (
-                      {feedbackData.accuracy !== undefined 
-                        ? (100 - feedbackData.accuracy).toFixed(1) 
-                        : feedbackData.mismatch_percentage !== undefined
-                          ? feedbackData.mismatch_percentage.toFixed(1)
-                          : "0"}%)
-                    </p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium">Accuracy</p>
-                    <p className="text-sm">
-                      {feedbackData.accuracy !== undefined 
-                        ? feedbackData.accuracy.toFixed(1) 
-                        : feedbackData.mismatch_percentage !== undefined
-                          ? (100 - feedbackData.mismatch_percentage).toFixed(1)
-                          : "100"}%
-                    </p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium">Agreement (AC1)</p>
-                    <p className="text-sm">{feedbackData.overall_ac1?.toFixed(4) || 'N/A'}</p>
-                  </div>
-                </>
-              )}
+              <div className="space-y-1">
+                <p className="text-sm font-medium">Total Mismatches</p>
+                <p className="text-sm">
+                  {feedbackData.total_mismatches} (
+                  {feedbackData.accuracy !== undefined 
+                    ? (100 - feedbackData.accuracy).toFixed(1) 
+                    : feedbackData.mismatch_percentage !== undefined
+                      ? feedbackData.mismatch_percentage.toFixed(1)
+                      : "0.0"}%)
+                </p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm font-medium">Accuracy</p>
+                <p className="text-sm">
+                  {feedbackData.accuracy !== undefined 
+                    ? feedbackData.accuracy.toFixed(1) 
+                    : feedbackData.mismatch_percentage !== undefined
+                      ? (100 - feedbackData.mismatch_percentage).toFixed(1)
+                      : "100.0"}%
+                </p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm font-medium">Overall Agreement (AC1)</p>
+                {(feedbackData.overall_ac1 !== null && feedbackData.overall_ac1 !== undefined) ? (
+                  (() => {
+                    const level = getAgreementLevel(feedbackData.overall_ac1);
+                    return (
+                      <Badge className={level.color}>
+                        {`${level.label} (AC1: ${feedbackData.overall_ac1.toFixed(4)})`}
+                      </Badge>
+                    );
+                  })()
+                ) : (
+                  <Badge className="bg-muted text-muted-foreground">No Data</Badge>
+                )}
+              </div>
             </div>
           </CardContent>
         </Card>
+      )}
 
-        {hasData && feedbackData.scores.length > 0 && (
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Question Breakdown</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Question ID</TableHead>
-                    <TableHead>Name</TableHead>
-                    <TableHead className="text-right">AC1 Score</TableHead>
-                    <TableHead className="text-right">Items</TableHead>
-                    <TableHead className="text-right">Mismatches</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {feedbackData.scores
-                    .sort((a, b) => (b.ac1 || -1) - (a.ac1 || -1)) // Sort by AC1 score (descending, handle nulls)
-                    .map((score) => {
-                      const level = getAgreementLevel(score.ac1);
-                      const displayMismatchPercentage = () => {
-                        if (score.accuracy !== undefined) {
-                          return (100 - score.accuracy).toFixed(1);
-                        }
-                        if (score.mismatch_percentage !== undefined) {
-                          return score.mismatch_percentage.toFixed(1);
-                        }
-                        return "0.0";
-                      };
-                      return (
-                        <TableRow key={score.id}>
-                          <TableCell className="font-medium">{score.id}</TableCell>
-                          <TableCell>{score.name}</TableCell>
-                          <TableCell className="text-right">
-                            <Badge className={level.color}>
-                              {score.ac1?.toFixed(4) || 'N/A'}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right">{score.total_comparisons}</TableCell>
-                          <TableCell className="text-right">
-                            {score.mismatches} ({displayMismatchPercentage()}%)
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        )}
-
-        {!hasData && (
-          <div className="py-8 text-center text-muted-foreground">
-            <p>No feedback data available for analysis.</p>
-            <p className="text-sm mt-1">Check that feedback items exist for the specified scorecard and date range.</p>
-          </div>
-        )}
-      </div>
+      {!hasData && feedbackData.scores && feedbackData.scores.length === 0 && (
+        <div className="py-8 text-center text-muted-foreground">
+          <p>No feedback data available for analysis within the selected parameters.</p>
+          <p className="text-sm mt-1">Check that feedback items exist for the specified scorecard and date range.</p>
+        </div>
+      )}
     </div>
   );
 };
