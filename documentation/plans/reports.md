@@ -403,22 +403,23 @@ This refactoring ensures the core report generation logic is DRY and consistentl
     *   ✅ Format Data for API (`FeedbackItem`, `FeedbackChangeDetail` payloads).
     *   ✅ Implement **Upsert Logic:** Query for existing records via `list()` and use `update()` or `create()` accordingly for both `FeedbackItem` and `FeedbackChangeDetail`.
     *   ✅ **Detailed Logging:** Use `rich.panel.Panel` with `rich.table.Table` for aligned key-value display of payloads being upserted. Include `None` values for comment fields.
-*   ⬜ **Implement `FeedbackAnalysisBlock` (Plexus Python):**
-    *   ⬜ Create new report block class `plexus.reports.blocks.FeedbackAnalysisBlock(BaseReportBlock)`.
-    *   ⬜ Implement `generate(config, params)` method.
-    *   ⬜ **Input Parameters:** Accept parameters like `scorecardId`, `dateRange` (start/end dates) via `params`.
-    *   ⬜ **API Querying:** Use `PlexusDashboardClient` within the block to query the Plexus API for relevant `FeedbackItem` records matching the input parameters (filtering by `accountId`, `scorecardId`, and potentially date range if timestamps are added to `FeedbackItem` or derived from `FeedbackChangeDetail`).
-    *   ⬜ **Analysis Logic:** Implement analysis logic (e.g., Gwet\'s AC1 calculation) using the fetched `FeedbackItem` data (comparing `initialAnswerValue` and `finalAnswerValue`). Group results by `scoreId` (Plexus Score ID).
-    *   ⬜ **JSON Output:** Return a JSON-serializable dictionary containing the analysis results (e.g., overall AC1, per-score AC1, mismatch counts, total items analyzed). This JSON will be stored in the corresponding `ReportBlock.output` field.
-*   ⬜ **Implement Frontend Component (`FeedbackAnalysis`):**
-    *   ⬜ Create a new React component (e.g., `FeedbackAnalysis.tsx`) specifically for rendering the output of the `FeedbackAnalysisBlock`.
-    *   ⬜ Register this component with the `BlockRegistry`.
-    *   ⬜ The component will receive the `output` JSON from the `ReportBlock` record as props.
-    *   ⬜ Render the analysis results effectively using tables, summary statistics, and potentially charts (similar style to the output of the original `analyze.py` command but driven by the structured JSON data).
-*   ⬜ **Add Testing:**
-    *   ⬜ Write unit/integration tests for `FeedbackAnalysisBlock`.
-    *   ⬜ Add Storybook stories and potentially integration tests for the `FeedbackAnalysis` React component.
-*   ⬜ **Verify Phase 6:** Confirm the `FeedbackAnalysisBlock` correctly queries the Plexus API, performs the analysis, stores results, and the frontend component renders the results accurately within a generated report.
+*   ✅ **Implement `FeedbackAnalysisBlock` (Plexus Python):**
+    *   ✅ Create new report block class `plexus.reports.blocks.FeedbackAnalysisBlock(BaseReportBlock)`.
+    *   ✅ Implement `generate(config, params)` method.
+    *   ✅ **Input Parameters:** Accept parameters like `scorecardId`, `dateRange` (start/end dates) via `params`.
+    *   ✅ **API Querying:** Use `PlexusDashboardClient` within the block to query the Plexus API for relevant `FeedbackItem` records matching the input parameters (filtering by `accountId`, `scorecardId`, and potentially date range if timestamps are added to `FeedbackItem` or derived from `FeedbackChangeDetail`).
+    *   ✅ **Analysis Logic:** Implement analysis logic (e.g., Gwet\'s AC1 calculation) using the fetched `FeedbackItem` data (comparing `initialAnswerValue` and `finalAnswerValue`). Group results by `scoreId` (Plexus Score ID).
+    *   ✅ **JSON Output:** Return a JSON-serializable dictionary containing the analysis results (e.g., overall AC1, per-score AC1, mismatch counts, total items analyzed). This JSON will be stored in the corresponding `ReportBlock.output` field.
+*   ✅ **Implement Frontend Component (`FeedbackAnalysis`):**
+    *   ✅ Create a new React component (e.g., `FeedbackAnalysis.tsx`) specifically for rendering the output of the `FeedbackAnalysisBlock`.
+    *   ✅ Register this component with the `BlockRegistry`.
+    *   ✅ The component will receive the `output` JSON from the `ReportBlock` record as props.
+    *   ✅ Render the analysis results effectively using individual score cards with gauges for AC1 and Accuracy, and a summary section.
+*   ✅ **Add Testing:**
+    *   ✅ Write unit/integration tests for `FeedbackAnalysisBlock`.
+    *   ✅ Add Storybook stories for the `FeedbackAnalysis` component with various data scenarios (especially multiple scores if output changes).
+    *   ✅ Consider integration tests to verify the component correctly displays data from the API.
+*   ✅ **Verify Phase 6:** Confirm the `FeedbackAnalysisBlock` correctly queries the Plexus API, performs the analysis, stores results, and the frontend component renders the results accurately within a generated report.
 
 ### Phase 7: Asynchronous Generation Testing (Celery)
 
@@ -493,19 +494,28 @@ When the report is generated, each report block in the report will generate stru
 - Added detailed logging to help diagnose API lookup issues
 - Data is now properly being retrieved and analyzed
 
-🟡 **Next Steps for Feedback Analysis:**
-- ⬜ **Implement Frontend Component (`FeedbackAnalysis`):**
-  - ⬜ Create a new React component (e.g., `FeedbackAnalysis.tsx`) specifically for rendering the output of the `FeedbackAnalysis` block
-  - ⬜ Register this component with the `BlockRegistry`
-  - ⬜ Design the component UI to display agreement scores, accuracy metrics, and date ranges
-  - ⬜ Include visual elements like badges and charts to highlight important metrics
-  - ⬜ Implement sorting and filtering capabilities for better data exploration
-  - ⬜ Ensure the component handles empty or error states gracefully
-  - ⬜ Add responsive behavior for different screen sizes
+✅ **Frontend Component Implemented & Refined:**
+- ✅ Created `FeedbackAnalysis.tsx` React component.
+- ✅ Registered with `BlockRegistry`.
+- ✅ Designed component UI to display agreement scores and accuracy metrics using `Gauge` components within individual cards per score.
+- ✅ Each score card displays:
+    - Score Name
+    - Agreements / Total Feedback Items
+    - "Agreement" Gauge (AC1, -1 to 1 range, custom segments, 3-decimal formatting)
+    - "Accuracy" Gauge (0-100 range, default formatting)
+- ✅ Includes a summary section for overall metrics and date range.
+- ✅ Handles empty or error states gracefully.
+- ✅ Implemented responsive behavior for different screen sizes.
 
+🟡 **Next Steps for Feedback Analysis:**
+- ⬜ **Enhance `FeedbackAnalysisBlock` (Python Backend):**
+  - ⬜ Modify the Python `FeedbackAnalysisBlock` to accept a list of score IDs/names as input (e.g., via `params`).
+  - ⬜ Update the block's `generate` method to process and aggregate data for all specified scores.
+  - ⬜ Ensure the JSON output structure can accommodate results for multiple scores if it needs adjustment (though the current frontend likely handles an array of scores well).
 - ⬜ **Add Testing:**
-  - ⬜ Add Storybook stories for the `FeedbackAnalysis` component with various data scenarios
-  - ⬜ Consider integration tests to verify the component correctly displays data from the API
+  - ⬜ Add Storybook stories for the `FeedbackAnalysis` component with various data scenarios (especially multiple scores if output changes).
+  - ⬜ Consider integration tests to verify the component correctly displays data from the API.
+  - ⬜ Write unit/integration tests for the Python `FeedbackAnalysisBlock`, including multi-score scenarios.
 
 ### Block Rendering Implementation Updates
 
