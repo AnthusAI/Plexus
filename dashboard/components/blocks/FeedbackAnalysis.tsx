@@ -9,10 +9,11 @@ interface ScoreData {
   id: string;
   name: string;
   external_id: string;
-  ac1: number;
+  ac1: number | null;
   total_comparisons: number;
   mismatches: number;
-  mismatch_percentage: number;
+  mismatch_percentage?: number;
+  accuracy?: number;
 }
 
 interface FeedbackAnalysisData {
@@ -20,7 +21,8 @@ interface FeedbackAnalysisData {
   scores: ScoreData[];
   total_items: number;
   total_mismatches: number;
-  mismatch_percentage: number;
+  mismatch_percentage?: number;
+  accuracy?: number;
   date_range: {
     start: string;
     end: string;
@@ -97,7 +99,24 @@ const FeedbackAnalysis: React.FC<ReportBlockProps> = ({ name, output }) => {
                 <>
                   <div className="space-y-1">
                     <p className="text-sm font-medium">Total Mismatches</p>
-                    <p className="text-sm">{feedbackData.total_mismatches} ({feedbackData.mismatch_percentage.toFixed(1)}%)</p>
+                    <p className="text-sm">
+                      {feedbackData.total_mismatches} (
+                      {feedbackData.accuracy !== undefined 
+                        ? (100 - feedbackData.accuracy).toFixed(1) 
+                        : feedbackData.mismatch_percentage !== undefined
+                          ? feedbackData.mismatch_percentage.toFixed(1)
+                          : "0"}%)
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium">Accuracy</p>
+                    <p className="text-sm">
+                      {feedbackData.accuracy !== undefined 
+                        ? feedbackData.accuracy.toFixed(1) 
+                        : feedbackData.mismatch_percentage !== undefined
+                          ? (100 - feedbackData.mismatch_percentage).toFixed(1)
+                          : "100"}%
+                    </p>
                   </div>
                   <div className="space-y-1">
                     <p className="text-sm font-medium">Agreement (AC1)</p>
@@ -127,9 +146,18 @@ const FeedbackAnalysis: React.FC<ReportBlockProps> = ({ name, output }) => {
                 </TableHeader>
                 <TableBody>
                   {feedbackData.scores
-                    .sort((a, b) => (b.ac1 || 0) - (a.ac1 || 0)) // Sort by AC1 score (descending)
+                    .sort((a, b) => (b.ac1 || -1) - (a.ac1 || -1)) // Sort by AC1 score (descending, handle nulls)
                     .map((score) => {
                       const level = getAgreementLevel(score.ac1);
+                      const displayMismatchPercentage = () => {
+                        if (score.accuracy !== undefined) {
+                          return (100 - score.accuracy).toFixed(1);
+                        }
+                        if (score.mismatch_percentage !== undefined) {
+                          return score.mismatch_percentage.toFixed(1);
+                        }
+                        return "0.0";
+                      };
                       return (
                         <TableRow key={score.id}>
                           <TableCell className="font-medium">{score.id}</TableCell>
@@ -141,7 +169,7 @@ const FeedbackAnalysis: React.FC<ReportBlockProps> = ({ name, output }) => {
                           </TableCell>
                           <TableCell className="text-right">{score.total_comparisons}</TableCell>
                           <TableCell className="text-right">
-                            {score.mismatches} ({score.mismatch_percentage.toFixed(1)}%)
+                            {score.mismatches} ({displayMismatchPercentage()}%)
                           </TableCell>
                         </TableRow>
                       );
