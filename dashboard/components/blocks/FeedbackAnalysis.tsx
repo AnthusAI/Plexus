@@ -88,7 +88,7 @@ const FeedbackAnalysis: React.FC<ReportBlockProps> = ({ name, output }) => {
             .map((score) => {
               const agreements = score.item_count - score.mismatches;
               return (
-                <Card key={score.id}>
+                <Card key={score.id} className="bg-card shadow-none border-none">
                   <CardHeader>
                     <CardTitle className="font-bold">{score.score_name}</CardTitle>
                     <p className="text-sm text-muted-foreground">
@@ -123,7 +123,7 @@ const FeedbackAnalysis: React.FC<ReportBlockProps> = ({ name, output }) => {
 
       {/* Summary Card - Conditionally Rendered */}
       {showSummary && (
-        <Card>
+        <Card className="bg-card shadow-none border-none">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Summary</CardTitle>
           </CardHeader>
