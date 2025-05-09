@@ -454,6 +454,75 @@ plexus results list --account "Example Account" --limit 20`}</code>
         </section>
 
         <section>
+          <h2 className="text-2xl font-semibold mb-4">Report Commands</h2>
+          <p className="text-muted-foreground mb-4">
+            Manage report configurations and generated reports using the following commands.
+            Remember to run commands from your project root using `python -m plexus.cli.CommandLineInterface ...`
+            if you are working on the codebase locally, to avoid conflicts with globally installed versions.
+          </p>
+
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-xl font-medium mb-2">Report Configuration Commands</h3>
+              <pre className="bg-muted rounded-lg mb-4">
+                <div className="code-container p-4">
+                  <code>{`# List available report configurations for your account
+python -m plexus.cli.CommandLineInterface report config list
+
+# Show details of a specific report configuration (using ID or Name)
+# Note: Uses the flexible identifier system (tries ID, then Name if it looks like UUID; otherwise Name then ID)
+python -m plexus.cli.CommandLineInterface report config show <id_or_name>
+
+# Create a new report configuration from a Markdown/YAML file
+python -m plexus.cli.CommandLineInterface report config create --name "My Report Config" --file ./path/to/config.md [--description "Optional description"]
+
+# Delete a report configuration (prompts for confirmation)
+python -m plexus.cli.CommandLineInterface report config delete <id_or_name>
+
+# Delete a report configuration (skip confirmation prompt)
+python -m plexus.cli.CommandLineInterface report config delete <id_or_name> --yes`}</code>
+                </div>
+              </pre>
+            </div>
+
+            <div>
+              <h3 className="text-xl font-medium mb-2">Report Generation and Viewing Commands</h3>
+              <pre className="bg-muted rounded-lg mb-4">
+                <div className="code-container p-4">
+                  <code>{`# Trigger a new report generation task based on a configuration (using ID or Name for config)
+python -m plexus.cli.CommandLineInterface report run --config <config_id_or_name> [param1=value1 param2=value2 ...]
+
+# List generated reports, optionally filtered by configuration (using ID or Name for config filter)
+# Shows Report ID, Name, Config ID, Task ID, and Task Status
+python -m plexus.cli.CommandLineInterface report list [--config <config_id_or_name>]
+
+# Show details of a specific generated report (using ID or Name)
+# Includes Report details, linked Task status/details, rendered output, and Report Block summary
+python -m plexus.cli.CommandLineInterface report show <report_id_or_name>
+
+# Show details of the most recently created report
+python -m plexus.cli.CommandLineInterface report last`}</code>
+                </div>
+              </pre>
+            </div>
+
+            <div>
+              <h3 className="text-xl font-medium mb-2">Report Block Inspection Commands</h3>
+              <pre className="bg-muted rounded-lg mb-4">
+                <div className="code-container p-4">
+                  <code>{`# List the analysis blocks for a specific report (requires Report ID)
+python -m plexus.cli.CommandLineInterface report block list <report_id>
+
+# Show details of a specific block within a report (requires Report ID and block position or name)
+# Displays block details, output JSON (syntax highlighted), and logs
+python -m plexus.cli.CommandLineInterface report block show <report_id> <block_position_or_name>`}</code>
+                </div>
+              </pre>
+            </div>
+          </div>
+        </section>
+
+        <section>
           <h2 className="text-2xl font-semibold mb-4">Additional Resources</h2>
           <p className="text-muted-foreground">
             For more detailed information about specific features:

@@ -21,6 +21,7 @@ interface GaugeProps {
   information?: string
   informationUrl?: string
   priority?: boolean
+  valueFormatter?: (value: number) => string
 }
 
 const calculateAngle = (percent: number) => {
@@ -39,7 +40,8 @@ const GaugeComponent: React.FC<GaugeProps> = ({
   showTicks = false,
   information,
   informationUrl,
-  priority = false
+  priority = false,
+  valueFormatter
 }) => {
   const [animatedValue, setAnimatedValue] = useState(0)
   const [animatedBeforeValue, setAnimatedBeforeValue] = useState(0)
@@ -282,7 +284,10 @@ const GaugeComponent: React.FC<GaugeProps> = ({
                 dominantBaseline="middle"
               >
                 {value !== undefined 
-                  ? (value % 1 === 0 ? `${value}%` : `${value.toFixed(1)}%`)
+                  ? (valueFormatter
+                      ? valueFormatter(value)
+                      : (value % 1 === 0 ? `${value}%` : `${value.toFixed(1)}%`)
+                    )
                   : ''}
               </text>
             </g>
