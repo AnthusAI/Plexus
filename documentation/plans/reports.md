@@ -421,101 +421,17 @@ This refactoring ensures the core report generation logic is DRY and consistentl
     *   ✅ Consider integration tests to verify the component correctly displays data from the API.
 *   ✅ **Verify Phase 6:** Confirm the `FeedbackAnalysisBlock` correctly queries the Plexus API, performs the analysis, stores results, and the frontend component renders the results accurately within a generated report.
 
-### Phase 7: Asynchronous Generation Testing (Celery)
-
-*   ⬜ **Objective:** Verify that report generation can be successfully triggered asynchronously via the Celery task (`generate_report_task`) and that Task status updates correctly.
-*   ⬜ **Prerequisites:**
-    *   Phase 5 (Frontend Basics) completed or sufficiently progressed to trigger Task creation via UI/API.
-    *   Celery worker is running (`python -m plexus.cli.CommandLineInterface command worker`).
-    *   Mechanism for dispatching the task from Task creation exists (e.g., Lambda trigger or manual `plexus command dispatch`).
-*   ⬜ **Test Steps:**
-    1.  Trigger a report generation via the method intended for asynchronous execution (e.g., create Task via API/UI).
-    2.  Monitor the Celery worker logs to confirm it picks up the `generate_report_task`.
-    3.  Use `plexus task get <task_id>` and `plexus report list/show` to monitor the Task status and the creation/population of the Report record.
-    4.  Verify the Task progresses through stages and reaches a final `COMPLETED` status (or `FAILED` with appropriate error message from the Celery task handler).
-    5.  Confirm the generated `Report` and `ReportBlock` data is correct.
-*   ⬜ **Verify Phase 7:** Confirm asynchronous report generation via Celery works reliably and integrates correctly with the Task system.
-    *   **NEXT:** Phase 8 - Advanced Features & Polish
-
-### Phase 8: Advanced Features & Polish
-
-*   ⬜ **Implement Core Report Blocks:**
-    *   ⬜ Implement `ScorePerformanceBlock`.
-    *   ⬜ Implement `TopicModelBlock` (if applicable).
-*   ⬜ **Develop Corresponding React Components:**
-    *   ⬜ Develop components for other core blocks (ScorePerformance, TopicModel).
-*   ⬜ **Enhance Dynamic Rendering:** Improve the report viewing component to intelligently select and render the appropriate React component based on the structure/type information within the `ReportBlock.output` JSON.
-*   ⬜ **Integrate Sharing:** Connect the `Report` model to the `ShareLink` system.
-*   ⬜ **Improve Configuration Editor:** Consider a more user-friendly UI beyond raw YAML/JSON/Markdown editing (future enhancement).
-*   ⬜ **Refine Print Styles:** Ensure the `@media print` styles produce a high-quality printed report, handling block rendering appropriately.
-*   ⬜ **Verify Phase 8:** Test complex reports with various blocks, ensure proper visualization, sharing, and printing.
-
-## Example Report Configuration
-
-Here is an example of the content stored in the `ReportConfiguration.configuration` field:
-
-\`\`\`block name="Term Life - Temperature Check - Score Information"
-class: ScoreInformation
-scorecard: termlifev1
-score: Temperature Check
-\`\`\`
-
-The parameters for blocks work in the same way as parameters to the CLI tools: `scorecard` can be an ID, an external ID, a key, or a name. Same for `score`.
-
-When the report is generated, each report block in the report will generate structured JSON output that will be stored in a separate `ReportBlock` entry, linked to the `Report`. The JSON output for each block goes into `ReportBlock.output`. The block\'s execution logs can be stored in `ReportBlock.log`.
-
-*(Note: The example above shows `ScoreInformation`. We should ensure consistency with the actual class name, which we intend to be `ScoreInfo`.)*
-
-## Current Work (2025-05-09)
-
-### Feedback Analysis Integration Progress
-
-✅ **Successfully Implemented FeedbackAnalysis Block:**
-- Renamed `FeedbackAnalysisBlock` to `FeedbackAnalysis` for better consistency with frontend naming
-- Fixed async function handling in the report engine to properly await async block methods
-- Successfully executed the feedback analysis report through the CLI
-- Successfully retrieving scores via the API and getting real score names and external IDs
-- Changed `mismatch_percentage` to `accuracy` to provide a more positive metric
-
-✅ **Completed Feedback Data Extraction and Processing:**
-- Successfully implemented and fixed both `analyze` and `capture` commands in the client project
-- Both commands now properly combine chronologically sorted changes to determine accurate initial/final values
-- Consistent behavior between commands ensures reliable feedback item record creation
-
-✅ **Data Schema Changes Completed:**
-- ✅ Changed `isMismatch` to `isAgreement` in the FeedbackItem schema (inverse meaning, more intuitive for analysis)
-- ✅ Removed the `FeedbackChangeDetail` model from the schema as it's not required
-- ✅ Updated output format to use a list of score objects with `name`, `id`, and `external_id` fields
-- ✅ Replaced `mismatch_percentage` with `accuracy` for a more positive metric presentation
-
-✅ **Data Access Resolved:**
-- Fixed API lookup to correctly find score records by ID
-- Implemented multiple fallback mechanisms to retrieve score information
-- Added detailed logging to help diagnose API lookup issues
-- Data is now properly being retrieved and analyzed
-
-✅ **Frontend Component Implemented & Refined:**
-- ✅ Created `FeedbackAnalysis.tsx` React component.
-- ✅ Registered with `BlockRegistry`.
-- ✅ Designed component UI to display agreement scores and accuracy metrics using `Gauge` components within individual cards per score.
-- ✅ Each score card displays:
-    - Score Name
-    - Agreements / Total Feedback Items
-    - "Agreement" Gauge (AC1, -1 to 1 range, custom segments, 3-decimal formatting)
-    - "Accuracy" Gauge (0-100 range, default formatting)
-- ✅ Includes a summary section for overall metrics and date range.
-- ✅ Handles empty or error states gracefully.
-- ✅ Implemented responsive behavior for different screen sizes.
-
-🟡 **Next Steps for Feedback Analysis:**
+🟡 **Next Steps for FeedbackAnalysis:**
+- ⬜ **Enhance `capture` CLI Command for Multi-Score Support (Call-Criteria-Python):** (See detailed plan in Phase 6)
 - ⬜ **Enhance `FeedbackAnalysisBlock` (Python Backend):**
-  - ⬜ Modify the Python `FeedbackAnalysisBlock` to accept a list of score IDs/names as input (e.g., via `params`).
-  - ⬜ Update the block's `generate` method to process and aggregate data for all specified scores.
-  - ⬜ Ensure the JSON output structure can accommodate results for multiple scores if it needs adjustment (though the current frontend likely handles an array of scores well).
+  - ⬜ Modify the Python `FeedbackAnalysisBlock` to accept a list of score IDs/names as input (e.g., via `params` in the report configuration).
+  - ⬜ Update the block's `generate` method to fetch `FeedbackItem` data for all specified scores (potentially across multiple scorecards if the design evolves, or for multiple scores within the primary scorecard context defined for the block).
+  - ⬜ Aggregate data appropriately (e.g., calculate overall AC1 across all included scores, and provide per-score breakdowns).
+  - ⬜ Ensure the JSON output structure can clearly represent both overall and per-score results.
 - ⬜ **Add Testing:**
-  - ⬜ Add Storybook stories for the `FeedbackAnalysis` component with various data scenarios (especially multiple scores if output changes).
-  - ⬜ Consider integration tests to verify the component correctly displays data from the API.
-  - ⬜ Write unit/integration tests for the Python `FeedbackAnalysisBlock`, including multi-score scenarios.
+  - ⬜ Add Storybook stories for the `FeedbackAnalysis` component to test rendering with data from multiple scores.
+  - ⬜ Consider integration tests to verify the component correctly displays data from the API with multi-score results.
+  - ⬜ Write unit/integration tests for the Python `FeedbackAnalysisBlock`, including multi-score scenarios and dynamic ID resolution in the `capture` command.
 
 ### Block Rendering Implementation Updates
 
