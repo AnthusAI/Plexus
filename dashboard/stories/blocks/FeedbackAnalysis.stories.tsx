@@ -25,41 +25,36 @@ export const Basic: Story = {
   args: {
     name: 'Customer Feedback Analysis',
     output: {
-      type: 'FeedbackAnalysis',
-      data: {
-        overall_ac1: 0.846,
-        question_ac1s: {
-          "score1": {
-            ac1: 0.927,
-            name: "Customer Greeting",
-            total_comparisons: 120,
-            mismatches: 5,
-            mismatch_percentage: 4.17
-          },
-          "score2": {
-            ac1: 0.813,
-            name: "Issue Identification",
-            total_comparisons: 118,
-            mismatches: 12,
-            mismatch_percentage: 10.17
-          },
-          "score3": {
-            ac1: 0.775,
-            name: "Solution Explanation",
-            total_comparisons: 115,
-            mismatches: 18,
-            mismatch_percentage: 15.65
-          }
+      overall_ac1: 0.846,
+      question_ac1s: {
+        "score1": {
+          ac1: 0.927,
+          name: "Customer Greeting",
+          total_comparisons: 120,
+          mismatches: 5,
+          mismatch_percentage: 4.17
         },
-        total_items: 120,
-        total_mismatches: 35,
-        mismatch_percentage: 9.72,
-        analysis_date: '2025-05-01T10:05:00Z',
-        scorecard_id: 'customer_service_v1',
-        date_range: {
-          start: '2025-04-01T00:00:00Z',
-          end: '2025-04-30T23:59:59Z'
+        "score2": {
+          ac1: 0.813,
+          name: "Issue Identification",
+          total_comparisons: 118,
+          mismatches: 12,
+          mismatch_percentage: 10.17
+        },
+        "score3": {
+          ac1: 0.775,
+          name: "Solution Explanation",
+          total_comparisons: 115,
+          mismatches: 18,
+          mismatch_percentage: 15.65
         }
+      },
+      total_items: 120,
+      total_mismatches: 35,
+      mismatch_percentage: 9.72,
+      date_range: {
+        start: '2025-04-01T00:00:00Z',
+        end: '2025-04-30T23:59:59Z'
       }
     },
     position: 0,
@@ -75,28 +70,22 @@ export const WithScoreFilter: Story = {
   args: {
     name: 'Customer Greeting Analysis',
     output: {
-      type: 'FeedbackAnalysis',
-      data: {
-        overall_ac1: 0.927,
-        question_ac1s: {
-          "score1": {
-            ac1: 0.927,
-            name: "Customer Greeting",
-            total_comparisons: 120,
-            mismatches: 5,
-            mismatch_percentage: 4.17
-          }
-        },
-        total_items: 120,
-        total_mismatches: 5,
-        mismatch_percentage: 4.17,
-        analysis_date: '2025-05-01T10:05:00Z',
-        scorecard_id: 'customer_service_v1',
-        score_id: 'score1',
-        date_range: {
-          start: '2025-04-01T00:00:00Z',
-          end: '2025-04-30T23:59:59Z'
+      overall_ac1: 0.927,
+      question_ac1s: {
+        "score1": {
+          ac1: 0.927,
+          name: "Customer Greeting",
+          total_comparisons: 120,
+          mismatches: 5,
+          mismatch_percentage: 4.17
         }
+      },
+      total_items: 120,
+      total_mismatches: 5,
+      mismatch_percentage: 4.17,
+      date_range: {
+        start: '2025-04-01T00:00:00Z',
+        end: '2025-04-30T23:59:59Z'
       }
     },
     position: 1,
@@ -113,48 +102,43 @@ export const MixedPerformance: Story = {
   args: {
     name: 'Mixed Agreement Levels',
     output: {
-      type: 'FeedbackAnalysis',
-      data: {
-        overall_ac1: 0.681,
-        question_ac1s: {
-          "score1": {
-            ac1: 0.892,
-            name: "Initial Greeting",
-            total_comparisons: 50,
-            mismatches: 3,
-            mismatch_percentage: 6.0
-          },
-          "score2": {
-            ac1: 0.743,
-            name: "Problem Identification",
-            total_comparisons: 50,
-            mismatches: 8,
-            mismatch_percentage: 16.0
-          },
-          "score3": {
-            ac1: 0.623,
-            name: "Solution Proposal",
-            total_comparisons: 50,
-            mismatches: 12,
-            mismatch_percentage: 24.0
-          },
-          "score4": {
-            ac1: 0.466,
-            name: "Closing Remarks",
-            total_comparisons: 50,
-            mismatches: 18,
-            mismatch_percentage: 36.0
-          }
+      overall_ac1: 0.681,
+      question_ac1s: {
+        "score1": {
+          ac1: 0.892,
+          name: "Initial Greeting",
+          total_comparisons: 50,
+          mismatches: 3,
+          mismatch_percentage: 6.0
         },
-        total_items: 200,
-        total_mismatches: 41,
-        mismatch_percentage: 20.5,
-        analysis_date: '2025-05-01T14:30:00Z',
-        scorecard_id: 'customer_service_v2',
-        date_range: {
-          start: '2025-04-01T00:00:00Z',
-          end: '2025-04-30T23:59:59Z'
+        "score2": {
+          ac1: 0.743,
+          name: "Problem Identification",
+          total_comparisons: 50,
+          mismatches: 8,
+          mismatch_percentage: 16.0
+        },
+        "score3": {
+          ac1: 0.623,
+          name: "Solution Proposal",
+          total_comparisons: 50,
+          mismatches: 12,
+          mismatch_percentage: 24.0
+        },
+        "score4": {
+          ac1: 0.466,
+          name: "Closing Remarks",
+          total_comparisons: 50,
+          mismatches: 18,
+          mismatch_percentage: 36.0
         }
+      },
+      total_items: 200,
+      total_mismatches: 41,
+      mismatch_percentage: 20.5,
+      date_range: {
+        start: '2025-04-01T00:00:00Z',
+        end: '2025-04-30T23:59:59Z'
       }
     },
     position: 2,
@@ -170,19 +154,14 @@ export const NoData: Story = {
   args: {
     name: 'No Feedback Data',
     output: {
-      type: 'FeedbackAnalysis',
-      data: {
-        overall_ac1: null,
-        question_ac1s: {},
-        total_items: 0,
-        total_mismatches: 0,
-        mismatch_percentage: 0,
-        analysis_date: '2025-05-01T16:45:00Z',
-        scorecard_id: 'new_scorecard_v1',
-        date_range: {
-          start: '2025-04-01T00:00:00Z',
-          end: '2025-04-30T23:59:59Z'
-        }
+      overall_ac1: null,
+      question_ac1s: {},
+      total_items: 0,
+      total_mismatches: 0,
+      mismatch_percentage: 0,
+      date_range: {
+        start: '2025-04-01T00:00:00Z',
+        end: '2025-04-30T23:59:59Z'
       }
     },
     position: 3,

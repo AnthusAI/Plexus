@@ -66,28 +66,24 @@ class TestFeedbackAnalysis:
         block = FeedbackAnalysis(config, {}, mock_api_client)
         
         # Mock the _fetch_feedback_items method to return our test data
-        with patch.object(block, '_fetch_feedback_items', return_value=asyncio.Future()) as mock_fetch:
-            mock_fetch.return_value.set_result(mock_feedback_items)
-            
+        with patch.object(block, '_fetch_feedback_items', return_value=mock_feedback_items):
             # Call the generate method
             output, logs = await block.generate()
             
             # Verify the output
             assert output is not None
-            assert output["type"] == "FeedbackAnalysis"
-            assert "data" in output
-            assert "overall_ac1" in output["data"]
-            assert "question_ac1s" in output["data"]
-            assert "score1" in output["data"]["question_ac1s"]
-            assert "score2" in output["data"]["question_ac1s"]
-            assert output["data"]["total_items"] == 15
-            assert output["data"]["total_mismatches"] == 4
+            assert "overall_ac1" in output
+            assert "question_ac1s" in output
+            assert "score1" in output["question_ac1s"]
+            assert "score2" in output["question_ac1s"]
+            assert output["total_items"] == 15
+            assert output["total_mismatches"] == 4
             
             # Check that AC1 values are reasonable
-            assert output["data"]["overall_ac1"] is not None
-            assert isinstance(output["data"]["overall_ac1"], float)
-            assert output["data"]["question_ac1s"]["score1"]["ac1"] is not None
-            assert output["data"]["question_ac1s"]["score2"]["ac1"] is not None
+            assert output["overall_ac1"] is not None
+            assert isinstance(output["overall_ac1"], float)
+            assert output["question_ac1s"]["score1"]["ac1"] is not None
+            assert output["question_ac1s"]["score2"]["ac1"] is not None
             
             # Verify logs were generated
             assert logs is not None
@@ -106,19 +102,15 @@ class TestFeedbackAnalysis:
         block = FeedbackAnalysis(config, {}, mock_api_client)
         
         # Mock the _fetch_feedback_items method to return empty list
-        with patch.object(block, '_fetch_feedback_items', return_value=asyncio.Future()) as mock_fetch:
-            mock_fetch.return_value.set_result([])
-            
+        with patch.object(block, '_fetch_feedback_items', return_value=[]):
             # Call the generate method
             output, logs = await block.generate()
             
             # Verify the output shows empty results
             assert output is not None
-            assert output["type"] == "FeedbackAnalysis"
-            assert "data" in output
-            assert output["data"]["overall_ac1"] is None
-            assert output["data"]["question_ac1s"] == {}
-            assert output["data"]["total_items"] == 0
+            assert output["overall_ac1"] is None
+            assert output["question_ac1s"] == {}
+            assert output["total_items"] == 0
             
             # Verify logs were generated
             assert logs is not None
