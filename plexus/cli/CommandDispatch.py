@@ -250,7 +250,6 @@ def dispatch(
                 # Add a single task that tracks both status and progress
                 stage_configs = {
                     "Setup": StageConfig(
-                        name="Setup",
                         order=1,
                         status_message="Setting up...",
                         total_items=100  # Set a default total
