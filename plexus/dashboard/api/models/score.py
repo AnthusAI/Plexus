@@ -28,10 +28,6 @@ class Score(BaseModel):
     version: Optional[str] = None
     aiProvider: Optional[str] = None
     aiModel: Optional[str] = None
-    isFineTuned: Optional[bool] = None
-    configuration: Optional[Dict] = None
-    distribution: Optional[Dict] = None
-    versionHistory: Optional[Dict] = None
 
     def __init__(
         self,
@@ -46,10 +42,6 @@ class Score(BaseModel):
         version: Optional[str] = None,
         aiProvider: Optional[str] = None,
         aiModel: Optional[str] = None,
-        isFineTuned: Optional[bool] = None,
-        configuration: Optional[Dict] = None,
-        distribution: Optional[Dict] = None,
-        versionHistory: Optional[Dict] = None,
         client: Optional[_BaseAPIClient] = None
     ):
         super().__init__(id, client)
@@ -63,10 +55,6 @@ class Score(BaseModel):
         self.version = version
         self.aiProvider = aiProvider
         self.aiModel = aiModel
-        self.isFineTuned = isFineTuned
-        self.configuration = configuration
-        self.distribution = distribution
-        self.versionHistory = versionHistory
 
     @classmethod
     def fields(cls) -> str:
@@ -82,10 +70,6 @@ class Score(BaseModel):
             version
             aiProvider
             aiModel
-            isFineTuned
-            configuration
-            distribution
-            versionHistory
         """
 
     @classmethod
@@ -102,10 +86,6 @@ class Score(BaseModel):
             version=data.get('version'),
             aiProvider=data.get('aiProvider'),
             aiModel=data.get('aiModel'),
-            isFineTuned=data.get('isFineTuned'),
-            configuration=data.get('configuration'),
-            distribution=data.get('distribution'),
-            versionHistory=data.get('versionHistory'),
             client=client
         )
 

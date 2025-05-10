@@ -811,6 +811,9 @@ class Task(BaseModel):
         
         # Add any additional fields from kwargs
         for key, value in kwargs.items():
+            # Explicitly skip the 'client' argument if passed via kwargs
+            if key == 'client':
+                continue
             if value is not None:
                 variables['input'][key] = value
         
