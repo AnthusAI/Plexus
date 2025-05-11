@@ -11,9 +11,21 @@ logging.basicConfig(level=logging.INFO)
 # Read Celery configuration from environment variables
 CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL')
 CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND')
+CELERY_QUEUE_NAME = os.environ.get('CELERY_QUEUE_NAME', 'plexus-celery')  # Changed default to "plexus-celery"
+
+logging.info(f"Using queue name: {CELERY_QUEUE_NAME}" + 
+            (f" (from CELERY_QUEUE_NAME environment variable)" if os.environ.get("CELERY_QUEUE_NAME") else " (default)"))
 
 # Initialize Celery app
+# Add queue name to broker URL if not already included
+if CELERY_BROKER_URL and '/' not in CELERY_BROKER_URL.split('@')[-1]:
+    CELERY_BROKER_URL = f"{CELERY_BROKER_URL}/{CELERY_QUEUE_NAME}"
+    logging.info(f"Added queue name to broker URL: {CELERY_BROKER_URL}")
+
 celery_app = Celery('plexus', broker=CELERY_BROKER_URL, backend=CELERY_RESULT_BACKEND)
+
+# Set the default queue
+celery_app.conf.task_default_queue = CELERY_QUEUE_NAME
 
 # Initialize DynamoDB deserializer
 deserializer = TypeDeserializer()
