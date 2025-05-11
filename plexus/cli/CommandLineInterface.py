@@ -8,7 +8,7 @@ import os
 import json
 
 from plexus.cli.TaskCommands import tasks
-from plexus.cli.CommandDispatch import command
+from plexus.cli.CommandDispatch import command, create_cli
 from plexus.cli.BatchCommands import batch
 from plexus.cli.EvaluationCommands import evaluate, evaluations
 from plexus.cli.PredictionCommands import predict
@@ -22,28 +22,18 @@ from plexus.cli.ScoreChatCommands import score_chat
 from plexus.cli.DataLakeCommands import lake_group
 from plexus.cli.FeedbackCommands import feedback
 
-@click.group()
+# Create the main CLI application object using the factory from CommandDispatch
+# This 'cli' variable can now be imported by other modules if needed.
+cli = create_cli()
+
 def main():
     """
     Plexus Command Line Interface.
+    This function is the entry point when the `plexus` command is run.
     """
-    pass
-
-main.add_command(tasks)
-main.add_command(command)
-main.add_command(batch)
-main.add_command(evaluate)
-main.add_command(evaluations)
-main.add_command(predict)
-main.add_command(analyze)
-main.add_command(tuning)
-main.add_command(train)
-main.add_command(results)
-main.add_command(report)
-main.add_command(data)
-main.add_command(score_chat)
-main.add_command(lake_group)
-main.add_command(feedback)
+    # Execute the main CLI application object
+    # Click will handle parsing arguments and dispatching to the correct command.
+    cli()
 
 if __name__ == '__main__':
     main()
