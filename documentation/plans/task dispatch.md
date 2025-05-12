@@ -327,6 +327,86 @@ The system handles various error conditions:
 - `CELERY_AWS_REGION_NAME`: AWS region for SQS
 - `CELERY_RESULT_BACKEND_TEMPLATE`: DynamoDB backend URL template
 
+### Optional Environment Variables
+- `CELERY_QUEUE_NAME`: Custom queue name for Celery tasks (defaults to "plexus-celery" if not specified)
+
+## Usage Examples
+
+### Worker Commands
+```bash
+# Start a worker with default configuration
+plexus command worker
+
+# Start a worker with custom concurrency and queue
+plexus command worker --concurrency=8 --queue=custom-queue
+
+# Start a worker with specific log level
+plexus command worker --loglevel=DEBUG
+
+# Start a worker with target pattern filtering
+plexus command worker --target-patterns="training/*,datasets/*"
+
+# Start worker with environment variables for AWS credentials and queue configuration
+AWS_ACCESS_KEY_ID=XXXX AWS_SECRET_ACCESS_KEY=XXXX AWS_REGION_NAME=us-west-2 \
+CELERY_QUEUE_NAME=plexus-celery-dev \
+CELERY_RESULT_BACKEND_TEMPLATE=dynamodb://{aws_access_key}:{aws_secret_key}@{aws_region_name}/plexus-action-dev \
+plexus command worker
+```
+
+### Task Dispatch Commands
+```bash
+# Dispatch a task asynchronously
+plexus command dispatch "command demo" --async
+
+# Dispatch a task and wait for the result
+plexus command dispatch "evaluate accuracy --scorecard-name agent-scorecard"
+
+# Dispatch a task with a timeout
+plexus command dispatch "train model" --timeout=3600
+
+# Dispatch a task to a specific target
+plexus command dispatch "train model" --target="training/gpu"
+
+# Dispatch a task with custom log level
+plexus command dispatch "analyze data" --loglevel=DEBUG
+```
+
+### Task Management Commands
+```bash
+# Check the status of a task
+plexus command status <task-id>
+
+# View task results (if completed)
+plexus command status <task-id>
+
+# Run the demo task for testing
+plexus command demo
+
+# Run the demo task with failure simulation
+plexus command demo --fail
+
+# Run the demo task with Task API tracking
+plexus command demo --task-id <task-id>
+
+# List tasks in the task database
+plexus tasks list
+
+# List tasks for a specific account
+plexus tasks list --account-id <account-id>
+
+# List tasks with a specific status
+plexus tasks list --status COMPLETED
+
+# Delete tasks by ID
+plexus tasks delete --id <task-id>
+
+# Delete completed tasks older than 30 days
+plexus tasks delete --status=COMPLETED --older-than=30d
+
+# Delete tasks by status without confirmation
+plexus tasks delete --status=FAILED --force
+```
+
 ## Usage Example
 
 Start a worker:
@@ -335,6 +415,10 @@ Start a worker:
 cd path/to/call-criteria-python
 plexus command worker --concurrency=4 --loglevel=INFO
 ```
+
+# The worker will automatically use the CELERY_QUEUE_NAME environment variable if set,
+# or you can explicitly specify a queue with --queue
+# plexus command worker --concurrency=4 --loglevel=INFO --queue custom-queue
 
 Execute commands:
 ```bash

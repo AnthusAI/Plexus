@@ -1,0 +1,37 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+
+# Task Dispatch System
+
+This guide explains Plexus's two-level task dispatch system.
+
+## Core Components
+
+### High-Level Task Dispatch
+- [CommandDispatch.py](mdc:Plexus_2/plexus/cli/CommandDispatch.py) - Contains the main implementation of the Celery app configuration and worker management
+- [CommandTasks.py](mdc:Plexus_2/plexus/cli/CommandTasks.py) - Defines the task execution functions and progress tracking
+- [task_dispatcher.py](mdc:Plexus_2/plexus/lambda/task_dispatcher.py) - Lambda handler for processing DynamoDB stream events and dispatching Celery tasks
+
+### Queue Management
+- The system uses SQS queues with auto-creation capability
+- Default queue name is `plexus-celery` (configurable with `CELERY_QUEUE_NAME` environment variable)
+- When a worker starts, it checks if the queue exists and creates it if needed
+
+### Dashboard Integration
+- [taskDispatcher/index.py](mdc:Plexus_2/dashboard/amplify/functions/taskDispatcher/index.py) - Amplify function for task dispatching from the dashboard
+
+## Key Workflows
+
+1. **Dispatching Tasks**:
+   - User initiates task from CLI or dashboard
+   - Task is created in DynamoDB
+   - Lambda function is triggered by DynamoDB stream
+   - Celery task is dispatched to worker
+
+2. **Worker Processing**:
+   - Workers poll SQS queue for tasks
+   - Worker executes task and reports progress
+   - Results are stored in DynamoDB (Celery) and the Plexus API
