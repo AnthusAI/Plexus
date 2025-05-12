@@ -10,8 +10,8 @@ The Plexus MCP (Multi-Agent Cooperative Protocol) system enables AI agents and t
 ## Core Components
 
 ### Server Implementation
-- **Main Server**: [MCP/plexus_mcp_server.py](mdc:MCP/plexus_mcp_server.py) - Core server implementation using the `mcp.server` library
-- **Wrapper Script**: [MCP/plexus_mcp_wrapper.py](mdc:MCP/plexus_mcp_wrapper.py) - Handles proper stdout/stderr separation and environment setup
+- **Main Server**: [MCP/plexus_mcp_server.py](mdc:Plexus-2/Plexus-2/MCP/plexus_mcp_server.py) - Core server implementation using the `mcp.server` library
+- **Wrapper Script**: [MCP/plexus_mcp_wrapper.py](mdc:Plexus-2/Plexus-2/MCP/plexus_mcp_wrapper.py) - Handles proper stdout/stderr separation and environment setup
 
 ### Key Features
 1. **Protocol Communication**
@@ -93,3 +93,9 @@ To use with MCP clients (e.g., Cursor), configure `mcp.json`:
 - Ensure Python version is 3.10+
 - Confirm proper stdout/stderr separation
 - Validate tool schemas and implementations
+
+## Logging
+- MCP logs are stored in `~/Library/Logs/Claude`
+- You can monitor logs in real-time using `tail -f ~/Library/Logs/Claude/mcp.log`
+- Logs contain detailed information about protocol communication and tool execution
+- Useful for debugging connection issues and tool failures
