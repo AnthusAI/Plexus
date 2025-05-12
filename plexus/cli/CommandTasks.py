@@ -268,6 +268,7 @@ def register_tasks(app):
             # Set up progress reporting
             CommandProgress.set_update_callback(progress_callback)
             
+            status = 'error'  # Initialize status before the try block
             try:
                 # Replace argv with our command
                 sys.argv = ['plexus'] + args
@@ -369,13 +370,28 @@ def register_tasks(app):
                             else:
                                 task.fail_processing("Command failed")
                 
-                return {
+                # Return a result dict with stdout and stderr
+                result = {
                     'status': status,
                     'command': command_string,
                     'target': target,
                     'stdout': stdout_capture.getvalue(),
                     'stderr': stderr_capture.getvalue(),
+                    'started_at': datetime.now(timezone.utc).timestamp(),
+                    'completed_at': datetime.now(timezone.utc).timestamp()
                 }
+                
+                # Update task status to completed if available
+                if task:
+                    try:
+                        task.update(
+                            status='COMPLETED',
+                            completedAt=datetime.now(timezone.utc).isoformat()
+                        )
+                    except Exception as e:
+                        logging.error(f"Failed to update task status to completed: {str(e)}")
+
+                return result
                 
             finally:
                 # Restore the original argv
@@ -385,18 +401,33 @@ def register_tasks(app):
                     CommandProgress.set_update_callback(None)
                 
         except Exception as e:
-            logging.error(f"Command failed: {str(e)}")
-            # Update task status if we have a task
-            if 'task' in locals() and task:
-                task.fail_processing(str(e))
-            return {
+            logging.error(f"Error executing command '{command_string}': {e}", exc_info=True)
+            
+            # Return an error result
+            result = {
                 'status': 'error',
                 'command': command_string,
                 'target': target,
                 'error': str(e),
                 'stdout': stdout_capture.getvalue() if 'stdout_capture' in locals() else '',
                 'stderr': stderr_capture.getvalue() if 'stderr_capture' in locals() else '',
+                'started_at': datetime.now(timezone.utc).timestamp(),
+                'completed_at': datetime.now(timezone.utc).timestamp()
             }
+            
+            # Update task status to failed if available
+            if 'task' in locals() and task:
+                try:
+                    task.update(
+                        status='FAILED',
+                        errorMessage=str(e),
+                        errorDetails={"traceback": str(sys.exc_info())} if sys.exc_info() else None,
+                        completedAt=datetime.now(timezone.utc).isoformat()
+                    )
+                except Exception as update_error:
+                    logging.error(f"Failed to update task status to failed: {str(update_error)}")
+            
+            return result
     
     @app.task(bind=True, name="plexus.demo_task")
     def demo_task(self: Task, target: str = "default/command") -> dict:
