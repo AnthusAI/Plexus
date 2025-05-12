@@ -26,10 +26,14 @@ The Plexus MCP (Multi-Agent Cooperative Protocol) system enables AI agents and t
    - Environment directory must be specified via `--env-dir` argument
 
 3. **Available Tools**
-   - `list_plexus_scorecards`: Lists scorecards from dashboard with filtering options
-   - `get_plexus_scorecard_info`: Gets detailed scorecard information
-   - `get_plexus_score_details`: Gets detailed score information including versions
-   - All tools are read-only by default
+   - `list_plexus_scorecards`: Lists scorecards from the Plexus Dashboard. Can filter by account, name, or key.
+   - `get_plexus_scorecard_info`: Gets detailed information about a specific scorecard, including its sections and scores.
+   - `get_plexus_score_details`: Gets detailed information for a specific score, including its configuration and version history.
+   - `list_plexus_reports`: Lists reports from the Plexus Dashboard. Can be filtered by account or report configuration ID. Results are sorted by most recent first.
+   - `get_plexus_report_details`: Gets detailed information for a specific report, including its output and any generated blocks.
+   - `get_latest_plexus_report`: Gets full details for the most recent report, optionally filtered by account or report configuration ID.
+   - `run_plexus_evaluation`: Run an accuracy evaluation on a Plexus scorecard. Can accept either scorecard name or key.
+   - `debug_python_env`: Debug the Python environment, including available modules and paths.
 
 ## Implementation Details
 
