@@ -1,0 +1,95 @@
+---
+description: About the MCP server for enabling AI agents to use Plexus.
+globs: 
+alwaysApply: false
+---
+# Plexus MCP System Overview
+
+The Plexus MCP (Multi-Agent Cooperative Protocol) system enables AI agents and tools to interact with Plexus functionality through a standardized protocol. This document provides an overview of the system architecture and key components.
+
+## Core Components
+
+### Server Implementation
+- **Main Server**: [MCP/plexus_mcp_server.py](mdc:MCP/plexus_mcp_server.py) - Core server implementation using the `mcp.server` library
+- **Wrapper Script**: [MCP/plexus_mcp_wrapper.py](mdc:MCP/plexus_mcp_wrapper.py) - Handles proper stdout/stderr separation and environment setup
+
+### Key Features
+1. **Protocol Communication**
+   - Uses JSON-based MCP protocol over stdio
+   - All protocol messages go to stdout
+   - All logging/debugging goes to stderr
+   - Ensures clean separation for MCP clients
+
+2. **Environment Management**
+   - Requires dashboard credentials (API URL, API Key)
+   - Loads credentials from `.env` file
+   - Environment directory must be specified via `--env-dir` argument
+
+3. **Available Tools**
+   - `list_plexus_scorecards`: Lists scorecards from dashboard with filtering options
+   - `get_plexus_scorecard_info`: Gets detailed scorecard information
+   - `get_plexus_score_details`: Gets detailed score information including versions
+   - All tools are read-only by default
+
+## Implementation Details
+
+### Server Architecture
+- Built on `mcp.server` library
+- Uses async/await for non-blocking operations
+- Implements proper error handling and logging
+- Supports Python 3.10+ (required by MCP library)
+
+### Tool Implementation Pattern
+1. Define tool schema with input/output specifications
+2. Implement handler function with error handling
+3. Register tool with server using decorators
+4. Add read-only annotation where appropriate
+
+### Error Handling
+- All errors are captured and returned as structured responses
+- Detailed logging to stderr for debugging
+- Clean error messages for client consumption
+
+## Configuration
+
+### Client Setup
+To use with MCP clients (e.g., Cursor), configure `mcp.json`:
+```json
+{
+  "mcpServers": {
+    "plexus-mcp-service": {
+      "command": "/path/to/python",
+      "args": [
+        "/path/to/plexus_mcp_wrapper.py",
+        "--transport", "stdio",
+        "--env-dir", "/path/to/env/dir"
+      ],
+      "env": {
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONPATH": "/path/to/plexus"
+      }
+    }
+  }
+}
+```
+
+### Environment Requirements
+- Python 3.10+
+- Plexus installation with dashboard access
+- Valid `.env` file with API credentials
+- `python-dotenv` package (recommended)
+
+## Best Practices
+1. Always use the wrapper script to launch the server
+2. Keep stdout clean for protocol messages
+3. Use stderr for all logging and debugging
+4. Implement proper error handling in tool functions
+5. Add read-only annotation for safe tools
+6. Document tool schemas clearly
+
+## Troubleshooting
+- Check stderr for detailed error messages
+- Verify environment variables are loaded
+- Ensure Python version is 3.10+
+- Confirm proper stdout/stderr separation
+- Validate tool schemas and implementations
