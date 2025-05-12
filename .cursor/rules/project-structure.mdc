@@ -1,6 +1,6 @@
 ---
-description:
-globs:
+description: Understanding the overall structure of the project.
+globs: 
 alwaysApply: false
 ---
 # Plexus Project Structure

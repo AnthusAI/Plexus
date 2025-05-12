@@ -1,6 +1,6 @@
 ---
-description:
-globs:
+description: Understanding how the reporting infrastructure works, for generating and storing and displaying reports based on data.
+globs: 
 alwaysApply: false
 ---
 # Plexus Reports Feature
