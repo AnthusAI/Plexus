@@ -1361,3 +1361,44 @@ async def test_multi_node_condition_routing():
         # Check that the "No" condition output wasn't set
         assert 'value' not in final_state_dict  # Value setter node wasn't triggered
         assert final_state_dict['explanation'] == "No"  # This comes from the parser, not the value setter
+
+@pytest.mark.asyncio
+async def test_strip_classification_from_explanation():
+    """Test the functionality of stripping classification from explanations."""
+    parser = Classifier.ClassificationOutputParser(valid_classes=["Yes", "No", "N/A"])
+    
+    # Test case 1: Simple "Yes" at beginning of line
+    output = "Yes, the customer is eligible because they meet criteria X."
+    classification = "Yes"
+    clean_explanation = parser.strip_classification_from_explanation(output, classification)
+    assert clean_explanation == "the customer is eligible because they meet criteria X."
+    
+    # Test case 2: Classification on its own line
+    output = "No\nNQ - Current or Previous Customer"
+    classification = "No"
+    clean_explanation = parser.strip_classification_from_explanation(output, classification)
+    assert clean_explanation == "NQ - Current or Previous Customer"
+    
+    # Test case 3: Multiple line explanation with classification at start
+    output = "Yes\nThe customer is eligible\nBecause they meet criteria X"
+    classification = "Yes"
+    clean_explanation = parser.strip_classification_from_explanation(output, classification)
+    assert clean_explanation == "The customer is eligible\nBecause they meet criteria X"
+    
+    # Test case 4: Classification with different casing
+    output = "YES - the customer is eligible"
+    classification = "Yes"
+    clean_explanation = parser.strip_classification_from_explanation(output, classification)
+    assert clean_explanation == "the customer is eligible"
+    
+    # Test case 5: Classification with punctuation
+    output = "No. NQ - Voicemail"
+    classification = "No"
+    clean_explanation = parser.strip_classification_from_explanation(output, classification)
+    assert clean_explanation == "NQ - Voicemail"
+    
+    # Test case 6: Classification with colon
+    output = "No: NQ - Current or Previous Customer"
+    classification = "No"
+    clean_explanation = parser.strip_classification_from_explanation(output, classification)
+    assert clean_explanation == "NQ - Current or Previous Customer"

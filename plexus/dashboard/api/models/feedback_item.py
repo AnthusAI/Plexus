@@ -1,0 +1,612 @@
+import logging
+from datetime import datetime
+from typing import List, Optional, Dict, Any, TYPE_CHECKING
+from dataclasses import dataclass, field
+
+from plexus.dashboard.api.models.base import BaseModel
+from plexus.dashboard.api.models.feedback_change_detail import FeedbackChangeDetail
+
+if TYPE_CHECKING:
+    from plexus.dashboard.api.client import PlexusDashboardClient
+    from plexus.dashboard.api.models.account import Account
+    from plexus.dashboard.api.models.scorecard import Scorecard
+    from plexus.dashboard.api.models.score import Score
+
+logger = logging.getLogger(__name__)
+
+@dataclass
+class FeedbackItem(BaseModel):
+    """
+    Represents aggregated feedback results for a specific form/question combination.
+    Corresponds to the FeedbackItem model in the GraphQL schema.
+    """
+    id: Optional[str] = None
+    accountId: Optional[str] = None
+    scorecardId: Optional[str] = None
+    cacheKey: Optional[str] = None # Maps to Call Criteria form_id
+    scoreId: Optional[str] = None # Maps to Call Criteria question_id
+    initialAnswerValue: Optional[str] = None
+    finalAnswerValue: Optional[str] = None
+    initialCommentValue: Optional[str] = None
+    finalCommentValue: Optional[str] = None
+    editCommentValue: Optional[str] = None
+    isAgreement: Optional[bool] = None
+    createdAt: Optional[datetime] = None
+    updatedAt: Optional[datetime] = None
+
+    # Relationships - lazy loaded
+    account: Optional['Account'] = field(default=None, repr=False)
+    scorecard: Optional['Scorecard'] = field(default=None, repr=False)
+    score: Optional['Score'] = field(default=None, repr=False)
+
+    _client: Optional['PlexusDashboardClient'] = field(default=None, repr=False)
+    _raw_data: Optional[Dict[str, Any]] = field(default=None, repr=False)
+
+    GRAPHQL_BASE_FIELDS = [
+        'id', 'accountId', 'scorecardId', 'cacheKey', 'scoreId',
+        'initialAnswerValue', 'finalAnswerValue', 'initialCommentValue',
+        'finalCommentValue', 'editCommentValue', 'isAgreement', 'createdAt', 'updatedAt'
+    ]
+    GRAPHQL_RELATIONSHIP_FIELDS = {
+        # Relationship fields can be added here if needed
+    }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any], client: Optional['PlexusDashboardClient'] = None) -> 'FeedbackItem':
+        """
+        Create a FeedbackItem instance from a dictionary.
+        
+        Args:
+            data: Dictionary containing the FeedbackItem data.
+            client: Optional API client to associate with the instance.
+            
+        Returns:
+            A new FeedbackItem instance.
+        """
+        # Handle datetime fields
+        if 'createdAt' in data and data['createdAt'] and isinstance(data['createdAt'], str):
+            data['createdAt'] = datetime.fromisoformat(data['createdAt'].replace('Z', '+00:00'))
+        if 'updatedAt' in data and data['updatedAt'] and isinstance(data['updatedAt'], str):
+            data['updatedAt'] = datetime.fromisoformat(data['updatedAt'].replace('Z', '+00:00'))
+            
+        # Create instance with data
+        instance = cls(
+            id=data.get('id'),
+            accountId=data.get('accountId'),
+            scorecardId=data.get('scorecardId'),
+            cacheKey=data.get('cacheKey'),
+            scoreId=data.get('scoreId'),
+            initialAnswerValue=data.get('initialAnswerValue'),
+            finalAnswerValue=data.get('finalAnswerValue'),
+            initialCommentValue=data.get('initialCommentValue'),
+            finalCommentValue=data.get('finalCommentValue'),
+            editCommentValue=data.get('editCommentValue'),
+            isAgreement=data.get('isAgreement'),
+            createdAt=data.get('createdAt'),
+            updatedAt=data.get('updatedAt')
+        )
+        
+        # Set client and raw data
+        instance._client = client
+        instance._raw_data = data
+        
+        return instance
+
+    @classmethod
+    def _build_query(
+        cls, 
+        fields: Optional[List[str]] = None, 
+        relationship_fields: Optional[Dict[str, List[str]]] = None
+    ) -> str:
+        """Builds the GraphQL query string including specified relationships."""
+        if fields is None:
+            fields = cls.GRAPHQL_BASE_FIELDS
+        if relationship_fields is None:
+            relationship_fields = {}
+            
+        query_parts = list(fields)
+        
+        for rel_name, rel_fields in relationship_fields.items():
+            # Add handling for relationships like account, scorecard, score if needed
+            pass
+            
+        return f"{{ {' '.join(query_parts)} }}"
+
+    @classmethod
+    def get(cls, id: str, client: 'PlexusDashboardClient', fields: Optional[List[str]] = None, relationship_fields: Optional[Dict[str, List[str]]] = None) -> Optional['FeedbackItem']:
+        """Retrieve a specific FeedbackItem by its ID."""
+        query_name = "getFeedbackItem"
+        query_body = cls._build_query(fields, relationship_fields)
+        
+        # Construct the full query string
+        query_string = f"""
+            query GetFeedbackItem($id: ID!) {{
+                {query_name}(id: $id) {query_body}
+            }}
+        """
+        variables = {"id": id}
+        
+        logger.debug(f"Executing GraphQL query: {query_string} with variables: {variables}")
+        # Call client.execute directly
+        response = client.execute(query=query_string, variables=variables)
+        
+        if response and query_name in response and response[query_name]:
+            item_data = response[query_name]
+            return cls.from_dict(item_data, client=client)
+        elif response and 'errors' in response:
+             logger.error(f"GraphQL errors fetching FeedbackItem {id}: {response['errors']}")
+        return None
+
+    @classmethod
+    def list(
+        cls, 
+        client: 'PlexusDashboardClient', 
+        account_id: Optional[str] = None, 
+        scorecard_id: Optional[str] = None,
+        score_id: Optional[str] = None,
+        cache_key: Optional[str] = None,
+        limit: int = 100, 
+        next_token: Optional[str] = None,
+        fields: Optional[List[str]] = None,
+        relationship_fields: Optional[Dict[str, List[str]]] = None
+    ) -> (List['FeedbackItem'], Optional[str]):
+        """List FeedbackItems with optional filtering."""
+        query_name = "listFeedbackItems"
+        
+        # Fixed for accounts - corrected the field name to match schema
+        if account_id and not (scorecard_id or score_id or cache_key):
+            query_name = "listFeedbackItemByAccountIdAndUpdatedAt"  # Fixed field name
+            
+        query_body_items = cls._build_query(fields, relationship_fields)
+        query_body = f"""
+            {{
+                items {query_body_items}
+                nextToken
+            }}
+        """
+        
+        # Prepare variables based on query type
+        variables = {}
+        if query_name == "listFeedbackItemByAccountIdAndUpdatedAt":
+            variables = {
+                "accountId": account_id,
+                "limit": limit,
+                "nextToken": next_token
+            }
+            # Construct query string for account-based list
+            query_string = f"""
+                query ListFeedbackItemsByAccount($accountId: String!, $limit: Int, $nextToken: String) {{
+                    {query_name}(accountId: $accountId, limit: $limit, nextToken: $nextToken) {query_body}
+                }}
+            """
+        else:
+            # Standard filtering logic for regular list
+            filters = {}
+            if account_id:
+                filters["accountId"] = {"eq": account_id}
+            if scorecard_id:
+                filters["scorecardId"] = {"eq": scorecard_id}
+            if score_id:
+                filters["scoreId"] = {"eq": score_id}
+            if cache_key:
+                filters["cacheKey"] = {"eq": cache_key}
+                
+            variables = {
+                "filter": filters if filters else None,
+                "limit": limit,
+                "nextToken": next_token
+            }
+            
+            # Construct the full query string with arguments for standard list
+            query_string = f"""
+                query ListFeedbackItems(
+                    $filter: ModelFeedbackItemFilterInput, 
+                    $limit: Int, 
+                    $nextToken: String
+                ) {{
+                    {query_name}(filter: $filter, limit: $limit, nextToken: $nextToken) {query_body}
+                }}
+            """
+        
+        # Remove None values from variables
+        variables = {k: v for k, v in variables.items() if v is not None}
+        
+        logger.debug(f"Executing GraphQL query: {query_string} with variables: {variables}")
+        # Call client.execute directly
+        response = client.execute(query=query_string, variables=variables)
+        
+        items = []
+        new_next_token = None
+        
+        if response and query_name in response and response[query_name]:
+            list_data = response[query_name]
+            items = [cls.from_dict(item_data, client=client) for item_data in list_data.get('items', [])]
+            new_next_token = list_data.get('nextToken')
+        elif response and 'errors' in response:
+             logger.error(f"GraphQL errors listing FeedbackItems: {response['errors']}")
+
+        return items, new_next_token
+
+    @classmethod
+    def create(cls, client: 'PlexusDashboardClient', data: Dict[str, Any]) -> Optional['FeedbackItem']:
+        """Create a new FeedbackItem."""
+        mutation_name = "createFeedbackItem"
+        input_variable_name = "input"
+        input_type = "CreateFeedbackItemInput!" # Assuming standard Amplify input type
+        input_data = data # Assume data is already formatted correctly
+        
+        return_fields = cls.GRAPHQL_BASE_FIELDS 
+        mutation_body = cls._build_query(return_fields) # Just get base fields back for now
+
+        # Construct the full mutation string
+        mutation_string = f"""
+            mutation CreateFeedbackItem($input: {input_type}) {{
+                {mutation_name}(input: $input) {mutation_body}
+            }}
+        """
+        variables = {input_variable_name: input_data}
+
+        logger.debug(f"Executing GraphQL mutation: {mutation_string} with variables: {variables}")
+        # Call client.execute directly
+        response = client.execute(query=mutation_string, variables=variables)
+
+        if response and mutation_name in response and response[mutation_name]:
+            created_data = response[mutation_name]
+            return cls.from_dict(created_data, client=client)
+        elif response and 'errors' in response:
+             error_message = f"GraphQL errors creating FeedbackItem: {response['errors']}"
+             logger.error(error_message)
+             # Optionally raise an exception or return None
+             raise Exception(error_message) # Raising exception to make failure explicit
+
+        return None
+        
+    # --- Relationship Loading Methods ---
+    
+    def load_change_details(self, force_reload: bool = False):
+        """Loads the related FeedbackChangeDetail records."""
+        if not self._client or not self.id:
+            logger.warning("Cannot load change details without a client and FeedbackItem ID.")
+            return
+            
+        if self.changeDetails is None or force_reload:
+            logger.debug(f"Loading change details for FeedbackItem {self.id}")
+            # Paginate if necessary
+            details = []
+            next_token = None
+            while True:
+                results, next_token = FeedbackChangeDetail.list(
+                    client=self._client, 
+                    feedback_item_id=self.id, 
+                    limit=1000, # Adjust limit as needed
+                    next_token=next_token
+                )
+                details.extend(results)
+                if not next_token:
+                    break
+            self.changeDetails = details
+            logger.debug(f"Loaded {len(self.changeDetails)} change details for FeedbackItem {self.id}")
+
+    # Add similar load methods for account, scorecard, score if needed
+
+    # Update/Delete methods would follow a similar pattern if needed 
+    
+    @classmethod
+    def count_by_account_id(cls, account_id: str, client: 'PlexusDashboardClient') -> int:
+        """
+        Count the number of FeedbackItem records for a specific account.
+        
+        Args:
+            account_id: The ID of the account to count records for.
+            client: The API client to use.
+            
+        Returns:
+            int: The number of FeedbackItem records for the account.
+        """
+        # Use the list method with a limit but only count items
+        items, next_token = cls.list(
+            client=client,
+            account_id=account_id,
+            limit=1000,  # Use a large limit to minimize pagination
+            fields=['id']  # Only fetch ID to minimize data transfer
+        )
+        
+        total_count = len(items)
+        
+        # Handle pagination
+        while next_token:
+            items, next_token = cls.list(
+                client=client,
+                account_id=account_id,
+                limit=1000,
+                next_token=next_token,
+                fields=['id']
+            )
+            total_count += len(items)
+            
+        return total_count
+    
+    @classmethod
+    def delete_all_by_account_id(cls, account_id: str, client: 'PlexusDashboardClient', 
+                               progress=None, task_id=None) -> int:
+        """
+        Delete all FeedbackItem records for a specific account.
+        
+        Args:
+            account_id: The ID of the account to delete records for.
+            client: The API client to use.
+            progress: Optional progress bar instance to use for tracking progress.
+            task_id: Optional task ID within the progress bar to update.
+            
+        Returns:
+            int: The number of records deleted.
+        """
+        import time
+        # Only import if we need to create our own progress bar
+        if progress is None:
+            from rich.progress import Progress, TextColumn, BarColumn, TimeElapsedColumn, TimeRemainingColumn
+
+        deleted_count = 0
+        batch_size = 50  # Delete in batches to avoid overwhelming the API
+        
+        # First, get the total count for progress reporting
+        total_items = cls.count_by_account_id(account_id, client)
+        
+        if total_items == 0:
+            logger.info("No FeedbackItem records found to delete.")
+            return 0
+            
+        # Determine if we need to create our own progress bar
+        use_external_progress = progress is not None and task_id is not None
+        internal_progress = None
+        task = task_id
+        
+        try:
+            # Create our own progress bar if not provided
+            if not use_external_progress:
+                internal_progress = Progress(
+                    TextColumn("[bold blue]{task.description}"),
+                    BarColumn(bar_width=50),
+                    TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                    TextColumn("[cyan]{task.completed}/{task.total}"),
+                    TimeElapsedColumn(),
+                    TimeRemainingColumn(),
+                    expand=True
+                )
+                internal_progress.start()
+                task = internal_progress.add_task(f"[cyan]Deleting FeedbackItem records", total=total_items)
+                # Use the internal progress from now on
+                progress = internal_progress
+            
+            # First, fetch all IDs (this is more efficient than fetching in batches)
+            all_ids = []
+            next_token = None
+            
+            logger.info(f"Collecting all FeedbackItem IDs for account {account_id}...")
+            while True:
+                # Fetch a batch of IDs
+                items, next_token = cls.list(
+                    client=client,
+                    account_id=account_id,
+                    limit=1000,  # Use a large limit to minimize pagination API calls
+                    next_token=next_token,
+                    fields=['id']  # Only fetch ID to minimize data transfer
+                )
+                
+                if not items:
+                    break
+                    
+                # Extract IDs from items
+                all_ids.extend([item.id for item in items])
+                
+                # Update progress bar for collection phase
+                progress.update(task, description=f"[cyan]Collecting IDs ({len(all_ids)}/{total_items})")
+                
+                # If no next token, we've reached the end
+                if not next_token:
+                    break
+            
+            # Reset progress bar for deletion phase
+            progress.update(task, description="[cyan]Deleting FeedbackItem records", completed=0)
+            
+            # Process deletions in batches
+            for i in range(0, len(all_ids), batch_size):
+                batch = all_ids[i:i+batch_size]
+                
+                # Construct batch mutation
+                batch_operations = []
+                for item_id in batch:
+                    # Clean ID for alias to avoid GraphQL errors
+                    clean_id = ''.join(c for c in item_id if c.isalnum())
+                    batch_operations.append(
+                        f"""
+                        delete{clean_id}: deleteFeedbackItem(input: {{id: "{item_id}"}}) {{
+                            id
+                        }}
+                        """
+                    )
+                
+                # Execute batch mutation
+                if batch_operations:
+                    try:
+                        mutation = f"""
+                        mutation BatchDeleteFeedbackItems {{
+                            {" ".join(batch_operations)}
+                        }}
+                        """
+                        
+                        result = client.execute(query=mutation)
+                        
+                        # Check results and count successful deletions
+                        if result:
+                            for item_id in batch:
+                                clean_id = ''.join(c for c in item_id if c.isalnum())
+                                field_name = f"delete{clean_id}"
+                                if field_name in result and result[field_name] and result[field_name].get('id'):
+                                    deleted_count += 1
+                    except Exception as e:
+                        # If batch deletion fails, fall back to individual deletions
+                        logger.warning(f"Batch deletion failed, falling back to individual deletions: {e}")
+                        for item_id in batch:
+                            try:
+                                mutation = """
+                                mutation DeleteFeedbackItem($input: DeleteFeedbackItemInput!) {
+                                    deleteFeedbackItem(input: $input) {
+                                        id
+                                    }
+                                }
+                                """
+                                result = client.execute(query=mutation, variables={'input': {'id': item_id}})
+                                
+                                if result and 'deleteFeedbackItem' in result and result['deleteFeedbackItem']:
+                                    deleted_count += 1
+                                else:
+                                    logger.warning(f"Failed to delete FeedbackItem {item_id}. Response: {result}")
+                            except Exception as e:
+                                logger.error(f"Error deleting FeedbackItem {item_id}: {e}")
+                
+                # Update progress after each batch
+                progress.update(task, advance=len(batch))
+                
+                # Small delay to prevent API rate limiting
+                time.sleep(0.1)
+        
+        finally:
+            # Clean up if we created our own progress bar
+            if internal_progress is not None:
+                internal_progress.stop()
+            
+        logger.info(f"Deleted {deleted_count} FeedbackItem records for account {account_id}")
+        return deleted_count
+
+    @classmethod
+    def get_by_composite_key(cls, client: 'PlexusDashboardClient', account_id: str, scorecard_id: str, 
+                            score_id: str, cache_key: str) -> Optional['FeedbackItem']:
+        """
+        Efficiently retrieve a FeedbackItem using the combination of account, scorecard, score, and cache key.
+        
+        Args:
+            client: The API client
+            account_id: Account ID
+            scorecard_id: Scorecard ID
+            score_id: Score ID
+            cache_key: Cache key for this feedback item
+            
+        Returns:
+            FeedbackItem or None if not found
+        """
+        # Use standard query with filters and pagination to ensure we check all potential records
+        query = """
+        query GetFeedbackItemByCompositeKey(
+            $filter: ModelFeedbackItemFilterInput!,
+            $limit: Int,
+            $nextToken: String
+        ) {
+            listFeedbackItems(
+                filter: $filter,
+                limit: $limit,
+                nextToken: $nextToken
+            ) {
+                items {
+                    id
+                    accountId
+                    scorecardId
+                    cacheKey
+                    scoreId
+                    initialAnswerValue
+                    finalAnswerValue
+                    initialCommentValue
+                    finalCommentValue
+                    editCommentValue
+                    isAgreement
+                    createdAt
+                    updatedAt
+                }
+                nextToken
+            }
+        }
+        """
+        
+        # Use AND filter combination to match all 4 key components
+        filter_condition = {
+            "and": [
+                {"accountId": {"eq": account_id}},
+                {"scorecardId": {"eq": scorecard_id}},
+                {"scoreId": {"eq": score_id}}, 
+                {"cacheKey": {"eq": cache_key}}
+            ]
+        }
+        
+        variables = {
+            "filter": filter_condition,
+            "limit": 25  # Increased from 1 to handle potential duplicates
+        }
+        
+        logger.debug(f"Executing get_by_composite_key query with variables: {variables}")
+        
+        try:
+            # Handle pagination to ensure we get ALL matching records
+            all_items = []
+            next_token = None
+            
+            while True:
+                # Add the next token if we have one
+                if next_token:
+                    variables["nextToken"] = next_token
+                
+                # Execute the query
+                response = client.execute(query=query, variables=variables)
+                
+                if response and 'listFeedbackItems' in response:
+                    items = response['listFeedbackItems'].get('items', [])
+                    if items:
+                        all_items.extend(items)
+                    
+                    # Get the next token for pagination
+                    next_token = response['listFeedbackItems'].get('nextToken')
+                    
+                    # If no next token, we've reached the end
+                    if not next_token:
+                        break
+                else:
+                    logger.warning(f"Unexpected response structure from query: {response}")
+                    break
+            
+            # Process the results
+            if all_items:
+                # If we found multiple items, log a warning - this shouldn't happen with proper indexing
+                if len(all_items) > 1:
+                    logger.warning(f"Found {len(all_items)} FeedbackItems with the same composite key: "
+                                  f"account={account_id}, scorecard={scorecard_id}, score={score_id}, "
+                                  f"cache_key={cache_key}. Using the first one.")
+                    
+                    # Use the most recently updated item if there are multiple
+                    all_items.sort(key=lambda x: x.get('updatedAt', ''), reverse=True)
+                
+                # Return the first (or most recently updated) item
+                return cls.from_dict(all_items[0], client=client)
+            else:
+                logger.debug(f"No FeedbackItem found with filter: account={account_id}, scorecard={scorecard_id}, "
+                            f"score={score_id}, cache_key={cache_key}")
+                
+        except Exception as e:
+            logger.error(f"Error querying FeedbackItem by composite key: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            
+        return None
+
+    @classmethod
+    def generate_cache_key(cls, score_id: str, form_id: str) -> str:
+        """
+        Generate a cache key for a feedback item based on score ID and form ID.
+        
+        Args:
+            score_id: The score ID
+            form_id: The form ID
+            
+        Returns:
+            A string that can be used as a cache key
+        """
+        # Simple concatenation with a separator
+        return f"{score_id}:{form_id}" 

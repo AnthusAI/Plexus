@@ -963,4 +963,53 @@ export function observeTaskStageUpdates() {
       subscriptions.forEach(sub => sub.unsubscribe());
     };
   });
+}
+
+export function observeItemCreations() {
+  const client = getClient();
+  
+  return {
+    subscribe(handler: SubscriptionHandler<any>) {
+      const subscription = client.graphql({
+        query: `
+          subscription OnCreateItem {
+            onCreateItem {
+              id
+              externalId
+              description
+              accountId
+              scorecardId
+              scoreId
+              evaluationId
+              updatedAt
+              createdAt
+              isEvaluation
+            }
+          }
+        `
+      }) as unknown as { subscribe: Function };
+
+      return subscription.subscribe({
+        next: async ({ data }: { data?: { onCreateItem: Schema['Item']['type'] } }) => {
+          // Log the notification but with a note about null data
+          if (!data?.onCreateItem) {
+            console.log('Item creation subscription received null data - this is expected with Amplify Gen2');
+            return; // Skip processing for null data
+          }
+          
+          console.log('Item creation subscription received valid data:', data.onCreateItem);
+          try {
+            handler.next({ data: data.onCreateItem });
+          } catch (error) {
+            console.error('Error processing item creation:', error);
+            handler.error(error as Error);
+          }
+        },
+        error: (error: Error) => {
+          handler.error(error);
+          console.error('Error in item creation subscription:', error);
+        }
+      });
+    }
+  };
 } 

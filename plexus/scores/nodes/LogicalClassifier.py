@@ -16,7 +16,8 @@ class LogicalClassifier(BaseNode):
     
     class Parameters(BaseNode.Parameters):
         code: str = Field(description="Python code string defining the score function")
-        conditions: list = Field(description="List of conditions for routing results")
+        # Make conditions optional with a default of None
+        conditions: Optional[list] = Field(default=None, description="List of conditions for routing results")
 
     class GraphState(BaseNode.GraphState):
         classification: Optional[str]
@@ -49,11 +50,27 @@ class LogicalClassifier(BaseNode):
             if isinstance(state, dict):
                 state = self.GraphState(**state)
 
-            # Create Score.Input from state
+            # Create a merged metadata dictionary that includes both the existing metadata
+            # and all state attributes (excluding 'metadata' itself to avoid recursion)
+            state_dict = state.model_dump()
+
+            logging.info(f"LogicalClassifier state_dict: {state_dict}")
+
+            merged_metadata = state_dict.get('metadata', {}).copy()
+
+            # Add all state attributes directly to metadata
+            for key, value in state_dict.items():
+                if key != 'metadata' and key != 'text':
+                    merged_metadata[key] = value
+            
+            # Create Score.Input from state with enhanced metadata
             score_input = Score.Input(
                 text=state.text,
-                metadata=state.metadata if hasattr(state, 'metadata') else {}
+                metadata=merged_metadata
             )
+
+            logging.info(f"LogicalClassifier parameters: {parameters}")
+            logging.info(f"LogicalClassifier score_input: {score_input}")
 
             # Execute the score function with both parameters and input
             result = score_function(parameters, score_input)

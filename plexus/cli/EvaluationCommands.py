@@ -1131,7 +1131,7 @@ def get_data_driven_samples(
     if os.path.exists(content_ids_to_exclude_filename):
         with open(content_ids_to_exclude_filename, 'r') as file:
             content_ids_to_exclude = file.read().splitlines()
-        samples = [sample for sample in samples if sample['content_id'] not in content_ids_to_exclude]
+        samples = [sample for sample in samples if str(sample['content_id']) not in content_ids_to_exclude]
         logging.info(f"Number of samples after filtering out training examples: {len(samples)}")
 
     # Filter samples based on content_ids_to_sample if provided

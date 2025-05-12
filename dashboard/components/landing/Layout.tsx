@@ -16,7 +16,6 @@ import {
 
 const landingPages = [
   { href: '/solutions/platform', label: 'Platform' },
-  { href: '/solutions/call-center-qa', label: 'Call Center QA' },
   { href: '/solutions/optimizer-agents', label: 'Optimizer Agents' },
   { href: '/solutions/enterprise', label: 'Enterprise' },
   { href: '/solutions/resources', label: 'Resources' }

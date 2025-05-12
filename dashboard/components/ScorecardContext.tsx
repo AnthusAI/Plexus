@@ -123,10 +123,6 @@ const ScorecardContext: React.FC<ScorecardContextProps> = ({
     fetchScores()
   }, [selectedScorecard, useMockData])
 
-  if (isLoading) {
-    return <div>Loading scorecards...</div>
-  }
-
   const handleScoreChange = (value: string) => {
     console.debug('Score selection changed:', { 
       newValue: value, 

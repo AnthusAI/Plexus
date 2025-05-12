@@ -58,9 +58,9 @@ class Classifier(BaseNode):
             # Remove all non-alphanumeric characters except spaces
             return ''.join(c.lower() for c in text if c.isalnum() or c.isspace())
 
-        def find_matches_in_text(self, text: str) -> List[Tuple[str, int, int]]:
+        def find_matches_in_text(self, text: str) -> List[Tuple[str, int, int, int]]:
             """Find all matches in text with their line and position.
-            Returns list of tuples: (valid_class, line_number, position)
+            Returns list of tuples: (valid_class, line_number, position, original_index)
             """
             matches = []
             lines = text.strip().split('\n')
@@ -68,9 +68,15 @@ class Classifier(BaseNode):
             # First normalize all valid classes (do this once)
             normalized_classes = [(vc, self.normalize_text(vc), i) for i, vc in enumerate(self.valid_classes)]
             
-            # When parsing from end, sort by length to handle overlapping terms
-            # When parsing from start, keep original order
-            if not self.parse_from_start:
+            # Sort by appropriate strategy:
+            # 1. For parse_from_start=True: use original order, but handle exact same match text
+            # 2. For parse_from_start=False: sort by length (descending) to prioritize specific classes
+            if self.parse_from_start:
+                # When parsing from start, maintain original order
+                # (Already in original order, so no sorting needed)
+                pass
+            else:
+                # When parsing from end, sort by length to handle overlapping terms
                 normalized_classes.sort(key=lambda x: len(x[1]), reverse=True)
             
             # Process each line
@@ -91,11 +97,27 @@ class Classifier(BaseNode):
                                 normalized_line[pos + len(normalized_class)].isspace())
                         
                         if before and after:
-                            # Store original index to maintain order
-                            matches.append((original_class, line_idx, pos, original_idx))
-                            # When parsing from start, return first match immediately
-                            if self.parse_from_start:
-                                return [(original_class, line_idx, pos, original_idx)]
+                            # Check for already matched terms that completely contain this match
+                            conflict = False
+                            if not self.parse_from_start:
+                                for m_class, m_line, m_pos, m_idx in matches:
+                                    m_norm = self.normalize_text(m_class)
+                                    # If they're on the same line and there's an overlap
+                                    if (m_line == line_idx and 
+                                        m_pos <= pos < m_pos + len(m_norm) and 
+                                        len(m_norm) > len(normalized_class)):
+                                        # Longer match takes precedence
+                                        conflict = True
+                                        break
+                            
+                            if not conflict:
+                                # Store match
+                                matches.append((original_class, line_idx, pos, original_idx))
+                                
+                                # When parsing from start, return first match immediately
+                                if self.parse_from_start:
+                                    return [(original_class, line_idx, pos, original_idx)]
+                            
                             # Skip past this match
                             pos += len(normalized_class)
                         else:
@@ -113,9 +135,66 @@ class Classifier(BaseNode):
                 # When parsing from start, we already have the first match
                 return matches[0][0]
             else:
-                # When parsing from end, sort by line and position in reverse
+                # When parsing from end, sort by position (line and column) in reverse
+                # For substring conflicts, we already handled this in find_matches_in_text
                 matches.sort(key=lambda x: (x[1], x[2]), reverse=True)
                 return matches[0][0]  # Return the original class name
+
+        def strip_classification_from_explanation(self, output: str, classification: str) -> str:
+            """Remove the classification from the explanation text."""
+            if not classification:
+                return output.strip()
+
+            lines = output.strip().split('\n')
+            result_lines = []
+            classification_removed = False
+
+            # Normalize the classification for comparison
+            normalized_classification = self.normalize_text(classification)
+            
+            for line in lines:
+                normalized_line = self.normalize_text(line)
+                
+                # Skip lines that ONLY contain the classification or very short lines with the classification
+                if (normalized_line == normalized_classification or 
+                    (len(normalized_line) < len(normalized_classification) + 5 and 
+                     normalized_classification in normalized_line)):
+                    classification_removed = True
+                    continue
+                
+                result_lines.append(line)
+            
+            # If we didn't filter any lines and there are at least 2 lines,
+            # try to remove classification from the beginning of the first line
+            if not classification_removed and len(lines) >= 1:
+                first_line = lines[0]
+                normalized_first = self.normalize_text(first_line)
+                
+                if normalized_first.startswith(normalized_classification):
+                    # Try to find where to split the first line
+                    # Look for common separators after the classification
+                    original_class_len = len(classification)
+                    potential_cuts = [
+                        first_line.find(': ', 0, len(first_line)),
+                        first_line.find(' - ', 0, len(first_line)),
+                        first_line.find('. ', 0, len(first_line)),
+                        first_line.find(', ', 0, len(first_line)),
+                        first_line.find(':\n', 0, len(first_line)),
+                        first_line.find('.\n', 0, len(first_line))
+                    ]
+                    
+                    valid_cuts = [cut for cut in potential_cuts if cut > 0]
+                    if valid_cuts:
+                        cut_point = min(valid_cuts) + 2  # +2 to include the separator
+                        result_lines[0] = first_line[cut_point:].strip()
+                    else:
+                        # No clear separator found, try a simpler approach
+                        for i, char in enumerate(first_line):
+                            if i >= original_class_len and not char.isalnum():
+                                result_lines[0] = first_line[i+1:].strip()
+                                break
+            
+            return '\n'.join(result_lines).strip()
 
         def parse(self, output: str) -> Dict[str, Any]:
             # Find all matches in the text
@@ -124,9 +203,12 @@ class Classifier(BaseNode):
             # Select the appropriate match
             selected_class = self.select_match(matches, output)
             
+            # Remove the classification from the explanation
+            clean_explanation = self.strip_classification_from_explanation(output, selected_class)
+            
             return {
                 "classification": selected_class,
-                "explanation": output.strip()
+                "explanation": clean_explanation or output.strip()  # Fall back to original if empty
             }
 
     def get_llm_prompt_node(self):

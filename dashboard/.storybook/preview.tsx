@@ -4,6 +4,9 @@ import '../app/globals.css';
 import { ThemeProvider } from '../components/theme-provider';
 import { withThemeByClassName } from "@storybook/addon-themes";
 
+// Import the block registry setup for side effects (registers blocks globally for Storybook)
+import "@/components/blocks/registrySetup";
+
 // Add Google Font
 const GoogleFontDecorator = (Story: React.ComponentType) => {
   React.useEffect(() => {

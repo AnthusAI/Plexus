@@ -455,6 +455,7 @@ export function useEvaluationData({
                 evaluation: () => Promise.resolve({ data: evaluationWithTask }),
                 scorecard: () => Promise.resolve({ data: null }),
                 score: () => Promise.resolve({ data: null }),
+                report: () => Promise.resolve({ data: null }),
                 updatedAt: new Date().toISOString()
               };
               
@@ -552,6 +553,7 @@ export function useEvaluationData({
                 evaluation: () => Promise.resolve({ data: evaluationWithTask }),
                 scorecard: () => Promise.resolve({ data: null }),
                 score: () => Promise.resolve({ data: null }),
+                report: () => Promise.resolve({ data: null }),
                 updatedAt: new Date().toISOString()
               };
               
