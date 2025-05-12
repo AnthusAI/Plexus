@@ -1,0 +1,67 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# Plexus URL Routing & Deep Linking
+
+## Overview
+Plexus implements client-side URL updates with browser's History API for seamless navigation without full page reloads, particularly for item selection patterns.
+
+## Deep Linking Implementation
+The deep linking approach allows for:
+- URL updates reflecting selected items (e.g., `/lab/evaluations/[id]` or `/lab/reports/[id]`)
+- Browser back/forward navigation support
+- Direct navigation via URL
+- State persistence without full page re-renders
+
+## Implementation Pattern
+Use this pattern when implementing selection-based views:
+
+1. **URL Updates via History API**:
+```typescript
+// When selecting an item
+window.history.pushState(null, '', `/lab/${section}/${itemId}`);
+
+// When deselecting
+window.history.pushState(null, '', `/lab/${section}`);
+```
+
+2. **Popstate Event Listener**:
+```typescript
+useEffect(() => {
+  const handlePopState = () => {
+    // Extract ID from URL if present
+    const match = window.location.pathname.match(/\/lab\/section\/([^\/]+)$/);
+    const idFromUrl = match ? match[1] : null;
+    
+    // Update selection state
+    setSelectedItemId(idFromUrl);
+  };
+
+  window.addEventListener('popstate', handlePopState);
+  return () => window.removeEventListener('popstate', handlePopState);
+}, []);
+```
+
+3. **Initial Deep Link Handling**:
+```typescript
+useEffect(() => {
+  // If URL contains an ID parameter on initial load
+  if (params && 'id' in params) {
+    setSelectedItemId(params.id as string);
+  }
+}, [params]);
+```
+
+## Key Files
+- `dashboard/app/lab/evaluations/page.tsx`: Example implementation for evaluations
+- `dashboard/app/lab/reports/page.tsx`: Implementation for reports
+- `dashboard/components/common/url-helpers.ts`: URL handling utilities
+
+## Benefits
+- Improved performance (no unnecessary re-renders)
+- Better UX (no flashing or state resets)
+- Preserved state during navigation
+- SEO and sharing capabilities via meaningful URLs
+- Standard browser navigation behavior

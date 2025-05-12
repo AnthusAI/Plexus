@@ -1,0 +1,122 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# Task Dispatch System
+
+This guide explains Plexus's two-level task dispatch system that connects our Next.js dashboard to Python AI/ML workers.
+
+## System Architecture
+
+### High-Level Components
+1. **Dashboard Layer**
+   - Next.js/React frontend with Amplify Gen2
+   - GraphQL API with Task and TaskStage models
+   - Real-time updates via GraphQL subscriptions
+
+2. **Dispatch Layer**
+   - AWS Lambda function triggered by DynamoDB streams
+   - Celery task dispatch to worker nodes
+   - AWS SQS for message queuing
+
+3. **Worker Layer**
+   - Python workers running Celery tasks
+   - TaskProgressTracker for standardized progress tracking
+   - CLI command execution and result handling
+
+### Key Files
+- [CommandDispatch.py](mdc:Plexus_2/plexus/cli/CommandDispatch.py) - Celery app configuration and worker management
+- [CommandTasks.py](mdc:Plexus_2/plexus/cli/CommandTasks.py) - Task execution and progress tracking
+- [task_dispatcher.py](mdc:Plexus_2/plexus/lambda/task_dispatcher.py) - Lambda handler for DynamoDB stream events
+- [task_progress_tracker.py](mdc:Plexus_2/plexus/cli/task_progress_tracker.py) - Progress tracking implementation
+- [Task.tsx](mdc:Plexus_2/dashboard/components/Task.tsx) - React component for task display
+- [task-status.tsx](mdc:Plexus_2/dashboard/components/ui/task-status.tsx) - Progress bar UI implementation
+
+## Data Flow
+
+### Task Creation & Dispatch
+1. User initiates task from dashboard or CLI
+2. Task record created in DynamoDB via GraphQL API
+3. DynamoDB stream triggers Lambda function
+4. Lambda dispatches Celery task to SQS queue
+5. Worker picks up task from queue
+
+### Progress Tracking
+1. Worker uses TaskProgressTracker to manage stages
+2. Progress updates flow through Task API
+3. GraphQL subscriptions push updates to dashboard
+4. UI components display real-time progress
+
+### Result Handling
+1. Worker stores results in DynamoDB
+2. Task record updated with completion status
+3. Dashboard displays results via GraphQL API
+
+## AWS Integration
+
+### DynamoDB
+- Task and TaskStage models for progress tracking
+- Custom indexes for efficient querying
+- Stream triggers for task dispatch
+
+### SQS
+- Message broker for Celery tasks
+- Auto-created queues with configurable names
+- Worker polling and message handling
+
+### Lambda
+- Python function for task dispatch
+- DynamoDB stream integration
+- Celery task creation and queueing
+
+## Progress Tracking System
+
+### TaskProgressTracker
+- Thread-safe singleton for global state
+- Stage management with configurable stages
+- Progress calculation and status messages
+- Support for both sync and async operations
+
+### Stage Configuration
+- Setup stages (no progress bar)
+- Processing stages (with progress bar)
+- Finalizing stages (no progress bar)
+- Status messages and timing information
+
+### UI Integration
+- Real-time progress updates
+- Stage transitions and animations
+- Error state handling
+- Estimated completion times
+
+## Environment Configuration
+
+### Required Variables
+- `CELERY_AWS_ACCESS_KEY_ID`: AWS access key
+- `CELERY_AWS_SECRET_ACCESS_KEY`: AWS secret key
+- `CELERY_AWS_REGION_NAME`: AWS region
+- `CELERY_RESULT_BACKEND_TEMPLATE`: DynamoDB backend URL
+
+### Optional Variables
+- `CELERY_QUEUE_NAME`: Custom queue name (default: "plexus-celery")
+
+## Best Practices
+
+### Task Design
+- Use meaningful stage names and messages
+- Configure appropriate total_items for progress bars
+- Handle errors gracefully with clear messages
+- Clean up resources in finalizing stage
+
+### Worker Configuration
+- Set appropriate concurrency levels
+- Configure target patterns for specialization
+- Monitor queue depth and worker health
+- Use proper logging levels for debugging
+
+### UI Implementation
+- Show progress bars only for processing stages
+- Display clear status messages
+- Handle all task states gracefully
+- Provide proper error feedback
