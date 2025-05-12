@@ -81,7 +81,43 @@ try:
         # Assign imported functions to pre-defined names
         from plexus.cli.ScorecardCommands import create_client as _create_dashboard_client, resolve_account_identifier as _resolve_account_identifier
         from plexus.cli.identifier_resolution import resolve_scorecard_identifier as _resolve_scorecard_identifier
-        create_dashboard_client = _create_dashboard_client
+        
+        # Create a wrapper around create_dashboard_client to add better error logging
+        def enhanced_create_dashboard_client():
+            try:
+                logger.error("DEBUG: enhanced_create_dashboard_client called")
+                api_url = os.environ.get('PLEXUS_API_URL', '')
+                api_key = os.environ.get('PLEXUS_API_KEY', '')
+                
+                logger.error(f"DEBUG: API URL exists: {bool(api_url)}, length: {len(api_url) if api_url else 0}")
+                logger.error(f"DEBUG: API KEY exists: {bool(api_key)}, length: {len(api_key) if api_key else 0}")
+                
+                if not api_url or not api_key:
+                    logger.error("DEBUG: Missing API credentials: API_URL or API_KEY not set in environment")
+                    return None
+                
+                # Call the original function
+                logger.error("DEBUG: About to call _create_dashboard_client()")
+                client = _create_dashboard_client()
+                logger.error(f"DEBUG: _create_dashboard_client() returned {client is not None}")
+                
+                if client:
+                    # Try to access some property to verify it's working
+                    logger.error(f"DEBUG: Client created with type: {type(client)}")
+                    # Try to check if client has expected methods/attributes
+                    client_attrs = dir(client)
+                    logger.error(f"DEBUG: Client has execute method: {'execute' in client_attrs}")
+                else:
+                    logger.error("DEBUG: Client creation returned None - critical failure")
+                
+                return client
+            except Exception as e:
+                logger.error(f"DEBUG: EXCEPTION in enhanced_create_dashboard_client: {str(e)}")
+                logger.error(f"Error creating dashboard client: {str(e)}", exc_info=True)
+                return None
+        
+        # Replace the imported function with our enhanced version
+        create_dashboard_client = enhanced_create_dashboard_client
         resolve_account_identifier = _resolve_account_identifier
         resolve_scorecard_identifier = _resolve_scorecard_identifier
         PLEXUS_CORE_AVAILABLE = True
@@ -98,7 +134,6 @@ try:
     except Exception as import_err:
         # Catch other potential errors during import/setup
         logger.error(f"Error during Plexus core module import/setup: {import_err}", exc_info=True)
-        PLEXUS_CORE_AVAILABLE = False
         
     # Check for and log any accidental stdout output from imports
     stdout_captured = temp_stdout.getvalue()
@@ -434,15 +469,26 @@ def get_score_details_impl(scorecard_identifier: str, score_identifier: str, ver
 
 def list_plexus_reports_impl(account_identifier: Optional[str] = None, report_configuration_id: Optional[str] = None, limit: Optional[int] = 10) -> Union[str, List[Dict]]:
     """ Lists reports, optionally filtered by account or report configuration. """
+    logger.error("DEBUG: list_plexus_reports_impl called")
+    
     if not PLEXUS_CORE_AVAILABLE:
+        logger.error("DEBUG: PLEXUS_CORE_AVAILABLE is False")
         return "Error: Plexus Dashboard components not available."
+    
+    logger.error("DEBUG: About to create dashboard client")
     client = create_dashboard_client()
-    if not client: return "Error: Could not create dashboard client."
+    logger.error(f"DEBUG: Dashboard client created: {client is not None}")
+    
+    if not client: 
+        logger.error("DEBUG: Client creation failed")
+        return "Error: Could not create dashboard client."
 
     filter_conditions = []
     if account_identifier:
+        logger.error(f"DEBUG: Resolving account identifier: {account_identifier}")
         actual_account_id = resolve_account_identifier(client, account_identifier)
         if not actual_account_id:
+            logger.error(f"DEBUG: Failed to resolve account identifier: {account_identifier}")
             return f"Error: Account '{account_identifier}' not found."
         filter_conditions.append(f'accountId: {{eq: "{actual_account_id}"}}')
     if report_configuration_id:
@@ -450,6 +496,8 @@ def list_plexus_reports_impl(account_identifier: Optional[str] = None, report_co
     
     filter_string = ", ".join(filter_conditions)
     limit_val = limit if limit is not None else 10
+    
+    logger.error(f"DEBUG: Building query with filter: {filter_string}, limit: {limit_val}")
 
     # Note: The listReports GQL schema might not directly support a sortField parameter.
     # We rely on sortDirection applying to a relevant field like createdAt or a GSI.
@@ -460,7 +508,7 @@ def list_plexus_reports_impl(account_identifier: Optional[str] = None, report_co
     # For consistency with 'latest', we use DESC.
     query = f"""
     query ListReports {{
-        listReports(filter: {{ {filter_string} }}, limit: {limit_val}, sortDirection: DESC) {{
+        listReports(filter: {{ {filter_string} }}, limit: {limit_val}) {{
             items {{
                 id
                 name
@@ -475,23 +523,37 @@ def list_plexus_reports_impl(account_identifier: Optional[str] = None, report_co
     """
     
     try:
-        logger.info(f"Executing listReports query: {query}")
-        response = client.execute(query_string=query) # client.execute should handle GQL string directly
+        logger.error(f"DEBUG: Executing listReports query: {query}")
+        response = client.execute(query) # client.execute handles GQL string directly
+        logger.error(f"DEBUG: Query executed, response type: {type(response)}")
         
+        if response is None:
+            logger.error("DEBUG: Response is None")
+            return "Error: API returned None response"
+            
         if response.get('errors'):
              error_details = json.dumps(response['errors'], indent=2)
-             logger.error(f"listReports query returned errors: {error_details}")
+             logger.error(f"DEBUG: listReports query returned errors: {error_details}")
              return f"Error from listReports query: {error_details}"
         
+        logger.error(f"DEBUG: Extracting 'listReports' from response keys: {list(response.keys())}")
         reports_data = response.get('listReports', {}).get('items', [])
+        logger.error(f"DEBUG: Got reports_data of type {type(reports_data)} with length {len(reports_data) if isinstance(reports_data, list) else 'N/A'}")
+        
         if not reports_data and not filter_string: # Only show general message if no filters applied
+            logger.error("DEBUG: No reports found (no filter)")
             return "No reports found."
         elif not reports_data:
+            logger.error("DEBUG: No reports found matching criteria")
             return "No reports found matching the criteria."
+            
+        logger.error(f"DEBUG: Successfully returning {len(reports_data)} reports")
         return reports_data
     except Exception as e:
+        logger.error(f"DEBUG: EXCEPTION in list_plexus_reports_impl: {str(e)}")
         logger.error(f"Error listing reports: {str(e)}", exc_info=True)
-        return "Error listing reports: An internal error occurred."
+        # Modified to include the actual error details
+        return f"Error listing reports: {str(e)}"
 
 def get_plexus_report_details_impl(report_id: str) -> Union[str, Dict[str, Any]]:
     """ Fetches detailed information for a specific report, including its blocks. """
@@ -529,7 +591,7 @@ def get_plexus_report_details_impl(report_id: str) -> Union[str, Dict[str, Any]]
     """
     try:
         logger.info(f"Executing getReport query for ID: {report_id}")
-        response = client.execute(query_string=query)
+        response = client.execute(query)
 
         if response.get('errors'):
             error_details = json.dumps(response['errors'], indent=2)
@@ -542,29 +604,62 @@ def get_plexus_report_details_impl(report_id: str) -> Union[str, Dict[str, Any]]
         return report_data
     except Exception as e:
         logger.error(f"Error getting report details for ID '{report_id}': {str(e)}", exc_info=True)
-        return f"Error getting report details: An internal error occurred."
+        return f"Error getting report details: {str(e)}"
 
 def get_latest_plexus_report_impl(account_identifier: Optional[str] = None, report_configuration_id: Optional[str] = None) -> Union[str, Dict[str, Any]]:
     """ Fetches details for the most recent report, optionally filtered. """
-    # First, list reports to find the latest one's ID
-    # list_plexus_reports_impl already sorts DESC by default relevant field implicitly or via GSI behavior
-    latest_report_list_response = list_plexus_reports_impl(account_identifier=account_identifier, report_configuration_id=report_configuration_id, limit=1)
+    try:
+        # Log input parameters
+        logger.error(f"DEBUG: get_latest_plexus_report_impl called with account_identifier={account_identifier}, report_configuration_id={report_configuration_id}")
+        
+        # First, list reports to find the latest one's ID
+        # list_plexus_reports_impl already sorts DESC by default relevant field implicitly or via GSI behavior
+        logger.error("DEBUG: About to call list_plexus_reports_impl")
+        latest_report_list_response = list_plexus_reports_impl(account_identifier=account_identifier, report_configuration_id=report_configuration_id, limit=1)
+        logger.error(f"DEBUG: list_plexus_reports_impl returned, response type: {type(latest_report_list_response)}")
+        
+        # Log the response type and basic content
+        if isinstance(latest_report_list_response, str):
+            logger.error(f"DEBUG: String response from list_plexus_reports_impl: '{latest_report_list_response}'")
+        elif isinstance(latest_report_list_response, list):
+            logger.error(f"DEBUG: List response length: {len(latest_report_list_response)}")
+            if latest_report_list_response:
+                logger.error(f"DEBUG: First item keys: {list(latest_report_list_response[0].keys()) if isinstance(latest_report_list_response[0], dict) else 'not a dict'}")
+        else:
+            logger.error(f"DEBUG: Unexpected response type: {type(latest_report_list_response)}")
 
-    if isinstance(latest_report_list_response, str) and latest_report_list_response.startswith("Error:"):
-        # Pass through error from list_plexus_reports_impl
-        return latest_report_list_response 
-    if not latest_report_list_response or not isinstance(latest_report_list_response, list) or not latest_report_list_response[0]:
-        # Handle cases where list_plexus_reports_impl returns "No reports found..." string or empty list
-        if isinstance(latest_report_list_response, str): 
-            return latest_report_list_response # Return the message like "No reports found..."
-        return "No reports found to determine the latest one, or list_plexus_reports_impl returned an unexpected type."
-    
-    latest_report_id = latest_report_list_response[0].get('id')
-    if not latest_report_id:
-        return "Error: Could not extract ID from the latest report found by list_plexus_reports_impl."
-    
-    logger.info(f"Latest report ID found: {latest_report_id}. Fetching details...")
-    return get_plexus_report_details_impl(report_id=latest_report_id)
+        if isinstance(latest_report_list_response, str) and latest_report_list_response.startswith("Error:"):
+            # Pass through error from list_plexus_reports_impl
+            logger.error(f"DEBUG: Error from list_plexus_reports_impl: {latest_report_list_response}")
+            return latest_report_list_response 
+            
+        if not latest_report_list_response:
+            logger.error("DEBUG: Empty response from list_plexus_reports_impl")
+            return "No reports found to determine the latest one."
+            
+        if not isinstance(latest_report_list_response, list):
+            logger.error(f"DEBUG: Response is not a list, type={type(latest_report_list_response)}")
+            return f"Unexpected response type from list_plexus_reports_impl: {type(latest_report_list_response)}"
+            
+        if not latest_report_list_response[0]:
+            logger.error("DEBUG: First item in response list is empty/None")
+            return "No reports found to determine the latest one."
+        
+        logger.error(f"DEBUG: First report data: {json.dumps(latest_report_list_response[0])}")
+        latest_report_id = latest_report_list_response[0].get('id')
+        if not latest_report_id:
+            logger.error(f"DEBUG: No 'id' field in the first report: {list(latest_report_list_response[0].keys())}")
+            return "Error: Could not extract ID from the latest report found by list_plexus_reports_impl."
+        
+        logger.error(f"DEBUG: Latest report ID found: {latest_report_id}. Fetching details...")
+        return get_plexus_report_details_impl(report_id=latest_report_id)
+        
+    except Exception as e:
+        # Add detailed error logging
+        logger.error(f"DEBUG: CRITICAL EXCEPTION in get_latest_plexus_report_impl: {str(e)}")
+        logger.error(f"Error in get_latest_plexus_report_impl: {str(e)}", exc_info=True)
+        return f"Error getting latest report: {str(e)}"
+
 def run_plexus_evaluation(scorecard_name=None, scorecard_key=None, n_samples=10) -> str:
     """Run a Plexus evaluation using the direct CLI script approach that we confirmed works."""
     logger.info(f"Running Plexus evaluation: scorecard_name={scorecard_name}, scorecard_key={scorecard_key}, n_samples={n_samples}")
@@ -749,83 +844,9 @@ def debug_python_env(module_to_check: str = "plexus.cli") -> str:
     except Exception as e:
         return f"Error getting Python environment info: {str(e)}"
 
-def test_plexus_commands() -> str:
-    """Tests different methods of executing Plexus commands."""
-    import subprocess
-    import os
-    
-    result = "Testing different Plexus command execution methods:\n\n"
-    commands = [
-        # Test 1: plexus direct command
-        {
-            "desc": "Direct plexus command",
-            "cmd": "plexus --help", 
-            "shell": True
-        },
-        # Test 2: Python module entry point
-        {
-            "desc": "Python module entry point", 
-            "cmd": f"{sys.executable} -m plexus.cli --help", 
-            "shell": True
-        },
-        # Test 3: Find any command scripts
-        {
-            "desc": "Execute plexus.cli directly with Python",
-            "cmd": f"{sys.executable} -c \"import plexus.cli; print('Modules in plexus.cli:', dir(plexus.cli))\"",
-            "shell": True
-        },
-        # Test 4: Try CommandLineInterface directly
-        {
-            "desc": "Import and run CommandLineInterface",
-            "cmd": f"{sys.executable} -c \"from plexus.cli.CommandLineInterface import cli; print('CLI command found:', cli != None)\"",
-            "shell": True
-        },
-        # Test 5: Try finding the actual command script
-        {
-            "desc": "Find plexus script/binary in PATH",
-            "cmd": "which plexus",
-            "shell": True
-        }
-    ]
-    
-    for i, test in enumerate(commands, 1):
-        result += f"Test {i}: {test['desc']}\n"
-        result += f"Command: {test['cmd']}\n"
-        
-        try:
-            process = subprocess.run(
-                test["cmd"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                shell=test["shell"],
-                env=os.environ.copy(),
-                text=True,
-                timeout=10
-            )
-            result += f"Return code: {process.returncode}\n"
-            
-            if process.stdout.strip():
-                stdout = process.stdout.strip()
-                # Truncate if too long
-                if len(stdout) > 500:
-                    stdout = stdout[:500] + "... [truncated]"
-                result += f"Output:\n{stdout}\n"
-                
-            if process.stderr.strip():
-                stderr = process.stderr.strip()
-                # Truncate if too long
-                if len(stderr) > 500:
-                    stderr = stderr[:500] + "... [truncated]"
-                result += f"Error output:\n{stderr}\n"
-                
-        except subprocess.TimeoutExpired:
-            result += "Command timed out after 10 seconds.\n"
-        except Exception as e:
-            result += f"Error running command: {str(e)}\n"
-            
-        result += "\n" + "-" * 40 + "\n\n"
-    
-    return result
+
+
+
 
 # Create the Server instance
 # Use a more specific name now that Plexus code is included
@@ -964,16 +985,9 @@ DEBUG_PYTHON_ENV_TOOL_DEF = {
     }
 }
 
-# Add test commands tool definition
-TEST_PLEXUS_COMMANDS_TOOL_DEF = {
-    "name": "test_plexus_commands",
-    "description": "Test different methods of executing Plexus commands to find one that works.",
-    "inputSchema": {
-        "type": "object",
-        "properties": {},
-        "required": []
-    }
-}
+
+
+
 
 # --- MCP Server Handlers using Decorators ---
 
@@ -988,8 +1002,7 @@ async def list_tools() -> List[Tool]:
         Tool(**GET_PLEXUS_SCORE_DETAILS_TOOL_DEF),
         Tool(**LIST_PLEXUS_REPORTS_TOOL_DEF),
         Tool(**GET_PLEXUS_REPORT_DETAILS_TOOL_DEF),
-        Tool(**GET_LATEST_PLEXUS_REPORT_TOOL_DEF),
-        Tool(**TEST_PLEXUS_COMMANDS_TOOL_DEF)
+        Tool(**GET_LATEST_PLEXUS_REPORT_TOOL_DEF)
     ]
     logger.info(f"Listing {len(tools)} tools.")
     return tools
@@ -998,6 +1011,53 @@ async def list_tools() -> List[Tool]:
 async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
     """Handles tool execution requests."""
     logger.info(f"Executing tool: {name} with args: {arguments}")
+
+    try:
+        # FORCE DEBUG FOR get_latest_plexus_report
+        if name == "get_latest_plexus_report":
+            try:
+                # Try to create dashboard client directly
+                api_url = os.environ.get('PLEXUS_API_URL', '')
+                api_key = os.environ.get('PLEXUS_API_KEY', '')
+                
+                debug_info = f"DEBUG INFO: API_URL exists: {bool(api_url)}, API_KEY exists: {bool(api_key)}\n"
+                
+                from plexus.dashboard.api.client import PlexusDashboardClient
+                try:
+                    client = PlexusDashboardClient(api_url=api_url, api_key=api_key)
+                    debug_info += f"Client created successfully: {client is not None}\n"
+                    
+                    # Test query
+                    test_query = """query { __typename }"""
+                    test_result = client.execute(test_query)
+                    debug_info += f"Test query result: {test_result}\n"
+                    
+                    # Reports query
+                    reports_query = """
+                    query ListReports {
+                        listReports(limit: 1) {
+                            items {
+                                id
+                            }
+                        }
+                    }
+                    """
+                    debug_info += "Trying reports query...\n"
+                    reports_result = client.execute(reports_query)
+                    debug_info += f"Reports query result: {json.dumps(reports_result)}\n"
+                    
+                except Exception as client_err:
+                    debug_info += f"Client creation or query error: {str(client_err)}\n"
+                    import traceback
+                    debug_info += f"Traceback: {traceback.format_exc()}\n"
+            except Exception as outer_err:
+                debug_info += f"Outer debug error: {str(outer_err)}\n"
+                import traceback
+                debug_info += f"Outer traceback: {traceback.format_exc()}\n"
+                
+            return [TextContent(type="text", text=f"FORCED DEBUG: {debug_info}")]
+    except Exception as debug_err:
+        return [TextContent(type="text", text=f"Debug attempt failed: {str(debug_err)}")]
 
     result = None
     error_message = None
@@ -1054,9 +1114,6 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
         elif name == "debug_python_env":
             module_to_check = arguments.get("module_to_check", "plexus.cli")
             result = debug_python_env(module_to_check)
-            
-        elif name == "test_plexus_commands":
-            result = test_plexus_commands()
         
         # Add other tool handlers here later
         # elif name == "get_plexus_scorecard_info": # This was a typo, get_plexus_scorecard_info is already handled
