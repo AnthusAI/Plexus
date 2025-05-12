@@ -186,24 +186,391 @@ def list_dashboard_scorecards(account=None, name=None, key=None, limit: Optional
         # Return a simple error string, preventing tracebacks on stdout
         return f"Error listing dashboard scorecards: An internal error occurred. Check server logs for details."
 
+def get_scorecard_info_impl(scorecard_identifier: str) -> Union[str, Dict[str, Any]]:
+    """ Fetches detailed information for a specific scorecard from the dashboard. """
+    if not PLEXUS_CORE_AVAILABLE:
+        return "Error: Plexus Dashboard components not available (Plexus core modules failed to import)."
+
+    client = None
+    try:
+        api_url = os.environ.get('PLEXUS_API_URL', '')
+        api_key = os.environ.get('PLEXUS_API_KEY', '')
+
+        if not api_url or not api_key:
+            logger.warning("Missing API credentials for get_scorecard_info. Ensure .env file is loaded.")
+            return "Error: Missing API credentials. Use --env-file to specify your .env file path."
+
+        from plexus.dashboard.api.client import PlexusDashboardClient
+        client = PlexusDashboardClient(api_url=api_url, api_key=api_key)
+
+        if not client:
+            return "Error: Could not create dashboard client for get_scorecard_info."
+
+        # Resolve the scorecard identifier
+        actual_scorecard_id = resolve_scorecard_identifier(client, scorecard_identifier)
+        if not actual_scorecard_id:
+            return f"Error: Scorecard '{scorecard_identifier}' not found in Dashboard."
+
+        # Fetch the scorecard with sections and scores
+        query = f"""
+        query GetScorecard {{
+            getScorecard(id: "{actual_scorecard_id}") {{
+                id
+                name
+                key
+                description
+                externalId
+                createdAt
+                updatedAt
+                sections {{
+                    items {{
+                        id
+                        name
+                        order
+                        scores {{
+                            items {{
+                                id
+                                name
+                                key
+                                description
+                                type
+                                order
+                                externalId
+                            }}
+                        }}
+                    }}
+                }}
+            }}
+        }}
+        """
+        logger.info(f"Executing Dashboard query for scorecard ID: {actual_scorecard_id}")
+        response = client.execute(query)
+
+        if 'errors' in response:
+            error_details = json.dumps(response['errors'], indent=2)
+            logger.error(f"Dashboard query for scorecard info returned errors: {error_details}")
+            return f"Error from Dashboard query for scorecard info: {error_details}"
+
+        scorecard_data = response.get('getScorecard')
+        if not scorecard_data:
+            return f"Error: Scorecard with ID '{actual_scorecard_id}' (resolved from '{scorecard_identifier}') not found after query."
+
+        # Restructure the output to prioritize key info and nest less frequently needed details
+        formatted_output = {
+            "name": scorecard_data.get("name"),
+            "key": scorecard_data.get("key"),
+            "externalId": scorecard_data.get("externalId"),
+            "description": scorecard_data.get("description"),
+            "additionalDetails": {
+                "id": scorecard_data.get("id"),
+                "createdAt": scorecard_data.get("createdAt"),
+                "updatedAt": scorecard_data.get("updatedAt"),
+            },
+            "sections": scorecard_data.get("sections") # Keep full sections/scores structure
+        }
+        return formatted_output
+
+    except Exception as e:
+        logger.error(f"Error getting scorecard info for '{scorecard_identifier}': {str(e)}", exc_info=True)
+        return f"Error getting scorecard info: An internal error occurred. Check server logs for details."
+
+def get_score_details_impl(scorecard_identifier: str, score_identifier: str, version_id: Optional[str] = None) -> Union[str, Dict[str, Any]]:
+    """ Fetches detailed information for a specific score, including its versions and configuration. """
+    if not PLEXUS_CORE_AVAILABLE:
+        return "Error: Plexus Dashboard components not available (Plexus core modules failed to import)."
+
+    client = None
+    try:
+        api_url = os.environ.get('PLEXUS_API_URL', '')
+        api_key = os.environ.get('PLEXUS_API_KEY', '')
+
+        if not api_url or not api_key:
+            logger.warning("Missing API credentials for get_score_details. Ensure .env file is loaded.")
+            return "Error: Missing API credentials for get_score_details."
+
+        from plexus.dashboard.api.client import PlexusDashboardClient
+        client = PlexusDashboardClient(api_url=api_url, api_key=api_key)
+
+        if not client:
+            return "Error: Could not create dashboard client for get_score_details."
+
+        # 1. Resolve scorecard_identifier to scorecard_id
+        actual_scorecard_id = resolve_scorecard_identifier(client, scorecard_identifier)
+        if not actual_scorecard_id:
+            return f"Error: Scorecard '{scorecard_identifier}' not found."
+
+        # 2. Fetch scorecard to find the score_id and its details (including championVersionId)
+        scorecard_query = f"""
+        query GetScorecardForScoreResolution {{
+            getScorecard(id: "{actual_scorecard_id}") {{
+                id
+                name
+                sections {{
+                    items {{
+                        id
+                        name
+                        scores {{
+                            items {{
+                                id
+                                name
+                                key
+                                externalId
+                                championVersionId
+                            }}
+                        }}
+                    }}
+                }}
+            }}
+        }}
+        """
+        logger.debug(f"Fetching scorecard '{actual_scorecard_id}' to resolve score '{score_identifier}'")
+        scorecard_response = client.execute(scorecard_query)
+        if 'errors' in scorecard_response:
+            return f"Error fetching scorecard details for score resolution: {json.dumps(scorecard_response['errors'])}"
+        
+        scorecard_data = scorecard_response.get('getScorecard')
+        if not scorecard_data:
+            return f"Error: Scorecard '{actual_scorecard_id}' data not found after query."
+
+        found_score_details = None
+        for section in scorecard_data.get('sections', {}).get('items', []):
+            for s_item in section.get('scores', {}).get('items', []):
+                if (s_item.get('id') == score_identifier or 
+                    s_item.get('key') == score_identifier or 
+                    s_item.get("name") == score_identifier or 
+                    s_item.get("externalId") == score_identifier):
+                    found_score_details = s_item
+                    break
+            if found_score_details:
+                break
+        
+        if not found_score_details:
+            return f"Error: Score '{score_identifier}' not found within scorecard '{scorecard_identifier} (ID: {actual_scorecard_id})'."
+
+        actual_score_id = found_score_details.get('id')
+        champion_version_id_from_score = found_score_details.get('championVersionId')
+
+        # 3. Fetch all versions for the identified score
+        score_versions_query = f"""
+        query GetScoreVersions {{
+            getScore(id: "{actual_score_id}") {{
+                id
+                name
+                key
+                externalId
+                championVersionId # Confirm champion ID at score level
+                versions(sortDirection: DESC, limit: 50) {{ # Get a decent number of recent versions
+                    items {{
+                        id
+                        configuration
+                        createdAt
+                        updatedAt
+                        isFeatured
+                        parentVersionId
+                        note
+                    }}
+                }}
+            }}
+        }}
+        """
+        logger.info(f"Fetching versions for score ID: {actual_score_id}")
+        versions_response = client.execute(score_versions_query)
+
+        if 'errors' in versions_response:
+            error_details = json.dumps(versions_response['errors'], indent=2)
+            logger.error(f"Dashboard query for score versions returned errors: {error_details}")
+            return f"Error from Dashboard query for score versions: {error_details}"
+
+        score_data_with_versions = versions_response.get('getScore')
+        if not score_data_with_versions:
+            return f"Error: Score data with versions for ID '{actual_score_id}' not found."
+
+        all_versions = score_data_with_versions.get('versions', {}).get('items', [])
+        if not all_versions:
+            return f"No versions found for score '{score_identifier}' (ID: {actual_score_id})."
+
+        target_version_data = None
+        if version_id:
+            # User specified a version_id
+            for v in all_versions:
+                if v.get('id') == version_id:
+                    target_version_data = v
+                    break
+            if not target_version_data:
+                return f"Error: Specified version ID '{version_id}' not found for score '{actual_score_id}'."
+        else:
+            # No specific version_id, try champion, then most recent
+            effective_champion_id = score_data_with_versions.get('championVersionId') or champion_version_id_from_score
+            if effective_champion_id:
+                for v in all_versions:
+                    if v.get('id') == effective_champion_id:
+                        target_version_data = v
+                        break
+            if not target_version_data and all_versions: # Fallback to most recent if champion not found or not set
+                target_version_data = all_versions[0] # Assumes versions are sorted DESC by createdAt
+        
+        if not target_version_data:
+            return f"Could not determine target version for score '{actual_score_id}'."
+
+        # Return the full score details along with all its versions, and specifically the target version's config
+        # The main structure is the score itself, with a list of all its versions,
+        # and a special field for the configuration of the version we targeted.
+        output = {
+            "scoreId": score_data_with_versions.get("id"),
+            "scoreName": score_data_with_versions.get("name"),
+            "scoreKey": score_data_with_versions.get("key"),
+            "scoreExternalId": score_data_with_versions.get("externalId"),
+            "currentChampionVersionId": score_data_with_versions.get("championVersionId"),
+            "targetedVersionDetails": target_version_data, # This includes the configuration string
+            "allVersions": all_versions # List of all version metadata (config included in each)
+        }
+        return output
+
+    except Exception as e:
+        logger.error(f"Error getting score details for scorecard '{scorecard_identifier}', score '{score_identifier}': {str(e)}", exc_info=True)
+        return f"Error getting score details: An internal error occurred. Check server logs for details."
+
+# --- Report Tool Implementations ---
+
+def list_plexus_reports_impl(account_identifier: Optional[str] = None, report_configuration_id: Optional[str] = None, limit: Optional[int] = 10) -> Union[str, List[Dict]]:
+    """ Lists reports, optionally filtered by account or report configuration. """
+    if not PLEXUS_CORE_AVAILABLE:
+        return "Error: Plexus Dashboard components not available."
+    client = create_dashboard_client()
+    if not client: return "Error: Could not create dashboard client."
+
+    filter_conditions = []
+    if account_identifier:
+        actual_account_id = resolve_account_identifier(client, account_identifier)
+        if not actual_account_id:
+            return f"Error: Account '{account_identifier}' not found."
+        filter_conditions.append(f'accountId: {{eq: "{actual_account_id}"}}')
+    if report_configuration_id:
+        filter_conditions.append(f'reportConfigurationId: {{eq: "{report_configuration_id}"}}')
+    
+    filter_string = ", ".join(filter_conditions)
+    limit_val = limit if limit is not None else 10
+
+    # Note: The listReports GQL schema might not directly support a sortField parameter.
+    # We rely on sortDirection applying to a relevant field like createdAt or a GSI.
+    # For reports, GSIs on (accountId, updatedAt) and (reportConfigurationId, createdAt) exist.
+    # If report_configuration_id is given, sorting by createdAt is effective.
+    # If only accountId is given, sorting by updatedAt is effective.
+    # If neither, default AppSync sorting applies (often by ID, or primary index sort key if defined).
+    # For consistency with 'latest', we use DESC.
+    query = f"""
+    query ListReports {{
+        listReports(filter: {{ {filter_string} }}, limit: {limit_val}, sortDirection: DESC) {{
+            items {{
+                id
+                name
+                createdAt
+                updatedAt
+                reportConfigurationId
+                accountId
+                taskId
+            }}
+        }}
+    }}
+    """
+    
+    try:
+        logger.info(f"Executing listReports query: {query}")
+        response = client.execute(query_string=query) # client.execute should handle GQL string directly
+        
+        if response.get('errors'):
+             error_details = json.dumps(response['errors'], indent=2)
+             logger.error(f"listReports query returned errors: {error_details}")
+             return f"Error from listReports query: {error_details}"
+        
+        reports_data = response.get('listReports', {}).get('items', [])
+        if not reports_data and not filter_string: # Only show general message if no filters applied
+            return "No reports found."
+        elif not reports_data:
+            return "No reports found matching the criteria."
+        return reports_data
+    except Exception as e:
+        logger.error(f"Error listing reports: {str(e)}", exc_info=True)
+        return "Error listing reports: An internal error occurred."
+
+def get_plexus_report_details_impl(report_id: str) -> Union[str, Dict[str, Any]]:
+    """ Fetches detailed information for a specific report, including its blocks. """
+    if not PLEXUS_CORE_AVAILABLE: return "Error: Plexus Dashboard components not available."
+    client = create_dashboard_client()
+    if not client: return "Error: Could not create dashboard client."
+
+    query = f"""
+    query GetReport {{
+        getReport(id: "{report_id}") {{
+            id
+            name
+            createdAt
+            updatedAt
+            parameters
+            output # Original markdown template
+            accountId
+            reportConfigurationId
+            taskId
+            reportBlocks {{
+                items {{
+                    id
+                    reportId
+                    name
+                    position
+                    type
+                    output # JSON output from block
+                    log
+                    createdAt
+                    updatedAt
+                }}
+            }}
+        }}
+    }}
+    """
+    try:
+        logger.info(f"Executing getReport query for ID: {report_id}")
+        response = client.execute(query_string=query)
+
+        if response.get('errors'):
+            error_details = json.dumps(response['errors'], indent=2)
+            logger.error(f"getReport query returned errors: {error_details}")
+            return f"Error from getReport query: {error_details}"
+
+        report_data = response.get('getReport')
+        if not report_data:
+            return f"Error: Report with ID '{report_id}' not found."
+        return report_data
+    except Exception as e:
+        logger.error(f"Error getting report details for ID '{report_id}': {str(e)}", exc_info=True)
+        return f"Error getting report details: An internal error occurred."
+
+def get_latest_plexus_report_impl(account_identifier: Optional[str] = None, report_configuration_id: Optional[str] = None) -> Union[str, Dict[str, Any]]:
+    """ Fetches details for the most recent report, optionally filtered. """
+    # First, list reports to find the latest one's ID
+    # list_plexus_reports_impl already sorts DESC by default relevant field implicitly or via GSI behavior
+    latest_report_list_response = list_plexus_reports_impl(account_identifier=account_identifier, report_configuration_id=report_configuration_id, limit=1)
+
+    if isinstance(latest_report_list_response, str) and latest_report_list_response.startswith("Error:"):
+        # Pass through error from list_plexus_reports_impl
+        return latest_report_list_response 
+    if not latest_report_list_response or not isinstance(latest_report_list_response, list) or not latest_report_list_response[0]:
+        # Handle cases where list_plexus_reports_impl returns "No reports found..." string or empty list
+        if isinstance(latest_report_list_response, str): 
+            return latest_report_list_response # Return the message like "No reports found..."
+        return "No reports found to determine the latest one, or list_plexus_reports_impl returned an unexpected type."
+    
+    latest_report_id = latest_report_list_response[0].get('id')
+    if not latest_report_id:
+        return "Error: Could not extract ID from the latest report found by list_plexus_reports_impl."
+    
+    logger.info(f"Latest report ID found: {latest_report_id}. Fetching details...")
+    return get_plexus_report_details_impl(report_id=latest_report_id)
 
 # Create the Server instance
 # Use a more specific name now that Plexus code is included
 server = Server("Plexus MCP Server", "0.3.0")
 
 # --- Tool Definitions (Dictionaries) ---
-
-HELLO_WORLD_TOOL_DEF = {
-    "name": "hello_world",
-    "description": "A simple tool that returns a greeting.",
-    "inputSchema": { # Note: Correct casing
-        "type": "object",
-        "properties": {
-            "name": {"type": "string", "description": "Name to greet."}
-        },
-        "required": ["name"]
-    }
-}
 
 LIST_PLEXUS_SCORECARDS_TOOL_DEF = {
     "name": "list_plexus_scorecards",
@@ -217,12 +584,97 @@ LIST_PLEXUS_SCORECARDS_TOOL_DEF = {
             "limit": {"type": ["integer", "null"], "description": "Maximum number of scorecards to return. If omitted or null, attempts to return all."}
         },
         "required": []
+    },
+    "annotations": {
+        "readOnlyHint": True
     }
 }
 
-# --- Tool Implementation Function (Hello World) ---
-def hello_world_impl(name: str) -> str:
-    return f"Hello, {name}! This is the Plexus MCP server using mcp.server library."
+GET_PLEXUS_SCORECARD_INFO_TOOL_DEF = {
+    "name": "get_plexus_scorecard_info",
+    "description": "Gets detailed information about a specific scorecard, including its sections and scores.",
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "scorecard_identifier": {
+                "type": "string",
+                "description": "The identifier for the scorecard (can be ID, name, key, or external ID)."
+            }
+        },
+        "required": ["scorecard_identifier"]
+    },
+    "annotations": {
+        "readOnlyHint": True
+    }
+}
+
+GET_PLEXUS_SCORE_DETAILS_TOOL_DEF = {
+    "name": "get_plexus_score_details",
+    "description": "Gets detailed information for a specific score, including its configuration and version history.",
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "scorecard_identifier": {
+                "type": "string",
+                "description": "Identifier for the parent scorecard (ID, name, key, or external ID)."
+            },
+            "score_identifier": {
+                "type": "string",
+                "description": "Identifier for the score (ID, name, key, or external ID)."
+            },
+            "version_id": {
+                "type": ["string", "null"],
+                "description": "Optional specific version ID of the score to fetch configuration for. If omitted, defaults to champion or latest."
+            }
+        },
+        "required": ["scorecard_identifier", "score_identifier"]
+    },
+    "annotations": {
+        "readOnlyHint": True
+    }
+}
+
+LIST_PLEXUS_REPORTS_TOOL_DEF = {
+    "name": "list_plexus_reports",
+    "description": "Lists reports from the Plexus Dashboard. Can be filtered by account or report configuration ID. Results are sorted by most recent first.",
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "account_identifier": {"type": ["string", "null"], "description": "Optional: Account name, key, or ID."},
+            "report_configuration_id": {"type": ["string", "null"], "description": "Optional: ID of the report configuration."},
+            "limit": {"type": ["integer", "null"], "description": "Optional: Maximum number of reports to return (default 10)."}
+        },
+        "required": []
+    },
+    "annotations": {"readOnlyHint": True}
+}
+
+GET_PLEXUS_REPORT_DETAILS_TOOL_DEF = {
+    "name": "get_plexus_report_details",
+    "description": "Gets detailed information for a specific report, including its output and any generated blocks.",
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "report_id": {"type": "string", "description": "The unique ID of the report."}
+        },
+        "required": ["report_id"]
+    },
+    "annotations": {"readOnlyHint": True}
+}
+
+GET_LATEST_PLEXUS_REPORT_TOOL_DEF = {
+    "name": "get_latest_plexus_report",
+    "description": "Gets full details for the most recent report, optionally filtered by account or report configuration ID.",
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "account_identifier": {"type": ["string", "null"], "description": "Optional: Account name, key, or ID to filter by."},
+            "report_configuration_id": {"type": ["string", "null"], "description": "Optional: ID of the report configuration to filter by."}
+        },
+        "required": []
+    },
+    "annotations": {"readOnlyHint": True}
+}
 
 # --- MCP Server Handlers using Decorators ---
 
@@ -230,9 +682,12 @@ def hello_world_impl(name: str) -> str:
 async def list_tools() -> List[Tool]:
     """Returns the list of available tools."""
     tools = [
-        Tool(**HELLO_WORLD_TOOL_DEF),
-        Tool(**LIST_PLEXUS_SCORECARDS_TOOL_DEF)
-        # Add other Plexus tool definitions here later
+        Tool(**LIST_PLEXUS_SCORECARDS_TOOL_DEF),
+        Tool(**GET_PLEXUS_SCORECARD_INFO_TOOL_DEF),
+        Tool(**GET_PLEXUS_SCORE_DETAILS_TOOL_DEF),
+        Tool(**LIST_PLEXUS_REPORTS_TOOL_DEF),
+        Tool(**GET_PLEXUS_REPORT_DETAILS_TOOL_DEF),
+        Tool(**GET_LATEST_PLEXUS_REPORT_TOOL_DEF)
     ]
     logger.info(f"Listing {len(tools)} tools.")
     return tools
@@ -246,26 +701,51 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
     error_message = None
 
     try:
-        if name == "hello_world":
-            name_arg = arguments.get("name")
-            if not name_arg:
-                raise ValueError("Missing required argument: name")
-            result = hello_world_impl(name=name_arg)
-
-        elif name == "list_plexus_scorecards":
+        if name == "list_plexus_scorecards":
             # Always use dashboard without local fallback
             result = list_dashboard_scorecards(
                 account=arguments.get("account"),
                 name=arguments.get("name"),
                 key=arguments.get("key"),
-                limit=arguments.get("limit") 
+                limit=arguments.get("limit")
             )
-        
+        elif name == "get_plexus_scorecard_info":
+            scorecard_identifier_arg = arguments.get("scorecard_identifier")
+            if not scorecard_identifier_arg:
+                raise ValueError("Missing required argument: scorecard_identifier")
+            result = get_scorecard_info_impl(scorecard_identifier=scorecard_identifier_arg)
+        elif name == "get_plexus_score_details":
+            scorecard_id_arg = arguments.get("scorecard_identifier")
+            score_id_arg = arguments.get("score_identifier")
+            version_id_arg = arguments.get("version_id") # Optional
+            if not scorecard_id_arg or not score_id_arg:
+                raise ValueError("Missing required arguments: scorecard_identifier and/or score_identifier")
+            result = get_score_details_impl(
+                scorecard_identifier=scorecard_id_arg, 
+                score_identifier=score_id_arg, 
+                version_id=version_id_arg
+            )
+        elif name == "list_plexus_reports":
+            result = list_plexus_reports_impl(
+                account_identifier=arguments.get("account_identifier"),
+                report_configuration_id=arguments.get("report_configuration_id"),
+                limit=arguments.get("limit")
+            )
+        elif name == "get_plexus_report_details":
+            report_id_arg = arguments.get("report_id")
+            if not report_id_arg:
+                raise ValueError("Missing required argument: report_id")
+            result = get_plexus_report_details_impl(report_id=report_id_arg)
+        elif name == "get_latest_plexus_report":
+            result = get_latest_plexus_report_impl(
+                account_identifier=arguments.get("account_identifier"),
+                report_configuration_id=arguments.get("report_configuration_id")
+            )
+
         # Add other tool handlers here later
-        # elif name == "get_plexus_scorecard_info":
+        # elif name == "get_plexus_scorecard_info": # This was a typo, get_plexus_scorecard_info is already handled
         #     ...
         # elif name == "run_plexus_evaluation":
-        #     ...
 
         else:
             raise ValueError(f"Unknown tool: {name}")
