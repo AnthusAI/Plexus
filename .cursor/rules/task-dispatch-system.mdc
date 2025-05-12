@@ -1,5 +1,5 @@
 ---
-description: 
+description: How the remote task dispatch system  and dashboard work.
 globs: 
 alwaysApply: false
 ---
@@ -27,15 +27,15 @@ This guide explains Plexus's two-level task dispatch system that connects our Ne
 
 ### Key Files and Directories
 - `/plexus/cli/` - Core CLI and task dispatch implementation
-  - [CommandDispatch.py](mdc:Plexus_2/Plexus_2/Plexus_2/plexus/cli/CommandDispatch.py) - Celery app configuration and worker management
-  - [CommandTasks.py](mdc:Plexus_2/Plexus_2/Plexus_2/plexus/cli/CommandTasks.py) - Task execution and progress tracking
-  - [task_progress_tracker.py](mdc:Plexus_2/Plexus_2/Plexus_2/plexus/cli/task_progress_tracker.py) - Progress tracking implementation
+  - [CommandDispatch.py](mdc:Plexus_2/Plexus_2/Plexus_2/Plexus_2/plexus/cli/CommandDispatch.py) - Celery app configuration and worker management
+  - [CommandTasks.py](mdc:Plexus_2/Plexus_2/Plexus_2/Plexus_2/plexus/cli/CommandTasks.py) - Task execution and progress tracking
+  - [task_progress_tracker.py](mdc:Plexus_2/Plexus_2/Plexus_2/Plexus_2/plexus/cli/task_progress_tracker.py) - Progress tracking implementation
 - `/plexus/lambda/` - AWS Lambda functions
-  - [task_dispatcher.py](mdc:Plexus_2/Plexus_2/Plexus_2/plexus/lambda/task_dispatcher.py) - Lambda handler for DynamoDB stream events
+  - [task_dispatcher.py](mdc:Plexus_2/Plexus_2/Plexus_2/Plexus_2/plexus/lambda/task_dispatcher.py) - Lambda handler for DynamoDB stream events
 - `/dashboard/` - Next.js dashboard application
   - `/components/` - React components
-    - [Task.tsx](mdc:Plexus_2/Plexus_2/Plexus_2/dashboard/components/Task.tsx) - Main task display component
-    - [task-status.tsx](mdc:Plexus_2/Plexus_2/Plexus_2/dashboard/components/ui/task-status.tsx) - Progress bar UI implementation
+    - [Task.tsx](mdc:Plexus_2/Plexus_2/Plexus_2/Plexus_2/dashboard/components/Task.tsx) - Main task display component
+    - [task-status.tsx](mdc:Plexus_2/Plexus_2/Plexus_2/Plexus_2/dashboard/components/ui/task-status.tsx) - Progress bar UI implementation
   - `/amplify/` - AWS Amplify configuration
     - `/data/resource.ts` - GraphQL schema definitions
     - `/functions/taskDispatcher/` - Task dispatch Lambda function
