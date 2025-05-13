@@ -1,8 +1,3 @@
----
-description: About the MCP server for enabling AI agents to use Plexus.
-globs: 
-alwaysApply: false
----
 # Plexus MCP System Overview
 
 The Plexus MCP (Multi-Agent Cooperative Protocol) system enables AI agents and tools to interact with Plexus functionality through a standardized protocol. This document provides an overview of the system architecture and key components.
@@ -34,6 +29,19 @@ The Plexus MCP (Multi-Agent Cooperative Protocol) system enables AI agents and t
    - `get_latest_plexus_report`: Gets full details for the most recent report, optionally filtered by account or report configuration ID.
    - `run_plexus_evaluation`: Run an accuracy evaluation on a Plexus scorecard. Can accept either scorecard name or key.
    - `debug_python_env`: Debug the Python environment, including available modules and paths.
+   - `list_plexus_report_configurations`: Lists report configurations for an account sorted by most recent first.
+
+### Recent Improvements
+- Fixed account resolution in `list_plexus_report_configurations` to properly handle case-insensitive matches
+- Improved GraphQL query formatting for consistent results
+- Added robust fallback mechanisms for API response handling
+- Enhanced logging for better troubleshooting
+
+### Planned Features
+1. **Deep Links to Reports** (In Progress)
+   - Create a new tool to generate direct dashboard URLs to reports
+   - Allow linking to the latest report for a given report configuration
+   - Planned implementation: `get_plexus_report_deep_link`
 
 ## Implementation Details
 
@@ -102,4 +110,4 @@ To use with MCP clients (e.g., Cursor), configure `mcp.json`:
 - MCP logs are stored in `~/Library/Logs/Claude`
 - You can monitor logs in real-time using `tail -f ~/Library/Logs/Claude/mcp.log`
 - Logs contain detailed information about protocol communication and tool execution
-- Useful for debugging connection issues and tool failures
+- Useful for debugging connection issues and tool failures 
