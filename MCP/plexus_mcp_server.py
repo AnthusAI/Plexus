@@ -659,10 +659,11 @@ def get_latest_plexus_report_impl(account_identifier: Optional[str] = None, repo
         logger.error(f"DEBUG: CRITICAL EXCEPTION in get_latest_plexus_report_impl: {str(e)}")
         logger.error(f"Error in get_latest_plexus_report_impl: {str(e)}", exc_info=True)
         return f"Error getting latest report: {str(e)}"
+    
 
-def run_plexus_evaluation(scorecard_name=None, scorecard_key=None, n_samples=10) -> str:
-    """Run a Plexus evaluation using the direct CLI script approach that we confirmed works."""
-    logger.info(f"Running Plexus evaluation: scorecard_name={scorecard_name}, scorecard_key={scorecard_key}, n_samples={n_samples}")
+def run_plexus_evaluation(scorecard_name=None, score_name=None, n_samples=10) -> str:
+    """Run a Plexus evaluation using the direct CLI script approach."""
+    logger.info(f"Running Plexus evaluation: scorecard_name={scorecard_name}, score_name={score_name}, n_samples={n_samples}")
     
     try:
         import subprocess
@@ -670,8 +671,8 @@ def run_plexus_evaluation(scorecard_name=None, scorecard_key=None, n_samples=10)
         import importlib.util
         
         # Validate parameters
-        if not scorecard_name and not scorecard_key:
-            return "Error: Either scorecard_name or scorecard_key must be provided."
+        if not scorecard_name:
+            return "Error: scorecard_name must be provided."
             
         # Get Python executable path
         python_executable = sys.executable
@@ -687,22 +688,31 @@ def run_plexus_evaluation(scorecard_name=None, scorecard_key=None, n_samples=10)
         
         if not os.path.isfile(cli_script):
             return f"Error: CommandLineInterface.py not found at {cli_script}"
+        
+        # First, construct the evaluation command as a single string
+        # Make sure values with spaces are properly quoted
+        eval_cmd = "evaluate accuracy"
+        eval_cmd += f" --scorecard-name \"{scorecard_name.replace('\"', '\\\"')}\""
+        
+        if score_name:
+            eval_cmd += f" --score-name \"{score_name.replace('\"', '\\\"')}\""
             
-        # Build the command arguments
-        if scorecard_name:
-            eval_args = f"evaluate accuracy --scorecard-name \"{scorecard_name}\" --number-of-samples {n_samples}"
-        else:
-            eval_args = f"evaluate accuracy --scorecard-key {scorecard_key} --number-of-samples {n_samples}"
-            
-        # Full command: python /path/to/CommandLineInterface.py command dispatch "evaluate accuracy..."
-        cmd = [
+        eval_cmd += f" --number-of-samples {n_samples}"
+        
+        # Then build the full command list, passing the evaluation command as a single argument
+        cmd_list = [
             python_executable,
             cli_script,
             "command", "dispatch",
-            f"\"{eval_args}\""
+            eval_cmd  # The entire evaluation command as a single argument
         ]
-        full_cmd = " ".join(cmd)
-        logger.info(f"Executing command: {full_cmd}")
+        
+        # Log the command for debugging
+        cmd_str = ' '.join(cmd_list)  # Simple space-joined string
+        cmd_repr = ' '.join(repr(arg) for arg in cmd_list)  # With proper quoting
+        logger.info(f"Executing command: {cmd_str}")
+        logger.info(f"Command with proper quoting: {cmd_repr}")
+        logger.info(f"Evaluation command portion: {eval_cmd}")
         
         # Set environment variables including AWS region
         env = os.environ.copy()
@@ -712,29 +722,31 @@ def run_plexus_evaluation(scorecard_name=None, scorecard_key=None, n_samples=10)
             
         # Execute the command
         process = subprocess.Popen(
-            full_cmd,
+            cmd_list,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            shell=True,
+            shell=False,  # Important: set to False for proper argument handling
             env=env,
             text=True,
-            cwd=os.getcwd()  # Use current working directory instead of hardcoded path
+            cwd=os.getcwd()  # Use current working directory
         )
         
         # Wait for the command to complete with a timeout
         try:
-            stdout, stderr = process.communicate(timeout=60)
+            stdout, stderr = process.communicate(timeout=300)
             return_code = process.returncode
         except subprocess.TimeoutExpired:
             process.kill()
             stdout, stderr = process.communicate()
-            return "Error: Command execution timed out after 60 seconds."
+            return "Error: Command execution timed out after 5 minutes (300 seconds)."
             
         # Check return code and format response
         if return_code == 0:
             result = "Plexus evaluation dispatch successful!\n\n"
-            result += f"Command: {full_cmd}\n"
-            result += f"Scorecard: {scorecard_name or scorecard_key}\n"
+            result += f"Command: {cmd_str}\n"
+            result += f"Scorecard: {scorecard_name}\n"
+            if score_name:
+                result += f"Score: {score_name}\n"
             result += f"Samples: {n_samples}\n\n"
             
             if stdout.strip():
@@ -1209,15 +1221,15 @@ GET_LATEST_PLEXUS_REPORT_TOOL_DEF = {
 
 RUN_PLEXUS_EVALUATION_TOOL_DEF = {
     "name": "run_plexus_evaluation",
-    "description": "Run an accuracy evaluation on a Plexus scorecard. Can accept either scorecard name or key.",
+    "description": "Run an accuracy evaluation on a Plexus scorecard with a specific score.",
     "inputSchema": {
         "type": "object",
         "properties": {
             "scorecard_name": {"type": "string", "description": "The name of the scorecard to evaluate (e.g., 'CMG - EDU v1.0')."},
-            "scorecard_key": {"type": "string", "description": "The key of the scorecard to evaluate (e.g., 'cmg_edu_v1_0'). Alternative to name."},
+            "score_name": {"type": "string", "description": "The name of a specific score to evaluate within the scorecard."},
             "n_samples": {"type": "integer", "description": "Number of samples to evaluate.", "default": 10}
         },
-        "required": []
+        "required": ["scorecard_name"]
     }
 }
 
@@ -1373,7 +1385,7 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
         elif name == "run_plexus_evaluation":
             result = run_plexus_evaluation(
                 scorecard_name=arguments.get("scorecard_name"),
-                scorecard_key=arguments.get("scorecard_key"),
+                score_name=arguments.get("score_name"),
                 n_samples=arguments.get("n_samples", 10)
             )
             
