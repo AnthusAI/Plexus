@@ -638,12 +638,12 @@ def run_plexus_evaluation(scorecard_name=None, score_name=None, n_samples=10) ->
         
         # Wait for the command to complete with a timeout
         try:
-            stdout, stderr = process.communicate(timeout=60)
+            stdout, stderr = process.communicate(timeout=300)
             return_code = process.returncode
         except subprocess.TimeoutExpired:
             process.kill()
             stdout, stderr = process.communicate()
-            return "Error: Command execution timed out after 60 seconds."
+            return "Error: Command execution timed out after 5 minutes (300 seconds)."
             
         # Check return code and format response
         if return_code == 0:
