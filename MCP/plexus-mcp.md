@@ -25,23 +25,18 @@ The Plexus MCP (Multi-Agent Cooperative Protocol) system enables AI agents and t
    - `get_plexus_scorecard_info`: Gets detailed information about a specific scorecard, including its sections and scores.
    - `get_plexus_score_details`: Gets detailed information for a specific score, including its configuration and version history.
    - `list_plexus_reports`: Lists reports from the Plexus Dashboard. Can be filtered by account or report configuration ID. Results are sorted by most recent first.
-   - `get_plexus_report_details`: Gets detailed information for a specific report, including its output and any generated blocks.
-   - `get_latest_plexus_report`: Gets full details for the most recent report, optionally filtered by account or report configuration ID.
+   - `get_plexus_report`: Gets information about a report by ID, or the latest report if no ID is provided. Includes a deep link URL to view the report in the dashboard.
    - `run_plexus_evaluation`: Run an accuracy evaluation on a Plexus scorecard. Can accept either scorecard name or key.
    - `debug_python_env`: Debug the Python environment, including available modules and paths.
    - `list_plexus_report_configurations`: Lists report configurations for an account sorted by most recent first.
 
 ### Recent Improvements
+- Consolidated report tools for simpler, more consistent usage
+- Added deep link URL generation for easier access to dashboard resources
 - Fixed account resolution in `list_plexus_report_configurations` to properly handle case-insensitive matches
 - Improved GraphQL query formatting for consistent results
 - Added robust fallback mechanisms for API response handling
 - Enhanced logging for better troubleshooting
-
-### Planned Features
-1. **Deep Links to Reports** (In Progress)
-   - Create a new tool to generate direct dashboard URLs to reports
-   - Allow linking to the latest report for a given report configuration
-   - Planned implementation: `get_plexus_report_deep_link`
 
 ## Implementation Details
 
@@ -90,6 +85,16 @@ To use with MCP clients (e.g., Cursor), configure `mcp.json`:
 - Plexus installation with dashboard access
 - Valid `.env` file with API credentials
 - `python-dotenv` package (recommended)
+
+#### Required Environment Variables
+- `PLEXUS_API_URL`: The AppSync API endpoint URL
+- `PLEXUS_API_KEY`: The API key for authentication
+- `PLEXUS_DASHBOARD_URL`: The base URL of the Plexus dashboard (for generating deep links)
+
+#### Optional Environment Variables
+- `PLEXUS_ACCOUNT_KEY`: Default account key to use when not specified
+- `MCP_DEBUG`: Set to "true" to enable debug logging
+- `LOG_LEVEL`: Set logging level (DEBUG, INFO, WARNING, ERROR)
 
 ## Best Practices
 1. Always use the wrapper script to launch the server

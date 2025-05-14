@@ -148,12 +148,34 @@ def main():
                     print(f"wrapper: loaded {len(loaded_vars)} variables", file=sys.stderr)
                     
                     # Check for specific Plexus variables
-                    plexus_vars = ['PLEXUS_API_URL', 'PLEXUS_API_KEY']
+                    plexus_vars = ['PLEXUS_API_URL', 'PLEXUS_API_KEY', 'PLEXUS_DASHBOARD_URL']
                     for var_name in plexus_vars:
                         if var_name in env:
                             print(f"wrapper: found {var_name} in environment", file=sys.stderr)
                         else:
                             print(f"wrapper: {var_name} NOT FOUND in environment", file=sys.stderr)
+                            
+                    # Special handling for dashboard URL if not set
+                    if 'PLEXUS_DASHBOARD_URL' not in env and 'PLEXUS_API_URL' in env:
+                        # Try to derive dashboard URL from API URL - this is a heuristic
+                        # API URL format: https://xyz.appsync-api.region.amazonaws.com/graphql
+                        api_url = env['PLEXUS_API_URL']
+                        if 'appsync-api' in api_url:
+                            # Extract the environment/stage from API URL if possible
+                            parts = api_url.split('.')
+                            if len(parts) > 0 and 'https://' in parts[0]:
+                                api_prefix = parts[0].replace('https://', '')
+                                # Parse out just the environment name (development, staging, production)
+                                env_name = "app"
+                                if "dev" in api_prefix:
+                                    env_name = "dev"
+                                elif "staging" in api_prefix:
+                                    env_name = "staging"
+                                # Construct a reasonable default dashboard URL
+                                default_dashboard = f"https://{env_name}.plexus.ai"
+                                env['PLEXUS_DASHBOARD_URL'] = default_dashboard
+                                print(f"wrapper: auto-setting PLEXUS_DASHBOARD_URL={default_dashboard}", file=sys.stderr)
+                        
                 except Exception as e:
                     print(f"wrapper WARNING: error loading .env file: {e}", file=sys.stderr)
             else:
