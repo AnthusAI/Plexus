@@ -1,0 +1,46 @@
+---
+description: Understanding the overall structure of the project.
+globs: 
+alwaysApply: false
+---
+# Plexus Project Structure
+
+## Overall Structure
+Plexus is a documentation and evaluation platform for AI/ML systems with:
+- A Next.js/React dashboard app using AWS Amplify Gen2
+- Python backend code for AI/ML functionality
+- Celery with AWS SQS and DynamoDB for remote task dispatch
+
+## Key Directories
+- `plexus/`: Python modules for AI/ML, CLI, and other core functionality
+- `dashboard/app/`: Next.js routes and pages
+- `dashboard/components/`: React components
+- `dashboard/amplify/`: AWS configuration and resources
+
+## Core Files
+- `dashboard/app/client-layout.tsx`: Controls auth & public routes via `publicPaths` array
+- `dashboard/amplify/data/resource.ts`: Core data model definitions
+- `dashboard/utils/amplify-client.ts`: API client implementation
+
+## Tech Stack
+### Python AI/ML
+- Python with LangChain/LangGraph
+- Miniconda environment `py39`
+
+### Dashboard
+- Next.js 14.1
+- TypeScript 
+- React with Shadcn UI
+- AWS Amplify Gen2
+
+## Task Progress Tracking System
+The system uses multi-stage progress tracking for long-running tasks with key files:
+- `plexus/cli/task_progress_tracker.py`: Core tracking implementation
+- `dashboard/components/Task.tsx`: UI component for task display
+- `dashboard/components/ui/task-status.tsx`: Progress bar implementation
+
+## Authentication
+- Auth handled by AWS Amplify / Cognito
+- Routes checked against `publicPaths` in `client-layout.tsx`
+- Protected routes redirect to landing
+- Data operations flow through `amplify-client.ts`

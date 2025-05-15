@@ -31,14 +31,23 @@ const baseFeedbackAnalysisData = {
   },
 };
 
-const scoreTemplate = (id: string, name: string, ac1: number | null, comparisons: number, mismatches: number, accuracy: number) => ({
+const scoreTemplate = (
+  id: string, 
+  name: string, 
+  ac1: number | null, 
+  comparisons: number, 
+  mismatches: number, 
+  accuracy: number,
+  labelDistribution?: Record<string, number>
+) => ({
   id,
-  name,
-  external_id: `ext-${id}`,
+  score_name: name,
+  cc_question_id: `ext-${id}`,
   ac1,
-  total_comparisons: comparisons,
+  item_count: comparisons,
   mismatches,
   accuracy,
+  label_distribution: labelDistribution,
 });
 
 export const SingleScore: Story = {
@@ -90,6 +99,83 @@ export const MultipleScores: Story = {
       total_mismatches: 40, // Sum of mismatches
       accuracy: Number(((165 - 40) / 165 * 100).toFixed(1)), // Calculated accuracy
       // type: 'FeedbackAnalysis'
+    },
+  },
+};
+
+export const WithBalancedDistribution: Story = {
+  args: {
+    name: 'Feedback Analysis - Balanced Class Distribution',
+    type: 'FeedbackAnalysis',
+    position: 1,
+    log: 'Log with balanced class distribution.',
+    config: {
+      class: 'FeedbackAnalysis',
+      scorecard: 'balanced-example',
+      days: 30,
+    },
+    output: {
+      ...baseFeedbackAnalysisData,
+      overall_ac1: 0.65,
+      scores: [
+        scoreTemplate('score1', 'Binary Score (50/50)', 0.65, 100, 25, 75.0, { 'yes': 50, 'no': 50 }),
+        scoreTemplate('score2', 'Three Classes (Equal)', 0.72, 90, 20, 77.8, { 'low': 30, 'medium': 30, 'high': 30 })
+      ],
+      total_items: 190,
+      total_mismatches: 45,
+      accuracy: 76.3,
+      label_distribution: { 'yes': 50, 'no': 50, 'low': 30, 'medium': 30, 'high': 30 }
+    },
+  },
+};
+
+export const WithImbalancedDistribution: Story = {
+  args: {
+    name: 'Feedback Analysis - Imbalanced Class Distribution',
+    type: 'FeedbackAnalysis',
+    position: 1,
+    log: 'Log with imbalanced class distribution.',
+    config: {
+      class: 'FeedbackAnalysis',
+      scorecard: 'imbalanced-example',
+      days: 30,
+    },
+    output: {
+      ...baseFeedbackAnalysisData,
+      overall_ac1: 0.55,
+      scores: [
+        scoreTemplate('score1', 'Binary Score (90/10)', 0.55, 100, 10, 90.0, { 'yes': 90, 'no': 10 }),
+        scoreTemplate('score2', 'Three Classes (Skewed)', 0.62, 100, 15, 85.0, { 'low': 70, 'medium': 20, 'high': 10 })
+      ],
+      total_items: 200,
+      total_mismatches: 25,
+      accuracy: 87.5,
+      label_distribution: { 'yes': 90, 'no': 10, 'low': 70, 'medium': 20, 'high': 10 }
+    },
+  },
+};
+
+export const WithVeryImbalancedDistribution: Story = {
+  args: {
+    name: 'Feedback Analysis - Very Imbalanced',
+    type: 'FeedbackAnalysis',
+    position: 1,
+    log: 'Log with extremely imbalanced class distribution.',
+    config: {
+      class: 'FeedbackAnalysis',
+      scorecard: 'very-imbalanced-example',
+      days: 30,
+    },
+    output: {
+      ...baseFeedbackAnalysisData,
+      overall_ac1: 0.25,
+      scores: [
+        scoreTemplate('score1', 'Binary Score (95/5)', 0.25, 100, 5, 95.0, { 'yes': 95, 'no': 5 }),
+      ],
+      total_items: 100,
+      total_mismatches: 5,
+      accuracy: 95.0,
+      label_distribution: { 'yes': 95, 'no': 5 }
     },
   },
 };

@@ -21,6 +21,7 @@ from plexus.cli.DataCommands import data
 from plexus.cli.ScoreChatCommands import score_chat
 from plexus.cli.DataLakeCommands import lake_group
 from plexus.cli.FeedbackCommands import feedback
+from plexus.cli.ScorecardCommands import scorecards, scorecard
 
 # Create the main CLI application object using the factory from CommandDispatch
 # This 'cli' variable can now be imported by other modules if needed.

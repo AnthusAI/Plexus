@@ -2,20 +2,10 @@ import React from 'react';
 import { ReportBlockProps } from './ReportBlock';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Gauge, Segment } from '@/components/gauge';
+import { GaugeThresholdComputer } from '@/utils/gauge-thresholds';
+import FeedbackScoreCard, { ScoreData } from '@/components/ui/feedback-score-card';
 
 // For type-safety, create an interface for the data structure
-interface ScoreData {
-  id: string;
-  score_name: string;
-  cc_question_id: string;
-  ac1: number | null;
-  item_count: number;
-  mismatches: number;
-  mismatch_percentage?: number;
-  accuracy?: number;
-}
-
 interface FeedbackAnalysisData {
   overall_ac1: number | null;
   scores: ScoreData[];
@@ -27,16 +17,8 @@ interface FeedbackAnalysisData {
     start: string;
     end: string;
   };
+  label_distribution?: Record<string, number>;
 }
-
-// Define AC1 segments (percentages of the -1 to 1 range)
-const ac1GaugeSegments: Segment[] = [
-  { start: 0, end: 50, color: 'var(--gauge-inviable)' },   // AC1: -1.0 to 0.0
-  { start: 50, end: 70, color: 'var(--gauge-converging)' }, // AC1: 0.0 to 0.4
-  { start: 70, end: 80, color: 'var(--gauge-almost)' },    // AC1: 0.4 to 0.6
-  { start: 80, end: 90, color: 'var(--gauge-viable)' },    // AC1: 0.6 to 0.8
-  { start: 90, end: 100, color: 'var(--gauge-great)' },   // AC1: 0.8 to 1.0
-];
 
 /**
  * Renders a Feedback Analysis block showing Gwet's AC1 agreement scores.
@@ -85,39 +67,9 @@ const FeedbackAnalysis: React.FC<ReportBlockProps> = ({ name, output }) => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {feedbackData.scores
             .sort((a, b) => (b.ac1 === null ? -2 : b.ac1) - (a.ac1 === null ? -2 : a.ac1))
-            .map((score) => {
-              const agreements = score.item_count - score.mismatches;
-              return (
-                <Card key={score.id} className="bg-card shadow-none border-none">
-                  <CardHeader>
-                    <CardTitle className="font-bold">{score.score_name}</CardTitle>
-                    <p className="text-sm text-muted-foreground">
-                      {agreements} agreement{agreements === 1 ? '' : 's'} / {score.item_count} feedback item{score.item_count === 1 ? '' : 's'}
-                    </p>
-                  </CardHeader>
-                  <CardContent className="flex flex-col sm:flex-row justify-around items-center gap-4 pt-2 pb-4">
-                    <div className="w-full sm:w-1/2 max-w-[200px] sm:max-w-none">
-                        <Gauge
-                            title="Agreement"
-                            value={score.ac1 ?? undefined}
-                            min={-1}
-                            max={1}
-                            segments={ac1GaugeSegments}
-                            valueFormatter={(v) => v.toFixed(3)}
-                            showTicks={false}
-                        />
-                    </div>
-                    <div className="w-full sm:w-1/2 max-w-[200px] sm:max-w-none">
-                        <Gauge
-                            title="Accuracy"
-                            value={score.accuracy ?? undefined}
-                            showTicks={false}
-                        />
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
+            .map((score) => (
+              <FeedbackScoreCard key={score.id} score={score} />
+            ))}
         </div>
       )}
 
@@ -159,6 +111,11 @@ const FeedbackAnalysis: React.FC<ReportBlockProps> = ({ name, output }) => {
                       ? (100 - feedbackData.mismatch_percentage).toFixed(1)
                       : "100.0"}%
                 </p>
+                {feedbackData.label_distribution && (
+                  <p className="text-xs text-muted-foreground">
+                    Chance: {GaugeThresholdComputer.computeThresholds(feedbackData.label_distribution).chance.toFixed(1)}%
+                  </p>
+                )}
               </div>
               <div className="space-y-1">
                 <p className="text-sm font-medium">Overall Agreement (AC1)</p>

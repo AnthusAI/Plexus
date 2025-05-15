@@ -528,6 +528,26 @@ def _generate_report_core(
                 for result in block_results:
                     try:
                         output_json_str = json.dumps(result["output"] if result["output"] is not None else {})
+                        
+                        # Add detailed logging about the output size and content
+                        output_size = len(output_json_str)
+                        output_sample = output_json_str[:500] + "..." if output_size > 500 else output_json_str
+                        logger.info(
+                            f"{log_prefix} Creating ReportBlock: "
+                            f"name='{result.get('name', 'N/A')}', "
+                            f"position={result.get('position', 'N/A')}, "
+                            f"type='{result.get('type', 'N/A')}', "
+                            f"output_size={output_size} bytes"
+                        )
+                        logger.debug(f"{log_prefix} Output sample: {output_sample}")
+                        
+                        if output_size > 350000:  # Warn if approaching 400KB DynamoDB limit
+                            logger.warning(
+                                f"{log_prefix} WARNING: Large output size ({output_size} bytes) "
+                                f"for block '{result.get('name', 'N/A')}' "
+                                f"approaching DynamoDB's 400KB limit!"
+                            )
+                        
                         block_record = ReportBlock.create(
                             reportId=report_id,
                             position=result["position"],
