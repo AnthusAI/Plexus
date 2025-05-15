@@ -175,17 +175,12 @@ class TestFeedbackAnalysis:
         }
         block = FeedbackAnalysis(config, {}, mock_api_client)
         
-        # Call the generate method
-        output, logs = await block.generate()
+        # Expect a ValueError to be raised
+        with pytest.raises(ValueError) as excinfo:
+            await block.generate()
         
-        # Verify the output contains error message
-        assert output is not None
-        assert "error" in output
-        assert "'scorecard' is required in the block configuration." in output["error"]
-        
-        # Verify error logs were generated
-        assert logs is not None
-        assert "ERROR: 'scorecard'" in logs
+        # Verify the error message
+        assert "'scorecard' is required in the block configuration." in str(excinfo.value)
     
     def test_analyze_feedback_data_gwet(self, mock_api_client, mock_feedback_items):
         """Tests the _analyze_feedback_data_gwet method directly."""
