@@ -55,6 +55,18 @@ export default function AdvancedPage() {
             </Link>
           </div>
         </section>
+
+        <section>
+          <h2 className="text-2xl font-semibold mb-4">Plexus MCP Server</h2>
+          <div className="space-y-4">
+            <p className="text-muted-foreground mb-4">
+              Enable AI agents and tools to interact with Plexus functionality using the Multi-Agent Cooperative Protocol (MCP).
+            </p>
+            <Link href="/documentation/advanced/mcp-server">
+              <DocButton>Explore MCP Server</DocButton>
+            </Link>
+          </div>
+        </section>
       </div>
     </div>
   )

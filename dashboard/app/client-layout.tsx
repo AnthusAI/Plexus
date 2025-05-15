@@ -55,6 +55,13 @@ function AuthWrapper({ children }: { children: React.ReactNode }) {
     '/documentation/methods/add-edit-score',
     '/documentation/methods/evaluate-score',
     '/documentation/methods/monitor-tasks',
+    '/documentation/advanced',
+    '/documentation/advanced/cli',
+    '/documentation/advanced/worker-nodes',
+    '/documentation/advanced/sdk',
+    '/documentation/advanced/mcp-server',
+    '/login',
+    '/signup',
   ];
   
   // Check if we should direct users straight to login

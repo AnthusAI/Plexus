@@ -115,6 +115,7 @@ const docSections: DocSidebarItem[] = [
       { name: "plexus CLI Tool", href: "/documentation/advanced/cli" },
       { name: "Worker Nodes", href: "/documentation/advanced/worker-nodes" },
       { name: "Python SDK Reference", href: "/documentation/advanced/sdk" },
+      { name: "MCP Server", href: "/documentation/advanced/mcp-server" },
     ],
   },
 ]
