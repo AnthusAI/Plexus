@@ -3,7 +3,7 @@ import { Task, TaskHeader, TaskContent, BaseTaskProps } from '@/components/Task'
 import { FlaskConical, Square, X, Split, ChevronLeft } from 'lucide-react'
 import MetricsGauges from '@/components/MetricsGauges'
 import { TaskStatus, type TaskStageConfig } from '@/components/ui/task-status'
-import { ConfusionMatrix } from '@/components/confusion-matrix'
+import { ConfusionMatrix, type ConfusionMatrixData, type ConfusionMatrixRow } from '@/components/confusion-matrix'
 import { CardButton } from '@/components/CardButton'
 import ClassDistributionVisualizer from '@/components/ClassDistributionVisualizer'
 import PredictedClassDistributionVisualizer from '@/components/PredictedClassDistributionVisualizer'
@@ -661,6 +661,53 @@ const DetailContent = React.memo(({
     onSelectScoreResult?.(null)
   }
 
+  const transformedConfusionMatrixData = useMemo((): ConfusionMatrixData | null => {
+    const cmInput = data.confusionMatrix;
+    if (!cmInput || !cmInput.matrix || !cmInput.labels || cmInput.matrix.length === 0 || cmInput.labels.length === 0) {
+      return null;
+    }
+    // Basic check: matrix rows should match labels length for a square matrix using labels for both axes
+    if (cmInput.matrix.length !== cmInput.labels.length) {
+        console.warn('Confusion matrix: matrix rows length does not match labels length.');
+        // This might indicate an issue, but ConfusionMatrix component itself has more robust validation.
+        // For now, we let it pass to the component for its validation.
+    }
+    if (cmInput.labels.some(l => l === '')) {
+        console.warn('EvaluationTask: Input confusion matrix labels contain empty strings. This can lead to errors.');
+    }
+
+    try {
+      const newMatrix: ConfusionMatrixRow[] = cmInput.matrix.map((row, actualIndex) => {
+        const actualClassLabel = cmInput.labels![actualIndex];
+        if (actualClassLabel === undefined) {
+          // Should not happen if matrix.length === labels.length and labels is not sparse
+          throw new Error(`Label not found for actual index ${actualIndex}`);
+        }
+        const predictedClassCounts: { [predictedClassLabel: string]: number } = {};
+        row.forEach((count, predictedIndex) => {
+          const predictedClassLabel = cmInput.labels![predictedIndex];
+          if (predictedClassLabel === undefined) {
+            throw new Error(`Label not found for predicted index ${predictedIndex}`);
+          }
+          // It's important that predictedClassLabel is a valid key (non-empty string)
+          // The ConfusionMatrix component will validate if these labels exist in its main `labels` prop.
+          predictedClassCounts[predictedClassLabel] = count;
+        });
+        return {
+          actualClassLabel: actualClassLabel, // Use the label as is, even if it's ""
+          predictedClassCounts,
+        };
+      });
+      return {
+        matrix: newMatrix,
+        labels: cmInput.labels, // Pass original labels, ConfusionMatrix will validate them
+      };
+    } catch (error) {
+      console.error("Error transforming confusion matrix data:", error);
+      return null; // Or a specific error structure if ConfusionMatrix can handle it
+    }
+  }, [data.confusionMatrix]);
+
   return (
     <div 
       ref={containerRef}
@@ -778,15 +825,10 @@ const DetailContent = React.memo(({
                   variant="detail"
                 />
 
-                {data.confusionMatrix?.matrix && 
-                 data.confusionMatrix.matrix.length > 0 && 
-                 data.confusionMatrix.labels && (
+                {transformedConfusionMatrixData && ( // Use transformed data
                   <div className="mt-3">
                     <ConfusionMatrix 
-                      data={{
-                        matrix: data.confusionMatrix.matrix,
-                        labels: data.confusionMatrix.labels
-                      }}
+                      data={transformedConfusionMatrixData} // Pass the transformed data object
                       onSelectionChange={setSelectedPredictedActual}
                     />
                   </div>

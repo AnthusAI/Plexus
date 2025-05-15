@@ -295,29 +295,29 @@ export default function EvaluationMetricsPage() {
 
   // Fair coin confusion matrix data - showing the 58% accuracy
   const fairCoinConfusionMatrix = {
-    matrix: [
-      [30, 22], // Predicted Heads, actual [Heads, Tails]
-      [20, 28], // Predicted Tails, actual [Heads, Tails]
-    ],
     labels: ["Heads", "Tails"],
+    matrix: [
+      { actualClassLabel: "Heads", predictedClassCounts: { "Heads": 30, "Tails": 22 } },
+      { actualClassLabel: "Tails", predictedClassCounts: { "Heads": 20, "Tails": 28 } },
+    ],
   };
   
   // Weighted coin confusion matrix
   const weightedCoinConfusionMatrix = {
-    matrix: [
-      [60, 18], // Predicted Heads, actual [Heads, Tails]
-      [15, 7],  // Predicted Tails, actual [Heads, Tails]
-    ],
     labels: ["Heads", "Tails"],
+    matrix: [
+      { actualClassLabel: "Heads", predictedClassCounts: { "Heads": 60, "Tails": 18 } },
+      { actualClassLabel: "Tails", predictedClassCounts: { "Heads": 15, "Tails": 7 } },
+    ],
   };
   
   // Always heads confusion matrix
   const alwaysHeadsConfusionMatrix = {
-    matrix: [
-      [75, 25], // Predicted Heads, actual [Heads, Tails]
-      [0, 0],   // Predicted Tails, actual [Heads, Tails]
-    ],
     labels: ["Heads", "Tails"],
+    matrix: [
+      { actualClassLabel: "Heads", predictedClassCounts: { "Heads": 75, "Tails": 0 } },
+      { actualClassLabel: "Tails", predictedClassCounts: { "Heads": 0, "Tails": 0 } },
+    ],
   };
 
   // Card Suit Guessing Example Data
@@ -339,13 +339,13 @@ export default function EvaluationMetricsPage() {
   ];
 
   const cardSuitConfusionMatrix = {
-    matrix: [
-      [3,3,3,4], // Actual H: Pred H,D,C,S
-      [3,3,4,3], // Actual D: Pred H,D,C,S
-      [3,4,3,3], // Actual C: Pred H,D,C,S
-      [4,3,3,3], // Actual S: Pred H,D,C,S
-    ],
     labels: ["♥️", "♦️", "♣️", "♠️"],
+    matrix: [
+      { actualClassLabel: "♥️", predictedClassCounts: { "♥️": 3, "♦️": 3, "♣️": 3, "♠️": 4 } },
+      { actualClassLabel: "♦️", predictedClassCounts: { "♥️": 3, "♦️": 3, "♣️": 4, "♠️": 3 } },
+      { actualClassLabel: "♣️", predictedClassCounts: { "♥️": 3, "♦️": 4, "♣️": 3, "♠️": 3 } },
+      { actualClassLabel: "♠️", predictedClassCounts: { "♥️": 4, "♦️": 3, "♣️": 3, "♠️": 3 } },
+    ],
   };
   
   const cardSuitPredictedDistribution = [ 
@@ -374,13 +374,13 @@ export default function EvaluationMetricsPage() {
   ];
 
   const stackedDeckRandomGuessingConfusionMatrix = {
-    matrix: [
-      [10, 10, 10, 9],  // Actual Hearts, Predicted H,D,C,S (each ~25% of 39)
-      [1, 2, 1, 1],     // Actual Diamonds, Predicted H,D,C,S (each ~25% of 5)
-      [1, 1, 1, 1],     // Actual Clubs, Predicted H,D,C,S (each ~25% of 4)
-      [1, 1, 1, 1]      // Actual Spades, Predicted H,D,C,S (each ~25% of 4)
-    ],
     labels: ["♥️", "♦️", "♣️", "♠️"],
+    matrix: [
+      { actualClassLabel: "♥️", predictedClassCounts: { "♥️": 10, "♦️": 10, "♣️": 10, "♠️": 9 } },
+      { actualClassLabel: "♦️", predictedClassCounts: { "♥️": 1, "♦️": 2, "♣️": 1, "♠️": 1 } },
+      { actualClassLabel: "♣️", predictedClassCounts: { "♥️": 1, "♦️": 1, "♣️": 1, "♠️": 1 } },
+      { actualClassLabel: "♠️", predictedClassCounts: { "♥️": 1, "♦️": 1, "♣️": 1, "♠️": 1 } }
+    ],
   };
   
   const stackedDeckRandomPredictedDistribution = [ 
@@ -402,13 +402,13 @@ export default function EvaluationMetricsPage() {
   );
 
   const alwaysHeartsConfusionMatrix = {
-    matrix: [
-      [39, 0, 0, 0],  // Actual Hearts, all predicted as Hearts (correct)
-      [5, 0, 0, 0],   // Actual Diamonds, all predicted as Hearts (wrong)
-      [4, 0, 0, 0],   // Actual Clubs, all predicted as Hearts (wrong)
-      [4, 0, 0, 0]    // Actual Spades, all predicted as Hearts (wrong)
-    ],
     labels: ["♥️", "♦️", "♣️", "♠️"],
+    matrix: [
+      { actualClassLabel: "♥️", predictedClassCounts: { "♥️": 39, "♦️": 0, "♣️": 0, "♠️": 0 } },
+      { actualClassLabel: "♦️", predictedClassCounts: { "♥️": 5, "♦️": 0, "♣️": 0, "♠️": 0 } },
+      { actualClassLabel: "♣️", predictedClassCounts: { "♥️": 4, "♦️": 0, "♣️": 0, "♠️": 0 } },
+      { actualClassLabel: "♠️", predictedClassCounts: { "♥️": 4, "♦️": 0, "♣️": 0, "♠️": 0 } }
+    ],
   };
   
   const alwaysHeartsPredictedDistribution = [ 
@@ -559,11 +559,11 @@ export default function EvaluationMetricsPage() {
                     <div className="bg-card/50 rounded-md p-2">
                       <ConfusionMatrix 
                         data={{
-                          matrix: [
-                            [29, 10], // Predicted Red, actual [Red, Black]
-                            [10, 3],   // Predicted Black, actual [Red, Black]
-                          ],
                           labels: ["Red", "Black"],
+                          matrix: [
+                            { actualClassLabel: "Red", predictedClassCounts: { "Red": 29, "Black": 10 } },
+                            { actualClassLabel: "Black", predictedClassCounts: { "Red": 10, "Black": 3 } },
+                          ],
                         }} 
                       />
                     </div>
@@ -612,11 +612,13 @@ export default function EvaluationMetricsPage() {
                     <div className="bg-card/50 rounded-md p-2">
                       <ConfusionMatrix 
                         data={{
-                          matrix: [
-                            [25, 25], // Actual Heads: 25 Pred H, 25 Pred T
-                            [27, 23], // Actual Tails: 27 Pred H, 23 Pred T
-                          ],
                           labels: ["Heads", "Tails"],
+                          matrix: [
+                            // Original comment: Actual Heads: 25 Pred H, 25 Pred T
+                            { actualClassLabel: "Heads", predictedClassCounts: { "Heads": 25, "Tails": 25 } },
+                            // Original comment: Actual Tails: 27 Pred H, 23 Pred T
+                            { actualClassLabel: "Tails", predictedClassCounts: { "Heads": 27, "Tails": 23 } },
+                          ],
                         }} 
                       />
                     </div>
@@ -666,11 +668,11 @@ export default function EvaluationMetricsPage() {
                     <div className="bg-card/50 rounded-md p-2">
                       <ConfusionMatrix 
                         data={{
-                          matrix: [
-                            [39, 0],  // Actual Red: 39 predicted as Red, 0 as Black
-                            [13, 0],  // Actual Black: 13 predicted as Red, 0 as Black
-                          ],
                           labels: ["Red", "Black"],
+                          matrix: [
+                            { actualClassLabel: "Red", predictedClassCounts: { "Red": 39, "Black": 0 } },
+                            { actualClassLabel: "Black", predictedClassCounts: { "Red": 13, "Black": 0 } },
+                          ],
                         }} 
                       />
                     </div>
@@ -734,11 +736,11 @@ export default function EvaluationMetricsPage() {
                     <div className="bg-card/50 rounded-md p-2">
                       <ConfusionMatrix 
                         data={{
-                          matrix: [
-                            [970, 30], // Predicted Safe, actual [Safe, Prohibited]
-                            [0, 0],    // Predicted Prohibited, actual [Safe, Prohibited]
-                          ],
                           labels: ["Safe", "Prohibited"],
+                          matrix: [
+                            { actualClassLabel: "Safe", predictedClassCounts: { "Safe": 970, "Prohibited": 30 } },
+                            { actualClassLabel: "Prohibited", predictedClassCounts: { "Safe": 0, "Prohibited": 0 } },
+                          ],
                         }} 
                       />
                     </div>
@@ -1037,11 +1039,11 @@ export default function EvaluationMetricsPage() {
                 accuracy={48.0}
                 gwetAC1={-0.04}
                 confusionMatrixData={{
-                  matrix: [
-                    [25, 25], // Actual Heads: 25 Pred H, 25 Pred T
-                    [27, 23], // Actual Tails: 27 Pred H, 23 Pred T
-                  ],
                   labels: ["Heads", "Tails"],
+                  matrix: [
+                    { actualClassLabel: "Heads", predictedClassCounts: { "Heads": 25, "Tails": 25 } },
+                    { actualClassLabel: "Tails", predictedClassCounts: { "Heads": 27, "Tails": 23 } },
+                  ],
                 }}
                 predictedClassDistributionData={predictedFairCoinData}
                 showBothGauges={true}
@@ -1075,11 +1077,11 @@ export default function EvaluationMetricsPage() {
                 accuracy={53.0}
                 gwetAC1={0.06}
                 confusionMatrixData={{
-                  matrix: [
-                    [14, 12], // Predicted Red, actual [Red, Black]
-                    [12, 14], // Predicted Black, actual [Red, Black]
-                  ],
                   labels: ["Red", "Black"],
+                  matrix: [
+                    { actualClassLabel: "Red", predictedClassCounts: { "Red": 14, "Black": 12 } },
+                    { actualClassLabel: "Black", predictedClassCounts: { "Red": 12, "Black": 14 } },
+                  ],
                 }}
                 predictedClassDistributionData={[
                   { label: "Red", count: 26 },
@@ -1102,11 +1104,11 @@ export default function EvaluationMetricsPage() {
                 accuracy={51.9}
                 gwetAC1={-0.137}
                 confusionMatrixData={{
-                  matrix: [
-                    [24, 15], // Actual Red: 24 Pred R, 15 Pred B
-                    [10, 3],  // Actual Black: 10 Pred R, 3 Pred B
-                  ],
                   labels: ["Red", "Black"],
+                  matrix: [
+                    { actualClassLabel: "Red", predictedClassCounts: { "Red": 24, "Black": 15 } },
+                    { actualClassLabel: "Black", predictedClassCounts: { "Red": 10, "Black": 3 } },
+                  ],
                 }}
                 predictedClassDistributionData={[
                   { label: "Red", count: 34 },
@@ -1129,11 +1131,11 @@ export default function EvaluationMetricsPage() {
                 accuracy={75.0}
                 gwetAC1={0.0}
                 confusionMatrixData={{
-                  matrix: [
-                    [39, 0],  // Actual Red: 39 predicted as Red, 0 as Black
-                    [13, 0],  // Actual Black: 13 predicted as Red, 0 as Black
-                  ],
                   labels: ["Red", "Black"],
+                  matrix: [
+                    { actualClassLabel: "Red", predictedClassCounts: { "Red": 39, "Black": 0 } },
+                    { actualClassLabel: "Black", predictedClassCounts: { "Red": 13, "Black": 0 } },
+                  ],
                 }}
                 predictedClassDistributionData={[
                   { label: "Red", count: 52 },

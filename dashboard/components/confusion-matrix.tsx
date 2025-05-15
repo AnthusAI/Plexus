@@ -10,9 +10,18 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 
+export interface ConfusionMatrixRow {
+  actualClassLabel: string; // e.g., "Red", "Heads" - represents the true class for this row
+  predictedClassCounts: { [predictedClassLabel: string]: number }; // Key is the predicted class label, value is the count
+                                                                   // e.g., { "Red": 39, "Black": 0 }
+}
+
 export interface ConfusionMatrixData {
-  matrix: number[][]
-  labels: string[]
+  matrix: ConfusionMatrixRow[];
+  // The existing 'labels' prop might still be useful for defining the overall order of classes
+  // if it cannot be solely derived from the matrix structure, or for UI display preferences.
+  // Alternatively, 'labels' could be derived from the keys in `predictedClassCounts` and `actualClassLabel`.
+  labels: string[]; // e.g., ["Red", "Black"] or ["Heads", "Tails"] - Defines the order of display
 }
 
 /**
@@ -46,26 +55,72 @@ export interface ConfusionMatrixProps {
  * - Column label: { predicted: "class1", actual: null }
  */
 export function ConfusionMatrix({ data, onSelectionChange }: ConfusionMatrixProps) {
-  if (!data || data.matrix.length !== data.labels.length) {
+  // Updated validation logic
+  if (!data || !data.labels) {
     return (
       <Alert variant="destructive">
         <ExclamationTriangleIcon className="h-4 w-4" />
         <AlertTitle>Error</AlertTitle>
-        <AlertDescription>Invalid confusion matrix data</AlertDescription>
+        <AlertDescription>Invalid confusion matrix: Missing data or labels.</AlertDescription>
       </Alert>
     )
   }
 
-  const maxValue = Math.max(...data.matrix.flat())
+  if (data.matrix && data.labels.length === 0 && data.matrix.length > 0) {
+    // if matrix has data but no labels are defined to interpret it
+    return (
+      <Alert variant="destructive">
+        <ExclamationTriangleIcon className="h-4 w-4" />
+        <AlertTitle>Error</AlertTitle>
+        <AlertDescription>Invalid confusion matrix: Data provided but 'labels' array is empty or missing.</AlertDescription>
+      </Alert>
+    )
+  }
+  
+  // Validate that all actualClassLabels and predictedClassLabels in the matrix are present in the main 'labels' array
+  for (const row of data.matrix) {
+    if (!data.labels.includes(row.actualClassLabel)) {
+      return (
+        <Alert variant="destructive">
+          <ExclamationTriangleIcon className="h-4 w-4" />
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>
+            Invalid confusion matrix: 'actualClassLabel' "{row.actualClassLabel}" not found in 'labels' array.
+          </AlertDescription>
+        </Alert>
+      );
+    }
+    for (const predictedLabel of Object.keys(row.predictedClassCounts)) {
+      if (!data.labels.includes(predictedLabel)) {
+        return (
+          <Alert variant="destructive">
+            <ExclamationTriangleIcon className="h-4 w-4" />
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>
+              Invalid confusion matrix: Predicted class label "{predictedLabel}" from 'predictedClassCounts' not found in 'labels' array.
+            </AlertDescription>
+          </Alert>
+        );
+      }
+    }
+  }
+
+  const allCounts = data.matrix.reduce((acc, row) => {
+    acc.push(...Object.values(row.predictedClassCounts));
+    return acc;
+  }, [] as number[]);
+  
+  const maxValue = allCounts.length > 0 ? Math.max(...allCounts) : 1;
+
 
   const getBackgroundColor = (value: number) => {
-    const opacity = Math.max(0.15, value / maxValue)
+    const opacity = Math.max(0.15, value / maxValue) // Ensure some color even for 0, if maxValue is > 0
     return `hsl(var(--purple-6) / ${opacity})`
   }
 
   const getTextColor = (value: number) => {
     const threshold = maxValue * 0.9; // 90% of max value
-    return value >= threshold ? 'text-foreground-selected' : 'text-foreground';
+    return value >= threshold && maxValue > 0 ? 'text-foreground-selected' : 'text-foreground'; // ensure maxValue > 0 for threshold logic
   }
 
   const handleCellClick = (predicted: string, actual: string) => {
@@ -79,6 +134,10 @@ export function ConfusionMatrix({ data, onSelectionChange }: ConfusionMatrixProp
   const handleActualLabelClick = (label: string) => {
     onSelectionChange?.({ predicted: null, actual: label })
   }
+  
+  // effectiveMatrix will be used for rendering. If data.matrix is empty but labels are provided,
+  // we can still render the structure with all zero counts.
+  const effectiveMatrix = data.matrix;
 
   return (
     <div className="flex flex-col w-full gap-1">
@@ -91,9 +150,9 @@ export function ConfusionMatrix({ data, onSelectionChange }: ConfusionMatrixProp
         <div className="flex">
           {/* Actual label column - height matches only the matrix */}
           <div className="w-6">
-            <div className="flex flex-col items-center justify-center w-6" 
+            <div className="flex flex-col items-center justify-center w-6"
               style={{ height: `${data.labels.length * 64}px` }}>
-              <span className="-rotate-90 whitespace-nowrap text-sm 
+              <span className="-rotate-90 whitespace-nowrap text-sm
                 text-muted-foreground truncate">
                 Actual
               </span>
@@ -102,29 +161,30 @@ export function ConfusionMatrix({ data, onSelectionChange }: ConfusionMatrixProp
 
           {/* Row labels column */}
           <div className="flex flex-col w-6 shrink-0">
-            {data.labels.map((label, index) => (
-              <TooltipProvider key={`row-${index}`}>
+            {/* Iterate over data.labels for actual class labels (rows) */}
+            {data.labels.map((actualLabel, index) => (
+              <TooltipProvider key={`row-label-${actualLabel}-${index}`}>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <div 
-                      onClick={() => handleActualLabelClick(label)}
+                    <div
+                      onClick={() => handleActualLabelClick(actualLabel)}
                       className="flex items-center justify-center h-16 relative min-w-0
                         cursor-pointer hover:bg-muted/50"
                     >
-                      <span className="-rotate-90 whitespace-nowrap text-sm 
+                      <span className="-rotate-90 whitespace-nowrap text-sm
                         text-muted-foreground truncate">
-                        {label}
+                        {actualLabel}
                       </span>
                     </div>
                   </TooltipTrigger>
                   <TooltipContent>
                     <div className="flex flex-col gap-1">
-                      <p>{label}</p>
-                      <div 
+                      <p>{actualLabel}</p>
+                      <div
                         role="button"
-                        onClick={() => handleActualLabelClick(label)}
-                        className="flex items-center gap-1 text-xs bg-muted 
-                          px-2 py-0.5 rounded-full mt-1 text-muted-foreground 
+                        onClick={() => handleActualLabelClick(actualLabel)}
+                        className="flex items-center gap-1 text-xs bg-muted
+                          px-2 py-0.5 rounded-full mt-1 text-muted-foreground
                           cursor-pointer hover:bg-muted/80"
                       >
                         <span>View</span>
@@ -142,83 +202,92 @@ export function ConfusionMatrix({ data, onSelectionChange }: ConfusionMatrixProp
         <div className="flex flex-col min-w-0 flex-1">
           {/* Matrix cells */}
           <div className="flex flex-col">
-            {/* Bottom labels */}
             <div className="flex">
-              {data.matrix[0].map((_, colIndex) => (
-                <div key={`col-${colIndex}`} 
+              {/* Iterate over PREDICTED classes (columns) based on data.labels */}
+              {data.labels.map((predictedLabel, colIndex) => (
+                <div key={`col-cells-${predictedLabel}-${colIndex}`}
                   className="flex flex-col flex-1 basis-0 min-w-0">
-                  {data.matrix.map((row, rowIndex) => (
-                    <TooltipProvider key={`cell-${rowIndex}-${colIndex}`}>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <div
-                            onClick={() => handleCellClick(
-                              data.labels[colIndex], 
-                              data.labels[rowIndex]
-                            )}
-                            className={`flex items-center justify-center h-16
-                              text-sm font-medium truncate ${getTextColor(row[colIndex])}
-                              cursor-pointer hover:opacity-80`}
-                            style={{
-                              backgroundColor: getBackgroundColor(row[colIndex]),
-                            }}
-                          >
-                            {row[colIndex]}
-                          </div>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <div className="flex flex-col gap-1">
-                            <p>Predicted: {data.labels[colIndex]}</p>
-                            <p>Actual: {data.labels[rowIndex]}</p>
-                            <p>Count: {row[colIndex]}</p>
-                            <div 
-                              role="button"
+                  {/* Iterate over ACTUAL classes (rows) based on data.labels */}
+                  {data.labels.map((actualLabel, rowIndex) => {
+                    // Find the corresponding row in effectiveMatrix by actualClassLabel
+                    const matrixRow = effectiveMatrix.find(r => r.actualClassLabel === actualLabel);
+                    // Get the count for the current predictedLabel from that row's predictedClassCounts
+                    // Default to 0 if the actualLabel row doesn't exist or if the predictedLabel is not in its counts
+                    const count = matrixRow ? (matrixRow.predictedClassCounts[predictedLabel] ?? 0) : 0;
+
+                    return (
+                      <TooltipProvider key={`cell-${actualLabel}-${predictedLabel}-${rowIndex}-${colIndex}`}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div
                               onClick={() => handleCellClick(
-                                data.labels[colIndex], 
-                                data.labels[rowIndex]
+                                predictedLabel,
+                                actualLabel
                               )}
-                              className="flex items-center gap-1 text-xs bg-muted 
-                                px-2 py-0.5 rounded-full mt-1 text-muted-foreground 
-                                cursor-pointer hover:bg-muted/80"
+                              className={`flex items-center justify-center h-16
+                                text-sm font-medium truncate ${getTextColor(count)}
+                                cursor-pointer hover:opacity-80`}
+                              style={{
+                                backgroundColor: getBackgroundColor(count),
+                              }}
                             >
-                              <span>View</span>
-                              <ArrowRight className="h-3 w-3" />
+                              {count}
                             </div>
-                          </div>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  ))}
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <div className="flex flex-col gap-1">
+                              <p>Predicted: {predictedLabel}</p>
+                              <p>Actual: {actualLabel}</p>
+                              <p>Count: {count}</p>
+                              <div
+                                role="button"
+                                onClick={() => handleCellClick(
+                                  predictedLabel,
+                                  actualLabel
+                                )}
+                                className="flex items-center gap-1 text-xs bg-muted
+                                  px-2 py-0.5 rounded-full mt-1 text-muted-foreground
+                                  cursor-pointer hover:bg-muted/80"
+                              >
+                                <span>View</span>
+                                <ArrowRight className="h-3 w-3" />
+                              </div>
+                            </div>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    );
+                  })}
                 </div>
               ))}
             </div>
 
-            {/* Bottom labels */}
+            {/* Bottom labels for Predicted Classes */}
             <div className="flex">
-              {data.labels.map((label, index) => (
-                <TooltipProvider key={`bottom-${index}`}>
+              {data.labels.map((predictedLabel, index) => (
+                <TooltipProvider key={`bottom-label-${predictedLabel}-${index}`}>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <div 
-                        onClick={() => handlePredictedLabelClick(label)}
-                        className="flex-1 basis-0 flex items-center justify-center 
+                      <div
+                        onClick={() => handlePredictedLabelClick(predictedLabel)}
+                        className="flex-1 basis-0 flex items-center justify-center
                           border-t-0 min-w-0 w-8 overflow-hidden
                           cursor-pointer hover:bg-muted/50"
                       >
-                        <span className="text-sm text-muted-foreground truncate w-full 
+                        <span className="text-sm text-muted-foreground truncate w-full
                           text-center">
-                          {label}
+                          {predictedLabel}
                         </span>
                       </div>
                     </TooltipTrigger>
                     <TooltipContent>
                       <div className="flex flex-col gap-1">
-                        <p>{label}</p>
-                        <div 
+                        <p>{predictedLabel}</p>
+                        <div
                           role="button"
-                          onClick={() => handlePredictedLabelClick(label)}
-                          className="flex items-center gap-1 text-xs bg-muted 
-                            px-2 py-0.5 rounded-full mt-1 text-muted-foreground 
+                          onClick={() => handlePredictedLabelClick(predictedLabel)}
+                          className="flex items-center gap-1 text-xs bg-muted
+                            px-2 py-0.5 rounded-full mt-1 text-muted-foreground
                             cursor-pointer hover:bg-muted/80"
                         >
                           <span>View</span>
@@ -231,9 +300,9 @@ export function ConfusionMatrix({ data, onSelectionChange }: ConfusionMatrixProp
               ))}
             </div>
 
-            {/* Predicted label */}
+            {/* Predicted label text */}
             <div className="flex">
-              <div className="flex-1 basis-0 flex items-center justify-center 
+              <div className="flex-1 basis-0 flex items-center justify-center
                 border-t-0 min-w-0 overflow-hidden">
                 <span className="text-sm text-muted-foreground truncate">
                   Predicted
