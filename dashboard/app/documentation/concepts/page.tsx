@@ -93,6 +93,16 @@ export default function BasicsPage() {
                 <DocButton>Learn about Reports</DocButton>
               </Link>
             </div>
+
+            <div>
+              <h3 className="text-xl font-medium mb-2">Evaluation Metrics</h3>
+              <p className="text-muted-foreground mb-4">
+                Specialized visualization tools that help interpret agreement and accuracy metrics, especially when dealing with imbalanced data.
+              </p>
+              <Link href="/documentation/concepts/evaluation-metrics">
+                <DocButton>Understand Evaluation Metrics</DocButton>
+              </Link>
+            </div>
           </div>
         </section>
 

@@ -140,6 +140,22 @@ class ReportBlock(BaseModel):
         # Remove keys with None values if the mutation expects them to be absent
         input_data = {k: v for k, v in input_data.items() if v is not None}
 
+        # Add detailed logging about sizes
+        if 'output' in input_data:
+            input_data_size = len(json.dumps(input_data))
+            output_size = len(input_data['output']) if isinstance(input_data['output'], str) else 0
+            other_fields_size = input_data_size - output_size
+            
+            logger.info(f"ReportBlock create sizes - Total input: {input_data_size} bytes")
+            logger.info(f"ReportBlock create sizes - Output field: {output_size} bytes")
+            logger.info(f"ReportBlock create sizes - Other fields: {other_fields_size} bytes")
+            
+            if output_size > 350000:
+                logger.warning(f"ReportBlock output field size ({output_size} bytes) approaching DynamoDB limit!")
+            
+            if input_data_size > 380000:
+                logger.error(f"TOTAL input data size ({input_data_size} bytes) exceeds DynamoDB limit!")
+
         try:
             logger.debug(f"Creating ReportBlock with input: {input_data}")
             result = client.execute(mutation, {'input': input_data})
