@@ -142,7 +142,7 @@ const Task = <TData extends BaseTaskData = BaseTaskData>({
     <div 
       className={`
         transition-colors duration-200 
-        flex flex-col h-full p-3 rounded-lg
+        flex flex-col h-full rounded-lg
         ${variant === 'grid' ? 'cursor-pointer hover:bg-accent/50' : ''}
         ${effectiveIsSelected ? 'bg-card-selected' : 'bg-card'}
       `}
@@ -158,7 +158,7 @@ const Task = <TData extends BaseTaskData = BaseTaskData>({
       aria-busy={isLoading}
       aria-disabled={isLoading}
     >
-      <div className="flex-none">
+      <div className="flex-none p-3">
         {renderHeader(childProps)}
       </div>
       <div className="flex-1 min-h-0">

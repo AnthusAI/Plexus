@@ -285,12 +285,9 @@ def dispatch(
                 logging.debug("Waiting for task result...")
                 
                 with Progress(
-                    # First row - status only
                     TextColumn("[bright_magenta]{task.fields[status]}"),
-                    TextColumn(""),  # Empty column for spacing
-                    # New line for visual separation
+                    TextColumn(""), 
                     TextColumn("\n"),
-                    # Second row - progress bar and details
                     SpinnerColumn(style="bright_magenta"),
                     ItemCountColumn(),
                     BarColumn(
@@ -302,7 +299,6 @@ def dispatch(
                     TimeRemainingColumn(),
                     expand=True
                 ) as progress:
-                    # Add a single task that tracks both status and progress
                     stage_configs = {
                         "Setup": StageConfig(
                             order=1,
@@ -323,7 +319,6 @@ def dispatch(
                             status_from_worker = task.info.get('status')
                             
                             if all([current is not None, total_from_worker is not None, status_from_worker is not None]):
-                                # Update progress and status, ensuring the total is updated
                                 progress.update(
                                     task_progress,
                                     total=float(total_from_worker),
