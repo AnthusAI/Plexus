@@ -69,7 +69,8 @@ To use with MCP clients (e.g., Cursor), configure `mcp.json`:
       "args": [
         "/path/to/plexus_mcp_wrapper.py",
         "--transport", "stdio",
-        "--env-dir", "/path/to/env/dir"
+        "--env-file", "/path/to/env/dir/.env",
+        "--target-cwd", "/path/to/project/"
       ],
       "env": {
         "PYTHONUNBUFFERED": "1",
@@ -81,7 +82,7 @@ To use with MCP clients (e.g., Cursor), configure `mcp.json`:
 ```
 
 ### Environment Requirements
-- Python 3.10+
+- Python 3.11+
 - Plexus installation with dashboard access
 - Valid `.env` file with API credentials
 - `python-dotenv` package (recommended)
