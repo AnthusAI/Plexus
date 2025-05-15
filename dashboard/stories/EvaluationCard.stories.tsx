@@ -44,8 +44,14 @@ export const WithConfusionMatrix: Story = {
     isBalanced: false,
     confusionMatrixData: {
       matrix: [
-        [950, 20], // Predicted Safe, actual [Safe, Prohibited]
-        [20, 10],  // Predicted Prohibited, actual [Safe, Prohibited]
+        {
+          actualClassLabel: 'Safe',
+          predictedClassCounts: { 'Safe': 950, 'Prohibited': 20 }
+        },
+        {
+          actualClassLabel: 'Prohibited',
+          predictedClassCounts: { 'Safe': 20, 'Prohibited': 10 }
+        }
       ],
       labels: ['Safe', 'Prohibited'],
     },
@@ -88,8 +94,14 @@ export const WithWarning: Story = {
     isBalanced: false,
     confusionMatrixData: {
       matrix: [
-        [970, 30], // Predicted Safe, actual [Safe, Prohibited]
-        [0, 0],    // Predicted Prohibited, actual [Safe, Prohibited]
+        {
+          actualClassLabel: 'Safe',
+          predictedClassCounts: { 'Safe': 970, 'Prohibited': 0 }
+        },
+        {
+          actualClassLabel: 'Prohibited',
+          predictedClassCounts: { 'Safe': 30, 'Prohibited': 0 }
+        }
       ],
       labels: ['Safe', 'Prohibited'],
     },
