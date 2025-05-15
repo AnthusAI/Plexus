@@ -2,6 +2,7 @@ from typing import Any, Dict, Optional, Tuple, List
 import logging
 import asyncio
 from datetime import datetime, timedelta, timezone
+from collections import Counter
 
 from plexus.analysis.metrics import GwetAC1
 from plexus.analysis.metrics.metric import Metric
@@ -45,13 +46,13 @@ class FeedbackAnalysis(BaseReportBlock):
 
         try:
             self._log("Starting FeedbackAnalysis block generation.")
-            self._log(f"Raw config: {self.config}")
-            self._log(f"Raw params: {self.params}")
+            # Only log config keys, not full values
+            self._log(f"Config keys: {list(self.config.keys())}")
 
             # --- 1. Extract and Validate Configuration ---
             cc_scorecard_id_param = self.config.get("scorecard")
             if not cc_scorecard_id_param:
-                self._log("ERROR: 'scorecard' (Call Criteria Scorecard ID) missing in block configuration.")
+                self._log("ERROR: 'scorecard' (Call Criteria Scorecard ID) missing in block configuration.", level="ERROR")
                 raise ValueError("'scorecard' is required in the block configuration.")
             self._log(f"Call Criteria Scorecard ID from config: {cc_scorecard_id_param}")
 
@@ -92,11 +93,11 @@ class FeedbackAnalysis(BaseReportBlock):
                 )
                 if not plexus_scorecard_obj:
                     msg = f"Plexus Scorecard not found for Call Criteria Scorecard ID: {cc_scorecard_id_param}"
-                    self._log(f"ERROR: {msg}")
+                    self._log(f"ERROR: {msg}", level="ERROR")
                     raise ValueError(msg)
                 self._log(f"Found Plexus Scorecard: '{plexus_scorecard_obj.name}' (ID: {plexus_scorecard_obj.id})")
             except Exception as e:
-                self._log(f"ERROR resolving Plexus Scorecard: {e}")
+                self._log(f"ERROR resolving Plexus Scorecard: {e}", level="ERROR")
                 raise
 
             # --- 3. Determine Plexus Score(s) to Process ---
@@ -119,9 +120,9 @@ class FeedbackAnalysis(BaseReportBlock):
                         })
                         self._log(f"Found specific Plexus Score: '{plexus_score_obj.name}' (ID: {plexus_score_obj.id})")
                     else:
-                        self._log(f"WARNING: Plexus Score not found for CC Question ID: {cc_question_id_param} on Scorecard '{plexus_scorecard_obj.name}'. This score will be skipped.")
+                        self._log(f"WARNING: Plexus Score not found for CC Question ID: {cc_question_id_param} on Scorecard '{plexus_scorecard_obj.name}'. This score will be skipped.", level="WARNING")
                 except Exception as e:
-                    self._log(f"ERROR looking up specific Plexus Score (CC Question ID: {cc_question_id_param}): {e}. This score will be skipped.")
+                    self._log(f"ERROR looking up specific Plexus Score (CC Question ID: {cc_question_id_param}): {e}. This score will be skipped.", level="ERROR")
             else:
                 self._log(f"Fetching all Plexus Scores for Scorecard '{plexus_scorecard_obj.name}' (ID: {plexus_scorecard_obj.id}) to find mappable scores.")
                 scores_query = """
@@ -146,22 +147,23 @@ class FeedbackAnalysis(BaseReportBlock):
                                             'cc_question_id': score_item['externalId']
                                         })
                                     else:
-                                        self._log(f"Plexus Score '{score_item.get('name')}' (ID: {score_item.get('id')}) is missing an externalId (CC Question ID). Skipping.")
+                                        self._log(f"Plexus Score '{score_item.get('name')}' (ID: {score_item.get('id')}) is missing an externalId (CC Question ID). Skipping.", level="DEBUG")
                     self._log(f"Identified {len(scores_to_process)} Plexus Scores with externalIds to process.")
                 except Exception as e:
-                    self._log(f"ERROR fetching scores for Plexus Scorecard '{plexus_scorecard_obj.name}': {e}")
+                    self._log(f"ERROR fetching scores for Plexus Scorecard '{plexus_scorecard_obj.name}': {e}", level="ERROR")
                     # Continue if some scores were found, otherwise this will be caught by the next check
             
             if not scores_to_process:
                 msg = "No Plexus Scores identified for analysis (either none found or none had a mappable CC Question ID)."
-                self._log(f"ERROR: {msg}")
+                self._log(f"ERROR: {msg}", level="ERROR")
                 # Return a structure indicating no data, but not an error state for the report block itself.
                 return {
                     "overall_ac1": None, "total_items": 0, "total_mismatches": 0, "accuracy": None,
                     "scores": [],
                     "total_feedback_items_retrieved": 0,
                     "date_range": {"start": start_date.isoformat(), "end": end_date.isoformat()},
-                    "message": msg
+                    "message": msg,
+                    "classes_count": 2  # Default to binary classification for overall
                 }, "\n".join(self.log_messages)
 
             # --- 4. Fetch and Analyze Feedback for Each Score ---
@@ -189,36 +191,46 @@ class FeedbackAnalysis(BaseReportBlock):
                 all_date_filtered_feedback_items.extend(date_filtered_items_for_score)
 
                 if not date_filtered_items_for_score:
-                    self._log("No feedback items for this score within the date range.")
+                    self._log("No feedback items for this score within the date range.", level="WARNING")
                     analysis_for_this_score = {
                         "score_id": score_info['plexus_score_id'],
                         "score_name": score_info['plexus_score_name'],
                         "cc_question_id": score_info['cc_question_id'],
                         "ac1": None, "item_count": 0, "mismatches": 0, "accuracy": None,
-                        "message": "No feedback items found in the specified date range."
+                        "message": "No feedback items found in the specified date range.",
+                        "classes_count": 2,  # Default to binary classification
+                        "label_distribution": {}
                     }
                 else:
-                    analysis_for_this_score = self._analyze_feedback_data_gwet(
-                        feedback_items=date_filtered_items_for_score,
-                        score_id_info=score_info['plexus_score_id'] # For logging within analysis
-                    )
-                    analysis_for_this_score["score_id"] = score_info['plexus_score_id']
-                    analysis_for_this_score["score_name"] = score_info['plexus_score_name']
-                    analysis_for_this_score["cc_question_id"] = score_info['cc_question_id']
+                    try:
+                        analysis_for_this_score = self._analyze_feedback_data_gwet(
+                            feedback_items=date_filtered_items_for_score,
+                            score_id_info=score_info['plexus_score_id'] # For logging within analysis
+                        )
+                        analysis_for_this_score["score_id"] = score_info['plexus_score_id']
+                        analysis_for_this_score["score_name"] = score_info['plexus_score_name']
+                        analysis_for_this_score["cc_question_id"] = score_info['cc_question_id']
+                    except Exception as e:
+                        self._log(f"Error analyzing score {score_info['plexus_score_name']}: {e}", level="ERROR")
+                        raise  # Re-raise to be caught by outer try/except
                 
                 per_score_analysis_results.append(analysis_for_this_score)
-                self._log(f"Analysis for score '{score_info['plexus_score_name']}': {analysis_for_this_score}")
+                # Only log a summary instead of the full analysis details
+                accuracy_str = f"{analysis_for_this_score.get('accuracy'):.2f}%" if analysis_for_this_score.get('accuracy') is not None else "N/A"
+                self._log(f"Analysis summary for score '{score_info['plexus_score_name']}': AC1={analysis_for_this_score.get('ac1')}, Items={analysis_for_this_score.get('item_count')}, Mismatches={analysis_for_this_score.get('mismatches')}, Accuracy={accuracy_str}, Classes={analysis_for_this_score.get('classes_count')}")
 
             # --- 5. Calculate Overall Metrics ---
             self._log(f"Calculating overall metrics from {len(all_date_filtered_feedback_items)} date-filtered feedback items across all processed scores.")
             if not all_date_filtered_feedback_items:
-                overall_analysis = {"ac1": None, "item_count": 0, "mismatches": 0, "accuracy": None}
-                self._log("No date-filtered items available for overall analysis.")
+                overall_analysis = {"ac1": None, "item_count": 0, "mismatches": 0, "accuracy": None, "classes_count": 2, "label_distribution": {}}
+                self._log("No date-filtered items available for overall analysis.", level="WARNING")
             else:
                 # Use a generic score_id_info for the overall log
                 overall_analysis = self._analyze_feedback_data_gwet(all_date_filtered_feedback_items, "Overall") 
             
-            self._log(f"Overall analysis: {overall_analysis}")
+            # Log a summary of the overall analysis instead of full details
+            accuracy_str = f"{overall_analysis.get('accuracy'):.2f}%" if overall_analysis.get('accuracy') is not None else "N/A"
+            self._log(f"Overall analysis summary: AC1={overall_analysis.get('ac1')}, Items={overall_analysis.get('item_count')}, Mismatches={overall_analysis.get('mismatches')}, Accuracy={accuracy_str}, Classes={overall_analysis.get('classes_count', 2)}")
 
             # --- 6. Structure Final Output ---
             final_output_data = {
@@ -232,19 +244,23 @@ class FeedbackAnalysis(BaseReportBlock):
                     "start": start_date.isoformat(),
                     "end": end_date.isoformat()
                 },
-                "message": f"Processed {len(scores_to_process)} score(s)." if scores_to_process else "No scores were processed."
+                "message": f"Processed {len(scores_to_process)} score(s)." if scores_to_process else "No scores were processed.",
+                "classes_count": overall_analysis.get("classes_count", 2),  # Add number of classes to overall output
+                "label_distribution": overall_analysis.get("label_distribution", {})
             }
-            self._log(f"Final output data: {final_output_data}")
+            # Don't log the full output data - it's redundant and can be large
+            self._log(f"Finished generating analysis for {len(scores_to_process)} scores with {all_feedback_items_retrieved_count} total feedback items.")
 
         except ValueError as ve:
-            self._log(f"Configuration or Value Error: {ve}")
-            # final_output_data remains None, or could be set to an error structure
-            final_output_data = {"error": str(ve), "scores": []}
+            self._log(f"Configuration or Value Error: {ve}", level="ERROR")
+            raise  # Re-raise to be caught by the task
         except Exception as e:
-            self._log(f"ERROR during FeedbackAnalysis generation: {str(e)}")
+            self._log(f"ERROR during FeedbackAnalysis generation: {str(e)}", level="ERROR")
+            # Log only first few lines of traceback, not the full trace
             import traceback
-            self._log(traceback.format_exc())
-            final_output_data = {"error": str(e), "scores": []}
+            trace_lines = traceback.format_exc().splitlines()[:10]  # Just first 10 lines
+            self._log(f"Error details: {' | '.join(trace_lines)}", level="ERROR")
+            raise  # Re-raise to be caught by the task
 
         log_string = "\n".join(self.log_messages) if self.log_messages else None
         return final_output_data, log_string
@@ -262,7 +278,7 @@ class FeedbackAnalysis(BaseReportBlock):
         if not account_id:
             # Attempt to resolve account_id if not directly available in params or context
             try:
-                self._log("Attempting to resolve account_id via PlexusDashboardClient...")
+                self._log("Attempting to resolve account_id via PlexusDashboardClient...", level="DEBUG")
                 # Ensure _resolve_account_id can be called or account_id is pre-resolved.
                 # This might require self.api_client to have context.account_key set.
                 if hasattr(self.api_client, '_resolve_account_id'):
@@ -273,23 +289,21 @@ class FeedbackAnalysis(BaseReportBlock):
                 if account_id:
                     self._log(f"Resolved account_id: {account_id}")
                 else: # Final fallback if it cannot be resolved
-                    self._log("WARNING: account_id could not be resolved. FeedbackItem fetching might be incomplete or fail.")
+                    self._log("WARNING: account_id could not be resolved. FeedbackItem fetching might be incomplete or fail.", level="WARNING")
                     # Depending on API, not providing account_id might fetch for all accounts (bad) or fail.
                     # For safety, we might choose to return empty list here if account_id is critical.
                     # For now, proceed with None, and let FeedbackItem.list handle it.
             except Exception as e:
-                self._log(f"Error resolving account_id: {e}. Proceeding with account_id as None.")
+                self._log(f"Error resolving account_id: {e}. Proceeding with account_id as None.", level="WARNING")
                 account_id = None # Ensure it's None if resolution fails
         else:
-            self._log(f"Using account_id: {account_id}")
+            self._log(f"Using account_id: {account_id}", level="DEBUG")
 
 
         while True:
             try:
-                # Ensure all required args for FeedbackItem.list are provided.
-                # It's crucial that `FeedbackItem.list` can handle `score_id` being None if that's intended.
-                # However, in this method, `plexus_score_id` should always be provided.
-                self._log(f"Calling FeedbackItem.list with account_id='{account_id}', scorecard_id='{plexus_scorecard_id}', score_id='{plexus_score_id}', limit=100, next_token='{next_token}'")
+                # Don't log every API call detail - it's too verbose
+                self._log(f"Fetching feedback items page (token: {next_token is not None})", level="DEBUG")
                 
                 # Making FeedbackItem.list an async-compatible call
                 items, next_token = await asyncio.to_thread(
@@ -307,9 +321,8 @@ class FeedbackAnalysis(BaseReportBlock):
                 if not next_token:
                     break
             except Exception as e:
-                self._log(f"Error during paginated fetch for score {plexus_score_id}: {str(e)}")
-                import traceback
-                self._log(traceback.format_exc())
+                self._log(f"Error during paginated fetch for score {plexus_score_id}: {str(e)}", level="ERROR")
+                # Don't log full traceback, just the error message
                 break # Stop fetching for this score on error
                 
         return all_items_for_score
@@ -324,27 +337,19 @@ class FeedbackAnalysis(BaseReportBlock):
             score_id_info: Identifier string for the score (e.g., Plexus Score ID or "Overall") for logging.
             
         Returns:
-            Dictionary with analysis results: {ac1, item_count, mismatches, accuracy}
+            Dictionary with analysis results: {ac1, item_count, mismatches, accuracy, classes_count, label_distribution}
         """
         self._log(f"Analyzing {len(feedback_items)} feedback items for: {score_id_info}")
         
         if not feedback_items:
-            self._log(f"No feedback items to analyze for {score_id_info}.")
-            return {"ac1": None, "item_count": 0, "mismatches": 0, "accuracy": None}
+            self._log(f"No feedback items to analyze for {score_id_info}.", level="WARNING")
+            return {"ac1": None, "item_count": 0, "mismatches": 0, "accuracy": None, "classes_count": 2, "label_distribution": {}}
             
-        initial_values = [item.initialAnswerValue for item in feedback_items if item.initialAnswerValue is not None]
-        final_values = [item.finalAnswerValue for item in feedback_items if item.finalAnswerValue is not None]
-        
-        # Gwet's AC1 requires paired data. Ensure lists are of the same length by taking the minimum.
-        # This assumes items are already somewhat paired or we're comparing corresponding entries.
-        # A more robust pairing might be needed if items aren't implicitly paired.
+        # Don't log intermediate data processing details unless debugging
         valid_pairs_count = 0
         paired_initial = []
         paired_final = []
 
-        # Iterate based on the full list of feedback_items to ensure each item is considered once for pairing
-        processed_indices = set() # To avoid double counting if items are not perfectly one-to-one by index
-        
         # For Gwet's AC1, we need a list of ratings from rater1 and rater2 for the *same set of items*.
         # Here, 'initialAnswerValue' is rater1, 'finalAnswerValue' is rater2 for the same FeedbackItem.
         for item in feedback_items:
@@ -356,16 +361,31 @@ class FeedbackAnalysis(BaseReportBlock):
         self._log(f"Found {valid_pairs_count} valid initial/final pairs for analysis for {score_id_info}.")
 
         if valid_pairs_count == 0:
-            self._log(f"No valid (non-None initial and final) pairs to analyze for {score_id_info}.")
-            return {"ac1": None, "item_count": 0, "mismatches": 0, "accuracy": None}
+            self._log(f"No valid (non-None initial and final) pairs to analyze for {score_id_info}.", level="WARNING")
+            return {"ac1": None, "item_count": 0, "mismatches": 0, "accuracy": None, "classes_count": 2, "label_distribution": {}}
+
+        # Calculate label distribution
+        label_distribution = dict(Counter(paired_final))
+        self._log(f"Final value distribution for {score_id_info}: {label_distribution}")
 
         # Calculate Gwet's AC1
         try:
-            # Ensure GwetAC1 can handle the data format (e.g., list of strings)
-            # Convert values to string just in case they are not, as GwetAC1 might expect consistent types.
+            # Get the number of valid classes from the score configuration
+            num_classes = 2  # Default to binary classification
+            if score_id_info != "Overall":
+                try:
+                    # Get the score object and its valid classes count
+                    score = Score.get_by_id(score_id_info, client=self.api_client)
+                    if score:
+                        # Ensure the client is set on the score instance
+                        score.client = self.api_client
+                        num_classes = score.get_valid_classes_count()
+                        self._log(f"Found {num_classes} valid classes in score configuration")
+                except Exception as e:
+                    self._log(f"Error getting valid classes count, defaulting to 2: {e}", level="WARNING")
             
-            # Corrected GwetAC1 usage:
-            gwet_ac1_calculator = GwetAC1() # Instantiate without arguments
+            # Create GwetAC1 instance - it will determine classes from the input data
+            gwet_ac1_calculator = GwetAC1()
             
             # Prepare reference and predictions lists
             reference_list = [str(i) for i in paired_initial]
@@ -379,34 +399,49 @@ class FeedbackAnalysis(BaseReportBlock):
             ac1_value = calculation_result.value # Get value from the result object
 
             self._log(f"Gwet's AC1 for {score_id_info}: {ac1_value}")
-        except Exception as e:
-            self._log(f"Error calculating Gwet's AC1 for {score_id_info}: {e}")
-            import traceback
-            self._log(traceback.format_exc())
-            ac1_value = None
             
-        # Calculate mismatches and accuracy based on the paired data
-        mismatches = sum(1 for i, f in zip(paired_initial, paired_final) if i != f)
-        
-        if valid_pairs_count > 0:
-            accuracy_float = (valid_pairs_count - mismatches) / valid_pairs_count
-            accuracy_percentage = accuracy_float * 100
-        else:
-            accuracy_percentage = None # MODIFIED: Set to None if no valid pairs
-        
-        self._log(f"Analysis for {score_id_info} - Items: {valid_pairs_count}, Mismatches: {mismatches}, Accuracy: {f'{accuracy_percentage:.2f}%' if accuracy_percentage is not None else 'N/A'}") # MODIFIED Log
-        
-        return {
-            "ac1": ac1_value,
-            "item_count": valid_pairs_count, # Number of items used in AC1 calculation
-            "mismatches": mismatches,
-            "accuracy": accuracy_percentage # Return as percentage or None
-        }
+            # Calculate accuracy
+            mismatches = sum(1 for i, f in zip(paired_initial, paired_final) if i != f)
+            accuracy_percentage = ((valid_pairs_count - mismatches) / valid_pairs_count) * 100 if valid_pairs_count > 0 else None
+            
+            accuracy_str = f"{accuracy_percentage:.2f}%" if accuracy_percentage is not None else "N/A"
+            self._log(f"Analysis results for {score_id_info}: Gwet's AC1={ac1_value}, Items={valid_pairs_count}, Mismatches={mismatches}, Accuracy={accuracy_str}, Classes={num_classes}")
+            
+            return {
+                "ac1": ac1_value,
+                "item_count": valid_pairs_count,
+                "mismatches": mismatches,
+                "accuracy": accuracy_percentage,
+                "classes_count": num_classes,  # Still return the configured number of classes for reference
+                "label_distribution": label_distribution  # Add the distribution of final values
+            }
+            
+        except Exception as e:
+            self._log(f"Error calculating Gwet's AC1 for {score_id_info}: {e}", level="ERROR")
+            # Don't log full traceback, just the error message
+            raise
 
-    def _log(self, message: str):
-        """Helper method to log messages and store them for the report block's log output."""
-        logger.info(f"[ReportBlock {self.config.get('name', 'Unnamed')} (FeedbackAnalysis)] {message}")
-        self.log_messages.append(f"{datetime.now().isoformat()} - {message}")
+    def _log(self, message: str, level="INFO"):
+        """Helper method to log messages and store them for the report block's log output.
+        
+        Args:
+            message: The message to log
+            level: Log level (INFO, DEBUG, WARNING, ERROR)
+        """
+        # Only store non-DEBUG messages in the log output
+        if level == "DEBUG":
+            # Just log to system logger but don't add to block log
+            logger.debug(f"[ReportBlock {self.config.get('name', 'Unnamed')} (FeedbackAnalysis)] {message}")
+        else:
+            # For all other levels (INFO, WARNING, ERROR), log to both system and block log
+            log_method = getattr(logger, level.lower(), logger.info)
+            log_method(f"[ReportBlock {self.config.get('name', 'Unnamed')} (FeedbackAnalysis)] {message}")
+            
+            # Add to block log with level prefix for important messages
+            if level in ("WARNING", "ERROR"):
+                self.log_messages.append(f"{datetime.now().isoformat()} - {level}: {message}")
+            else:
+                self.log_messages.append(f"{datetime.now().isoformat()} - {message}")
 
 # Example of how this block might be configured in a ReportConfiguration:
 """

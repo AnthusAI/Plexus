@@ -47,13 +47,14 @@ function AuthWrapper({ children }: { children: React.ReactNode }) {
     '/documentation/concepts/tasks',
     '/documentation/concepts/items',
     '/documentation/concepts/score-results',
+    '/documentation/concepts/reports',
+    '/documentation/concepts/evaluation-metrics',
     '/documentation/methods/add-edit-source',
     '/documentation/methods/profile-source',
     '/documentation/methods/add-edit-scorecard',
     '/documentation/methods/add-edit-score',
     '/documentation/methods/evaluate-score',
     '/documentation/methods/monitor-tasks',
-    '/documentation/concepts/reports',
   ];
   
   // Check if we should direct users straight to login
