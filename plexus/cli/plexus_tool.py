@@ -17,7 +17,7 @@ from ruamel.yaml import YAML
 
 from plexus.cli.identifier_resolution import resolve_scorecard_identifier, resolve_score_identifier
 from plexus.cli.console import console
-from plexus.cli.CommandLineInterface import create_client
+from plexus.cli.client_utils import create_client
 from plexus.cli.shared import get_score_yaml_path
 from plexus.dashboard.api.client import PlexusDashboardClient
 from plexus.cli.memoized_resolvers import (
