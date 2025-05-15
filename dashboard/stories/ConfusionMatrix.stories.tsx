@@ -17,13 +17,23 @@ const meta: Meta<typeof ConfusionMatrix> = {
     },
   },
   decorators: [
-    (Story) => (
-      <div className="w-full">
-        <Card className="p-4">
-          <Story />
-        </Card>
-      </div>
-    ),
+    (Story) => {
+      // Define styles to ensure "Actual" label is visible
+      const overrideStyles = {
+        overflow: 'visible' as const,
+        position: 'relative' as const
+      };
+      
+      return (
+        <div className="w-full" style={overrideStyles}>
+          <Card className="p-4" style={overrideStyles}>
+            <div style={overrideStyles}>
+              <Story />
+            </div>
+          </Card>
+        </div>
+      );
+    },
   ],
 }
 
@@ -188,6 +198,35 @@ export const Matrix3x3: Story = {
     ],
   }),
 }
+
+// New story for debugging
+export const DebugActualLabelVisibilityInContainer: Story = {
+  args: createStoryArgs({
+    labels: ["No", "Yes"],
+    matrix: [
+      { actualClassLabel: "No", predictedClassCounts: { "No": 50, "Yes": 10 } },
+      { actualClassLabel: "Yes", predictedClassCounts: { "No": 5, "Yes": 35 } },
+    ],
+  }),
+  decorators: [
+    (Story) => (
+      <div 
+        className="p-4 w-full h-screen resize overflow-auto bg-background-subtle"
+        style={{ border: '1px dashed red', position: 'relative' }}
+      >
+        {/* Container mimicking EvaluationTask story */}
+        <Story />
+      </div>
+    ),
+  ],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    // Check for Actual label
+    await expect(canvas.getByText('Actual')).toBeInTheDocument()
+    // Check for Predicted label
+    await expect(canvas.getByText('Predicted')).toBeInTheDocument()
+  }
+};
 
 export const MatrixWithMissingPredictedValues: Story = {
   args: createStoryArgs({

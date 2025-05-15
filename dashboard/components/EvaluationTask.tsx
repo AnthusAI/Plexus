@@ -711,9 +711,9 @@ const DetailContent = React.memo(({
   return (
     <div 
       ref={containerRef}
-      className="w-full min-w-[300px] h-full overflow-y-auto"
+      className="w-full p-3 min-w-[300px] h-full overflow-y-auto"
     >
-      <div className={`${showAsColumns ? 'grid gap-4' : 'space-y-4'} ${showAsColumns ? 'h-full' : 'h-auto'}`} 
+      <div className={`overflow-visible ${showAsColumns ? 'grid gap-4' : 'space-y-4'} ${showAsColumns ? 'h-full' : 'h-auto'}`} 
         style={{
           gridTemplateColumns: isWideEnoughForThree 
             ? selectedScoreResult ? '1fr 1fr 1fr' : '1fr 1fr'
@@ -737,9 +737,11 @@ const DetailContent = React.memo(({
 
         {/* Only show main panel if not showing score result in narrow view */}
         {showMainPanel && (
-          <div className={`w-full ${showAsColumns ? 'h-full' : 'h-auto'} flex flex-col overflow-hidden`}>
-            <div className={`${showAsColumns ? 'flex-1' : ''} overflow-y-auto max-h-full`}>
-              <div className="space-y-3 p-1">
+          <div 
+            className={`w-full ${showAsColumns ? 'h-full' : 'h-auto'} flex flex-col overflow-visible`}
+          >
+            <div className={`${showAsColumns ? 'flex-1' : ''} overflow-visible max-h-full`}>
+              <div className="space-y-3 p-1 overflow-visible">
                 <div className="mb-3">
                   <TaskStatus
                     variant="detail"
@@ -825,11 +827,12 @@ const DetailContent = React.memo(({
                   variant="detail"
                 />
 
-                {transformedConfusionMatrixData && ( // Use transformed data
-                  <div className="mt-3">
-                    <ConfusionMatrix 
+                {/* Confusion Matrix Section */}
+                {transformedConfusionMatrixData && (
+                  <div className="mt-4 rounded-md bg-background/30 w-full" style={{ overflow: 'visible' }}>
+                    <ConfusionMatrix
                       data={transformedConfusionMatrixData} // Pass the transformed data object
-                      onSelectionChange={setSelectedPredictedActual}
+                      onSelectionChange={setSelectedPredictedActual} // Reverted to original handler
                     />
                   </div>
                 )}
