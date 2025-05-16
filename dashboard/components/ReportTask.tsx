@@ -6,6 +6,7 @@ import { Timestamp } from '@/components/ui/timestamp'
 import ReactMarkdown from 'react-markdown'
 import { BlockRenderer } from './blocks/BlockRegistry'
 import { getClient } from '@/utils/amplify-client'
+import BlockDetails from './reports/BlockDetails'
 
 // Define the data structure for report tasks
 export interface ReportTaskData {
@@ -49,6 +50,7 @@ interface ReportBlock {
   output: Record<string, any>
   log?: string | null
   config?: Record<string, any>  // Add config field
+  detailsFiles?: string | null  // Add detailsFiles field
 }
 
 const ReportTask: React.FC<ReportTaskProps> = ({ 
@@ -83,6 +85,7 @@ const ReportTask: React.FC<ReportTaskProps> = ({
                   type
                   output
                   log
+                  detailsFiles
                 }
               }
             }
@@ -198,15 +201,18 @@ const ReportTask: React.FC<ReportTaskProps> = ({
         console.log('Found matching block:', blockData);
         
         return (
-          <BlockRenderer
-            key={blockData.id}
-            config={blockData.config || {}}
-            output={blockData.output}
-            log={blockData.log || undefined}
-            name={blockData.name || blockConfig.name || undefined}
-            position={blockData.position}
-            type={blockData.type}
-          />
+          <>
+            <BlockRenderer
+              key={blockData.id}
+              config={blockData.config || {}}
+              output={blockData.output}
+              log={blockData.log || undefined}
+              name={blockData.name || blockConfig.name || undefined}
+              position={blockData.position}
+              type={blockData.type}
+            />
+            {blockData.detailsFiles && <BlockDetails block={blockData} />}
+          </>
         );
       }
     }
