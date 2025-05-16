@@ -251,19 +251,30 @@ class FeedbackAnalysis(BaseReportBlock):
             # Don't log the full output data - it's redundant and can be large
             self._log(f"Finished generating analysis for {len(scores_to_process)} scores with {all_feedback_items_retrieved_count} total feedback items.")
 
+            # Create a summary log for the ReportBlock.log field (keep it short)
+            summary_log = f"Processed {len(scores_to_process)} score(s) across {all_feedback_items_retrieved_count} feedback items. See detailed logs in log.txt."
+            
+            # The full detailed log will be stored in the S3 file
+            detailed_log = "\n".join(self.log_messages) if self.log_messages else "No logs generated."
+
         except ValueError as ve:
-            self._log(f"Configuration or Value Error: {ve}", level="ERROR")
-            raise  # Re-raise to be caught by the task
+            self._log(f"Configuration or Value Error: {ve}")
+            # final_output_data remains None, or could be set to an error structure
+            final_output_data = {"error": str(ve), "scores": []}
+            summary_log = f"Error: {str(ve)}"
+            detailed_log = "\n".join(self.log_messages) if self.log_messages else f"Error: {str(ve)}"
         except Exception as e:
             self._log(f"ERROR during FeedbackAnalysis generation: {str(e)}", level="ERROR")
             # Log only first few lines of traceback, not the full trace
             import traceback
-            trace_lines = traceback.format_exc().splitlines()[:10]  # Just first 10 lines
-            self._log(f"Error details: {' | '.join(trace_lines)}", level="ERROR")
-            raise  # Re-raise to be caught by the task
+            self._log(traceback.format_exc())
+            final_output_data = {"error": str(e), "scores": []}
+            summary_log = f"Error: {str(e)}"
+            detailed_log = "\n".join(self.log_messages) if self.log_messages else f"Error: {str(e)}"
 
-        log_string = "\n".join(self.log_messages) if self.log_messages else None
-        return final_output_data, log_string
+        # Always return the detailed_log as the second return value to ensure logs are saved to S3
+        # The service.py code will use this to upload to S3
+        return final_output_data, detailed_log
     
     async def _fetch_feedback_items_for_score(self, plexus_scorecard_id: str, plexus_score_id: str) -> List[FeedbackItem]:
         """Fetches all FeedbackItem records for a specific Plexus Score on a Plexus Scorecard."""
