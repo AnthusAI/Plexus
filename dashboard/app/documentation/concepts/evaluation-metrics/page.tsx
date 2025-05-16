@@ -169,11 +169,11 @@ export default function EvaluationMetricsPage() {
   const alwaysHeadsData = createExampleScore(
     'always-heads',
     'Always Guessing "Heads" (50/50)',
-    0.02, // AC1 for 51% accuracy on 50/50 data
-    51.0,
+    0.0, // AC1 for 50% accuracy on 50/50 data when always guessing majority/one class
+    50.0,
     100,
-    49,
-    { 'Heads': 51, 'Tails': 49 }
+    50, // 50 mismatches if 50 are Tails and all are guessed Heads
+    { 'Heads': 50, 'Tails': 50 } // Actual distribution is 50/50
   )
   
   const scenario2Data = createExampleScore( // Balanced 4-Class
@@ -315,8 +315,8 @@ export default function EvaluationMetricsPage() {
   const alwaysHeadsConfusionMatrix = {
     labels: ["Heads", "Tails"],
     matrix: [
-      { actualClassLabel: "Heads", predictedClassCounts: { "Heads": 51, "Tails": 0 } },
-      { actualClassLabel: "Tails", predictedClassCounts: { "Heads": 49, "Tails": 0 } },
+      { actualClassLabel: "Heads", predictedClassCounts: { "Heads": 50, "Tails": 0 } },
+      { actualClassLabel: "Tails", predictedClassCounts: { "Heads": 50, "Tails": 0 } },
     ],
   };
 
@@ -500,7 +500,7 @@ export default function EvaluationMetricsPage() {
               Interpreting accuracy requires understanding the baseline performance for the specific prediction task. Without this context, raw accuracy numbers are meaningless - we need to know what accuracy level would be expected by chance alone.
             </p>
 
-            <h3 className="text-xl font-medium mb-3">Another Complication: Multiple Classes</h3>
+            <h3 className="text-xl font-medium mb-3">A Complication: Multiple Classes</h3>
             <p className="text-muted-foreground mb-6">
               But it gets more complicated when we introduce more than two classes, because the baseline random chance agreement rate changes. To illustrate this, let's look at a simple example: guessing the suit of a card.
             </p>
@@ -565,7 +565,7 @@ export default function EvaluationMetricsPage() {
             {/* === END OF NEW Card Suit Guessing Example === */}
 
             {/* === START OF NEW Stacked Deck Examples (Color Version) === */}
-            <h3 className="text-xl font-medium mb-3">Yet Another Complication: Class Imbalance</h3>
+            <h3 className="text-xl font-medium mb-3">Another Complication: Class Imbalance</h3>
             <p className="text-muted-foreground mb-6">
               And there's a second factor that can confuse the interpretation of raw accuracy: the distribution of the classes in the actual data.
             </p>
@@ -584,8 +584,8 @@ export default function EvaluationMetricsPage() {
               confusionMatrixData={{
                 labels: ["Red", "Black"],
                 matrix: [
-                  { actualClassLabel: "Red", predictedClassCounts: { "Red": 29, "Black": 10 } },
-                  { actualClassLabel: "Black", predictedClassCounts: { "Red": 10, "Black": 3 } },
+                  { actualClassLabel: "Red", predictedClassCounts: { "Red": 20, "Black": 19 } },
+                  { actualClassLabel: "Black", predictedClassCounts: { "Red": 6, "Black": 7 } },
                 ],
               }}
               predictedClassDistributionData={[
@@ -616,12 +616,10 @@ export default function EvaluationMetricsPage() {
               ]}
               isBalanced={false}
               confusionMatrixData={{
-                labels: ["Heads", "Tails"],
+                labels: ["Red", "Black"],
                 matrix: [
-                  // Original comment: Actual Heads: 25 Pred H, 25 Pred T
-                  { actualClassLabel: "Heads", predictedClassCounts: { "Heads": 25, "Tails": 25 } },
-                  // Original comment: Actual Tails: 27 Pred H, 23 Pred T
-                  { actualClassLabel: "Tails", predictedClassCounts: { "Heads": 27, "Tails": 23 } },
+                  { actualClassLabel: "Red", predictedClassCounts: { "Red": 29, "Black": 10 } },
+                  { actualClassLabel: "Black", predictedClassCounts: { "Red": 10, "Black": 3 } },
                 ],
               }}
               predictedClassDistributionData={[
@@ -706,8 +704,8 @@ export default function EvaluationMetricsPage() {
               confusionMatrixData={{
                 labels: ["Safe", "Prohibited"],
                 matrix: [
-                  { actualClassLabel: "Safe", predictedClassCounts: { "Safe": 970, "Prohibited": 30 } },
-                  { actualClassLabel: "Prohibited", predictedClassCounts: { "Safe": 0, "Prohibited": 0 } },
+                  { actualClassLabel: "Safe", predictedClassCounts: { "Safe": 970, "Prohibited": 0 } },
+                  { actualClassLabel: "Prohibited", predictedClassCounts: { "Safe": 30, "Prohibited": 0 } },
                 ],
               }}
               predictedClassDistributionData={[
@@ -991,8 +989,8 @@ export default function EvaluationMetricsPage() {
                 confusionMatrixData={{
                   labels: ["Heads", "Tails"],
                   matrix: [
-                    { actualClassLabel: "Heads", predictedClassCounts: { "Heads": 25, "Tails": 25 } },
-                    { actualClassLabel: "Tails", predictedClassCounts: { "Heads": 27, "Tails": 23 } },
+                    { actualClassLabel: "Heads", predictedClassCounts: { "Heads": 24, "Tails": 26 } },
+                    { actualClassLabel: "Tails", predictedClassCounts: { "Heads": 26, "Tails": 24 } },
                   ],
                 }}
                 predictedClassDistributionData={predictedFairCoinData}
