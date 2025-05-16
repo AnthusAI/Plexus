@@ -293,6 +293,42 @@ export default function EvaluationMetricsPage() {
   const thresholdsWeightedCoin = GaugeThresholdComputer.computeThresholds(weightedCoinData.label_distribution!);
   const dynamicSegmentsWeightedCoin = GaugeThresholdComputer.createSegments(thresholdsWeightedCoin);
 
+  // For the new visualization: 3-class and 12-class scenarios
+  const label_distribution_3_class = { C1: 1, C2: 1, C3: 1 };
+  const thresholds3Class = GaugeThresholdComputer.computeThresholds(label_distribution_3_class);
+  const dynamicSegments3Class = GaugeThresholdComputer.createSegments(thresholds3Class);
+
+  const label_distribution_12_class: Record<string, number> = {};
+  for (let i = 1; i <= 12; i++) {
+    label_distribution_12_class[`Class ${i}`] = 1;
+  }
+  const thresholds12Class = GaugeThresholdComputer.computeThresholds(label_distribution_12_class);
+  const dynamicSegments12Class = GaugeThresholdComputer.createSegments(thresholds12Class);
+
+  // Data for Class Imbalance Visualization
+  const imbal_scenario1_dist = { C1: 50, C2: 50 }; // Balanced 50/50
+  const imbal_scenario1_thresholds = GaugeThresholdComputer.computeThresholds(imbal_scenario1_dist);
+  const imbal_scenario1_segments = GaugeThresholdComputer.createSegments(imbal_scenario1_thresholds);
+
+  const imbal_scenario2_dist = { C1: 75, C2: 25 }; // Imbalanced 75/25
+  const imbal_scenario2_thresholds = GaugeThresholdComputer.computeThresholds(imbal_scenario2_dist);
+  const imbal_scenario2_segments = GaugeThresholdComputer.createSegments(imbal_scenario2_thresholds);
+
+  const imbal_scenario3_dist = { C1: 95, C2: 5 }; // Highly Imbalanced 95/5
+  const imbal_scenario3_thresholds = GaugeThresholdComputer.computeThresholds(imbal_scenario3_dist);
+  const imbal_scenario3_segments = GaugeThresholdComputer.createSegments(imbal_scenario3_thresholds);
+
+  const imbal_scenario4_dist = { C1: 80, C2: 10, C3: 10 }; // Imbalanced 3-Class 80/10/10
+  const imbal_scenario4_thresholds = GaugeThresholdComputer.computeThresholds(imbal_scenario4_dist);
+  const imbal_scenario4_segments = GaugeThresholdComputer.createSegments(imbal_scenario4_thresholds);
+
+  // NEW data for 90/10 binary imbalance
+  const imbal_scenario_moderate_dist = { C1: 90, C2: 10 };
+  const imbal_scenario_moderate_thresholds = GaugeThresholdComputer.computeThresholds(imbal_scenario_moderate_dist);
+  const imbal_scenario_moderate_segments = GaugeThresholdComputer.createSegments(imbal_scenario_moderate_thresholds);
+
+  const consistentAccuracyForImbalanceViz = 75.0;
+
   // Fair coin confusion matrix data - showing the 48% accuracy
   const fairCoinConfusionMatrix = {
     labels: ["Heads", "Tails"],
@@ -487,22 +523,14 @@ export default function EvaluationMetricsPage() {
             <p className="text-muted-foreground mb-6">
               Notice something interesting about both strategies? They both resulted in accuracy rates hovering around 50%. This is what we call the <strong className="text-foreground">base random-chance agreement rate</strong> - the accuracy you would expect from pure guessing when the outcomes are equally likely.
             </p>
-            
-            <p className="text-muted-foreground mb-6">
-              With a perfectly fair coin, no strategy can consistently beat the 50% baseline because each flip is completely independent and random. Any accuracy above this baseline (over a large number of flips) would suggest either extraordinary luck or that you've discovered some actual pattern in the coin's behavior.
-            </p>
 
             <p className="text-muted-foreground mb-6">
-              This raises an important question: if you guess right 48% or 51% of the time with a coin flip, is that "good" performance? The answer depends entirely on what you're comparing it to - in this case, the baseline random chance of 50%.
-            </p>
-
-            <p className="text-muted-foreground mb-6">
-              Interpreting accuracy requires understanding the baseline performance for the specific prediction task. Without this context, raw accuracy numbers are meaningless - we need to know what accuracy level would be expected by chance alone.
+              Interpreting accuracy requires understanding the baseline performance for the specific prediction task. Without this context, raw accuracy numbers are meaningless - we need to know what accuracy level would be expected by chance alone.  You have to understand the concept of chance agreement to understand accuracy.
             </p>
 
             <h3 className="text-xl font-medium mb-3">A Complication: Multiple Classes</h3>
             <p className="text-muted-foreground mb-6">
-              But it gets more complicated when we introduce more than two classes, because the baseline random chance agreement rate changes. To illustrate this, let's look at a simple example: guessing the suit of a card.
+              The problem is that the chance agreement rate is a moving target.  The baseline random chance agreement rate changes when we introduce more than two classes. To illustrate this, let's look at a simple example: guessing the suit of a card.
             </p>
 
             <p className="text-muted-foreground mb-6">
@@ -562,6 +590,116 @@ export default function EvaluationMetricsPage() {
               </p>
             </div>
 
+            <div> <h3 className="text-xl font-medium mb-2">Solution: Adding Context to Accuracy</h3>
+
+            <p className="text-muted-foreground mt-6 mb-4">
+              To address this, Plexus provides context to the raw accuracy metric. One way we do this is by dynamically adjusting the visual representation of the accuracy gauge based on the problem's characteristics. For example, the number of classes significantly impacts the baseline random-chance agreement. A 50% accuracy means something very different for a 2-class problem than for a 12-class problem. By visualizing this context directly on the gauge, we can make the raw accuracy number more interpretable.
+            </p>
+
+            <p className="text-muted-foreground mt-2 mb-4">
+                By calculating a "chance level" or baseline for your specific dataset, the gauge's colors can visually indicate whether the achieved accuracy is substantially better than random guessing, just slightly better, or even close to what chance would predict. For example, 75% accuracy might look very different on a gauge for a 2-class balanced problem (50% chance) versus a 4-class balanced problem (25% chance). This contextual scaling helps you interpret the raw number more effectively.
+              </p>
+              
+              <p className="text-muted-foreground mb-4">
+                The first approach is to retain raw accuracy but enhance its interpretability by providing crucial context. Plexus achieves this by using dynamic visual scales on its Accuracy gauges. This means the background colors and threshold markers on the Accuracy gauge adapt based on your data's characteristics – specifically, the number of classes and the distribution of items among those classes.
+              </p>
+ 
+
+              {/* Coin Flip Example Card */}
+              <EvaluationCard
+                title="Coin Flip Prediction (50/50)"
+                subtitle="A fair coin has a 50% chance of heads or tails. Random guessing achieves 50% accuracy."
+                classDistributionData={fairCoinDistribution}
+                isBalanced={true}
+                accuracy={50.0}
+                variant="default"
+                notes="Without context (left gauge), the 50% accuracy has no meaning. With proper contextual segments (right gauge), 
+                we can see that 50% is exactly at the chance level for a balanced binary problem, indicating no prediction skill."
+              />
+
+              {/* Card Suit Example Card */}
+              <EvaluationCard
+                title="Card Suit Prediction (25/25/25/25)"
+                subtitle="A standard deck has four equally likely suits. Random guessing achieves 25% accuracy."
+                classDistributionData={cardSuitActualDistribution}
+                isBalanced={true}
+                accuracy={25.0}
+                variant="default"
+                accuracyGaugeSegments={GaugeThresholdComputer.createSegments(GaugeThresholdComputer.computeThresholds(cardSuitData.label_distribution!))}
+                notes="Without context (left gauge), 25% accuracy appears very low. With proper contextual segments (right gauge), 
+                we can see that 25% is exactly at the chance level for a balanced 4-class problem, indicating no prediction skill."
+              />
+
+              <p className="text-muted-foreground mt-4 mb-4">
+                The dynamic gauges adjust their colors to match what "baseline random chance" means for each specific task. 
+                Instead of misleadingly suggesting that random guessing is "poor performance" in multi-class problems, 
+                the adjusted gauge shows it's exactly what you'd expect from chance. This makes it much easier to understand 
+                when a model is actually performing better than random guessing.
+              </p>
+              
+            </div>
+
+            <div className="my-8 p-6 rounded-lg">
+              <h3 className="text-xl font-semibold mb-6 text-center">Visualizing Context: Impact of Number of Classes on Accuracy Interpretation</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-8">
+                {/* Column 1: 2 Classes */}
+                <div className="flex flex-col items-center space-y-3 p-4 bg-card rounded-md">
+                  <h4 className="text-md font-medium text-center">Balanced</h4>
+                  <p className="text-sm text-muted-foreground text-center">50/50 Distribution<br/>65% Accuracy</p>
+                  <div className="w-full">
+                    <p className="text-xs text-center text-muted-foreground mb-1">Fixed Thresholds</p>
+                    <AccuracyGauge value={65.0} title="" segments={fixedAccuracyGaugeSegments} />
+                  </div>
+                  <div className="w-full">
+                    <p className="text-xs text-center text-muted-foreground mb-1">Contextual Thresholds</p>
+                    <AccuracyGauge value={65.0} title="" segments={imbal_scenario1_segments} />
+                  </div>
+                </div>
+
+                {/* Column 2: Imbalanced 75/25, 70% Acc */}
+                <div className="flex flex-col items-center space-y-3 p-4 bg-card rounded-md">
+                  <h4 className="text-md font-medium text-center">Slight Imbalance</h4>
+                  <p className="text-sm text-muted-foreground text-center">75/25 Distribution<br/>70% Accuracy</p>
+                  <div className="w-full">
+                    <p className="text-xs text-center text-muted-foreground mb-1">Fixed Thresholds</p>
+                    <AccuracyGauge value={70.0} title="" segments={fixedAccuracyGaugeSegments} />
+                  </div>
+                  <div className="w-full">
+                    <p className="text-xs text-center text-muted-foreground mb-1">Contextual Thresholds</p>
+                    <AccuracyGauge value={70.0} title="" segments={imbal_scenario2_segments} />
+                  </div>
+                </div>
+
+                {/* Column 3: Imbalanced 3-Class 80/10/10, 70% Acc */}
+                <div className="flex flex-col items-center space-y-3 p-4 bg-card rounded-md">
+                  <h4 className="text-md font-medium text-center">Moderate Imbalance</h4>
+                  <p className="text-sm text-muted-foreground text-center">80/10/10 Distribution (3-Class)<br/>70% Accuracy</p>
+                  <div className="w-full">
+                    <p className="text-xs text-center text-muted-foreground mb-1">Fixed Thresholds</p>
+                    <AccuracyGauge value={70.0} title="" segments={fixedAccuracyGaugeSegments} />
+                  </div>
+                  <div className="w-full">
+                    <p className="text-xs text-center text-muted-foreground mb-1">Contextual Thresholds</p>
+                    <AccuracyGauge value={70.0} title="" segments={imbal_scenario4_segments} />
+                  </div>
+                </div>
+                
+                {/* Column 4: Highly Imbalanced 95/5, 92% Acc */}
+                <div className="flex flex-col items-center space-y-3 p-4 bg-card rounded-md">
+                  <h4 className="text-md font-medium text-center">Extreme Imbalance</h4>
+                  <p className="text-sm text-muted-foreground text-center">95/5 Distribution<br/>92% Accuracy</p>
+                  <div className="w-full">
+                    <p className="text-xs text-center text-muted-foreground mb-1">Fixed Thresholds</p>
+                    <AccuracyGauge value={92.0} title="" segments={fixedAccuracyGaugeSegments} />
+                  </div>
+                  <div className="w-full">
+                    <p className="text-xs text-center text-muted-foreground mb-1">Contextual Thresholds</p>
+                    <AccuracyGauge value={92.0} title="" segments={imbal_scenario3_segments} />
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* === END OF NEW Card Suit Guessing Example === */}
 
             {/* === START OF NEW Stacked Deck Examples (Color Version) === */}
@@ -570,7 +708,8 @@ export default function EvaluationMetricsPage() {
               And there's a second factor that can confuse the interpretation of raw accuracy: the distribution of the classes in the actual data.
             </p>
             <p className="text-muted-foreground mb-6">
-              Let's go back to a simpler task: guessing whether a playing card is red or black. But here's the twist - this time our deck is stacked, with 75% red cards and only 25% black cards.
+              Imagine that you're guessing playing cards again, but this time you're just guessing whether a playing card is red or black.  A two-class, binary-classification challenge.
+              But here's the twist - this time our deck is stacked, with 75% red cards and only 25% black cards.
             </p>
 
             <EvaluationCard
@@ -594,7 +733,7 @@ export default function EvaluationMetricsPage() {
               ]}
               accuracy={52.0}
               variant="oneGauge"
-              disableAccuracySegments={true}
+              accuracyGaugeSegments={fixedAccuracyGaugeSegments}
               gaugeDescription={
                 <p className="text-sm">
                   <strong>Still at basic chance level:</strong> Even with a stacked deck (75% red cards), random 50/50 guessing still gives you about 50% accuracy. This matches the baseline for a balanced binary prediction task. Your random strategy doesn't exploit the imbalance in the deck.
@@ -628,7 +767,7 @@ export default function EvaluationMetricsPage() {
               ]}
               accuracy={62.0}
               variant="oneGauge"
-              disableAccuracySegments={true}
+              accuracyGaugeSegments={fixedAccuracyGaugeSegments}
               gaugeDescription={
                 <p className="text-sm">
                   <strong>Better than random guessing, but still no skill:</strong> By matching the known distribution, your accuracy jumps to around 62.5% (0.75×0.75 + 0.25×0.25 = 0.625). This appears better than 50% random guessing, but you're still not demonstrating any card-specific prediction skill—you're just exploiting knowledge of the overall distribution. The AC1 score would still be near 0.
@@ -662,7 +801,7 @@ export default function EvaluationMetricsPage() {
               ]}
               accuracy={75.0}
               variant="oneGauge"
-              disableAccuracySegments={true}
+              accuracyGaugeSegments={fixedAccuracyGaugeSegments}
               gaugeDescription={
                 <>
                   <p className="text-sm">
@@ -714,7 +853,7 @@ export default function EvaluationMetricsPage() {
               ]}
               accuracy={97.0}
               variant="oneGauge"
-              disableAccuracySegments={true}
+              accuracyGaugeSegments={fixedAccuracyGaugeSegments}
               gaugeDescription={
                 <>
                   <p className="text-sm">
@@ -732,82 +871,28 @@ export default function EvaluationMetricsPage() {
             />
 
             <p className="text-muted-foreground mb-6">
-              If you let someone tell you that a model has 97% accuracy, they're not really telling you anything about the model's performance.  You need to know the context of the task to understand what that means.
+              If someone tells you that a model has 97% accuracy, they're not really telling you anything about the model's performance.  You need to know the context of the task to understand what that means.
             </p>
-            
-            <div className="mt-8 p-5 bg-violet-50 dark:bg-violet-950/40 rounded-lg border-l-4 border-violet-500">
-              <h3 className="text-xl font-semibold mb-2">The Core Problem: Accuracy Without Context Is Meaningless</h3>
-              <p className="text-muted-foreground mb-3">
-                As our examples demonstrate, <strong className="text-foreground">raw accuracy scores cannot be meaningfully interpreted without context</strong>. A 97% accuracy might represent:
-              </p>
-              <ul className="list-disc pl-6 space-y-2 mb-4 text-muted-foreground">
-                <li>Excellent performance on a balanced dataset</li>
-                <li>Mediocre performance on an imbalanced dataset</li> 
-                <li>Complete failure that detects zero relevant cases in rare event detection</li>
-              </ul>
-              <p className="text-muted-foreground mb-3">
-                How can we solve this fundamental problem? We have two primary approaches:
-              </p>
-              <ol className="list-decimal pl-6 space-y-2 mb-2 text-muted-foreground">
-                <li><strong className="text-foreground">Add context to the accuracy metric</strong> by visually adjusting gauge thresholds based on class distribution</li>
-                <li><strong className="text-foreground">Use alternative metrics</strong> that inherently account for class distribution (like Gwet's AC1)</li>
-              </ol>
-              <p className="text-sm text-muted-foreground mt-3">
-                As we'll see next, Plexus provides both solutions to ensure you can correctly interpret classifier performance regardless of your data's characteristics.
-              </p>
-            </div>
-            
-          </div>
-        </section>
 
-        <section>
-          <h2 className="text-2xl font-semibold mb-4">Two Solutions for More Meaningful Evaluation</h2>
-          <p className="text-muted-foreground mb-4">
-            When faced with a raw accuracy score, like "75% accurate," it's hard to know its true meaning without more information. Plexus addresses this challenge in two main ways to provide a clearer picture of classifier performance:
-          </p>
-          <div className="space-y-6 mb-6">
-            <div>
-              <h3 className="text-xl font-medium mb-2">Solution 1: Adding Context to Accuracy</h3>
-              <p className="text-muted-foreground">
-                The first approach is to retain raw accuracy but enhance its interpretability by providing crucial context. Plexus achieves this by using dynamic visual scales on its Accuracy gauges. This means the background colors and threshold markers on the Accuracy gauge adapt based on your data's characteristics – specifically, the number of classes and the distribution of items among those classes.
-              </p>
-              <p className="text-muted-foreground mt-2 mb-4">
-                By calculating a "chance level" or baseline for your specific dataset, the gauge's colors can visually indicate whether the achieved accuracy is substantially better than random guessing, just slightly better, or even close to what chance would predict. For example, 75% accuracy might look very different on a gauge for a 2-class balanced problem (50% chance) versus a 4-class balanced problem (25% chance). This contextual scaling helps you interpret the raw number more effectively.
-              </p>
+            <div className="mt-6 p-5 bg-violet-50 dark:bg-violet-950/40 rounded-lg border-l-4 border-violet-500">
+                <h4 className="text-xl font-semibold mb-2">Key Insight: Notice how our gauge thresholds shift to counteract the advantage gained by simply matching the distribution.</h4>
+                <p className="text-muted-foreground mb-3">
+                  By correctly identifying that the baseline chance level for the stacked deck is around {GaugeThresholdComputer.computeThresholds({ "Red": 39, "Black": 13 }).chance.toFixed(1)}%, the gauge prevents us from being impressed by accuracy scores that could be achieved just by exploiting the skewed distribution.
+                </p>
+                
+                <ul className="list-disc pl-6 space-y-2 mb-3 text-muted-foreground">
+                  <li>With the stacked deck, <strong className="text-foreground">distribution-aware random guessing</strong> achieves 62.5% accuracy with zero real predictive skill</li>
+                  <li>All the "success" segments (okay, good, great) are <strong className="text-foreground">crammed to the right</strong> of the gauge for imbalanced data, reflecting the higher baseline to beat</li>
+                  <li>To achieve what would be considered "good" performance (30% above chance) on the stacked deck, you'd need accuracy of {(GaugeThresholdComputer.computeThresholds({ "Red": 39, "Black": 13 }).chance + 30).toFixed(1)}%!</li>
+                </ul>
+              </div>
 
-              {/* Coin Flip Example Card */}
-              <EvaluationCard
-                title="Coin Flip Prediction (50/50)"
-                subtitle="A fair coin has a 50% chance of heads or tails. Random guessing achieves 50% accuracy."
-                classDistributionData={fairCoinDistribution}
-                isBalanced={true}
-                accuracy={50.0}
-                variant="default"
-                notes="Without context (left gauge), the 50% accuracy has no meaning. With proper contextual segments (right gauge), 
-                we can see that 50% is exactly at the chance level for a balanced binary problem, indicating no prediction skill."
-              />
+            <p className="text-muted-foreground mt-8 mb-4">
+              The challenge with class imbalance is that a high raw accuracy can often be achieved by simply predicting the majority class, without any real understanding of the minority classes. To illustrate how Plexus helps provide context in such situations, the visualization below demonstrates the accuracy gauge under different imbalance scenarios. The top gauge in each column uses fixed, unadjusted segments, while the bottom gauge uses segments dynamically adjusted for the specific class distribution.
+            </p>
 
-              {/* Card Suit Example Card */}
-              <EvaluationCard
-                title="Card Suit Prediction (25/25/25/25)"
-                subtitle="A standard deck has four equally likely suits. Random guessing achieves 25% accuracy."
-                classDistributionData={cardSuitActualDistribution}
-                isBalanced={true}
-                accuracy={25.0}
-                variant="default"
-                accuracyGaugeSegments={GaugeThresholdComputer.createSegments(GaugeThresholdComputer.computeThresholds(cardSuitData.label_distribution!))}
-                notes="Without context (left gauge), 25% accuracy appears very low. With proper contextual segments (right gauge), 
-                we can see that 25% is exactly at the chance level for a balanced 4-class problem, indicating no prediction skill."
-              />
 
-              <p className="text-muted-foreground mt-4 mb-4">
-                The dynamic gauges adjust their colors to match what "baseline random chance" means for each specific task. 
-                Instead of misleadingly suggesting that random guessing is "poor performance" in multi-class problems, 
-                the adjusted gauge shows it's exactly what you'd expect from chance. This makes it much easier to understand 
-                when a model is actually performing better than random guessing.
-              </p>
-
-              <p className="text-muted-foreground mt-4 mb-4">
+            <p className="text-muted-foreground mt-4 mb-4">
                 Let's return to our card deck example to demonstrate how gauge thresholds adjust for imbalanced data. Remember our stacked deck with 75% red cards?
               </p>
 
@@ -893,7 +978,7 @@ export default function EvaluationMetricsPage() {
                       data={[
                         { label: "Red", count: 39 },
                         { label: "Black", count: 13 }
-                      ]} 
+                      ]}
                       isBalanced={false} 
                     />
                   </div>
@@ -948,22 +1033,146 @@ export default function EvaluationMetricsPage() {
                   </div>
                 </CardContent>
               </Card>
-              
-              <div className="mt-6 p-5 bg-violet-50 dark:bg-violet-950/40 rounded-lg border-l-4 border-violet-500">
-                <h4 className="text-xl font-semibold mb-2">Key Insight: Notice how our gauge thresholds shift to counteract the advantage gained by simply matching the distribution.</h4>
-                <p className="text-muted-foreground mb-3">
-                  By correctly identifying that the baseline chance level for the stacked deck is around {GaugeThresholdComputer.computeThresholds({ "Red": 39, "Black": 13 }).chance.toFixed(1)}%, the gauge prevents us from being impressed by accuracy scores that could be achieved just by exploiting the skewed distribution.
-                </p>
+
+            <p className="text-muted-foreground mb-6">
+              Notice how an accuracy score that might appear 'good' or 'great' with fixed segments can be revealed as mediocre or even poor once the baseline chance agreement for that imbalanced dataset is factored into the contextual segments. The contextual gauge makes it clear how much actual predictive skill (beyond simply guessing based on the imbalance) is represented by the accuracy score.
+            </p>
+
+            <div className="my-8 p-6 rounded-lg">
+              <h3 className="text-xl font-semibold mb-6 text-center">Visualizing Context: Impact of Class Imbalance on Accuracy Interpretation</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-8">
+                {/* Column 1: Balanced 50/50, 75% Acc */}
+                <div className="flex flex-col items-center space-y-3 p-4 bg-card rounded-md">
+                  <h4 className="text-md font-medium text-center">Balanced</h4>
+                  <p className="text-sm text-muted-foreground text-center">50/50 Distribution<br/>75% Accuracy</p>
+                  <div className="w-full">
+                    <p className="text-xs text-center text-muted-foreground mb-1">Fixed Thresholds</p>
+                    <AccuracyGauge value={consistentAccuracyForImbalanceViz} title="" segments={fixedAccuracyGaugeSegments} />
+                  </div>
+                  <div className="w-full">
+                    <p className="text-xs text-center text-muted-foreground mb-1">Contextual Thresholds</p>
+                    <AccuracyGauge value={consistentAccuracyForImbalanceViz} title="" segments={imbal_scenario1_segments} />
+                  </div>
+                </div>
+
+                {/* Column 2: Imbalanced 75/25, 75% Acc */}
+                <div className="flex flex-col items-center space-y-3 p-4 bg-card rounded-md">
+                  <h4 className="text-md font-medium text-center">Imbalanced</h4>
+                  <p className="text-sm text-muted-foreground text-center">75/25 Distribution<br/>75% Accuracy</p>
+                  <div className="w-full">
+                    <p className="text-xs text-center text-muted-foreground mb-1">Fixed Thresholds</p>
+                    <AccuracyGauge value={consistentAccuracyForImbalanceViz} title="" segments={fixedAccuracyGaugeSegments} />
+                  </div>
+                  <div className="w-full">
+                    <p className="text-xs text-center text-muted-foreground mb-1">Contextual Thresholds</p>
+                    <AccuracyGauge value={consistentAccuracyForImbalanceViz} title="" segments={imbal_scenario2_segments} />
+                  </div>
+                </div>
+
+                {/* Column 3: Imbalanced 90/10, 75% Acc */}
+                <div className="flex flex-col items-center space-y-3 p-4 bg-card rounded-md">
+                  <h4 className="text-md font-medium text-center">Imbalanced</h4>
+                  <p className="text-sm text-muted-foreground text-center">90/10 Distribution<br/>75% Accuracy</p>
+                  <div className="w-full">
+                    <p className="text-xs text-center text-muted-foreground mb-1">Fixed Thresholds</p>
+                    <AccuracyGauge value={consistentAccuracyForImbalanceViz} title="" segments={fixedAccuracyGaugeSegments} />
+                  </div>
+                  <div className="w-full">
+                    <p className="text-xs text-center text-muted-foreground mb-1">Contextual Thresholds</p>
+                    <AccuracyGauge value={consistentAccuracyForImbalanceViz} title="" segments={imbal_scenario_moderate_segments} />
+                  </div>
+                </div>
                 
-                <ul className="list-disc pl-6 space-y-2 mb-3 text-muted-foreground">
-                  <li>With the stacked deck, <strong className="text-foreground">distribution-aware random guessing</strong> achieves 62.5% accuracy with zero real predictive skill</li>
-                  <li>All the "success" segments (okay, good, great) are <strong className="text-foreground">crammed to the right</strong> of the gauge for imbalanced data, reflecting the higher baseline to beat</li>
-                  <li>To achieve what would be considered "good" performance (30% above chance) on the stacked deck, you'd need accuracy of {(GaugeThresholdComputer.computeThresholds({ "Red": 39, "Black": 13 }).chance + 30).toFixed(1)}%!</li>
-                </ul>
+                {/* Column 4: Highly Imbalanced 95/5, 75% Acc */}
+                <div className="flex flex-col items-center space-y-3 p-4 bg-card rounded-md">
+                  <h4 className="text-md font-medium text-center">Imbalanced</h4>
+                  <p className="text-sm text-muted-foreground text-center">95/5 Distribution<br/>75% Accuracy</p>
+                  <div className="w-full">
+                    <p className="text-xs text-center text-muted-foreground mb-1">Fixed Thresholds</p>
+                    <AccuracyGauge value={consistentAccuracyForImbalanceViz} title="" segments={fixedAccuracyGaugeSegments} />
+                  </div>
+                  <div className="w-full">
+                    <p className="text-xs text-center text-muted-foreground mb-1">Contextual Thresholds</p>
+                    <AccuracyGauge value={consistentAccuracyForImbalanceViz} title="" segments={imbal_scenario3_segments} />
+                  </div>
+                </div>
               </div>
-
-
             </div>
+ 
+            <div className="mt-8 p-5 bg-violet-50 dark:bg-violet-950/40 rounded-lg border-l-4 border-violet-500">
+              <h3 className="text-xl font-semibold mb-2">The Core Problem: Accuracy Without Context Is Meaningless</h3>
+              <p className="text-muted-foreground mb-3">
+                As our examples demonstrate, <strong className="text-foreground">raw accuracy scores cannot be meaningfully interpreted without context</strong>. A 97% accuracy might represent:
+              </p>
+              <ul className="list-disc pl-6 space-y-2 mb-4 text-muted-foreground">
+                <li>Excellent performance on a balanced dataset</li>
+                <li>Mediocre performance on an imbalanced dataset</li> 
+                <li>Complete failure that detects zero relevant cases in rare event detection</li>
+              </ul>
+              <p className="text-muted-foreground mb-3">
+                How can we solve this fundamental problem? We have two primary approaches:
+              </p>
+              <ol className="list-decimal pl-6 space-y-2 mb-2 text-muted-foreground">
+                <li><strong className="text-foreground">Add context to the accuracy metric</strong> by visually adjusting gauge thresholds based on class distribution</li>
+                <li><strong className="text-foreground">Use alternative metrics</strong> that inherently account for class distribution (like Gwet's AC1)</li>
+              </ol>
+              <p className="text-sm text-muted-foreground mt-3">
+                As we'll see next, Plexus provides both solutions to ensure you can correctly interpret classifier performance regardless of your data's characteristics.
+              </p>
+            </div>
+            
+          </div>
+        </section>
+
+        <section>
+          <h2 className="text-2xl font-semibold mb-4">Two Solutions for More Meaningful Evaluation</h2>
+          <p className="text-muted-foreground mb-4">
+            When faced with a raw accuracy score, like "75% accurate," it's hard to know its true meaning without more information. Plexus addresses this challenge in two main ways to provide a clearer picture of classifier performance:
+          </p>
+          <div className="space-y-6 mb-6">
+            <div>
+              <h3 className="text-xl font-medium mb-2">Solution 1: Adding Context to Accuracy</h3>
+              <p className="text-muted-foreground">
+                The first approach is to retain raw accuracy but enhance its interpretability by providing crucial context. Plexus achieves this by using dynamic visual scales on its Accuracy gauges. This means the background colors and threshold markers on the Accuracy gauge adapt based on your data's characteristics – specifically, the number of classes and the distribution of items among those classes.
+              </p>
+              <p className="text-muted-foreground mt-2 mb-4">
+                By calculating a "chance level" or baseline for your specific dataset, the gauge's colors can visually indicate whether the achieved accuracy is substantially better than random guessing, just slightly better, or even close to what chance would predict. For example, 75% accuracy might look very different on a gauge for a 2-class balanced problem (50% chance) versus a 4-class balanced problem (25% chance). This contextual scaling helps you interpret the raw number more effectively.
+              </p>
+
+              {/* Coin Flip Example Card */}
+              <EvaluationCard
+                title="Coin Flip Prediction (50/50)"
+                subtitle="A fair coin has a 50% chance of heads or tails. Random guessing achieves 50% accuracy."
+                classDistributionData={fairCoinDistribution}
+                isBalanced={true}
+                accuracy={50.0}
+                variant="default"
+                notes="Without context (left gauge), the 50% accuracy has no meaning. With proper contextual segments (right gauge), 
+                we can see that 50% is exactly at the chance level for a balanced binary problem, indicating no prediction skill."
+              />
+
+              {/* Card Suit Example Card */}
+              <EvaluationCard
+                title="Card Suit Prediction (25/25/25/25)"
+                subtitle="A standard deck has four equally likely suits. Random guessing achieves 25% accuracy."
+                classDistributionData={cardSuitActualDistribution}
+                isBalanced={true}
+                accuracy={25.0}
+                variant="default"
+                accuracyGaugeSegments={GaugeThresholdComputer.createSegments(GaugeThresholdComputer.computeThresholds(cardSuitData.label_distribution!))}
+                notes="Without context (left gauge), 25% accuracy appears very low. With proper contextual segments (right gauge), 
+                we can see that 25% is exactly at the chance level for a balanced 4-class problem, indicating no prediction skill."
+              />
+
+              <p className="text-muted-foreground mt-4 mb-4">
+                The dynamic gauges adjust their colors to match what "baseline random chance" means for each specific task. 
+                Instead of misleadingly suggesting that random guessing is "poor performance" in multi-class problems, 
+                the adjusted gauge shows it's exactly what you'd expect from chance. This makes it much easier to understand 
+                when a model is actually performing better than random guessing.
+              </p>
+              
+            </div>
+
             <div>
               <h3 className="text-xl font-medium mb-2">Solution 2: Using a Context-Free Agreement Metric</h3>
               <p className="text-muted-foreground">
@@ -973,9 +1182,19 @@ export default function EvaluationMetricsPage() {
                 An AC1 score of 0 typically indicates performance no better than chance, while a score of 1 indicates perfect agreement, and negative scores indicate systematic disagreement. Because this correction for chance is built into the AC1 calculation, its scale (and the interpretation of "good" or "poor" agreement) remains consistent regardless of the number of classes or the balance of the data distribution. This makes the Agreement gauge straightforward to interpret - you don't need to mentally adjust for the data's characteristics because the metric has already done that heavy lifting.
               </p>
 
-              <p className="text-lg font-medium mb-4">Side-by-Side Comparison: Agreement vs. Accuracy</p>
+              <p className="text-lg font-medium mb-4">Interpreting Performance: Using Agreement and Accuracy Gauges Together</p>
               <p className="text-muted-foreground mb-6">
-                Let's compare the Agreement (AC1) gauge with the Accuracy gauge for the same examples we showed earlier, to see how each metric handles different scenarios:
+                While the contextualized Accuracy gauge helps make raw accuracy more interpretable, the Agreement (AC1) gauge offers a complementary perspective. Gwet's AC1 is designed to inherently account for chance agreement and class distribution, providing a stable measure of classifier performance that doesn't require you to mentally adjust for the data's characteristics.
+              </p>
+              <p className="text-muted-foreground mt-2 mb-6">
+                By using both gauges together, you get a comprehensive view. The Accuracy gauge, with its dynamic segments, shows how your model's raw correctness compares to the baseline chance for that specific problem. The Agreement gauge (AC1) gives you a single number that has already made this chance correction. 
+                An AC1 score near 0 typically indicates performance no better than random chance for that data distribution, while 1 signifies perfect agreement, and negative scores suggest systematic disagreement. 
+                When both gauges tell a similar story (e.g., AC1 is low and Accuracy is near its chance baseline, or AC1 is high and Accuracy is well above its chance baseline), it strengthens your interpretation. Discrepancies can also be revealing, often highlighting how a seemingly good raw accuracy might be less impressive once chance agreement is fully accounted for, especially in cases of imbalance.
+              </p>
+
+              <h3 className="text-lg font-medium mb-4">Illustrative Examples: Dual Gauge Interpretation</h3>
+              <p className="text-muted-foreground mb-6">
+                Let's re-examine some of our earlier scenarios, this time focusing on how the combination of the Agreement (AC1) gauge and the contextualized Accuracy gauge helps build a robust understanding of model performance:
               </p>
 
               {/* Coin Flip Example - Using showBothGauges prop */}
