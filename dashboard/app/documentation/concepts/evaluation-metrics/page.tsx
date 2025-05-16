@@ -329,6 +329,13 @@ export default function EvaluationMetricsPage() {
 
   const consistentAccuracyForImbalanceViz = 75.0;
 
+  // Segments for the conceptual visualization of imbalance impact
+  const conceptualImbalanceContextualSegments: Segment[] = [
+    { start: 0, end: 90, color: 'var(--gauge-inviable)' },    // Represents 'chance' or 'poor' up to 90%
+    { start: 90, end: 95, color: 'var(--gauge-converging)' }, // Represents 'okay' or 'better than chance'
+    { start: 95, end: 100, color: 'var(--gauge-great)' }      // Represents 'good' or 'significantly better'
+  ];
+
   const consistentAccuracyForNumClassesViz = 75.0; // Added for the "Impact of Number of Classes" visualization
 
   // Fair coin confusion matrix data - showing the 48% accuracy
@@ -798,6 +805,44 @@ export default function EvaluationMetricsPage() {
               <p className="text-muted-foreground mt-2 mb-4">
                 When classes are imbalanced, a simple classifier might achieve high raw accuracy by merely predicting the majority class. The contextualized Accuracy gauge counteracts this misleading interpretation by calculating a baseline chance agreement that considers this skew. Consequently, the "okay," "good," and "great" performance regions on the gauge will shift, often to higher accuracy values, reflecting that a higher raw accuracy is needed to demonstrate skill beyond simply exploiting the imbalance.
               </p>
+
+              {/* Conceptual Visualization for Imbalance Impact using AccuracyGauge */}
+              <div className="my-8 p-6 bg-card rounded-lg shadow">
+                <h5 className="text-md font-semibold text-center mb-4">Conceptual: Accuracy Gauge Thresholds & Imbalance</h5>
+                <p className="text-sm text-muted-foreground text-center mb-1">
+                  Scenario: Highly Imbalanced Data (e.g., 90% Class A, 10% Class B). Naive accuracy by guessing majority = 90%.
+                </p>
+                <p className="text-sm text-muted-foreground text-center mb-4">Achieved Accuracy by a model: 85%</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 items-start">
+                  {/* Fixed Thresholds Gauge */}
+                  <div className="flex flex-col items-center space-y-2 p-4 rounded-md bg-background">
+                    <p className="text-sm font-medium text-center mb-2">Gauge with Fixed Thresholds</p>
+                    <AccuracyGauge value={85} title="" segments={fixedAccuracyGaugeSegments} />
+                    <p className="text-xs text-muted-foreground mt-2 text-center">
+                      (Fixed Segments: 0-50 Poor, 50-70 Converging, 70-80 Almost, 80-90 Viable, 90-100 Great)
+                    </p>
+                    <p className="text-xs text-center mt-1">
+                      <strong className="text-foreground">Interpretation:</strong> Appears "Viable"
+                    </p>
+                  </div>
+
+                  {/* Contextual Thresholds Gauge */}
+                  <div className="flex flex-col items-center space-y-2 p-4 rounded-md bg-background">
+                    <p className="text-sm font-medium text-center mb-2">Gauge with Contextual Thresholds</p>
+                    <AccuracyGauge value={85} title="" segments={conceptualImbalanceContextualSegments} />
+                    <p className="text-xs text-muted-foreground mt-2 text-center">
+                      (Contextual Segments for 90/10 Imbalance: 0-90 Poor/Chance, 90-95 Converging, 95-100 Great)
+                    </p>
+                    <p className="text-xs text-center mt-1">
+                      <strong className="text-foreground">Interpretation:</strong> "Poor" (below naive chance)
+                    </p>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground mt-4 text-center">
+                  This graphic using Plexus's standard gauges illustrates: with severe imbalance, an 85% accuracy that looks "Viable" on a fixed scale is correctly shown as "Poor" or "Below Chance" once gauge thresholds are contextualized to the 90% baseline accuracy achievable by naive guessing.
+                </p>
+              </div>
+            
               <p className="text-muted-foreground mt-2 mb-4">
                 Detailed explanations, examples (such as the "Stacked Deck Color Prediction"), and visualizations illustrating how these dynamic adjustments work for various levels of class imbalance are provided earlier in this document (see sections like <Link href="#solution-for-imbalance" className="text-primary hover:underline">Solution for Imbalance: Contextual Accuracy Adjustments</Link> and <Link href="#visualizing-imbalance" className="text-primary hover:underline">Visualizing Context: Impact of Class Imbalance</Link>). This tactic ensures that the Accuracy gauge provides a more honest assessment even when dealing with skewed datasets.
               </p>
