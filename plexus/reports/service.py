@@ -13,6 +13,17 @@ import mistune
 import yaml
 import jinja2
 
+# Import S3 utils explicitly at the top level to ensure it's loaded
+try:
+    from plexus.reports.s3_utils import upload_report_block_file, get_bucket_name
+    logger = logging.getLogger(__name__)
+    logger.info("Successfully imported S3 utils at module level")
+    S3_UTILS_AVAILABLE = True
+except Exception as e:
+    logger = logging.getLogger(__name__)
+    logger.error(f"Failed to import S3 utils at module level: {str(e)}")
+    S3_UTILS_AVAILABLE = False
+
 # Import block classes dynamically or maintain a registry
 # For now, let's import the known ones to start. Need a robust way later.
 from plexus.reports import blocks
@@ -529,35 +540,99 @@ def _generate_report_core(
                     try:
                         output_json_str = json.dumps(result["output"] if result["output"] is not None else {})
                         
-                        # Add detailed logging about the output size and content
-                        output_size = len(output_json_str)
-                        output_sample = output_json_str[:500] + "..." if output_size > 500 else output_json_str
-                        logger.info(
-                            f"{log_prefix} Creating ReportBlock: "
-                            f"name='{result.get('name', 'N/A')}', "
-                            f"position={result.get('position', 'N/A')}, "
-                            f"type='{result.get('type', 'N/A')}', "
-                            f"output_size={output_size} bytes"
-                        )
-                        logger.debug(f"{log_prefix} Output sample: {output_sample}")
+                        # Store log content in S3 instead of directly in the ReportBlock record
+                        details_files = []
+                        log_content = result.get("log")
                         
-                        if output_size > 350000:  # Warn if approaching 400KB DynamoDB limit
-                            logger.warning(
-                                f"{log_prefix} WARNING: Large output size ({output_size} bytes) "
-                                f"for block '{result.get('name', 'N/A')}' "
-                                f"approaching DynamoDB's 400KB limit!"
+                        logger.info(f"{log_prefix} Processing block {result.get('name', 'unnamed')}:")
+                        logger.info(f"{log_prefix} S3_UTILS_AVAILABLE = {S3_UTILS_AVAILABLE}")
+                        
+                        # Log the log content details to understand what we're working with
+                        if log_content is None:
+                            logger.info(f"{log_prefix} Log content is None, skipping S3 upload")
+                        elif log_content == "":
+                            logger.info(f"{log_prefix} Log content is empty string, skipping S3 upload")
+                        else:
+                            log_content_length = len(log_content)
+                            logger.info(f"{log_prefix} Log content is present: {log_content_length} characters")
+                            log_preview = log_content[:100] + "..." if len(log_content) > 100 else log_content
+                            logger.info(f"{log_prefix} Log content preview: {log_preview}")
+                        
+                        # Only upload log file if there's actual content AND S3 utils are available
+                        if log_content and S3_UTILS_AVAILABLE:
+                            logger.info(f"{log_prefix} Starting S3 upload path for log content")
+                            try:
+                                # Create a temporary ReportBlock to get an ID
+                                logger.info(f"{log_prefix} Creating temporary ReportBlock")
+                                temp_block = ReportBlock.create(
+                                    reportId=report_id,
+                                    position=result["position"],
+                                    name=result["name"],
+                                    type=result["type"],
+                                    output=output_json_str,
+                                    log="See log.txt in detailsFiles", # Reference to the file
+                                    client=client
+                                )
+                                logger.info(f"{log_prefix} Created temporary ReportBlock with ID {temp_block.id}")
+                                
+                                # Upload log content to S3
+                                logger.info(f"{log_prefix} Starting upload of log file to S3")
+                                log_file_info = upload_report_block_file(
+                                    report_block_id=temp_block.id,
+                                    file_name="log.txt",
+                                    content=log_content,
+                                    content_type="text/plain"
+                                )
+                                logger.info(f"{log_prefix} S3 upload completed successfully: {log_file_info}")
+                                
+                                # Add file info to details_files
+                                details_files.append(log_file_info)
+                                logger.info(f"{log_prefix} Added file info to details_files: {details_files}")
+                                
+                                # Update the block with details_files
+                                details_files_json = json.dumps(details_files)
+                                logger.info(f"{log_prefix} Updating ReportBlock with detailsFiles JSON: {details_files_json}")
+                                temp_block.update(
+                                    detailsFiles=details_files_json,
+                                    client=client
+                                )
+                                logger.info(f"{log_prefix} Successfully updated ReportBlock with detailsFiles")
+                                
+                                created_block_ids.append(temp_block.id)
+                                logger.info(f"{log_prefix} Created ReportBlock with ID {temp_block.id} and uploaded log to S3")
+                                
+                            except Exception as s3_error:
+                                logger.exception(f"{log_prefix} Failed to upload log to S3: {s3_error}. Error details:", exc_info=True)
+                                # Fall back to storing log directly in the ReportBlock
+                                logger.info(f"{log_prefix} Falling back to storing log directly in ReportBlock (truncated if needed)")
+                                block_record = ReportBlock.create(
+                                    reportId=report_id,
+                                    position=result["position"],
+                                    name=result["name"],
+                                    type=result["type"],
+                                    output=output_json_str,
+                                    log=log_content[:10000] if log_content else None,  # Truncate if too long
+                                    client=client
+                                )
+                                created_block_ids.append(block_record.id)
+                        else:
+                            # Either no log content or S3 utils not available
+                            if not log_content:
+                                logger.info(f"{log_prefix} No log content for block {result.get('name', 'unnamed')}, creating block without S3 upload")
+                            else:
+                                logger.info(f"{log_prefix} S3 utils not available, storing log directly in ReportBlock")
+                                
+                            # Create block normally without S3
+                            block_record = ReportBlock.create(
+                                reportId=report_id,
+                                position=result["position"],
+                                name=result["name"],
+                                type=result["type"],
+                                output=output_json_str,
+                                log=log_content[:10000] if log_content else None,  # Truncate if too long
+                                client=client
                             )
-                        
-                        block_record = ReportBlock.create(
-                            reportId=report_id,
-                            position=result["position"],
-                            name=result["name"],
-                            type=result["type"],  # Use the class name directly as the type
-                            output=output_json_str,
-                            log=result["log"],
-                            client=client
-                        )
-                        created_block_ids.append(block_record.id)
+                            created_block_ids.append(block_record.id)
                     except Exception as e:
                         logger.exception(f"{log_prefix} Failed to create ReportBlock record for block at pos {result.get('position')}: {e}")
                         if first_block_error_message is None:

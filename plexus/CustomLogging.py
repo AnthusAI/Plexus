@@ -133,6 +133,7 @@ def setup_logging(log_group=DEFAULT_LOG_GROUP):
     logging.getLogger('botocore').setLevel(logging.WARNING)
     logging.getLogger('boto3').setLevel(logging.WARNING)
     logging.getLogger('gql.transport').setLevel(logging.WARNING)
+    logging.getLogger('gql.dsl').setLevel(logging.WARNING)
 
 # Initial setup with default log group
 setup_logging()
