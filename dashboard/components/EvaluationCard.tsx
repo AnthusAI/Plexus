@@ -58,6 +58,12 @@ export interface EvaluationCardProps {
   accuracyGaugeSegments?: Segment[]
   
   /**
+   * Disables colored segments in the accuracy gauge, showing only a gray background
+   * This is useful when we want to show the raw accuracy value without implying interpretability
+   */
+  disableAccuracySegments?: boolean
+  
+  /**
    * Optional notes to display at the bottom of the card
    */
   notes?: React.ReactNode
@@ -76,6 +82,18 @@ export interface EvaluationCardProps {
    * Show both AC1 and Accuracy gauges side-by-side
    */
   showBothGauges?: boolean
+
+  /**
+   * Layout variant
+   * - default: Visualizations span full width, gauges in grid below
+   * - oneGauge: Two-column layout with visualizations on left, single gauge on right
+   */
+  variant?: 'default' | 'oneGauge'
+  
+  /**
+   * Optional additional text to display below the gauge in oneGauge variant
+   */
+  gaugeDescription?: React.ReactNode
 }
 
 /**
@@ -93,28 +111,132 @@ export default function EvaluationCard({
   accuracy,
   gwetAC1,
   accuracyGaugeSegments,
+  disableAccuracySegments = false,
   notes,
   warningMessage,
   className,
-  showBothGauges = false
+  showBothGauges = false,
+  variant = 'default',
+  gaugeDescription
 }: EvaluationCardProps) {
   // Compute gauge segments from class distribution if not provided
-  const segments = accuracyGaugeSegments || (() => {
-    const distribution: Record<string, number> = {};
-    classDistributionData.forEach(item => {
-      distribution[item.label] = item.count;
-    });
-    return GaugeThresholdComputer.createSegments(
-      GaugeThresholdComputer.computeThresholds(distribution)
-    );
-  })();
+  const segments = disableAccuracySegments 
+    ? [{ start: 0, end: 100, color: 'var(--gauge-inviable)' }]
+    : (accuracyGaugeSegments || (() => {
+        const distribution: Record<string, number> = {};
+        classDistributionData.forEach(item => {
+          distribution[item.label] = item.count;
+        });
+        return GaugeThresholdComputer.createSegments(
+          GaugeThresholdComputer.computeThresholds(distribution)
+        );
+      })());
 
   // Shared style for gauge titles to ensure consistency
   const gaugeTitleStyle = "text-sm text-muted-foreground text-center min-h-[2.5rem] flex items-center justify-center";
 
+  // Function to render the visualizations in a consistent container
+  const renderVisualizations = () => (
+    <div className="space-y-4">
+      <div>
+        <ClassDistributionVisualizer 
+          data={classDistributionData} 
+          isBalanced={isBalanced} 
+        />
+      </div>
+      
+      {confusionMatrixData && (
+        <div className="bg-card/50 rounded-md">
+          <ConfusionMatrix data={confusionMatrixData} />
+        </div>
+      )}
+      
+      {predictedClassDistributionData && (
+        <div>
+          <PredictedClassDistributionVisualizer 
+            data={predictedClassDistributionData}
+          />
+        </div>
+      )}
+    </div>
+  );
+
+  // OneGauge variant render - two column layout
+  if (variant === 'oneGauge') {
+    return (
+      <Card className={cn("border-none shadow-none bg-card mb-6", className)}>
+        <CardContent className="pt-6">
+          <h4 className="text-xl font-medium mb-3">{title}</h4>
+          {subtitle && (
+            <p className="text-sm text-muted-foreground mb-4">
+              {subtitle}
+            </p>
+          )}
+          
+          <div className="flex flex-col md:flex-row gap-6 items-start">
+            {/* Left column: visualizations */}
+            <div className="w-full md:w-1/2 overflow-visible">
+              {renderVisualizations()}
+            </div>
+            
+            {/* Right column: single gauge */}
+            <div className="w-full md:w-1/2 flex flex-col items-center">
+              <p className="text-sm text-muted-foreground mb-2 text-center">
+                You achieved {accuracy}% accuracy:
+              </p>
+              <div className="max-w-[180px] mx-auto">
+                <Gauge 
+                  value={accuracy} 
+                  title="Accuracy"
+                  segments={segments}
+                  showTicks={true}
+                />
+              </div>
+              
+              {gaugeDescription && (
+                <div className="text-sm mt-6 w-full">
+                  {gaugeDescription}
+                </div>
+              )}
+            </div>
+          </div>
+          
+          {/* Notes Section */}
+          {notes && (
+            <div className="bg-muted/50 rounded-md p-4 mt-6">
+              {typeof notes === 'string' ? (
+                <>
+                  <p className="text-sm font-medium">Key Insight:</p>
+                  <p className="text-sm mt-1">{notes}</p>
+                </>
+              ) : (
+                notes
+              )}
+            </div>
+          )}
+          
+          {/* Warning Message */}
+          {warningMessage && (
+            <div className="mt-4">
+              {typeof warningMessage === 'string' ? (
+                <Alert variant="destructive">
+                  <AlertTitle>Warning</AlertTitle>
+                  <AlertDescription>{warningMessage}</AlertDescription>
+                </Alert>
+              ) : (
+                warningMessage
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Default variant render - visualizations full width, gauges below
   return (
     <Card className={cn("border-none shadow-none bg-card mb-6", className)}>
-      <CardContent className="pt-6">
+      <CardContent className="pt-3">
         <h4 className="text-xl font-medium mb-3">{title}</h4>
         {subtitle && (
           <p className="text-sm text-muted-foreground mb-4">
@@ -122,28 +244,10 @@ export default function EvaluationCard({
           </p>
         )}
         
-        <div className="w-full mb-4">
-          <ClassDistributionVisualizer 
-            data={classDistributionData} 
-            isBalanced={isBalanced} 
-          />
+        {/* All visualizations in a single shared container */}
+        <div className="mb-6">
+          {renderVisualizations()}
         </div>
-        
-        {/* Predicted distribution when available */}
-        {predictedClassDistributionData && (
-          <div className="w-full mb-4">
-            <PredictedClassDistributionVisualizer 
-              data={predictedClassDistributionData}
-            />
-          </div>
-        )}
-        
-        {/* Confusion matrix when available */}
-        {confusionMatrixData && (
-          <div className="bg-card/50 rounded-md mb-4">
-            <ConfusionMatrix data={confusionMatrixData} />
-          </div>
-        )}
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Show both gauges side by side or default behavior */}
@@ -153,19 +257,19 @@ export default function EvaluationCard({
               <div className="flex flex-col items-center">
                 <div className="max-w-[180px] mx-auto">
                   <Gauge 
-                    value={(gwetAC1 ?? 0) * 100} 
+                    value={gwetAC1 ?? 0} 
                     title="Agreement (AC1)"
                     valueUnit=""
-                    min={-100}
-                    max={100}
+                    min={-1}
+                    max={1}
                     decimalPlaces={2}
                     showTicks={true}
                     segments={[
-                      { start: 0, end: 50, color: 'var(--gauge-inviable)' },
-                      { start: 50, end: 60, color: 'var(--gauge-converging)' },
-                      { start: 60, end: 75, color: 'var(--gauge-almost)' },
-                      { start: 75, end: 90, color: 'var(--gauge-viable)' },
-                      { start: 90, end: 100, color: 'var(--gauge-great)' }
+                      { start: 0, end: 50, color: 'var(--gauge-inviable)' },      // Negative values (-1 to 0)
+                      { start: 50, end: 60, color: 'var(--gauge-converging)' },   // Low alignment (0 to 0.2)
+                      { start: 60, end: 75, color: 'var(--gauge-almost)' },       // Moderate alignment (0.2 to 0.5)
+                      { start: 75, end: 90, color: 'var(--gauge-viable)' },       // Good alignment (0.5 to 0.8)
+                      { start: 90, end: 100, color: 'var(--gauge-great)' }        // Excellent alignment (0.8 to 1.0)
                     ]}
                   />
                 </div>
@@ -218,16 +322,20 @@ export default function EvaluationCard({
                 <div className="max-w-[180px] mx-auto">
                   {gwetAC1 !== undefined ? (
                     <Gauge 
-                      value={gwetAC1 * 100} 
+                      value={gwetAC1} 
                       title="Agreement (AC1)"
-                      segments={[
-                        { start: 0, end: 20, color: 'var(--gauge-poor)' },
-                        { start: 20, end: 40, color: 'var(--gauge-fair)' },
-                        { start: 40, end: 60, color: 'var(--gauge-moderate)' },
-                        { start: 60, end: 80, color: 'var(--gauge-good)' },
-                        { start: 80, end: 100, color: 'var(--gauge-excellent)' }
-                      ]}
+                      valueUnit=""
+                      min={-1}
+                      max={1}
+                      decimalPlaces={2}
                       showTicks={true}
+                      segments={[
+                        { start: 0, end: 50, color: 'var(--gauge-inviable)' },      // Negative values (-1 to 0)
+                        { start: 50, end: 60, color: 'var(--gauge-converging)' },   // Low alignment (0 to 0.2)
+                        { start: 60, end: 75, color: 'var(--gauge-almost)' },       // Moderate alignment (0.2 to 0.5)
+                        { start: 75, end: 90, color: 'var(--gauge-viable)' },       // Good alignment (0.5 to 0.8)
+                        { start: 90, end: 100, color: 'var(--gauge-great)' }        // Excellent alignment (0.8 to 1.0)
+                      ]}
                     />
                   ) : (
                     <Gauge 
@@ -245,7 +353,7 @@ export default function EvaluationCard({
         
         {/* Notes Section */}
         {notes && (
-          <div className="bg-muted/50 rounded-md mt-6">
+          <div className="bg-muted/50 rounded-md p-4 mt-6">
             {typeof notes === 'string' ? (
               <>
                 <p className="text-sm font-medium">Key Insight:</p>
@@ -272,5 +380,5 @@ export default function EvaluationCard({
         )}
       </CardContent>
     </Card>
-  )
+  );
 } 

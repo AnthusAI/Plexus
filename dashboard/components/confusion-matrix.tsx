@@ -146,7 +146,7 @@ export function ConfusionMatrix({ data, onSelectionChange }: ConfusionMatrixProp
         <span>Confusion matrix</span>
       </div>
 
-      <div className="flex flex-col min-w-0 flex-1 overflow-visible" style={{ overflow: 'visible' }}>
+      <div className="flex flex-col min-w-0 flex-1 overflow-visible">
         {/* Matrix cells with integrated labels */}
         <div className="flex flex-col overflow-visible">
           {/* Iterate over ACTUAL classes (rows) based on data.labels */}
@@ -184,7 +184,7 @@ export function ConfusionMatrix({ data, onSelectionChange }: ConfusionMatrixProp
                                 handlePredictedLabelClick(predictedLabel);
                               }}
                               className="absolute bottom-0 left-0 right-0 text-xs 
-                                text-muted-foreground text-center truncate px-0.5
+                                text-foreground text-center truncate px-0.5
                                 hover:bg-muted/50 rounded-sm"
                               style={{
                                 bottom: '-2px',
@@ -202,7 +202,7 @@ export function ConfusionMatrix({ data, onSelectionChange }: ConfusionMatrixProp
                                 handleActualLabelClick(actualLabel);
                               }}
                               className="absolute left-0 text-xs 
-                                text-muted-foreground truncate
+                                text-foreground truncate
                                 hover:bg-muted/50 rounded-sm px-0.5"
                               style={{
                                 top: '50%',
@@ -252,7 +252,7 @@ export function ConfusionMatrix({ data, onSelectionChange }: ConfusionMatrixProp
         </div>
         
         {/* Axis labels */}
-        <div className="flex mt-2 text-xs text-muted-foreground overflow-visible" style={{ overflow: 'visible' }}>
+        <div className="flex mt-2 text-xs text-foreground overflow-visible" style={{ overflow: 'visible' }}>
           <div className="flex-1 text-center relative" style={{ marginTop: '-10px' }}>Predicted</div>
           <div className="absolute" 
                style={{ 
