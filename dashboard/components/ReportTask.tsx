@@ -250,7 +250,7 @@ const ReportTask: React.FC<ReportTaskProps> = ({
       renderContent={(props) => (
         <TaskContent {...props} hideTaskStatus={true}>
           {variant === 'detail' && task.data?.output && (
-            <div className="prose dark:prose-invert max-w-none overflow-y-auto flex-1 min-h-0">
+            <div className="prose dark:prose-invert max-w-none overflow-y-auto flex-1 min-h-0 p-3">
               <ReactMarkdown
                 components={{
                   p: ({node, ...props}) => <p className="mb-2" {...props} />,
