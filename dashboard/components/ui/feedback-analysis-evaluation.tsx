@@ -12,6 +12,15 @@ import { ConfusionMatrix, type ConfusionMatrixData } from '@/components/confusio
 import { GaugeThresholdComputer } from '@/utils/gauge-thresholds';
 import { RawAgreementBar } from '@/components/RawAgreementBar';
 
+// Export the AC1 gauge segments for reuse in other components
+export const ac1GaugeSegments: Segment[] = [
+  { start: 0, end: 50, color: 'var(--gauge-inviable)' },      // Negative values (-1 to 0)
+  { start: 50, end: 60, color: 'var(--gauge-converging)' },   // Low alignment (0 to 0.2)
+  { start: 60, end: 75, color: 'var(--gauge-almost)' },       // Moderate alignment (0.2 to 0.5)
+  { start: 75, end: 90, color: 'var(--gauge-viable)' },       // Good alignment (0.5 to 0.8)
+  { start: 90, end: 100, color: 'var(--gauge-great)' }        // Excellent alignment (0.8 to 1.0)
+];
+
 export interface FeedbackAnalysisEvaluationData {
   id: string;
   question: string;
@@ -138,13 +147,7 @@ export const FeedbackAnalysisEvaluation: React.FC<FeedbackAnalysisEvaluationProp
                     min={-1}
                     max={1}
                     decimalPlaces={2}
-                    segments={[
-                      { start: 0, end: 50, color: 'var(--gauge-inviable)' },      // Negative values (-1 to 0)
-                      { start: 50, end: 60, color: 'var(--gauge-converging)' },   // Low alignment (0 to 0.2)
-                      { start: 60, end: 75, color: 'var(--gauge-almost)' },       // Moderate alignment (0.2 to 0.5)
-                      { start: 75, end: 90, color: 'var(--gauge-viable)' },       // Good alignment (0.5 to 0.8)
-                      { start: 90, end: 100, color: 'var(--gauge-great)' }        // Excellent alignment (0.8 to 1.0)
-                    ]}
+                    segments={ac1GaugeSegments}
                   />
                 </div>
               </div>
