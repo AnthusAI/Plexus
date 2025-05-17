@@ -2,7 +2,7 @@ import { Button as DocButton } from "@/components/ui/button"
 import Link from "next/link"
 import { Metadata } from "next"
 import { Card, CardContent } from "@/components/ui/card"
-import { ac1GaugeSegments } from "@/components/ui/feedback-score-card"
+import { ac1GaugeSegments } from "@/components/ui/feedback-analysis-evaluation"
 import { Gauge, Segment } from "@/components/gauge"
 import ClassDistributionVisualizer from "@/components/ClassDistributionVisualizer"
 import { GaugeThresholdComputer } from "@/utils/gauge-thresholds"
@@ -472,7 +472,7 @@ export default function EvaluationMetricsPage() {
 
       <div className="space-y-10">
         <section>
-          <h2 className="text-2xl font-semibold mb-4">The Problem with Raw Accuracy</h2>
+          <h2 className="text-2xl font-semibold mb-4">The Problem with Accuracy</h2>
           <p className="text-muted-foreground mb-4">
             Let's start with a simple game: predicting coin flips. Imagine someone flips a coin 100 times, and your job is to predict each outcome before it happens. You'll need to make your prediction before each flip, and then we'll track how many you get right.
           </p>
@@ -648,67 +648,6 @@ export default function EvaluationMetricsPage() {
               
             </div>
 
-            <div className="my-8 p-6 rounded-lg">
-              <h3 id="visualizing-imbalance" className="text-xl font-semibold mb-6 text-center">Visualizing Context: Impact of Class Imbalance on Accuracy Interpretation</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-8">
-                {/* Column 1: Balanced 50/50, 75% Acc */}
-                <div className="flex flex-col items-center space-y-3 p-4 bg-card rounded-md">
-                  <h4 className="text-md font-medium text-center">Balanced</h4>
-                  <p className="text-sm text-muted-foreground text-center">50/50 Distribution<br/>75% Accuracy</p>
-                  <div className="w-full">
-                    <p className="text-xs text-center text-muted-foreground mb-1">Fixed Thresholds</p>
-                    <AccuracyGauge value={consistentAccuracyForImbalanceViz} title="" segments={fixedAccuracyGaugeSegments} />
-                  </div>
-                  <div className="w-full">
-                    <p className="text-xs text-center text-muted-foreground mb-1">Contextual Thresholds</p>
-                    <AccuracyGauge value={consistentAccuracyForImbalanceViz} title="" segments={imbal_scenario1_segments} />
-                  </div>
-                </div>
-
-                {/* Column 2: Imbalanced 75/25, 75% Acc */}
-                <div className="flex flex-col items-center space-y-3 p-4 bg-card rounded-md">
-                  <h4 className="text-md font-medium text-center">Imbalanced</h4>
-                  <p className="text-sm text-muted-foreground text-center">75/25 Distribution<br/>75% Accuracy</p>
-                  <div className="w-full">
-                    <p className="text-xs text-center text-muted-foreground mb-1">Fixed Thresholds</p>
-                    <AccuracyGauge value={consistentAccuracyForImbalanceViz} title="" segments={fixedAccuracyGaugeSegments} />
-                  </div>
-                  <div className="w-full">
-                    <p className="text-xs text-center text-muted-foreground mb-1">Contextual Thresholds</p>
-                    <AccuracyGauge value={consistentAccuracyForImbalanceViz} title="" segments={imbal_scenario2_segments} />
-                  </div>
-                </div>
-
-                {/* Column 3: Imbalanced 90/10, 75% Acc */}
-                <div className="flex flex-col items-center space-y-3 p-4 bg-card rounded-md">
-                  <h4 className="text-md font-medium text-center">Imbalanced</h4>
-                  <p className="text-sm text-muted-foreground text-center">90/10 Distribution<br/>75% Accuracy</p>
-                  <div className="w-full">
-                    <p className="text-xs text-center text-muted-foreground mb-1">Fixed Thresholds</p>
-                    <AccuracyGauge value={consistentAccuracyForImbalanceViz} title="" segments={fixedAccuracyGaugeSegments} />
-                  </div>
-                  <div className="w-full">
-                    <p className="text-xs text-center text-muted-foreground mb-1">Contextual Thresholds</p>
-                    <AccuracyGauge value={consistentAccuracyForImbalanceViz} title="" segments={imbal_scenario_moderate_segments} />
-                  </div>
-                </div>
-                
-                {/* Column 4: Highly Imbalanced 95/5, 75% Acc */}
-                <div className="flex flex-col items-center space-y-3 p-4 bg-card rounded-md">
-                  <h4 className="text-md font-medium text-center">Imbalanced</h4>
-                  <p className="text-sm text-muted-foreground text-center">95/5 Distribution<br/>75% Accuracy</p>
-                  <div className="w-full">
-                    <p className="text-xs text-center text-muted-foreground mb-1">Fixed Thresholds</p>
-                    <AccuracyGauge value={consistentAccuracyForImbalanceViz} title="" segments={fixedAccuracyGaugeSegments} />
-                  </div>
-                  <div className="w-full">
-                    <p className="text-xs text-center text-muted-foreground mb-1">Contextual Thresholds</p>
-                    <AccuracyGauge value={consistentAccuracyForImbalanceViz} title="" segments={imbal_scenario3_segments} />
-                  </div>
-                </div>
-              </div>
-            </div>
-
             <div className="mt-8 p-5 bg-violet-50 dark:bg-violet-950/40 rounded-lg border-l-4 border-violet-500">
               <h3 className="text-xl font-semibold mb-2">The Core Problem: Accuracy Without Context Is Meaningless</h3>
               <p className="text-muted-foreground mb-3">
@@ -797,6 +736,8 @@ export default function EvaluationMetricsPage() {
                 the adjusted gauge shows it's exactly what you'd expect from chance. This makes it much easier to understand 
                 when a model is actually performing better than random guessing for that specific number of classes.
               </p>
+              
+              {/* INSERT VISUALIZATION HERE: A visualization showing the impact of number of classes (2-class, 3-class, 4-class, 12-class) on accuracy gauge interpretation. All with the same accuracy value (e.g. 75%) but with different gauge segments based on the number of classes. */}
             
               <h4 className="text-lg font-semibold mt-6 mb-3">Tactic 1.2: Adjusting for Class Distribution (Imbalance)</h4>
               <p className="text-muted-foreground">
