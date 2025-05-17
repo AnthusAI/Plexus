@@ -199,7 +199,13 @@ class FeedbackAnalysis(BaseReportBlock):
                         "ac1": None, "item_count": 0, "mismatches": 0, "accuracy": None,
                         "message": "No feedback items found in the specified date range.",
                         "classes_count": 2,  # Default to binary classification
-                        "label_distribution": {}
+                        "label_distribution": {},
+                        "confusion_matrix": None,
+                        "class_distribution": [],
+                        "predicted_class_distribution": [],
+                        "precision": None,
+                        "recall": None,
+                        "discussion": None
                     }
                 else:
                     try:
@@ -222,7 +228,9 @@ class FeedbackAnalysis(BaseReportBlock):
             # --- 5. Calculate Overall Metrics ---
             self._log(f"Calculating overall metrics from {len(all_date_filtered_feedback_items)} date-filtered feedback items across all processed scores.")
             if not all_date_filtered_feedback_items:
-                overall_analysis = {"ac1": None, "item_count": 0, "mismatches": 0, "accuracy": None, "classes_count": 2, "label_distribution": {}}
+                overall_analysis = {"ac1": None, "item_count": 0, "mismatches": 0, "accuracy": None, "classes_count": 2, 
+                                    "label_distribution": {}, "confusion_matrix": None, "class_distribution": [], 
+                                    "predicted_class_distribution": [], "precision": None, "recall": None, "discussion": None}
                 self._log("No date-filtered items available for overall analysis.", level="WARNING")
             else:
                 # Use a generic score_id_info for the overall log
@@ -245,8 +253,15 @@ class FeedbackAnalysis(BaseReportBlock):
                     "end": end_date.isoformat()
                 },
                 "message": f"Processed {len(scores_to_process)} score(s)." if scores_to_process else "No scores were processed.",
-                "classes_count": overall_analysis.get("classes_count", 2),  # Add number of classes to overall output
-                "label_distribution": overall_analysis.get("label_distribution", {})
+                "classes_count": overall_analysis.get("classes_count", 2),
+                "label_distribution": overall_analysis.get("label_distribution", {}),
+                # Add the new data from our enhanced analysis
+                "confusion_matrix": overall_analysis.get("confusion_matrix"),
+                "class_distribution": overall_analysis.get("class_distribution", []),
+                "predicted_class_distribution": overall_analysis.get("predicted_class_distribution", []),
+                "precision": overall_analysis.get("precision"),
+                "recall": overall_analysis.get("recall"),
+                "discussion": overall_analysis.get("discussion")
             }
             # Don't log the full output data - it's redundant and can be large
             self._log(f"Finished generating analysis for {len(scores_to_process)} scores with {all_feedback_items_retrieved_count} total feedback items.")
@@ -354,7 +369,9 @@ class FeedbackAnalysis(BaseReportBlock):
         
         if not feedback_items:
             self._log(f"No feedback items to analyze for {score_id_info}.", level="WARNING")
-            return {"ac1": None, "item_count": 0, "mismatches": 0, "accuracy": None, "classes_count": 2, "label_distribution": {}}
+            return {"ac1": None, "item_count": 0, "mismatches": 0, "accuracy": None, "classes_count": 2, 
+                    "label_distribution": {}, "confusion_matrix": None, "class_distribution": [], 
+                    "predicted_class_distribution": [], "precision": None, "recall": None, "discussion": None}
             
         # Don't log intermediate data processing details unless debugging
         valid_pairs_count = 0
@@ -373,11 +390,17 @@ class FeedbackAnalysis(BaseReportBlock):
 
         if valid_pairs_count == 0:
             self._log(f"No valid (non-None initial and final) pairs to analyze for {score_id_info}.", level="WARNING")
-            return {"ac1": None, "item_count": 0, "mismatches": 0, "accuracy": None, "classes_count": 2, "label_distribution": {}}
+            return {"ac1": None, "item_count": 0, "mismatches": 0, "accuracy": None, "classes_count": 2, 
+                    "label_distribution": {}, "confusion_matrix": None, "class_distribution": [], 
+                    "predicted_class_distribution": [], "precision": None, "recall": None, "discussion": None}
 
         # Calculate label distribution
         label_distribution = dict(Counter(paired_final))
         self._log(f"Final value distribution for {score_id_info}: {label_distribution}")
+        
+        # Calculate initial value distribution
+        initial_label_distribution = dict(Counter(paired_initial))
+        self._log(f"Initial value distribution for {score_id_info}: {initial_label_distribution}")
 
         # Calculate Gwet's AC1
         try:
@@ -418,19 +441,257 @@ class FeedbackAnalysis(BaseReportBlock):
             accuracy_str = f"{accuracy_percentage:.2f}%" if accuracy_percentage is not None else "N/A"
             self._log(f"Analysis results for {score_id_info}: Gwet's AC1={ac1_value}, Items={valid_pairs_count}, Mismatches={mismatches}, Accuracy={accuracy_str}, Classes={num_classes}")
             
+            # Generate confusion matrix
+            confusion_matrix = self._build_confusion_matrix(paired_initial, paired_final)
+            
+            # Generate class distribution for visualization
+            class_distribution = self._format_class_distribution(label_distribution)
+            
+            # Generate predicted class distribution for visualization
+            predicted_class_distribution = self._format_class_distribution(initial_label_distribution)
+            
+            # Calculate precision and recall metrics if there are multiple classes
+            precision_recall = self._calculate_precision_recall(paired_initial, paired_final, label_distribution.keys())
+            
             return {
                 "ac1": ac1_value,
                 "item_count": valid_pairs_count,
                 "mismatches": mismatches,
                 "accuracy": accuracy_percentage,
-                "classes_count": num_classes,  # Still return the configured number of classes for reference
-                "label_distribution": label_distribution  # Add the distribution of final values
+                "classes_count": num_classes,
+                "label_distribution": label_distribution,
+                "confusion_matrix": confusion_matrix,
+                "class_distribution": class_distribution,
+                "predicted_class_distribution": predicted_class_distribution,
+                "precision": precision_recall.get("precision"),
+                "recall": precision_recall.get("recall"),
+                "discussion": self._generate_discussion(ac1_value, accuracy_percentage, precision_recall, confusion_matrix)
             }
             
         except Exception as e:
             self._log(f"Error calculating Gwet's AC1 for {score_id_info}: {e}", level="ERROR")
             # Don't log full traceback, just the error message
             raise
+    
+    def _format_class_distribution(self, distribution: Dict[Any, int]) -> List[Dict[str, Any]]:
+        """
+        Format class distribution for visualization.
+        
+        Args:
+            distribution: Dictionary mapping class labels to counts
+            
+        Returns:
+            List of dictionaries in the format expected by the UI
+        """
+        if not distribution:
+            return []
+            
+        # Calculate total for percentages
+        total = sum(distribution.values())
+        
+        # Format data to match ClassDistribution interface in UI
+        result = [
+            {
+                "label": str(label),  # Ensure label is a string
+                "count": count        # Keep count as an integer
+            }
+            for label, count in distribution.items()
+        ]
+        
+        # Sort by count descending
+        result.sort(key=lambda x: x["count"], reverse=True)
+        
+        self._log(f"Formatted class distribution: {result}")
+        return result
+    
+    def _build_confusion_matrix(self, reference_values: List, predicted_values: List) -> Dict[str, Any]:
+        """
+        Build a confusion matrix from reference and predicted values.
+        
+        Args:
+            reference_values: List of reference (ground truth) values
+            predicted_values: List of predicted values
+            
+        Returns:
+            Dictionary representation of confusion matrix in the format expected by the UI
+        """
+        # Get unique classes from both lists and ensure they are strings
+        all_classes = sorted(list(set(str(v) for v in reference_values + predicted_values)))
+        
+        # Initialize matrix structure to match UI expectations
+        matrix_result = {
+            "labels": all_classes,
+            "matrix": []
+        }
+        
+        # Build matrix rows matching the ConfusionMatrixData format
+        for true_class in all_classes:
+            # Create a row object with actualClassLabel
+            row = {
+                "actualClassLabel": true_class,
+                "predictedClassCounts": {}
+            }
+            
+            # Add counts for each predicted class
+            for pred_class in all_classes:
+                # Count instances where reference is true_class and prediction is pred_class
+                count = sum(1 for ref, pred in zip(reference_values, predicted_values) 
+                           if str(ref) == str(true_class) and str(pred) == str(pred_class))
+                row["predictedClassCounts"][pred_class] = count
+            
+            # Add this row to the matrix
+            matrix_result["matrix"].append(row)
+        
+        self._log(f"Built confusion matrix with {len(all_classes)} classes")
+        self._log(f"Matrix structure: labels={matrix_result['labels']}, row count={len(matrix_result['matrix'])}")
+        return matrix_result
+    
+    def _calculate_precision_recall(self, reference_values: List, predicted_values: List, classes: Any) -> Dict[str, float]:
+        """
+        Calculate precision and recall metrics.
+        
+        Args:
+            reference_values: List of reference (ground truth) values
+            predicted_values: List of predicted values
+            classes: Iterable of class labels
+            
+        Returns:
+            Dictionary with precision and recall values
+        """
+        # Default result if calculation fails
+        result = {"precision": None, "recall": None}
+        
+        try:
+            # Convert values to strings for comparison
+            str_reference = [str(v) for v in reference_values]
+            str_predicted = [str(v) for v in predicted_values]
+            str_classes = [str(c) for c in classes]
+            
+            # If there are only two classes, calculate binary precision/recall
+            if len(str_classes) == 2:
+                # Assuming the first class is the positive class
+                positive_class = str_classes[0]
+                
+                # Calculate TP, FP, FN
+                true_positives = sum(1 for ref, pred in zip(str_reference, str_predicted) 
+                                    if ref == positive_class and pred == positive_class)
+                false_positives = sum(1 for ref, pred in zip(str_reference, str_predicted) 
+                                     if ref != positive_class and pred == positive_class)
+                false_negatives = sum(1 for ref, pred in zip(str_reference, str_predicted) 
+                                     if ref == positive_class and pred != positive_class)
+                
+                # Calculate precision and recall
+                precision = true_positives / (true_positives + false_positives) if (true_positives + false_positives) > 0 else 0
+                recall = true_positives / (true_positives + false_negatives) if (true_positives + false_negatives) > 0 else 0
+                
+                result = {"precision": precision * 100, "recall": recall * 100}  # Convert to percentage
+            else:
+                # For multiclass, use macro averaging (average of per-class metrics)
+                precisions = []
+                recalls = []
+                
+                for cls in str_classes:
+                    # For each class, treat it as the positive class
+                    true_positives = sum(1 for ref, pred in zip(str_reference, str_predicted) 
+                                        if ref == cls and pred == cls)
+                    false_positives = sum(1 for ref, pred in zip(str_reference, str_predicted) 
+                                         if ref != cls and pred == cls)
+                    false_negatives = sum(1 for ref, pred in zip(str_reference, str_predicted) 
+                                         if ref == cls and pred != cls)
+                    
+                    # Calculate class precision and recall
+                    class_precision = true_positives / (true_positives + false_positives) if (true_positives + false_positives) > 0 else 0
+                    class_recall = true_positives / (true_positives + false_negatives) if (true_positives + false_negatives) > 0 else 0
+                    
+                    precisions.append(class_precision)
+                    recalls.append(class_recall)
+                
+                # Macro averaging
+                macro_precision = sum(precisions) / len(precisions) if precisions else 0
+                macro_recall = sum(recalls) / len(recalls) if recalls else 0
+                
+                result = {"precision": macro_precision * 100, "recall": macro_recall * 100}  # Convert to percentage
+        
+        except Exception as e:
+            self._log(f"Error calculating precision/recall: {e}", level="WARNING")
+        
+        return result
+    
+    def _generate_discussion(self, ac1: Optional[float], accuracy: Optional[float], 
+                            precision_recall: Dict[str, float], confusion_matrix: Dict[str, Any]) -> Optional[str]:
+        """
+        Generate a discussion text based on the analysis results.
+        
+        Args:
+            ac1: Gwet's AC1 value
+            accuracy: Raw agreement percentage
+            precision_recall: Dictionary with precision and recall values
+            confusion_matrix: Confusion matrix data
+            
+        Returns:
+            Discussion text or None if there's insufficient data
+        """
+        if ac1 is None or accuracy is None:
+            return None
+            
+        discussion_parts = []
+        
+        # AC1 interpretation
+        if ac1 >= 0.8:
+            discussion_parts.append("The agreement level is strong, indicating high consistency between initial and final assessments.")
+        elif ac1 >= 0.6:
+            discussion_parts.append("The agreement level is moderate, showing reasonable consistency between assessments.")
+        elif ac1 >= 0.4:
+            discussion_parts.append("The agreement level is fair, with some inconsistency between initial and final assessments.")
+        elif ac1 >= 0.0:
+            discussion_parts.append("The agreement level is slight, suggesting substantial inconsistency between assessments.")
+        else:
+            discussion_parts.append("The agreement level is poor, indicating systematic disagreement beyond chance.")
+        
+        # Accuracy context
+        raw_agreement_text = f"The raw agreement rate is {accuracy:.1f}%."
+        discussion_parts.append(raw_agreement_text)
+        
+        # Precision/recall if available
+        if precision_recall.get("precision") is not None and precision_recall.get("recall") is not None:
+            precision = precision_recall["precision"]
+            recall = precision_recall["recall"]
+            precision_recall_text = f"Precision is {precision:.1f}% and recall is {recall:.1f}%."
+            
+            if precision < 70 or recall < 70:
+                precision_recall_text += " This suggests potential issues with consistent application of assessment criteria."
+            
+            discussion_parts.append(precision_recall_text)
+        
+        # Confusion matrix analysis
+        if confusion_matrix and confusion_matrix.get("matrix") and confusion_matrix.get("labels"):
+            # Identify most common confusion patterns
+            labels = confusion_matrix["labels"]
+            matrix_rows = confusion_matrix["matrix"]
+            
+            # Find off-diagonal maximum (indicating the most common confusion)
+            max_confusion = 0
+            max_confusion_pair = None
+            
+            for i, row in enumerate(matrix_rows):
+                actual_class = row["actualClassLabel"]
+                for j, predicted_class in enumerate(labels):
+                    # Skip diagonal (when actual == predicted)
+                    if actual_class == predicted_class:
+                        continue
+                    
+                    # Get count from predictedClassCounts dictionary
+                    value = row["predictedClassCounts"].get(predicted_class, 0)
+                    
+                    if value > max_confusion:
+                        max_confusion = value
+                        max_confusion_pair = (actual_class, predicted_class)
+            
+            if max_confusion_pair and max_confusion > 0:
+                confusion_text = f"The most common confusion occurs between '{max_confusion_pair[0]}' and '{max_confusion_pair[1]}', occurring {max_confusion} times."
+                discussion_parts.append(confusion_text)
+        
+        return " ".join(discussion_parts)
 
     def _log(self, message: str, level="INFO"):
         """Helper method to log messages and store them for the report block's log output.
