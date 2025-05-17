@@ -250,3 +250,83 @@ class ReportBlock(BaseModel):
                 break # Stop fetching on error
 
         return blocks 
+
+    def update(self, client: Optional[_BaseAPIClient] = None, **kwargs) -> 'ReportBlock':
+        """Update an existing ReportBlock record via GraphQL mutation."""
+        if not self.id:
+            raise ValueError("Cannot update ReportBlock without an ID.")
+
+        # Use the instance's client if one isn't provided
+        api_client = client if client else self._client
+        if not api_client:
+            raise ValueError("API client not available for update operation.")
+
+        mutation = f"""
+        mutation UpdateReportBlock($input: UpdateReportBlockInput!) {{
+            updateReportBlock(input: $input) {{
+                {self.fields()}
+            }}
+        }}
+        """
+        
+        input_data = {'id': self.id}
+        
+        # Prepare allowed fields for update from kwargs
+        # Only include fields that are part of the model and were actually passed
+        allowed_update_fields = {
+            'reportId', 'name', 'position', 'type', 
+            'output', 'log', 'detailsFiles' # Add other mutable fields as needed
+        }
+        
+        for key, value in kwargs.items():
+            if key in allowed_update_fields:
+                # Special handling for 'output' if it's a dict, needs to be JSON string for GQL
+                if key == 'output' and isinstance(value, dict):
+                    input_data[key] = json.dumps(value)
+                elif key == 'detailsFiles' and not isinstance(value, str): # Ensure detailsFiles is stringified JSON
+                    input_data[key] = json.dumps(value)
+                else:
+                    input_data[key] = value
+            else:
+                logger.warning(f"Field '{key}' not allowed for ReportBlock update or not recognized.")
+
+        if len(input_data) == 1 and 'id' in input_data:
+            logger.warning("Update called with no fields to update other than ID.")
+            return self
+
+        try:
+            logger.debug(f"Updating ReportBlock {self.id} with input: {input_data}")
+            result = api_client.execute(mutation, {'input': input_data})
+            if not result or 'updateReportBlock' not in result or not result['updateReportBlock']:
+                error_msg = f"Failed to update ReportBlock {self.id}. Response: {result}"
+                logger.error(error_msg)
+                raise Exception(error_msg)
+            
+            updated_data = result['updateReportBlock']
+            for field_name, value in updated_data.items():
+                if hasattr(self, field_name):
+                    if field_name == 'output' and isinstance(value, str):
+                        try:
+                            setattr(self, field_name, json.loads(value))
+                        except json.JSONDecodeError:
+                            logger.warning(f"Could not parse output from update response: {value}")
+                            setattr(self, field_name, {"error": "Failed to parse output JSON", "raw_output": value})
+                    elif field_name in ['createdAt', 'updatedAt'] and isinstance(value, str):
+                        try:
+                            setattr(self, field_name, datetime.fromisoformat(value.replace('Z', '+00:00')))
+                        except (ValueError, TypeError):
+                            setattr(self, field_name, None)
+                    else:
+                        setattr(self, field_name, value)
+            
+            self.id = updated_data.get('id', self.id)
+            logger.info(f"Successfully updated ReportBlock {self.id}")
+            return self
+        except Exception as e:
+            logger.exception(f"Error updating ReportBlock {self.id}: {e}")
+            raise
+
+# TODO: If list_by_report_id is used, ensure it's correctly implemented or remove if unused.
+# Consider if this file is the single source of truth for ReportBlock or if there's another.
+# BaseModel might provide some of these methods, verify to avoid duplication or conflicts.
+# Example: if BaseModel has _client or generic get_by_id, update, delete methods. 
