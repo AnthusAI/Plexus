@@ -769,6 +769,7 @@ def create_cli():
     from plexus.cli.PredictionCommands import predict
     from plexus.cli.ScoreChatCommands import score_chat
     from plexus.cli.ReportCommands import report # Import the new command group
+    from plexus.cli.FeedbackCommands import feedback # Import the feedback command group
     
     # Add top-level commands
     cli.add_command(score)
@@ -785,6 +786,7 @@ def create_cli():
     cli.add_command(predict)
     cli.add_command(score_chat)
     cli.add_command(report) # Register the new command group
+    cli.add_command(feedback) # Register the feedback command group
     cli.add_command(command)
     
     return cli
