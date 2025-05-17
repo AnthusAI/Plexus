@@ -654,10 +654,9 @@ export default function EvaluationMetricsPage() {
                 {/* Column 1: Binary (2-Class) */}
                 <div className="flex flex-col items-center space-y-3 p-4 bg-card rounded-md">
                   <h4 className="text-md font-medium text-center">Binary</h4>
-                  <p className="text-sm text-muted-foreground text-center">2 Classes<br/>65% Accuracy</p>
                   <div className="w-full">
                     <p className="text-xs text-center text-muted-foreground mb-1">No Context</p>
-                    <AccuracyGauge value={65.0} title="" segments={[]} />
+                    <AccuracyGauge value={65.0} title="" segments={[{ start: 0, end: 100, color: 'var(--gauge-inviable)' }]} />
                   </div>
                   <div className="w-full">
                     <p className="text-xs text-center text-muted-foreground mb-1">With Class Context</p>
@@ -668,10 +667,9 @@ export default function EvaluationMetricsPage() {
                 {/* Column 2: Ternary (3-Class) */}
                 <div className="flex flex-col items-center space-y-3 p-4 bg-card rounded-md">
                   <h4 className="text-md font-medium text-center">Ternary</h4>
-                  <p className="text-sm text-muted-foreground text-center">3 Classes<br/>65% Accuracy</p>
                   <div className="w-full">
                     <p className="text-xs text-center text-muted-foreground mb-1">No Context</p>
-                    <AccuracyGauge value={65.0} title="" segments={[]} />
+                    <AccuracyGauge value={65.0} title="" segments={[{ start: 0, end: 100, color: 'var(--gauge-inviable)' }]} />
                   </div>
                   <div className="w-full">
                     <p className="text-xs text-center text-muted-foreground mb-1">With Class Context</p>
@@ -682,10 +680,9 @@ export default function EvaluationMetricsPage() {
                 {/* Column 3: 4-Class */}
                 <div className="flex flex-col items-center space-y-3 p-4 bg-card rounded-md">
                   <h4 className="text-md font-medium text-center">Four-Class</h4>
-                  <p className="text-sm text-muted-foreground text-center">4 Classes<br/>65% Accuracy</p>
                   <div className="w-full">
                     <p className="text-xs text-center text-muted-foreground mb-1">No Context</p>
-                    <AccuracyGauge value={65.0} title="" segments={[]} />
+                    <AccuracyGauge value={65.0} title="" segments={[{ start: 0, end: 100, color: 'var(--gauge-inviable)' }]} />
                   </div>
                   <div className="w-full">
                     <p className="text-xs text-center text-muted-foreground mb-1">With Class Context</p>
@@ -696,10 +693,9 @@ export default function EvaluationMetricsPage() {
                 {/* Column 4: 12-Class */}
                 <div className="flex flex-col items-center space-y-3 p-4 bg-card rounded-md">
                   <h4 className="text-md font-medium text-center">Twelve-Class</h4>
-                  <p className="text-sm text-muted-foreground text-center">12 Classes<br/>65% Accuracy</p>
                   <div className="w-full">
                     <p className="text-xs text-center text-muted-foreground mb-1">No Context</p>
-                    <AccuracyGauge value={65.0} title="" segments={[]} />
+                    <AccuracyGauge value={65.0} title="" segments={[{ start: 0, end: 100, color: 'var(--gauge-inviable)' }]} />
                   </div>
                   <div className="w-full">
                     <p className="text-xs text-center text-muted-foreground mb-1">With Class Context</p>
@@ -798,66 +794,64 @@ export default function EvaluationMetricsPage() {
                 when a model is actually performing better than random guessing for that specific number of classes.
               </p>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-8">
+              <div className="my-8 p-6 rounded-lg">
                 <h3 className="text-xl font-semibold mb-6 text-center">Visualizing Context: Impact of Class Imbalance on Accuracy Interpretation</h3>
-
-                {/* Column 1: 2 Classes */}
-                <div className="flex flex-col items-center space-y-3 p-4 bg-card rounded-md">
-                  <h4 className="text-md font-medium text-center">Balanced</h4>
-                  <p className="text-sm text-muted-foreground text-center">50/50 Distribution<br/>65% Accuracy</p>
-                  <div className="w-full">
-                    <p className="text-xs text-center text-muted-foreground mb-1">Fixed Thresholds</p>
-                    <AccuracyGauge value={65.0} title="" segments={fixedAccuracyGaugeSegments} />
-                  </div>
-                  <div className="w-full">
-                    <p className="text-xs text-center text-muted-foreground mb-1">Contextual Thresholds</p>
-                    <AccuracyGauge value={65.0} title="" segments={imbal_scenario1_segments} />
-                  </div>
-                </div>
-
-                {/* Column 2: Imbalanced 75/25, 70% Acc */}
-                <div className="flex flex-col items-center space-y-3 p-4 bg-card rounded-md">
-                  <h4 className="text-md font-medium text-center">Slight Imbalance</h4>
-                  <p className="text-sm text-muted-foreground text-center">75/25 Distribution<br/>70% Accuracy</p>
-                  <div className="w-full">
-                    <p className="text-xs text-center text-muted-foreground mb-1">Fixed Thresholds</p>
-                    <AccuracyGauge value={70.0} title="" segments={fixedAccuracyGaugeSegments} />
-                  </div>
-                  <div className="w-full">
-                    <p className="text-xs text-center text-muted-foreground mb-1">Contextual Thresholds</p>
-                    <AccuracyGauge value={70.0} title="" segments={imbal_scenario2_segments} />
-                  </div>
-                </div>
-
-                {/* Column 3: Imbalanced 3-Class 80/10/10, 70% Acc */}
-                <div className="flex flex-col items-center space-y-3 p-4 bg-card rounded-md">
-                  <h4 className="text-md font-medium text-center">Moderate Imbalance</h4>
-                  <p className="text-sm text-muted-foreground text-center">80/10/10 Distribution (3-Class)<br/>70% Accuracy</p>
-                  <div className="w-full">
-                    <p className="text-xs text-center text-muted-foreground mb-1">Fixed Thresholds</p>
-                    <AccuracyGauge value={70.0} title="" segments={fixedAccuracyGaugeSegments} />
-                  </div>
-                  <div className="w-full">
-                    <p className="text-xs text-center text-muted-foreground mb-1">Contextual Thresholds</p>
-                    <AccuracyGauge value={70.0} title="" segments={imbal_scenario4_segments} />
-                  </div>
-                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-8">
                 
-                {/* Column 4: Highly Imbalanced 95/5, 92% Acc */}
-                <div className="flex flex-col items-center space-y-3 p-4 bg-card rounded-md">
-                  <h4 className="text-md font-medium text-center">Extreme Imbalance</h4>
-                  <p className="text-sm text-muted-foreground text-center">95/5 Distribution<br/>92% Accuracy</p>
-                  <div className="w-full">
-                    <p className="text-xs text-center text-muted-foreground mb-1">Fixed Thresholds</p>
-                    <AccuracyGauge value={92.0} title="" segments={fixedAccuracyGaugeSegments} />
+                  {/* Column 1: 2 Classes */}
+                  <div className="flex flex-col items-center space-y-3 p-4 bg-card rounded-md">
+                    <h4 className="text-md font-medium text-center">Balanced</h4>
+                    <div className="w-full">
+                      <p className="text-xs text-center text-muted-foreground mb-1">Fixed Thresholds</p>
+                      <AccuracyGauge value={65.0} title="" segments={fixedAccuracyGaugeSegments} />
+                    </div>
+                    <div className="w-full">
+                      <p className="text-xs text-center text-muted-foreground mb-1">Contextual Thresholds</p>
+                      <AccuracyGauge value={65.0} title="" segments={imbal_scenario1_segments} />
+                    </div>
                   </div>
-                  <div className="w-full">
-                    <p className="text-xs text-center text-muted-foreground mb-1">Contextual Thresholds</p>
-                    <AccuracyGauge value={92.0} title="" segments={imbal_scenario3_segments} />
+
+                  {/* Column 2: Imbalanced 75/25, 70% Acc */}
+                  <div className="flex flex-col items-center space-y-3 p-4 bg-card rounded-md">
+                    <h4 className="text-md font-medium text-center">Slight Imbalance</h4>
+                    <div className="w-full">
+                      <p className="text-xs text-center text-muted-foreground mb-1">Fixed Thresholds</p>
+                      <AccuracyGauge value={70.0} title="" segments={fixedAccuracyGaugeSegments} />
+                    </div>
+                    <div className="w-full">
+                      <p className="text-xs text-center text-muted-foreground mb-1">Contextual Thresholds</p>
+                      <AccuracyGauge value={70.0} title="" segments={imbal_scenario2_segments} />
+                    </div>
+                  </div>
+
+                  {/* Column 3: Imbalanced 3-Class 80/10/10, 70% Acc */}
+                  <div className="flex flex-col items-center space-y-3 p-4 bg-card rounded-md">
+                    <h4 className="text-md font-medium text-center">Moderate Imbalance</h4>
+                    <div className="w-full">
+                      <p className="text-xs text-center text-muted-foreground mb-1">Fixed Thresholds</p>
+                      <AccuracyGauge value={70.0} title="" segments={fixedAccuracyGaugeSegments} />
+                    </div>
+                    <div className="w-full">
+                      <p className="text-xs text-center text-muted-foreground mb-1">Contextual Thresholds</p>
+                      <AccuracyGauge value={70.0} title="" segments={imbal_scenario4_segments} />
+                    </div>
+                  </div>
+                  
+                  {/* Column 4: Highly Imbalanced 95/5, 92% Acc */}
+                  <div className="flex flex-col items-center space-y-3 p-4 bg-card rounded-md">
+                    <h4 className="text-md font-medium text-center">Extreme Imbalance</h4>
+                    <div className="w-full">
+                      <p className="text-xs text-center text-muted-foreground mb-1">Fixed Thresholds</p>
+                      <AccuracyGauge value={92.0} title="" segments={fixedAccuracyGaugeSegments} />
+                    </div>
+                    <div className="w-full">
+                      <p className="text-xs text-center text-muted-foreground mb-1">Contextual Thresholds</p>
+                      <AccuracyGauge value={92.0} title="" segments={imbal_scenario3_segments} />
+                    </div>
                   </div>
                 </div>
               </div>
-            
+              
               <h4 className="text-lg font-semibold mt-6 mb-3">Tactic 1.2: Adjusting for Class Distribution (Imbalance)</h4>
               <p className="text-muted-foreground">
                 The second critical adjustment to the Accuracy gauge's context involves accounting for the <strong className="text-foreground">distribution of items among classes</strong>, particularly when the data is imbalanced. Just as with the number of classes, the gauge's thresholds dynamically adapt to reflect the true chance level for a given class distribution.
