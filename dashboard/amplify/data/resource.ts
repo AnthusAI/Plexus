@@ -656,7 +656,8 @@ const schema = a.schema({
             idx("accountId").sortKeys(["scorecardId", "scoreId", "cacheKey"]).name("byAccountScorecardScoreCacheKey"),
             idx("accountId").sortKeys(["updatedAt"]),
             idx("scoreId").sortKeys(["cacheKey"]),
-            idx("cacheKey")
+            idx("cacheKey"),
+            idx("accountId").sortKeys(["scorecardId", "scoreId", "updatedAt"]).name("byAccountScorecardScoreUpdatedAt")
         ]),
 });
 
