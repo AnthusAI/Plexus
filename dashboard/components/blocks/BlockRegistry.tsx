@@ -41,14 +41,15 @@ export function getRegisteredBlockTypes(): string[] {
 export type BlockRendererProps = ReportBlockProps
 
 /**
- * Block component that renders the appropriate block based on type,
- * wrapped in a standard container.
+ * Block component that renders the appropriate block based on type.
+ * Only uses a container for the default block type or error states.
  */
 export function BlockRenderer(props: BlockRendererProps) {
   const { config, ...blockProps } = props
   const type = blockProps.type || 'default'  // Use type from block data, fallback to default
   let BlockComponent = getBlock(type)
   let componentProps = props; // Store props to potentially modify
+  let isDefaultOrError = false;
 
   if (!BlockComponent) {
     console.warn(`No block component registered for type: ${type}`)
@@ -60,6 +61,7 @@ export function BlockRenderer(props: BlockRendererProps) {
         ...props,
         name: `Block Type Not Found: ${type}`, // Set the error message as the name
       };
+      isDefaultOrError = true;
     } else {
       // Critical error: Default block not found
       // Keep border here for critical error visibility
@@ -70,11 +72,19 @@ export function BlockRenderer(props: BlockRendererProps) {
       )
     }
   }
+  
+  // Check if we're using the default block type
+  isDefaultOrError = isDefaultOrError || type === 'default';
 
-  // Render the determined block component inside the standard wrapper (NO BORDER)
-  return (
-    <div className="rounded-lg bg-background p-4 my-4 w-full min-w-0 max-w-full overflow-hidden">
-      <BlockComponent {...componentProps} /> 
-    </div>
-  )
+  // For default block or error states, use the container
+  if (isDefaultOrError) {
+    return (
+      <div className="rounded-lg bg-background p-4 my-4 w-full min-w-0 max-w-full overflow-hidden border">
+        <BlockComponent {...componentProps} /> 
+      </div>
+    )
+  }
+  
+  // For custom block components, render directly without the container
+  return <BlockComponent {...componentProps} />
 } 
