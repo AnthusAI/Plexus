@@ -48,8 +48,9 @@ logger = logging.getLogger(__name__)
 
 @click.command(name="run") # Changed from report.command to click.command
 @click.option('--config', 'config_identifier', required=True, help='ID or name of the ReportConfiguration to use.')
+@click.option('--days', type=int, help='Number of days to analyze (overrides the default in the report configuration).')
 @click.argument('params', nargs=-1)
-def run(config_identifier: str, params: Tuple[str]):
+def run(config_identifier: str, days: Optional[int], params: Tuple[str]):
     """
     Generate a new report instance from a ReportConfiguration synchronously.
 
@@ -63,6 +64,11 @@ def run(config_identifier: str, params: Tuple[str]):
     try:
         # --- Step 1: Parse Parameters & Resolve Account ---
         run_parameters = parse_kv_pairs(params)
+        
+        # Add days parameter to run_parameters if provided
+        if days is not None:
+            run_parameters['days'] = str(days)
+            
         console.print(f"Attempting to run report from configuration: [cyan]'{config_identifier}'[/cyan] with parameters: {run_parameters}")
 
         # Resolve account ID first (needed for config lookup by name)
