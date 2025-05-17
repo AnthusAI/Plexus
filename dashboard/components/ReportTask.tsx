@@ -256,42 +256,44 @@ const ReportTask: React.FC<ReportTaskProps> = ({
       renderContent={(props) => (
         <TaskContent {...props} hideTaskStatus={true}>
           {variant === 'detail' && task.data?.output && (
-            <div className="prose dark:prose-invert max-w-none overflow-y-auto flex-1 min-h-0 p-3">
-              <ReactMarkdown
-                components={{
-                  p: ({node, ...props}) => <p className="mb-2" {...props} />,
-                  strong: ({node, ...props}) => <strong className="font-semibold" {...props} />,
-                  ul: ({node, ...props}) => <ul className="list-disc pl-5 mb-2" {...props} />,
-                  li: ({node, ...props}) => <li className="mb-1" {...props} />,
-                  h1: ({node, ...props}) => <h1 className="text-2xl font-bold mt-4 mb-2" {...props} />,
-                  h2: ({node, ...props}) => <h2 className="text-xl font-bold mt-4 mb-2" {...props} />,
-                  h3: ({node, ...props}) => <h3 className="text-lg font-bold mt-3 mb-1" {...props} />,
-                  h4: ({node, ...props}) => <h4 className="text-base font-bold mt-2 mb-1" {...props} />,
-                  code: ({node, className, children, ...props}: any) => {
-                    const match = /language-(\w+)/.exec(className || '');
-                    const language = match ? match[1] : '';
-                    
-                    if (language === 'block') {
-                      return customCodeBlockRenderer({ node, className, children, ...props });
-                    }
-                    
-                    return (
+            <div className="bg-background rounded-lg p-3 mx-3 mb-3 overflow-y-auto flex-1 min-h-0">
+              <div className="prose dark:prose-invert max-w-none">
+                <ReactMarkdown
+                  components={{
+                    p: ({node, ...props}) => <p className="mb-2" {...props} />,
+                    strong: ({node, ...props}) => <strong className="font-semibold" {...props} />,
+                    ul: ({node, ...props}) => <ul className="list-disc pl-5 mb-2" {...props} />,
+                    li: ({node, ...props}) => <li className="mb-1" {...props} />,
+                    h1: ({node, ...props}) => <h1 className="text-2xl font-bold mt-2 mb-2" {...props} />,
+                    h2: ({node, ...props}) => <h2 className="text-xl font-bold mt-2 mb-2" {...props} />,
+                    h3: ({node, ...props}) => <h3 className="text-lg font-bold mt-3 mb-1" {...props} />,
+                    h4: ({node, ...props}) => <h4 className="text-base font-bold mt-2 mb-1" {...props} />,
+                    code: ({node, className, children, ...props}: any) => {
+                      const match = /language-(\w+)/.exec(className || '');
+                      const language = match ? match[1] : '';
+                      
+                      if (language === 'block') {
+                        return customCodeBlockRenderer({ node, className, children, ...props });
+                      }
+                      
+                      return (
+                        <div className="w-full min-w-0 max-w-full overflow-x-auto">
+                          <code className="bg-muted px-1 py-0.5 rounded block whitespace-pre-wrap break-all" {...props}>
+                            {children}
+                          </code>
+                        </div>
+                      );
+                    },
+                    pre: ({node, children, ...props}: any) => (
                       <div className="w-full min-w-0 max-w-full overflow-x-auto">
-                        <code className="bg-muted px-1 py-0.5 rounded block whitespace-pre-wrap break-all" {...props}>
-                          {children}
-                        </code>
+                        <div className="w-full min-w-0 max-w-full" {...props}>{children}</div>
                       </div>
-                    );
-                  },
-                  pre: ({node, children, ...props}: any) => (
-                    <div className="w-full min-w-0 max-w-full overflow-x-auto">
-                      <div className="w-full min-w-0 max-w-full" {...props}>{children}</div>
-                    </div>
-                  ),
-                }}
-              >
-                {task.data.output}
-              </ReactMarkdown>
+                    ),
+                  }}
+                >
+                  {task.data.output}
+                </ReactMarkdown>
+              </div>
             </div>
           )}
           {variant === 'detail' && !task.data?.output && (
