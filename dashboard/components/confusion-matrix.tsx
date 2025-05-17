@@ -9,7 +9,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { useCallback } from "react"
 
 export interface ConfusionMatrixRow {
   actualClassLabel: string; // e.g., "Red", "Heads" - represents the true class for this row
@@ -56,41 +55,8 @@ export interface ConfusionMatrixProps {
  * - Column label: { predicted: "class1", actual: null }
  */
 export function ConfusionMatrix({ data, onSelectionChange }: ConfusionMatrixProps) {
-  // Use callbacks for event handlers to prevent re-renders
-  const handleCellClick = useCallback((predicted: string, actual: string) => {
-    onSelectionChange?.({ predicted, actual })
-  }, [onSelectionChange])
-
-  const handlePredictedLabelClick = useCallback((label: string) => {
-    onSelectionChange?.({ predicted: label, actual: null })
-  }, [onSelectionChange])
-
-  const handleActualLabelClick = useCallback((label: string) => {
-    onSelectionChange?.({ predicted: null, actual: label })
-  }, [onSelectionChange])
-
-  // Safe default for maxValue in case validation fails
-  const maxValue = data?.matrix 
-    ? Math.max(1, ...data.matrix.reduce((acc, row) => {
-        if (row && row.predictedClassCounts) {
-          acc.push(...Object.values(row.predictedClassCounts));
-        }
-        return acc;
-      }, [] as number[]))
-    : 1;
-
-  const getBackgroundColor = useCallback((value: number) => {
-    const opacity = Math.max(0.15, value / maxValue) // Ensure some color even for 0, if maxValue is > 0
-    return `hsl(var(--purple-6) / ${opacity})`
-  }, [maxValue])
-
-  const getTextColor = useCallback((value: number) => {
-    const threshold = maxValue * 0.9; // 90% of max value
-    return value >= threshold && maxValue > 0 ? 'text-foreground-selected' : 'text-foreground'; // ensure maxValue > 0 for threshold logic
-  }, [maxValue])
-
-  // Validate data structure
-  if (!data || !data.labels || !Array.isArray(data.labels)) {
+  // Updated validation logic
+  if (!data || !data.labels) {
     return (
       <Alert variant="destructive">
         <ExclamationTriangleIcon className="h-4 w-4" />
@@ -100,18 +66,7 @@ export function ConfusionMatrix({ data, onSelectionChange }: ConfusionMatrixProp
     )
   }
 
-  // Validate matrix structure
-  if (!data.matrix || !Array.isArray(data.matrix)) {
-    return (
-      <Alert variant="destructive">
-        <ExclamationTriangleIcon className="h-4 w-4" />
-        <AlertTitle>Error</AlertTitle>
-        <AlertDescription>Invalid confusion matrix: Missing or malformed matrix data.</AlertDescription>
-      </Alert>
-    )
-  }
-
-  if (data.labels.length === 0 && data.matrix.length > 0) {
+  if (data.matrix && data.labels.length === 0 && data.matrix.length > 0) {
     // if matrix has data but no labels are defined to interpret it
     return (
       <Alert variant="destructive">
@@ -122,15 +77,69 @@ export function ConfusionMatrix({ data, onSelectionChange }: ConfusionMatrixProp
     )
   }
   
-  // Get all counts for color scaling
-  const allCounts = data.matrix.reduce((acc, row) => {
-    if (row && row.predictedClassCounts) {
-      acc.push(...Object.values(row.predictedClassCounts));
+  // Validate that all actualClassLabels and predictedClassLabels in the matrix are present in the main 'labels' array
+  for (const row of data.matrix) {
+    if (!data.labels.includes(row.actualClassLabel)) {
+      return (
+        <Alert variant="destructive">
+          <ExclamationTriangleIcon className="h-4 w-4" />
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>
+            Invalid confusion matrix: 'actualClassLabel' "{row.actualClassLabel}" not found in 'labels' array.
+          </AlertDescription>
+        </Alert>
+      );
     }
+    for (const predictedLabel of Object.keys(row.predictedClassCounts)) {
+      if (!data.labels.includes(predictedLabel)) {
+        return (
+          <Alert variant="destructive">
+            <ExclamationTriangleIcon className="h-4 w-4" />
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>
+              Invalid confusion matrix: Predicted class label "{predictedLabel}" from 'predictedClassCounts' not found in 'labels' array.
+            </AlertDescription>
+          </Alert>
+        );
+      }
+    }
+  }
+
+  const allCounts = data.matrix.reduce((acc, row) => {
+    acc.push(...Object.values(row.predictedClassCounts));
     return acc;
   }, [] as number[]);
   
-  // We can safely reuse maxValue from the top-level calculation
+  const maxValue = allCounts.length > 0 ? Math.max(...allCounts) : 1;
+
+  const getBackgroundColor = (value: number, predicted: string, actual: string) => {
+    const opacity = Math.max(0.15, value / maxValue) // Ensure some color even for 0, if maxValue is > 0
+    // Use true color for correct predictions (diagonal), false color for incorrect
+    return predicted === actual
+      ? `hsl(var(--green-6) / ${opacity})`
+      : `hsl(var(--red-6) / ${opacity})`
+  }
+
+  const getTextColor = (value: number) => {
+    const threshold = maxValue * 0.9; // 90% of max value
+    return value >= threshold && maxValue > 0 ? 'text-foreground-selected' : 'text-foreground'; // ensure maxValue > 0 for threshold logic
+  }
+
+  const handleCellClick = (predicted: string, actual: string) => {
+    onSelectionChange?.({ predicted, actual })
+  }
+
+  const handlePredictedLabelClick = (label: string) => {
+    onSelectionChange?.({ predicted: label, actual: null })
+  }
+
+  const handleActualLabelClick = (label: string) => {
+    onSelectionChange?.({ predicted: null, actual: label })
+  }
+  
+  // effectiveMatrix will be used for rendering. If data.matrix is empty but labels are provided,
+  // we can still render the structure with all zero counts.
+  const effectiveMatrix = data.matrix;
 
   return (
     <div className="flex flex-col w-full gap-1 overflow-visible" style={{ overflow: 'visible', position: 'relative' }}>
@@ -147,16 +156,15 @@ export function ConfusionMatrix({ data, onSelectionChange }: ConfusionMatrixProp
             <div key={`row-${actualLabel}-${rowIndex}`} className="flex overflow-visible">
               {/* Iterate over PREDICTED classes (columns) based on data.labels */}
               {data.labels.map((predictedLabel, colIndex) => {
-                // Find the corresponding row in matrix by actualClassLabel
-                const matrixRow = data.matrix.find(r => r && r.actualClassLabel === actualLabel);
+                // Find the corresponding row in effectiveMatrix by actualClassLabel
+                const matrixRow = effectiveMatrix.find(r => r.actualClassLabel === actualLabel);
                 // Get the count for the current predictedLabel from that row's predictedClassCounts
                 // Default to 0 if the actualLabel row doesn't exist or if the predictedLabel is not in its counts
-                const count = matrixRow && matrixRow.predictedClassCounts ? 
-                  (matrixRow.predictedClassCounts[predictedLabel] ?? 0) : 0;
+                const count = matrixRow ? (matrixRow.predictedClassCounts[predictedLabel] ?? 0) : 0;
 
                 return (
                   <TooltipProvider key={`cell-${actualLabel}-${predictedLabel}-${rowIndex}-${colIndex}`}>
-                    <Tooltip key={`tooltip-${actualLabel}-${predictedLabel}-${rowIndex}-${colIndex}`}>
+                    <Tooltip>
                       <TooltipTrigger asChild>
                         <div
                           onClick={() => handleCellClick(
@@ -167,7 +175,7 @@ export function ConfusionMatrix({ data, onSelectionChange }: ConfusionMatrixProp
                             text-sm font-medium truncate ${getTextColor(count)}
                             cursor-pointer hover:opacity-80 flex-1 basis-0 min-w-0`}
                           style={{
-                            backgroundColor: getBackgroundColor(count),
+                            backgroundColor: getBackgroundColor(count, predictedLabel, actualLabel),
                           }}
                         >
                           {/* Bottom label (Column/Predicted) - only for last row */}
@@ -244,15 +252,20 @@ export function ConfusionMatrix({ data, onSelectionChange }: ConfusionMatrixProp
             </div>
           ))}
         </div>
-      </div>
-
-      {/* Headers for the matrix */}
-      <div className="flex justify-between text-xs text-muted-foreground mt-2">
-        <div className="flex items-center">
-          <span>← Actual</span>
-        </div>
-        <div className="flex items-center">
-          <span>Predicted ↑</span>
+        
+        {/* Axis labels */}
+        <div className="flex mt-2 text-xs text-foreground overflow-visible" style={{ overflow: 'visible' }}>
+          <div className="flex-1 text-center relative" style={{ marginTop: '-10px' }}>Predicted</div>
+          <div className="absolute" 
+               style={{ 
+                 top: '50%', 
+                 left: '-2em', 
+                 zIndex: 10, 
+                 transform: 'translateY(-50%) rotate(-90deg)',
+                 transformOrigin: 'center center'
+               }}>
+            Actual
+          </div>
         </div>
       </div>
     </div>
