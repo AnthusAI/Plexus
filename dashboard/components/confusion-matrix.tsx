@@ -56,6 +56,39 @@ export interface ConfusionMatrixProps {
  * - Column label: { predicted: "class1", actual: null }
  */
 export function ConfusionMatrix({ data, onSelectionChange }: ConfusionMatrixProps) {
+  // Use callbacks for event handlers to prevent re-renders
+  const handleCellClick = useCallback((predicted: string, actual: string) => {
+    onSelectionChange?.({ predicted, actual })
+  }, [onSelectionChange])
+
+  const handlePredictedLabelClick = useCallback((label: string) => {
+    onSelectionChange?.({ predicted: label, actual: null })
+  }, [onSelectionChange])
+
+  const handleActualLabelClick = useCallback((label: string) => {
+    onSelectionChange?.({ predicted: null, actual: label })
+  }, [onSelectionChange])
+
+  // Safe default for maxValue in case validation fails
+  const maxValue = data?.matrix 
+    ? Math.max(1, ...data.matrix.reduce((acc, row) => {
+        if (row && row.predictedClassCounts) {
+          acc.push(...Object.values(row.predictedClassCounts));
+        }
+        return acc;
+      }, [] as number[]))
+    : 1;
+
+  const getBackgroundColor = useCallback((value: number) => {
+    const opacity = Math.max(0.15, value / maxValue) // Ensure some color even for 0, if maxValue is > 0
+    return `hsl(var(--purple-6) / ${opacity})`
+  }, [maxValue])
+
+  const getTextColor = useCallback((value: number) => {
+    const threshold = maxValue * 0.9; // 90% of max value
+    return value >= threshold && maxValue > 0 ? 'text-foreground-selected' : 'text-foreground'; // ensure maxValue > 0 for threshold logic
+  }, [maxValue])
+
   // Validate data structure
   if (!data || !data.labels || !Array.isArray(data.labels)) {
     return (
@@ -89,19 +122,6 @@ export function ConfusionMatrix({ data, onSelectionChange }: ConfusionMatrixProp
     )
   }
   
-  // Use callbacks for event handlers to prevent re-renders
-  const handleCellClick = useCallback((predicted: string, actual: string) => {
-    onSelectionChange?.({ predicted, actual })
-  }, [onSelectionChange])
-
-  const handlePredictedLabelClick = useCallback((label: string) => {
-    onSelectionChange?.({ predicted: label, actual: null })
-  }, [onSelectionChange])
-
-  const handleActualLabelClick = useCallback((label: string) => {
-    onSelectionChange?.({ predicted: null, actual: label })
-  }, [onSelectionChange])
-
   // Get all counts for color scaling
   const allCounts = data.matrix.reduce((acc, row) => {
     if (row && row.predictedClassCounts) {
@@ -110,17 +130,7 @@ export function ConfusionMatrix({ data, onSelectionChange }: ConfusionMatrixProp
     return acc;
   }, [] as number[]);
   
-  const maxValue = allCounts.length > 0 ? Math.max(...allCounts) : 1;
-
-  const getBackgroundColor = useCallback((value: number) => {
-    const opacity = Math.max(0.15, value / maxValue) // Ensure some color even for 0, if maxValue is > 0
-    return `hsl(var(--purple-6) / ${opacity})`
-  }, [maxValue])
-
-  const getTextColor = useCallback((value: number) => {
-    const threshold = maxValue * 0.9; // 90% of max value
-    return value >= threshold && maxValue > 0 ? 'text-foreground-selected' : 'text-foreground'; // ensure maxValue > 0 for threshold logic
-  }, [maxValue])
+  // We can safely reuse maxValue from the top-level calculation
 
   return (
     <div className="flex flex-col w-full gap-1 overflow-visible" style={{ overflow: 'visible', position: 'relative' }}>
