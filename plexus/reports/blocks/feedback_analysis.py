@@ -176,21 +176,16 @@ class FeedbackAnalysis(BaseReportBlock):
                 
                 items_for_this_score = await self._fetch_feedback_items_for_score(
                     plexus_scorecard_id=plexus_scorecard_obj.id,
-                    plexus_score_id=score_info['plexus_score_id']
+                    plexus_score_id=score_info['plexus_score_id'],
+                    start_date=start_date,
+                    end_date=end_date
                 )
                 all_feedback_items_retrieved_count += len(items_for_this_score)
-                self._log(f"Retrieved {len(items_for_this_score)} FeedbackItems for this score (before date filtering).")
-
-                # Date filter items for this score
-                date_filtered_items_for_score = [
-                    item for item in items_for_this_score
-                    if item.updatedAt and start_date <= item.updatedAt <= end_date
-                ]
-                self._log(f"{len(date_filtered_items_for_score)} items for this score within date range: {start_date.date()} - {end_date.date()}")
+                self._log(f"Retrieved {len(items_for_this_score)} FeedbackItems for this score within date range: {start_date.date()} - {end_date.date()}")
                 
-                all_date_filtered_feedback_items.extend(date_filtered_items_for_score)
+                all_date_filtered_feedback_items.extend(items_for_this_score)
 
-                if not date_filtered_items_for_score:
+                if not items_for_this_score:
                     self._log("No feedback items for this score within the date range.", level="WARNING")
                     analysis_for_this_score = {
                         "score_id": score_info['plexus_score_id'],
@@ -210,7 +205,7 @@ class FeedbackAnalysis(BaseReportBlock):
                 else:
                     try:
                         analysis_for_this_score = self._analyze_feedback_data_gwet(
-                            feedback_items=date_filtered_items_for_score,
+                            feedback_items=items_for_this_score,
                             score_id_info=score_info['plexus_score_id'] # For logging within analysis
                         )
                         analysis_for_this_score["score_id"] = score_info['plexus_score_id']
@@ -291,12 +286,24 @@ class FeedbackAnalysis(BaseReportBlock):
         # The service.py code will use this to upload to S3
         return final_output_data, detailed_log
     
-    async def _fetch_feedback_items_for_score(self, plexus_scorecard_id: str, plexus_score_id: str) -> List[FeedbackItem]:
-        """Fetches all FeedbackItem records for a specific Plexus Score on a Plexus Scorecard."""
+    async def _fetch_feedback_items_for_score(self, plexus_scorecard_id: str, plexus_score_id: str, 
+                                       start_date: Optional[datetime] = None, 
+                                       end_date: Optional[datetime] = None) -> List[FeedbackItem]:
+        """
+        Fetches FeedbackItem records for a specific Plexus Score on a Plexus Scorecard.
+        Now with direct GraphQL query for date-filtered items.
+        
+        Args:
+            plexus_scorecard_id: The ID of the scorecard
+            plexus_score_id: The ID of the score
+            start_date: Optional start date for filtering (UTC aware)
+            end_date: Optional end date for filtering (UTC aware)
+        """
         self._log(f"Fetching feedback items for Plexus Scorecard ID: {plexus_scorecard_id}, Plexus Score ID: {plexus_score_id}")
+        if start_date and end_date:
+            self._log(f"With date filtering: {start_date.isoformat()} to {end_date.isoformat()}")
         
         all_items_for_score = []
-        next_token = None
         account_id = self.params.get("account_id") # Assuming account_id is in self.params from Task context
         if not account_id and hasattr(self.api_client, 'context') and self.api_client.context:
              account_id = self.api_client.context.account_id # Try to get from client context
@@ -306,7 +313,6 @@ class FeedbackAnalysis(BaseReportBlock):
             try:
                 self._log("Attempting to resolve account_id via PlexusDashboardClient...", level="DEBUG")
                 # Ensure _resolve_account_id can be called or account_id is pre-resolved.
-                # This might require self.api_client to have context.account_key set.
                 if hasattr(self.api_client, '_resolve_account_id'):
                     account_id = await asyncio.to_thread(self.api_client._resolve_account_id) 
                 elif hasattr(self.api_client, 'account_id'): # if it was resolved and stored
@@ -314,43 +320,144 @@ class FeedbackAnalysis(BaseReportBlock):
 
                 if account_id:
                     self._log(f"Resolved account_id: {account_id}")
-                else: # Final fallback if it cannot be resolved
+                else:
                     self._log("WARNING: account_id could not be resolved. FeedbackItem fetching might be incomplete or fail.", level="WARNING")
-                    # Depending on API, not providing account_id might fetch for all accounts (bad) or fail.
-                    # For safety, we might choose to return empty list here if account_id is critical.
-                    # For now, proceed with None, and let FeedbackItem.list handle it.
             except Exception as e:
                 self._log(f"Error resolving account_id: {e}. Proceeding with account_id as None.", level="WARNING")
                 account_id = None # Ensure it's None if resolution fails
         else:
             self._log(f"Using account_id: {account_id}", level="DEBUG")
 
+        if not account_id:
+            self._log("No account_id available. Cannot fetch feedback items.", level="ERROR")
+            return []
 
-        while True:
-            try:
-                # Don't log every API call detail - it's too verbose
-                self._log(f"Fetching feedback items page (token: {next_token is not None})", level="DEBUG")
+        try:
+            # Try using the optimized GSI directly with GraphQL
+            if plexus_scorecard_id and plexus_score_id and start_date and end_date:
+                self._log("Using direct GraphQL query with GSI", level="DEBUG")
                 
-                # Making FeedbackItem.list an async-compatible call
-                items, next_token = await asyncio.to_thread(
-                    FeedbackItem.list, # Assuming FeedbackItem.list is a static/class method
-                    client=self.api_client,
-                    account_id=account_id, # Pass resolved or param account_id
-                    scorecard_id=plexus_scorecard_id,
-                    score_id=plexus_score_id, # Specific score for this fetch
-                    limit=100,
-                    next_token=next_token
-                )
-                all_items_for_score.extend(items)
-                self._log(f"Fetched {len(items)} items for this score (total for score: {len(all_items_for_score)})")
+                # Construct a direct GraphQL query using the new GSI
+                query = """
+                query ListFeedbackItemsByGSI(
+                    $accountId: String!, 
+                    $SortKeyInput: ModelFeedbackItemByAccountScorecardScoreUpdatedAtCompositeKeyConditionInput,
+                    $limit: Int,
+                    $nextToken: String
+                ) {
+                    listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt(
+                        accountId: $accountId,
+                        scorecardIdScoreIdUpdatedAt: $SortKeyInput, # Argument for the composite sort key parts
+                        limit: $limit,
+                        nextToken: $nextToken
+                    ) {
+                        items {
+                            id
+                            accountId
+                            scorecardId
+                            scoreId
+                            cacheKey
+                            initialAnswerValue
+                            finalAnswerValue
+                            initialCommentValue
+                            finalCommentValue
+                            editCommentValue
+                            isAgreement
+                            createdAt
+                            updatedAt
+                        }
+                        nextToken
+                    }
+                }
+                """
                 
-                if not next_token:
-                    break
-            except Exception as e:
-                self._log(f"Error during paginated fetch for score {plexus_score_id}: {str(e)}", level="ERROR")
-                # Don't log full traceback, just the error message
-                break # Stop fetching for this score on error
+                # Prepare variables for the query
+                variables = {
+                    "accountId": account_id,
+                    "SortKeyInput": { # This object matches the $SortKeyInput variable
+                        "scorecardId": {"eq": plexus_scorecard_id},
+                        "scoreId": {"eq": plexus_score_id},
+                        "updatedAt": {"between": [start_date.isoformat(), end_date.isoformat()]}
+                    },
+                    "limit": 1000,
+                    "nextToken": None
+                }
                 
+                next_token = None
+                
+                while True:
+                    if next_token:
+                        variables["nextToken"] = next_token
+                    
+                    try:
+                        # Execute the query
+                        response = await asyncio.to_thread(self.api_client.execute, query, variables)
+                        
+                        if response and 'listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt' in response:
+                            result = response['listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt']
+                            item_dicts = result.get('items', [])
+                            
+                            # Convert to FeedbackItem objects
+                            items = [FeedbackItem.from_dict(item_dict, client=self.api_client) for item_dict in item_dicts]
+                            all_items_for_score.extend(items)
+                            
+                            self._log(f"Fetched {len(items)} items using GSI query (total: {len(all_items_for_score)})")
+                            
+                            # Get next token for pagination
+                            next_token = result.get('nextToken')
+                            if not next_token:
+                                break
+                        else:
+                            if response and 'errors' in response:
+                                self._log(f"GraphQL errors with GSI query: {response.get('errors')}", level="WARNING")
+                            else:
+                                self._log("Unexpected response format from GSI query", level="WARNING")
+                            raise ValueError("Invalid response format")
+                            
+                    except Exception as e:
+                        self._log(f"Error with GSI query, falling back to standard query: {e}", level="WARNING")
+                        # Clear items and use standard method below
+                        all_items_for_score = []
+                        break
+            
+            # If we have no items yet (either we didn't try GSI or it failed), use standard filtering
+            if not all_items_for_score:
+                self._log("Using standard query method", level="DEBUG")
+                
+                # Build filter for standard query
+                filter_params = {
+                    "accountId": {"eq": account_id},
+                    "scorecardId": {"eq": plexus_scorecard_id},
+                    "scoreId": {"eq": plexus_score_id}
+                }
+                
+                # Add date filtering if provided
+                if start_date and end_date:
+                    filter_params["updatedAt"] = {"between": [start_date.isoformat(), end_date.isoformat()]}
+                
+                next_token = None
+                
+                # Use standard list query
+                while True:
+                    items, next_token = await asyncio.to_thread(
+                        FeedbackItem.list,
+                        client=self.api_client,
+                        filter=filter_params,
+                        limit=100,
+                        next_token=next_token
+                    )
+                    
+                    all_items_for_score.extend(items)
+                    self._log(f"Fetched {len(items)} items using standard query (total: {len(all_items_for_score)})")
+                    
+                    if not next_token:
+                        break
+        
+        except Exception as e:
+            self._log(f"Error during feedback item fetch for score {plexus_score_id}: {str(e)}", level="ERROR")
+            # Don't log full traceback, just the error message
+        
+        self._log(f"Total items fetched for score {plexus_score_id}: {len(all_items_for_score)}")
         return all_items_for_score
     
     def _analyze_feedback_data_gwet(self, feedback_items: List[FeedbackItem], score_id_info: str) -> Dict[str, Any]:
