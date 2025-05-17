@@ -12,7 +12,7 @@ interface ReportBlock {
   name?: string | null;
   position: number;
   type: string;
-  output: string;
+  output: Record<string, any>;
   log?: string | null;
   detailsFiles?: string | null;
 }
