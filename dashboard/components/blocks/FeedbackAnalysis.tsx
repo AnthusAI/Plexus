@@ -126,7 +126,7 @@ const FeedbackAnalysis: React.FC<ReportBlockProps> = ({ name, output }) => {
                   <div className="w-full max-w-[160px] mx-auto">
                     <Gauge 
                       value={feedbackData.overall_ac1 ?? 0} 
-                      title="Agreement (AC1)"
+                      title="Agreement"
                       valueUnit=""
                       min={-1}
                       max={1}

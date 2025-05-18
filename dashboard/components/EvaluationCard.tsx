@@ -258,7 +258,7 @@ export default function EvaluationCard({
                 <div className="max-w-[180px] mx-auto">
                   <Gauge 
                     value={gwetAC1 ?? 0} 
-                    title="Agreement (AC1)"
+                    title="Agreement"
                     valueUnit=""
                     min={-1}
                     max={1}
@@ -323,7 +323,7 @@ export default function EvaluationCard({
                   {gwetAC1 !== undefined ? (
                     <Gauge 
                       value={gwetAC1} 
-                      title="Agreement (AC1)"
+                      title="Agreement"
                       valueUnit=""
                       min={-1}
                       max={1}

@@ -142,7 +142,7 @@ export const FeedbackAnalysisEvaluation: React.FC<FeedbackAnalysisEvaluationProp
                 <div className="w-full max-w-[160px] mx-auto">
                   <Gauge 
                     value={score.ac1 ?? 0} 
-                    title="Agreement (AC1)"
+                    title="Agreement"
                     valueUnit=""
                     min={-1}
                     max={1}
