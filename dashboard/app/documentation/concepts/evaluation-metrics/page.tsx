@@ -430,12 +430,12 @@ export default function EvaluationMetricsPage() {
             disableAccuracySegments={true}
                           gaugeDescription={
                 <>
-                  <p>
-                    <strong>Is 62% accuracy good for this classifier?</strong>
-                  </p>
-                  <p className="mt-2 text-sm">
-                    This seems like a fairly mediocre number. The gauge suggests it's in the "converging but not quite there" range. But without additional context, it's hard to determine if this represents genuinely poor performance or if there's more to the story.
-                  </p>
+                  <div className="p-3 bg-violet-50 dark:bg-violet-950/40 rounded-md mt-4 border-l-4 border-violet-500">
+                    <p className="text-sm font-medium">Is 62% accuracy good for this classifier?</p>
+                    <p className="text-sm mt-2">
+                      This seems like a fairly mediocre number. The gauge suggests it's in the "converging but not quite there" range. But without additional context, it's hard to determine if this represents genuinely poor performance or if there's more to the story.
+                    </p>
+                  </div>
                 </>
               }
           />
@@ -477,12 +477,12 @@ export default function EvaluationMetricsPage() {
               disableAccuracySegments={true}
               gaugeDescription={
                 <>
-                  <p>
-                    <strong>Is this a good accuracy score?</strong>
-                  </p>
-                  <p className="mt-2 text-sm">
-                    We got a number, but how do we know if that's good performance at guessing?
-                  </p>
+                  <div className="p-3 bg-violet-50 dark:bg-violet-950/40 rounded-md mt-4 border-l-4 border-violet-500">
+                    <p className="text-sm font-medium">Is this a good accuracy score?</p>
+                    <p className="text-sm mt-2">
+                      We got a number, but how do we know if that's good performance at guessing?
+                    </p>
+                  </div>
                 </>
               }
               accuracyGaugeSegments={fixedAccuracyGaugeSegments}
@@ -504,12 +504,12 @@ export default function EvaluationMetricsPage() {
               disableAccuracySegments={true}
               gaugeDescription={
                 <>
-                  <p>
-                    <strong>So, is this good?</strong>
-                  </p>
-                  <p className="mt-2 text-sm">
-                    This is a higher number than random guessing, so that's good. Right?
-                  </p>
+                  <div className="p-3 bg-violet-50 dark:bg-violet-950/40 rounded-md mt-4 border-l-4 border-violet-500">
+                    <p className="text-sm font-medium">Is this good?</p>
+                    <p className="text-sm mt-2">
+                      This is a higher number than random guessing, so that's good. Right?
+                    </p>
+                  </div>
                 </>
               }
               accuracyGaugeSegments={fixedAccuracyGaugeSegments}
@@ -549,12 +549,12 @@ export default function EvaluationMetricsPage() {
               disableAccuracySegments={true}
               gaugeDescription={
                 <>
-                  <p>
-                    <strong>Wait, is 23% accuracy bad?</strong>
-                  </p>
-                  <p className="mt-2 text-sm">
-                    The gauge shows this as poor performance, but is that the right interpretation for a 4-class problem?
-                  </p>
+                  <div className="p-3 bg-violet-50 dark:bg-violet-950/40 rounded-md mt-4 border-l-4 border-violet-500">
+                    <p className="text-sm font-medium">Is 23% accuracy bad?</p>
+                    <p className="text-sm mt-2">
+                      The gauge shows this as poor performance, but is that the right interpretation for a 4-class problem?
+                    </p>
+                  </div>
                   
                   <div className="mt-4 p-3 bg-destructive rounded-md">
                     <p className="text-base font-bold text-white">Misleading Accuracy</p>
@@ -776,9 +776,12 @@ export default function EvaluationMetricsPage() {
               variant="oneGauge"
               disableAccuracySegments={true}
               gaugeDescription={
-                <p className="text-sm">
-                  <strong>Still at basic chance level:</strong> Even with a stacked deck (75% red cards), random 50/50 guessing still gives you about 50% accuracy. This matches the baseline for a balanced binary prediction task. Your random strategy doesn't exploit the imbalance in the deck.
-                </p>
+                <div className="p-3 bg-violet-50 dark:bg-violet-950/40 rounded-md mt-4 border-l-4 border-violet-500">
+                  <p className="text-sm font-medium">Still at basic chance level</p>
+                  <p className="text-sm mt-2">
+                    Even with a stacked deck (75% red cards), random 50/50 guessing still gives you about 50% accuracy. This matches the baseline for a balanced binary prediction task. Your random strategy doesn't exploit the imbalance in the deck.
+                  </p>
+                </div>
               }
             />
 
@@ -810,9 +813,12 @@ export default function EvaluationMetricsPage() {
               variant="oneGauge"
               disableAccuracySegments={true}
               gaugeDescription={
-                <p className="text-sm">
-                  <strong>Better than random guessing, but still no skill:</strong> By matching the known distribution, your accuracy jumps to around 62.5% (0.75×0.75 + 0.25×0.25 = 0.625). This appears better than 50% random guessing, but you're still not demonstrating any card-specific prediction skill—you're just exploiting knowledge of the overall distribution. Gwet's AC1 would still be near 0.
-                </p>
+                                  <div className="p-3 bg-violet-50 dark:bg-violet-950/40 rounded-md mt-4 border-l-4 border-violet-500">
+                    <p className="text-sm font-medium">Better than random guessing, but still no skill</p>
+                    <p className="text-sm mt-2">
+                      By matching the known distribution, your accuracy jumps to around 62.5% (0.75×0.75 + 0.25×0.25 = 0.625). This appears better than 50% random guessing, but you're still not demonstrating any card-specific prediction skill—you're just exploiting knowledge of the overall distribution without any genuine predictive ability.
+                    </p>
+                  </div>
               }
             />
 
@@ -845,9 +851,12 @@ export default function EvaluationMetricsPage() {
               disableAccuracySegments={true}
               gaugeDescription={
                 <>
-                  <p className="text-sm">
-                    <strong>No real insight:</strong> Gwet's AC1 would be 0.0, correctly showing that you have no predictive ability beyond exploiting the class distribution.
-                  </p>
+                  <div className="p-3 bg-violet-50 dark:bg-violet-950/40 rounded-md mt-4 border-l-4 border-violet-500">
+                    <p className="text-sm font-medium">No real insight</p>
+                    <p className="text-sm mt-2">
+                      This strategy has no genuine predictive ability - you're simply exploiting knowledge of the class distribution without demonstrating any actual skill at card-specific prediction.
+                    </p>
+                  </div>
 
                   <div className="p-3 bg-destructive rounded-md mt-4">
                     <p className="text-base font-bold text-white">Misleading Accuracy</p>
@@ -897,9 +906,12 @@ export default function EvaluationMetricsPage() {
               disableAccuracySegments={true}
               gaugeDescription={
                 <>
-                  <p className="text-sm">
-                    <strong>Yay!:</strong> 97% accuracy is great, right?
-                  </p>
+                  <div className="p-3 bg-violet-50 dark:bg-violet-950/40 rounded-md mt-4 border-l-4 border-violet-500">
+                    <p className="text-sm font-medium">Deceptive performance</p>
+                    <p className="text-sm mt-2">
+                      97% accuracy sounds great at first glance, doesn't it? But this number is hiding a serious problem.
+                    </p>
+                  </div>
 
                   <div className="p-3 bg-destructive rounded-md mt-4">
                     <p className="text-base font-bold text-white">CRITICAL FLAW</p>
@@ -1016,14 +1028,16 @@ export default function EvaluationMetricsPage() {
                 accuracyGaugeSegments={GaugeThresholdComputer.createSegments(GaugeThresholdComputer.computeThresholds({ 'Red': 39, 'Black': 13 }))}
                 gaugeDescription={
                   <>
-                    <p className="text-sm">
-                      <strong>Context is everything:</strong> With contextual gauge segments that account for the 75/25 class imbalance, the gauge now 
-                      correctly shows that this 75% accuracy is merely at the "chance" level - exactly what you'd expect from always guessing the majority class.
-                    </p>
-                    
-                    <p className="mt-2 text-sm">
-                      Notice how the colored segments have shifted to reflect that 75% is actually the minimum expected accuracy for this imbalanced distribution.
-                    </p>                  
+                    <div className="p-3 bg-violet-50 dark:bg-violet-950/40 rounded-md mt-4 border-l-4 border-violet-500">
+                      <p className="text-sm font-medium">Context is everything</p>
+                      <p className="text-sm mt-2">
+                        With contextual gauge segments that account for the 75/25 class imbalance, the gauge now 
+                        correctly shows that this 75% accuracy is merely at the "chance" level - exactly what you'd expect from always guessing the majority class.
+                      </p>
+                      <p className="text-sm mt-2">
+                        Notice how the colored segments have shifted to reflect that 75% is actually the minimum expected accuracy for this imbalanced distribution.
+                      </p>
+                    </div>                  
                   </>
                 }
               />
@@ -1055,14 +1069,13 @@ export default function EvaluationMetricsPage() {
                   accuracyGaugeSegments={GaugeThresholdComputer.createSegments(GaugeThresholdComputer.computeThresholds({ 'Safe': 970, 'Prohibited': 30 }))}
                   gaugeDescription={
                     <>
-                      <p className="text-sm">
-                        <strong>Exposed as meaningless:</strong> With contextual gauge segments, the 97% accuracy is now shown to be precisely at 
-                        the "chance" level - exactly what you'd get by always predicting "Safe" given the 97/3 class distribution.
-                      </p>
-                      
-                      <div className="p-3 bg-amber-100 dark:bg-amber-900/40 rounded-md mt-4">
-                        <p className="text-sm font-medium">Notice the gauge segments</p>
-                        <p className="text-xs mt-1">
+                      <div className="p-3 bg-violet-50 dark:bg-violet-950/40 rounded-md mt-4 border-l-4 border-violet-500">
+                        <p className="text-sm font-medium">Exposed as meaningless</p>
+                        <p className="text-sm mt-2">
+                          With contextual gauge segments, the 97% accuracy is now shown to be precisely at 
+                          the "chance" level - exactly what you'd get by always predicting "Safe" given the 97/3 class distribution.
+                        </p>
+                        <p className="text-sm mt-2">
                           The colored segments are compressed to the right side of the gauge, showing that with this extreme imbalance, 
                           even 97% accuracy is at the bare minimum expected by chance. Any meaningful performance would need to exceed this baseline.
                         </p>
@@ -1103,13 +1116,12 @@ export default function EvaluationMetricsPage() {
                   accuracyGaugeSegments={articleTopicLabelerFullContextSegments}
                   gaugeDescription={
                     <>
-                      <p className="text-sm">
-                        <strong>Context-aware interpretation:</strong> With gauge segments that account for both the 5 classes and the 40/15/15/15/15 distribution, our 62% accuracy now appears good but not excellent. Notice how the gauge segments have shifted compared to our previous example - the threshold for "good" performance has increased to reflect that a naive classifier could achieve 40% just by always guessing "News".
-                      </p>
-                      
-                      <div className="p-3 bg-amber-100 dark:bg-amber-900/40 rounded-md mt-4">
-                        <p className="text-sm font-medium">A More Nuanced Picture</p>
-                        <p className="text-xs mt-1">
+                      <div className="p-3 bg-violet-50 dark:bg-violet-950/40 rounded-md mt-4 border-l-4 border-violet-500">
+                        <p className="text-sm font-medium">Context-aware interpretation</p>
+                        <p className="text-sm mt-2">
+                          With gauge segments that account for both the 5 classes and the 40/15/15/15/15 distribution, our 62% accuracy now appears good but not excellent. Notice how the gauge segments have shifted compared to our previous example - the threshold for "good" performance has increased to reflect that a naive classifier could achieve 40% just by always guessing "News".
+                        </p>
+                        <p className="text-sm mt-2">
                           While our 62% accuracy is still decent—it's better than the 40% we'd get from always predicting "News"—it's no longer in the highest performance tier once we account for the class imbalance. The threshold for "great" performance has shifted from around 60% to around 65%.
                         </p>
                       </div>
