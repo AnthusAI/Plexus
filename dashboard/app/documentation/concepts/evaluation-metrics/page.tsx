@@ -134,6 +134,63 @@ const fixedAccuracyGaugeSegments: Segment[] = [
 ];
 
 export default function EvaluationMetricsPage() {
+  // Article Topic Labeler - Our consistent example through the document
+  const articleTopicLabelerExampleData = {
+    id: 'article-topic-labeler',
+    score_name: 'Article Topic Labeler Performance',
+    cc_question_id: 'example-topic-labeler',
+    accuracy: 62.0,
+    item_count: 100,
+    mismatches: 38, // 100 - 62
+    gwetAC1: 0.512, // Lower AC1 reflecting 62% accuracy
+    label_distribution: { 
+      'News': 40, 
+      'Sports': 15, 
+      'Business': 15, 
+      'Technology': 15, 
+      'Lifestyle': 15 
+    }
+  };
+
+  // Article Topic Labeler data for visualization components
+  const articleTopicLabelerClassDistribution = [
+    { label: "News", count: 40 },
+    { label: "Sports", count: 15 },
+    { label: "Business", count: 15 },
+    { label: "Technology", count: 15 },
+    { label: "Lifestyle", count: 15 }
+  ];
+
+  const articleTopicLabelerConfusionMatrix = {
+    labels: ["News", "Sports", "Business", "Technology", "Lifestyle"],
+    matrix: [
+      { actualClassLabel: "News", predictedClassCounts: { "News": 28, "Sports": 3, "Business": 3, "Technology": 3, "Lifestyle": 3 } },
+      { actualClassLabel: "Sports", predictedClassCounts: { "News": 3, "Sports": 9, "Business": 1, "Technology": 1, "Lifestyle": 1 } },
+      { actualClassLabel: "Business", predictedClassCounts: { "News": 3, "Sports": 1, "Business": 8, "Technology": 2, "Lifestyle": 1 } },
+      { actualClassLabel: "Technology", predictedClassCounts: { "News": 3, "Sports": 1, "Business": 2, "Technology": 8, "Lifestyle": 1 } },
+      { actualClassLabel: "Lifestyle", predictedClassCounts: { "News": 3, "Sports": 1, "Business": 1, "Technology": 1, "Lifestyle": 9 } },
+    ],
+  };
+
+  const articleTopicLabelerPredictedDistribution = [
+    { label: "News", count: 40 }, // 28+3+3+3+3
+    { label: "Sports", count: 15 }, // 3+9+1+1+1
+    { label: "Business", count: 15 }, // 3+1+8+2+1
+    { label: "Technology", count: 15 }, // 3+1+2+8+1
+    { label: "Lifestyle", count: 15 }  // 3+1+1+1+9
+  ];
+  
+  // Calculate segments for only the 5-class nature (balanced distribution)
+  const balanced5ClassDistribution = { 'Class1': 20, 'Class2': 20, 'Class3': 20, 'Class4': 20, 'Class5': 20 };
+  const articleTopicLabelerClassCountOnlySegments = GaugeThresholdComputer.createSegments(
+    GaugeThresholdComputer.computeThresholds(balanced5ClassDistribution)
+  );
+  
+  // Calculate segments for both 5-class nature AND the actual imbalanced distribution
+  const articleTopicLabelerFullContextSegments = GaugeThresholdComputer.createSegments(
+    GaugeThresholdComputer.computeThresholds(articleTopicLabelerExampleData.label_distribution)
+  );
+
   // Example scores for different scenarios - ALL NOW AT 75% ACCURACY
   const scenario1Data = createExampleScore( // Balanced 2-Class
     'scenario1-balanced-2class',
@@ -352,12 +409,43 @@ export default function EvaluationMetricsPage() {
 
       <div className="space-y-10">
         <section className="mb-10">
-          <h2 className="text-2xl font-semibold mb-4">The Big Question: Is the Scorecard Score Good?</h2>
+          <h2 className="text-2xl font-semibold mb-4">The Big Question: Is This Classifier Good?</h2>
           <p className="text-muted-foreground mb-4">
-            You can't optimize a metric that you're not measuring.  If we need to improve the performance of a score aimed at detecting prohibited speech, then we need to see some kind of a gauge so that we can see if we're moving the needle.
+            You can't optimize a metric that you're not measuring. When developing an AI system, we need some kind of gauge to tell us if our model is performing well or needs improvement. Let's look at a concrete example.
           </p>
+          
           <p className="text-muted-foreground mb-4">
-            If we set up an accuracy gauge, then we can see the needle pointing at a number.  But how do we know if that number is good or bad?  We get 97% accuracy when we run evaluations, so that's good, right?
+            Imagine we've built an "Article Topic Labeler" that classifies articles into one of five categories: News, Sports, Business, Technology, and Lifestyle. We evaluate it on 100 articles and get the following results:
+          </p>
+
+          <EvaluationCard
+            title="Article Topic Labeler"
+            subtitle="Classifies articles into 5 categories: News, Sports, Business, Technology, and Lifestyle"
+            classDistributionData={articleTopicLabelerClassDistribution}
+            isBalanced={false}
+            accuracy={articleTopicLabelerExampleData.accuracy}
+            confusionMatrixData={articleTopicLabelerConfusionMatrix}
+            predictedClassDistributionData={articleTopicLabelerPredictedDistribution}
+            variant="oneGauge"
+            disableAccuracySegments={true}
+                          gaugeDescription={
+                <>
+                  <p>
+                    <strong>Is 62% accuracy good for this classifier?</strong>
+                  </p>
+                  <p className="mt-2 text-sm">
+                    This seems like a fairly mediocre number. The gauge suggests it's in the "converging but not quite there" range. But without additional context, it's hard to determine if this represents genuinely poor performance or if there's more to the story.
+                  </p>
+                </>
+              }
+          />
+          
+          <p className="text-muted-foreground mt-4 mb-4">
+            Our Article Topic Labeler shows 62% accuracy. Intuitively, that seems somewhat weak—after all, it's getting nearly 4 out of 10 articles wrong. But is this actually poor performance? How do we judge whether this is good or bad? The gauge doesn't provide much insight without context.
+          </p>
+          
+          <p className="text-muted-foreground mb-4">
+            To interpret this number, we need to understand what would be considered "bad" performance. If we were to just randomly guess topics instead of using our classifier, what number would we expect to see?
           </p>
         </section>
         
@@ -627,6 +715,30 @@ export default function EvaluationMetricsPage() {
               </p>
             </div>
             
+            {/* Our Article Topic Labeler revisited with class count context */}
+            <div className="my-8">
+              <h3 className="text-xl font-medium mb-4">Revisiting Our Article Topic Labeler</h3>
+              <p className="text-muted-foreground mb-6">
+                Remember our Article Topic Labeler from the beginning? Let's apply what we've learned about multiple classes to understand its performance better. With five classes (News, Sports, Business, Technology, and Lifestyle), the baseline random guessing accuracy would be just 20% if the classes were equally distributed. This completely changes how we should interpret that 62% accuracy.
+              </p>
+              
+              <EvaluationCard
+                title="Article Topic Labeler - With Class Count Context"
+                subtitle="The same 5-class classifier with 79% accuracy, now with proper context for interpretation"
+                classDistributionData={articleTopicLabelerClassDistribution}
+                isBalanced={false}
+                accuracy={articleTopicLabelerExampleData.accuracy}
+                confusionMatrixData={articleTopicLabelerConfusionMatrix}
+                predictedClassDistributionData={articleTopicLabelerPredictedDistribution}
+                variant="default"
+                accuracyGaugeSegments={articleTopicLabelerClassCountOnlySegments}
+                notes="Without context (left gauge), 62% accuracy seems mediocre. With contextual segments (right gauge) that account for the 5-class nature of the problem, the same 62% accuracy is revealed to be excellent performance! It's triple the 20% random chance baseline for a 5-class problem and falls well into the 'great' segment of the gauge."
+              />
+              
+              <p className="text-muted-foreground mt-4 mb-4">
+                What a difference context makes! The dynamic gauge segments show that for a 5-class problem with balanced classes (where random guessing would yield 20% accuracy), our model's 62% accuracy actually represents excellent performance. What initially appeared mediocre is now revealed to be quite impressive. The contextual gauge visualization makes this clear by shifting the colored segments to reflect the 5-class nature of the problem. In this view, we're only factoring in the number of classes, not yet accounting for their imbalanced distribution.
+              </p>
+            </div>
 
           </div>
         </section>
@@ -966,6 +1078,49 @@ export default function EvaluationMetricsPage() {
                 chance level once we account for the imbalanced distribution of classes. The gauge segments shift accordingly, showing that 
                 genuinely good performance requires exceeding what simple strategies like "always guess the majority class" would achieve.
               </p>
+              
+              {/* Third instance of Article Topic Labeler - Now with both class count and imbalance context */}
+              <div className="my-8">
+                <h3 className="text-xl font-medium mb-4">Article Topic Labeler: Accounting for Class Imbalance</h3>
+                <p className="text-muted-foreground mb-6">
+                  Let's revisit our Article Topic Labeler once more. We've already seen how its 62% accuracy looks excellent when considering that it's a 5-class problem. But not so fast—we also need to account for the fact that our dataset is imbalanced—40% of the articles are "News," while the other categories each represent just 15% of the data.
+                </p>
+                
+                <p className="text-muted-foreground mb-4">
+                  Given this imbalance, simply guessing "News" for every article would achieve 40% accuracy—far better than the 20% baseline for a balanced 5-class problem. This means the bar for truly "great" performance should be higher, and our classifier's 62% accuracy might not be as impressive as we initially thought. In this example, the gauge segments have been adjusted to account for both the number of classes AND their imbalanced distribution, resulting in a noticeably different gauge appearance than our previous example.
+                </p>
+                
+                                 <EvaluationCard
+                  title="Article Topic Labeler - With Class Imbalance Context"
+                  subtitle="The same 5-class classifier with 79% accuracy, accounting for both multiple classes and class imbalance (40% News, 15% each for other categories)"
+                  classDistributionData={articleTopicLabelerClassDistribution}
+                  isBalanced={false}
+                  accuracy={articleTopicLabelerExampleData.accuracy}
+                  confusionMatrixData={articleTopicLabelerConfusionMatrix}
+                  predictedClassDistributionData={articleTopicLabelerPredictedDistribution}
+                  variant="oneGauge"
+                  disableAccuracySegments={false}
+                  accuracyGaugeSegments={articleTopicLabelerFullContextSegments}
+                  gaugeDescription={
+                    <>
+                      <p className="text-sm">
+                        <strong>Context-aware interpretation:</strong> With gauge segments that account for both the 5 classes and the 40/15/15/15/15 distribution, our 62% accuracy now appears good but not excellent. Notice how the gauge segments have shifted compared to our previous example - the threshold for "good" performance has increased to reflect that a naive classifier could achieve 40% just by always guessing "News".
+                      </p>
+                      
+                      <div className="p-3 bg-amber-100 dark:bg-amber-900/40 rounded-md mt-4">
+                        <p className="text-sm font-medium">A More Nuanced Picture</p>
+                        <p className="text-xs mt-1">
+                          While our 62% accuracy is still decent—it's better than the 40% we'd get from always predicting "News"—it's no longer in the highest performance tier once we account for the class imbalance. The threshold for "great" performance has shifted from around 60% to around 65%.
+                        </p>
+                      </div>
+                    </>
+                  }
+                />
+                
+                <p className="text-muted-foreground mt-4 mb-4">
+                  The contextual accuracy gauge now gives us a much more nuanced picture of our classifier's performance. By accounting for both the number of classes and their imbalanced distribution, we can see that 62% accuracy represents good but not exceptional performance for this specific task. It's significantly better than naive strategies, but there's room for improvement.
+                </p>
+              </div>
             </div>
 
             <div className="my-8 p-6 rounded-lg">
@@ -1242,6 +1397,37 @@ export default function EvaluationMetricsPage() {
               <p className="text-muted-foreground mt-4 mb-6">
                 The Agreement gauge provides a more intuitive measure of classifier performance, especially for users without extensive machine learning expertise. Instead of requiring users to interpret accuracy in the context of baseline chance rates and class distributions, it directly shows how much better (or worse) than chance the classifier performs.
               </p>
+              
+              {/* Fourth and final instance of Article Topic Labeler - Now with both gauges */}
+              <div className="my-8">
+                <h3 className="text-xl font-medium mb-4">Our Article Topic Labeler: The Complete Picture</h3>
+                <p className="text-muted-foreground mb-6">
+                  Let's complete our journey with the Article Topic Labeler. We've seen how adding context dramatically changed our interpretation of its 62% accuracy—from seemingly mediocre, to excellent when considering the 5-class nature, and back to "good but not great" when factoring in class imbalance. Now, let's see how the Agreement gauge adds even more interpretability.
+                </p>
+                
+                <EvaluationCard
+                  title="Article Topic Labeler - With Both Gauges"
+                  subtitle="Our 5-class imbalanced classifier with 79% accuracy, now showing both the contextualized Accuracy gauge and the Agreement gauge"
+                  classDistributionData={articleTopicLabelerClassDistribution}
+                  isBalanced={false}
+                  accuracy={articleTopicLabelerExampleData.accuracy}
+                  gwetAC1={articleTopicLabelerExampleData.gwetAC1}
+                  confusionMatrixData={articleTopicLabelerConfusionMatrix}
+                  predictedClassDistributionData={articleTopicLabelerPredictedDistribution}
+                  showBothGauges={true}
+                  variant="default"
+                  accuracyGaugeSegments={articleTopicLabelerFullContextSegments}
+                  notes="The Agreement gauge (AC1 = 0.512) immediately shows moderate agreement beyond chance, providing a nuanced view of our classifier's performance. It inherently accounts for both the 5-class nature and the 40/15/15/15/15 distribution. The gauge confirms what our contextualized accuracy gauge showed: the classifier is performing reasonably well, but there's definite room for improvement."
+                />
+                
+                <p className="text-muted-foreground mt-4 mb-4">
+                  The Agreement gauge (AC1 = 0.512) instantly provides a clear assessment: our Article Topic Labeler demonstrates moderate predictive skill. This score shows that the classifier performs notably better than chance, but isn't achieving the highest levels of agreement. The Agreement gauge has internally adjusted for both the number of classes and their distribution, providing a single, comparable measure of performance.
+                </p>
+                
+                <p className="text-muted-foreground mb-4">
+                  While the contextualized Accuracy gauge is helpful, the Agreement gauge offers the most straightforward interpretation: a value of 0.512 on a scale from -1 to 1 indicates moderate agreement beyond what would be expected by chance. This aligns with our final interpretation of the accuracy—the classifier is performing reasonably well, but there's room for improvement. The Agreement gauge delivers this insight in a single, easily interpretable number.
+                </p>
+              </div>
         </section>
 
         <section>
