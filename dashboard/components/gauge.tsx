@@ -71,6 +71,8 @@ const GaugeComponent: React.FC<GaugeProps> = ({
   const [animatedValue, setAnimatedValue] = useState(0)
   const [animatedBeforeValue, setAnimatedBeforeValue] = useState(0)
   const [animatedTarget, setAnimatedTarget] = useState(0)
+  const [containerWidth, setContainerWidth] = useState(0)
+  const containerRef = React.useRef<HTMLDivElement>(null)
   const radius = 80
   const strokeWidth = 25
   const normalizedValue = value !== undefined 
@@ -116,6 +118,40 @@ const GaugeComponent: React.FC<GaugeProps> = ({
     
     requestAnimationFrame(animate)
   }, [normalizedValue, beforeValue, target])
+
+  useEffect(() => {
+    if (!containerRef.current) return
+
+    const updateSize = () => {
+      if (containerRef.current) {
+        setContainerWidth(containerRef.current.offsetWidth)
+      }
+    }
+
+    // Initial measurement
+    updateSize()
+
+    // Setup resize observer
+    const resizeObserver = new ResizeObserver(updateSize)
+    resizeObserver.observe(containerRef.current)
+
+    return () => {
+      if (containerRef.current) {
+        resizeObserver.unobserve(containerRef.current)
+      }
+    }
+  }, [])
+  
+  // Calculate the offset for the label based on container width
+  const getLabelBottomOffset = () => {
+    if (containerWidth <= 0) return 0
+    
+    // Only apply offset when width is below 150px
+    if (containerWidth > 150) return 0
+    
+    // Calculate offset: more offset as it gets smaller
+    return Math.max(0, (150 - containerWidth) * 0.1)
+  }
 
   const calculateCoordinates = (angle: number, r: number = radius) => {
     const x = r * Math.cos(angle - Math.PI / 2)
@@ -299,12 +335,13 @@ const GaugeComponent: React.FC<GaugeProps> = ({
   const viewBoxHeight = showTicks ? 200 : 170
   const textY = showTicks ? 45 : 45
   const clipHeight = showTicks ? 168 : 144
+  const labelBottomOffset = getLabelBottomOffset()
 
   return (
     <div className="flex flex-col items-center w-full h-full max-h-[220px]">
       <Popover>
         <PopoverAnchor asChild>
-          <div className="relative w-full h-full" style={{ maxWidth: '20em' }}>
+          <div ref={containerRef} className="relative w-full h-full" style={{ maxWidth: '20em' }}>
             <div className="relative w-full h-full">
               <svg 
                 viewBox={`-120 -${topPadding} 240 ${viewBoxHeight}`}
@@ -395,11 +432,13 @@ const GaugeComponent: React.FC<GaugeProps> = ({
                 <div 
                   className={cn(
                     "absolute left-0 right-0 flex justify-center items-center whitespace-nowrap",
-                    "text-[clamp(0.75rem,4vw,1rem)] transition-colors duration-500 ease-in-out",
+                    "text-[1rem]",
+                    "transition-colors duration-500 ease-in-out",
                     priority ? "text-focus" : "text-foreground"
                   )}
                   style={{
-                    bottom: showTicks ? '5%' : '2%'
+                    bottom: `calc(${showTicks ? '5%' : '2%'} - ${labelBottomOffset}px)`,
+                    fontSize: containerWidth < 150 ? 'max(0.6rem, 8px + 0.5vw)' : undefined
                   }}
                 >
                   <span className="relative">

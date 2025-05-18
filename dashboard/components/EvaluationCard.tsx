@@ -184,7 +184,7 @@ export default function EvaluationCard({
               <p className="text-sm text-muted-foreground mb-2 text-center">
                 You achieved {accuracy}% accuracy:
               </p>
-              <div className="max-w-[180px] mx-auto">
+              <div className="max-w-[270px] mx-auto">
                 <Gauge 
                   value={accuracy} 
                   title="Accuracy"
@@ -255,7 +255,7 @@ export default function EvaluationCard({
             <>
               {/* Agreement (AC1) Gauge */}
               <div className="flex flex-col items-center">
-                <div className="max-w-[180px] mx-auto">
+                <div className="max-w-[270px] mx-auto">
                   <Gauge 
                     value={gwetAC1 ?? 0} 
                     title="Agreement"
@@ -277,7 +277,7 @@ export default function EvaluationCard({
               
               {/* Accuracy Gauge */}
               <div className="flex flex-col items-center">
-                <div className="max-w-[180px] mx-auto">
+                <div className="max-w-[270px] mx-auto">
                   <Gauge 
                     value={accuracy} 
                     title="Accuracy"
@@ -292,7 +292,7 @@ export default function EvaluationCard({
               {/* Default behavior with "No context" and "With context" gauges */}
               <div className="flex flex-col items-center">
                 <p className={gaugeTitleStyle}>No context for interpretation</p>
-                <div className="max-w-[180px] mx-auto">
+                <div className="max-w-[270px] mx-auto">
                   <Gauge
                     value={accuracy}
                     title="Accuracy"
@@ -319,7 +319,7 @@ export default function EvaluationCard({
                             : 'Excellent agreement')
                     : 'With context for interpretation'}
                 </p>
-                <div className="max-w-[180px] mx-auto">
+                <div className="max-w-[270px] mx-auto">
                   {gwetAC1 !== undefined ? (
                     <Gauge 
                       value={gwetAC1} 
