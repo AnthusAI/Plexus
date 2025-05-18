@@ -156,15 +156,7 @@ export default function EvaluationMetricsPage() {
     { 'Heads': 50, 'Tails': 50 }
   )
   
-  const weightedCoinData = createExampleScore(
-    'weighted-coin',
-    'Weighted Coin Prediction (75/25)',
-    0.0,
-    75.0,
-    100,
-    25,
-    { 'Heads': 75, 'Tails': 25 }
-  )
+
   
   const alwaysHeadsData = createExampleScore(
     'always-heads',
@@ -186,31 +178,11 @@ export default function EvaluationMetricsPage() {
     { 'Technical': 250, 'Marketing': 250, 'Legal': 250, 'Financial': 250 }
   )
 
-  const scenario3Data = createExampleScore( // Imbalanced 2-Class
-    'scenario3-imbalanced-2class',
-    'Scenario 3: Imbalanced 2-Class Data (95/5)',
-    -0.05, // AC1 for 75% acc on 95/5 (Yes/No). Po=0.75. With Pred Yes=790, Pred No=210: Pe=(0.95*0.79)+(0.05*0.21) = 0.7505 + 0.0105 = 0.761. AC1=(0.75-0.761)/(1-0.761) = -0.011/0.239 approx -0.05
-    75.0,
-    1000,
-    250,
-    { 'Yes': 950, 'No': 50 }
-  )
+
   
-  const scenario4Data = createExampleScore( // Naive Always-Yes classifier on 75/25 data
-    'scenario4-naive-75yes',
-    'Scenario 4: Imbalanced (75/25) - Naive Always-Yes Classifier',
-    0.0,  // Po=0.75. Pred Yes=1.0, Pred No=0.0. Pe=(0.75*1.0)+(0.25*0.0)=0.75. AC1=(0.75-0.75)/(1-0.75)=0
-    75.0,
-    1000,
-    250, // All 250 "No" cases are misclassified
-    { 'Yes': 750, 'No': 250 }
-  )
+
 
   // Distribution data for visualization
-  const scenario1Distribution = [ // Balanced 2-Class
-    { label: "Yes", count: 500 },
-    { label: "No", count: 500 }
-  ];
   
   // Coin flip distribution data
   const fairCoinDistribution = [
@@ -218,33 +190,15 @@ export default function EvaluationMetricsPage() {
     { label: "Tails", count: 49 }
   ];
   
-  const weightedCoinDistribution = [
-    { label: "Heads", count: 75 },
-    { label: "Tails", count: 25 }
-  ];
+
   
-  const scenario2Distribution = [ // Balanced 4-Class
-    { label: "Technical", count: 250 },
-    { label: "Marketing", count: 250 },
-    { label: "Legal", count: 250 },
-    { label: "Financial", count: 250 }
-  ];
 
-  const scenario3Distribution = [ // Imbalanced 2-Class
-    { label: "Yes", count: 950 },
-    { label: "No", count: 50 }
-  ];
 
-  const scenario4Distribution = [ // Imbalanced 2-Class (75/25)
-    { label: "Yes", count: 750 },
-    { label: "No", count: 250 }
-  ];
+
+
+
 
   // Predicted distribution data for the examples at 75% accuracy
-  const predictedScenario1Data = [
-    { label: "Yes", count: 500 },
-    { label: "No", count: 500 }
-  ];
 
   // Predicted distributions for coin flip examples
   const predictedFairCoinData = [
@@ -262,22 +216,11 @@ export default function EvaluationMetricsPage() {
     { label: "Tails", count: 0 }
   ];
   
-  const predictedScenario2Data = [
-    { label: "Technical", count: 250 },
-    { label: "Marketing", count: 250 },
-    { label: "Legal", count: 250 },
-    { label: "Financial", count: 250 }
-  ];
 
-  const predictedScenario3Data = [
-    { label: "Yes", count: 790 }, 
-    { label: "No", count: 210 }
-  ];
 
-  const predictedScenario4Data = [
-    { label: "Yes", count: 1000 }, 
-    { label: "No", count: 0 }
-  ];
+
+
+
 
   // Compute dynamic segments for examples in the "Plexus's Approach" section
   const thresholds2Class = GaugeThresholdComputer.computeThresholds(scenario1Data.label_distribution!);
@@ -290,8 +233,7 @@ export default function EvaluationMetricsPage() {
   const thresholdsFairCoin = GaugeThresholdComputer.computeThresholds(fairCoinData.label_distribution!);
   const dynamicSegmentsFairCoin = GaugeThresholdComputer.createSegments(thresholdsFairCoin);
   
-  const thresholdsWeightedCoin = GaugeThresholdComputer.computeThresholds(weightedCoinData.label_distribution!);
-  const dynamicSegmentsWeightedCoin = GaugeThresholdComputer.createSegments(thresholdsWeightedCoin);
+
 
   // For the new visualization: 3-class and 12-class scenarios
   const label_distribution_3_class = { C1: 1, C2: 1, C3: 1 };
@@ -327,16 +269,11 @@ export default function EvaluationMetricsPage() {
   const imbal_scenario_moderate_thresholds = GaugeThresholdComputer.computeThresholds(imbal_scenario_moderate_dist);
   const imbal_scenario_moderate_segments = GaugeThresholdComputer.createSegments(imbal_scenario_moderate_thresholds);
 
-  const consistentAccuracyForImbalanceViz = 75.0;
 
-  // Segments for the conceptual visualization of imbalance impact
-  const conceptualImbalanceContextualSegments: Segment[] = [
-    { start: 0, end: 90, color: 'var(--gauge-inviable)' },    // Represents 'chance' or 'poor' up to 90%
-    { start: 90, end: 95, color: 'var(--gauge-converging)' }, // Represents 'okay' or 'better than chance'
-    { start: 95, end: 100, color: 'var(--gauge-great)' }      // Represents 'good' or 'significantly better'
-  ];
 
-  const consistentAccuracyForNumClassesViz = 75.0; // Added for the "Impact of Number of Classes" visualization
+
+
+
 
   // Fair coin confusion matrix data - showing the 48% accuracy
   const fairCoinConfusionMatrix = {
@@ -400,68 +337,11 @@ export default function EvaluationMetricsPage() {
     { label: "♠️", count: (14+13+13+12) }    // Sum of fourth column = 52
   ];
 
-  // Stacked deck example data (75% Hearts)
-  const stackedDeckData = createExampleScore(
-    'stacked-deck-random-guessing',
-    'Predicting a Stacked Casino Shoe (75% Hearts) with Random Guessing',
-    -0.33,  // AC1 score for this scenario
-    25.0,   // Accuracy with random guessing is still 25%
-    208,    // Total predictions - 4-deck casino shoe
-    156,    // 156 wrong predictions out of 208
-    { '♥️': 156, '♦️': 18, '♣️': 17, '♠️': 17 } // Distribution of actual cards (156+18+17+17=208)
-  );
 
-  const stackedDeckActualDistribution = [
-    { label: "♥️", count: 156 },
-    { label: "♦️", count: 18 },
-    { label: "♣️", count: 17 },
-    { label: "♠️", count: 17 }
-  ];
 
-  const stackedDeckRandomGuessingConfusionMatrix = {
-    labels: ["♥️", "♦️", "♣️", "♠️"],
-    matrix: [
-      { actualClassLabel: "♥️", predictedClassCounts: { "♥️": 40, "♦️": 39, "♣️": 39, "♠️": 38 } },
-      { actualClassLabel: "♦️", predictedClassCounts: { "♥️": 5, "♦️": 4, "♣️": 5, "♠️": 4 } },
-      { actualClassLabel: "♣️", predictedClassCounts: { "♥️": 4, "♦️": 5, "♣️": 4, "♠️": 4 } },
-      { actualClassLabel: "♠️", predictedClassCounts: { "♥️": 4, "♦️": 4, "♣️": 4, "♠️": 5 } }
-    ],
-  };
-  
-  const stackedDeckRandomPredictedDistribution = [ 
-    { label: "♥️", count: 53 },  // We're guessing randomly, so ~52 for each suit
-    { label: "♦️", count: 52 },
-    { label: "♣️", count: 52 },
-    { label: "♠️", count: 51 }
-  ];
 
-  // Always guessing Hearts for the stacked deck
-  const alwaysHeartsStackedDeckData = createExampleScore(
-    'stacked-deck-always-hearts',
-    'Predicting a Stacked Casino Shoe (75% Hearts) by Always Guessing "Hearts"',
-    0.0,    // AC1 score for always guessing the majority class
-    75.0,   // Accuracy matches the majority class percentage
-    208,    // Total predictions - 4-deck casino shoe
-    52,     // 52 wrong predictions (all non-Hearts)
-    { '♥️': 156, '♦️': 18, '♣️': 17, '♠️': 17 } // Same distribution
-  );
 
-  const alwaysHeartsConfusionMatrix = {
-    labels: ["♥️", "♦️", "♣️", "♠️"],
-    matrix: [
-      { actualClassLabel: "♥️", predictedClassCounts: { "♥️": 156, "♦️": 0, "♣️": 0, "♠️": 0 } },
-      { actualClassLabel: "♦️", predictedClassCounts: { "♥️": 18, "♦️": 0, "♣️": 0, "♠️": 0 } },
-      { actualClassLabel: "♣️", predictedClassCounts: { "♥️": 17, "♦️": 0, "♣️": 0, "♠️": 0 } },
-      { actualClassLabel: "♠️", predictedClassCounts: { "♥️": 17, "♦️": 0, "♣️": 0, "♠️": 0 } }
-    ],
-  };
-  
-  const alwaysHeartsPredictedDistribution = [ 
-    { label: "♥️", count: 208 },  // Always predicting Hearts for all 208 cards
-    { label: "♦️", count: 0 },
-    { label: "♣️", count: 0 },
-    { label: "♠️", count: 0 }
-  ];
+
 
   return (
     <div className="max-w-4xl mx-auto py-8 px-6">
