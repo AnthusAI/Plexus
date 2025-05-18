@@ -360,38 +360,38 @@ export default function EvaluationMetricsPage() {
   };
 
   // Card Suit Guessing Example Data
-  const cardSuitData = createExampleScore(
-    'card-suit-guessing',
-    'Predicting a Card Suit (4 Classes, Random Guessing)',
-    -0.03,  // AC1 for 23% acc, 25% chance: (0.23-0.25)/(1-0.25) = -0.03
-    23.0, // Accuracy slightly below the random chance level
-    208,   // 4-deck shoe (like those used in casino games) - 208 cards total
-    160,   // 208 items, 23% accuracy -> 160 mismatches (208-48=160)
-    { '♥️': 52, '♦️': 52, '♣️': 52, '♠️': 52 } // 4-deck shoe has 52 cards of each suit
-  );
+      const cardSuitData = createExampleScore(
+      'card-suit-guessing',
+      'Predicting a Card Suit (4 Classes, Random Guessing)',
+      -0.03,  // AC1 for 23% acc, 25% chance: (0.23-0.25)/(1-0.25) = -0.03
+      23.0, // Accuracy slightly below the random chance level (25%)
+      208,   // 4-deck shoe (like those used in casino games) - 208 cards total
+      160,   // 208 items, 23% accuracy -> 160 mismatches (208-48=160)
+      { '♥️': 52, '♦️': 52, '♣️': 52, '♠️': 52 } // 4-deck shoe has 52 cards of each suit
+    );
 
   const cardSuitActualDistribution = [
-    { label: "♥️", count: 52 },
-    { label: "♦️", count: 52 },
-    { label: "♣️", count: 52 },
-    { label: "♠️", count: 52 }
+    { label: "♥️", count: 52 * 4 }, // 208 cards in 4-deck shoe, 52 of each suit
+    { label: "♦️", count: 52 * 4 },
+    { label: "♣️", count: 52 * 4 },
+    { label: "♠️", count: 52 * 4 }
   ];
 
   const cardSuitConfusionMatrix = {
     labels: ["♥️", "♦️", "♣️", "♠️"],
     matrix: [
-      { actualClassLabel: "♥️", predictedClassCounts: { "♥️": 12, "♦️": 13, "♣️": 13, "♠️": 14 } },
-      { actualClassLabel: "♦️", predictedClassCounts: { "♥️": 13, "♦️": 12, "♣️": 14, "♠️": 13 } },
-      { actualClassLabel: "♣️", predictedClassCounts: { "♥️": 13, "♦️": 14, "♣️": 12, "♠️": 13 } },
-      { actualClassLabel: "♠️", predictedClassCounts: { "♥️": 14, "♦️": 13, "♣️": 13, "♠️": 12 } },
+      { actualClassLabel: "♥️", predictedClassCounts: { "♥️": 12*4, "♦️": 13*4, "♣️": 13*4, "♠️": 14*4 } },
+      { actualClassLabel: "♦️", predictedClassCounts: { "♥️": 13*4, "♦️": 12*4, "♣️": 14*4, "♠️": 13*4 } },
+      { actualClassLabel: "♣️", predictedClassCounts: { "♥️": 13*4, "♦️": 14*4, "♣️": 12*4, "♠️": 13*4 } },
+      { actualClassLabel: "♠️", predictedClassCounts: { "♥️": 14*4, "♦️": 13*4, "♣️": 13*4, "♠️": 12*4 } },
     ],
   };
   
   const cardSuitPredictedDistribution = [ 
-    { label: "♥️", count: (12+13+13+14) },   // Sum of first column = 52
-    { label: "♦️", count: (13+12+14+13) },   // Sum of second column = 52 
-    { label: "♣️", count: (13+14+12+13) },   // Sum of third column = 52
-    { label: "♠️", count: (14+13+13+12) }    // Sum of fourth column = 52
+    { label: "♥️", count: (12+13+13+14) * 4 },   // Sum scaled to 4-deck shoe = 208
+    { label: "♦️", count: (13+12+14+13) * 4 },   // Sum scaled to 4-deck shoe = 208 
+    { label: "♣️", count: (13+14+12+13) * 4 },   // Sum scaled to 4-deck shoe = 208
+    { label: "♠️", count: (14+13+13+12) * 4 }    // Sum scaled to 4-deck shoe = 208
   ];
 
 
@@ -529,7 +529,7 @@ export default function EvaluationMetricsPage() {
             </p>
 
             <p className="text-muted-foreground mb-6">
-              Imagine you're in a Las Vegas casino playing blackjack, where the dealer uses a multi-deck shoe containing 4 decks of cards (208 cards total). You're trying to guess the suit of each card before it's revealed.
+              Imagine you're in a casino playing blackjack, where the dealer uses a multi-deck shoe containing 4 decks of cards (208 cards total). You're trying to guess the suit of each card before it's revealed.
             </p>
 
             <p className="text-muted-foreground mb-6">
@@ -612,10 +612,10 @@ export default function EvaluationMetricsPage() {
               {/* Coin Flip Example Card */}
               <EvaluationCard
                 title="Coin Flip Prediction (50/50)"
-                subtitle="A fair coin has a 50% chance of heads or tails. Random guessing achieves 50% accuracy."
+                subtitle="A fair coin has a 50% chance of heads or tails. Random guessing achieves about 50% accuracy (this run: 48%)."
                 classDistributionData={fairCoinDistribution}
                 isBalanced={true}
-                accuracy={50.0}
+                accuracy={50}
                 variant="default"
                 notes="Without context (left gauge), the 50% accuracy has no meaning. With proper contextual segments (right gauge), 
                 we can see that 50% is exactly at the chance level for a balanced binary problem, indicating no prediction skill."
@@ -624,10 +624,10 @@ export default function EvaluationMetricsPage() {
               {/* Card Suit Example Card */}
               <EvaluationCard
                 title="Card Suit Prediction (25/25/25/25)"
-                subtitle="A standard deck has four equally likely suits. Random guessing achieves 25% accuracy."
+                subtitle="A standard deck has four equally likely suits. Random guessing achieves 25% accuracy. This run: 23%."
                 classDistributionData={cardSuitActualDistribution}
                 isBalanced={true}
-                accuracy={25.0}
+                accuracy={25}
                 variant="default"
                 accuracyGaugeSegments={GaugeThresholdComputer.createSegments(GaugeThresholdComputer.computeThresholds(cardSuitData.label_distribution!))}
                 notes="Without context (left gauge), 25% accuracy appears very low. With proper contextual segments (right gauge), 
@@ -724,7 +724,7 @@ export default function EvaluationMetricsPage() {
               
               <EvaluationCard
                 title="Article Topic Labeler - With Class Count Context"
-                subtitle="The same 5-class classifier with 79% accuracy, now with proper context for interpretation"
+                                  subtitle="The same 5-class classifier with 62% accuracy, now with proper context for interpretation"
                 classDistributionData={articleTopicLabelerClassDistribution}
                 isBalanced={false}
                 accuracy={articleTopicLabelerExampleData.accuracy}
@@ -772,7 +772,7 @@ export default function EvaluationMetricsPage() {
                 { label: "Red", count: 26 },
                 { label: "Black", count: 26 }
               ]}
-              accuracy={52.0}
+                              accuracy={52}
               variant="oneGauge"
               disableAccuracySegments={true}
               gaugeDescription={
@@ -806,12 +806,12 @@ export default function EvaluationMetricsPage() {
                 { label: "Red", count: 39 },
                 { label: "Black", count: 13 }
               ]}
-              accuracy={62.0}
+                              accuracy={62}
               variant="oneGauge"
               disableAccuracySegments={true}
               gaugeDescription={
                 <p className="text-sm">
-                  <strong>Better than random guessing, but still no skill:</strong> By matching the known distribution, your accuracy jumps to around 62.5% (0.75×0.75 + 0.25×0.25 = 0.625). This appears better than 50% random guessing, but you're still not demonstrating any card-specific prediction skill—you're just exploiting knowledge of the overall distribution. The AC1 score would still be near 0.
+                  <strong>Better than random guessing, but still no skill:</strong> By matching the known distribution, your accuracy jumps to around 62.5% (0.75×0.75 + 0.25×0.25 = 0.625). This appears better than 50% random guessing, but you're still not demonstrating any card-specific prediction skill—you're just exploiting knowledge of the overall distribution. Gwet's AC1 would still be near 0.
                 </p>
               }
             />
@@ -846,7 +846,7 @@ export default function EvaluationMetricsPage() {
               gaugeDescription={
                 <>
                   <p className="text-sm">
-                    <strong>No real insight:</strong> The AC1 score would be 0.0, correctly showing that you have no predictive ability beyond exploiting the class distribution.
+                    <strong>No real insight:</strong> Gwet's AC1 would be 0.0, correctly showing that you have no predictive ability beyond exploiting the class distribution.
                   </p>
 
                   <div className="p-3 bg-destructive rounded-md mt-4">
@@ -1092,7 +1092,7 @@ export default function EvaluationMetricsPage() {
                 
                                  <EvaluationCard
                   title="Article Topic Labeler - With Class Imbalance Context"
-                  subtitle="The same 5-class classifier with 79% accuracy, accounting for both multiple classes and class imbalance (40% News, 15% each for other categories)"
+                  subtitle="The same 5-class classifier with 62% accuracy, accounting for both multiple classes and class imbalance (40% News, 15% each for other categories)"
                   classDistributionData={articleTopicLabelerClassDistribution}
                   isBalanced={false}
                   accuracy={articleTopicLabelerExampleData.accuracy}
@@ -1407,7 +1407,7 @@ export default function EvaluationMetricsPage() {
                 
                 <EvaluationCard
                   title="Article Topic Labeler - With Both Gauges"
-                  subtitle="Our 5-class imbalanced classifier with 79% accuracy, now showing both the contextualized Accuracy gauge and the Agreement gauge"
+                  subtitle="Our 5-class imbalanced classifier with 62% accuracy, now showing both the contextualized Accuracy gauge and the Agreement gauge"
                   classDistributionData={articleTopicLabelerClassDistribution}
                   isBalanced={false}
                   accuracy={articleTopicLabelerExampleData.accuracy}
@@ -1460,7 +1460,7 @@ export default function EvaluationMetricsPage() {
             When dealing with balanced distributions, where each class has an equal (or nearly equal) number of instances, the number of classes itself becomes a critical factor in interpreting raw accuracy. A 65% accuracy score, for instance, means something very different for a 2-class problem (where chance is 50%) compared to a 4-class problem (where chance is 25%). The dynamically colored segments on the Accuracy gauge are designed to help with this: they visually adjust the 'chance', 'okay', 'good', and 'great' regions based on the number of classes, providing immediate visual context for how the achieved accuracy compares to the baseline random chance performance for that specific number of classes.
           </p>
           <p className="text-muted-foreground mt-2 mb-6">
-            Gwet's AC1 Agreement gauge, on the other hand, adapts to the number of classes in a different but equally powerful way. The AC1 calculation inherently accounts for chance agreement based on the number of classes and their distribution. This means the AC1 score itself (ranging from -1 to 1) can be interpreted consistently: a score of 0.0 always indicates performance no better than chance, 1.0 indicates perfect agreement, and values in between (e.g., 0.2-0.4 for fair, 0.4-0.6 for moderate, 0.6-0.8 for substantial, 0.8-1.0 for almost perfect agreement) carry a similar meaning regardless of whether you have two, three, or ten classes. This consistency makes the Agreement gauge a very reliable indicator of true classifier skill, corrected for chance.
+            Gwet's AC1 Agreement gauge, on the other hand, adapts to the number of classes in a different but equally powerful way. The AC1 calculation inherently accounts for chance agreement based on the number of classes and their distribution. This means Gwet's AC1 itself (ranging from -1 to 1) can be interpreted consistently: a score of 0.0 always indicates performance no better than chance, 1.0 indicates perfect agreement, and values in between (e.g., 0.2-0.4 for fair, 0.4-0.6 for moderate, 0.6-0.8 for substantial, 0.8-1.0 for almost perfect agreement) carry a similar meaning regardless of whether you have two, three, or ten classes. This consistency makes the Agreement gauge a very reliable indicator of true classifier skill, corrected for chance.
           </p>
           {/* Binary classifier, balanced distribution, 65% accuracy */}
           {(() => {
@@ -1593,12 +1593,12 @@ export default function EvaluationMetricsPage() {
             Interpreting classifier performance becomes even more challenging with imbalanced distributions, where one or more classes are significantly over or underrepresented. Raw accuracy, in particular, can be dangerously misleading. A classifier might achieve a high accuracy score simply by predicting the majority class most of the time, while completely failing on minority classes. The Accuracy gauge, with its dynamically adjusting segments, remains a key tool. It calculates a baseline chance agreement level that considers the skewed distribution. This means the 'good' performance regions on the gauge will shift, often to higher accuracy values, reflecting that a higher raw accuracy is needed to demonstrate skill beyond merely guessing the dominant class. The upcoming \"Always No\" strategy example will starkly illustrate this: high apparent accuracy, but the gauge will reveal it as unimpressive once contextualized against the skewed baseline.
           </p>
           <p className="text-muted-foreground mt-2 mb-6">
-            Gwet's AC1 Agreement gauge proves especially invaluable for imbalanced datasets. Because it inherently corrects for chance agreement that arises from the specific class distribution (no matter how skewed), an AC1 score provides a stable and reliable measure of a classifier's ability to agree with true labels beyond what random chance would produce for that particular imbalance. For instance, if a model achieves a high AC1 score on an imbalanced dataset, it indicates genuine skill in distinguishing between classes, including the rarer ones. Conversely, as we will see in the \"Always No\" example, a strategy that yields high raw accuracy by ignoring the minority class will correctly result in an AC1 score of 0.0, exposing its lack of true predictive power across the full spectrum of classes.
+            Gwet's AC1 Agreement gauge proves especially invaluable for imbalanced datasets. Because it inherently corrects for chance agreement that arises from the specific class distribution (no matter how skewed), Gwet's AC1 provides a stable and reliable measure of a classifier's ability to agree with true labels beyond what random chance would produce for that particular imbalance. For instance, if a model achieves a high Gwet's AC1 on an imbalanced dataset, it indicates genuine skill in distinguishing between classes, including the rarer ones. Conversely, as we will see in the \"Always No\" example, a strategy that yields high raw accuracy by ignoring the minority class will correctly result in a Gwet's AC1 of 0.0, exposing its lack of true predictive power across the full spectrum of classes.
           </p>
           {/* Binary classifier, imbalanced (5% \"Yes\" prevalence), 90/100 correct */}
           {(() => {
             const scoreData = { accuracy: 90.0, itemCount: 100, mismatches: 10, label_distribution: { 'Yes': 5, 'No': 95 } };
-            const gwetAC1 = 0.401; // Calculated: (0.90 - ((0.05*0.13)+(0.95*0.87))) / (1 - ((0.05*0.13)+(0.95*0.87)))
+            const gwetAC1 = 0.401; // Calculated: (0.90 - ((0.05×0.13)+(0.95×0.87))) / (1 - ((0.05×0.13)+(0.95×0.87)))
             const classDistribution = [ { label: "Yes", count: 5 }, { label: "No", count: 95 } ];
             const isBalanced = false;
             const confusionMatrix = {
@@ -1666,7 +1666,7 @@ export default function EvaluationMetricsPage() {
           {/* Ternary classifier, imbalanced distribution, 90/100 correct */}
           {(() => {
             const scoreData = { accuracy: 90.0, itemCount: 100, mismatches: 10, label_distribution: { 'A': 5, 'B': 45, 'C': 50 } };
-            const gwetAC1 = 0.819; // Calculated: (0.90 - Pe) / (1-Pe) where Pe = (0.05*0.07) + (0.45*0.44) + (0.50*0.49) = 0.4465
+            const gwetAC1 = 0.819; // Calculated: (0.90 - Pe) / (1-Pe) where Pe = (0.05×0.07) + (0.45×0.44) + (0.50×0.49) = 0.4465
             const classDistribution = [ { label: "A", count: 5 }, { label: "B", count: 45 }, { label: "C", count: 50 } ];
             const isBalanced = false;
             const confusionMatrix = {
@@ -1705,7 +1705,7 @@ export default function EvaluationMetricsPage() {
           {/* Four-class classifier, imbalanced distribution, 90/100 correct */}
           {(() => {
             const scoreData = { accuracy: 90.0, itemCount: 100, mismatches: 10, label_distribution: { 'A': 5, 'B': 15, 'C': 30, 'D': 50 } };
-            const gwetAC1 = 0.843; // Calculated: (0.90 - Pe) / (1-Pe) where Pe = (0.05*0.06) + (0.15*0.15) + (0.30*0.29) + (0.50*0.50) = 0.3625
+            const gwetAC1 = 0.843; // Calculated: (0.90 - Pe) / (1-Pe) where Pe = (0.05×0.06) + (0.15×0.15) + (0.30×0.29) + (0.50×0.50) = 0.3625
             const classDistribution = [ { label: "A", count: 5 }, { label: "B", count: 15 }, { label: "C", count: 30 }, { label: "D", count: 50 } ];
             const isBalanced = false;
             const confusionMatrix = {
@@ -1748,7 +1748,7 @@ export default function EvaluationMetricsPage() {
         <section>
           <h2 className="text-2xl font-semibold mb-4">Next Steps</h2>
           <p className="text-muted-foreground mb-4">
-            Now that you understand how to interpret these alignment gauges, explore related concepts
+            Now that you understand how to interpret these agreement gauges, explore related concepts
             to get the most out of your evaluation data.
           </p>
           <div className="flex gap-4">
@@ -1756,7 +1756,7 @@ export default function EvaluationMetricsPage() {
               <DocButton>Learn about Evaluations</DocButton>
             </Link>
             <Link href="/documentation/concepts/reports">
-              <DocButton variant="outline">Explore Reports</DocButton>
+              <DocButton>Explore Reports</DocButton>
             </Link>
           </div>
         </section>
