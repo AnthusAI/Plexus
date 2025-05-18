@@ -563,11 +563,11 @@ export default function EvaluationMetricsPage() {
                   <h4 className="text-md font-medium text-center">Binary</h4>
                   <div className="w-full">
                     <p className="text-xs text-center text-muted-foreground mb-1">No Context</p>
-                    <AccuracyGauge value={65.0} title="" segments={[{ start: 0, end: 100, color: 'var(--gauge-inviable)' }]} />
+                    <AccuracyGauge value={65.0} title="Accuracy" segments={[{ start: 0, end: 100, color: 'var(--gauge-inviable)' }]} />
                   </div>
                   <div className="w-full">
                     <p className="text-xs text-center text-muted-foreground mb-1">With Class Context</p>
-                    <AccuracyGauge value={65.0} title="" segments={dynamicSegments2Class} />
+                    <AccuracyGauge value={65.0} title="Accuracy" segments={dynamicSegments2Class} />
                   </div>
                 </div>
 
@@ -576,11 +576,11 @@ export default function EvaluationMetricsPage() {
                   <h4 className="text-md font-medium text-center">Ternary</h4>
                   <div className="w-full">
                     <p className="text-xs text-center text-muted-foreground mb-1">No Context</p>
-                    <AccuracyGauge value={65.0} title="" segments={[{ start: 0, end: 100, color: 'var(--gauge-inviable)' }]} />
+                    <AccuracyGauge value={65.0} title="Accuracy" segments={[{ start: 0, end: 100, color: 'var(--gauge-inviable)' }]} />
                   </div>
                   <div className="w-full">
                     <p className="text-xs text-center text-muted-foreground mb-1">With Class Context</p>
-                    <AccuracyGauge value={65.0} title="" segments={dynamicSegments3Class} />
+                    <AccuracyGauge value={65.0} title="Accuracy" segments={dynamicSegments3Class} />
                   </div>
                 </div>
 
@@ -589,11 +589,11 @@ export default function EvaluationMetricsPage() {
                   <h4 className="text-md font-medium text-center">Four-Class</h4>
                   <div className="w-full">
                     <p className="text-xs text-center text-muted-foreground mb-1">No Context</p>
-                    <AccuracyGauge value={65.0} title="" segments={[{ start: 0, end: 100, color: 'var(--gauge-inviable)' }]} />
+                    <AccuracyGauge value={65.0} title="Accuracy" segments={[{ start: 0, end: 100, color: 'var(--gauge-inviable)' }]} />
                   </div>
                   <div className="w-full">
                     <p className="text-xs text-center text-muted-foreground mb-1">With Class Context</p>
-                    <AccuracyGauge value={65.0} title="" segments={dynamicSegments4Class} />
+                    <AccuracyGauge value={65.0} title="Accuracy" segments={dynamicSegments4Class} />
                   </div>
                 </div>
                 
@@ -602,11 +602,11 @@ export default function EvaluationMetricsPage() {
                   <h4 className="text-md font-medium text-center">Twelve-Class</h4>
                   <div className="w-full">
                     <p className="text-xs text-center text-muted-foreground mb-1">No Context</p>
-                    <AccuracyGauge value={65.0} title="" segments={[{ start: 0, end: 100, color: 'var(--gauge-inviable)' }]} />
+                    <AccuracyGauge value={65.0} title="Accuracy" segments={[{ start: 0, end: 100, color: 'var(--gauge-inviable)' }]} />
                   </div>
                   <div className="w-full">
                     <p className="text-xs text-center text-muted-foreground mb-1">With Class Context</p>
-                    <AccuracyGauge value={65.0} title="" segments={dynamicSegments12Class} />
+                    <AccuracyGauge value={65.0} title="Accuracy" segments={dynamicSegments12Class} />
                   </div>
                 </div>
               </div>
@@ -978,11 +978,11 @@ export default function EvaluationMetricsPage() {
                   <p className="text-xs text-center text-muted-foreground mb-2">50/50 Distribution</p>
                   <div className="w-full">
                     <p className="text-xs text-center text-muted-foreground mb-1">Fixed Thresholds</p>
-                    <AccuracyGauge value={65.0} title="" segments={fixedAccuracyGaugeSegments} />
+                    <AccuracyGauge value={65.0} title="Accuracy" segments={fixedAccuracyGaugeSegments} />
                   </div>
                   <div className="w-full">
                     <p className="text-xs text-center text-muted-foreground mb-1">Contextual Thresholds</p>
-                    <AccuracyGauge value={65.0} title="" segments={imbal_scenario1_segments} />
+                    <AccuracyGauge value={65.0} title="Accuracy" segments={imbal_scenario1_segments} />
                   </div>
                 </div>
 
@@ -992,11 +992,11 @@ export default function EvaluationMetricsPage() {
                   <p className="text-xs text-center text-muted-foreground mb-2">75/25 Distribution</p>
                   <div className="w-full">
                     <p className="text-xs text-center text-muted-foreground mb-1">Fixed Thresholds</p>
-                    <AccuracyGauge value={65.0} title="" segments={fixedAccuracyGaugeSegments} />
+                    <AccuracyGauge value={65.0} title="Accuracy" segments={fixedAccuracyGaugeSegments} />
                   </div>
                   <div className="w-full">
                     <p className="text-xs text-center text-muted-foreground mb-1">Contextual Thresholds</p>
-                    <AccuracyGauge value={65.0} title="" segments={imbal_scenario2_segments} />
+                    <AccuracyGauge value={65.0} title="Accuracy" segments={imbal_scenario2_segments} />
                   </div>
                 </div>
 
@@ -1006,11 +1006,11 @@ export default function EvaluationMetricsPage() {
                   <p className="text-xs text-center text-muted-foreground mb-2">80/10/10 Distribution</p>
                   <div className="w-full">
                     <p className="text-xs text-center text-muted-foreground mb-1">Fixed Thresholds</p>
-                    <AccuracyGauge value={65.0} title="" segments={fixedAccuracyGaugeSegments} />
+                    <AccuracyGauge value={65.0} title="Accuracy" segments={fixedAccuracyGaugeSegments} />
                   </div>
                   <div className="w-full">
                     <p className="text-xs text-center text-muted-foreground mb-1">Contextual Thresholds</p>
-                    <AccuracyGauge value={65.0} title="" segments={imbal_scenario4_segments} />
+                    <AccuracyGauge value={65.0} title="Accuracy" segments={imbal_scenario4_segments} />
                   </div>
                 </div>
                 
@@ -1020,11 +1020,11 @@ export default function EvaluationMetricsPage() {
                   <p className="text-xs text-center text-muted-foreground mb-2">95/5 Distribution</p>
                   <div className="w-full">
                     <p className="text-xs text-center text-muted-foreground mb-1">Fixed Thresholds</p>
-                    <AccuracyGauge value={65.0} title="" segments={fixedAccuracyGaugeSegments} />
+                    <AccuracyGauge value={65.0} title="Accuracy" segments={fixedAccuracyGaugeSegments} />
                   </div>
                   <div className="w-full">
                     <p className="text-xs text-center text-muted-foreground mb-1">Contextual Thresholds</p>
-                    <AccuracyGauge value={65.0} title="" segments={imbal_scenario3_segments} />
+                    <AccuracyGauge value={65.0} title="Accuracy" segments={imbal_scenario3_segments} />
                   </div>
                 </div>
               </div>
@@ -1042,24 +1042,75 @@ export default function EvaluationMetricsPage() {
                 Rather than adding context to help interpret the position of the needle on a gauge, what if the gauge itself could interpret this information for you? This is exactly what the Agreement gauge in Plexus does.
               </p>
 
-              <div className="p-5 bg-card rounded-lg my-6">
-                <h3 className="text-xl font-medium mb-3">The Agreement Gauge: Standardized Interpretation</h3>
+              <h3 className="text-xl font-medium mb-3">The Agreement Gauge: Standardized Interpretation</h3>
+              
+              <p className="text-muted-foreground mb-4">
+                The Agreement gauge uses a metric (specifically Gwet's AC1) that inherently factors in both the number of classes and their distribution. This creates a standardized scale where 0.0 always means random chance agreement (equivalent to guessing randomly), 1.0 means perfect agreement (every prediction is correct), and -1.0 means perfect disagreement (every prediction is incorrect). Values between 0 and 1 indicate degrees of agreement better than chance.
+              </p>
+              
+              <p className="text-muted-foreground mb-4">
+                The beauty of this approach is its consistency. Whether you're evaluating a binary classifier, a 4-class problem, or dealing with severe class imbalance, the Agreement score always means the same thing. A score of 0.6 represents the same level of performance above chance regardless of the underlying data distribution.
+              </p>
+              
+              {/* Three-column visualization showing the three states */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 my-6">
+                <div className="flex flex-col items-center p-4 bg-card rounded-md">
+                  <h4 className="text-xl font-semibold mb-2">Opposite</h4>
+                  <div className="w-full max-w-[150px] mx-auto mb-2">
+                    <Gauge
+                      title="Agreement"
+                      value={-1.0}
+                      min={-1}
+                      max={1}
+                      segments={ac1GaugeSegments}
+                      showTicks={false}
+                    />
+                  </div>
+                  <p className="text-sm text-muted-foreground text-center">
+                    Perfect disagreement. Every prediction is incorrect.
+                  </p>
+                </div>
                 
-                <p className="text-muted-foreground mb-4">
-                  The Agreement gauge uses a metric (specifically Gwet's AC1) that inherently factors in both the number of classes and their distribution. This creates a standardized scale where:
-                </p>
+                <div className="flex flex-col items-center p-4 bg-card rounded-md">
+                  <h4 className="text-xl font-semibold mb-2">Random</h4>
+                  <div className="w-full max-w-[150px] mx-auto mb-2">
+                    <Gauge
+                      title="Agreement"
+                      value={0.0}
+                      min={-1}
+                      max={1}
+                      segments={ac1GaugeSegments}
+                      showTicks={false}
+                    />
+                  </div>
+                  <p className="text-sm text-muted-foreground text-center">
+                    No skill beyond chance. Equivalent to random guessing.
+                  </p>
+                </div>
                 
-                <ul className="list-disc pl-6 space-y-2 mb-4 text-muted-foreground">
-                  <li><strong className="text-foreground">0.0</strong> always means random chance agreement (equivalent to guessing randomly)</li>
-                  <li><strong className="text-foreground">1.0</strong> means perfect agreement (every prediction is correct)</li>
-                  <li><strong className="text-foreground">-1.0</strong> means perfect disagreement (every prediction is incorrect)</li>
-                  <li>Values between 0 and 1 indicate degrees of agreement better than chance</li>
-                </ul>
-                
-                <p className="text-muted-foreground mb-4">
-                  The beauty of this approach is its consistency. Whether you're evaluating a binary classifier, a 4-class problem, or dealing with severe class imbalance, the Agreement score always means the same thing. A score of 0.6 represents the same level of performance above chance regardless of the underlying data distribution.
-                </p>
+                <div className="flex flex-col items-center p-4 bg-card rounded-md">
+                  <h4 className="text-xl font-semibold mb-2">Perfect</h4>
+                  <div className="w-full max-w-[150px] mx-auto mb-2">
+                    <Gauge
+                      title="Agreement"
+                      value={1.0}
+                      min={-1}
+                      max={1}
+                      segments={ac1GaugeSegments}
+                      showTicks={false}
+                    />
+                  </div>
+                  <p className="text-sm text-muted-foreground text-center">
+                    Perfect agreement. Every prediction is correct.
+                  </p>
+                </div>
+              </div>
 
+              <p className="text-muted-foreground mb-4">
+                Now let's see how the random coin flip would look if we combine the Agreement gauge with an Accuracy gauge. This shows how both metrics represent the same underlying performance in different ways.
+              </p>
+
+              <div className="p-5 bg-card rounded-lg my-6">
                 {/* Coin Flip Example - Using showBothGauges prop */}
                 <EvaluationCard
                   title="Random Coin Flip Prediction (50/50)"
@@ -1082,27 +1133,9 @@ export default function EvaluationMetricsPage() {
                 />
               </div>
 
-              <h3 className="text-xl font-medium mb-3">How the Agreement Gauge Works</h3>
-              
               <p className="text-muted-foreground mb-4">
-                The Agreement gauge accomplishes this consistency through an elegant approach:
+                Now let's see how this works with a more complex scenario. Instead of a binary choice like a coin flip, we'll examine a 4-class problem – predicting the suit of a playing card. As we move from 2 classes to 4 classes, the baseline chance level drops from 50% to 25%. This is where the Agreement gauge really shines, as it automatically adjusts to maintain consistency across different problem types.
               </p>
-              
-              <ol className="list-decimal pl-6 space-y-2 mb-4 text-muted-foreground">
-                <li>It calculates what level of agreement would be expected by pure chance given the specific data distribution</li>
-                <li>It measures how much the actual agreement exceeds this chance level</li>
-                <li>It normalizes this difference to create a consistent scale from -1 to 1</li>
-              </ol>
-              
-              <p className="text-muted-foreground mb-4">
-                This creates a metric that automatically adjusts for both the number of classes and their distribution. For example:
-              </p>
-              
-              <ul className="list-disc pl-6 space-y-2 mb-4 text-muted-foreground">
-                <li>In a balanced binary classification problem, 50% accuracy yields an Agreement score of 0.0</li>
-                <li>In a balanced 4-class problem, 25% accuracy also yields an Agreement score of 0.0</li>
-                <li>For a 90/10 imbalanced problem, a model that always predicts the majority class (achieving 90% accuracy) still gets an Agreement score of 0.0</li>
-              </ul>
 
               {/* Card Suit Example - Using showBothGauges prop */}
               <EvaluationCard
@@ -1119,6 +1152,10 @@ export default function EvaluationMetricsPage() {
                 accuracyGaugeSegments={GaugeThresholdComputer.createSegments(GaugeThresholdComputer.computeThresholds(cardSuitData.label_distribution!))}
                 notes="Both gauges indicate performance slightly below chance for this particular run. The Agreement gauge shows AC1 = -0.03, and the contextual Accuracy gauge shows 23% is just below the baseline 25% for a balanced 4-class problem."
               />
+
+              <p className="text-muted-foreground mb-4">
+                The true power of the Agreement gauge lies in how it naturally adapts to your specific data. Like a smart GPS that reroutes when traffic conditions change, the gauge automatically recalibrates based on how many classes you have and how common each class is. It doesn't require complex calculations from the user – it simply shows whether your model is actually learning patterns or just making educated guesses. Whether you're classifying emails into two categories or medical images into dozens of different conditions, the Agreement gauge gives you a consistent way to understand performance: 0 means "no better than guessing," and 1 means "perfect predictions."
+              </p>
 
               <h3 className="text-xl font-medium mb-3">Benefits of the Agreement Gauge</h3>
               
