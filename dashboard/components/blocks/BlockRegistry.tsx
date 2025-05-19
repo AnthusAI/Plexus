@@ -85,5 +85,5 @@ export function BlockRenderer(props: BlockRendererProps) {
   }
   
   // For custom block components, render directly without the container
-  return <BlockComponent {...componentProps} />
+  return <BlockComponent {...componentProps} {...(componentProps.config || {})} />
 } 
