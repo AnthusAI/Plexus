@@ -6,6 +6,12 @@ import { GaugeThresholdComputer } from '@/utils/gauge-thresholds';
 import { FeedbackAnalysisEvaluation, FeedbackAnalysisEvaluationData } from '@/components/ui/feedback-analysis-evaluation';
 import { RawAgreementBar } from '@/components/RawAgreementBar';
 import { Gauge, type Segment } from '@/components/gauge';
+import { FileText } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useBlockDetails } from '@/components/hooks/useBlockDetails';
+import BlockDetails from '@/components/reports/BlockDetails';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
 
 // For type-safety, create an interface for the data structure
 interface FeedbackAnalysisData {
@@ -26,9 +32,23 @@ interface FeedbackAnalysisData {
  * Renders a Feedback Analysis block showing Gwet's AC1 agreement scores.
  * This component displays overall agreement and per-question breakdowns.
  */
-const FeedbackAnalysis: React.FC<ReportBlockProps> = ({ name, output }) => {
+const FeedbackAnalysis: React.FC<ReportBlockProps> = ({ 
+  name, 
+  output, 
+  log, 
+  id, 
+  detailsFiles 
+}) => {
   // Cast to the expected data type
   const feedbackData = output as FeedbackAnalysisData;
+  
+  // Use our custom hook for managing details dialog
+  const blockDetails = useBlockDetails({
+    blockId: id,
+    hasLogs: !!log,
+    hasDetailsFiles: !!detailsFiles,
+    detailsFiles
+  });
   
   if (!feedbackData) {
     // It might be better to render a specific loading/empty state component
@@ -38,6 +58,7 @@ const FeedbackAnalysis: React.FC<ReportBlockProps> = ({ name, output }) => {
 
   const hasData = feedbackData.scores && feedbackData.scores.length > 0;
   const showSummary = hasData && feedbackData.scores.length > 1;
+  const hasLog = !!log;
 
   const formattedDate = (dateStr: string) => {
     try {
@@ -70,12 +91,45 @@ const FeedbackAnalysis: React.FC<ReportBlockProps> = ({ name, output }) => {
       ? (100 - feedbackData.mismatch_percentage)
       : 100.0;
 
+  // Create a mock block object for BlockDetails component
+  const blockObj = {
+    id,
+    name,
+    position: 0,
+    type: 'FeedbackAnalysis',
+    output: {},
+    log,
+    detailsFiles
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-2">
-        <h3 className="text-xl font-semibold">
-          {name || 'Feedback Analysis'} 
-        </h3>
+        <div className="flex justify-between items-center">
+          <h3 className="text-xl font-semibold">
+            {name || 'Feedback Analysis'} 
+          </h3>
+          {blockDetails.hasDetails && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="h-8 w-8 p-0"
+                    aria-label="View analysis logs"
+                    onClick={blockDetails.openDetailsDialog}
+                  >
+                    <FileText className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>View analysis logs</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+        </div>
       </div>
 
       {/* Score Cards Section */}
@@ -173,8 +227,18 @@ const FeedbackAnalysis: React.FC<ReportBlockProps> = ({ name, output }) => {
           <p className="text-sm mt-1">Check that feedback items exist for the specified scorecard and date range.</p>
         </div>
       )}
+      
+      {/* Block details dialog */}
+      <Dialog open={blockDetails.showDetailsDialog} onOpenChange={blockDetails.closeDetailsDialog}>
+        <DialogContent className="max-w-3xl max-h-[80vh]">
+          <BlockDetails block={blockObj} />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
+
+// Set the blockClass property
+FeedbackAnalysis.blockClass = 'FeedbackAnalysis';
 
 export default FeedbackAnalysis; 

@@ -20,6 +20,10 @@ export interface ReportBlockProps {
   children?: React.ReactNode
   /** Optional className for styling */
   className?: string
+  /** The block's unique identifier */
+  id: string
+  /** JSON string containing details files information */
+  detailsFiles?: string | null
 }
 
 /**

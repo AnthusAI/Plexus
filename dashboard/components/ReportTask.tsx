@@ -204,14 +204,15 @@ const ReportTask: React.FC<ReportTaskProps> = ({
           <>
             <BlockRenderer
               key={blockData.id}
+              id={blockData.id}
               config={blockData.config || {}}
               output={blockData.output}
               log={blockData.log || undefined}
               name={blockData.name || blockConfig.name || undefined}
               position={blockData.position}
               type={blockData.type}
+              detailsFiles={blockData.detailsFiles}
             />
-            {blockData.detailsFiles && <BlockDetails block={blockData} />}
           </>
         );
       }
