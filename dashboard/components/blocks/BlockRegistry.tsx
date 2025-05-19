@@ -45,10 +45,9 @@ export type BlockRendererProps = ReportBlockProps
  * Only uses a container for the default block type or error states.
  */
 export function BlockRenderer(props: BlockRendererProps) {
-  const { config, ...blockProps } = props
-  const type = blockProps.type || 'default'  // Use type from block data, fallback to default
+  const { type = 'default' } = props  // Use type from props, fallback to default
   let BlockComponent = getBlock(type)
-  let componentProps = props; // Store props to potentially modify
+  let componentProps = { ...props } // Create a copy to potentially modify
   let isDefaultOrError = false;
 
   if (!BlockComponent) {

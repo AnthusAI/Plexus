@@ -3,8 +3,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ReloadIcon } from '@radix-ui/react-icons';
-// Import commented out to fix linter error - would need proper AWS Amplify configuration
-// import { Storage } from 'aws-amplify';
+// Import AWS Amplify Storage
+import { getUrl, downloadData } from 'aws-amplify/storage';
 
 // Define ReportBlock type if @/API is not available
 interface ReportBlock {
@@ -47,25 +47,20 @@ const BlockDetails: React.FC<BlockDetailsProps> = ({ block }) => {
         return;
       }
       
-      // Mock URLs for demonstration without Storage
-      const filesWithUrls = files.map(file => ({
-        ...file,
-        url: `#mock-url-for-${file.name}`
-      }));
-      
-      /* Original implementation would use AWS Amplify Storage
+      // Get signed URLs for each file using Amplify Storage
       const filesWithUrls = await Promise.all(
         files.map(async (file) => {
           try {
-            const url = await Storage.get(file.path, { level: 'protected' });
-            return { ...file, url };
+            const urlResult = await getUrl({
+              path: file.path,
+            });
+            return { ...file, url: urlResult.url.toString() };
           } catch (err) {
             console.error(`Error getting URL for file ${file.name}:`, err);
             return file;
           }
         })
       );
-      */
       
       setDetailFiles(filesWithUrls);
     } catch (err) {
@@ -82,22 +77,19 @@ const BlockDetails: React.FC<BlockDetailsProps> = ({ block }) => {
     setDialogOpen(true);
     setFileContent(null);
     
-    // Mock content for demonstration without actual fetch
-    setFileContent("Mock file content would be displayed here.");
-    
-    /* Original implementation would fetch content
     try {
-      const response = await fetch(file.url);
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      const text = await response.text();
+      // Use Amplify Storage to download the file content
+      const downloadResult = await downloadData({
+        path: file.path,
+      }).result;
+      
+      // Convert the binary data to text
+      const text = await downloadResult.body.text();
       setFileContent(text);
     } catch (error: any) {
       console.error(`Error fetching file ${file.name}:`, error);
       setFileContent(`Error loading file: ${error.message}`);
     }
-    */
   };
   
   // Load detail files on first render
