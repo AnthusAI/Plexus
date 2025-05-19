@@ -290,7 +290,7 @@ const ReportBlock: BlockComponent = ({
 
       {/* Inline Log Display Area */}
       {showLog && hasLog && (
-        <div className="mt-4 bg-card p-3">
+        <div className="mt-4 bg-card p-3 w-full overflow-hidden">
           <div className="flex flex-row justify-between items-center mb-3">
             <h4 className="text-base font-medium">Log</h4>
             {logFileFromDetails && (
@@ -302,15 +302,15 @@ const ReportBlock: BlockComponent = ({
               />
             )}
           </div>
-          <div>
+          <div className="w-full overflow-hidden">
             {isLoadingLog && <p className="text-sm text-muted-foreground">Loading log content...</p>}
             {!isLoadingLog && logText && (
-              <pre className="whitespace-pre-wrap text-xs bg-muted/50 overflow-y-auto font-mono max-h-[300px]">
+              <pre className="whitespace-pre-wrap text-xs bg-muted/50 overflow-y-auto overflow-x-auto font-mono max-h-[300px] max-w-full">
                 {logText}
               </pre>
             )}
             {!isLoadingLog && !logText && log && (
-              <pre className="whitespace-pre-wrap text-xs bg-muted/50 overflow-y-auto font-mono max-h-[300px]">
+              <pre className="whitespace-pre-wrap text-xs bg-muted/50 overflow-y-auto overflow-x-auto font-mono max-h-[300px] max-w-full">
                 {log}
               </pre>
             )}
@@ -323,12 +323,12 @@ const ReportBlock: BlockComponent = ({
 
       {/* Attached Files Display Area */}
       {showAttachedFiles && parsedDetailsFiles.length > 0 && (
-        <div className="mt-4 bg-card p-3">
+        <div className="mt-4 bg-card p-3 w-full overflow-hidden">
           <div className="flex flex-row justify-between items-center mb-3">
             <h4 className="text-base font-medium">Attached Files</h4>
           </div>
           
-          <div className="flex flex-col space-y-4">
+          <div className="flex flex-col space-y-4 w-full overflow-hidden">
             {/* File list */}
             <div className="bg-muted/50 py-2 px-0 rounded-sm">
               <h5 className="text-sm font-medium mb-2 px-2">Files</h5>
@@ -357,10 +357,10 @@ const ReportBlock: BlockComponent = ({
             
             {/* File content view - No header needed */}
             {selectedFileName && (
-              <div className="bg-muted/50 py-2 px-0 rounded-sm">
+              <div className="bg-muted/50 py-2 px-0 rounded-sm w-full overflow-hidden">
                 {isLoadingFile && <p className="text-sm text-muted-foreground px-2">Loading file content...</p>}
                 {!isLoadingFile && selectedFileContent && (
-                  <pre className="whitespace-pre-wrap text-xs overflow-y-auto font-mono max-h-[300px] px-2">
+                  <pre className="whitespace-pre-wrap text-xs overflow-y-auto overflow-x-auto font-mono max-h-[300px] px-2 max-w-full">
                     {selectedFileContent}
                   </pre>
                 )}
