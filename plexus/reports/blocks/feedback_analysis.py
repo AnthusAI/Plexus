@@ -337,19 +337,56 @@ class FeedbackAnalysis(BaseReportBlock):
             if plexus_scorecard_id and plexus_score_id and start_date and end_date:
                 self._log("Using direct GraphQL query with GSI", level="DEBUG")
                 
+                # First, try to get schema information for the GSI query
+                self._log("Querying schema information for correct parameters...", level="INFO")
+                schema_query = """
+                query IntrospectionQuery {
+                  __schema {
+                    queryType {
+                      fields {
+                        name
+                        args {
+                          name
+                          type {
+                            name
+                            kind
+                            ofType {
+                              name
+                              kind
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+                """
+                
+                try:
+                    schema_response = await asyncio.to_thread(self.api_client.execute, schema_query, {})
+                    if schema_response and '__schema' in schema_response:
+                        query_fields = schema_response['__schema']['queryType']['fields']
+                        gsi_field = next((f for f in query_fields if f['name'] == 'listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt'), None)
+                        if gsi_field:
+                            self._log(f"GSI arguments: {gsi_field['args']}", level="INFO")
+                        else:
+                            self._log("Could not find GSI in schema", level="WARNING")
+                except Exception as e:
+                    self._log(f"Error querying schema: {e}", level="WARNING")
+                
                 # Construct a direct GraphQL query using the new GSI
                 query = """
                 query ListFeedbackItemsByGSI(
                     $accountId: String!, 
-                    $SortKeyInput: ModelFeedbackItemByAccountScorecardScoreUpdatedAtCompositeKeyConditionInput,
                     $limit: Int,
-                    $nextToken: String
+                    $nextToken: String,
+                    $sortDirection: ModelSortDirection
                 ) {
                     listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt(
                         accountId: $accountId,
-                        scorecardIdScoreIdUpdatedAt: $SortKeyInput, # Argument for the composite sort key parts
                         limit: $limit,
-                        nextToken: $nextToken
+                        nextToken: $nextToken,
+                        sortDirection: $sortDirection
                     ) {
                         items {
                             id
@@ -374,14 +411,14 @@ class FeedbackAnalysis(BaseReportBlock):
                 # Prepare variables for the query
                 variables = {
                     "accountId": account_id,
-                    "SortKeyInput": { # This object matches the $SortKeyInput variable
-                        "scorecardId": {"eq": plexus_scorecard_id},
-                        "scoreId": {"eq": plexus_score_id},
-                        "updatedAt": {"between": [start_date.isoformat(), end_date.isoformat()]}
-                    },
                     "limit": 1000,
-                    "nextToken": None
+                    "nextToken": None,
+                    "sortDirection": "DESC"
                 }
+                
+                # Log the exact query and variables to INFO level so they show up
+                self._log(f"GraphQL query: {query}", level="INFO")
+                self._log(f"GraphQL variables: {variables}", level="INFO")
                 
                 next_token = None
                 
@@ -391,7 +428,39 @@ class FeedbackAnalysis(BaseReportBlock):
                     
                     try:
                         # Execute the query
+                        self._log(f"Executing GraphQL query with variables: {variables}", level="INFO")
                         response = await asyncio.to_thread(self.api_client.execute, query, variables)
+                        
+                        # If there's an error, log it
+                        if response and 'errors' in response:
+                            self._log(f"GraphQL errors: {response.get('errors')}", level="ERROR")
+                            
+                            # Try a simplified query without any optional parameters
+                            self._log("Trying a simplified fallback query...", level="INFO")
+                            simplified_query = """
+                            query SimplifiedFeedbackQuery {
+                              listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt(
+                                accountId: "%s"
+                                limit: 1
+                              ) {
+                                items {
+                                  id
+                                  accountId
+                                  scorecardId
+                                  scoreId
+                                }
+                                nextToken
+                              }
+                            }
+                            """ % account_id
+                            
+                            self._log(f"Simplified query: {simplified_query}", level="INFO")
+                            try:
+                                # No variables with hardcoded query
+                                simplified_response = await asyncio.to_thread(self.api_client.execute, simplified_query, {})
+                                self._log(f"Simplified query response: {simplified_response}", level="INFO")
+                            except Exception as e:
+                                self._log(f"Even simplified query failed: {e}", level="ERROR")
                         
                         if response and 'listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt' in response:
                             result = response['listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt']
