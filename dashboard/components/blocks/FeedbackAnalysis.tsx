@@ -1,6 +1,7 @@
 import React from 'react';
 import { ReportBlockProps } from './ReportBlock';
 import ScorecardReport, { ScorecardReportData } from './ScorecardReport';
+// No need to import FeedbackItemView since it's used in ScorecardReportEvaluation
 
 // For type-safety, create an interface for the data structure
 export interface FeedbackAnalysisData extends ScorecardReportData {
@@ -15,6 +16,9 @@ export interface FeedbackAnalysisData extends ScorecardReportData {
  * Renders a Feedback Analysis block showing Gwet's AC1 agreement scores.
  * This component displays overall agreement and per-question breakdowns.
  * It extends the base ScorecardReport component.
+ * 
+ * The confusion matrix now uses FeedbackItemView to display filtered feedback items
+ * in a structured before/after format with toggleable raw JSON view.
  */
 const FeedbackAnalysis: React.FC<ReportBlockProps> = (props) => {
   // Cast to the expected data type
