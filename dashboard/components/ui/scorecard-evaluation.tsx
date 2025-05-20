@@ -14,6 +14,7 @@ import { RawAgreementBar } from '@/components/RawAgreementBar';
 import { downloadData } from 'aws-amplify/storage';
 import { Button } from '@/components/ui/button';
 import type { DetailFile } from '../blocks/ReportBlock';
+import { FeedbackItemsList, FeedbackItemsView, type FeedbackItem } from '@/components/ui/feedback-item-view';
 
 // Export the AC1 gauge segments for reuse in other components
 export const ac1GaugeSegments: Segment[] = [
@@ -67,6 +68,8 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
   
   const [activeCellFilter, setActiveCellFilter] = useState<{ predicted: string; actual: string } | null>(null);
   const [filteredScoreDetails, setFilteredScoreDetails] = useState<any[] | null>(null);
+  const [showRawJson, setShowRawJson] = useState(false);
+  const [showDetailsSection, setShowDetailsSection] = useState(false);
 
   const parsedDetailsFiles = useMemo(() => {
     if (typeof detailsFiles === 'string') {
@@ -107,12 +110,28 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
     if (activeCellFilter && scoreDetailsContent && typeof scoreDetailsContent === 'string') {
       try {
         const parsedData = JSON.parse(scoreDetailsContent);
-        const items = parsedData?.predicted?.[activeCellFilter.actual]?.[activeCellFilter.predicted];
+        console.debug('Parsed data structure:', 
+          Object.keys(parsedData),
+          'Looking for:', activeCellFilter.predicted, activeCellFilter.actual);
+          
+        // Updated to handle the new structure where the keys are directly the predicted/actual values
+        // instead of having a 'predicted' wrapper object
+        const items = parsedData?.[activeCellFilter.predicted]?.[activeCellFilter.actual];
+        
         if (Array.isArray(items)) {
+          console.debug(`Found ${items.length} items using predicted[actual] structure`);
           setFilteredScoreDetails(items);
         } else {
-          setFilteredScoreDetails([]); 
-          console.warn('Could not find items for filter or items is not an array:', activeCellFilter, parsedData);
+          // Try the opposite order in case the data structure is flipped
+          const itemsAlt = parsedData?.[activeCellFilter.actual]?.[activeCellFilter.predicted];
+          if (Array.isArray(itemsAlt)) {
+            console.debug(`Found ${itemsAlt.length} items using actual[predicted] structure`);
+            setFilteredScoreDetails(itemsAlt);
+          } else {
+            setFilteredScoreDetails([]); 
+            console.warn('Could not find items for filter. Structure of parsed data:', 
+              JSON.stringify(parsedData, null, 2).substring(0, 200) + '...');
+          }
         }
       } catch (error) {
         console.error('Failed to parse or filter score details content:', error);
@@ -125,7 +144,12 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
 
   const handleConfusionMatrixSelection = (selection: { predicted: string | null; actual: string | null }) => {
     if (selection.predicted && selection.actual) {
+      // Store the selected matrix cell values
+      console.debug('Selected confusion matrix cell:', selection);
       setActiveCellFilter({ predicted: selection.predicted, actual: selection.actual });
+      setShowDetailsSection(true);
+      
+      // Fetch details if needed and not already loading
       if (!scoreDetailsContent && scoreDetailFile && !isLoadingScoreDetails) {
         fetchScoreDetailsContent();
       }
@@ -288,52 +312,23 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
         )}
       </div>
       
-      {(isLoadingScoreDetails || scoreDetailsContent !== null) && (
+      {showDetailsSection && (
         <div className="px-4 pb-4">
-          <div className="mt-2 w-full overflow-hidden">
-            <div className="flex justify-between items-center mb-1">
-              <h4 className="text-base font-medium">
-                Details
-              </h4>
-              {activeCellFilter && (
-                <Button variant="ghost" size="sm" onClick={() => setActiveCellFilter(null)} className="h-auto p-1">Clear Filter</Button>
-              )}
-            </div>
-            {activeCellFilter && filteredScoreDetails && (
-              <h5 className="text-sm text-muted-foreground mb-2">
-                Filtered items: {filteredScoreDetails.length} - Predicted: {activeCellFilter.predicted}, Actual: {activeCellFilter.actual}
-              </h5>
-            )}
-            
-            <div className="w-full overflow-hidden">
-              {isLoadingScoreDetails && <p className="text-sm text-muted-foreground">Loading details...</p>}
-              {!isLoadingScoreDetails && scoreDetailsContent && typeof scoreDetailsContent === 'string' && (
-                <>
-                  {filteredScoreDetails ? (
-                    <div>
-                      {filteredScoreDetails.length > 0 ? (
-                        <pre className="whitespace-pre-wrap text-xs bg-white dark:bg-gray-800 dark:text-gray-200 overflow-y-auto overflow-x-auto font-mono max-h-[300px] px-2 py-2 max-w-full rounded">
-                          {JSON.stringify(filteredScoreDetails, null, 2)}
-                        </pre>
-                      ) : (
-                        <p className="text-sm text-muted-foreground">No items match the selected filter in the details file.</p>
-                      )}
-                    </div>
-                  ) : (
-                    <pre className="whitespace-pre-wrap text-xs bg-white dark:bg-gray-800 dark:text-gray-200 overflow-y-auto overflow-x-auto font-mono max-h-[300px] px-2 py-2 max-w-full rounded">
-                      {scoreDetailsContent}
-                    </pre>
-                  )}
-                </>
-              )}
-              {!isLoadingScoreDetails && scoreDetailsContent === 'Failed to load score details content.' && (
-                 <p className="text-sm text-red-500">{scoreDetailsContent}</p>
-              )}
-              {!isLoadingScoreDetails && !scoreDetailsContent && (
-                <p className="text-sm text-muted-foreground">Click on the matrix above to load details.</p>
-              )}
-            </div>
-          </div>
+          <FeedbackItemsView
+            items={filteredScoreDetails as FeedbackItem[] || []}
+            showRawJson={showRawJson}
+            onToggleView={() => setShowRawJson(!showRawJson)}
+            isLoading={isLoadingScoreDetails}
+            filterInfo={activeCellFilter && filteredScoreDetails ? {
+              predicted: activeCellFilter.predicted,
+              actual: activeCellFilter.actual,
+              count: filteredScoreDetails.length
+            } : undefined}
+            onClose={() => {
+              setShowDetailsSection(false);
+              setActiveCellFilter(null);
+            }}
+          />
         </div>
       )}
       
