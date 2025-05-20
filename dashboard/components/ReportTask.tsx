@@ -67,9 +67,26 @@ const ReportTask: React.FC<ReportTaskProps> = ({
   const [isLoadingBlocks, setIsLoadingBlocks] = useState(false)
   const [blockError, setBlockError] = useState<string | null>(null)
 
+  // Add a function to parse output if it's a string
+  const parseOutput = (output: any): Record<string, any> => {
+    if (typeof output === 'string') {
+      try {
+        return JSON.parse(output);
+      } catch (err) {
+        console.error('Failed to parse output string:', err);
+        return { error: 'Failed to parse output', raw: output };
+      }
+    }
+    
+    if (output && typeof output === 'object') {
+      return output;
+    }
+    
+    return {};
+  };
+
   // Function to fetch report blocks
   const fetchReportBlocks = async (reportId: string) => {
-    console.log('Starting to fetch blocks for report:', reportId)
     setIsLoadingBlocks(true)
     setBlockError(null)
     try {
@@ -94,18 +111,16 @@ const ReportTask: React.FC<ReportTaskProps> = ({
         variables: { reportId }
       })
 
-      console.log('Received response for report blocks:', response)
-
       if ('data' in response && response.data?.getReport?.reportBlocks?.items) {
         const blocks = response.data.getReport.reportBlocks.items.map((block: any) => ({
           ...block,
           output: JSON.parse(block.output),
           config: {}  // Add empty config object by default
         }))
-        console.log('Found blocks:', blocks)
+        console.log(`Fetched ${blocks.length} blocks directly from API`);
         setReportBlocks(blocks)
       } else {
-        console.log('No blocks found in response')
+        console.log('No blocks found in API response')
       }
     } catch (err: any) {
       console.error('Error fetching report blocks:', err)
@@ -118,10 +133,37 @@ const ReportTask: React.FC<ReportTaskProps> = ({
   // Fetch blocks when report is selected and we're in detail view
   useEffect(() => {
     if (variant === 'detail' && task.data?.id) {
-      console.log('Effect triggered - fetching blocks for report:', task.data.id)
-      fetchReportBlocks(task.data.id)
+      console.log('Fetching blocks for report:', task.data.id);
+      fetchReportBlocks(task.data.id);
     }
-  }, [variant, task.data?.id])
+  }, [variant, task.data?.id]);
+
+  // Add a new effect to monitor task.data.reportBlocks and update reportBlocks state when it changes
+  useEffect(() => {
+    if (variant === 'detail' && task.data?.reportBlocks && task.data.reportBlocks.length > 0) {
+      console.log(`Received ${task.data.reportBlocks.length} blocks via props`);
+      
+      // Transform blocks from props to match our expected format
+      const transformedBlocks = task.data.reportBlocks.map(block => {
+        // Ensure output is parsed if it's a string
+        const parsedOutput = parseOutput(block.output);
+        
+        return {
+          id: block.name || `block-${block.position}`,
+          name: block.name,
+          position: block.position,
+          type: block.type || parsedOutput.class || 'unknown',
+          output: parsedOutput,
+          log: block.log || null,
+          config: block.config || parsedOutput,
+          detailsFiles: null
+        };
+      });
+      
+      // Replace the blocks state entirely to ensure we get a fresh render
+      setReportBlocks(transformedBlocks);
+    }
+  }, [variant, task.data?.reportBlocks]);
 
   // Format the timestamp for detail view display
   const formattedDetailTimestamp = task.data?.updatedAt 
@@ -136,8 +178,15 @@ const ReportTask: React.FC<ReportTaskProps> = ({
   // Explicitly set the name and description in the correct order
   // name = Report name (from report.name)
   // description = Report configuration description
-  const reportName = task.data?.configName || 'Report';
+  const reportName = task.data?.configName || task.data?.name || 'Report';
   const reportDescription = getValueOrEmpty(task.data?.configDescription);
+
+  // Add render count for debugging
+  const renderCount = React.useRef(0);
+  renderCount.current++;
+
+  // Log only essential info for real-time tracking
+  console.log(`ReportTask render #${renderCount.current} - Blocks: ${reportBlocks.length}`);
 
   // Create a properly typed data object
   const reportData: ReportTaskData = {
@@ -152,7 +201,52 @@ const ReportTask: React.FC<ReportTaskProps> = ({
     reportBlocks: task.data?.reportBlocks || []
   };
 
-  // Update the customCodeBlockRenderer function to extract data correctly
+  // Add a function to determine if the report is complete
+  const isReportComplete = (taskStatus?: string, blocks: ReportBlock[] = []): boolean => {
+    // Check if the task itself is complete
+    if (taskStatus === 'COMPLETED') {
+      return true;
+    }
+    
+    // If the task status is explicitly FAILED, it's done but not successful
+    if (taskStatus === 'FAILED') {
+      return true;
+    }
+    
+    // Check if any blocks are still in a pending state
+    const hasPendingBlocks = blocks.some(block => {
+      // Check for pending_execution status in the output
+      if (block.output && typeof block.output === 'object') {
+        if (block.output.status === 'pending_execution') {
+          return true;
+        }
+      }
+      
+      // Check log messages for processing indicators
+      if (block.log && typeof block.log === 'string') {
+        if (block.log.includes('Processing...') || block.log.includes('Waiting') || block.log.includes('pending')) {
+          return true;
+        }
+      }
+      
+      return false;
+    });
+
+    // If we have blocks but none are pending, consider it complete
+    if (blocks.length > 0 && !hasPendingBlocks) {
+      return true;
+    }
+    
+    // If task is explicitly RUNNING or PENDING, it's not complete
+    if (taskStatus === 'RUNNING' || taskStatus === 'PENDING') {
+      return false;
+    }
+
+    // Default to false (not complete) if we can't determine clearly
+    return false;
+  };
+
+  // Update the customCodeBlockRenderer function to handle incomplete reports better
   const customCodeBlockRenderer = ({ node, inline, className, children, ...props }: any) => {
     // If it's an inline code block, render normally
     if (inline) {
@@ -163,58 +257,100 @@ const ReportTask: React.FC<ReportTaskProps> = ({
     const match = /language-(\w+)/.exec(className || '');
     const language = match ? match[1] : '';
     
-    console.log('Processing code block:', {
-      language,
-      className,
-      children: String(children).trim(),
-      availableBlocks: reportBlocks
-    });
+    const childrenText = String(children).trim();
     
     // Check if this is a report block by looking for the language-block class
     if (language === 'block') {
-      const content = String(children).trim();
+      const content = childrenText;
       
       // Parse the YAML-like content
       const lines = content.split('\n');
       const blockConfig: Record<string, any> = {};
       
       lines.forEach(line => {
-        const [key, value] = line.split(':').map(s => s.trim());
-        if (key && value) {
-          blockConfig[key] = value;
+        const parts = line.split(':');
+        if (parts.length >= 2) {
+          const key = parts[0].trim();
+          const value = parts.slice(1).join(':').trim();
+          if (key) {
+            blockConfig[key] = value;
+          }
         }
       });
       
-      console.log('Parsed block config:', blockConfig);
-      
-      // Find the corresponding block data from reportBlocks
+      // Try to match blocks by class/type and then by position if available
       const blockData = reportBlocks.find(block => {
-        console.log('Checking block:', {
-          blockType: block.type,
-          configClass: blockConfig.class,
-          matches: block.type === blockConfig.class
-        });
-        return block.type === blockConfig.class;
+        // First try exact type/class match
+        if (block.type === blockConfig.class) {
+          return true;
+        }
+        
+        // If position is specified, try matching by position
+        if (blockConfig.position && block.position.toString() === blockConfig.position) {
+          return true;
+        }
+        
+        // As a fallback, try name match if available
+        if (blockConfig.name && block.name === blockConfig.name) {
+          return true;
+        }
+        
+        return false;
       });
       
       if (blockData) {
-        console.log('Found matching block:', blockData);
+        // Log when we successfully find a block to render
+        console.log(`Rendering block: ${blockData.type} (position: ${blockData.position})`);
+        
+        // Check if the report is complete
+        const complete = isReportComplete(task.status, reportBlocks);
+        
+        // Add a unique key that includes task.id to force re-render when report data changes
+        const blockKey = `${task.id}-block-${blockData.id}-${blockData.position}-${Date.now()}`;
+        
+        // Set up enhanced props for the block when the report is not complete
+        const blockProps = {
+          id: blockData.id,
+          config: {
+            ...blockData.config,
+            // Force the log UI to be shown during generation
+            showLog: !complete && !!blockData.log
+          },
+          output: blockData.output,
+          log: blockData.log || undefined,
+          name: blockData.name || blockConfig.name || undefined,
+          position: blockData.position,
+          type: blockData.type,
+          detailsFiles: blockData.detailsFiles,
+          // Add a note when the block is generating
+          subtitle: !complete ? "Generating..." : undefined,
+          // Add any error or warning from the block output if available
+          error: blockData.output?.error,
+          warning: blockData.output?.warning
+        };
         
         return (
-          <>
-            <BlockRenderer
-              key={blockData.id}
-              id={blockData.id}
-              config={blockData.config || {}}
-              output={blockData.output}
-              log={blockData.log || undefined}
-              name={blockData.name || blockConfig.name || undefined}
-              position={blockData.position}
-              type={blockData.type}
-              detailsFiles={blockData.detailsFiles}
-            />
-          </>
+          <div key={blockKey} className="my-4">
+            <BlockRenderer {...blockProps} />
+            
+            {/* If not using a Block component that handles logs/files, show them directly */}
+            {!complete && !blockData.detailsFiles && blockData.log && (
+              <div className="mt-2 p-2 bg-muted/20 rounded text-xs text-muted-foreground">
+                <details open>
+                  <summary className="cursor-pointer font-medium">Processing Log</summary>
+                  <pre className="whitespace-pre-wrap mt-2">{blockData.log}</pre>
+                </details>
+              </div>
+            )}
+          </div>
         );
+      } else {
+        // Log when we can't find the requested block
+        console.log(`Waiting for block: class=${blockConfig.class || 'unknown'}, position=${blockConfig.position || 'unknown'}`);
+        
+        // Instead of showing a loading placeholder, return an empty div
+        // This prevents flickering while still reserving space for the block
+        return <div className="my-2"></div>;
       }
     }
     
