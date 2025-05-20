@@ -15,6 +15,7 @@ class BaseReportBlock(ABC):
         self.params = params if params is not None else {}
         self.api_client = api_client
         self.log_messages = []
+        self.report_block_id = None  # This will be set by the report service if available
 
     def _log(self, message: str):
         """Helper method to add log messages during generation."""
