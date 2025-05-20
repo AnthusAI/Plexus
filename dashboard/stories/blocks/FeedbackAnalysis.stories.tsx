@@ -87,8 +87,6 @@ const scoreTemplate = (
   if (labelDistribution) {
     return {
       ...baseScore,
-      precision: accuracy + Math.random() * 5 - 2.5, // Random value near accuracy for demo
-      recall: accuracy + Math.random() * 5 - 2.5, // Random value near accuracy for demo
       class_distribution: createClassDistribution(labelDistribution),
       predicted_class_distribution: createClassDistribution(
         // Create a slightly different distribution for predicted
