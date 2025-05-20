@@ -300,72 +300,81 @@ def _parse_report_configuration(config_markdown: str) -> List[Dict[str, Any]]:
 
 
 def _instantiate_and_run_block(
-    block_def: dict, report_params: dict, api_client: PlexusDashboardClient
+    block_def: dict, report_params: dict, api_client: PlexusDashboardClient, report_block_id: Optional[str] = None
 ) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
     """
-    Instantiates and runs a specific report block class.
+    Instantiates and runs a single report block.
 
     Args:
-        block_def: Dictionary containing block definition ('class_name', 'config', 'block_name', 'position').
-        report_params: General parameters passed to the report run.
-        api_client: The PlexusDashboardClient instance.
+        block_def: Definition of the block (class_name, config, etc.).
+        report_params: Global parameters for the report run.
+        api_client: PlexusDashboardClient instance.
+        report_block_id: Optional ID of the ReportBlock record this execution is for.
+                         If provided, it will be set on the block instance.
 
     Returns:
-        Tuple (output_json, log_string)
-        - output_json: JSON-serializable dictionary from the block's generate method.
-        - log_string: Optional log output from the block.
-        Returns (None, Error Message String) on failure.
+        A tuple containing the block's output data (JSON serializable dict) and log string.
+        Returns (None, error_message_string) if the block fails.
     """
     class_name = block_def["class_name"]
     block_config = block_def["config"]
-    block_name = block_def.get("block_name", f"Block at position {block_def.get('position', 'N/A')}")
-    log_prefix = f"[ReportBlock {block_name} ({class_name})]"
-    logger.info(f"{log_prefix} Instantiating and running block.")
+    block_display_name = block_def.get("block_name", class_name) # Use provided name or class name
+
+    logger.info(f"Instantiating block: {class_name} with config: {block_config}")
+
+    if class_name not in BLOCK_CLASSES:
+        error_msg = f"Block class '{class_name}' not found or not registered. Available: {list(BLOCK_CLASSES.keys())}"
+        logger.error(error_msg)
+        return None, error_msg
 
     try:
-        # Find the class in the registry
-        block_class = BLOCK_CLASSES.get(class_name)
-        if not block_class:
-            # Simplify the error message
-            error_msg = f"Report block class '{class_name}' not found."
-            logger.error(f"{log_prefix} {error_msg}")
-            # Return None for data, and the error message as the log
-            return None, error_msg
-
-        # Instantiate the block
-        logger.debug(f"{log_prefix} Instantiating with config: {block_config}")
+        block_class = BLOCK_CLASSES[class_name]
+        # Pass api_client and report_params to the block's constructor
         block_instance = block_class(config=block_config, params=report_params, api_client=api_client)
-
-        # Run the block's generate method
-        logger.debug(f"{log_prefix} Calling generate method...")
         
-        # Check if the generate method is a coroutine (async)
-        import inspect
-        if inspect.iscoroutinefunction(block_instance.generate):
-            logger.debug(f"{log_prefix} Detected async generate method, using asyncio.run")
-            import asyncio
-            output_json, log_string = asyncio.run(block_instance.generate())
-        else:
-            # Regular synchronous method
-            output_json, log_string = block_instance.generate()
-            
-        logger.info(f"{log_prefix} Block execution finished successfully.")
-        logger.debug(f"{log_prefix} Output JSON: {str(output_json)[:200]}...") # Log snippet
-        logger.debug(f"{log_prefix} Log String: {log_string}")
+        # Set the report_block_id on the instance if provided
+        if report_block_id:
+            block_instance.report_block_id = report_block_id
+            logger.info(f"Set report_block_id '{report_block_id}' on block instance '{class_name}'")
 
-        # Ensure output is JSON serializable before returning
+        # Run the block's generate method (assuming it's async)
+        # output_data, log_output = asyncio.run(block_instance.generate())
+        # Check if running in an existing event loop
         try:
-            json.dumps(output_json)
-        except TypeError as json_err:
-            logger.error(f"{log_prefix} Block output is not JSON serializable: {json_err}")
-            raise ValueError(f"Block output is not JSON serializable: {json_err}") from json_err
+            loop = asyncio.get_running_loop()
+        except RuntimeError:  # No running event loop
+            loop = None
 
-        return output_json, log_string
+        if loop and loop.is_running():
+            # If there's a running loop, schedule generate() as a task
+            # This is typical in an async environment like a Celery worker or FastAPI
+            logger.info(f"Detected running event loop. Scheduling block '{class_name}' generation as a task.")
+            # This won't work as a direct call if _instantiate_and_run_block is synchronous.
+            # For now, we assume _generate_report_core is not itself async, so direct await or run is needed.
+            # If _generate_report_core were async, we could 'await block_instance.generate()'
+            # Let's stick to asyncio.run for now, assuming this function might be called
+            # from a synchronous context that needs to drive an async method.
+            # Re-evaluating this: if called by Celery, Celery itself might handle the loop.
+            # Plexus tasks are often async. The caller (Celery task) should manage the async context.
+            # For simplicity, let's assume we need to run it.
+            # If _instantiate_and_run_block is called from an async func, then use:
+            # output_data, log_output = await block_instance.generate()
+            # If called from sync, and generate is async:
+            output_data, log_output = asyncio.run(block_instance.generate())
+        else:
+            # If no running loop, create one to run the async method
+            logger.info(f"No running event loop. Creating new loop for block '{class_name}' generation.")
+            output_data, log_output = asyncio.run(block_instance.generate())
+            
+
+        logger.info(f"Block '{block_display_name}' executed. Log output length: {len(log_output) if log_output else 0}")
+        # logger.debug(f"Block '{block_display_name}' log output:\n{log_output}") # Can be very verbose
+        return output_data, log_output
 
     except Exception as e:
-        error_msg = f"Error running block {block_name} ({class_name}): {e}"
+        error_msg = f"Error running block {block_display_name} ({class_name}): {e}"
         detailed_error = traceback.format_exc()
-        logger.exception(f"{log_prefix} {error_msg}")
+        logger.exception(f"{error_msg}")
         # Return None for JSON output and the error message as the log string
         return None, f"{error_msg}\nDetails:\n{detailed_error}"
 
@@ -499,44 +508,128 @@ def _generate_report_core(
         logger.info(f"{log_prefix} Starting processing of {num_blocks} report blocks.")
         tracker.set_total_items(num_blocks)
 
-        block_results = []
         for i, block_def in enumerate(block_definitions):
             position = block_def.get("position", i)
-            block_name = block_def.get("block_name", f"Block at position {position}")
-            logger.info(f"{log_prefix} Processing block {i+1}/{num_blocks}: {block_name} (Pos: {position})")
+            block_class_name = block_def["class_name"]
+            block_display_name = block_def.get("block_name", f"{block_class_name} at pos {position}")
+            
+            logger.info(f"{log_prefix} Preparing block {i+1}/{num_blocks}: {block_display_name} (Class: {block_class_name}, Pos: {position})")
 
+            # Create the ReportBlock record *before* running the block instance
+            # This allows the block instance to know its ID and attach files to itself.
+            current_report_block = None
+            try {
+                logger.info(f"{log_prefix} Creating initial ReportBlock record for {block_display_name}")
+                current_report_block = ReportBlock.create(
+                    reportId=report_id,
+                    position=position,
+                    name=block_display_name,
+                    type=block_class_name,
+                    output=json.dumps({"status": "pending_execution"}), # Initial status
+                    log="Processing...", # Initial log
+                    detailsFiles=None, # Start with no details files
+                    client=client
+                )
+                logger.info(f"{log_prefix} Created ReportBlock ID {current_report_block.id} for {block_display_name}")
+            } except Exception as e {
+                logger.exception(f"{log_prefix} Failed to create initial ReportBlock for {block_display_name}: {e}")
+                # Record this as a block-level error and continue to next block if possible
+                if first_block_error_message is None:
+                    first_block_error_message = f"Failed to create DB record for block {block_display_name}: {e}"
+                tracker.update(current_items=i + 1) # Still advance tracker
+                continue # Skip to next block definition
+            }
+
+            # Run the block instance, passing its report_block_id
             output_json, log_string = _instantiate_and_run_block(
                 block_def=block_def,
                 report_params=run_parameters,
-                api_client=client
+                api_client=client,
+                report_block_id=current_report_block.id # Pass the ID
             )
 
-            block_results.append({
-                "position": position,
-                "name": block_def.get("block_name"),
-                "type": block_def["class_name"],  # Use the class_name as the type
-                "output": output_json,
-                "log": log_string
-            })
+            # Fetch the latest state of the ReportBlock, as the block itself might have updated detailsFiles
+            try {
+                logger.info(f"{log_prefix} Re-fetching ReportBlock ID {current_report_block.id} after block execution.")
+                db_block_state = ReportBlock.get_by_id(current_report_block.id, client)
+                if not db_block_state:
+                    logger.error(f"{log_prefix} Failed to re-fetch ReportBlock {current_report_block.id} after execution. File attachments might be lost.")
+                    # Fallback to an empty list if fetch fails, though this is problematic
+                    existing_details_files_list = []
+                else:
+                    logger.info(f"{log_prefix} Fetched DB state. Current detailsFiles: {db_block_state.detailsFiles}")
+                    if db_block_state.detailsFiles:
+                        try {
+                            existing_details_files_list = json.loads(db_block_state.detailsFiles)
+                            if not isinstance(existing_details_files_list, list):
+                                logger.warning(f"{log_prefix} detailsFiles for ReportBlock {current_report_block.id} was not a list: {existing_details_files_list}. Resetting.")
+                                existing_details_files_list = []
+                        } except json.JSONDecodeError:
+                            logger.warning(f"{log_prefix} Failed to parse existing detailsFiles for ReportBlock {current_report_block.id}: {db_block_state.detailsFiles}. Resetting.")
+                            existing_details_files_list = []
+                    else:
+                        existing_details_files_list = []
+            } except Exception as e {
+                logger.exception(f"{log_prefix} Error fetching or parsing ReportBlock {current_report_block.id} detailsFiles: {e}. Proceeding with empty list.")
+                existing_details_files_list = []
+            }
+            
+            # Handle log content attachment
+            final_log_message_for_db = "No detailed log output."
+            if log_string:
+                if S3_UTILS_AVAILABLE:
+                    try {
+                        logger.info(f"{log_prefix} Uploading log.txt for ReportBlock {current_report_block.id}")
+                        log_file_info = upload_report_block_file(
+                            report_block_id=current_report_block.id,
+                            file_name="log.txt",
+                            content=log_string,
+                            content_type="text/plain"
+                        )
+                        existing_details_files_list.append(log_file_info)
+                        logger.info(f"{log_prefix} Appended log.txt info. New detailsFiles list: {existing_details_files_list}")
+                        final_log_message_for_db = "See log.txt in detailsFiles."
+                    } except Exception as e {
+                        logger.exception(f"{log_prefix} Failed to upload log.txt to S3 for ReportBlock {current_report_block.id}: {e}. Storing log inline (truncated).")
+                        final_log_message_for_db = log_string[:10000] # Truncate if storing inline
+                } else {
+                    logger.warning(f"{log_prefix} S3_UTILS_AVAILABLE is false. Storing log inline (truncated) for ReportBlock {current_report_block.id}.")
+                    final_log_message_for_db = log_string[:10000] # Truncate
+                }
+            }
 
-            if output_json is None:
-                block_error = log_string or f"Block {i+1}/{num_blocks} ({block_name}) failed with unspecified error."
-                if first_block_error_message is None:
-                    first_block_error_message = block_error # Capture the first error
-                logger.error(f"{log_prefix} Block {i+1}/{num_blocks} ({block_name}) failed. Error: {block_error}")
-            else:
-                logger.info(f"{log_prefix} Block {i+1}/{num_blocks} ({block_name}) completed successfully.")
+            # Final update to the ReportBlock record
+            try {
+                logger.info(f"{log_prefix} Performing final update for ReportBlock {current_report_block.id}")
+                final_details_files_json = json.dumps(existing_details_files_list) if existing_details_files_list else None
+                
+                current_report_block.update( # Use the 'current_report_block' instance that has the .update method
+                    output=json.dumps(output_json if output_json is not None else {"status": "failed", "error": log_string}),
+                    log=final_log_message_for_db,
+                    detailsFiles=final_details_files_json,
+                    client=client
+                )
+                logger.info(f"{log_prefix} Successfully finalized ReportBlock {current_report_block.id}. detailsFiles: {final_details_files_json}")
+            } except Exception as e {
+                 logger.exception(f"{log_prefix} Failed to finalize ReportBlock {current_report_block.id}: {e}")
+                 if first_block_error_message is None:
+                    first_block_error_message = f"Failed to finalize block {block_display_name}: {e}"
+            }
 
+            if output_json is None and first_block_error_message is None:
+                first_block_error_message = log_string or f"Block {block_display_name} failed with unspecified error."
+            
+            logger.info(f"{log_prefix} Completed processing for block {block_display_name} (ID: {current_report_block.id})")
             tracker.update(current_items=i + 1)
 
         tracker.advance_stage() # Advance to next stage (Finalizing Report)
 
         # === 5. Create ReportBlock Records ===
         if report_id:
-            logger.info(f"{log_prefix} Creating ReportBlock database records for {len(block_results)} blocks.")
+            logger.info(f"{log_prefix} Creating ReportBlock database records for {len(block_definitions)} blocks.")
             try:
                 created_block_ids = []
-                for result in block_results:
+                for result in block_definitions:
                     try:
                         output_json_str = json.dumps(result["output"] if result["output"] is not None else {})
                         
@@ -638,7 +731,7 @@ def _generate_report_core(
                         if first_block_error_message is None:
                             first_block_error_message = f"Failed to save results for block at pos {result.get('position')}: {e}"
                         # Don't raise here, try to save other blocks, but ensure overall failure is recorded
-                logger.info(f"{log_prefix} Finished creating ReportBlock records (attempted {len(block_results)}, created {len(created_block_ids)})." )
+                logger.info(f"{log_prefix} Finished creating ReportBlock records (attempted {len(block_definitions)}, created {len(created_block_ids)})." )
             except Exception as e: # Catch broader errors during the loop setup itself
                 logger.exception(f"{log_prefix} Error during ReportBlock creation loop: {e}")
                 if first_block_error_message is None:
