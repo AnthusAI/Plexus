@@ -36,7 +36,7 @@ import { shareLinkClient, ShareLinkViewOptions } from "@/utils/share-link-client
 import { ShareResourceModal } from "@/components/share-resource-modal"
 import { EvaluationDashboardSkeleton } from "@/components/loading-skeleton" // Placeholder skeleton
 import ReportTask, { ReportTaskData } from "@/components/ReportTask" // Import ReportTask with its types
-import { TaskDispatchButton } from '@/components/task-dispatch' // Placeholder for dispatch
+import { RunReportButton } from '@/components/task-dispatch' // Import direct button
 
 // Define types based on Amplify schema
 type Report = Schema['Report']['type'] & {
@@ -59,26 +59,6 @@ type ReportDisplayData = {
     description?: string | null;
   } | null;
   task?: Task | null;
-};
-
-// TODO: Define actual report configuration for dispatch
-interface TaskConfigType {
-  taskType: string;
-  label: string;
-  icon: React.ComponentType;
-  requiredContext: string[];
-  getTaskMetadata: (context: Record<string, any>) => Record<string, any>;
-}
-
-const reportsConfig: TaskConfigType = {
-  taskType: 'REPORT_GENERATION', // Example
-  label: 'Generate Report',
-  icon: Play,
-  requiredContext: ['reportConfigurationId'], // Example
-  getTaskMetadata: (context: Record<string, any>) => ({
-    reportConfigurationId: context.reportConfigurationId,
-    // Add other necessary metadata
-  }),
 };
 
 const ACCOUNT_KEY = process.env.NEXT_PUBLIC_PLEXUS_ACCOUNT_KEY || 'call-criteria'
@@ -1125,12 +1105,14 @@ export default function ReportsDashboard({
             {error && <p className="text-xs text-destructive">{error}</p>}
           </div>
           <div className="flex gap-2">
-            <Button onClick={() => router.push('/lab/reports/edit')}>
+            <Button 
+              onClick={() => router.push('/lab/reports/edit')}
+              variant="ghost"
+              className="bg-card hover:bg-accent text-muted-foreground"
+            >
               <Pencil className="mr-2 h-4 w-4"/> Edit Configurations
             </Button>
-            <Button disabled>
-              <Play className="mr-2 h-4 w-4"/> Run Report
-            </Button>
+            <RunReportButton />
           </div>
         </div>
       </div>
