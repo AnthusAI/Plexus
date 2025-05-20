@@ -854,8 +854,14 @@ export default function ReportsDashboard({
   useEffect(() => {
     const evalMatch = pathname.match(/\/lab\/reports\/([^\/]+)/);
     const idFromUrl = evalMatch ? evalMatch[1] : null;
+    
+    // This is the key change: we need to check explicitly if idFromUrl is null
     if (idFromUrl && idFromUrl !== selectedReportId) {
       setSelectedReportId(idFromUrl);
+    } else if (!idFromUrl && selectedReportId !== null) {
+      // Clear selectedReportId when URL no longer has a report ID
+      setSelectedReportId(null);
+      setIsFullWidth(false);
     }
 
     const handlePopState = () => {
