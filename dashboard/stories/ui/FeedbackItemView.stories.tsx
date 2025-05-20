@@ -88,18 +88,43 @@ export const ItemsList: StoryObj<typeof FeedbackItemsList> = {
   },
 };
 
+// Create proper components for the stories with hooks
+const ItemsViewWithRawJsonComponent = (args: any) => {
+  const [showRawJson, setShowRawJson] = useState(true);
+  return (
+    <FeedbackItemsView 
+      {...args}
+      showRawJson={showRawJson}
+      onToggleView={() => setShowRawJson(!showRawJson)}
+    />
+  );
+};
+
+const ItemsViewWithListViewComponent = (args: any) => {
+  const [showRawJson, setShowRawJson] = useState(false);
+  return (
+    <FeedbackItemsView 
+      {...args}
+      showRawJson={showRawJson}
+      onToggleView={() => setShowRawJson(!showRawJson)}
+    />
+  );
+};
+
+const ItemsViewLoadingComponent = (args: any) => {
+  const [showRawJson, setShowRawJson] = useState(false);
+  return (
+    <FeedbackItemsView 
+      {...args}
+      showRawJson={showRawJson}
+      onToggleView={() => setShowRawJson(!showRawJson)}
+    />
+  );
+};
+
 // Stories for the FeedbackItemsView component with toggle functionality
 export const ItemsViewWithRawJson: StoryObj<typeof FeedbackItemsView> = {
-  render: (args) => {
-    const [showRawJson, setShowRawJson] = useState(true);
-    return (
-      <FeedbackItemsView 
-        {...args}
-        showRawJson={showRawJson}
-        onToggleView={() => setShowRawJson(!showRawJson)}
-      />
-    );
-  },
+  render: (args) => <ItemsViewWithRawJsonComponent {...args} />,
   args: {
     items: listItems,
     filterInfo: {
@@ -112,16 +137,7 @@ export const ItemsViewWithRawJson: StoryObj<typeof FeedbackItemsView> = {
 };
 
 export const ItemsViewWithListView: StoryObj<typeof FeedbackItemsView> = {
-  render: (args) => {
-    const [showRawJson, setShowRawJson] = useState(false);
-    return (
-      <FeedbackItemsView 
-        {...args}
-        showRawJson={showRawJson}
-        onToggleView={() => setShowRawJson(!showRawJson)}
-      />
-    );
-  },
+  render: (args) => <ItemsViewWithListViewComponent {...args} />,
   args: {
     items: listItems,
     filterInfo: {
@@ -134,16 +150,7 @@ export const ItemsViewWithListView: StoryObj<typeof FeedbackItemsView> = {
 };
 
 export const ItemsViewLoading: StoryObj<typeof FeedbackItemsView> = {
-  render: (args) => {
-    const [showRawJson, setShowRawJson] = useState(false);
-    return (
-      <FeedbackItemsView 
-        {...args}
-        showRawJson={showRawJson}
-        onToggleView={() => setShowRawJson(!showRawJson)}
-      />
-    );
-  },
+  render: (args) => <ItemsViewLoadingComponent {...args} />,
   args: {
     items: [],
     isLoading: true
