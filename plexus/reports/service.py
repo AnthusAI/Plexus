@@ -6,6 +6,7 @@ from datetime import datetime, timezone # Added datetime
 import traceback # Added for error details
 import re
 import os # Added for API client env vars
+import asyncio # Add asyncio import
 
 # print("[DEBUG] service.py top level print") # DEBUG PRINT
 
@@ -518,7 +519,7 @@ def _generate_report_core(
             # Create the ReportBlock record *before* running the block instance
             # This allows the block instance to know its ID and attach files to itself.
             current_report_block = None
-            try {
+            try:
                 logger.info(f"{log_prefix} Creating initial ReportBlock record for {block_display_name}")
                 current_report_block = ReportBlock.create(
                     reportId=report_id,
@@ -531,14 +532,14 @@ def _generate_report_core(
                     client=client
                 )
                 logger.info(f"{log_prefix} Created ReportBlock ID {current_report_block.id} for {block_display_name}")
-            } except Exception as e {
+            except Exception as e:
                 logger.exception(f"{log_prefix} Failed to create initial ReportBlock for {block_display_name}: {e}")
                 # Record this as a block-level error and continue to next block if possible
                 if first_block_error_message is None:
                     first_block_error_message = f"Failed to create DB record for block {block_display_name}: {e}"
                 tracker.update(current_items=i + 1) # Still advance tracker
                 continue # Skip to next block definition
-            }
+            
 
             # Run the block instance, passing its report_block_id
             output_json, log_string = _instantiate_and_run_block(
@@ -549,36 +550,35 @@ def _generate_report_core(
             )
 
             # Fetch the latest state of the ReportBlock, as the block itself might have updated detailsFiles
-            try {
+            existing_details_files_list = [] # Initialize before try block
+            try:
                 logger.info(f"{log_prefix} Re-fetching ReportBlock ID {current_report_block.id} after block execution.")
                 db_block_state = ReportBlock.get_by_id(current_report_block.id, client)
                 if not db_block_state:
                     logger.error(f"{log_prefix} Failed to re-fetch ReportBlock {current_report_block.id} after execution. File attachments might be lost.")
                     # Fallback to an empty list if fetch fails, though this is problematic
-                    existing_details_files_list = []
+                    # existing_details_files_list is already []
                 else:
                     logger.info(f"{log_prefix} Fetched DB state. Current detailsFiles: {db_block_state.detailsFiles}")
                     if db_block_state.detailsFiles:
-                        try {
+                        try:
                             existing_details_files_list = json.loads(db_block_state.detailsFiles)
                             if not isinstance(existing_details_files_list, list):
                                 logger.warning(f"{log_prefix} detailsFiles for ReportBlock {current_report_block.id} was not a list: {existing_details_files_list}. Resetting.")
                                 existing_details_files_list = []
-                        } except json.JSONDecodeError:
+                        except json.JSONDecodeError:
                             logger.warning(f"{log_prefix} Failed to parse existing detailsFiles for ReportBlock {current_report_block.id}: {db_block_state.detailsFiles}. Resetting.")
                             existing_details_files_list = []
-                    else:
-                        existing_details_files_list = []
-            } except Exception as e {
+                    # else: existing_details_files_list is already []
+            except Exception as e:
                 logger.exception(f"{log_prefix} Error fetching or parsing ReportBlock {current_report_block.id} detailsFiles: {e}. Proceeding with empty list.")
-                existing_details_files_list = []
-            }
+                existing_details_files_list = [] # Ensure it's an empty list on error
             
             # Handle log content attachment
             final_log_message_for_db = "No detailed log output."
             if log_string:
                 if S3_UTILS_AVAILABLE:
-                    try {
+                    try:
                         logger.info(f"{log_prefix} Uploading log.txt for ReportBlock {current_report_block.id}")
                         log_file_info = upload_report_block_file(
                             report_block_id=current_report_block.id,
@@ -589,17 +589,16 @@ def _generate_report_core(
                         existing_details_files_list.append(log_file_info)
                         logger.info(f"{log_prefix} Appended log.txt info. New detailsFiles list: {existing_details_files_list}")
                         final_log_message_for_db = "See log.txt in detailsFiles."
-                    } except Exception as e {
+                    except Exception as e:
                         logger.exception(f"{log_prefix} Failed to upload log.txt to S3 for ReportBlock {current_report_block.id}: {e}. Storing log inline (truncated).")
                         final_log_message_for_db = log_string[:10000] # Truncate if storing inline
-                } else {
+                else:
                     logger.warning(f"{log_prefix} S3_UTILS_AVAILABLE is false. Storing log inline (truncated) for ReportBlock {current_report_block.id}.")
                     final_log_message_for_db = log_string[:10000] # Truncate
-                }
-            }
+            
 
             # Final update to the ReportBlock record
-            try {
+            try:
                 logger.info(f"{log_prefix} Performing final update for ReportBlock {current_report_block.id}")
                 final_details_files_json = json.dumps(existing_details_files_list) if existing_details_files_list else None
                 
@@ -610,11 +609,11 @@ def _generate_report_core(
                     client=client
                 )
                 logger.info(f"{log_prefix} Successfully finalized ReportBlock {current_report_block.id}. detailsFiles: {final_details_files_json}")
-            } except Exception as e {
+            except Exception as e:
                  logger.exception(f"{log_prefix} Failed to finalize ReportBlock {current_report_block.id}: {e}")
                  if first_block_error_message is None:
                     first_block_error_message = f"Failed to finalize block {block_display_name}: {e}"
-            }
+            
 
             if output_json is None and first_block_error_message is None:
                 first_block_error_message = log_string or f"Block {block_display_name} failed with unspecified error."
@@ -622,126 +621,16 @@ def _generate_report_core(
             logger.info(f"{log_prefix} Completed processing for block {block_display_name} (ID: {current_report_block.id})")
             tracker.update(current_items=i + 1)
 
+        # === 5. Create ReportBlock Records ===
+        # This section is now fully integrated into the main processing loop (Step 4 above).
+        # ReportBlocks are created, executed (which may attach files), and then finalized
+        # with their log.txt within that single loop.
+        # No separate loop is needed here to create/update ReportBlock records from intermediate results.
+        logger.info(f"{log_prefix} All block processing and ReportBlock record finalization completed in the main loop.")
+        
         tracker.advance_stage() # Advance to next stage (Finalizing Report)
 
-        # === 5. Create ReportBlock Records ===
-        if report_id:
-            logger.info(f"{log_prefix} Creating ReportBlock database records for {len(block_definitions)} blocks.")
-            try:
-                created_block_ids = []
-                for result in block_definitions:
-                    try:
-                        output_json_str = json.dumps(result["output"] if result["output"] is not None else {})
-                        
-                        # Store log content in S3 instead of directly in the ReportBlock record
-                        details_files = []
-                        log_content = result.get("log")
-                        
-                        logger.info(f"{log_prefix} Processing block {result.get('name', 'unnamed')}:")
-                        logger.info(f"{log_prefix} S3_UTILS_AVAILABLE = {S3_UTILS_AVAILABLE}")
-                        
-                        # Log the log content details to understand what we're working with
-                        if log_content is None:
-                            logger.info(f"{log_prefix} Log content is None, skipping S3 upload")
-                        elif log_content == "":
-                            logger.info(f"{log_prefix} Log content is empty string, skipping S3 upload")
-                        else:
-                            log_content_length = len(log_content)
-                            logger.info(f"{log_prefix} Log content is present: {log_content_length} characters")
-                            log_preview = log_content[:100] + "..." if len(log_content) > 100 else log_content
-                            logger.info(f"{log_prefix} Log content preview: {log_preview}")
-                        
-                        # Only upload log file if there's actual content AND S3 utils are available
-                        if log_content and S3_UTILS_AVAILABLE:
-                            logger.info(f"{log_prefix} Starting S3 upload path for log content")
-                            try:
-                                # Create a temporary ReportBlock to get an ID
-                                logger.info(f"{log_prefix} Creating temporary ReportBlock")
-                                temp_block = ReportBlock.create(
-                                    reportId=report_id,
-                                    position=result["position"],
-                                    name=result["name"],
-                                    type=result["type"],
-                                    output=output_json_str,
-                                    log="See log.txt in detailsFiles", # Reference to the file
-                                    client=client
-                                )
-                                logger.info(f"{log_prefix} Created temporary ReportBlock with ID {temp_block.id}")
-                                
-                                # Upload log content to S3
-                                logger.info(f"{log_prefix} Starting upload of log file to S3")
-                                log_file_info = upload_report_block_file(
-                                    report_block_id=temp_block.id,
-                                    file_name="log.txt",
-                                    content=log_content,
-                                    content_type="text/plain"
-                                )
-                                logger.info(f"{log_prefix} S3 upload completed successfully: {log_file_info}")
-                                
-                                # Add file info to details_files
-                                details_files.append(log_file_info)
-                                logger.info(f"{log_prefix} Added file info to details_files: {details_files}")
-                                
-                                # Update the block with details_files
-                                details_files_json = json.dumps(details_files)
-                                logger.info(f"{log_prefix} Updating ReportBlock with detailsFiles JSON: {details_files_json}")
-                                temp_block.update(
-                                    detailsFiles=details_files_json,
-                                    client=client
-                                )
-                                logger.info(f"{log_prefix} Successfully updated ReportBlock with detailsFiles")
-                                
-                                created_block_ids.append(temp_block.id)
-                                logger.info(f"{log_prefix} Created ReportBlock with ID {temp_block.id} and uploaded log to S3")
-                                
-                            except Exception as s3_error:
-                                logger.exception(f"{log_prefix} Failed to upload log to S3: {s3_error}. Error details:", exc_info=True)
-                                # Fall back to storing log directly in the ReportBlock
-                                logger.info(f"{log_prefix} Falling back to storing log directly in ReportBlock (truncated if needed)")
-                                block_record = ReportBlock.create(
-                                    reportId=report_id,
-                                    position=result["position"],
-                                    name=result["name"],
-                                    type=result["type"],
-                                    output=output_json_str,
-                                    log=log_content[:10000] if log_content else None,  # Truncate if too long
-                                    client=client
-                                )
-                                created_block_ids.append(block_record.id)
-                        else:
-                            # Either no log content or S3 utils not available
-                            if not log_content:
-                                logger.info(f"{log_prefix} No log content for block {result.get('name', 'unnamed')}, creating block without S3 upload")
-                            else:
-                                logger.info(f"{log_prefix} S3 utils not available, storing log directly in ReportBlock")
-                                
-                            # Create block normally without S3
-                            block_record = ReportBlock.create(
-                                reportId=report_id,
-                                position=result["position"],
-                                name=result["name"],
-                                type=result["type"],
-                                output=output_json_str,
-                                log=log_content[:10000] if log_content else None,  # Truncate if too long
-                                client=client
-                            )
-                            created_block_ids.append(block_record.id)
-                    except Exception as e:
-                        logger.exception(f"{log_prefix} Failed to create ReportBlock record for block at pos {result.get('position')}: {e}")
-                        if first_block_error_message is None:
-                            first_block_error_message = f"Failed to save results for block at pos {result.get('position')}: {e}"
-                        # Don't raise here, try to save other blocks, but ensure overall failure is recorded
-                logger.info(f"{log_prefix} Finished creating ReportBlock records (attempted {len(block_definitions)}, created {len(created_block_ids)})." )
-            except Exception as e: # Catch broader errors during the loop setup itself
-                logger.exception(f"{log_prefix} Error during ReportBlock creation loop: {e}")
-                if first_block_error_message is None:
-                    first_block_error_message = f"Error saving block results: {e}"
-        else:
-             logger.error(f"{log_prefix} Cannot create ReportBlock records because Report ID is missing.")
-             if first_block_error_message is None:
-                  first_block_error_message = "Failed to create initial Report record."
-
-        # === 6. Finalize ===
+        # === 6. Finalize Report === (This stage was implicitly step 5 before)
         logger.info(f"{log_prefix} Report generation core logic finished.")
 
         if first_block_error_message:
