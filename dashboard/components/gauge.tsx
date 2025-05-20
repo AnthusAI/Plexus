@@ -438,7 +438,7 @@ const GaugeComponent: React.FC<GaugeProps> = ({
                   )}
                   style={{
                     bottom: `calc(${showTicks ? '5%' : '2%'} - ${labelBottomOffset}px)`,
-                    fontSize: containerWidth < 150 ? 'max(0.6rem, 8px + 0.5vw)' : undefined
+                    fontSize: containerWidth < 150 ? `max(0.6rem, ${8 + (containerWidth * 0.05)}px)` : undefined
                   }}
                 >
                   <span className="relative">

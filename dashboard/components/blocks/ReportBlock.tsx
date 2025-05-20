@@ -1,4 +1,19 @@
-import React from 'react'
+import React, { useState } from 'react'
+import { ScrollText, Download, Paperclip, AlertTriangle, AlertCircle, Eye } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { downloadData, getUrl } from 'aws-amplify/storage';
+import { CardButton } from '@/components/CardButton';
+
+// Define DetailFile locally, ensure it includes 'path'
+// Export DetailFile to be used in other components
+export interface DetailFile {
+  name: string;
+  path: string; // S3 key for the file
+  description?: string;
+  size?: number;
+  type?: string;
+  [key: string]: any; 
+}
 
 /**
  * Props for all report block components
@@ -24,6 +39,21 @@ export interface ReportBlockProps {
   id: string
   /** JSON string containing details files information */
   detailsFiles?: string | null
+  /** Optional title to override the name */
+  title?: string
+  /** Optional subtitle for additional context */
+  subtitle?: string
+  /** Optional notes for the report block */
+  notes?: string
+  /** Optional error message to display */
+  error?: string  
+  /** Optional warning message to display */
+  warning?: string
+  /** Optional date range for the report block */
+  dateRange?: {
+    start: string;
+    end: string;
+  }
 }
 
 /**
@@ -36,44 +66,344 @@ export interface BlockComponent extends React.FC<ReportBlockProps> {
 }
 
 /**
- * ReportBlock component serves as the default renderer for unknown block types.
- * Renders the internal content, assuming the BlockRenderer provides the outer container.
+ * ReportBlock component serves as the base renderer for all block types.
+ * Provides common functionality for title, logs, file attachments, and error/warning messages.
+ * Specialized block types should extend this component.
  */
 const ReportBlock: BlockComponent = ({ 
   children, 
-  className = '', // className might still be useful for internal styling
+  className = '',
   output,
   name,
   log,
   config,
-  position
+  position,
+  id,
+  detailsFiles,
+  title,
+  subtitle,
+  notes,
+  error,
+  warning,
+  dateRange
 }) => {
-  // Return only the inner content structure
+  // State for inline log display
+  const [showLog, setShowLog] = useState(false);
+  const [logText, setLogText] = useState<string | null>(null);
+  const [isLoadingLog, setIsLoadingLog] = useState(false);
+
+  // State for attached files display
+  const [showAttachedFiles, setShowAttachedFiles] = useState(false);
+  const [selectedFileContent, setSelectedFileContent] = useState<string | null>(null);
+  const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
+  const [isLoadingFile, setIsLoadingFile] = useState(false);
+
+  // Parse detailsFiles JSON string once
+  const parsedDetailsFiles = React.useMemo(() => {
+    if (typeof detailsFiles === 'string') {
+      try {
+        return JSON.parse(detailsFiles) as DetailFile[];
+      } catch (error) {
+        console.error('Failed to parse detailsFiles JSON string:', error);
+        return [];
+      }
+    }
+    return []; // Handle as empty if not string
+  }, [detailsFiles]);
+
+  const logFileFromDetails = React.useMemo(() => {
+    return parsedDetailsFiles.find(f => f.name === 'log.txt');
+  }, [parsedDetailsFiles]);
+
+  const hasAttachedFiles = parsedDetailsFiles.length > 0;
+  const hasLog = !!log || !!logFileFromDetails;
+
+  const fetchLogFileContent = React.useCallback(async () => {
+    if (!logFileFromDetails || !logFileFromDetails.path) return;
+    setIsLoadingLog(true);
+    try {
+      const downloadResult = await downloadData({ path: logFileFromDetails.path }).result;
+      const text = await downloadResult.body.text();
+      setLogText(text);
+    } catch (error) {
+      console.error('Error fetching log content from S3:', error);
+      setLogText('Failed to load log content.');
+    } finally {
+      setIsLoadingLog(false);
+    }
+  }, [logFileFromDetails]);
+
+  const fetchFileContent = React.useCallback(async (file: DetailFile) => {
+    // If this file is already selected, toggle it off
+    if (selectedFileName === file.name) {
+      setSelectedFileContent(null);
+      setSelectedFileName(null);
+      return;
+    }
+    
+    // Otherwise, load the new file
+    setIsLoadingFile(true);
+    setSelectedFileName(file.name);
+    try {
+      const downloadResult = await downloadData({ path: file.path }).result;
+      const text = await downloadResult.body.text();
+      setSelectedFileContent(text);
+    } catch (error) {
+      console.error('Error fetching file content from S3:', error);
+      setSelectedFileContent('Failed to load file content.');
+    } finally {
+      setIsLoadingFile(false);
+    }
+  }, [selectedFileName]);
+
+  const toggleShowLog = () => {
+    const newShowLogState = !showLog;
+    setShowLog(newShowLogState);
+    if (newShowLogState && !logText && logFileFromDetails && !isLoadingLog) {
+      fetchLogFileContent();
+    }
+  };
+
+  const toggleShowAttachedFiles = () => {
+    setShowAttachedFiles(!showAttachedFiles);
+    // Reset selected file when hiding
+    if (showAttachedFiles) {
+      setSelectedFileContent(null);
+      setSelectedFileName(null);
+    }
+  };
+
+  const handleDownloadFile = async (file: DetailFile) => {
+    if (!file || !file.path) return;
+    try {
+      const urlResult = await getUrl({ path: file.path });
+      if (urlResult.url) {
+        window.open(urlResult.url.toString(), '_blank');
+      } else {
+        console.error('Failed to get download URL for file.');
+      }
+    } catch (error) {
+      console.error('Error getting download URL for file from S3:', error);
+    }
+  };
+
+  const handleDownloadLog = async () => {
+    if (!logFileFromDetails || !logFileFromDetails.path) return;
+    try {
+      const urlResult = await getUrl({ path: logFileFromDetails.path });
+      if (urlResult.url) {
+        window.open(urlResult.url.toString(), '_blank');
+      } else {
+        console.error('Failed to get download URL for log.');
+      }
+    } catch (error) {
+      console.error('Error getting download URL for log from S3:', error);
+    }
+  };
+
+  const formattedDate = (dateStr: string) => {
+    try {
+      return new Date(dateStr).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+    } catch (e) {
+      return dateStr;
+    }
+  };
+
+  // Extract error and warning from output if not provided directly
+  const displayError = error || (output && typeof output === 'object' && output.error);
+  const displayWarning = warning || (output && typeof output === 'object' && output.warning);
+  
+  // Extract date range from output if not provided directly
+  const displayDateRange = dateRange || (output && typeof output === 'object' && output.date_range);
+
   return (
-    <>
-      {/* Block Header */}
-      {name && (
-        <div className="font-semibold mb-2">{name}</div>
+    <div className="space-y-2">
+      <div className="flex flex-col gap-2">
+        <div className="flex justify-between items-center">
+          <div>
+            <h3 className="text-xl font-semibold">
+              {title || name || 'Report'} 
+            </h3>
+            {subtitle && (
+              <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>
+            )}
+            {displayDateRange && (
+              <p className="text-sm text-muted-foreground mt-1">
+                {formattedDate(displayDateRange.start)} to {formattedDate(displayDateRange.end)}
+              </p>
+            )}
+            {notes && (
+              <div className="text-sm text-muted-foreground mt-2 max-w-prose">
+                {notes}
+              </div>
+            )}
+          </div>
+          <div className="flex items-center space-x-2">
+            {hasLog && (
+              <Button 
+                variant="secondary"
+                size="sm"
+                onClick={toggleShowLog}
+                className="h-8 bg-card hover:bg-card/90 border-0"
+              >
+                <ScrollText className="mr-2 h-4 w-4" />
+                {showLog ? "Hide Log" : "View Log"}
+              </Button>
+            )}
+            {hasAttachedFiles && (
+              <Button 
+                variant="secondary"
+                size="sm"
+                onClick={toggleShowAttachedFiles}
+                className="h-8 bg-card hover:bg-card/90 border-0"
+              >
+                <Paperclip className="mr-2 h-4 w-4" />
+                {showAttachedFiles ? "Hide Files" : parsedDetailsFiles.length === 1 ? "Attached File" : "Attached Files"}
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Display error message if present */}
+      {displayError && (
+        <div className="mt-4 bg-red-600 text-white p-3 rounded-md w-full">
+          <div className="flex items-start gap-2">
+            <AlertCircle size={18} className="mt-0.5 flex-shrink-0" />
+            <p className="text-sm font-medium">{displayError}</p>
+          </div>
+        </div>
       )}
       
+      {/* Display warning message if present */}
+      {!displayError && displayWarning && (
+        <div className="mt-4 bg-amber-600 text-white p-3 rounded-md w-full">
+          <div className="flex items-start gap-2">
+            <AlertTriangle size={18} className="mt-0.5 flex-shrink-0" />
+            <p className="text-sm font-medium">{displayWarning}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Inline Log Display Area */}
+      {showLog && hasLog && (
+        <div className="mt-4 bg-card p-3 w-full overflow-hidden rounded-lg">
+          <div className="flex flex-row justify-between items-center mb-3">
+            <h4 className="text-base font-medium">Log</h4>
+            {logFileFromDetails && (
+              <CardButton 
+                icon={Download} 
+                onClick={handleDownloadLog}
+                label="Download"
+                aria-label="Download log file"
+              />
+            )}
+          </div>
+          <div className="w-full overflow-hidden">
+            {isLoadingLog && <p className="text-sm text-muted-foreground">Loading log content...</p>}
+            {!isLoadingLog && logText && (
+              <pre className="whitespace-pre-wrap text-xs bg-white overflow-y-auto overflow-x-auto font-mono max-h-[300px] px-2 py-2 max-w-full">
+                {logText}
+              </pre>
+            )}
+            {!isLoadingLog && !logText && log && (
+              <pre className="whitespace-pre-wrap text-xs bg-white overflow-y-auto overflow-x-auto font-mono max-h-[300px] px-2 py-2 max-w-full">
+                {log}
+              </pre>
+            )}
+            {!isLoadingLog && !logText && !log && (
+              <p className="text-sm text-muted-foreground">Log content is empty or could not be loaded.</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Attached Files Display Area */}
+      {showAttachedFiles && parsedDetailsFiles.length > 0 && (
+        <div className="mt-4 bg-card p-3 w-full overflow-hidden rounded-lg">
+          <div className="flex flex-row justify-between items-center mb-3">
+            <h4 className="text-base font-medium">Attached Files</h4>
+          </div>
+          
+          <div className="flex flex-col space-y-4 w-full overflow-hidden">
+            {/* File list */}
+            <div className="bg-muted/50 py-2 px-0 rounded-sm">
+              <div className="space-y-2">
+                {parsedDetailsFiles.map((file, index) => (
+                  <div key={index} className="flex flex-col">
+                    <div className="flex justify-between items-center bg-card rounded-sm">
+                      <span className="text-sm truncate flex-1">{file.name}</span>
+                      <div className="flex space-x-2">
+                        <CardButton 
+                          icon={Eye} 
+                          onClick={() => fetchFileContent(file)}
+                          label={selectedFileName === file.name ? "Hide" : "View"}
+                          aria-label={selectedFileName === file.name ? `Hide ${file.name}` : `View ${file.name}`}
+                        />
+                        <CardButton 
+                          icon={Download} 
+                          onClick={() => handleDownloadFile(file)}
+                          label="Download"
+                          aria-label={`Download ${file.name}`}
+                        />
+                      </div>
+                    </div>
+                    
+                    {/* Show file content directly under this item */}
+                    {selectedFileName === file.name && (
+                      <div className="w-full overflow-hidden mt-2">
+                        {isLoadingFile && <p className="text-sm text-muted-foreground px-2 py-2">Loading file content...</p>}
+                        {!isLoadingFile && selectedFileContent && (
+                          <pre className="whitespace-pre-wrap text-xs overflow-y-auto overflow-x-auto font-mono max-h-[300px] px-2 py-2 bg-white max-w-full">
+                            {selectedFileContent}
+                          </pre>
+                        )}
+                        {!isLoadingFile && !selectedFileContent && <p className="text-sm text-muted-foreground px-2 py-2">File content is empty or could not be loaded.</p>}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Content Area */}
       {children ? (
         // Render custom content if provided
         children
       ) : (
-        // Default content rendering - just show raw output
-        <div className={`w-full min-w-0 max-w-full ${className}`}> {/* Apply className here if needed */}
-          {output && (
-            <div className="w-full min-w-0 max-w-full overflow-hidden">
-              <div className="w-full min-w-0 max-w-full overflow-x-auto">
-                <pre className="text-xs whitespace-pre-wrap break-all w-full min-w-0 max-w-full">
-                  {JSON.stringify(output, null, 2)}
+        // Default content rendering - just show raw output in a card
+        <div className={`w-full min-w-0 max-w-full ${className}`}>
+          <div className="bg-card p-4 rounded-md mt-4">
+            <h4 className="text-base font-medium mb-3">Configuration</h4>
+            {config && (
+              <div className="bg-muted/50 p-3 rounded-sm">
+                <pre className="text-xs whitespace-pre-wrap overflow-x-auto font-mono">
+                  {JSON.stringify(config, null, 2)}
                 </pre>
               </div>
-            </div>
-          )}
+            )}
+            
+            {output && Object.keys(output).length > 0 && (
+              <div className="mt-4">
+                <h4 className="text-base font-medium mb-3">Output</h4>
+                <div className="bg-muted/50 p-3 rounded-sm">
+                  <pre className="text-xs whitespace-pre-wrap overflow-x-auto font-mono">
+                    {JSON.stringify(output, null, 2)}
+                  </pre>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
-    </>
+    </div>
   )
 }
 
