@@ -3,12 +3,14 @@ import logging
 import asyncio
 from datetime import datetime, timedelta, timezone
 from collections import Counter
+import json # Ensure json import at the top
 
 from plexus.analysis.metrics import GwetAC1
 from plexus.analysis.metrics.metric import Metric
 from plexus.dashboard.api.models.feedback_item import FeedbackItem
 from plexus.dashboard.api.models.score import Score
 from plexus.dashboard.api.models.scorecard import Scorecard
+from plexus.dashboard.api.models.report_block import ReportBlock
 
 from .base import BaseReportBlock
 
@@ -170,8 +172,13 @@ class FeedbackAnalysis(BaseReportBlock):
             all_feedback_items_retrieved_count = 0
             all_date_filtered_feedback_items = [] # For overall calculation
             per_score_analysis_results = []
-
-            for score_info in scores_to_process:
+            
+            # Store the report block ID when created for attaching files later
+            report_block_id = None
+            if hasattr(self, 'report_block_id') and self.report_block_id:
+                report_block_id = self.report_block_id
+            
+            for score_index, score_info in enumerate(scores_to_process):
                 self._log(f"--- Processing Score: '{score_info['plexus_score_name']}' (ID: {score_info['plexus_score_id']}, CC ID: {score_info['cc_question_id']}) ---")
                 
                 items_for_this_score = await self._fetch_feedback_items_for_score(
@@ -211,6 +218,59 @@ class FeedbackAnalysis(BaseReportBlock):
                         analysis_for_this_score["score_id"] = score_info['plexus_score_id']
                         analysis_for_this_score["score_name"] = score_info['plexus_score_name']
                         analysis_for_this_score["cc_question_id"] = score_info['cc_question_id']
+                        
+                        # Create indexed feedback items structure for this score
+                        indexed_items = self._create_indexed_feedback_items(items_for_this_score)
+                        
+                        # Export the indexed items to a JSON file
+                        if indexed_items and report_block_id:
+                            file_name = f"score-{score_index}-results.json"
+                            self._log(f"Creating indexed feedback items JSON file: {file_name}")
+                            
+                            # Write the indexed items to a detail file
+                            detailed_json_content = json.dumps(indexed_items, default=str, indent=2)
+                            try:
+                                # Log the state of the ReportBlock before attaching file
+                                try:
+                                    block_before = ReportBlock.get_by_id(report_block_id, self.api_client)
+                                    if block_before:
+                                        self._log(f"BEFORE ATTACH - ReportBlock {report_block_id} state: detailsFiles={block_before.detailsFiles}", level="DEBUG")
+                                except Exception as e:
+                                    self._log(f"Error fetching ReportBlock before attach: {e}", level="WARNING")
+                                
+                                # Attach the file
+                                file_details = self.attach_detail_file(
+                                    report_block_id=report_block_id,
+                                    file_name=file_name,
+                                    content=detailed_json_content,
+                                    content_type="application/json"
+                                )
+                                self._log(f"Successfully attached indexed feedback items file: {file_name}, details: {file_details}")
+                                
+                                # Log the state of the ReportBlock after attaching file
+                                try:
+                                    block_after = ReportBlock.get_by_id(report_block_id, self.api_client)
+                                    if block_after:
+                                        self._log(f"AFTER ATTACH - ReportBlock {report_block_id} state: detailsFiles={block_after.detailsFiles}", level="INFO")
+                                        
+                                        # Try to parse and validate the detailsFiles content
+                                        if block_after.detailsFiles:
+                                            try:
+                                                details_files_obj = json.loads(block_after.detailsFiles)
+                                                self._log(f"detailsFiles parsed successfully, contains {len(details_files_obj)} files: {details_files_obj}", level="INFO")
+                                            except json.JSONDecodeError as je:
+                                                self._log(f"detailsFiles is not valid JSON: {je}", level="ERROR")
+                                        else:
+                                            self._log(f"detailsFiles is empty or None", level="WARNING")
+                                except Exception as e:
+                                    self._log(f"Error fetching ReportBlock after attach: {e}", level="WARNING")
+                                
+                                # Add reference to the file in the analysis result
+                                analysis_for_this_score["indexed_items_file"] = file_name
+                            except Exception as e:
+                                self._log(f"Error attaching indexed feedback items file: {e}", level="ERROR")
+                                import traceback
+                                self._log(f"Error details: {traceback.format_exc()}", level="ERROR")
                     except Exception as e:
                         self._log(f"Error analyzing score {score_info['plexus_score_name']}: {e}", level="ERROR")
                         raise  # Re-raise to be caught by outer try/except
@@ -890,6 +950,86 @@ class FeedbackAnalysis(BaseReportBlock):
                 self.log_messages.append(f"{datetime.now().isoformat()} - {level}: {message}")
             else:
                 self.log_messages.append(f"{datetime.now().isoformat()} - {message}")
+
+    def _create_indexed_feedback_items(self, feedback_items: List[FeedbackItem]) -> Dict[str, Any]:
+        """
+        Creates an indexed structure of feedback items organized by initial (predicted) and final (actual) answers.
+        This allows for quick lookup of feedback items for any cell in the confusion matrix.
+        
+        Args:
+            feedback_items: List of FeedbackItem objects to index
+            
+        Returns:
+            Dictionary with structure:
+            {
+                "predicted": {
+                    "answer1": {
+                        "answer1": [feedback_items_with_answer1_answer1],
+                        "answer2": [feedback_items_with_answer1_answer2],
+                        ...
+                    },
+                    "answer2": {
+                        "answer1": [feedback_items_with_answer2_answer1],
+                        "answer2": [feedback_items_with_answer2_answer2],
+                        ...
+                    },
+                    ...
+                }
+            }
+        """
+        self._log(f"Creating indexed feedback items structure for {len(feedback_items)} items")
+        
+        # Initialize the structure
+        indexed_structure = {
+            "predicted": {}  # Initial answer values (keys) mapping to dicts of final answer values
+        }
+        
+        # Process only items with both values present
+        valid_items = [item for item in feedback_items if item.initialAnswerValue is not None and item.finalAnswerValue is not None]
+        self._log(f"Found {len(valid_items)} valid items with both initial and final answer values")
+        
+        # Process each valid item
+        for item in valid_items:
+            # Convert values to strings to ensure consistent keys
+            initial_value = str(item.initialAnswerValue)
+            final_value = str(item.finalAnswerValue)
+            
+            # Ensure nested structure exists
+            if initial_value not in indexed_structure["predicted"]:
+                indexed_structure["predicted"][initial_value] = {}
+            
+            if final_value not in indexed_structure["predicted"][initial_value]:
+                indexed_structure["predicted"][initial_value][final_value] = []
+            
+            # Create a simplified representation of the feedback item
+            item_dict = {
+                "id": item.id,
+                "initialAnswerValue": item.initialAnswerValue,
+                "finalAnswerValue": item.finalAnswerValue,
+                "initialCommentValue": item.initialCommentValue,
+                "finalCommentValue": item.finalCommentValue,
+                "editCommentValue": item.editCommentValue,
+                "isAgreement": item.isAgreement,
+                "scorecardId": item.scorecardId,
+                "scoreId": item.scoreId,
+                "cacheKey": item.cacheKey,
+                "createdAt": item.createdAt,
+                "updatedAt": item.updatedAt
+            }
+            
+            # Add the item to the appropriate list
+            indexed_structure["predicted"][initial_value][final_value].append(item_dict)
+        
+        # Log summary of indexed structure
+        total_indexed = 0
+        for initial_value, final_values_dict in indexed_structure["predicted"].items():
+            for final_value, items_list in final_values_dict.items():
+                count = len(items_list)
+                total_indexed += count
+                self._log(f"Indexed {count} items with initial={initial_value}, final={final_value}")
+        
+        self._log(f"Total indexed items: {total_indexed}")
+        return indexed_structure
 
 # Example of how this block might be configured in a ReportConfiguration:
 """

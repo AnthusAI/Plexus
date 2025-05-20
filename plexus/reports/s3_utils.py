@@ -129,22 +129,39 @@ def add_file_to_report_block(report_block_id, file_name, content, content_type=N
         logger.error(f"Report block with ID {report_block_id} not found")
         raise ValueError(f"Report block with ID {report_block_id} not found")
     
+    # Log the current state
+    logger.info(f"Current detailsFiles before update for block {report_block_id}: {report_block.detailsFiles}")
+    
     # Get existing detailsFiles or initialize as empty list
     details_files = []
     if report_block.detailsFiles:
         try:
             details_files = json.loads(report_block.detailsFiles)
+            logger.info(f"Successfully parsed existing detailsFiles: {details_files}")
         except json.JSONDecodeError:
             logger.warning(f"Could not parse detailsFiles for report block {report_block_id}: {report_block.detailsFiles}")
     
     # Add the new file info
     details_files.append(file_info)
     
-    # Update the report block
-    report_block.update(detailsFiles=json.dumps(details_files), client=client)
+    # Convert to JSON string
+    details_files_json = json.dumps(details_files)
+    logger.info(f"New detailsFiles JSON to be saved: {details_files_json}")
     
-    logger.info(f"Added file {file_name} to report block {report_block_id}")
-    return details_files 
+    # Update the report block
+    report_block.update(detailsFiles=details_files_json, client=client)
+    logger.info(f"Updated report block {report_block_id} with detailsFiles")
+    
+    # Verify the update
+    updated_block = ReportBlock.get_by_id(report_block_id, client)
+    if updated_block:
+        logger.info(f"After update, detailsFiles for block {report_block_id}: {updated_block.detailsFiles}")
+        if updated_block.detailsFiles != details_files_json:
+            logger.warning(f"detailsFiles mismatch! Expected {details_files_json}, got {updated_block.detailsFiles}")
+    else:
+        logger.warning(f"Could not verify update - block {report_block_id} not found after update")
+    
+    return details_files
 
 def download_report_block_file(s3_path, local_path=None):
     """
