@@ -92,19 +92,26 @@ const ScorecardReport: React.FC<ScorecardReportProps> = ({
       {hasData && scoreData.scores.length > 0 && (
         <div className="space-y-2">
           {scoreData.scores
+            .map((scoreItem, originalIdx) => ({ // Add originalIndex before sorting
+              scoreData: scoreItem,
+              originalIndex: originalIdx
+            }))
             .sort((a, b) => {
               // Sort by accuracy if available, otherwise sorting can be customized
-              if (a.accuracy === undefined && b.accuracy !== undefined) return 1;
-              if (a.accuracy !== undefined && b.accuracy === undefined) return -1;
-              if (a.accuracy !== undefined && b.accuracy !== undefined) {
-                return b.accuracy - a.accuracy;
+              // Now access accuracy via a.scoreData.accuracy
+              if (a.scoreData.accuracy === undefined && b.scoreData.accuracy !== undefined) return 1;
+              if (a.scoreData.accuracy !== undefined && b.scoreData.accuracy === undefined) return -1;
+              if (a.scoreData.accuracy !== undefined && b.scoreData.accuracy !== undefined) {
+                return b.scoreData.accuracy - a.scoreData.accuracy;
               }
               return 0;
             })
-            .map((score, index) => (
+            .map((item, sortedMapIndex) => ( // item now contains scoreData and originalIndex
               <ScorecardReportEvaluation 
-                key={score.id || `score-${index}`} 
-                score={score}
+                key={item.scoreData.id || `score-eval-${item.originalIndex}`} // Use originalIndex or id for a stable key
+                score={item.scoreData}
+                scoreIndex={item.originalIndex} // Pass the ORIGINAL index
+                detailsFiles={restProps.detailsFiles}
                 showPrecisionRecall={showPrecisionRecall}
               />
             ))}

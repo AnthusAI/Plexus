@@ -5,7 +5,8 @@ import { downloadData, getUrl } from 'aws-amplify/storage';
 import { CardButton } from '@/components/CardButton';
 
 // Define DetailFile locally, ensure it includes 'path'
-interface DetailFile {
+// Export DetailFile to be used in other components
+export interface DetailFile {
   name: string;
   path: string; // S3 key for the file
   description?: string;
@@ -290,7 +291,7 @@ const ReportBlock: BlockComponent = ({
 
       {/* Inline Log Display Area */}
       {showLog && hasLog && (
-        <div className="mt-4 bg-card p-3 w-full overflow-hidden">
+        <div className="mt-4 bg-card p-3 w-full overflow-hidden rounded-lg">
           <div className="flex flex-row justify-between items-center mb-3">
             <h4 className="text-base font-medium">Log</h4>
             {logFileFromDetails && (
@@ -305,12 +306,12 @@ const ReportBlock: BlockComponent = ({
           <div className="w-full overflow-hidden">
             {isLoadingLog && <p className="text-sm text-muted-foreground">Loading log content...</p>}
             {!isLoadingLog && logText && (
-              <pre className="whitespace-pre-wrap text-xs bg-muted/50 overflow-y-auto overflow-x-auto font-mono max-h-[300px] max-w-full">
+              <pre className="whitespace-pre-wrap text-xs bg-white overflow-y-auto overflow-x-auto font-mono max-h-[300px] px-2 py-2 max-w-full">
                 {logText}
               </pre>
             )}
             {!isLoadingLog && !logText && log && (
-              <pre className="whitespace-pre-wrap text-xs bg-muted/50 overflow-y-auto overflow-x-auto font-mono max-h-[300px] max-w-full">
+              <pre className="whitespace-pre-wrap text-xs bg-white overflow-y-auto overflow-x-auto font-mono max-h-[300px] px-2 py-2 max-w-full">
                 {log}
               </pre>
             )}
@@ -323,7 +324,7 @@ const ReportBlock: BlockComponent = ({
 
       {/* Attached Files Display Area */}
       {showAttachedFiles && parsedDetailsFiles.length > 0 && (
-        <div className="mt-4 bg-card p-3 w-full overflow-hidden">
+        <div className="mt-4 bg-card p-3 w-full overflow-hidden rounded-lg">
           <div className="flex flex-row justify-between items-center mb-3">
             <h4 className="text-base font-medium">Attached Files</h4>
           </div>
@@ -331,42 +332,43 @@ const ReportBlock: BlockComponent = ({
           <div className="flex flex-col space-y-4 w-full overflow-hidden">
             {/* File list */}
             <div className="bg-muted/50 py-2 px-0 rounded-sm">
-              <h5 className="text-sm font-medium mb-2 px-2">Files</h5>
               <div className="space-y-2">
                 {parsedDetailsFiles.map((file, index) => (
-                  <div key={index} className="flex justify-between items-center py-2 px-2 bg-card rounded-sm">
-                    <span className="text-sm truncate flex-1">{file.name}</span>
-                    <div className="flex space-x-2">
-                      <CardButton 
-                        icon={Eye} 
-                        onClick={() => fetchFileContent(file)}
-                        label={selectedFileName === file.name ? "Hide" : "View"}
-                        aria-label={selectedFileName === file.name ? `Hide ${file.name}` : `View ${file.name}`}
-                      />
-                      <CardButton 
-                        icon={Download} 
-                        onClick={() => handleDownloadFile(file)}
-                        label="Download"
-                        aria-label={`Download ${file.name}`}
-                      />
+                  <div key={index} className="flex flex-col">
+                    <div className="flex justify-between items-center bg-card rounded-sm">
+                      <span className="text-sm truncate flex-1">{file.name}</span>
+                      <div className="flex space-x-2">
+                        <CardButton 
+                          icon={Eye} 
+                          onClick={() => fetchFileContent(file)}
+                          label={selectedFileName === file.name ? "Hide" : "View"}
+                          aria-label={selectedFileName === file.name ? `Hide ${file.name}` : `View ${file.name}`}
+                        />
+                        <CardButton 
+                          icon={Download} 
+                          onClick={() => handleDownloadFile(file)}
+                          label="Download"
+                          aria-label={`Download ${file.name}`}
+                        />
+                      </div>
                     </div>
+                    
+                    {/* Show file content directly under this item */}
+                    {selectedFileName === file.name && (
+                      <div className="w-full overflow-hidden mt-2">
+                        {isLoadingFile && <p className="text-sm text-muted-foreground px-2 py-2">Loading file content...</p>}
+                        {!isLoadingFile && selectedFileContent && (
+                          <pre className="whitespace-pre-wrap text-xs overflow-y-auto overflow-x-auto font-mono max-h-[300px] px-2 py-2 bg-white max-w-full">
+                            {selectedFileContent}
+                          </pre>
+                        )}
+                        {!isLoadingFile && !selectedFileContent && <p className="text-sm text-muted-foreground px-2 py-2">File content is empty or could not be loaded.</p>}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
             </div>
-            
-            {/* File content view - No header needed */}
-            {selectedFileName && (
-              <div className="bg-muted/50 py-2 px-0 rounded-sm w-full overflow-hidden">
-                {isLoadingFile && <p className="text-sm text-muted-foreground px-2">Loading file content...</p>}
-                {!isLoadingFile && selectedFileContent && (
-                  <pre className="whitespace-pre-wrap text-xs overflow-y-auto overflow-x-auto font-mono max-h-[300px] px-2 max-w-full">
-                    {selectedFileContent}
-                  </pre>
-                )}
-                {!isLoadingFile && !selectedFileContent && <p className="text-sm text-muted-foreground px-2">File content is empty or could not be loaded.</p>}
-              </div>
-            )}
           </div>
         </div>
       )}

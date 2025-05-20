@@ -1,16 +1,19 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Badge } from '@/components/ui/badge';
-import { ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
+import { ChevronDown, ChevronUp, AlertTriangle, Eye } from 'lucide-react';
 import { CardButton } from '@/components/CardButton';
 import { Gauge, type Segment } from '@/components/gauge';
 import { cn } from '@/lib/utils';
 import ClassDistributionVisualizer, { type ClassDistribution } from '@/components/ClassDistributionVisualizer';
 import PredictedClassDistributionVisualizer from '@/components/PredictedClassDistributionVisualizer';
-import { ConfusionMatrix, type ConfusionMatrixData } from '@/components/confusion-matrix';
+import { ConfusionMatrix, type ConfusionMatrixData, type ConfusionMatrixRow } from '@/components/confusion-matrix';
 import { GaugeThresholdComputer } from '@/utils/gauge-thresholds';
 import { RawAgreementBar } from '@/components/RawAgreementBar';
+import { downloadData } from 'aws-amplify/storage';
+import { Button } from '@/components/ui/button';
+import type { DetailFile } from '../blocks/ReportBlock';
 
 // Export the AC1 gauge segments for reuse in other components
 export const ac1GaugeSegments: Segment[] = [
@@ -44,18 +47,93 @@ export interface ScorecardReportEvaluationData {
 
 interface ScorecardReportEvaluationProps {
   score: ScorecardReportEvaluationData;
+  scoreIndex: number;
+  detailsFiles?: string | null;
   className?: string;
   showPrecisionRecall?: boolean;
 }
 
 export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps> = ({ 
   score,
+  scoreIndex,
+  detailsFiles,
   className,
   showPrecisionRecall = true
 }) => {
   const [expanded, setExpanded] = useState(false);
   
-  // Helper function to get agreement level text and color
+  const [scoreDetailsContent, setScoreDetailsContent] = useState<string | null>(null);
+  const [isLoadingScoreDetails, setIsLoadingScoreDetails] = useState(false);
+  
+  const [activeCellFilter, setActiveCellFilter] = useState<{ predicted: string; actual: string } | null>(null);
+  const [filteredScoreDetails, setFilteredScoreDetails] = useState<any[] | null>(null);
+
+  const parsedDetailsFiles = useMemo(() => {
+    if (typeof detailsFiles === 'string') {
+      try {
+        return JSON.parse(detailsFiles) as DetailFile[];
+      } catch (error) {
+        console.error('Failed to parse detailsFiles JSON string in ScorecardReportEvaluation:', error);
+        return [];
+      }
+    }
+    return [];
+  }, [detailsFiles]);
+
+  const scoreDetailsFileName = `score-${scoreIndex + 1}-results.json`;
+  const scoreDetailFile = useMemo(() => {
+    return parsedDetailsFiles.find(f => f.name === scoreDetailsFileName);
+  }, [parsedDetailsFiles, scoreDetailsFileName]);
+
+  const fetchScoreDetailsContent = useCallback(async () => {
+    if (!scoreDetailFile || !scoreDetailFile.path) return;
+    
+    if (isLoadingScoreDetails || scoreDetailsContent) return;
+
+    setIsLoadingScoreDetails(true);
+    try {
+      const downloadResult = await downloadData({ path: scoreDetailFile.path }).result;
+      const text = await downloadResult.body.text();
+      setScoreDetailsContent(text);
+    } catch (error) {
+      console.error('Error fetching score details content from S3:', error);
+      setScoreDetailsContent('Failed to load score details content.');
+    } finally {
+      setIsLoadingScoreDetails(false);
+    }
+  }, [scoreDetailFile, isLoadingScoreDetails, scoreDetailsContent]);
+  
+  useEffect(() => {
+    if (activeCellFilter && scoreDetailsContent && typeof scoreDetailsContent === 'string') {
+      try {
+        const parsedData = JSON.parse(scoreDetailsContent);
+        const items = parsedData?.predicted?.[activeCellFilter.actual]?.[activeCellFilter.predicted];
+        if (Array.isArray(items)) {
+          setFilteredScoreDetails(items);
+        } else {
+          setFilteredScoreDetails([]); 
+          console.warn('Could not find items for filter or items is not an array:', activeCellFilter, parsedData);
+        }
+      } catch (error) {
+        console.error('Failed to parse or filter score details content:', error);
+        setFilteredScoreDetails([]); 
+      }
+    } else {
+      setFilteredScoreDetails(null);
+    }
+  }, [activeCellFilter, scoreDetailsContent]);
+
+  const handleConfusionMatrixSelection = (selection: { predicted: string | null; actual: string | null }) => {
+    if (selection.predicted && selection.actual) {
+      setActiveCellFilter({ predicted: selection.predicted, actual: selection.actual });
+      if (!scoreDetailsContent && scoreDetailFile && !isLoadingScoreDetails) {
+        fetchScoreDetailsContent();
+      }
+    } else {
+      setActiveCellFilter(null);
+    }
+  };
+  
   const getAgreementLevel = (ac1: number | null): { label: string; color: string } => {
     if (ac1 === null) return { label: 'No Data', color: 'bg-muted text-muted-foreground' };
     if (ac1 >= 0.8) return { label: 'Strong', color: 'bg-green-700 text-white' };
@@ -76,22 +154,18 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
   const hasDiscussion = !!score.discussion;
   const hasItems = itemCount > 0;
   
-  // Calculate accuracy segments if label distribution is available
   const accuracySegments: Segment[] = score.label_distribution 
     ? GaugeThresholdComputer.createSegments(
         GaugeThresholdComputer.computeThresholds(score.label_distribution)
       )
     : [{ start: 0, end: 100, color: 'var(--gauge-inviable)' }];
   
-  // Determine if we have visualization data available
   const hasClassDistribution = score.class_distribution && score.class_distribution.length > 0;
   const hasPredictedDistribution = score.predicted_class_distribution && score.predicted_class_distribution.length > 0;
-  const hasConfusionMatrix = score.confusion_matrix !== undefined;
-  const hasVisualizationData = hasClassDistribution || hasPredictedDistribution || hasConfusionMatrix;
+  const hasConfusionMatrixData = score.confusion_matrix && score.confusion_matrix.matrix && score.confusion_matrix.labels && score.confusion_matrix.matrix.length > 0;
+  const hasVisualizationData = hasClassDistribution || hasPredictedDistribution || (hasConfusionMatrixData && scoreDetailFile);
   
-  // Determine if we have extra data to show in expanded view
-  // Now we always allow expansion if there's any items data to show raw agreement bars
-  const hasExtendedData = hasVisualizationData || hasDiscussion || hasItems;
+  const hasExtendedData = hasClassDistribution || hasPredictedDistribution || hasDiscussion || hasItems;
   
   return (
     <div className={cn(
@@ -100,7 +174,6 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
       className
     )}>
       <div className="p-4">
-        {/* Header row with title and expand/collapse button */}
         <div className="flex justify-between items-start mb-4">
           <h3 className="text-base font-medium">{displayName}</h3>
           {hasExtendedData && (
@@ -113,9 +186,7 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
           )}
         </div>
         
-        {/* Main content area - responsive grid layout */}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
-          {/* Left side - metadata */}
           <div className="md:col-span-4">
             <div className="text-sm space-y-1">
               {itemCount > 0 && (
@@ -132,7 +203,6 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
               )}
             </div>
             
-            {/* Notes section - shown in both collapsed and expanded views */}
             {hasNotes && (
               <div className="mt-3 text-sm">
                 <p className="text-foreground">{score.notes}</p>
@@ -140,11 +210,9 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
             )}
           </div>
           
-          {/* Right side - Gauges */}
           <div className="md:col-span-8">
             <div className="@container">
               <div className="grid grid-cols-1 @xs:grid-cols-2 @lg:grid-cols-4 gap-3">
-                {/* AC1 Gauge - Only show if ac1 is available */}
                 {score.ac1 !== undefined && (
                   <div className="flex flex-col items-center">
                     <div className="w-full max-w-[140px] mx-auto">
@@ -161,7 +229,6 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
                   </div>
                 )}
                 
-                {/* Accuracy Gauge - Only show if accuracy is available */}
                 {score.accuracy !== undefined && (
                   <div className="flex flex-col items-center">
                     <div className="w-full max-w-[140px] mx-auto">
@@ -174,7 +241,6 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
                   </div>
                 )}
                 
-                {/* Precision Gauge - Only show if precision is available and showPrecisionRecall is true */}
                 {showPrecisionRecall && score.precision !== undefined && (
                   <div className="flex flex-col items-center">
                     <div className="w-full max-w-[140px] mx-auto">
@@ -187,7 +253,6 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
                   </div>
                 )}
                 
-                {/* Recall Gauge - Only show if recall is available and showPrecisionRecall is true */}
                 {showPrecisionRecall && score.recall !== undefined && (
                   <div className="flex flex-col items-center">
                     <div className="w-full max-w-[140px] mx-auto">
@@ -204,7 +269,6 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
           </div>
         </div>
         
-        {/* Warning message - below the gauges */}
         {hasWarning && (
           <div className="mt-4 bg-red-600 text-white p-3 rounded-sm w-full">
             <div className="flex items-start gap-2">
@@ -213,87 +277,105 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
             </div>
           </div>
         )}
+
+        {hasConfusionMatrixData && scoreDetailFile && (
+          <div className="mt-4">
+            <ConfusionMatrix 
+              data={score.confusion_matrix!}
+              onSelectionChange={handleConfusionMatrixSelection} 
+            />
+          </div>
+        )}
       </div>
       
-      {/* Expanded View */}
-      {expanded && (
+      {(isLoadingScoreDetails || scoreDetailsContent !== null) && (
         <div className="px-4 pb-4">
-          {/* Visualizations */}
-          {hasVisualizationData && (
-            <div className="space-y-6">
-              {hasClassDistribution && (
-                <div>
-                  <h5 className="text-sm font-medium mb-2">Class Distribution</h5>
-                  <ClassDistributionVisualizer 
-                    data={score.class_distribution!} 
-                    isBalanced={false} 
-                  />
-                </div>
-              )}
-              
-              {hasPredictedDistribution && (
-                <div>
-                  <h5 className="text-sm font-medium mb-2">Predicted Class Distribution</h5>
-                  <PredictedClassDistributionVisualizer 
-                    data={score.predicted_class_distribution!}
-                  />
-                </div>
-              )}
-              
-              {hasConfusionMatrix && (
-                <div>
-                  <h5 className="text-sm font-medium mb-2">Confusion Matrix</h5>
-                  <ConfusionMatrix data={score.confusion_matrix!} />
-                </div>
-              )}
-              
-              {/* Raw Agreement Bar */}
-              {hasItems && (
-                <div>
-                  <h5 className="text-sm font-medium mb-2">Raw Agreement</h5>
-                  <RawAgreementBar 
-                    agreements={agreements}
-                    totalItems={itemCount}
-                  />
-                </div>
-              )}
-              
-              {/* Discussion section - only shown in expanded view */}
-              {hasDiscussion && (
-                <div className="mt-6">
-                  <div className="text-sm prose-sm max-w-none">
-                    <p>{score.discussion}</p>
-                  </div>
-                </div>
+          <div className="mt-2 w-full overflow-hidden">
+            <div className="flex justify-between items-center mb-1">
+              <h4 className="text-base font-medium">
+                Details
+              </h4>
+              {activeCellFilter && (
+                <Button variant="ghost" size="sm" onClick={() => setActiveCellFilter(null)} className="h-auto p-1">Clear Filter</Button>
               )}
             </div>
-          )}
-          
-          {/* If there's no visualization data but there is discussion, show only discussion */}
-          {!hasVisualizationData && hasDiscussion && (
-            <div className="space-y-6">
-              <div className="pt-2">
-                <div className="text-sm prose-sm max-w-none">
-                  <p>{score.discussion}</p>
-                </div>
-              </div>
+            {activeCellFilter && filteredScoreDetails && (
+              <h5 className="text-sm text-muted-foreground mb-2">
+                Filtered items: {filteredScoreDetails.length} - Predicted: {activeCellFilter.predicted}, Actual: {activeCellFilter.actual}
+              </h5>
+            )}
+            
+            <div className="w-full overflow-hidden">
+              {isLoadingScoreDetails && <p className="text-sm text-muted-foreground">Loading details...</p>}
+              {!isLoadingScoreDetails && scoreDetailsContent && typeof scoreDetailsContent === 'string' && (
+                <>
+                  {filteredScoreDetails ? (
+                    <div>
+                      {filteredScoreDetails.length > 0 ? (
+                        <pre className="whitespace-pre-wrap text-xs bg-white dark:bg-gray-800 dark:text-gray-200 overflow-y-auto overflow-x-auto font-mono max-h-[300px] px-2 py-2 max-w-full rounded">
+                          {JSON.stringify(filteredScoreDetails, null, 2)}
+                        </pre>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">No items match the selected filter in the details file.</p>
+                      )}
+                    </div>
+                  ) : (
+                    <pre className="whitespace-pre-wrap text-xs bg-white dark:bg-gray-800 dark:text-gray-200 overflow-y-auto overflow-x-auto font-mono max-h-[300px] px-2 py-2 max-w-full rounded">
+                      {scoreDetailsContent}
+                    </pre>
+                  )}
+                </>
+              )}
+              {!isLoadingScoreDetails && scoreDetailsContent === 'Failed to load score details content.' && (
+                 <p className="text-sm text-red-500">{scoreDetailsContent}</p>
+              )}
+              {!isLoadingScoreDetails && !scoreDetailsContent && (
+                <p className="text-sm text-muted-foreground">Click on the matrix above to load details.</p>
+              )}
             </div>
-          )}
+          </div>
         </div>
       )}
       
-      {/* Expanded View section for when there's only raw agreement bars to show */}
-      {expanded && !hasVisualizationData && !hasDiscussion && hasItems && (
+      {expanded && (
         <div className="px-4 pb-4">
-          <div className="space-y-6">
-            <div>
+          {(hasClassDistribution || hasPredictedDistribution) && (
+            <div className="space-y-6 mb-4">
+              {hasClassDistribution && (
+                  <div>
+                  <h5 className="text-sm font-medium mb-2">Class Distribution</h5>
+                  <ClassDistributionVisualizer 
+                      data={score.class_distribution!} 
+                      isBalanced={false} 
+                  />
+                  </div>
+              )}
+              {hasPredictedDistribution && (
+                  <div>
+                  <h5 className="text-sm font-medium mb-2">Predicted Class Distribution</h5>
+                  <PredictedClassDistributionVisualizer 
+                      data={score.predicted_class_distribution!}
+                  />
+                  </div>
+              )}
+            </div>
+          )}
+          {hasItems && (
+            <div className="mt-0">
               <h5 className="text-sm font-medium mb-2">Raw Agreement</h5>
               <RawAgreementBar 
                 agreements={agreements}
                 totalItems={itemCount}
               />
             </div>
-          </div>
+          )}
+          {hasDiscussion && (
+            <div className="mt-6">
+              <div className="text-sm prose-sm max-w-none">
+                <p>{score.discussion}</p>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
