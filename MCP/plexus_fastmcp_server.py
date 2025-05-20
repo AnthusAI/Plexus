@@ -240,24 +240,90 @@ mcp = FastMCP(
     ## Utility Tools
     - debug_python_env: Check Python environment details and module availability
     - hello_world: Simple test function to verify the server is responsive
+    - think: REQUIRED tool to use before other tools to structure reasoning and plan approach
     """
 )
 
 # --- Tool Implementations ---
 
 @mcp.tool()
-async def list_plexus_scorecards(account: Optional[str] = None, 
-                                 name: Optional[str] = None, 
-                                 key: Optional[str] = None, 
-                                 limit: Optional[int] = None) -> Union[str, List[Dict]]:
+async def think(thought: str) -> str:
     """
-    Lists scorecards from the Plexus Dashboard. Can filter by account, name, or key.
+    Before taking any action or responding to the user after receiving tool results, use the think tool as a scratchpad to:
+    - Plan your approach
+    - Verify parameters
+    - Diagnose issues
+    - Find specific information
+    - Plan a sequence of tool calls
+    
+    When to use this tool:
+    - Before running evaluations to verify parameters
+    - After encountering an error and need to diagnose the issue
+    - When analyzing scorecard or report data to find specific information
+    - When planning a sequence of tool calls to accomplish a user request
+    - When determining what information is missing from a user request
+    - When deciding between multiple possible approaches
+    - When you plan on using multiple tools in a sequence
+    
+    Here are some examples of what to iterate over inside the think tool:
+
+    <think_tool_example_1>
+    The user asked to run an evaluation for 'EDU Scorecard'.
+    - I need to check: does this scorecard exist?
+    - Did they specify a score name? No.
+    - Did they specify sample count? Yes, 10 samples.
+    - Plan: First list scorecards to confirm name exists, then run evaluation.
+    </think_tool_example_1>
+    
+    <think_tool_example_2>
+    The user wants the latest report.
+    - Did they specify an account? No.
+    - Did they specify a report configuration? No.
+    - I should check if there's a default account in environment.
+    - Then use get_latest_plexus_report with minimal filtering.
+    </think_tool_example_2>
+    
+    <think_tool_example_3>
+    User asked about 'Pain Points' score configuration.
+    - Need to: 1) Find which scorecard contains this score
+                2) Get the scorecard ID
+                3) Get score details using the scorecard ID and score name
+    </think_tool_example_3>
+    """
+    # Temporarily redirect stdout to capture any unexpected output
+    old_stdout = sys.stdout
+    temp_stdout = StringIO()
+    sys.stdout = temp_stdout
+    
+    try:
+        # Log the thought for debugging purposes
+        logger.info(f"Think tool used: {thought[:100]}...")
+        
+        return "Thought processed"
+    except Exception as e:
+        logger.error(f"Error in think tool: {str(e)}", exc_info=True)
+        return f"Error processing thought: {str(e)}"
+    finally:
+        # Check if anything was written to stdout
+        captured_output = temp_stdout.getvalue()
+        if captured_output:
+            logger.warning(f"Captured unexpected stdout during think: {captured_output}")
+        # Restore original stdout
+        sys.stdout = old_stdout
+
+@mcp.tool()
+async def list_plexus_scorecards(
+    identifier: Optional[str] = None, 
+    account: Optional[str] = None,
+    limit: Optional[int] = None
+) -> Union[str, List[Dict]]:
+    """
+    Lists scorecards from the Plexus Dashboard.
     
     Parameters:
-    - account: Filter by account name or key (for Dashboard lookup)
-    - name: Filter scorecards whose name contains this string
-    - key: Filter scorecards whose key contains this string
-    - limit: Maximum number of scorecards to return
+    - identifier: Filter by scorecard name, key, ID, or external ID (optional)
+    - account: Filter by account name or key (optional)
+    - limit: Maximum number of scorecards to return (optional)
     
     Returns:
     - A list of scorecards matching the filter criteria
@@ -308,8 +374,9 @@ async def list_plexus_scorecards(account: Optional[str] = None,
         fetch_limit = limit if limit is not None else 1000 # Use 1000 if no limit specified
 
         filter_parts = []
+        
+        # Handle account filtering
         if account:
-            # Wrap resolver call in try/except if it might also print tracebacks
             try:
                 # Another stdout redirect specifically for account resolution
                 acct_stdout = StringIO()
@@ -329,10 +396,55 @@ async def list_plexus_scorecards(account: Optional[str] = None,
             except Exception as acc_res_err:
                 logger.error(f"Error resolving account '{account}': {acc_res_err}", exc_info=True)
                 return f"Error resolving account '{account}'."
-        if name:
-            filter_parts.append(f'name: {{ contains: "{name}" }}')
-        if key:
-            filter_parts.append(f'key: {{ contains: "{key}" }}')
+        
+        # Handle specific scorecard filtering if identifier is provided
+        if identifier:
+            # First try to directly resolve the identifier to a scorecard ID
+            try:
+                id_stdout = StringIO()
+                saved_stdout = sys.stdout
+                sys.stdout = id_stdout
+                
+                try:
+                    scorecard_id = resolve_scorecard_identifier(client, identifier)
+                    if scorecard_id:
+                        # If we found a specific ID, just return that scorecard
+                        query = f"""
+                        query GetScorecard {{ 
+                            getScorecard(id: "{scorecard_id}") {{
+                                id name key description externalId createdAt updatedAt 
+                            }} 
+                        }}
+                        """
+                        logger.info(f"Found exact scorecard match with ID: {scorecard_id}")
+                        response = client.execute(query)
+                        
+                        if 'errors' in response:
+                            error_details = json.dumps(response['errors'], indent=2)
+                            logger.error(f"Dashboard query returned errors: {error_details}")
+                            return f"Error from Dashboard query: {error_details}"
+                        
+                        scorecard_data = response.get('getScorecard')
+                        if scorecard_data:
+                            return [scorecard_data]
+                        else:
+                            logger.warning(f"Resolved scorecard ID {scorecard_id} but couldn't fetch details")
+                finally:
+                    id_output = id_stdout.getvalue()
+                    if id_output:
+                        logger.warning(f"Captured unexpected stdout during scorecard ID resolution: {id_output}")
+                    sys.stdout = saved_stdout
+            except Exception as id_err:
+                logger.error(f"Error resolving scorecard ID for '{identifier}': {id_err}", exc_info=True)
+            
+            # If direct resolution failed, try flexible search terms
+            # First check if it could be a name (contains spaces, proper case)
+            if ' ' in identifier or not identifier.islower():
+                filter_parts.append(f'name: {{ contains: "{identifier}" }}')
+            else:
+                # Otherwise use it as a general search term that could match name or key
+                filter_parts.append(f'or: [{{name: {{ contains: "{identifier}" }}}}, {{key: {{ contains: "{identifier}" }}}}]')
+
         filter_str = ", ".join(filter_parts)
 
         query = f"""
@@ -457,70 +569,6 @@ async def run_plexus_evaluation(
     
     return (f"Plexus evaluation for scorecard '{scorecard_name}' has been dispatched to run in the background. "
             f"Monitor logs or Plexus Dashboard for status and results.")
-
-@mcp.tool()
-async def debug_python_env(module_to_check: str = "plexus.cli") -> str:
-    """
-    Debug the Python environment, including available modules and paths.
-    
-    Parameters:
-    - module_to_check: Module to check for availability
-    
-    Returns:
-    - A string with debugging information
-    """
-    try:
-        import sys
-        import subprocess
-        
-        # Get Python info
-        python_path = sys.executable
-        python_version = sys.version
-        
-        # Check for the module
-        module_check_cmd = f"{python_path} -c \"import {module_to_check}; print('Module found: ' + {module_to_check}.__file__)\""
-        try:
-            module_result = subprocess.check_output(module_check_cmd, shell=True, text=True, stderr=subprocess.STDOUT)
-        except subprocess.CalledProcessError as e:
-            module_result = f"Module not found: {e.output}"
-        
-        # Get sys.path
-        paths = "\n".join(sys.path)
-        
-        # Get installed packages
-        pip_list_cmd = f"{python_path} -m pip list"
-        pip_list = subprocess.check_output(pip_list_cmd, shell=True, text=True)
-        
-        # Combine results
-        result = f"""
-Python Executable: {python_path}
-Python Version: {python_version}
-Module Check ({module_to_check}): {module_result}
-
-PYTHONPATH:
-{paths}
-
-Installed Packages (first 20 lines):
-{pip_list.splitlines()[:20]}
-        """
-        
-        return result
-    except Exception as e:
-        logger.error(f"Error debugging Python environment: {str(e)}", exc_info=True)
-        return f"Error debugging Python environment: {str(e)}"
-
-@mcp.tool()
-async def hello_world(name: str) -> str:
-    """
-    A simple tool that returns a greeting.
-    
-    Parameters:
-    - name: Name to greet
-    
-    Returns:
-    - A greeting message
-    """
-    return f"Hello, {name}! Welcome to the Plexus MCP Server."
 
 @mcp.tool()
 async def get_plexus_scorecard_info(scorecard_identifier: str) -> Union[str, Dict[str, Any]]:
