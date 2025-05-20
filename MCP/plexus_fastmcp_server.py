@@ -238,8 +238,6 @@ mcp = FastMCP(
     - list_plexus_report_configurations: List available report configurations
     
     ## Utility Tools
-    - debug_python_env: Check Python environment details and module availability
-    - hello_world: Simple test function to verify the server is responsive
     - think: REQUIRED tool to use before other tools to structure reasoning and plan approach
     """
 )
