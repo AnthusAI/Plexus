@@ -35,36 +35,19 @@ def parse_args():
     parser.add_argument("--python-path", help="Path to Python interpreter to use for running the server")
     return parser.parse_known_args()
 
-def get_target_cwd_from_config():
-    """Attempt to determine target working directory from Claude desktop config."""
-    config_path = os.path.expanduser("~/Library/Application Support/Claude/claude_desktop_config.json")
-    default_cwd = "/Users/derek.norrbom/Capacity/Call-Criteria-Python"
+
+
+def get_default_cwd(args):
+    """Return the target CWD based on arguments or current directory as fallback."""
+    if args.target_cwd:
+        target_cwd = args.target_cwd
+        print(f"wrapper: Using command-line specified target CWD: {target_cwd}", file=sys.stderr)
+        return target_cwd
     
-    if not os.path.exists(config_path):
-        print(f"wrapper: Claude desktop config not found at {config_path}, using default CWD", file=sys.stderr)
-        return default_cwd
-        
-    try:
-        with open(config_path, 'r') as f:
-            config = json.load(f)
-            
-        # Look for env_file path in the config and extract the directory
-        for server_name, server_config in config.get('mcpServers', {}).items():
-            args = server_config.get('args', [])
-            for i, arg in enumerate(args):
-                if arg == "--env-file" and i + 1 < len(args):
-                    env_file = args[i + 1]
-                    # Extract directory from env file path
-                    target_dir = os.path.dirname(env_file)
-                    if os.path.isdir(target_dir):
-                        print(f"wrapper: Using target CWD from config: {target_dir}", file=sys.stderr)
-                        return target_dir
-        
-        print(f"wrapper: Could not determine target CWD from config, using default", file=sys.stderr)
-        return default_cwd
-    except Exception as e:
-        print(f"wrapper: Error reading config: {e}, using default CWD", file=sys.stderr)
-        return default_cwd
+    # Fallback to current directory
+    default_cwd = os.getcwd()
+    print(f"wrapper: No target CWD specified, using current directory: {default_cwd}", file=sys.stderr)
+    return default_cwd
 
 def main():
     # Temporarily capture stdout during initialization
@@ -80,12 +63,8 @@ def main():
         script_dir = os.path.dirname(os.path.abspath(__file__))
         parent_dir = os.path.dirname(script_dir)
         
-        # Determine target working directory - use command line arg if provided, otherwise read from config
-        if args.target_cwd:
-            target_cwd = args.target_cwd
-            print(f"wrapper: Using command-line specified target CWD: {target_cwd}", file=sys.stderr)
-        else:
-            target_cwd = get_target_cwd_from_config()
+        # Determine target working directory - use command line arg if provided, otherwise use current directory
+        target_cwd = get_default_cwd(args)
         
         # Path to the FastMCP server script
         server_script = os.path.join(script_dir, "plexus_fastmcp_server.py")
