@@ -39,7 +39,9 @@ export interface ReportTaskData {
 }
 
 // Props for the ReportTask component
-export interface ReportTaskProps extends BaseTaskProps<ReportTaskData> {}
+export interface ReportTaskProps extends BaseTaskProps<ReportTaskData> {
+  isSelected?: boolean;
+}
 
 // Add interface for report blocks
 interface ReportBlock {
@@ -60,7 +62,8 @@ const ReportTask: React.FC<ReportTaskProps> = ({
   controlButtons,
   isFullWidth,
   onToggleFullWidth,
-  onClose
+  onClose,
+  isSelected
 }) => {
   // Add state for report blocks
   const [reportBlocks, setReportBlocks] = useState<ReportBlock[]>([])
@@ -383,6 +386,7 @@ const ReportTask: React.FC<ReportTaskProps> = ({
       isFullWidth={isFullWidth}
       onToggleFullWidth={onToggleFullWidth}
       onClose={onClose}
+      isSelected={isSelected}
       renderHeader={(props) => (
         <TaskHeader {...props}>
           <div className="flex justify-end w-full">
