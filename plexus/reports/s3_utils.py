@@ -58,7 +58,13 @@ def upload_report_block_file(report_block_id, file_name, content, content_type=N
     with tempfile.NamedTemporaryFile(mode='wb+', suffix=f"_{file_name}", delete=False) as temp_file:
         temp_file_path = temp_file.name
         logger.info(f"Created temp file at {temp_file_path}")
-        temp_file.write(content or b"")
+        # Encode content to bytes if it's a string, otherwise use as is (assuming it's already bytes or None)
+        if isinstance(content, str):
+            temp_file.write(content.encode('utf-8'))
+        elif content is not None: # It's bytes or some other non-None type
+            temp_file.write(content)
+        else: # content is None
+            temp_file.write(b"") # Write empty bytes if content is None
     
     try:
         # Set up extra args if content type is specified
