@@ -100,6 +100,25 @@ const ReportBlock: BlockComponent = ({
   const [selectedFileUrl, setSelectedFileUrl] = useState<string | null>(null);
   const [selectedFileIsImage, setSelectedFileIsImage] = useState<boolean | null>(null);
   const [selectedFileIsHtml, setSelectedFileIsHtml] = useState<boolean | null>(null);
+  
+  // State to track if we should use the wide layout
+  const [isWideLayout, setIsWideLayout] = useState(false);
+  
+  // Effect to update layout on mount and window resize
+  React.useEffect(() => {
+    const updateLayoutMode = () => {
+      setIsWideLayout(window.innerWidth >= 768); // 768px is typical md breakpoint
+    };
+    
+    // Initial check
+    updateLayoutMode();
+    
+    // Add resize listener
+    window.addEventListener('resize', updateLayoutMode);
+    
+    // Cleanup
+    return () => window.removeEventListener('resize', updateLayoutMode);
+  }, []);
 
   // Parse detailsFiles JSON string once
   const parsedDetailsFiles = React.useMemo(() => {
@@ -268,54 +287,200 @@ const ReportBlock: BlockComponent = ({
   // Extract date range from output if not provided directly
   const displayDateRange = dateRange || (output && typeof output === 'object' && output.date_range);
 
-  return (
-    <div className="space-y-2">
-      <div className="flex flex-col gap-2">
-        <div className="flex justify-between items-center">
-          <div>
-            <h3 className="text-xl font-semibold">
-              {title || name || 'Report'} 
-            </h3>
-            {subtitle && (
-              <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>
-            )}
-            {displayDateRange && (
-              <p className="text-sm text-muted-foreground mt-1">
-                {formattedDate(displayDateRange.start)} to {formattedDate(displayDateRange.end)}
-              </p>
-            )}
-            {notes && (
-              <div className="text-sm text-muted-foreground mt-2 max-w-prose">
-                {notes}
-              </div>
-            )}
-          </div>
-          <div className="flex items-center space-x-2">
-            {hasLog && (
-              <Button 
-                variant="secondary"
-                size="sm"
-                onClick={toggleShowLog}
-                className="h-8 bg-card hover:bg-card/90 border-0"
-              >
-                <ScrollText className="mr-2 h-4 w-4" />
-                {showLog ? "Hide Log" : "View Log"}
-              </Button>
-            )}
-            {hasAttachedFiles && (
-              <Button 
-                variant="secondary"
-                size="sm"
-                onClick={toggleShowAttachedFiles}
-                className="h-8 bg-card hover:bg-card/90 border-0"
-              >
-                <Paperclip className="mr-2 h-4 w-4" />
-                {showAttachedFiles ? "Hide Files" : parsedDetailsFiles.length === 1 ? "Attached File" : "Attached Files"}
-              </Button>
-            )}
+  // Render the log details
+  const renderLogDetails = () => {
+    if (!showLog) return null;
+    
+    return (
+      <div className={`mt-2 bg-card p-3 overflow-hidden rounded-lg ${isWideLayout ? "w-full" : "@[30rem]:w-[350px]"}`}>
+        <div className="flex flex-row justify-between items-center mb-3">
+          <h4 className="text-base font-medium">Log</h4>
+          {logFileFromDetails && (
+            <CardButton 
+              icon={Download} 
+              onClick={handleDownloadLog}
+              label="Download"
+              aria-label="Download log file"
+            />
+          )}
+        </div>
+        <div className="w-full overflow-hidden">
+          {isLoadingLog && <p className="text-sm text-muted-foreground">Loading log content...</p>}
+          {!isLoadingLog && logText && (
+            <pre className="whitespace-pre-wrap text-xs bg-white overflow-y-auto overflow-x-auto font-mono max-h-[300px] px-2 py-2 max-w-full">
+              {logText}
+            </pre>
+          )}
+          {!isLoadingLog && !logText && log && (
+            <pre className="whitespace-pre-wrap text-xs bg-white overflow-y-auto overflow-x-auto font-mono max-h-[300px] px-2 py-2 max-w-full">
+              {log}
+            </pre>
+          )}
+          {!isLoadingLog && !logText && !log && (
+            <p className="text-sm text-muted-foreground">Log content is empty or could not be loaded.</p>
+          )}
+        </div>
+      </div>
+    );
+  };
+  
+  // Render the file attachment details
+  const renderFileDetails = () => {
+    if (!showAttachedFiles) return null;
+    
+    return (
+      <div className={`mt-2 bg-card p-3 overflow-visible rounded-lg ${isWideLayout ? "w-full" : "@[30rem]:w-[350px]"}`}>
+        <div className="flex flex-row justify-between items-center mb-3">
+          <h4 className="text-base font-medium">Attached Files</h4>
+        </div>
+        
+        <div className="flex flex-col space-y-4 w-full overflow-visible">
+          {/* File list */}
+          <div className="bg-muted/50 py-2 px-0 rounded-sm">
+            <div className="space-y-1">
+              {parsedDetailsFiles.map((file, index) => (
+                <div key={index} className="flex flex-col -mx-1">
+                  <div className={`flex justify-between items-center ${index % 2 === 0 ? 'bg-card-selected' : 'bg-card'} rounded-sm p-1 w-full`}>
+                    <span className="text-sm truncate flex-1">{file.name}</span>
+                    <div className="flex space-x-2">
+                      <CardButton 
+                        icon={Eye} 
+                        onClick={() => fetchFileContent(file)}
+                        label={selectedFileName === file.name ? "Hide" : "View"}
+                        aria-label={selectedFileName === file.name ? `Hide ${file.name}` : `View ${file.name}`}
+                      />
+                      <CardButton 
+                        icon={Download} 
+                        onClick={() => handleDownloadFile(file)}
+                        label="Download"
+                        aria-label={`Download ${file.name}`}
+                      />
+                    </div>
+                  </div>
+                  
+                  {/* Show file content directly under this item */}
+                  {selectedFileName === file.name && (
+                    <div className="w-full overflow-hidden mt-2 bg-card rounded">
+                      {isLoadingFile && <p className="text-sm text-muted-foreground px-2 py-2">Loading...</p>}
+                      {!isLoadingFile && (
+                        <>
+                          {selectedFileIsImage === true && selectedFileUrl && (
+                            <div className="p-2 flex justify-center items-center bg-white rounded">
+                              <img 
+                                src={selectedFileUrl} 
+                                alt={selectedFileName || 'Attached image'} 
+                                className="w-full h-auto object-contain"
+                              />
+                            </div>
+                          )}
+                          {selectedFileIsHtml === true && selectedFileContent && (
+                            <div className="p-2 bg-white rounded">
+                              <iframe 
+                                srcDoc={selectedFileContent}
+                                title={selectedFileName || 'HTML content'}
+                                className="w-full h-[300px] border-0"
+                                sandbox="allow-scripts allow-same-origin" 
+                              />
+                            </div>
+                          )}
+                          {selectedFileIsImage === false && selectedFileIsHtml === false && selectedFileContent && (
+                            <pre className="whitespace-pre-wrap text-xs overflow-y-auto overflow-x-auto font-mono max-h-[200px] px-2 py-2 bg-white max-w-full rounded">
+                              {selectedFileContent}
+                            </pre>
+                          )}
+                          {/* Error display or specific messages */}
+                          {selectedFileIsImage === null && selectedFileIsHtml === null && selectedFileContent && ( // Error message for either type
+                            <p className="text-sm text-red-500 px-2 py-2 bg-white rounded">{selectedFileContent}</p>
+                          )}
+                          {/* Fallback for no content, no error message, and not explicitly an image or text, or if it's an image but URL failed silently */}
+                          {selectedFileIsImage === null && selectedFileIsHtml === null && !selectedFileContent && (
+                            <p className="text-sm text-muted-foreground px-2 py-2 bg-white rounded">Preview not available or file is empty.</p>
+                          )}
+                          {!selectedFileContent && selectedFileIsImage === true && !selectedFileUrl && ( // Image detected, but URL fetch failed and no error message set
+                            <p className="text-sm text-red-500 px-2 py-2 bg-white rounded">Could not load image preview.</p>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
+    );
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-col gap-2">
+        <div className="@container">
+          <div className="flex @[30rem]:flex-row flex-col @[30rem]:justify-between @[30rem]:items-start">
+            <div className="@[30rem]:max-w-[60%]">
+              <h3 className="text-xl font-semibold">
+                {title || name || 'Report'} 
+              </h3>
+              {subtitle && (
+                <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>
+              )}
+              {displayDateRange && (
+                <p className="text-sm text-muted-foreground mt-1">
+                  {formattedDate(displayDateRange.start)} to {formattedDate(displayDateRange.end)}
+                </p>
+              )}
+              {notes && (
+                <div className="text-sm text-muted-foreground mt-2 max-w-prose">
+                  {notes}
+                </div>
+              )}
+            </div>
+            <div className="w-full @[30rem]:w-auto @[30rem]:flex-shrink-0 flex @[30rem]:flex-row flex-col @[30rem]:items-start space-y-2 @[30rem]:space-y-0 @[30rem]:space-x-2 mt-2 @[30rem]:mt-0">
+              {hasLog && (
+                <div className="w-full @[30rem]:w-auto">
+                  <Button 
+                    variant="secondary"
+                    size="sm"
+                    onClick={toggleShowLog}
+                    className="h-8 bg-card hover:bg-card/90 border-0 w-full"
+                  >
+                    <ScrollText className="mr-2 h-4 w-4" />
+                    {showLog ? "Hide Log" : "View Log"}
+                  </Button>
+                  
+                  {/* Only render inline (below the button) in narrow layout */}
+                  {showLog && !isWideLayout && renderLogDetails()}
+                </div>
+              )}
+              
+              {hasAttachedFiles && (
+                <div className="w-full @[30rem]:w-auto">
+                  <Button 
+                    variant="secondary"
+                    size="sm"
+                    onClick={toggleShowAttachedFiles}
+                    className="h-8 bg-card hover:bg-card/90 border-0 w-full"
+                  >
+                    <Paperclip className="mr-2 h-4 w-4" />
+                    {showAttachedFiles ? "Hide Files" : parsedDetailsFiles.length === 1 ? "Attached File" : "Attached Files"}
+                  </Button>
+                  
+                  {/* Only render inline (below the button) in narrow layout */}
+                  {showAttachedFiles && !isWideLayout && renderFileDetails()}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* In wider layouts, display details at the top, above the content */}
+      {isWideLayout && (
+        <div className="mt-2">
+          {showLog && renderLogDetails()}
+          {showAttachedFiles && renderFileDetails()}
+        </div>
+      )}
 
       {/* Display error message if present */}
       {displayError && (
@@ -333,123 +498,6 @@ const ReportBlock: BlockComponent = ({
           <div className="flex items-start gap-2">
             <AlertTriangle size={18} className="mt-0.5 flex-shrink-0" />
             <p className="text-sm font-medium">{displayWarning}</p>
-          </div>
-        </div>
-      )}
-
-      {/* Inline Log Display Area */}
-      {showLog && hasLog && (
-        <div className="mt-4 bg-card p-3 w-full overflow-hidden rounded-lg">
-          <div className="flex flex-row justify-between items-center mb-3">
-            <h4 className="text-base font-medium">Log</h4>
-            {logFileFromDetails && (
-              <CardButton 
-                icon={Download} 
-                onClick={handleDownloadLog}
-                label="Download"
-                aria-label="Download log file"
-              />
-            )}
-          </div>
-          <div className="w-full overflow-hidden">
-            {isLoadingLog && <p className="text-sm text-muted-foreground">Loading log content...</p>}
-            {!isLoadingLog && logText && (
-              <pre className="whitespace-pre-wrap text-xs bg-white overflow-y-auto overflow-x-auto font-mono max-h-[300px] px-2 py-2 max-w-full">
-                {logText}
-              </pre>
-            )}
-            {!isLoadingLog && !logText && log && (
-              <pre className="whitespace-pre-wrap text-xs bg-white overflow-y-auto overflow-x-auto font-mono max-h-[300px] px-2 py-2 max-w-full">
-                {log}
-              </pre>
-            )}
-            {!isLoadingLog && !logText && !log && (
-              <p className="text-sm text-muted-foreground">Log content is empty or could not be loaded.</p>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Attached Files Display Area */}
-      {showAttachedFiles && parsedDetailsFiles.length > 0 && (
-        <div className="mt-4 bg-card p-3 w-full overflow-visible rounded-lg">
-          <div className="flex flex-row justify-between items-center mb-3">
-            <h4 className="text-base font-medium">Attached Files</h4>
-          </div>
-          
-          <div className="flex flex-col space-y-4 w-full overflow-visible">
-            {/* File list */}
-            <div className="bg-muted/50 py-2 px-0 rounded-sm">
-              <div className="space-y-1">
-                {parsedDetailsFiles.map((file, index) => (
-                  <div key={index} className="flex flex-col -mx-1">
-                    <div className={`flex justify-between items-center ${index % 2 === 0 ? 'bg-card-selected' : 'bg-card'} rounded-sm p-1 w-full`}>
-                      <span className="text-sm truncate flex-1">{file.name}</span>
-                      <div className="flex space-x-2">
-                        <CardButton 
-                          icon={Eye} 
-                          onClick={() => fetchFileContent(file)}
-                          label={selectedFileName === file.name ? "Hide" : "View"}
-                          aria-label={selectedFileName === file.name ? `Hide ${file.name}` : `View ${file.name}`}
-                        />
-                        <CardButton 
-                          icon={Download} 
-                          onClick={() => handleDownloadFile(file)}
-                          label="Download"
-                          aria-label={`Download ${file.name}`}
-                        />
-                      </div>
-                    </div>
-                    
-                    {/* Show file content directly under this item */}
-                    {selectedFileName === file.name && (
-                      <div className="w-full overflow-hidden mt-2 bg-card rounded">
-                        {isLoadingFile && <p className="text-sm text-muted-foreground px-2 py-2">Loading...</p>}
-                        {!isLoadingFile && (
-                          <>
-                            {selectedFileIsImage === true && selectedFileUrl && (
-                              <div className="p-2 flex justify-center items-center bg-white rounded">
-                                <img 
-                                  src={selectedFileUrl} 
-                                  alt={selectedFileName || 'Attached image'} 
-                                  className="w-full h-auto object-contain"
-                                />
-                              </div>
-                            )}
-                            {selectedFileIsHtml === true && selectedFileContent && (
-                              <div className="p-2 bg-white rounded">
-                                <iframe 
-                                  srcDoc={selectedFileContent}
-                                  title={selectedFileName || 'HTML content'}
-                                  className="w-full h-[500px] border-0"
-                                  sandbox="allow-scripts allow-same-origin" 
-                                />
-                              </div>
-                            )}
-                            {selectedFileIsImage === false && selectedFileIsHtml === false && selectedFileContent && (
-                              <pre className="whitespace-pre-wrap text-xs overflow-y-auto overflow-x-auto font-mono max-h-[300px] px-2 py-2 bg-white max-w-full rounded">
-                                {selectedFileContent}
-                              </pre>
-                            )}
-                            {/* Error display or specific messages */}
-                            {selectedFileIsImage === null && selectedFileIsHtml === null && selectedFileContent && ( // Error message for either type
-                              <p className="text-sm text-red-500 px-2 py-2 bg-white rounded">{selectedFileContent}</p>
-                            )}
-                            {/* Fallback for no content, no error message, and not explicitly an image or text, or if it's an image but URL failed silently */}
-                            {selectedFileIsImage === null && selectedFileIsHtml === null && !selectedFileContent && (
-                              <p className="text-sm text-muted-foreground px-2 py-2 bg-white rounded">Preview not available or file is empty.</p>
-                            )}
-                             {!selectedFileContent && selectedFileIsImage === true && !selectedFileUrl && ( // Image detected, but URL fetch failed and no error message set
-                              <p className="text-sm text-red-500 px-2 py-2 bg-white rounded">Could not load image preview.</p>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
           </div>
         </div>
       )}

@@ -193,7 +193,7 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
   
   return (
     <div className={cn(
-      "transition-all bg-card rounded-lg relative", 
+      "transition-all bg-card rounded-lg relative min-w-[280px]", 
       expanded ? "mb-6" : "mb-2",
       className
     )}>
@@ -210,84 +210,86 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
           )}
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
-          <div className="md:col-span-4">
-            <div className="text-sm space-y-1">
-              {itemCount > 0 && (
-                <>
-                  <div>
-                    <span className="text-muted-foreground">Agreements:</span>{' '}
-                    <span>{agreements}</span>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Items:</span>{' '}
-                    <span>{itemCount}</span>
-                  </div>
-                </>
+        <div className="@container">
+          <div className="grid grid-cols-1 @[30rem]:grid-cols-12 gap-4 items-start">
+            <div className="@[30rem]:col-span-4">
+              <div className="text-sm space-y-1">
+                {itemCount > 0 && (
+                  <>
+                    <div>
+                      <span className="text-muted-foreground">Agreements:</span>{' '}
+                      <span>{agreements}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Items:</span>{' '}
+                      <span>{itemCount}</span>
+                    </div>
+                  </>
+                )}
+              </div>
+              
+              {hasNotes && (
+                <div className="mt-3 text-sm">
+                  <p className="text-foreground">{score.notes}</p>
+                </div>
               )}
             </div>
             
-            {hasNotes && (
-              <div className="mt-3 text-sm">
-                <p className="text-foreground">{score.notes}</p>
-              </div>
-            )}
-          </div>
-          
-          <div className="md:col-span-8">
-            <div className="@container">
-              <div className="grid grid-cols-1 @xs:grid-cols-2 @lg:grid-cols-4 gap-3">
-                {score.ac1 !== undefined && (
-                  <div className="flex flex-col items-center">
-                    <div className="w-full max-w-[140px] mx-auto">
-                      <Gauge 
-                        value={score.ac1 ?? 0} 
-                        title="Agreement"
-                        valueUnit=""
-                        min={-1}
-                        max={1}
-                        decimalPlaces={2}
-                        segments={ac1GaugeSegments}
-                      />
+            <div className="@[30rem]:col-span-8">
+              <div className="@container">
+                <div className="grid grid-cols-1 @[20rem]:grid-cols-2 @[40rem]:grid-cols-4 gap-3">
+                  {score.ac1 !== undefined && (
+                    <div className="flex flex-col items-center px-2">
+                      <div className="w-full min-w-[100px] max-w-[140px] mx-auto">
+                        <Gauge 
+                          value={score.ac1 ?? 0} 
+                          title="Agreement"
+                          valueUnit=""
+                          min={-1}
+                          max={1}
+                          decimalPlaces={2}
+                          segments={ac1GaugeSegments}
+                        />
+                      </div>
                     </div>
-                  </div>
-                )}
-                
-                {score.accuracy !== undefined && (
-                  <div className="flex flex-col items-center">
-                    <div className="w-full max-w-[140px] mx-auto">
-                      <Gauge 
-                        value={score.accuracy ?? 0} 
-                        title="Accuracy"
-                        segments={accuracySegments}
-                      />
+                  )}
+                  
+                  {score.accuracy !== undefined && (
+                    <div className="flex flex-col items-center px-2">
+                      <div className="w-full min-w-[100px] max-w-[140px] mx-auto">
+                        <Gauge 
+                          value={score.accuracy ?? 0} 
+                          title="Accuracy"
+                          segments={accuracySegments}
+                        />
+                      </div>
                     </div>
-                  </div>
-                )}
-                
-                {showPrecisionRecall && score.precision !== undefined && (
-                  <div className="flex flex-col items-center">
-                    <div className="w-full max-w-[140px] mx-auto">
-                      <Gauge 
-                        value={score.precision ?? 0} 
-                        title="Precision"
-                        segments={accuracySegments}
-                      />
+                  )}
+                  
+                  {showPrecisionRecall && score.precision !== undefined && (
+                    <div className="flex flex-col items-center px-2">
+                      <div className="w-full min-w-[100px] max-w-[140px] mx-auto">
+                        <Gauge 
+                          value={score.precision ?? 0} 
+                          title="Precision"
+                          segments={accuracySegments}
+                        />
+                      </div>
                     </div>
-                  </div>
-                )}
-                
-                {showPrecisionRecall && score.recall !== undefined && (
-                  <div className="flex flex-col items-center">
-                    <div className="w-full max-w-[140px] mx-auto">
-                      <Gauge 
-                        value={score.recall ?? 0} 
-                        title="Recall"
-                        segments={accuracySegments}
-                      />
+                  )}
+                  
+                  {showPrecisionRecall && score.recall !== undefined && (
+                    <div className="flex flex-col items-center px-2">
+                      <div className="w-full min-w-[100px] max-w-[140px] mx-auto">
+                        <Gauge 
+                          value={score.recall ?? 0} 
+                          title="Recall"
+                          segments={accuracySegments}
+                        />
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             </div>
           </div>
