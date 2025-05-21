@@ -655,7 +655,7 @@ def _generate_report_core(
                 logger.error(f"{log_prefix} Additionally failed to set FAILED status via tracker: {tracker_fail_err}")
                 try:
                     # Refetch task for direct update as fallback
-                    task_fallback = Task.get_by_id(task_id, api_client)
+                    task_fallback = Task.get_by_id(tracker.task_id, tracker.api_client)
                     if task_fallback:
                         task_fallback.update(status="FAILED", errorMessage=final_error_msg, errorDetails=detailed_error, completedAt=datetime.now(timezone.utc).isoformat())
                         logger.error(f"{log_prefix} Set Task status to FAILED via direct update as fallback.")
@@ -795,7 +795,7 @@ def generate_report(task_id: str):
                 logger.error(f"{log_prefix} Additionally failed to set FAILED status via tracker: {tracker_fail_err}")
                 try:
                     # Refetch task for direct update as fallback
-                    task_fallback = Task.get_by_id(task_id, api_client)
+                    task_fallback = Task.get_by_id(tracker.task_id, tracker.api_client)
                     if task_fallback:
                         task_fallback.update(status="FAILED", errorMessage=final_error_msg, errorDetails=detailed_error, completedAt=datetime.now(timezone.utc).isoformat())
                         logger.error(f"{log_prefix} Set Task status to FAILED via direct update as fallback.")

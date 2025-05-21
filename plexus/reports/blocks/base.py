@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional, Tuple, List
+from plexus.dashboard.api.client import PlexusDashboardClient
 
 
 class BaseReportBlock(ABC):

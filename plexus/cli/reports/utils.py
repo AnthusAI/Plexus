@@ -8,6 +8,7 @@ from typing import Optional, Tuple, List
 import json
 import logging
 import os
+import click
 
 from rich.table import Table
 from rich.panel import Panel
@@ -19,7 +20,7 @@ from rich.console import Group, Console
 from rich.text import Text
 
 from plexus.cli.console import console # Assuming this is the shared console instance
-from plexus.dashboard.api.client import PlexusDashboardClient
+from plexus.dashboard.api.client import PlexusDashboardClient, _BaseAPIClient
 from plexus.dashboard.api.models.account import Account
 from plexus.dashboard.api.models.report_configuration import ReportConfiguration
 from plexus.dashboard.api.models.report import Report
