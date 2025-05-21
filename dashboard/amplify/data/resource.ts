@@ -659,6 +659,7 @@ const schema = a.schema({
         ])
         .secondaryIndexes((idx: (field: FeedbackItemIndexFields) => any) => [
             idx("accountId").sortKeys(["updatedAt"]),
+            idx("accountId").sortKeys(["editedAt"]),
             idx("accountId").sortKeys(["scorecardId", "scoreId", "updatedAt"]).name("byAccountScorecardScoreUpdatedAt"),
             idx("itemId")
         ]),
