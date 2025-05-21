@@ -872,21 +872,44 @@ export default function ReportsDashboard({
     window.history.pushState(null, '', '/lab/reports');
   };
 
-  // Placeholder delete handler
+  // Delete handler
   const handleDelete = async (reportId: string) => {
-    console.log("Attempting to delete report:", reportId);
-    toast.info("Delete functionality not yet implemented.");
-    // try {
-    //   await getClient().graphql({ /* ... delete mutation ... */ });
-    //   setReports(prev => prev.filter(r => r.id !== reportId));
-    //   if (selectedReportId === reportId) {
-    //     handleCloseReport();
-    //   }
-    //   toast.success("Report deleted");
-    // } catch (error) {
-    //   console.error("Error deleting report:", error);
-    //   toast.error("Failed to delete report");
-    // }
+    try {
+      console.log("Attempting to delete report:", reportId);
+      
+      const currentClient = getClient();
+      await currentClient.graphql({
+        query: `
+          mutation DeleteReport($input: DeleteReportInput!) {
+            deleteReport(input: $input) {
+              id
+            }
+          }
+        `,
+        variables: { 
+          input: {
+            id: reportId
+          }
+        }
+      });
+      
+      // Remove the deleted report from the reports state
+      setReports(prev => prev.filter(r => r.id !== reportId));
+      
+      // If currently selected report is deleted, close the detail view
+      if (selectedReportId === reportId) {
+        handleCloseReport();
+      }
+      
+      toast.success("Report deleted successfully");
+      return true;
+    } catch (error) {
+      console.error("Error deleting report:", error);
+      toast.error("Failed to delete report", {
+        description: "An unexpected error occurred."
+      });
+      return false;
+    }
   };
 
   // Share functionality (similar to evaluations)
@@ -1038,7 +1061,14 @@ export default function ReportsDashboard({
         controlButtons={
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-               <CardButton icon={MoreHorizontal} aria-label="More options" onClick={() => {}} />
+               <Button 
+                 variant="ghost" 
+                 size="icon" 
+                 className="h-8 w-8 rounded-md bg-border"
+                 aria-label="More options"
+               >
+                 <MoreHorizontal className="h-4 w-4" />
+               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
                <DropdownMenuItem onClick={() => copyLinkToClipboard(report.id)}>
