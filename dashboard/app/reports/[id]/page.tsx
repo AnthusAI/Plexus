@@ -12,6 +12,10 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { getValueFromLazyLoader } from '@/utils/data-operations'
 import { GraphQLResult } from '@aws-amplify/api'
+import BlockRegistryInitializer from '@/components/blocks/BlockRegistryInitializer'
+import SquareLogo, { LogoVariant } from '@/components/logo-square';
+import { format, parseISO } from 'date-fns';
+import { Timestamp } from '@/components/ui/timestamp';
 
 // Share link data type
 type ShareLinkData = {
@@ -62,41 +66,58 @@ export class ReportService {
   // Fetch report blocks
   async fetchReportBlocks(report: any): Promise<any> {
     try {
-      // Fetch blocks if not already included
-      if (!report.reportBlocks) {
+      // Condition to (re-)fetch blocks:
+      // Simplified check: if reportBlocks or its items are missing, or if the first block lacks a type.
+      const shouldFetchBlocks = 
+        !report.reportBlocks || 
+        !report.reportBlocks.items || 
+        report.reportBlocks.items.length === 0 ||
+        (report.reportBlocks.items.length > 0 && typeof report.reportBlocks.items[0].type === 'undefined');
+
+      if (shouldFetchBlocks) {
         const blockResponse = await this.client.graphql({
           query: `
-            query GetReportBlocks($reportId: ID!) {
-              listReportBlockByReportId(reportId: $reportId) {
-                items {
-                  id
-                  name
-                  position
-                  output
-                  log
-                  reportId
+            query GetReportAndItsBlocks($reportId: ID!) {
+              getReport(id: $reportId) {
+                id
+                reportBlocks {
+                  items {
+                    id
+                    name
+                    position
+                    type
+                    output
+                    log
+                  }
+                  nextToken
                 }
               }
             }
           `,
           variables: { reportId: report.id }
         }) as GraphQLResult<{
-          listReportBlockByReportId: {
-            items: Array<{
-              id: string;
-              name?: string;
-              position: number;
-              output: any;
-              log?: string;
-              reportId: string;
-            }>;
+          getReport: {
+            id: string;
+            reportBlocks: {
+              items: Array<{
+                id: string;
+                name?: string;
+                position: number;
+                type: string; // Ensure type is requested
+                output: any;
+                log?: string;
+                // detailsFiles?: string;
+              }>;
+              nextToken?: string;
+            };
           };
         }>;
 
-        if (blockResponse.data?.listReportBlockByReportId?.items) {
+        if (blockResponse.data?.getReport?.reportBlocks?.items) {
           report.reportBlocks = {
-            items: blockResponse.data.listReportBlockByReportId.items
+            items: blockResponse.data.getReport.reportBlocks.items
           };
+          // If you implement pagination, you'd also store blockResponse.data.getReport.reportBlocks.nextToken
         } else {
           report.reportBlocks = { items: [] };
         }
@@ -105,6 +126,9 @@ export class ReportService {
       return report;
     } catch (error) {
       console.error('Error fetching report blocks:', error);
+      // Ensure reportBlocks.items is at least an empty array on error to prevent further issues
+      if (report && !report.reportBlocks) report.reportBlocks = {};
+      if (report && !report.reportBlocks.items) report.reportBlocks.items = [];
       return report; // Return the report even if blocks fetch fails
     }
   }
@@ -340,17 +364,21 @@ export function PublicReport({
       try {
         outputData = typeof block.output === 'string' ? JSON.parse(block.output) : block.output;
       } catch (err) {
-        console.error('Error parsing block output:', err);
-        outputData = block.output || {};
+        outputData = block.output || {}; // Fallback to an empty object or raw output
       }
+
+      // Prioritize block.type from API, then outputData.class, then 'unknown'
+      const blockType = block.type || outputData.class || 'unknown'; 
       
       return {
-        type: outputData.class || 'unknown',
-        config: outputData,
+        type: blockType,
+        config: outputData, // Config is often the same as output for many blocks
         output: outputData,
         log: block.log || undefined,
-        name: block.name || undefined,
-        position: block.position
+        name: block.name || undefined, // Use API block name if available
+        position: block.position,
+        // Pass the original block ID as well, might be useful for keys or debugging
+        originalBlockId: block.id 
       };
     }) || [];
     
@@ -386,37 +414,70 @@ export function PublicReport({
       }
     }
 
+    const isShareView = memoizedService.isValidToken(id) && !isDashboardView;
+    const displayTimestamp = report.updatedAt || report.createdAt;
+
     // Render the report task with data
     return (
-      <div className="container mx-auto p-4">
-        <ReportTask
-          variant="detail"
-          task={{
-            id: report.id,
-            type: 'Report',
-            name: '',
-            description: '',
-            scorecard: '',
-            score: '',
-            time: report.updatedAt || report.createdAt || '',
-            data: {
+      <div className="flex flex-col flex-1 min-h-0">
+        <div className="container mx-auto mt-4 flex-1">
+          <BlockRegistryInitializer />
+          <ReportTask
+            variant={isShareView ? "bare" : "detail"}
+            task={{
               id: report.id,
-              title: displayName,
-              name: displayName,
-              configName: config?.name || displayName,
-              configDescription: config?.description,
-              createdAt: report.createdAt,
-              updatedAt: report.updatedAt,
-              output: report.output,
-              reportBlocks: reportBlocks
-            },
-            stages: stages,
-            status: task?.status || 'COMPLETED',
-            currentStageName: currentStageName,
-            errorMessage: task?.errorMessage
-          }}
-          onClick={() => {}}
-        />
+              type: 'Report',
+              name: '',
+              description: '',
+              scorecard: '',
+              score: '',
+              time: report.updatedAt || report.createdAt || '',
+              data: {
+                id: report.id,
+                title: displayName,
+                name: displayName,
+                configName: config?.name || displayName,
+                configDescription: config?.description,
+                createdAt: report.createdAt,
+                updatedAt: report.updatedAt,
+                output: report.output,
+                reportBlocks: reportBlocks
+              },
+              stages: stages,
+              status: task?.status || 'COMPLETED',
+              currentStageName: currentStageName,
+              errorMessage: task?.errorMessage
+            }}
+            onClick={() => {}}
+          />
+        </div>
+        {isShareView && displayTimestamp && (
+          <footer className="py-4 px-6 flex-shrink-0">
+            <div className="container mx-auto">
+              <div className="flex items-center justify-between">
+                <Timestamp
+                  time={displayTimestamp}
+                  variant="relative"
+                  showIcon={true}
+                  className="text-sm"
+                />
+                {process.env.NEXT_PUBLIC_MINIMAL_BRANDING !== 'true' && (
+                  <div className="flex items-center">
+                    <span className="text-sm text-muted-foreground mr-2">powered by</span>
+                    <a 
+                      href="https://plexus.anth.us" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="relative w-24 h-8"
+                    >
+                      <SquareLogo variant={LogoVariant.Wide} />
+                    </a>
+                  </div>
+                )}
+              </div>
+            </div>
+          </footer>
+        )}
       </div>
     );
   }

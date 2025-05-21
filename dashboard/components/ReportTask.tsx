@@ -143,27 +143,24 @@ const ReportTask: React.FC<ReportTaskProps> = ({
 
   // Add a new effect to monitor task.data.reportBlocks and update reportBlocks state when it changes
   useEffect(() => {
-    if (variant === 'detail' && task.data?.reportBlocks && task.data.reportBlocks.length > 0) {
-      console.log(`Received ${task.data.reportBlocks.length} blocks via props`);
+    if ((variant === 'detail' || variant === 'bare') && task.data?.reportBlocks && task.data.reportBlocks.length > 0) {
       
-      // Transform blocks from props to match our expected format
-      const transformedBlocks = task.data.reportBlocks.map(block => {
-        // Ensure output is parsed if it's a string
-        const parsedOutput = parseOutput(block.output);
+      const transformedBlocks = task.data.reportBlocks.map(blockProp => {
+        const parsedOutput = parseOutput(blockProp.output);
         
+        const blockTypeToUse = blockProp.type || parsedOutput.class || 'unknown';
+
         return {
-          id: block.name || `block-${block.position}`,
-          name: block.name,
-          position: block.position,
-          type: block.type || parsedOutput.class || 'unknown',
+          id: blockProp.name || `block-${blockProp.position}`,
+          name: blockProp.name,
+          position: blockProp.position,
+          type: blockTypeToUse, 
           output: parsedOutput,
-          log: block.log || null,
-          config: block.config || parsedOutput,
-          detailsFiles: null
+          log: blockProp.log || null,
+          config: blockProp.config || parsedOutput,
+          detailsFiles: null 
         };
       });
-      
-      // Replace the blocks state entirely to ensure we get a fresh render
       setReportBlocks(transformedBlocks);
     }
   }, [variant, task.data?.reportBlocks]);
@@ -283,27 +280,32 @@ const ReportTask: React.FC<ReportTaskProps> = ({
       
       // Try to match blocks by class/type and then by position if available
       const blockData = reportBlocks.find(block => {
-        // First try exact type/class match
-        if (block.type === blockConfig.class) {
-          return true;
-        }
-        
-        // If position is specified, try matching by position
-        if (blockConfig.position && block.position.toString() === blockConfig.position) {
-          return true;
-        }
-        
-        // As a fallback, try name match if available
+        // Primary match: if markdown has a name, it must match block.name
         if (blockConfig.name && block.name === blockConfig.name) {
           return true;
         }
+        // Secondary match: if markdown does not have a name, match by class/type AND (position if available in markdown OR it's the only one of its type)
+        if (!blockConfig.name && block.type === blockConfig.class) {
+          if (blockConfig.position) {
+            return block.position.toString() === blockConfig.position;
+          }
+          // If no position in markdown, and no name, it implies we might be looking for *any* block of this type.
+          // This could be ambiguous if there are multiple. For now, let's assume if no name/position, it's the first one.
+          // A more robust solution might involve ensuring markdown provides enough info or a different matching strategy.
+          return true; // Matches the first block of this type if no name/position specified in markdown
+        }
         
+        // Fallback: if markdown only has class, and no name, and block.type matches.
+        // This is similar to the above but explicit.
+        if (!blockConfig.name && !blockConfig.position && block.type === blockConfig.class) {
+            return true;
+        }
+
         return false;
       });
       
       if (blockData) {
         // Log when we successfully find a block to render
-        console.log(`Rendering block: ${blockData.type} (position: ${blockData.position})`);
         
         // Check if the report is complete
         const complete = isReportComplete(task.status, reportBlocks);
@@ -349,7 +351,6 @@ const ReportTask: React.FC<ReportTaskProps> = ({
         );
       } else {
         // Log when we can't find the requested block
-        console.log(`Waiting for block: class=${blockConfig.class || 'unknown'}, position=${blockConfig.position || 'unknown'}`);
         
         // Instead of showing a loading placeholder, return an empty div
         // This prevents flickering while still reserving space for the block
@@ -366,6 +367,54 @@ const ReportTask: React.FC<ReportTaskProps> = ({
       </div>
     );
   };
+
+  // Content for bare variant
+  const bareContent = (
+    <div className="prose dark:prose-invert max-w-none">
+      <ReactMarkdown
+        components={{
+          p: ({node, ...props}) => <p className="mb-2" {...props} />,
+          strong: ({node, ...props}) => <strong className="font-semibold" {...props} />,
+          ul: ({node, ...props}) => <ul className="list-disc pl-5 mb-2" {...props} />,
+          li: ({node, ...props}) => <li className="mb-1" {...props} />,
+          h1: ({node, ...props}) => <h1 className="text-2xl font-bold mt-2 mb-2" {...props} />,
+          h2: ({node, ...props}) => <h2 className="text-xl font-bold mt-2 mb-2" {...props} />,
+          h3: ({node, ...props}) => <h3 className="text-lg font-bold mt-3 mb-1" {...props} />,
+          h4: ({node, ...props}) => <h4 className="text-base font-bold mt-2 mb-1" {...props} />,
+          code: ({node, className, children, ...props}: any) => {
+            const match = /language-(\w+)/.exec(className || '');
+            const language = match ? match[1] : '';
+            
+            if (language === 'block') {
+              return customCodeBlockRenderer({ node, className, children, ...props });
+            }
+            
+            return (
+              <div className="w-full min-w-0 max-w-full overflow-x-auto">
+                <code className="bg-muted px-1 py-0.5 rounded block whitespace-pre-wrap break-all" {...props}>
+                  {children}
+                </code>
+              </div>
+            );
+          },
+          pre: ({node, children, ...props}: any) => (
+            <div className="w-full min-w-0 max-w-full overflow-x-auto">
+              <div className="w-full min-w-0 max-w-full" {...props}>{children}</div>
+            </div>
+          ),
+        }}
+      >
+        {task.data?.output || ''}
+      </ReactMarkdown>
+    </div>
+  );
+
+  if (variant === 'bare') {
+    if (!task.data?.output && (!task.data?.reportBlocks || task.data.reportBlocks.length === 0)) {
+      return <div className="text-muted-foreground">No report content available.</div>;
+    }
+    return bareContent;
+  }
 
   return (
     <Task 

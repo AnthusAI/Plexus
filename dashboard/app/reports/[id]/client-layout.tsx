@@ -17,11 +17,12 @@ export default function ReportClientLayout({
   return (
     <div className="flex flex-col min-h-screen bg-background">
       {/* Main content - fills available space and handles overflow */}
-      <main className="flex-1 overflow-hidden">
+      <main className="flex-1 overflow-auto">
         {children}
       </main>
       
       {/* Custom minimal footer - stays at the bottom */}
+      {!isShareToken && (
       <footer className="py-4 px-6 flex-shrink-0">
         <div className="flex items-center justify-end">
           <span className="text-sm text-muted-foreground mr-2">powered by</span>
@@ -35,6 +36,7 @@ export default function ReportClientLayout({
           </a>
         </div>
       </footer>
+      )}
     </div>
   )
 } 
