@@ -583,14 +583,14 @@ def _generate_report_core(
                         log_file_info = upload_report_block_file(
                             report_block_id=current_report_block.id,
                             file_name="log.txt",
-                            content=log_string,
+                            content=log_string.encode('utf-8'),  # Encode to bytes
                             content_type="text/plain"
                         )
                         existing_details_files_list.append(log_file_info)
                         logger.info(f"{log_prefix} Appended log.txt info. New detailsFiles list: {existing_details_files_list}")
                         final_log_message_for_db = "See log.txt in detailsFiles."
                     except Exception as e:
-                        logger.exception(f"{log_prefix} Failed to upload log.txt to S3 for ReportBlock {current_report_block.id}: {e}. Storing log inline (truncated).")
+                        logger.exception(f"{log_prefix} Failed to upload log.txt to S3 for ReportBlock {current_report_block.id}: {str(e)}. Storing log inline (truncated).", exc_info=True)
                         final_log_message_for_db = log_string[:10000] # Truncate if storing inline
                 else:
                     logger.warning(f"{log_prefix} S3_UTILS_AVAILABLE is false. Storing log inline (truncated) for ReportBlock {current_report_block.id}.")

@@ -97,6 +97,8 @@ const ReportBlock: BlockComponent = ({
   const [selectedFileContent, setSelectedFileContent] = useState<string | null>(null);
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
   const [isLoadingFile, setIsLoadingFile] = useState(false);
+  const [selectedFileUrl, setSelectedFileUrl] = useState<string | null>(null);
+  const [selectedFileIsImage, setSelectedFileIsImage] = useState<boolean | null>(null);
 
   // Parse detailsFiles JSON string once
   const parsedDetailsFiles = React.useMemo(() => {
@@ -118,6 +120,13 @@ const ReportBlock: BlockComponent = ({
   const hasAttachedFiles = parsedDetailsFiles.length > 0;
   const hasLog = !!log || !!logFileFromDetails;
 
+  const imageExtensions = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'svg', 'webp'];
+  const isImageFile = (fileName: string): boolean => {
+    if (!fileName) return false;
+    const extension = fileName.split('.').pop()?.toLowerCase();
+    return !!extension && imageExtensions.includes(extension);
+  };
+
   const fetchLogFileContent = React.useCallback(async () => {
     if (!logFileFromDetails || !logFileFromDetails.path) return;
     setIsLoadingLog(true);
@@ -138,19 +147,36 @@ const ReportBlock: BlockComponent = ({
     if (selectedFileName === file.name) {
       setSelectedFileContent(null);
       setSelectedFileName(null);
+      setSelectedFileUrl(null);
+      setSelectedFileIsImage(null);
       return;
     }
     
-    // Otherwise, load the new file
     setIsLoadingFile(true);
     setSelectedFileName(file.name);
+    setSelectedFileContent(null); // Reset previous content
+    setSelectedFileUrl(null);     // Reset previous URL
+    setSelectedFileIsImage(null); // Reset previous type
+
     try {
-      const downloadResult = await downloadData({ path: file.path }).result;
-      const text = await downloadResult.body.text();
-      setSelectedFileContent(text);
+      if (isImageFile(file.name)) {
+        const urlResult = await getUrl({ path: file.path });
+        if (urlResult.url) {
+          setSelectedFileUrl(urlResult.url.toString());
+          setSelectedFileIsImage(true);
+        } else {
+          throw new Error('Failed to get image URL.');
+        }
+      } else {
+        const downloadResult = await downloadData({ path: file.path }).result;
+        const text = await downloadResult.body.text();
+        setSelectedFileContent(text);
+        setSelectedFileIsImage(false);
+      }
     } catch (error) {
-      console.error('Error fetching file content from S3:', error);
-      setSelectedFileContent('Failed to load file content.');
+      console.error('Error processing file from S3:', error);
+      setSelectedFileContent( error instanceof Error ? `Failed to load file: ${error.message}` : 'Failed to load file content.');
+      setSelectedFileIsImage(null); // Indicates an error or unknown type
     } finally {
       setIsLoadingFile(false);
     }
@@ -165,11 +191,14 @@ const ReportBlock: BlockComponent = ({
   };
 
   const toggleShowAttachedFiles = () => {
-    setShowAttachedFiles(!showAttachedFiles);
+    const newShowAttachedFilesState = !showAttachedFiles;
+    setShowAttachedFiles(newShowAttachedFilesState);
     // Reset selected file when hiding
-    if (showAttachedFiles) {
+    if (!newShowAttachedFilesState) {
       setSelectedFileContent(null);
       setSelectedFileName(null);
+      setSelectedFileUrl(null);
+      setSelectedFileIsImage(null);
     }
   };
 
@@ -355,14 +384,37 @@ const ReportBlock: BlockComponent = ({
                     
                     {/* Show file content directly under this item */}
                     {selectedFileName === file.name && (
-                      <div className="w-full overflow-hidden mt-2">
-                        {isLoadingFile && <p className="text-sm text-muted-foreground px-2 py-2">Loading file content...</p>}
-                        {!isLoadingFile && selectedFileContent && (
-                          <pre className="whitespace-pre-wrap text-xs overflow-y-auto overflow-x-auto font-mono max-h-[300px] px-2 py-2 bg-white max-w-full">
-                            {selectedFileContent}
-                          </pre>
+                      <div className="w-full overflow-hidden mt-2 bg-card rounded">
+                        {isLoadingFile && <p className="text-sm text-muted-foreground px-2 py-2">Loading...</p>}
+                        {!isLoadingFile && (
+                          <>
+                            {selectedFileIsImage === true && selectedFileUrl && (
+                              <div className="p-2 flex justify-center items-center bg-white rounded">
+                                <img 
+                                  src={selectedFileUrl} 
+                                  alt={selectedFileName || 'Attached image'} 
+                                  className="w-full h-auto object-contain"
+                                />
+                              </div>
+                            )}
+                            {selectedFileIsImage === false && selectedFileContent && (
+                              <pre className="whitespace-pre-wrap text-xs overflow-y-auto overflow-x-auto font-mono max-h-[300px] px-2 py-2 bg-white max-w-full rounded">
+                                {selectedFileContent}
+                              </pre>
+                            )}
+                            {/* Error display or specific messages */}
+                            {selectedFileIsImage === null && selectedFileContent && ( // Error message for either type
+                              <p className="text-sm text-red-500 px-2 py-2 bg-white rounded">{selectedFileContent}</p>
+                            )}
+                            {/* Fallback for no content, no error message, and not explicitly an image or text, or if it's an image but URL failed silently */}
+                            {selectedFileIsImage === null && !selectedFileContent && (
+                              <p className="text-sm text-muted-foreground px-2 py-2 bg-white rounded">Preview not available or file is empty.</p>
+                            )}
+                             {!selectedFileContent && selectedFileIsImage === true && !selectedFileUrl && ( // Image detected, but URL fetch failed and no error message set
+                              <p className="text-sm text-red-500 px-2 py-2 bg-white rounded">Could not load image preview.</p>
+                            )}
+                          </>
                         )}
-                        {!isLoadingFile && !selectedFileContent && <p className="text-sm text-muted-foreground px-2 py-2">File content is empty or could not be loaded.</p>}
                       </div>
                     )}
                   </div>

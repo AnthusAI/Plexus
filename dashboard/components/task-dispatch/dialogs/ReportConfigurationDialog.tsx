@@ -123,7 +123,7 @@ export function ReportConfigurationDialog({ action, isOpen, onClose, onDispatch 
     const selectedConfig = configurations.find(c => c.id === selectedConfigId)
     
     // Build the command for running this report
-    const command = `report run --config-id ${selectedConfigId}`
+    const command = `report run --config ${selectedConfigId}`
     
     // Get additional metadata
     const metadata = {
