@@ -165,16 +165,29 @@ python3 -m plexus.cli.CommandLineInterface analyze test-ollama --prompt "Explain
    - ✅ Using LangChain cache in tmp/langchain.db
    - ✅ Each run creates a unique temp directory for isolation
 
+7. Report Block Integration (New)
+   - ✅ Created `plexus.reports.blocks.topic_analysis.TopicAnalysis` Python report block:
+     - ✅ Orchestrates transcript transformation and BERTopic analysis.
+     - ✅ Accepts configuration parameters similar to the CLI.
+     - ✅ Manages a temporary directory for artifacts.
+     - ✅ Attaches text-based BERTopic artifacts (HTML, CSV, TXT) to the `ReportBlock` record.
+     - ✅ Cleans up the temporary directory after execution.
+   - ✅ Created basic `dashboard.components.blocks.TopicAnalysis.tsx` React component:
+     - ✅ Relies on default `ReportBlock` rendering for file attachments.
+   - ✅ Registered `TopicAnalysis` block in both Python backend (`plexus/reports/blocks/__init__.py`) and frontend registry (`dashboard/components/blocks/registrySetup.ts`).
+   - ✅ Successfully executed topic analysis via the reporting system and viewed attached artifacts in the dashboard.
+
 ### In Progress
 1. BERTopic Integration
-   - [ ] Configure BERTopic with default settings
-   - [ ] Generate topic visualizations
-   - [ ] Add analysis to CLI command
+   - ✅ Configure BERTopic with default settings
+   - ✅ Generate topic visualizations
+   - ✅ Add analysis to CLI command
 
 2. Enhancements
-   - [ ] Add progress tracking
-   - [ ] Add more CLI options (e.g., BERTopic parameters)
    - [x] Integrate LLM for topic labeling
+
+### In Progress / Next Up
+- [ ] **Enhance `attach_detail_file` in `BaseReportBlock` to support binary file uploads (e.g., PNG images from BERTopic). This is critical for full BERTopic artifact support.** (Moved from Future Enhancements)
 
 ## File Structure
 ```
@@ -192,9 +205,26 @@ plexus/
 │       └── test_inspect.py
 ├── cli/
 │   ├── AnalyzeCommands.py (imports from plexus.analysis.topics)
+├── reports/
+│   └── blocks/
+│       ├── __init__.py
+│       └── topic_analysis.py (New)
 └── tmp/
     └── langchain.db/ (stores LLM cache)
+
+dashboard/
+├── components/
+│   └── blocks/
+│       ├── ReportBlock.tsx
+│       ├── BlockRegistry.tsx
+│       ├── registrySetup.ts
+│       └── TopicAnalysis.tsx (New)
+├── stories/
+│   └── blocks/
+│       └── TopicAnalysis.stories.tsx (New)
 ```
+
+*(Note: The file structure above highlights key areas and new additions related to BERTopic and its report block integration. Other files and directories exist.)*
 
 ## Technical Details
 ### Data Transformation
@@ -329,7 +359,7 @@ The template must include `{text}` and `{format_instructions}` placeholders, and
 1. Customizable BERTopic parameters
 2. Advanced visualization options
 3. Topic labeling and interpretation
-4. Integration with dashboard
+4. Enhanced dashboard integration for Topic Analysis results (e.g., custom visualizations beyond file listing)
 5. Support for more LLM providers beyond Ollama and OpenAI
 6. API for uploading/sharing topic analysis results
 

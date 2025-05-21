@@ -15,6 +15,7 @@ import plotly.express as px
 from umap import UMAP
 from bertopic.representation import OpenAI, LangChain
 import openai
+from pathlib import Path
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -298,18 +299,84 @@ def analyze_topics(
     logger.debug("BERTopic model initialized successfully.")
     
     # Fit and transform
-    logger.info("Performing topic modeling")
+    logger.info(f"Starting topic modeling process with BERTopic (n_gram_range={n_gram_range}, min_topic_size={min_topic_size}, nr_topics={nr_topics or 'auto'})...")
+    start_time = time.time()
+    
     try:
         topics, probs = topic_model.fit_transform(docs)
-    except ValueError as ve:
-        logger.error(f"ValueError during topic_model.fit_transform: {ve}", exc_info=True)
-        logger.error(f"Number of documents at the time of error: {len(docs)}")
-        if docs:
-            logger.error(f"First few documents: {docs[:5]}")
-        raise
+        logger.info(f"BERTopic fit_transform completed in {time.time() - start_time:.2f} seconds.")
+        logger.info(f"Found {len(topic_model.get_topic_info())-1} topics initially (before any reduction).") # -1 for outlier topic
     except Exception as e:
-        logger.error(f"Failed to perform topic modeling: {e}", exc_info=True)
+        logger.error(f"Error during BERTopic fit_transform: {e}", exc_info=True)
         raise
+
+    # --- Generate and Save Visualizations (including new PNGs) ---
+    try:
+        logger.info("Generating BERTopic visualizations...")
+        
+        # Visualize Topics (HTML and PNG)
+        fig_topics = topic_model.visualize_topics()
+        save_visualization(fig_topics, str(Path(output_dir) / "topic_visualization.html"))
+        try:
+            topics_png_path = str(Path(output_dir) / "topics_visualization.png")
+            fig_topics.write_image(topics_png_path)
+            os.chmod(topics_png_path, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH)
+            logger.info(f"Saved topics visualization to {topics_png_path}")
+        except Exception as e:
+            logger.error(f"Failed to save topics visualization as PNG: {e}", exc_info=True)
+
+        # Visualize Heatmap (HTML and PNG)
+        # Check if there are enough topics to generate a heatmap (BERTopic requires at least 2 topics for heatmap)
+        if len(topic_model.get_topic_info())-1 >= 2:
+            fig_heatmap = topic_model.visualize_heatmap()
+            save_visualization(fig_heatmap, str(Path(output_dir) / "heatmap.html"))
+            try:
+                heatmap_png_path = str(Path(output_dir) / "heatmap_visualization.png")
+                fig_heatmap.write_image(heatmap_png_path)
+                os.chmod(heatmap_png_path, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH)
+                logger.info(f"Saved heatmap visualization to {heatmap_png_path}")
+            except Exception as e:
+                logger.error(f"Failed to save heatmap visualization as PNG: {e}", exc_info=True)
+        else:
+            logger.warning("Skipping heatmap visualization as there are fewer than 2 topics.")
+
+        # Visualize Documents (HTML only, as it's highly interactive and large)
+        # Check if there are enough documents and topics for document visualization
+        if len(docs) >= umap_n_neighbors and len(topic_model.get_topic_info())-1 >=1:
+            try:
+                fig_documents = topic_model.visualize_documents(docs, topics=topics) # Pass topics, remove umap_model
+                save_visualization(fig_documents, str(Path(output_dir) / "document_visualization.html"))
+            except Exception as e:
+                # Log error but continue, as this is a non-critical visualization
+                logger.error(f"Failed to generate or save document visualization: {e}", exc_info=True)
+        else:
+            logger.warning("Skipping document visualization due to insufficient documents or topics for UMAP.")
+
+
+        # Visualize Topic Hierarchy (HTML only)
+        try:
+            hierarchical_topics_df = topic_model.hierarchical_topics(docs) # Renamed for clarity
+            if hierarchical_topics_df is not None and not hierarchical_topics_df.empty:
+                fig_hierarchy = topic_model.visualize_hierarchy(hierarchical_topics=hierarchical_topics_df, orientation='left') # Pass as keyword arg
+                save_visualization(fig_hierarchy, str(Path(output_dir) / "hierarchy.html"))
+            else:
+                logger.warning("Skipping topic hierarchy visualization as hierarchical_topics_df is empty or None.")
+        except Exception as e:
+            logger.error(f"Failed to generate or save topic hierarchy visualization: {e}", exc_info=True)
+            
+        # Visualize Topics per Class (if applicable, HTML only)
+        # Note: This requires class labels which are not directly available here unless passed in.
+        # For now, we'll skip this, but it's an example of how it could be added if `classes` were an argument.
+        # topics_per_class_fig = create_topics_per_class_visualization(topic_model, topics, docs, output_dir)
+        # if topics_per_class_fig:
+        #     logger.info("Topics per class visualization generated.")
+
+    except Exception as e:
+        logger.error(f"Error during visualization generation: {e}", exc_info=True)
+        # Continue even if visualizations fail, as core topic data might still be useful.
+        
+    # --- Save Topic Information ---
+    logger.info("Saving topic information...")
     
     # Log initial topic info
     n_topics = len(set(topics)) - 1  # Subtract 1 to exclude the -1 outlier topic
@@ -337,72 +404,4 @@ def analyze_topics(
             # Do not re-raise here, allow to proceed with unreduced topics if reduction fails
             logger.warning("Proceeding with unreduced topics after reduction failure.")
     
-    # Save visualizations
-    logger.info("Generating and saving visualizations")
-    
-    if n_topics == 0:
-        logger.warning("No topics found. Skipping most visualizations.")
-        logger.warning(
-            "This might be due to the input data, the 'min_topic_size' parameter (currently set or defaulted in BERTopic), "
-            "or other BERTopic/HDBSCAN settings. Consider adjusting these or increasing --sample-size if more diverse data might help."
-        )
-    else:
-        # Minimum topics needed for visualize_topics scatter plot (due to internal UMAP n_neighbors=2)
-        min_topics_for_scatter_plot = 3
-        
-        if n_topics >= min_topics_for_scatter_plot:
-            try:
-                # Topic distribution
-                logger.info(f"Generating topic distribution visualization ({n_topics} topics >= {min_topics_for_scatter_plot})...")
-                fig = topic_model.visualize_topics()
-                dist_path = os.path.join(output_dir, "topic_distribution.html")
-                save_visualization(fig, dist_path)
-                logger.info(f"Saved topic distribution to {dist_path}")
-            except Exception as e:
-                logger.error(f"Failed to generate topic distribution: {e}", exc_info=True)
-        else:
-            logger.warning(
-                f"Skipping topic distribution visualization because the number of topics ({n_topics}) "
-                f"is less than the minimum required ({min_topics_for_scatter_plot}) for this specific plot."
-            )
-        
-        try:
-            # Topic hierarchy
-            logger.info("Generating topic hierarchy visualization...")
-            fig = topic_model.visualize_hierarchy()
-            hier_path = os.path.join(output_dir, "topic_hierarchy.html")
-            save_visualization(fig, hier_path)
-            logger.info(f"Saved topic hierarchy to {hier_path}")
-        except Exception as e:
-            logger.error(f"Failed to generate topic hierarchy: {e}", exc_info=True)
-        
-        # Topic word clouds
-        logger.info("Generating topic word clouds...")
-        word_cloud_count = 0
-        # Ensure topics are correctly referenced, especially after potential reduction
-        unique_topics = set(topic_model.topics_ if hasattr(topic_model, 'topics_') and topic_model.topics_ is not None else topics)
-        for topic_num in unique_topics:
-            if topic_num != -1:  # Skip outliers
-                try:
-                    logger.debug(f"Generating word cloud for topic {topic_num}")
-                    fig = topic_model.visualize_barchart(topics=[topic_num]) # Pass as a list
-                    cloud_path = os.path.join(output_dir, f"topic_{topic_num}_words.html")
-                    save_visualization(fig, cloud_path)
-                    word_cloud_count += 1
-                except Exception as e:
-                    logger.error(f"Failed to generate word cloud for topic {topic_num}: {e}", exc_info=True)
-        logger.info(f"Generated {word_cloud_count} word clouds")
-        
-        # Topics per Class visualization (new)
-        try:
-            logger.info("Generating Topics per Class visualization...")
-            create_topics_per_class_visualization(
-                topic_model=topic_model,
-                topics=topics,
-                docs=docs,
-                output_dir=output_dir
-            )
-        except Exception as e:
-            logger.error(f"Failed to generate Topics per Class visualization: {e}", exc_info=True)
-
     logger.info(f"Analysis complete. Results saved to {output_dir}") 
