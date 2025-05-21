@@ -25,7 +25,7 @@ def upload_report_block_file(report_block_id, file_name, content, content_type=N
     Args:
         report_block_id: ID of the report block this file belongs to
         file_name: Name of the file to create
-        content: String content to upload
+        content: Bytes content to upload
         content_type: Optional MIME type for the file
     
     Returns:
@@ -55,10 +55,10 @@ def upload_report_block_file(report_block_id, file_name, content, content_type=N
     logger.info(f"Creating temporary file for content (content length: {len(content) if content else 0})")
     
     # Create a temporary file to upload from
-    with tempfile.NamedTemporaryFile(mode='w+', suffix=f"_{file_name}", delete=False) as temp_file:
+    with tempfile.NamedTemporaryFile(mode='wb+', suffix=f"_{file_name}", delete=False) as temp_file:
         temp_file_path = temp_file.name
         logger.info(f"Created temp file at {temp_file_path}")
-        temp_file.write(content or "")
+        temp_file.write(content or b"")
     
     try:
         # Set up extra args if content type is specified
@@ -98,14 +98,14 @@ def upload_report_block_file(report_block_id, file_name, content, content_type=N
             logger.info(f"Removing temp file {temp_file_path}")
             os.remove(temp_file_path)
 
-def add_file_to_report_block(report_block_id, file_name, content, content_type=None, client=None):
+def add_file_to_report_block(report_block_id, file_name, content: bytes, content_type=None, client=None):
     """
     Upload a file to S3 and add it to an existing report block's detailsFiles.
     
     Args:
         report_block_id: ID of the existing report block
         file_name: Name of the file to create
-        content: String content to upload
+        content: Bytes content to upload
         content_type: Optional MIME type for the file
         client: Optional PlexusDashboardClient instance
     
