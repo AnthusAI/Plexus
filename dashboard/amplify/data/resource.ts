@@ -643,6 +643,8 @@ const schema = a.schema({
             initialCommentValue: a.string(),
             finalCommentValue: a.string(),
             editCommentValue: a.string(),
+            editedAt: a.datetime(),
+            editorName: a.string(),
             isAgreement: a.boolean(),
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
