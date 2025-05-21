@@ -127,36 +127,73 @@ class FeedbackAnalysis(BaseReportBlock):
                     self._log(f"ERROR looking up specific Plexus Score (CC Question ID: {cc_question_id_param}): {e}. This score will be skipped.", level="ERROR")
             else:
                 self._log(f"Fetching all Plexus Scores for Scorecard '{plexus_scorecard_obj.name}' (ID: {plexus_scorecard_obj.id}) to find mappable scores.")
+                # Query for scores, assuming 'position' field exists for scores
+                # to establish a definitive order. Section order will be based on API return order.
                 scores_query = """
                 query GetScorecardScores($scorecardId: ID!) {
                     getScorecard(id: $scorecardId) {
-                        id name
-                        sections { items { id scores { items { id name externalId } } } }
+                        id
+                        name
+                        sections {
+                            items {
+                                id # Section ID
+                                # position # Removed as it does not exist on ScorecardSection
+                                scores {
+                                    items {
+                                        id
+                                        name
+                                        externalId
+                                        order # Attempting to use 'order' field for scores
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 """
                 try:
                     result = await asyncio.to_thread(self.api_client.execute, scores_query, {'scorecardId': plexus_scorecard_obj.id})
                     scorecard_data = result.get('getScorecard')
+                    
+                    raw_scores_with_positions = [] # Collect all scores with their positions
+
                     if scorecard_data and scorecard_data.get('sections') and scorecard_data['sections'].get('items'):
-                        for section in scorecard_data['sections']['items']:
+                        for section_index, section in enumerate(scorecard_data['sections']['items']):
+                            # Use section_index as the primary sort order for sections.
+                            section_order = section_index
+                            
                             if section.get('scores') and section['scores'].get('items'):
-                                for score_item in section['scores']['items']:
+                                for score_index, score_item in enumerate(section['scores']['items']):
                                     if score_item.get('externalId'):
-                                        scores_to_process.append({
+                                        # Use score's 'order' field if available, otherwise fall back to its index within the section.
+                                        score_order = score_item.get('order', score_index)
+                                        raw_scores_with_positions.append({
                                             'plexus_score_id': score_item['id'],
                                             'plexus_score_name': score_item['name'],
-                                            'cc_question_id': score_item['externalId']
+                                            'cc_question_id': score_item['externalId'],
+                                            'section_order': section_order,
+                                            'score_order': score_order
                                         })
                                     else:
                                         self._log(f"Plexus Score '{score_item.get('name')}' (ID: {score_item.get('id')}) is missing an externalId (CC Question ID). Skipping.", level="DEBUG")
-                    self._log(f"Identified {len(scores_to_process)} Plexus Scores with externalIds to process.")
+                    
+                    # Sort the collected scores by section order (index), then by score order (position or index) within the section.
+                    raw_scores_with_positions.sort(key=lambda s: (s['section_order'], s['score_order']))
+                    
+                    # Populate scores_to_process in the now sorted order, removing temporary sort keys.
+                    scores_to_process = [
+                        {k: v for k, v in s.items() if k not in ['section_order', 'score_order']}
+                        for s in raw_scores_with_positions
+                    ]
+                    
+                    self._log(f"Identified and sorted {len(scores_to_process)} Plexus Scores with externalIds to process.")
+
                 except Exception as e:
-                    self._log(f"ERROR fetching scores for Plexus Scorecard '{plexus_scorecard_obj.name}': {e}", level="ERROR")
-                    # Continue if some scores were found, otherwise this will be caught by the next check
+                    self._log(f"ERROR fetching and sorting scores for Plexus Scorecard '{plexus_scorecard_obj.name}': {e}", level="ERROR")
+                    # Continue if some scores were found before error, or caught by next check
             
             if not scores_to_process:
-                msg = "No Plexus Scores identified for analysis (either none found or none had a mappable CC Question ID)."
+                msg = "No Plexus Scores identified for analysis (either none found or none had a mappable CC Question ID, or an error occurred during fetching/sorting)."
                 self._log(f"ERROR: {msg}", level="ERROR")
                 # Return a structure indicating no data, but not an error state for the report block itself.
                 return {
@@ -198,7 +235,7 @@ class FeedbackAnalysis(BaseReportBlock):
                         "score_id": score_info['plexus_score_id'],
                         "score_name": score_info['plexus_score_name'],
                         "cc_question_id": score_info['cc_question_id'],
-                        "ac1": None, "item_count": 0, "mismatches": 0, "accuracy": None,
+                        "ac1": None, "item_count": 0, "mismatches": 0, "agreements": 0, "accuracy": None,
                         "message": "No feedback items found in the specified date range.",
                         "classes_count": 2,  # Default to binary classification
                         "label_distribution": {},
@@ -278,12 +315,12 @@ class FeedbackAnalysis(BaseReportBlock):
                 per_score_analysis_results.append(analysis_for_this_score)
                 # Only log a summary instead of the full analysis details
                 accuracy_str = f"{analysis_for_this_score.get('accuracy'):.2f}%" if analysis_for_this_score.get('accuracy') is not None else "N/A"
-                self._log(f"Analysis summary for score '{score_info['plexus_score_name']}': AC1={analysis_for_this_score.get('ac1')}, Items={analysis_for_this_score.get('item_count')}, Mismatches={analysis_for_this_score.get('mismatches')}, Accuracy={accuracy_str}, Classes={analysis_for_this_score.get('classes_count')}")
+                self._log(f"Analysis summary for score '{score_info['plexus_score_name']}': AC1={analysis_for_this_score.get('ac1')}, Items={analysis_for_this_score.get('item_count')}, Agreements={analysis_for_this_score.get('agreements')}, Mismatches={analysis_for_this_score.get('mismatches')}, Accuracy={accuracy_str}, Classes={analysis_for_this_score.get('classes_count')}")
 
             # --- 5. Calculate Overall Metrics ---
             self._log(f"Calculating overall metrics from {len(all_date_filtered_feedback_items)} date-filtered feedback items across all processed scores.")
             if not all_date_filtered_feedback_items:
-                overall_analysis = {"ac1": None, "item_count": 0, "mismatches": 0, "accuracy": None, "classes_count": 2, 
+                overall_analysis = {"ac1": None, "item_count": 0, "mismatches": 0, "agreements": 0, "accuracy": None, "classes_count": 2, 
                                     "label_distribution": {}, "confusion_matrix": None, "class_distribution": [], 
                                     "predicted_class_distribution": [], "precision": None, "recall": None, "discussion": None}
                 self._log("No date-filtered items available for overall analysis.", level="WARNING")
@@ -293,13 +330,14 @@ class FeedbackAnalysis(BaseReportBlock):
             
             # Log a summary of the overall analysis instead of full details
             accuracy_str = f"{overall_analysis.get('accuracy'):.2f}%" if overall_analysis.get('accuracy') is not None else "N/A"
-            self._log(f"Overall analysis summary: AC1={overall_analysis.get('ac1')}, Items={overall_analysis.get('item_count')}, Mismatches={overall_analysis.get('mismatches')}, Accuracy={accuracy_str}, Classes={overall_analysis.get('classes_count', 2)}")
+            self._log(f"Overall analysis summary: AC1={overall_analysis.get('ac1')}, Items={overall_analysis.get('item_count')}, Agreements={overall_analysis.get('agreements')}, Mismatches={overall_analysis.get('mismatches')}, Accuracy={accuracy_str}, Classes={overall_analysis.get('classes_count', 2)}")
 
             # --- 6. Structure Final Output ---
             final_output_data = {
                 "overall_ac1": overall_analysis.get("ac1"), # Renamed from overall_ac1
                 "total_items": overall_analysis.get("item_count"), # Renamed from item_count
                 "total_mismatches": overall_analysis.get("mismatches"), # Renamed from mismatches
+                "total_agreements": overall_analysis.get("agreements"), # Renamed from agreements
                 "accuracy": overall_analysis.get("accuracy"), # Renamed from accuracy
                 "scores": per_score_analysis_results,
                 "total_feedback_items_retrieved": all_feedback_items_retrieved_count,
@@ -629,7 +667,7 @@ class FeedbackAnalysis(BaseReportBlock):
         
         if not feedback_items:
             self._log(f"No feedback items to analyze for {score_id_info}.", level="WARNING")
-            return {"ac1": None, "item_count": 0, "mismatches": 0, "accuracy": None, "classes_count": 2, 
+            return {"ac1": None, "item_count": 0, "mismatches": 0, "agreements": 0, "accuracy": None, "classes_count": 2, 
                     "label_distribution": {}, "confusion_matrix": None, "class_distribution": [], 
                     "predicted_class_distribution": [], "precision": None, "recall": None, "discussion": None}
             
@@ -650,7 +688,7 @@ class FeedbackAnalysis(BaseReportBlock):
 
         if valid_pairs_count == 0:
             self._log(f"No valid (non-None initial and final) pairs to analyze for {score_id_info}.", level="WARNING")
-            return {"ac1": None, "item_count": 0, "mismatches": 0, "accuracy": None, "classes_count": 2, 
+            return {"ac1": None, "item_count": 0, "mismatches": 0, "agreements": 0, "accuracy": None, "classes_count": 2, 
                     "label_distribution": {}, "confusion_matrix": None, "class_distribution": [], 
                     "predicted_class_distribution": [], "precision": None, "recall": None, "discussion": None}
 
@@ -682,8 +720,9 @@ class FeedbackAnalysis(BaseReportBlock):
             gwet_ac1_calculator = GwetAC1()
             
             # Prepare reference and predictions lists
-            reference_list = [str(i) for i in paired_initial]
-            predictions_list = [str(f) for f in paired_final]
+            # Final answer is the reference (ground truth), Initial answer is the prediction
+            reference_list = [str(f) for f in paired_final]
+            predictions_list = [str(i) for i in paired_initial]
             
             # Create Metric.Input object
             metric_input = Metric.Input(reference=reference_list, predictions=predictions_list)
@@ -696,13 +735,15 @@ class FeedbackAnalysis(BaseReportBlock):
             
             # Calculate accuracy
             mismatches = sum(1 for i, f in zip(paired_initial, paired_final) if i != f)
-            accuracy_percentage = ((valid_pairs_count - mismatches) / valid_pairs_count) * 100 if valid_pairs_count > 0 else None
+            agreements = valid_pairs_count - mismatches
+            accuracy_percentage = (agreements / valid_pairs_count) * 100 if valid_pairs_count > 0 else None
             
             accuracy_str = f"{accuracy_percentage:.2f}%" if accuracy_percentage is not None else "N/A"
-            self._log(f"Analysis results for {score_id_info}: Gwet's AC1={ac1_value}, Items={valid_pairs_count}, Mismatches={mismatches}, Accuracy={accuracy_str}, Classes={num_classes}")
+            self._log(f"Analysis results for {score_id_info}: Gwet's AC1={ac1_value}, Items={valid_pairs_count}, Agreements={agreements}, Mismatches={mismatches}, Accuracy={accuracy_str}, Classes={num_classes}")
             
             # Generate confusion matrix
-            confusion_matrix = self._build_confusion_matrix(paired_initial, paired_final)
+            # Final answer is the reference (ground truth), Initial answer is the prediction
+            confusion_matrix = self._build_confusion_matrix(paired_final, paired_initial)
             
             # Generate class distribution for visualization
             class_distribution = self._format_class_distribution(label_distribution)
@@ -711,12 +752,14 @@ class FeedbackAnalysis(BaseReportBlock):
             predicted_class_distribution = self._format_class_distribution(initial_label_distribution)
             
             # Calculate precision and recall metrics if there are multiple classes
-            precision_recall = self._calculate_precision_recall(paired_initial, paired_final, label_distribution.keys())
+            # Final answer is the reference (ground truth), Initial answer is the prediction
+            precision_recall = self._calculate_precision_recall(paired_final, paired_initial, label_distribution.keys())
             
             return {
                 "ac1": ac1_value,
                 "item_count": valid_pairs_count,
                 "mismatches": mismatches,
+                "agreements": agreements,
                 "accuracy": accuracy_percentage,
                 "classes_count": num_classes,
                 "label_distribution": label_distribution,
@@ -795,8 +838,14 @@ class FeedbackAnalysis(BaseReportBlock):
             # Add counts for each predicted class
             for pred_class in all_classes:
                 # Count instances where reference is true_class and prediction is pred_class
-                count = sum(1 for ref, pred in zip(reference_values, predicted_values) 
-                           if str(ref) == str(true_class) and str(pred) == str(pred_class))
+                count = 0
+                for ref_val, pred_val in zip(reference_values, predicted_values):
+                    str_ref = str(ref_val)
+                    str_pred = str(pred_val)
+                    if str_ref == str(true_class) and str_pred == str(pred_class):
+                        count += 1
+                        # Log the values contributing to this cell
+                        self._log(f"[Debug CM] Matched for cell true='{str(true_class)}', pred='{str(pred_class)}': item_ref='{str_ref}', item_pred='{str_pred}'", level="DEBUG")
                 row["predictedClassCounts"][pred_class] = count
             
             # Add this row to the matrix
@@ -986,27 +1035,23 @@ class FeedbackAnalysis(BaseReportBlock):
         Returns:
             Dictionary with structure:
             {
-                "predicted": {
-                    "answer1": {
-                        "answer1": [feedback_items_with_answer1_answer1],
-                        "answer2": [feedback_items_with_answer1_answer2],
-                        ...
-                    },
-                    "answer2": {
-                        "answer1": [feedback_items_with_answer2_answer1],
-                        "answer2": [feedback_items_with_answer2_answer2],
-                        ...
-                    },
+                "answer1": {
+                    "answer1": [feedback_items_with_answer1_answer1],
+                    "answer2": [feedback_items_with_answer1_answer2],
                     ...
-                }
+                },
+                "answer2": {
+                    "answer1": [feedback_items_with_answer2_answer1],
+                    "answer2": [feedback_items_with_answer2_answer2],
+                    ...
+                },
+                ...
             }
         """
         self._log(f"Creating indexed feedback items structure for {len(feedback_items)} items")
         
-        # Initialize the structure
-        indexed_structure = {
-            "predicted": {}  # Initial answer values (keys) mapping to dicts of final answer values
-        }
+        # Initialize the structure - simplified to use initial values directly as top-level keys
+        indexed_structure = {}
         
         # Process only items with both values present
         valid_items = [item for item in feedback_items if item.initialAnswerValue is not None and item.finalAnswerValue is not None]
@@ -1019,12 +1064,15 @@ class FeedbackAnalysis(BaseReportBlock):
             final_value = str(item.finalAnswerValue)
             
             # Ensure nested structure exists
-            if initial_value not in indexed_structure["predicted"]:
-                indexed_structure["predicted"][initial_value] = {}
+            if initial_value not in indexed_structure:
+                indexed_structure[initial_value] = {}
             
-            if final_value not in indexed_structure["predicted"][initial_value]:
-                indexed_structure["predicted"][initial_value][final_value] = []
+            if final_value not in indexed_structure[initial_value]:
+                indexed_structure[initial_value][final_value] = []
             
+            # Log the specific keys being used for this item
+            self._log(f"[Debug Indexing] Item ID {item.id}: initial_key='{initial_value}', final_key='{final_value}'", level="DEBUG")
+
             # Create a simplified representation of the feedback item
             item_dict = {
                 "id": item.id,
@@ -1042,11 +1090,11 @@ class FeedbackAnalysis(BaseReportBlock):
             }
             
             # Add the item to the appropriate list
-            indexed_structure["predicted"][initial_value][final_value].append(item_dict)
+            indexed_structure[initial_value][final_value].append(item_dict)
         
         # Log summary of indexed structure
         total_indexed = 0
-        for initial_value, final_values_dict in indexed_structure["predicted"].items():
+        for initial_value, final_values_dict in indexed_structure.items():
             for final_value, items_list in final_values_dict.items():
                 count = len(items_list)
                 total_indexed += count
