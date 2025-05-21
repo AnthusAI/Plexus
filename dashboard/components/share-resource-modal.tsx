@@ -139,18 +139,21 @@ export function ShareResourceModal({
     return `Configure sharing options for this ${resourceType.toLowerCase()}`
   }
   
-  // Handle form submission
+  // Handler for form submission
   const handleSubmit = async () => {
     if (isClosingRef.current) return
     
     setIsSubmitting(true)
     
     try {
-      // Create view options object
-      const viewOptions: ShareLinkViewOptions = {
-        displayMode,
-        includeMetrics,
-        includeCostInfo
+      // Create view options object - only include properties relevant to the resource type
+      const viewOptions: ShareLinkViewOptions = {};
+      
+      // Only include evaluation-specific options for evaluation resources
+      if (resourceType === 'Evaluation') {
+        viewOptions.displayMode = displayMode;
+        viewOptions.includeMetrics = includeMetrics;
+        viewOptions.includeCostInfo = includeCostInfo;
       }
       
       // Call the onShare callback with the configured values
@@ -325,36 +328,41 @@ export function ShareResourceModal({
               )}
             </div>
             
-            <div className="grid gap-2">
-              <Label htmlFor="displayMode">Display Mode</Label>
-              <Select value={displayMode} onValueChange={(value: "summary" | "detailed") => setDisplayMode(value)}>
-                <SelectTrigger id="displayMode">
-                  <SelectValue placeholder="Select display mode" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="summary">Summary</SelectItem>
-                  <SelectItem value="detailed">Detailed</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="flex items-center space-x-2">
-              <Checkbox 
-                id="includeMetrics" 
-                checked={includeMetrics} 
-                onCheckedChange={(checked) => setIncludeMetrics(checked === true)}
-              />
-              <Label htmlFor="includeMetrics">Include Metrics</Label>
-            </div>
-            
-            <div className="flex items-center space-x-2">
-              <Checkbox 
-                id="includeCostInfo" 
-                checked={includeCostInfo} 
-                onCheckedChange={(checked) => setIncludeCostInfo(checked === true)}
-              />
-              <Label htmlFor="includeCostInfo">Include Cost Information</Label>
-            </div>
+            {/* Only show these options for Evaluations */}
+            {resourceType === 'Evaluation' && (
+              <>
+                <div className="grid gap-2">
+                  <Label htmlFor="displayMode">Display Mode</Label>
+                  <Select value={displayMode} onValueChange={(value: "summary" | "detailed") => setDisplayMode(value)}>
+                    <SelectTrigger id="displayMode">
+                      <SelectValue placeholder="Select display mode" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="summary">Summary</SelectItem>
+                      <SelectItem value="detailed">Detailed</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="flex items-center space-x-2">
+                  <Checkbox 
+                    id="includeMetrics" 
+                    checked={includeMetrics} 
+                    onCheckedChange={(checked) => setIncludeMetrics(checked === true)}
+                  />
+                  <Label htmlFor="includeMetrics">Include Metrics</Label>
+                </div>
+                
+                <div className="flex items-center space-x-2">
+                  <Checkbox 
+                    id="includeCostInfo" 
+                    checked={includeCostInfo} 
+                    onCheckedChange={(checked) => setIncludeCostInfo(checked === true)}
+                  />
+                  <Label htmlFor="includeCostInfo">Include Cost Information</Label>
+                </div>
+              </>
+            )}
           </div>
           
           <div className="flex justify-end space-x-2 mt-4">

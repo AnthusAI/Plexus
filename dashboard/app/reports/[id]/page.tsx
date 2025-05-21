@@ -1,0 +1,426 @@
+'use client'
+
+import React, { useState, useEffect } from 'react'
+import { useParams, useRouter } from 'next/navigation'
+import { AlertCircle } from 'lucide-react'
+import { generateClient } from 'aws-amplify/api'
+import { fetchAuthSession } from 'aws-amplify/auth'
+import { Schema } from '@/amplify/data/resource'
+import ReportTask from '@/components/ReportTask'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Card, CardContent } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { getValueFromLazyLoader } from '@/utils/data-operations'
+import { GraphQLResult } from '@aws-amplify/api'
+
+// Share link data type
+type ShareLinkData = {
+  token: string;
+  resourceType: string;
+  resourceId: string;
+  viewOptions: Record<string, any>;
+};
+
+// Report service for operations
+export class ReportService {
+  private client;
+
+  constructor() {
+    this.client = generateClient<Schema>();
+  }
+
+  // Helper method to safely get data from Amplify
+  private async safeGet<T>(modelName: string, id: string): Promise<T | null> {
+    try {
+      // @ts-ignore - Bypass TypeScript's type checking for this specific call
+      const response = await this.client.models[modelName].get({ id });
+      return response.data as T;
+    } catch (error) {
+      console.error(`Error fetching ${modelName} with ID ${id}:`, error);
+      return null;
+    }
+  }
+
+  // Fetch report by ID for dashboard deep links
+  async fetchReportById(id: string): Promise<any> {
+    try {
+      const reportData = await this.safeGet<Schema['Report']['type']>('Report', id);
+      
+      if (!reportData) {
+        throw new Error('Report not found');
+      }
+      
+      // Return report data with blocks
+      const reportWithBlocks = await this.fetchReportBlocks(reportData);
+      return reportWithBlocks;
+    } catch (error) {
+      console.error('Error fetching report by ID:', error);
+      throw error;
+    }
+  }
+
+  // Fetch report blocks
+  async fetchReportBlocks(report: any): Promise<any> {
+    try {
+      // Fetch blocks if not already included
+      if (!report.reportBlocks) {
+        const blockResponse = await this.client.graphql({
+          query: `
+            query GetReportBlocks($reportId: ID!) {
+              listReportBlockByReportId(reportId: $reportId) {
+                items {
+                  id
+                  name
+                  position
+                  output
+                  log
+                  reportId
+                }
+              }
+            }
+          `,
+          variables: { reportId: report.id }
+        }) as GraphQLResult<{
+          listReportBlockByReportId: {
+            items: Array<{
+              id: string;
+              name?: string;
+              position: number;
+              output: any;
+              log?: string;
+              reportId: string;
+            }>;
+          };
+        }>;
+
+        if (blockResponse.data?.listReportBlockByReportId?.items) {
+          report.reportBlocks = {
+            items: blockResponse.data.listReportBlockByReportId.items
+          };
+        } else {
+          report.reportBlocks = { items: [] };
+        }
+      }
+      
+      return report;
+    } catch (error) {
+      console.error('Error fetching report blocks:', error);
+      return report; // Return the report even if blocks fetch fails
+    }
+  }
+  
+  // Fetch report by share token
+  async fetchReportByShareToken(token: string): Promise<any> {
+    try {
+      console.log('Fetching report by share token:', token);
+      
+      // Determine auth mode based on user's session
+      let authMode: 'userPool' | 'identityPool' = 'identityPool'; // Default to guest access
+      try {
+        const session = await fetchAuthSession();
+        if (session.tokens?.idToken) {
+          console.log('User is authenticated, using userPool auth mode');
+          authMode = 'userPool';
+        } else {
+          console.log('No auth session, using identityPool (guest) auth mode');
+        }
+      } catch (error) {
+        console.log('Error checking auth session, falling back to guest access:', error);
+      }
+      
+      const response = await this.client.graphql({
+        query: `
+          query GetResourceByShareToken($token: String!) {
+            getResourceByShareToken(token: $token) {
+              shareLink {
+                token
+                resourceType
+                resourceId
+                viewOptions
+              }
+              data
+            }
+          }
+        `,
+        variables: { token },
+        authMode // Use the determined auth mode
+      }) as GraphQLResult<{
+        getResourceByShareToken: {
+          shareLink: ShareLinkData;
+          data: any;
+        }
+      }>;
+      
+      // Check for GraphQL errors
+      if (response.errors && response.errors.length > 0) {
+        const errorMessage = response.errors[0].message;
+        console.error('GraphQL error:', errorMessage);
+        throw new Error(errorMessage);
+      }
+      
+      if (!response.data?.getResourceByShareToken) {
+        throw new Error('Failed to load shared resource');
+      }
+      
+      const result = response.data.getResourceByShareToken;
+      
+      console.log('Share link data received:', {
+        shareLink: result.shareLink,
+        dataType: typeof result.data,
+        dataLength: typeof result.data === 'string' ? result.data.length : 'N/A'
+      });
+      
+      if (!result.shareLink) {
+        throw new Error('Invalid share link data');
+      }
+      
+      const shareLink = result.shareLink;
+      
+      // Verify that this is a Report resource (case insensitive check)
+      if (shareLink.resourceType.toUpperCase() !== 'REPORT' && 
+          shareLink.resourceType !== 'Report') {
+        throw new Error(`Invalid resource type: ${shareLink.resourceType}. Expected: Report`);
+      }
+      
+      // Handle the data as a string that needs to be parsed
+      if (!result.data) {
+        throw new Error('No data returned from share link resolver');
+      }
+      
+      // Parse the string data to JSON if needed
+      let reportData;
+      if (typeof result.data === 'string') {
+        try {
+          const parsedData = JSON.parse(result.data);
+          if (parsedData.getReport) {
+            reportData = parsedData.getReport;
+          } else {
+            reportData = parsedData;
+          }
+        } catch (e) {
+          console.error('Error parsing result.data as JSON:', e);
+          reportData = result.data; // Use as is if not JSON
+        }
+      } else {
+        reportData = result.data;
+      }
+      
+      // Fetch blocks if needed
+      return this.fetchReportBlocks(reportData);
+    } catch (error) {
+      console.error('Error fetching report by share token:', error);
+      throw error;
+    }
+  }
+
+  // Check if a string is a valid share token
+  isValidToken(token: string): boolean {
+    // Support both UUID format and MD5/hex string format
+    return /^[0-9a-f]{32}$/i.test(token) || // MD5/hex string format (32 chars)
+           /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i.test(token); // UUID format
+  }
+}
+
+// Props interface for the component
+interface PublicReportProps {
+  reportService?: ReportService;
+  isDashboardView?: boolean;
+}
+
+export default function ReportPage() {
+  // For share views, render the public report component
+  return <PublicReport />;
+}
+
+export function PublicReport({ 
+  reportService = new ReportService(),
+  isDashboardView = false
+}: PublicReportProps = {}) {
+  const { id } = useParams() as { id: string };
+  const router = useRouter();
+  const [report, setReport] = useState<any | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
+  // Memoize the service to prevent re-renders
+  const memoizedService = React.useMemo(() => reportService, []);
+
+  useEffect(() => {
+    async function loadReport() {
+      try {
+        if (!id) {
+          throw new Error('No ID or token provided');
+        }
+        
+        let data: any;
+        
+        // If this is a share token, fetch by token
+        if (memoizedService.isValidToken(id) && !isDashboardView) {
+          console.log('Loading report with token:', id);
+          data = await memoizedService.fetchReportByShareToken(id);
+        } else {
+          // Otherwise, fetch by ID (for dashboard deep links)
+          console.log('Loading report with ID:', id);
+          data = await memoizedService.fetchReportById(id);
+        }
+        
+        console.log('Successfully loaded report:', {
+          id: data.id,
+          name: data.name,
+          blocksCount: data.reportBlocks?.items?.length || 0
+        });
+        
+        setReport(data);
+      } catch (err: any) {
+        console.error('Error fetching report:', err);
+        setError(err.message || 'Failed to load report');
+      } finally {
+        setLoading(false);
+      }
+    }
+    
+    loadReport();
+  }, [id, memoizedService, isDashboardView]);
+
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="container mx-auto p-4">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex flex-col items-center justify-center gap-4 min-h-[300px]">
+              <div className="animate-pulse flex space-x-4">
+                <div className="flex-1 space-y-6 py-1">
+                  <div className="h-4 bg-muted rounded w-3/4"></div>
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="h-4 bg-muted rounded col-span-2"></div>
+                      <div className="h-4 bg-muted rounded col-span-1"></div>
+                    </div>
+                    <div className="h-4 bg-muted rounded"></div>
+                  </div>
+                </div>
+              </div>
+              <p className="text-muted-foreground">Loading report...</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Show error state
+  if (error) {
+    return (
+      <div className="container mx-auto p-4">
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+        <div className="mt-4">
+          <Button onClick={() => router.push('/')}>Return to Home</Button>
+        </div>
+      </div>
+    );
+  }
+
+  // Transform the report data into the format expected by ReportTask
+  if (report) {
+    // Extract task from the report
+    const task = report.task ? getValueFromLazyLoader(report.task) : null;
+    
+    // Extract reportConfiguration
+    const config = report.reportConfiguration ? 
+      getValueFromLazyLoader(report.reportConfiguration) : null;
+    
+    // Parse report blocks
+    const reportBlocks = report.reportBlocks?.items?.map((block: any) => {
+      let outputData;
+      try {
+        outputData = typeof block.output === 'string' ? JSON.parse(block.output) : block.output;
+      } catch (err) {
+        console.error('Error parsing block output:', err);
+        outputData = block.output || {};
+      }
+      
+      return {
+        type: outputData.class || 'unknown',
+        config: outputData,
+        output: outputData,
+        log: block.log || undefined,
+        name: block.name || undefined,
+        position: block.position
+      };
+    }) || [];
+    
+    // Ensure we have a valid display name
+    const displayName = report.name || 
+      (config?.name ? `${config.name}` : `Report ${report.id.substring(0, 6)}`);
+    
+    // Format stages for display
+    const stages = [];
+    if (task && task.stages) {
+      const stagesData = getValueFromLazyLoader(task.stages);
+      if (stagesData && stagesData.items) {
+        stages.push(...stagesData.items.map((stage: any) => ({
+          key: stage.id || `stage-${Math.random()}`,
+          label: stage.name || '',
+          color: 'bg-primary',
+          name: stage.name || '',
+          order: stage.order || 0,
+          status: stage.status || 'PENDING',
+          processedItems: stage.processedItems || 0,
+          totalItems: stage.totalItems || 0,
+          statusMessage: stage.statusMessage || ''
+        })));
+      }
+    }
+    
+    // Find current stage name
+    let currentStageName = '';
+    if (task && task.currentStageId) {
+      const currentStage = stages.find((s: any) => s.key === task.currentStageId);
+      if (currentStage) {
+        currentStageName = currentStage.name;
+      }
+    }
+
+    // Render the report task with data
+    return (
+      <div className="container mx-auto p-4">
+        <ReportTask
+          variant="detail"
+          task={{
+            id: report.id,
+            type: 'Report',
+            name: '',
+            description: '',
+            scorecard: '',
+            score: '',
+            time: report.updatedAt || report.createdAt || '',
+            data: {
+              id: report.id,
+              title: displayName,
+              name: displayName,
+              configName: config?.name || displayName,
+              configDescription: config?.description,
+              createdAt: report.createdAt,
+              updatedAt: report.updatedAt,
+              output: report.output,
+              reportBlocks: reportBlocks
+            },
+            stages: stages,
+            status: task?.status || 'COMPLETED',
+            currentStageName: currentStageName,
+            errorMessage: task?.errorMessage
+          }}
+          onClick={() => {}}
+        />
+      </div>
+    );
+  }
+
+  // Fallback if no report is loaded
+  return null;
+} 
