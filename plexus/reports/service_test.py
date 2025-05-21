@@ -108,8 +108,8 @@ def test_generate_report_success(
 
     # --- Configure the mock for _instantiate_and_run_block ---
     mock_run_block.side_effect = [
-        ({"id": "score-test-123", "name": "Mock Score 1"}, "Log for block 1"), # Return tuple with raw dict
-        ({"id": "score-test-456", "name": "Mock Score 2"}, "Log for block 2"), # Return tuple with raw dict
+        ({"status": "pending_execution"}, "Processing..."), # Return tuple with status pending
+        ({"status": "pending_execution"}, "Processing..."), # Return tuple with status pending
     ]
 
     # --- Mock TaskProgressTracker --- 
@@ -183,14 +183,14 @@ def test_generate_report_success(
     assert block_create_call_1_kwargs['reportId'] == mock_created_report_obj.id
     assert block_create_call_1_kwargs['position'] == 1 # Now 1-based
     assert block_create_call_1_kwargs['name'] == mock_block_defs[0]['block_name']
-    assert json.loads(block_create_call_1_kwargs['output']) == {"id": "score-test-123", "name": "Mock Score 1"}
-    assert block_create_call_1_kwargs['log'] == "Log for block 1"
+    assert json.loads(block_create_call_1_kwargs['output']) == {"status": "pending_execution"}
+    assert block_create_call_1_kwargs['log'] == "Processing..."
     block_create_call_2_kwargs = mock_block_create.call_args_list[1].kwargs
     assert block_create_call_2_kwargs['reportId'] == mock_created_report_obj.id
     assert block_create_call_2_kwargs['position'] == 2 # Now 1-based
     assert block_create_call_2_kwargs['name'] == mock_block_defs[1]['block_name']
-    assert json.loads(block_create_call_2_kwargs['output']) == {"id": "score-test-456", "name": "Mock Score 2"}
-    assert block_create_call_2_kwargs['log'] == "Log for block 2"
+    assert json.loads(block_create_call_2_kwargs['output']) == {"status": "pending_execution"}
+    assert block_create_call_2_kwargs['log'] == "Processing..."
 
     # 8. Tracker Progress Update calls are no longer applicable within generate_report
     # mock_tracker_instance.update.assert_any_call(current_items=1)

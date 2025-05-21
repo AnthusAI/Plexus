@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { Card } from '@/components/ui/card'
-import { MoreHorizontal, X, Square, Columns2, AudioLines, Info, ChevronDown, ChevronUp, Clock, IdCard } from 'lucide-react'
+import { MoreHorizontal, X, Square, Columns2, StickyNote, Info, ChevronDown, ChevronUp, Clock, IdCard } from 'lucide-react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { cn } from '@/lib/utils'
 import { CardButton } from '@/components/CardButton'
@@ -155,7 +155,7 @@ const GridContent = React.memo(({
         </div>
       </div>
       <div className="flex flex-col items-end space-y-1">
-        {item.icon || <AudioLines className="h-[1.75rem] w-[1.75rem]" strokeWidth={1.25} />}
+        {item.icon || <StickyNote className="h-[1.75rem] w-[1.75rem]" strokeWidth={1.25} />}
       </div>
     </div>
   )

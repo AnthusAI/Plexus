@@ -16,6 +16,7 @@ import argparse
 from pydantic import BaseModel, Field
 from typing_extensions import Annotated
 from fastmcp import FastMCP, Context
+from urllib.parse import urljoin
 
 # Save original stdout file descriptor
 original_stdout_fd = None
@@ -73,6 +74,11 @@ def safe_print(*args, **kwargs):
         kwargs['file'] = sys.stderr
     return original_print(*args, **kwargs)
 print = safe_print
+
+# Global account cache - stores the resolved account ID
+DEFAULT_ACCOUNT_ID = None
+DEFAULT_ACCOUNT_KEY = None
+ACCOUNT_CACHE = {}  # Maps account keys/names to resolved IDs
 
 # Temporarily redirect stdout during initialization to prevent any accidental writing to stdout
 original_stdout = sys.stdout
@@ -222,7 +228,7 @@ mcp = FastMCP(
     Access Plexus Dashboard functionality, run evaluations, and manage scorecards.
     
     ## Scorecard Management
-    - list_plexus_scorecards: List available scorecards with optional filtering by account, name, or key
+    - list_plexus_scorecards: List available scorecards with optional filtering by name or key
     - get_plexus_scorecard_info: Get detailed information about a specific scorecard, including sections and scores
     - get_plexus_score_details: Get configuration and version details for a specific score within a scorecard
     
@@ -232,32 +238,101 @@ mcp = FastMCP(
       Monitor evaluation status via Plexus Dashboard or system logs.
     
     ## Report Tools
-    - list_plexus_reports: List available reports with optional filtering
+    - list_plexus_reports: List available reports with optional filtering by report configuration
     - get_plexus_report_details: Get detailed information about a specific report
-    - get_latest_plexus_report: Get the most recent report, optionally filtered
+    - get_latest_plexus_report: Get the most recent report, optionally filtered by report configuration
     - list_plexus_report_configurations: List available report configurations
     
     ## Utility Tools
-    - debug_python_env: Check Python environment details and module availability
-    - hello_world: Simple test function to verify the server is responsive
+    - think: REQUIRED tool to use before other tools to structure reasoning and plan approach
     """
 )
 
 # --- Tool Implementations ---
 
 @mcp.tool()
-async def list_plexus_scorecards(account: Optional[str] = None, 
-                                 name: Optional[str] = None, 
-                                 key: Optional[str] = None, 
-                                 limit: Optional[int] = None) -> Union[str, List[Dict]]:
+async def think(thought: str) -> str:
     """
-    Lists scorecards from the Plexus Dashboard. Can filter by account, name, or key.
+    Before taking any action or responding to the user after receiving tool results, use the think tool as a scratchpad to:
+    - Plan your approach
+    - Verify parameters
+    - Diagnose issues
+    - Find specific information
+    - Plan a sequence of tool calls
+    
+    When to use this tool:
+    - Before running evaluations to verify parameters
+    - After encountering an error and need to diagnose the issue
+    - When analyzing scorecard or report data to find specific information
+    - When planning a sequence of tool calls to accomplish a user request
+    - When determining what information is missing from a user request
+    - When deciding between multiple possible approaches
+    - When you plan on using multiple tools in a sequence
+    
+    Here are some examples of what to iterate over inside the think tool:
+
+    <think_tool_example_1>
+    The user asked to run an evaluation for 'EDU Scorecard'.
+    - I need to check: does this scorecard exist?
+    - Did they specify a score name? No.
+    - Did they specify sample count? Yes, 10 samples.
+    - Plan: First list scorecards to confirm name exists, then run evaluation.
+    </think_tool_example_1>
+    
+    <think_tool_example_2>
+    The user wants the latest report.
+    - Did they specify a report configuration? No.
+    - Plan: Use get_latest_plexus_report with minimal filtering.
+    </think_tool_example_2>
+    
+    <think_tool_example_3>
+    User asked about 'Pain Points' score configuration.
+    - Need to: 1) Find which scorecard contains this score
+                2) Get the scorecard ID
+                3) Get score details using the scorecard ID and score name
+    </think_tool_example_3>
+
+    <think_tool_example_4>
+    User asked to see the most recent "HCS" report.
+    - Did they specify a report configuration? No.
+    - Plan: Use list_plexus_report_configurations to find the HCS report configuration.
+    - Then use get_latest_plexus_report with the report configuration ID.
+    - Then use get_plexus_report_details to get the details of the report.
+    And I should always show the URL of the report in my response.
+    </think_tool_example_4>
+    """
+    # Temporarily redirect stdout to capture any unexpected output
+    old_stdout = sys.stdout
+    temp_stdout = StringIO()
+    sys.stdout = temp_stdout
+    
+    try:
+        # Log the thought for debugging purposes
+        logger.info(f"Think tool used: {thought[:100]}...")
+        
+        return "Thought processed"
+    except Exception as e:
+        logger.error(f"Error in think tool: {str(e)}", exc_info=True)
+        return f"Error processing thought: {str(e)}"
+    finally:
+        # Check if anything was written to stdout
+        captured_output = temp_stdout.getvalue()
+        if captured_output:
+            logger.warning(f"Captured unexpected stdout during think: {captured_output}")
+        # Restore original stdout
+        sys.stdout = old_stdout
+
+@mcp.tool()
+async def list_plexus_scorecards(
+    identifier: Optional[str] = None, 
+    limit: Optional[int] = None
+) -> Union[str, List[Dict]]:
+    """
+    Lists scorecards from the Plexus Dashboard.
     
     Parameters:
-    - account: Filter by account name or key (for Dashboard lookup)
-    - name: Filter scorecards whose name contains this string
-    - key: Filter scorecards whose key contains this string
-    - limit: Maximum number of scorecards to return
+    - identifier: Filter by scorecard name, key, ID, or external ID (optional)
+    - limit: Maximum number of scorecards to return (optional)
     
     Returns:
     - A list of scorecards matching the filter criteria
@@ -308,31 +383,63 @@ async def list_plexus_scorecards(account: Optional[str] = None,
         fetch_limit = limit if limit is not None else 1000 # Use 1000 if no limit specified
 
         filter_parts = []
-        if account:
-            # Wrap resolver call in try/except if it might also print tracebacks
+        
+        # Always use default account
+        default_account_id = get_default_account_id()
+        if default_account_id:
+            filter_parts.append(f'accountId: {{ eq: "{default_account_id}" }}')
+            logger.info("Using default account for scorecard listing")
+        else:
+            logger.warning("No default account ID available for filtering scorecards")
+        
+        # Handle specific scorecard filtering if identifier is provided
+        if identifier:
+            # First try to directly resolve the identifier to a scorecard ID
             try:
-                # Another stdout redirect specifically for account resolution
-                acct_stdout = StringIO()
+                id_stdout = StringIO()
                 saved_stdout = sys.stdout
-                sys.stdout = acct_stdout
+                sys.stdout = id_stdout
                 
                 try:
-                    account_id = resolve_account_identifier(client, account)
-                    if not account_id:
-                        return f"Error: Account '{account}' not found in Dashboard."
-                    filter_parts.append(f'accountId: {{ eq: "{account_id}" }}')
+                    scorecard_id = resolve_scorecard_identifier(client, identifier)
+                    if scorecard_id:
+                        # If we found a specific ID, just return that scorecard
+                        query = f"""
+                        query GetScorecard {{ 
+                            getScorecard(id: "{scorecard_id}") {{
+                                id name key description externalId createdAt updatedAt 
+                            }} 
+                        }}
+                        """
+                        logger.info(f"Found exact scorecard match with ID: {scorecard_id}")
+                        response = client.execute(query)
+                        
+                        if 'errors' in response:
+                            error_details = json.dumps(response['errors'], indent=2)
+                            logger.error(f"Dashboard query returned errors: {error_details}")
+                            return f"Error from Dashboard query: {error_details}"
+                        
+                        scorecard_data = response.get('getScorecard')
+                        if scorecard_data:
+                            return [scorecard_data]
+                        else:
+                            logger.warning(f"Resolved scorecard ID {scorecard_id} but couldn't fetch details")
                 finally:
-                    acct_output = acct_stdout.getvalue()
-                    if acct_output:
-                        logger.warning(f"Captured unexpected stdout during account resolution: {acct_output}")
+                    id_output = id_stdout.getvalue()
+                    if id_output:
+                        logger.warning(f"Captured unexpected stdout during scorecard ID resolution: {id_output}")
                     sys.stdout = saved_stdout
-            except Exception as acc_res_err:
-                logger.error(f"Error resolving account '{account}': {acc_res_err}", exc_info=True)
-                return f"Error resolving account '{account}'."
-        if name:
-            filter_parts.append(f'name: {{ contains: "{name}" }}')
-        if key:
-            filter_parts.append(f'key: {{ contains: "{key}" }}')
+            except Exception as id_err:
+                logger.error(f"Error resolving scorecard ID for '{identifier}': {id_err}", exc_info=True)
+            
+            # If direct resolution failed, try flexible search terms
+            # First check if it could be a name (contains spaces, proper case)
+            if ' ' in identifier or not identifier.islower():
+                filter_parts.append(f'name: {{ contains: "{identifier}" }}')
+            else:
+                # Otherwise use it as a general search term that could match name or key
+                filter_parts.append(f'or: [{{name: {{ contains: "{identifier}" }}}}, {{key: {{ contains: "{identifier}" }}}}]')
+
         filter_str = ", ".join(filter_parts)
 
         query = f"""
@@ -457,70 +564,6 @@ async def run_plexus_evaluation(
     
     return (f"Plexus evaluation for scorecard '{scorecard_name}' has been dispatched to run in the background. "
             f"Monitor logs or Plexus Dashboard for status and results.")
-
-@mcp.tool()
-async def debug_python_env(module_to_check: str = "plexus.cli") -> str:
-    """
-    Debug the Python environment, including available modules and paths.
-    
-    Parameters:
-    - module_to_check: Module to check for availability
-    
-    Returns:
-    - A string with debugging information
-    """
-    try:
-        import sys
-        import subprocess
-        
-        # Get Python info
-        python_path = sys.executable
-        python_version = sys.version
-        
-        # Check for the module
-        module_check_cmd = f"{python_path} -c \"import {module_to_check}; print('Module found: ' + {module_to_check}.__file__)\""
-        try:
-            module_result = subprocess.check_output(module_check_cmd, shell=True, text=True, stderr=subprocess.STDOUT)
-        except subprocess.CalledProcessError as e:
-            module_result = f"Module not found: {e.output}"
-        
-        # Get sys.path
-        paths = "\n".join(sys.path)
-        
-        # Get installed packages
-        pip_list_cmd = f"{python_path} -m pip list"
-        pip_list = subprocess.check_output(pip_list_cmd, shell=True, text=True)
-        
-        # Combine results
-        result = f"""
-Python Executable: {python_path}
-Python Version: {python_version}
-Module Check ({module_to_check}): {module_result}
-
-PYTHONPATH:
-{paths}
-
-Installed Packages (first 20 lines):
-{pip_list.splitlines()[:20]}
-        """
-        
-        return result
-    except Exception as e:
-        logger.error(f"Error debugging Python environment: {str(e)}", exc_info=True)
-        return f"Error debugging Python environment: {str(e)}"
-
-@mcp.tool()
-async def hello_world(name: str) -> str:
-    """
-    A simple tool that returns a greeting.
-    
-    Parameters:
-    - name: Name to greet
-    
-    Returns:
-    - A greeting message
-    """
-    return f"Hello, {name}! Welcome to the Plexus MCP Server."
 
 @mcp.tool()
 async def get_plexus_scorecard_info(scorecard_identifier: str) -> Union[str, Dict[str, Any]]:
@@ -826,20 +869,18 @@ async def get_plexus_score_details(
 
 @mcp.tool()
 async def list_plexus_reports(
-    account_identifier: Optional[str] = None,
     report_configuration_id: Optional[str] = None,
     limit: Optional[int] = 10
 ) -> Union[str, List[Dict]]:
     """
-    Lists reports from the Plexus Dashboard. Can be filtered by account or report configuration ID.
+    Lists reports from the Plexus Dashboard. Can be filtered by report configuration ID.
     
     Parameters:
-    - account_identifier: Optional account name, key, or ID
     - report_configuration_id: Optional ID of the report configuration
     - limit: Maximum number of reports to return (default 10)
     
     Returns:
-    - A list of reports matching the filter criteria
+    - A list of reports matching the filter criteria, sorted by createdAt in descending order (newest first)
     """
     # Temporarily redirect stdout to capture any unexpected output
     old_stdout = sys.stdout
@@ -851,7 +892,6 @@ async def list_plexus_reports(
         try:
             # Fix imports to use the correct modules
             from plexus.cli.ScorecardCommands import create_client as create_dashboard_client
-            from plexus.cli.ScorecardCommands import resolve_account_identifier
             from plexus.dashboard.api.client import PlexusDashboardClient
         except ImportError as e:
             logger.error(f"ImportError: {str(e)}", exc_info=True)
@@ -872,49 +912,89 @@ async def list_plexus_reports(
 
         # Build filter conditions
         filter_conditions = []
-        if account_identifier:
-            actual_account_id = resolve_account_identifier(client, account_identifier)
-            if not actual_account_id:
-                return f"Error: Account '{account_identifier}' not found."
-            filter_conditions.append(f'accountId: {{eq: "{actual_account_id}"}}')
-        if report_configuration_id:
-            filter_conditions.append(f'reportConfigurationId: {{eq: "{report_configuration_id}"}}')
         
-        filter_string = ", ".join(filter_conditions)
+        # Always use default account
+        default_account_id = get_default_account_id()
+        if default_account_id:
+            filter_conditions.append(f'accountId: {{eq: "{default_account_id}"}}')
+            logger.info("Using default account for report listing")
+        else:
+            logger.warning("No default account ID available for filtering reports")
+        
         limit_val = limit if limit is not None else 10
         
-        # Build the query
-        query = f"""
-        query ListReports {{
-            listReports(filter: {{ {filter_string} }}, limit: {limit_val}) {{
-                items {{
-                    id
-                    name
-                    createdAt
-                    updatedAt
-                    reportConfigurationId
-                    accountId
-                    taskId
+        # If we have a report configuration ID, use the specific GSI for it
+        if report_configuration_id:
+            # Use GSI by reportConfigurationId and createdAt for more efficient queries
+            query = f"""
+            query ListReportsByConfig {{
+                listReportByReportConfigurationIdAndCreatedAt(
+                    reportConfigurationId: "{report_configuration_id}",
+                    sortDirection: DESC,
+                    limit: {limit_val}
+                ) {{
+                    items {{
+                        id
+                        name
+                        createdAt
+                        updatedAt
+                        reportConfigurationId
+                        accountId
+                        taskId
+                    }}
                 }}
             }}
-        }}
-        """
+            """
+            
+            logger.info(f"Executing listReportByReportConfigurationIdAndCreatedAt query")
+            response = client.execute(query)
+            
+            if response.get('errors'):
+                error_details = json.dumps(response['errors'], indent=2)
+                logger.error(f"listReportByReportConfigurationIdAndCreatedAt query returned errors: {error_details}")
+                return f"Error from listReportByReportConfigurationIdAndCreatedAt query: {error_details}"
+                
+            reports_data = response.get('listReportByReportConfigurationIdAndCreatedAt', {}).get('items', [])
+        else:
+            # No specific report configuration - use standard filter with account ID and sort
+            filter_string = ", ".join(filter_conditions)
+            
+            query = f"""
+            query ListReports {{
+                listReports(
+                    filter: {{ {filter_string} }},
+                    limit: {limit_val},
+                    sortBy: "createdAt",
+                    sortDirection: DESC
+                ) {{
+                    items {{
+                        id
+                        name
+                        createdAt
+                        updatedAt
+                        reportConfigurationId
+                        accountId
+                        taskId
+                    }}
+                }}
+            }}
+            """
+            
+            logger.info(f"Executing listReports query with sort")
+            response = client.execute(query)
+            
+            if response.get('errors'):
+                error_details = json.dumps(response['errors'], indent=2)
+                logger.error(f"listReports query returned errors: {error_details}")
+                return f"Error from listReports query: {error_details}"
+                
+            reports_data = response.get('listReports', {}).get('items', [])
         
-        # Execute the query
-        logger.info(f"Executing listReports query")
-        response = client.execute(query)
-        
-        if response.get('errors'):
-            error_details = json.dumps(response['errors'], indent=2)
-            logger.error(f"listReports query returned errors: {error_details}")
-            return f"Error from listReports query: {error_details}"
-        
-        reports_data = response.get('listReports', {}).get('items', [])
-        
-        if not reports_data and not filter_string:
-            return "No reports found."
-        elif not reports_data:
-            return "No reports found matching the criteria."
+        if not reports_data:
+            if report_configuration_id:
+                return f"No reports found for report configuration ID: {report_configuration_id}"
+            else:
+                return "No reports found."
             
         return reports_data
     except Exception as e:
@@ -1006,6 +1086,10 @@ async def get_plexus_report_details(report_id: str) -> Union[str, Dict[str, Any]
         report_data = response.get('getReport')
         if not report_data:
             return f"Error: Report with ID '{report_id}' not found."
+            
+        # Add URL to the report data
+        report_data['url'] = get_report_url(report_id)
+        
         return report_data
     except Exception as e:
         logger.error(f"Error getting report details for ID '{report_id}': {str(e)}", exc_info=True)
@@ -1020,14 +1104,12 @@ async def get_plexus_report_details(report_id: str) -> Union[str, Dict[str, Any]
 
 @mcp.tool()
 async def get_latest_plexus_report(
-    account_identifier: Optional[str] = None,
     report_configuration_id: Optional[str] = None
 ) -> Union[str, Dict[str, Any]]:
     """
-    Gets full details for the most recent report, optionally filtered by account or report configuration ID.
+    Gets full details for the most recent report, optionally filtered by report configuration ID.
     
     Parameters:
-    - account_identifier: Optional account name, key, or ID to filter by
     - report_configuration_id: Optional ID of the report configuration to filter by
     
     Returns:
@@ -1041,7 +1123,6 @@ async def get_latest_plexus_report(
     try:
         # First, list reports to find the latest one's ID
         reports = await list_plexus_reports(
-            account_identifier=account_identifier,
             report_configuration_id=report_configuration_id,
             limit=1
         )
@@ -1069,7 +1150,17 @@ async def get_latest_plexus_report(
         logger.info(f"Found latest report ID: {latest_report_id}")
         
         # Get the full report details
-        return await get_plexus_report_details(report_id=latest_report_id)
+        report_details = await get_plexus_report_details(report_id=latest_report_id)
+        
+        # If report_details is already a string (error message), return it directly
+        if isinstance(report_details, str):
+            return report_details
+            
+        # Add the URL if not already present
+        if isinstance(report_details, dict) and 'url' not in report_details:
+            report_details['url'] = get_report_url(latest_report_id)
+            
+        return report_details
         
     except Exception as e:
         logger.error(f"Error getting latest report: {str(e)}", exc_info=True)
@@ -1083,12 +1174,9 @@ async def get_latest_plexus_report(
         sys.stdout = old_stdout
 
 @mcp.tool()
-async def list_plexus_report_configurations(accountId: Optional[str] = None) -> Union[str, List[Dict]]:
+async def list_plexus_report_configurations() -> Union[str, List[Dict]]:
     """
-    List all report configurations for the specified account in reverse chronological order.
-    
-    Parameters:
-    - accountId: The ID of the account to list report configurations for. If not provided, the current account ID from the context will be used.
+    List all report configurations in reverse chronological order.
     
     Returns:
     - Array of report configuration objects with name, id, description, and updatedAt fields
@@ -1102,7 +1190,6 @@ async def list_plexus_report_configurations(accountId: Optional[str] = None) -> 
         # Import plexus CLI inside function to keep startup fast
         try:
             from plexus.cli.ScorecardCommands import create_client as create_dashboard_client
-            from plexus.cli.ScorecardCommands import resolve_account_identifier
             from plexus.dashboard.api.client import PlexusDashboardClient
         except ImportError as e:
             logger.error(f"ImportError: {str(e)}", exc_info=True)
@@ -1113,22 +1200,12 @@ async def list_plexus_report_configurations(accountId: Optional[str] = None) -> 
         if not client:
             return "Error: Could not create dashboard client."
         
-        # Determine the account ID
-        account_identifier = accountId
-        
-        # If no accountId provided, try to get it from environment
-        if not account_identifier or account_identifier == "":
-            account_identifier = os.environ.get('PLEXUS_ACCOUNT_KEY')
-            logger.info(f"Using PLEXUS_ACCOUNT_KEY from environment: '{account_identifier}'")
-            if not account_identifier:
-                return "Error: No account ID provided and PLEXUS_ACCOUNT_KEY environment variable not set."
-        
-        # Resolve the account identifier
-        actual_account_id = resolve_account_identifier(client, account_identifier)
+        # Get the default account ID
+        actual_account_id = get_default_account_id()
         if not actual_account_id:
-            return f"Error: Could not determine account ID from '{account_identifier}'."
+            return "Error: Could not determine default account ID. Please check that PLEXUS_ACCOUNT_KEY is set in environment."
             
-        logger.info(f"Listing report configurations for account {actual_account_id}")
+        logger.info("Listing report configurations")
         
         # Build and execute the query
         query = f"""
@@ -1180,7 +1257,7 @@ async def list_plexus_report_configurations(accountId: Optional[str] = None) -> 
                 
         # Format each configuration
         if not configs_data:
-            return f"No report configurations found for account '{account_identifier}' (ID: {actual_account_id})."
+            return "No report configurations found."
         
         formatted_configs = []
         for config in configs_data:
@@ -1229,6 +1306,101 @@ def load_env_file(env_dir=None):
         logger.warning("python-dotenv not installed, can't load .env file")
         return False
 
+def initialize_default_account():
+    """Initialize the default account ID from the environment variable PLEXUS_ACCOUNT_KEY."""
+    global DEFAULT_ACCOUNT_ID, DEFAULT_ACCOUNT_KEY
+    
+    # Get account key from environment
+    account_key = os.environ.get('PLEXUS_ACCOUNT_KEY')
+    if not account_key:
+        logger.warning("PLEXUS_ACCOUNT_KEY environment variable not set")
+        return
+    
+    DEFAULT_ACCOUNT_KEY = account_key
+    
+    # Only attempt to resolve if we have the client available
+    if not PLEXUS_CORE_AVAILABLE:
+        logger.warning("Plexus core not available, can't resolve default account ID")
+        return
+    
+    # Create dashboard client and resolve account ID
+    try:
+        client = create_dashboard_client()
+        if not client:
+            logger.warning("Could not create dashboard client to resolve default account")
+            return
+        
+        account_id = resolve_account_identifier(client, account_key)
+        if not account_id:
+            logger.warning(f"Could not resolve account ID for key: {account_key}")
+            return
+        
+        DEFAULT_ACCOUNT_ID = account_id
+        ACCOUNT_CACHE[account_key] = account_id
+        logger.info(f"Default account ID initialized successfully")
+    except Exception as e:
+        logger.error(f"Error initializing default account ID: {str(e)}", exc_info=True)
+
+def get_default_account_id():
+    """Get the default account ID, resolving it if necessary."""
+    global DEFAULT_ACCOUNT_ID, DEFAULT_ACCOUNT_KEY
+    
+    # If already resolved, return it
+    if DEFAULT_ACCOUNT_ID:
+        return DEFAULT_ACCOUNT_ID
+    
+    # Try to resolve it now
+    initialize_default_account()
+    return DEFAULT_ACCOUNT_ID
+
+def resolve_account_id_with_cache(client, identifier):
+    """Resolve an account identifier to its ID, using cache when possible."""
+    if not identifier:
+        return get_default_account_id()
+    
+    # Check cache first
+    if identifier in ACCOUNT_CACHE:
+        return ACCOUNT_CACHE[identifier]
+    
+    # Resolve and cache
+    account_id = resolve_account_identifier(client, identifier)
+    if account_id:
+        ACCOUNT_CACHE[identifier] = account_id
+    
+    return account_id
+
+def get_plexus_url(path: str) -> str:
+    """
+    Safely concatenates the PLEXUS_APP_URL with the provided path.
+    Handles cases where base URL may or may not have trailing slashes
+    and path may or may not have leading slashes.
+    
+    Parameters:
+    - path: The URL path to append to the base URL
+    
+    Returns:
+    - Full URL string
+    """
+    base_url = os.environ.get('PLEXUS_APP_URL', 'https://capacity-plexus.anth.us')
+    # Ensure base URL ends with a slash for urljoin to work correctly
+    if not base_url.endswith('/'):
+        base_url += '/'
+    # Strip leading slash from path if present to avoid double slashes
+    path = path.lstrip('/')
+    return urljoin(base_url, path)
+
+def get_report_url(report_id: str) -> str:
+    """
+    Generates a URL for viewing a report in the dashboard.
+    
+    Parameters:
+    - report_id: The ID of the report
+    
+    Returns:
+    - Full URL to the report in the dashboard
+    """
+    return get_plexus_url(f"lab/reports/{report_id}")
+
 # Main function to run the server
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run the Plexus MCP Server with FastMCP")
@@ -1242,6 +1414,14 @@ if __name__ == "__main__":
     # Load environment variables from .env file if specified
     if args.env_dir:
         load_env_file(args.env_dir)
+    
+    # Initialize default account as early as possible after env vars are loaded
+    # but after the Plexus core is available
+    if PLEXUS_CORE_AVAILABLE:
+        logger.info("Initializing default account from environment...")
+        initialize_default_account()
+    else:
+        logger.warning("Plexus core not available, skipping default account initialization")
     
     # Run the server with appropriate transport
     try:

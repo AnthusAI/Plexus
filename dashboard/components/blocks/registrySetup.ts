@@ -10,7 +10,9 @@ import { BlockComponent } from './ReportBlock';
 import ReportBlock from './ReportBlock';
 import TextBlock from './TextBlock';
 import FeedbackAnalysis from './FeedbackAnalysis';
+import ScorecardReport from './ScorecardReport';
 import ScoreInfo from './ScoreInfo';
+import TopicAnalysis from './TopicAnalysis';
 
 // Register all block components
 console.log("Running Block Registry Setup...");
@@ -19,9 +21,11 @@ console.log("Running Block Registry Setup...");
 registerBlock('default', ReportBlock);
 
 // Register specific block types - use type casting to satisfy BlockComponent interface
+registerBlock('ScorecardReport', ScorecardReport as BlockComponent);
 registerBlock('FeedbackAnalysis', FeedbackAnalysis as BlockComponent);
 registerBlock('text', TextBlock as BlockComponent);
 registerBlock('ScoreInfo', ScoreInfo as BlockComponent);
+registerBlock('TopicAnalysis', TopicAnalysis as BlockComponent);
 
 // Log all registered block types
 import { getRegisteredBlockTypes } from './BlockRegistry';

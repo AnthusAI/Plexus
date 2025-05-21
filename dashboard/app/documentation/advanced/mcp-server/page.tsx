@@ -55,7 +55,7 @@ export default function McpServerPage() {
             The Plexus MCP server is a pre-built tool that you can run on your system. Once running, it allows AI assistants 
             that support MCP (like the Claude desktop app) to connect to your Plexus environment. This connection lets the AI 
             perform various actions within Plexus on your behalf, such as listing scorecards, retrieving report details, or 
-            even initiating new evaluations. The server is typically run via a wrapper script (<code>plexus_mcp_wrapper.py</code>) 
+            even initiating new evaluations. The server is typically run via a wrapper script (<code>plexus_fastmcp_wrapper.py</code>) 
             which handles environment setup and ensures smooth communication with the AI client.
           </p>
         </section>
@@ -65,7 +65,7 @@ export default function McpServerPage() {
           <p className="text-muted-foreground mb-4">
             To run the Plexus MCP server, you'll first need to obtain the server code. This is available in the main Plexus GitHub repository. 
             You can clone or download it from: <Link href="https://github.com/AnthusAI/Plexus" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">https://github.com/AnthusAI/Plexus</Link>.
-            The necessary scripts (<code>plexus_mcp_wrapper.py</code> and <code>plexus_fastmcp_server.py</code>) are typically located at <code>MCP/</code> within the repository.
+            The necessary scripts (<code>plexus_fastmcp_wrapper.py</code> and <code>plexus_fastmcp_server.py</code>) are typically located at <code>MCP/</code> within the repository.
             You will primarily need these files and to ensure their dependencies can be met in your Python environment.
           </p>
         </section>
@@ -86,9 +86,11 @@ export default function McpServerPage() {
 {`{
   "mcpServers": {
     "plexus-mcp-service": {
-      "command": "/path/to/your/conda/envs/py39/bin/python",
+      "command": "/path/to/your/conda/envs/py311/bin/python",
       "args": [
-        "/path/to/your/Plexus/MCP/plexus_mcp_wrapper.py",
+        "/path/to/your/Plexus/MCP/plexus_fastmcp_wrapper.py",
+        "--host", "127.0.0.1",
+        "--port", "8002",
         "--transport", "stdio",
         "--env-file", "/path/to/your/Plexus/.env",
         "--target-cwd", "/path/to/your/Plexus/"
@@ -104,11 +106,12 @@ export default function McpServerPage() {
           </pre>
           <p className="text-muted-foreground mb-1">Key parts of this configuration:</p>
           <ul className="list-disc pl-6 space-y-1 text-muted-foreground mb-4">
-            <li><code>command</code>: The full path to the Python interpreter within your Plexus conda environment (e.g., <code>py39</code>).</li>
-            <li><code>args</code>: Specifies the wrapper script to run (<code>plexus_mcp_wrapper.py</code>) and its parameters. 
+            <li><code>command</code>: The full path to the Python interpreter within your Plexus conda environment (e.g., <code>py311</code>).</li>
+            <li><code>args</code>: Specifies the wrapper script to run (<code>plexus_fastmcp_wrapper.py</code>) and its parameters. 
+                The <code>--host</code> and <code>--port</code> arguments configure the local server settings.
                 The <code>--transport stdio</code> argument is standard for client-server communication. 
                 The <code>--env-file</code> argument must point directly to your <code>.env</code> file (which contains API keys). 
-                The <code>--target-cwd</code> should point to your Plexus project root directory. Note that if your cloned repository is named `Plexus_2` or similar, use that name in the paths.</li>
+                The <code>--target-cwd</code> should point to your Plexus project root directory.</li>
             <li><code>env.PYTHONPATH</code>: Should point to the root of your Plexus project directory to ensure the server can find all necessary Python modules.</li>
           </ul>
           <p className="text-muted-foreground mb-4">
@@ -174,12 +177,8 @@ export default function McpServerPage() {
             <h3 className="text-xl font-medium mb-2">Utility Tools</h3>
             <ul className="list-disc pl-6 space-y-3 text-muted-foreground">
               <li>
-                <strong><code>debug_python_env</code></strong>: A technical tool, mainly for troubleshooting if the server is having issues. 
-                You can ask the AI to use this to check the server's Python environment, available modules, and paths. For example: "Debug the Python environment for the Plexus MCP server and check if the 'plexus.cli' module is available."
-              </li>
-              <li>
-                <strong><code>hello_world</code></strong>: A simple test tool to verify the server is responsive and the AI can communicate with it. 
-                For example: "Say hello to the Plexus MCP server with my name, John."
+                <strong><code>think</code></strong>: A planning tool used internally by the AI to structure reasoning before using other tools.
+                This helps the AI organize its approach to complex tasks that may require multiple steps or tool calls.
               </li>
             </ul>
           </div>
@@ -191,7 +190,7 @@ export default function McpServerPage() {
             <div>
               <h3 className="text-xl font-medium mb-2">Software</h3>
               <ul className="list-disc pl-6 space-y-1 text-muted-foreground">
-                <li>Python 3.10 or newer (required by the <code>fastmcp</code> library the server uses).</li>
+                <li>Python 3.11 or newer (required by the <code>fastmcp</code> library the server uses).</li>
                 <li>An existing Plexus installation and access to its dashboard credentials.</li>
                 <li>The <code>python-dotenv</code> Python package (used by the server to load your API keys from the <code>.env</code> file).</li>
               </ul>
@@ -200,7 +199,7 @@ export default function McpServerPage() {
               <h3 className="text-xl font-medium mb-2"><code>.env</code> File with Plexus Credentials</h3>
               <p className="text-muted-foreground mb-2">
                 The server needs to access your Plexus API. Create a file named <code>.env</code>. The <code>--env-file</code> parameter in your <code>mcp.json</code> should point directly to this file.
-                It's typically located in your main Plexus project root directory (e.g., <code>Plexus/.env</code> or <code>Plexus_2/.env</code>).
+                It's typically located in your main Plexus project root directory (e.g., <code>Plexus/.env</code>).
               </p>
               <h4 className="text-lg font-medium mt-2 mb-1">Required Variables in <code>.env</code>:</h4>
               <ul className="list-disc pl-6 space-y-1 text-muted-foreground">
@@ -220,14 +219,14 @@ export default function McpServerPage() {
         <section>
           <h2 className="text-2xl font-semibold mb-4">Running the Server</h2>
           <p className="text-muted-foreground mb-2">
-            Once you have the code and your <code>.env</code> file is set up, you should run the server using the <code>plexus_mcp_wrapper.py</code> script as configured in your <code>mcp.json</code> file. 
+            Once you have the code and your <code>.env</code> file is set up, you should run the server using the <code>plexus_fastmcp_wrapper.py</code> script as configured in your <code>mcp.json</code> file. 
             The MCP client (e.g., Claude Desktop App) will execute the command specified in <code>mcp.json</code> when it attempts to connect to the "plexus-mcp-service".
           </p>
           <p className="text-muted-foreground mb-2">
-            You typically don't run the <code>plexus_mcp_wrapper.py</code> script manually from the terminal for client use. Instead, ensure your <code>mcp.json</code> is correctly configured, and the client application will start the server process as needed.
+            You typically don't run the <code>plexus_fastmcp_wrapper.py</code> script manually from the terminal for client use. Instead, ensure your <code>mcp.json</code> is correctly configured, and the client application will start the server process as needed.
           </p>
           <p className="text-muted-foreground mb-4">
-            Make sure your Plexus Python environment (e.g., <code>conda activate py39</code>) is correctly referenced by the full path to python in the <code>command</code> field of your <code>mcp.json</code>. 
+            Make sure your Plexus Python environment (e.g., <code>conda activate py311</code>) is correctly referenced by the full path to python in the <code>command</code> field of your <code>mcp.json</code>. 
             The wrapper script handles passing the necessary environment variables and paths to the underlying <code>plexus_fastmcp_server.py</code>.
           </p>
         </section>
@@ -235,7 +234,7 @@ export default function McpServerPage() {
         <section>
           <h2 className="text-2xl font-semibold mb-4">Troubleshooting Common Issues</h2>
           <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
-            <li><strong>Connection Errors:</strong> Double-check all paths in your <code>mcp.json</code> file (<code>command</code>, <code>args</code>, <code>env.PYTHONPATH</code>). Ensure they accurately point to your Python executable, the <code>plexus_mcp_wrapper.py</code> script, your <code>.env</code> file, and your project directory.</li>
+            <li><strong>Connection Errors:</strong> Double-check all paths in your <code>mcp.json</code> file (<code>command</code>, <code>args</code>, <code>env.PYTHONPATH</code>). Ensure they accurately point to your Python executable, the <code>plexus_fastmcp_wrapper.py</code> script, your <code>.env</code> file, and your project directory.</li>
             <li><strong>Authentication Errors:</strong> Verify that the <code>--env-file</code> path in <code>mcp.json</code> correctly points to your <code>.env</code> file and that this file contains the correct <code>PLEXUS_API_URL</code> and <code>PLEXUS_API_KEY</code>.</li>
           </ul>
         </section>
@@ -243,7 +242,7 @@ export default function McpServerPage() {
         <section>
           <h2 className="text-2xl font-semibold mb-4">Server Logs</h2>
           <p className="text-muted-foreground mb-2">
-            The Plexus MCP server setup (via <code>plexus_mcp_wrapper.py</code>) directs operational logs and error messages to stderr. 
+            The Plexus MCP server setup (via <code>plexus_fastmcp_wrapper.py</code>) directs operational logs and error messages to stderr. 
             MCP clients like the Claude desktop app typically capture and display these stderr logs, or store them in a dedicated log file.
           </p>
           <p className="text-muted-foreground mb-4">

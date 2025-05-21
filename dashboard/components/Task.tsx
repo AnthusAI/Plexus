@@ -320,7 +320,7 @@ const TaskContent = <TData extends BaseTaskData = BaseTaskData>({
   })()
 
   return (
-    <CardContent className="h-full p-0 flex flex-col flex-1">
+    <CardContent className="h-full p-0 flex flex-col flex-1 px-3 pb-3">
       {!hideTaskStatus && (
         <div>
           <TaskStatus
