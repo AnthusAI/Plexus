@@ -292,7 +292,7 @@ const ReportBlock: BlockComponent = ({
     if (!showLog) return null;
     
     return (
-      <div className={`mt-2 bg-card p-3 overflow-hidden rounded-lg ${isWideLayout ? "w-full" : "@[30rem]:w-[350px]"}`}>
+      <div className={`my-3 bg-card p-3 overflow-hidden rounded-lg ${isWideLayout ? "w-full" : "@[30rem]:w-[350px]"}`}>
         <div className="flex flex-row justify-between items-center mb-3">
           <h4 className="text-base font-medium">Log</h4>
           {logFileFromDetails && (
@@ -329,7 +329,7 @@ const ReportBlock: BlockComponent = ({
     if (!showAttachedFiles) return null;
     
     return (
-      <div className={`mt-2 bg-card p-3 overflow-visible rounded-lg ${isWideLayout ? "w-full" : "@[30rem]:w-[350px]"}`}>
+      <div className={`my-3 bg-card p-3 overflow-visible rounded-lg ${isWideLayout ? "w-full" : "@[30rem]:w-[350px]"}`}>
         <div className="flex flex-row justify-between items-center mb-3">
           <h4 className="text-base font-medium">Attached Files</h4>
         </div>

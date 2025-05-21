@@ -137,22 +137,20 @@ export class ReportService {
   // Fetch report by share token
   async fetchReportByShareToken(token: string): Promise<any> {
     try {
-      console.log('Fetching report by share token:', token);
-      
       // Determine auth mode based on user's session
       let authMode: 'userPool' | 'identityPool' = 'identityPool'; // Default to guest access
       try {
         const session = await fetchAuthSession();
         if (session.tokens?.idToken) {
-          console.log('User is authenticated, using userPool auth mode');
           authMode = 'userPool';
         } else {
-          console.log('No auth session, using identityPool (guest) auth mode');
+          console.log('Using guest access mode');
         }
       } catch (error) {
-        console.log('Error checking auth session, falling back to guest access:', error);
+        console.log('Error checking auth session, falling back to guest access');
       }
       
+      // First get the share link data and resource ID
       const response = await this.client.graphql({
         query: `
           query GetResourceByShareToken($token: String!) {
@@ -168,7 +166,7 @@ export class ReportService {
           }
         `,
         variables: { token },
-        authMode // Use the determined auth mode
+        authMode
       }) as GraphQLResult<{
         getResourceByShareToken: {
           shareLink: ShareLinkData;
@@ -178,9 +176,7 @@ export class ReportService {
       
       // Check for GraphQL errors
       if (response.errors && response.errors.length > 0) {
-        const errorMessage = response.errors[0].message;
-        console.error('GraphQL error:', errorMessage);
-        throw new Error(errorMessage);
+        throw new Error(response.errors[0].message);
       }
       
       if (!response.data?.getResourceByShareToken) {
@@ -188,49 +184,103 @@ export class ReportService {
       }
       
       const result = response.data.getResourceByShareToken;
+      const shareLink = result.shareLink;
       
-      console.log('Share link data received:', {
-        shareLink: result.shareLink,
-        dataType: typeof result.data,
-        dataLength: typeof result.data === 'string' ? result.data.length : 'N/A'
-      });
-      
-      if (!result.shareLink) {
+      if (!shareLink) {
         throw new Error('Invalid share link data');
       }
       
-      const shareLink = result.shareLink;
-      
-      // Verify that this is a Report resource (case insensitive check)
+      // Verify that this is a Report resource
       if (shareLink.resourceType.toUpperCase() !== 'REPORT' && 
           shareLink.resourceType !== 'Report') {
         throw new Error(`Invalid resource type: ${shareLink.resourceType}. Expected: Report`);
       }
       
-      // Handle the data as a string that needs to be parsed
-      if (!result.data) {
-        throw new Error('No data returned from share link resolver');
-      }
+      // Get the reportId from the shareLink
+      const reportId = shareLink.resourceId;
       
-      // Parse the string data to JSON if needed
+      // Parse the initial data if needed
       let reportData;
       if (typeof result.data === 'string') {
         try {
           const parsedData = JSON.parse(result.data);
-          if (parsedData.getReport) {
-            reportData = parsedData.getReport;
-          } else {
-            reportData = parsedData;
-          }
+          reportData = parsedData.getReport || parsedData;
         } catch (e) {
           console.error('Error parsing result.data as JSON:', e);
-          reportData = result.data; // Use as is if not JSON
+          reportData = result.data;
         }
       } else {
         reportData = result.data;
       }
       
-      // Fetch blocks if needed
+      // If we have a reportId, fetch the full report data to ensure we have detailsFiles
+      if (reportId) {
+        try {
+          const fullReportResponse = await this.client.graphql({
+            query: `
+              query GetFullReport($reportId: ID!) {
+                getReport(id: $reportId) {
+                  id
+                  name
+                  createdAt
+                  updatedAt
+                  parameters
+                  output
+                  accountId
+                  reportConfigurationId
+                  reportConfiguration {
+                    id
+                    name
+                    description
+                  }
+                  taskId
+                  task {
+                    id
+                    type
+                    status
+                    currentStageId
+                    errorMessage
+                    stages {
+                      items {
+                        id
+                        name
+                        order
+                        status
+                        statusMessage
+                        processedItems
+                        totalItems
+                      }
+                    }
+                  }
+                  reportBlocks {
+                    items {
+                      id
+                      name
+                      position
+                      type
+                      output
+                      log
+                      detailsFiles
+                    }
+                  }
+                }
+              }
+            `,
+            variables: { reportId },
+            authMode
+          }) as GraphQLResult<{
+            getReport: any;
+          }>;
+          
+          if (fullReportResponse.data?.getReport) {
+            reportData = fullReportResponse.data.getReport;
+          }
+        } catch (err) {
+          console.error('Error fetching full report, will continue with partial data');
+        }
+      }
+      
+      // Fetch any additional blocks if needed
       return this.fetchReportBlocks(reportData);
     } catch (error) {
       console.error('Error fetching report by share token:', error);
@@ -311,25 +361,12 @@ export function PublicReport({
   if (loading) {
     return (
       <div className="px-4 w-full">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex flex-col items-center justify-center gap-4 min-h-[300px]">
-              <div className="animate-pulse flex space-x-4">
-                <div className="flex-1 space-y-6 py-1">
-                  <div className="h-4 bg-muted rounded w-3/4"></div>
-                  <div className="space-y-3">
-                    <div className="grid grid-cols-3 gap-4">
-                      <div className="h-4 bg-muted rounded col-span-2"></div>
-                      <div className="h-4 bg-muted rounded col-span-1"></div>
-                    </div>
-                    <div className="h-4 bg-muted rounded"></div>
-                  </div>
-                </div>
-              </div>
-              <p className="text-muted-foreground">Loading report...</p>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="bg-background p-6 rounded-md">
+          <div className="flex flex-col items-center justify-center min-h-[200px]">
+            <div className="w-10 h-10 border-t-[8px] border-secondary rounded-full animate-spin mb-4"></div>
+            <p className="text-muted-foreground">Loading report...</p>
+          </div>
+        </div>
       </div>
     );
   }
@@ -422,7 +459,7 @@ export function PublicReport({
     // Render the report task with data
     return (
       <div className="flex flex-col flex-1 min-h-0">
-        <div className="px-4 w-full mt-4 flex-1">
+        <div className="px-3 sm:px-4 md:px-5 lg:px-6 xl:px-8 w-full mt-4 flex-1">
           <BlockRegistryInitializer />
           <ReportTask
             variant={isShareView ? "bare" : "detail"}
@@ -454,7 +491,7 @@ export function PublicReport({
           />
         </div>
         {isShareView && displayTimestamp && (
-          <footer className="py-4 px-4 flex-shrink-0">
+          <footer className="py-4 px-3 sm:px-4 md:px-5 lg:px-6 xl:px-8 flex-shrink-0">
             <div className="w-full">
               <div className="flex items-center justify-between">
                 <Timestamp

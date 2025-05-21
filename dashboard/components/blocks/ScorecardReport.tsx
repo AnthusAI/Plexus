@@ -91,7 +91,7 @@ const ScorecardReport: React.FC<ScorecardReportProps> = ({
       {/* Score Cards Section - Updated to use responsive container queries */}
       {hasData && scoreData.scores.length > 0 && (
         <div className="@container">
-          <div className="grid grid-cols-1 @[60rem]:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 @[60rem]:grid-cols-2 gap-3">
             {scoreData.scores
               .map((scoreItem, originalIdx) => ({ // Add originalIndex before sorting
                 scoreData: scoreItem,
@@ -128,7 +128,7 @@ const ScorecardReport: React.FC<ScorecardReportProps> = ({
           </div>
           
           <div className="@container">
-            <div className="grid grid-cols-1 @[30rem]:grid-cols-12 gap-4 items-start">
+            <div className="grid grid-cols-1 @[30rem]:grid-cols-12 gap-3 items-start">
               <div className="@[30rem]:col-span-4">
                 <div className="text-sm space-y-1">
                   <div>
