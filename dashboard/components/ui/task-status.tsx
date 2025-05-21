@@ -77,7 +77,7 @@ export interface TaskStatusProps {
   showPreExecutionStages?: boolean
   completedAt?: string
   truncateMessages?: boolean
-  variant?: 'grid' | 'detail' | 'nested' | 'list'
+  variant?: 'grid' | 'detail' | 'nested' | 'list' | 'bare'
   isFullWidth?: boolean
   onToggleFullWidth?: () => void
   onClose?: () => void

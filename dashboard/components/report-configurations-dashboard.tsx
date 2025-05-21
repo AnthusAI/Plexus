@@ -191,7 +191,7 @@ export function ReportConfigurationsDashboard() {
 
       {/* Main Content Area */}
       <div className="flex-1 p-1.5 overflow-y-auto">
-        <div className="grid gap-4 grid-cols-1 @[640px]:grid-cols-2">
+        <div className="grid gap-3 grid-cols-1 @[640px]:grid-cols-2">
           {configurations.map((config) => (
             <Card key={config.id} className="cursor-pointer hover:bg-accent/5 border-0 shadow-none">
               <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">

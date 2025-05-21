@@ -65,7 +65,7 @@ function AuthWrapper({ children }: { children: React.ReactNode }) {
   ];
   
   // Check if we should direct users straight to login
-  const directToLogin = process.env.NEXT_PUBLIC_DIRECT_TO_LOGIN === 'true';
+  const directToLogin = process.env.NEXT_PUBLIC_MINIMAL_BRANDING === 'true';
   
   // Only allow dynamic evaluation and report pages (with an ID) to be public
   const isPublicPath = publicPaths.includes(pathname) || 

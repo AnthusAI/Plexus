@@ -289,6 +289,7 @@ export const handler: Schema["getResourceByShareToken"]["functionHandler"] = asy
                   id
                   name
                   position
+                  type
                   output
                   log
                   reportId

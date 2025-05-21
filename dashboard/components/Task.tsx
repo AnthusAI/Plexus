@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils'
 import { Timestamp } from './ui/timestamp'
 
 export interface BaseTaskProps<TData extends BaseTaskData = BaseTaskData> {
-  variant: 'grid' | 'detail' | 'nested'
+  variant: 'grid' | 'detail' | 'nested' | 'bare'
   task: {
     id: string
     type: string
@@ -136,6 +136,11 @@ const Task = <TData extends BaseTaskData = BaseTaskData>({
         {renderContent(childProps)}
       </div>
     )
+  }
+
+  // Add a check for the 'bare' variant to render only content
+  if (variant === 'bare') {
+    return <>{renderContent(childProps)}</>;
   }
 
   return (
