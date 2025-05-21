@@ -38,7 +38,7 @@ type ScoreVersionIndexFields = "scoreId" | "versionNumber" | "isFeatured";
 type ReportConfigurationIndexFields = "accountId" | "name";
 type ReportIndexFields = "accountId" | "reportConfigurationId" | "createdAt" | "updatedAt" | "taskId";
 type ReportBlockIndexFields = "reportId" | "name" | "position";
-type FeedbackItemIndexFields = "accountId" | "scorecardId" | "scoreId" | "cacheKey" | "updatedAt"; // UPDATED: Renamed externalId to cacheKey
+type FeedbackItemIndexFields = "accountId" | "scorecardId" | "scoreId" | "cacheKey" | "updatedAt" | "itemId"; // UPDATED: Renamed externalId to cacheKey and added itemId
 
 // New index types for Feedback Analysis
 // type FeedbackAnalysisIndexFields = "accountId" | "scorecardId" | "createdAt"; // REMOVED
@@ -284,6 +284,8 @@ const schema = a.schema({
             updatedAt: a.datetime(),
             createdAt: a.datetime(),
             isEvaluation: a.boolean().required(),
+            identifiers: a.json(),
+            feedbackItems: a.hasMany('FeedbackItem', 'itemId'),
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
@@ -638,6 +640,8 @@ const schema = a.schema({
             cacheKey: a.string().required(),
             scoreId: a.string().required(),
             score: a.belongsTo('Score', 'scoreId'),
+            itemId: a.string().required(),
+            item: a.belongsTo('Item', 'itemId'),
             initialAnswerValue: a.string(),
             finalAnswerValue: a.string(),
             initialCommentValue: a.string(),
@@ -655,7 +659,8 @@ const schema = a.schema({
         ])
         .secondaryIndexes((idx: (field: FeedbackItemIndexFields) => any) => [
             idx("accountId").sortKeys(["updatedAt"]),
-            idx("accountId").sortKeys(["scorecardId", "scoreId", "updatedAt"]).name("byAccountScorecardScoreUpdatedAt")
+            idx("accountId").sortKeys(["scorecardId", "scoreId", "updatedAt"]).name("byAccountScorecardScoreUpdatedAt"),
+            idx("itemId")
         ]),
 });
 
