@@ -643,6 +643,8 @@ const schema = a.schema({
             initialCommentValue: a.string(),
             finalCommentValue: a.string(),
             editCommentValue: a.string(),
+            editedAt: a.datetime(),
+            editorName: a.string(),
             isAgreement: a.boolean(),
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
@@ -652,9 +654,7 @@ const schema = a.schema({
             allow.authenticated()
         ])
         .secondaryIndexes((idx: (field: FeedbackItemIndexFields) => any) => [
-            idx("accountId").sortKeys(["scorecardId", "scoreId", "cacheKey"]).name("byAccountScorecardScoreCacheKey"),
             idx("accountId").sortKeys(["updatedAt"]),
-            idx("cacheKey"),
             idx("accountId").sortKeys(["scorecardId", "scoreId", "updatedAt"]).name("byAccountScorecardScoreUpdatedAt")
         ]),
 });

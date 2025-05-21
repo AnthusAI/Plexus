@@ -209,7 +209,8 @@ class TopicAnalysis(BaseReportBlock):
                 os.environ["NUMEXPR_NUM_THREADS"] = "1"
                 self._log(f"Set OMP_NUM_THREADS for BERTopic: {os.environ.get('OMP_NUM_THREADS')}", level="DEBUG")
 
-                await asyncio.to_thread(
+                # Capture the return value from analyze_topics (it returns just one value, not a tuple)
+                topic_model = await asyncio.to_thread(
                     analyze_topics,
                     text_file_path=text_file_path_str,
                     output_dir=main_temp_dir, # analyze_topics will create subdirs here
@@ -222,6 +223,36 @@ class TopicAnalysis(BaseReportBlock):
                     use_langchain=use_langchain_representation
                 )
                 self._log("BERTopic analysis completed.")
+                
+                # Extract topic information and add to the final output data
+                if topic_model and hasattr(topic_model, 'get_topic_info'):
+                    try:
+                        topic_info = topic_model.get_topic_info()
+                        if not topic_info.empty:
+                            # Convert to dictionary format suitable for JSON
+                            topics_list = []
+                            for _, row in topic_info.iterrows():
+                                topic_id = row.get('Topic', -1)
+                                if topic_id != -1:  # Skip the -1 topic which is usually "noise"
+                                    # Get the topic words and weights if available
+                                    topic_words = []
+                                    if hasattr(topic_model, 'get_topic'):
+                                        words_weights = topic_model.get_topic(topic_id)
+                                        topic_words = [{"word": word, "weight": weight} for word, weight in words_weights]
+                                    
+                                    topics_list.append({
+                                        "id": int(topic_id),
+                                        "name": row.get('Name', f'Topic {topic_id}'),
+                                        "count": int(row.get('Count', 0)),
+                                        "representation": row.get('Representation', ''),
+                                        "words": topic_words
+                                    })
+                    
+                            final_output_data["topics"] = topics_list
+                            self._log(f"Added {len(topics_list)} topics to output data")
+                    except Exception as e:
+                        self._log(f"Failed to extract topic information: {e}", level="ERROR")
+                        final_output_data["errors"].append(f"Error extracting topics: {str(e)}")
 
                 # --- 4. Attach Artifacts ---
                 self._log(f"Scanning for BERTopic artifacts in temporary directory: {main_temp_dir}")

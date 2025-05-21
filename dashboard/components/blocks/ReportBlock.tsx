@@ -99,6 +99,7 @@ const ReportBlock: BlockComponent = ({
   const [isLoadingFile, setIsLoadingFile] = useState(false);
   const [selectedFileUrl, setSelectedFileUrl] = useState<string | null>(null);
   const [selectedFileIsImage, setSelectedFileIsImage] = useState<boolean | null>(null);
+  const [selectedFileIsHtml, setSelectedFileIsHtml] = useState<boolean | null>(null);
 
   // Parse detailsFiles JSON string once
   const parsedDetailsFiles = React.useMemo(() => {
@@ -127,6 +128,12 @@ const ReportBlock: BlockComponent = ({
     return !!extension && imageExtensions.includes(extension);
   };
 
+  const isHtmlFile = (fileName: string): boolean => {
+    if (!fileName) return false;
+    const extension = fileName.split('.').pop()?.toLowerCase();
+    return !!extension && ['html', 'htm'].includes(extension);
+  };
+
   const fetchLogFileContent = React.useCallback(async () => {
     if (!logFileFromDetails || !logFileFromDetails.path) return;
     setIsLoadingLog(true);
@@ -149,6 +156,7 @@ const ReportBlock: BlockComponent = ({
       setSelectedFileName(null);
       setSelectedFileUrl(null);
       setSelectedFileIsImage(null);
+      setSelectedFileIsHtml(null);
       return;
     }
     
@@ -157,6 +165,7 @@ const ReportBlock: BlockComponent = ({
     setSelectedFileContent(null); // Reset previous content
     setSelectedFileUrl(null);     // Reset previous URL
     setSelectedFileIsImage(null); // Reset previous type
+    setSelectedFileIsHtml(null);  // Reset previous HTML type
 
     try {
       if (isImageFile(file.name)) {
@@ -164,19 +173,28 @@ const ReportBlock: BlockComponent = ({
         if (urlResult.url) {
           setSelectedFileUrl(urlResult.url.toString());
           setSelectedFileIsImage(true);
+          setSelectedFileIsHtml(false);
         } else {
           throw new Error('Failed to get image URL.');
         }
+      } else if (isHtmlFile(file.name)) {
+        const downloadResult = await downloadData({ path: file.path }).result;
+        const text = await downloadResult.body.text();
+        setSelectedFileContent(text);
+        setSelectedFileIsHtml(true);
+        setSelectedFileIsImage(false);
       } else {
         const downloadResult = await downloadData({ path: file.path }).result;
         const text = await downloadResult.body.text();
         setSelectedFileContent(text);
         setSelectedFileIsImage(false);
+        setSelectedFileIsHtml(false);
       }
     } catch (error) {
       console.error('Error processing file from S3:', error);
       setSelectedFileContent( error instanceof Error ? `Failed to load file: ${error.message}` : 'Failed to load file content.');
       setSelectedFileIsImage(null); // Indicates an error or unknown type
+      setSelectedFileIsHtml(null);  // Indicates an error or unknown type
     } finally {
       setIsLoadingFile(false);
     }
@@ -199,6 +217,7 @@ const ReportBlock: BlockComponent = ({
       setSelectedFileName(null);
       setSelectedFileUrl(null);
       setSelectedFileIsImage(null);
+      setSelectedFileIsHtml(null);
     }
   };
 
@@ -353,18 +372,18 @@ const ReportBlock: BlockComponent = ({
 
       {/* Attached Files Display Area */}
       {showAttachedFiles && parsedDetailsFiles.length > 0 && (
-        <div className="mt-4 bg-card p-3 w-full overflow-hidden rounded-lg">
+        <div className="mt-4 bg-card p-3 w-full overflow-visible rounded-lg">
           <div className="flex flex-row justify-between items-center mb-3">
             <h4 className="text-base font-medium">Attached Files</h4>
           </div>
           
-          <div className="flex flex-col space-y-4 w-full overflow-hidden">
+          <div className="flex flex-col space-y-4 w-full overflow-visible">
             {/* File list */}
             <div className="bg-muted/50 py-2 px-0 rounded-sm">
-              <div className="space-y-2">
+              <div className="space-y-1">
                 {parsedDetailsFiles.map((file, index) => (
-                  <div key={index} className="flex flex-col">
-                    <div className="flex justify-between items-center bg-card rounded-sm">
+                  <div key={index} className="flex flex-col -mx-1">
+                    <div className={`flex justify-between items-center ${index % 2 === 0 ? 'bg-card-selected' : 'bg-card'} rounded-sm p-1 w-full`}>
                       <span className="text-sm truncate flex-1">{file.name}</span>
                       <div className="flex space-x-2">
                         <CardButton 
@@ -397,17 +416,27 @@ const ReportBlock: BlockComponent = ({
                                 />
                               </div>
                             )}
-                            {selectedFileIsImage === false && selectedFileContent && (
+                            {selectedFileIsHtml === true && selectedFileContent && (
+                              <div className="p-2 bg-white rounded">
+                                <iframe 
+                                  srcDoc={selectedFileContent}
+                                  title={selectedFileName || 'HTML content'}
+                                  className="w-full h-[500px] border-0"
+                                  sandbox="allow-scripts allow-same-origin" 
+                                />
+                              </div>
+                            )}
+                            {selectedFileIsImage === false && selectedFileIsHtml === false && selectedFileContent && (
                               <pre className="whitespace-pre-wrap text-xs overflow-y-auto overflow-x-auto font-mono max-h-[300px] px-2 py-2 bg-white max-w-full rounded">
                                 {selectedFileContent}
                               </pre>
                             )}
                             {/* Error display or specific messages */}
-                            {selectedFileIsImage === null && selectedFileContent && ( // Error message for either type
+                            {selectedFileIsImage === null && selectedFileIsHtml === null && selectedFileContent && ( // Error message for either type
                               <p className="text-sm text-red-500 px-2 py-2 bg-white rounded">{selectedFileContent}</p>
                             )}
                             {/* Fallback for no content, no error message, and not explicitly an image or text, or if it's an image but URL failed silently */}
-                            {selectedFileIsImage === null && !selectedFileContent && (
+                            {selectedFileIsImage === null && selectedFileIsHtml === null && !selectedFileContent && (
                               <p className="text-sm text-muted-foreground px-2 py-2 bg-white rounded">Preview not available or file is empty.</p>
                             )}
                              {!selectedFileContent && selectedFileIsImage === true && !selectedFileUrl && ( // Image detected, but URL fetch failed and no error message set
