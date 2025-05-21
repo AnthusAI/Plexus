@@ -12,9 +12,9 @@ import dotenv
 import os
 import re
 from pathlib import Path
-from plexus.cli.bertopic.transformer import transform_transcripts, inspect_data, transform_transcripts_llm, transform_transcripts_itemize
-from plexus.cli.bertopic.analyzer import analyze_topics
-from plexus.cli.bertopic.ollama_test import test_ollama_chat
+from plexus.analysis.topics.transformer import transform_transcripts, inspect_data, transform_transcripts_llm, transform_transcripts_itemize
+from plexus.analysis.topics.analyzer import analyze_topics
+from plexus.analysis.topics.ollama_test import test_ollama_chat
 from typing import Optional
 import asyncio
 
@@ -306,13 +306,10 @@ def topics(
                 logging.error("Text file path not generated from transformation step. Skipping analysis.")
                 return
             
-            # Define the hidden base directory for all plexus bertopic results
-            hidden_base_output_dirname = ".plexus_bertopic_results"
-            # The parent directory for the analysis folder
-            analysis_parent_dir = output_path / hidden_base_output_dirname
-
-            # Ensure the parent directory exists
-            analysis_parent_dir.mkdir(parents=True, exist_ok=True)
+            # Create a temporary directory for results
+            import tempfile
+            # Create a temporary directory that persists beyond the program execution
+            analysis_parent_dir = Path(tempfile.mkdtemp(prefix="plexus_topic_analysis_"))
 
             # Use descriptive naming scheme based on parameters
             analysis_dir_name = f"topics_{transform_suffix}_{min_ngram}-{max_ngram}gram_{num_topics if num_topics else 'auto'}"
@@ -325,6 +322,7 @@ def topics(
             output_dir_str = str(final_output_dir)
             
             logging.info(f"Preparing to start BERTopic analysis directly in the main process.")
+            logging.info(f"Created temporary directory for results: {analysis_parent_dir}")
             logging.info(f"Output directory for analysis: {output_dir_str}")
             
             # Set OpenMP environment variables before calling analyze_topics

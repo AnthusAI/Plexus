@@ -23,9 +23,9 @@ from langchain.cache import SQLiteCache
 logger = logging.getLogger(__name__)
 
 # Initialize and set the Langchain LLM cache globally
-# Cache file will be stored inside a directory named .langchain.db
-cache_dir_path = Path(".langchain.db")
-cache_db_file_path = cache_dir_path / "topic_analysis_llm_cache.db"
+# Cache file will be stored inside the project's tmp directory
+cache_dir_path = Path("tmp/langchain.db")
+cache_db_file_path = cache_dir_path / "topics_llm_cache.db"
 
 try:
     # Ensure the cache directory exists
@@ -192,8 +192,13 @@ def transform_transcripts(
     # Generate output file paths
     base_path = os.path.splitext(input_file)[0]
     suffix = "-customer-only" if customer_only else ""
-    cached_parquet_path = f"{base_path}-bertopic{suffix}.parquet"
-    text_file_path = f"{base_path}-bertopic{suffix}-text.txt"
+    # Use temporary file for caching results
+    import tempfile
+    temp_dir = tempfile.mkdtemp(prefix=f"plexus_transform_{Path(input_file).stem}_")
+    temp_base = Path(temp_dir) / Path(input_file).stem
+    cached_parquet_path = f"{temp_base}-bertopic{suffix}.parquet"
+    text_file_path = f"{temp_base}-bertopic{suffix}-text.txt"
+    logging.info(f"Using temporary directory for output: {temp_dir}")
     
     # Check if cached files exist and fresh is False
     if not fresh and os.path.exists(cached_parquet_path) and os.path.exists(text_file_path):
@@ -384,8 +389,13 @@ async def _transform_transcripts_llm_async(
     """
     base_path = os.path.splitext(input_file)[0]
     suffix = "-customer-only" if customer_only else ""
-    cached_parquet_path = f"{base_path}-bertopic-llm-{provider}{suffix}.parquet"
-    text_file_path = f"{base_path}-bertopic-llm-{provider}{suffix}-text.txt"
+    # Use temporary file for caching results
+    import tempfile
+    temp_dir = tempfile.mkdtemp(prefix=f"plexus_transform_llm_{Path(input_file).stem}_")
+    temp_base = Path(temp_dir) / Path(input_file).stem
+    cached_parquet_path = f"{temp_base}-bertopic-llm-{provider}{suffix}.parquet"
+    text_file_path = f"{temp_base}-bertopic-llm-{provider}{suffix}-text.txt"
+    logging.info(f"Using temporary directory for output: {temp_dir}")
     
     if not fresh and os.path.exists(cached_parquet_path) and os.path.exists(text_file_path):
         logging.info(f"Using cached files: {cached_parquet_path} and {text_file_path}")
@@ -777,8 +787,13 @@ async def _transform_transcripts_itemize_async(
     """
     base_path = os.path.splitext(input_file)[0]
     suffix = "-customer-only" if customer_only else ""
-    cached_parquet_path = f"{base_path}-bertopic-itemize-{provider}{suffix}.parquet"
-    text_file_path = f"{base_path}-bertopic-itemize-{provider}{suffix}-text.txt"
+    # Use temporary file for caching results
+    import tempfile
+    temp_dir = tempfile.mkdtemp(prefix=f"plexus_transform_itemize_{Path(input_file).stem}_")
+    temp_base = Path(temp_dir) / Path(input_file).stem
+    cached_parquet_path = f"{temp_base}-bertopic-itemize-{provider}{suffix}.parquet"
+    text_file_path = f"{temp_base}-bertopic-itemize-{provider}{suffix}-text.txt"
+    logging.info(f"Using temporary directory for output: {temp_dir}")
 
     if not fresh and os.path.exists(cached_parquet_path) and os.path.exists(text_file_path):
         logging.info(f"Using cached files: {cached_parquet_path} and {text_file_path}")
