@@ -61,7 +61,7 @@ dependencies = [
     "watchtower",
     "pyairtable",
     "azure-identity>=1.15.0",
-    "rich>=13.7.1",
+    "rich>=13.9.4",
     "gql[requests]>=3.0.0",
     "openai-cost-calculator @ git+https://github.com/AnthusAI/openai_cost_calculator.git@main",
     "invoke>=2.2.0",
