@@ -28,7 +28,7 @@ python3 -m plexus.cli.CommandLineInterface analyze topics --input-file <path> --
 python3 -m plexus.cli.CommandLineInterface analyze topics --input-file .plexus_training_data_cache/dataframes/1039_no_score_id_Start-Date_csv.parquet --transform llm
 
 # Use custom prompt template with Ollama
-python3 -m plexus.cli.CommandLineInterface analyze topics --input-file .plexus_training_data_cache/dataframes/1039_no_score_id_Start-Date_csv.parquet --transform llm --prompt-template plexus/cli/bertopic/prompts/summary.json --llm-model gemma3:27b
+python3 -m plexus.cli.CommandLineInterface analyze topics --input-file .plexus_training_data_cache/dataframes/1039_no_score_id_Start-Date_csv.parquet --transform llm --prompt-template plexus/analysis/topics/prompts/summary.json --llm-model gemma3:27b
 
 # Use OpenAI for transformation with custom model
 python3 -m plexus.cli.CommandLineInterface analyze topics --input-file .plexus_training_data_cache/dataframes/1039_no_score_id_Start-Date_csv.parquet --transform llm --provider openai --llm-model gpt-4o-mini
@@ -61,10 +61,10 @@ python3 -m plexus.cli.CommandLineInterface analyze topics --input-file .plexus_t
 python3 -m plexus.cli.CommandLineInterface analyze topics --input-file .plexus_training_data_cache/dataframes/1039_no_score_id_Start-Date_csv.parquet --transform itemize
 
 # Extract questions using OpenAI with custom prompt template (actual command in use)
-python3 -m plexus.cli.CommandLineInterface analyze topics --input-file .plexus_training_data_cache/dataframes/1039_no_score_id_Start-Date_csv.parquet --transform itemize --prompt-template plexus/cli/bertopic/prompts/itemize.json --fresh --provider openai --llm-model gpt-4o-mini
+python3 -m plexus.cli.CommandLineInterface analyze topics --input-file .plexus_training_data_cache/dataframes/1039_no_score_id_Start-Date_csv.parquet --transform itemize --prompt-template plexus/analysis/topics/prompts/itemize.json --fresh --provider openai --llm-model gpt-4o-mini
 
 # Extract customer questions using OpenAI (only on customer utterances)
-python3 -m plexus.cli.CommandLineInterface analyze topics --input-file .plexus_training_data_cache/dataframes/1039_no_score_id_Start-Date_csv.parquet --transform itemize --prompt-template plexus/cli/bertopic/prompts/itemize.json --provider openai --llm-model gpt-4o-mini --customer-only
+python3 -m plexus.cli.CommandLineInterface analyze topics --input-file .plexus_training_data_cache/dataframes/1039_no_score_id_Start-Date_csv.parquet --transform itemize --prompt-template plexus/analysis/topics/prompts/itemize.json --provider openai --llm-model gpt-4o-mini --customer-only
 
 # Customize retry behavior for parsing failures
 python3 -m plexus.cli.CommandLineInterface analyze topics --input-file .plexus_training_data_cache/dataframes/1039_no_score_id_Start-Date_csv.parquet --transform itemize --max-retries 3
@@ -72,11 +72,11 @@ python3 -m plexus.cli.CommandLineInterface analyze topics --input-file .plexus_t
 
 ### File Inspection
 ```bash
-# View transformed Parquet file
-python -c "import pandas as pd; df = pd.read_parquet('1039_no_score_id_Start-Date_csv-bertopic-itemize-openai.parquet'); print(df.head())"
+# View transformed Parquet file from temp directory (path will be shown in logs)
+python -c "import pandas as pd; df = pd.read_parquet('/tmp/plexus_transform_itemize_*/1039_no_score_id_Start-Date_csv-bertopic-itemize-openai.parquet'); print(df.head())"
 
-# View BERTopic text file
-head -n 5 1039_no_score_id_Start-Date_csv-bertopic-itemize-openai-text.txt
+# View BERTopic text file (path will be shown in logs)
+head -n 5 /tmp/plexus_transform_itemize_*/1039_no_score_id_Start-Date_csv-bertopic-itemize-openai-text.txt
 ```
 
 ### Test Data Location
@@ -121,7 +121,7 @@ python3 -m plexus.cli.CommandLineInterface analyze test-ollama --prompt "Explain
 ## Progress
 ### Completed
 1. Basic Infrastructure
-   - ✅ Created directory structure (`plexus/cli/bertopic/`)
+   - ✅ Created directory structure (`plexus/analysis/topics/`)
    - ✅ Set up test environment and dependencies
 
 2. Data Transformation
@@ -160,6 +160,11 @@ python3 -m plexus.cli.CommandLineInterface analyze test-ollama --prompt "Explain
    - ✅ Integrated OpenAI for topic representation and labeling
    - ✅ Added LangChain integration for topic representation as an alternative to direct OpenAI
 
+6. Storage & Caching Updates
+   - ✅ Moved output to system temp directories
+   - ✅ Using LangChain cache in tmp/langchain.db
+   - ✅ Each run creates a unique temp directory for isolation
+
 ### In Progress
 1. BERTopic Integration
    - [ ] Configure BERTopic with default settings
@@ -174,9 +179,9 @@ python3 -m plexus.cli.CommandLineInterface analyze test-ollama --prompt "Explain
 ## File Structure
 ```
 plexus/
-├── cli/
-│   ├── AnalyzeCommands.py
-│   └── bertopic/
+├── analysis/
+│   ├── __init__.py (exports 'topics' module)
+│   └── topics/
 │       ├── __init__.py
 │       ├── transformer.py
 │       ├── analyzer.py
@@ -185,14 +190,23 @@ plexus/
 │       │   ├── itemize.json
 │       │   └── summary.json
 │       └── test_inspect.py
+├── cli/
+│   ├── AnalyzeCommands.py (imports from plexus.analysis.topics)
+└── tmp/
+    └── langchain.db/ (stores LLM cache)
 ```
 
 ## Technical Details
 ### Data Transformation
 - Input: Parquet files with transcript data
 - Output:
-  - Cached Parquet file (same directory as input)
-  - Text file for BERTopic input (one turn per line)
+  - Cached Parquet file (in temp directory)
+  - Text file for BERTopic input (in temp directory)
+- Cache and output storage:
+  - All output files are stored in system temp directories
+  - Each run creates a unique temp directory with descriptive prefix
+  - LangChain cache is stored in project's tmp/langchain.db
+  - The path to output files is logged to the console
 - Customer turn extraction:
   - Splits on "Agent:" and "Customer:" markers
   - Filters out very short turns (< 2 words)
@@ -317,6 +331,7 @@ The template must include `{text}` and `{format_instructions}` placeholders, and
 3. Topic labeling and interpretation
 4. Integration with dashboard
 5. Support for more LLM providers beyond Ollama and OpenAI
+6. API for uploading/sharing topic analysis results
 
 ## Dependencies
 - pandas
