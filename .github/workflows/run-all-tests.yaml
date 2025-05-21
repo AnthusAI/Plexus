@@ -32,7 +32,7 @@ jobs:
         PYTHONPATH=$GITHUB_WORKSPACE pip install numpy
         
         # Install fasttext-wheel instead of fasttext
-        PYTHONPATH=$GITHUB_WORKSPACE pip install fasttext-wheel==0.9.2
+        # PYTHONPATH=$GITHUB_WORKSPACE pip install fasttext-wheel==0.9.2
         
         # Now install package dependencies
         PYTHONPATH=$GITHUB_WORKSPACE pip install -e .
