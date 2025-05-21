@@ -35,6 +35,7 @@ export interface ReportTaskData {
     log?: string;
     name?: string;
     position: number;
+    detailsFiles?: string | null;
   }>;
 }
 
@@ -158,7 +159,7 @@ const ReportTask: React.FC<ReportTaskProps> = ({
           output: parsedOutput,
           log: blockProp.log || null,
           config: blockProp.config || parsedOutput,
-          detailsFiles: null 
+          detailsFiles: blockProp.detailsFiles || null
         };
       });
       setReportBlocks(transformedBlocks);

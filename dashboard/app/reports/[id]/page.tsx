@@ -88,6 +88,7 @@ export class ReportService {
                     type
                     output
                     log
+                    detailsFiles
                   }
                   nextToken
                 }
@@ -106,7 +107,7 @@ export class ReportService {
                 type: string; // Ensure type is requested
                 output: any;
                 log?: string;
-                // detailsFiles?: string;
+                detailsFiles?: string;
               }>;
               nextToken?: string;
             };
@@ -377,6 +378,7 @@ export function PublicReport({
         log: block.log || undefined,
         name: block.name || undefined, // Use API block name if available
         position: block.position,
+        detailsFiles: block.detailsFiles,
         // Pass the original block ID as well, might be useful for keys or debugging
         originalBlockId: block.id 
       };
