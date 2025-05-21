@@ -181,4 +181,4 @@ def react_loop():
 3. Version Management UI
    - Add interactive version selection
    - Add version diff viewer
-   - Add version merge conflict resolution 
+   - Add version merge conflict resolution

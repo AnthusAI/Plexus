@@ -70,6 +70,8 @@ dependencies = [
     "pycurl>=7.45.4",
     "SQLAlchemy[asyncio]==1.4.15",
     "fastmcp>=2.3.5"
+    "ollama>=0.1.6",
+    "bertopic>=0.16.2"
 ]
 
 [project.scripts]
