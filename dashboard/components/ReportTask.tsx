@@ -68,6 +68,7 @@ const ReportTask: React.FC<ReportTaskProps> = ({
 }) => {
   // Add state for report blocks
   const [reportBlocks, setReportBlocks] = useState<ReportBlock[]>([])
+  const [isLoadingBlocks, setIsLoadingBlocks] = useState(false)
   const [blockError, setBlockError] = useState<string | null>(null)
 
   // Add a function to parse output if it's a string
@@ -88,10 +89,61 @@ const ReportTask: React.FC<ReportTaskProps> = ({
     return {};
   };
 
-  // Simplify to just monitor task.data.reportBlocks and update reportBlocks state when it changes
+  // Function to fetch report blocks - needed for detail view in dashboard
+  const fetchReportBlocks = async (reportId: string) => {
+    setIsLoadingBlocks(true)
+    setBlockError(null)
+    try {
+      const response = await getClient().graphql({
+        query: `
+          query GetReportBlocks($reportId: ID!) {
+            getReport(id: $reportId) {
+              reportBlocks {
+                items {
+                  id
+                  name
+                  position
+                  type
+                  output
+                  log
+                  detailsFiles
+                }
+              }
+            }
+          }
+        `,
+        variables: { reportId }
+      })
+
+      if ('data' in response && response.data?.getReport?.reportBlocks?.items) {
+        const blocks = response.data.getReport.reportBlocks.items.map((block: any) => ({
+          ...block,
+          output: JSON.parse(block.output),
+          config: {}  // Add empty config object by default
+        }))
+        setReportBlocks(blocks)
+      } else {
+        console.warn('No blocks found in API response for report', reportId)
+        setReportBlocks([])
+      }
+    } catch (err: any) {
+      console.error('Error fetching report blocks:', err)
+      setBlockError(err.message || 'Failed to load report blocks')
+    } finally {
+      setIsLoadingBlocks(false)
+    }
+  }
+
+  // Fetch blocks when report is selected and we're in detail view
   useEffect(() => {
-    if (task.data?.reportBlocks && task.data.reportBlocks.length > 0) {
-      
+    if (variant === 'detail' && task.data?.id) {
+      fetchReportBlocks(task.data.id);
+    }
+  }, [variant, task.data?.id]);
+
+  // Use reportBlocks from task.data for bare mode
+  useEffect(() => {
+    if (variant === 'bare' && task.data?.reportBlocks && task.data.reportBlocks.length > 0) {
       const transformedBlocks = task.data.reportBlocks.map(blockProp => {
         const parsedOutput = parseOutput(blockProp.output);
         const blockTypeToUse = blockProp.type || parsedOutput.class || 'unknown';
@@ -115,7 +167,7 @@ const ReportTask: React.FC<ReportTaskProps> = ({
         setBlockError(null);
       }
     }
-  }, [task.data?.reportBlocks, blockError]);
+  }, [variant, task.data?.reportBlocks, blockError]);
 
   // Format the timestamp for detail view display
   const formattedDetailTimestamp = task.data?.updatedAt 
