@@ -68,7 +68,6 @@ const ReportTask: React.FC<ReportTaskProps> = ({
 }) => {
   // Add state for report blocks
   const [reportBlocks, setReportBlocks] = useState<ReportBlock[]>([])
-  const [isLoadingBlocks, setIsLoadingBlocks] = useState(false)
   const [blockError, setBlockError] = useState<string | null>(null)
 
   // Add a function to parse output if it's a string
@@ -89,66 +88,12 @@ const ReportTask: React.FC<ReportTaskProps> = ({
     return {};
   };
 
-  // Function to fetch report blocks
-  const fetchReportBlocks = async (reportId: string) => {
-    setIsLoadingBlocks(true)
-    setBlockError(null)
-    try {
-      const response = await getClient().graphql({
-        query: `
-          query GetReportBlocks($reportId: ID!) {
-            getReport(id: $reportId) {
-              reportBlocks {
-                items {
-                  id
-                  name
-                  position
-                  type
-                  output
-                  log
-                  detailsFiles
-                }
-              }
-            }
-          }
-        `,
-        variables: { reportId }
-      })
-
-      if ('data' in response && response.data?.getReport?.reportBlocks?.items) {
-        const blocks = response.data.getReport.reportBlocks.items.map((block: any) => ({
-          ...block,
-          output: JSON.parse(block.output),
-          config: {}  // Add empty config object by default
-        }))
-        console.log(`Fetched ${blocks.length} blocks directly from API`);
-        setReportBlocks(blocks)
-      } else {
-        console.log('No blocks found in API response')
-      }
-    } catch (err: any) {
-      console.error('Error fetching report blocks:', err)
-      setBlockError(err.message || 'Failed to load report blocks')
-    } finally {
-      setIsLoadingBlocks(false)
-    }
-  }
-
-  // Fetch blocks when report is selected and we're in detail view
+  // Simplify to just monitor task.data.reportBlocks and update reportBlocks state when it changes
   useEffect(() => {
-    if (variant === 'detail' && task.data?.id) {
-      console.log('Fetching blocks for report:', task.data.id);
-      fetchReportBlocks(task.data.id);
-    }
-  }, [variant, task.data?.id]);
-
-  // Add a new effect to monitor task.data.reportBlocks and update reportBlocks state when it changes
-  useEffect(() => {
-    if ((variant === 'detail' || variant === 'bare') && task.data?.reportBlocks && task.data.reportBlocks.length > 0) {
+    if (task.data?.reportBlocks && task.data.reportBlocks.length > 0) {
       
       const transformedBlocks = task.data.reportBlocks.map(blockProp => {
         const parsedOutput = parseOutput(blockProp.output);
-        
         const blockTypeToUse = blockProp.type || parsedOutput.class || 'unknown';
 
         return {
@@ -162,9 +107,15 @@ const ReportTask: React.FC<ReportTaskProps> = ({
           detailsFiles: blockProp.detailsFiles || null
         };
       });
+      
       setReportBlocks(transformedBlocks);
+      
+      // If there were any pre-existing errors, clear them since we have blocks now
+      if (blockError) {
+        setBlockError(null);
+      }
     }
-  }, [variant, task.data?.reportBlocks]);
+  }, [task.data?.reportBlocks, blockError]);
 
   // Format the timestamp for detail view display
   const formattedDetailTimestamp = task.data?.updatedAt 
@@ -181,13 +132,6 @@ const ReportTask: React.FC<ReportTaskProps> = ({
   // description = Report configuration description
   const reportName = task.data?.configName || task.data?.name || 'Report';
   const reportDescription = getValueOrEmpty(task.data?.configDescription);
-
-  // Add render count for debugging
-  const renderCount = React.useRef(0);
-  renderCount.current++;
-
-  // Log only essential info for real-time tracking
-  console.log(`ReportTask render #${renderCount.current} - Blocks: ${reportBlocks.length}`);
 
   // Create a properly typed data object
   const reportData: ReportTaskData = {
@@ -306,8 +250,6 @@ const ReportTask: React.FC<ReportTaskProps> = ({
       });
       
       if (blockData) {
-        // Log when we successfully find a block to render
-        
         // Check if the report is complete
         const complete = isReportComplete(task.status, reportBlocks);
         
@@ -351,8 +293,6 @@ const ReportTask: React.FC<ReportTaskProps> = ({
           </div>
         );
       } else {
-        // Log when we can't find the requested block
-        
         // Instead of showing a loading placeholder, return an empty div
         // This prevents flickering while still reserving space for the block
         return <div className="my-2"></div>;
@@ -447,7 +387,7 @@ const ReportTask: React.FC<ReportTaskProps> = ({
       renderContent={(props) => (
         <TaskContent {...props} hideTaskStatus={true}>
           {variant === 'detail' && task.data?.output && (
-            <div className="bg-background rounded-lg p-3 mx-3 mb-3 overflow-y-auto flex-1 min-h-0">
+            <div className="bg-background rounded-lg p-3 mb-3 overflow-y-auto flex-1 min-h-0">
               <div className="prose dark:prose-invert max-w-none">
                 <ReactMarkdown
                   components={{

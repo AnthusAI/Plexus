@@ -193,8 +193,7 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
   
   return (
     <div className={cn(
-      "transition-all bg-card rounded-lg relative min-w-[280px]", 
-      expanded ? "mb-6" : "mb-2",
+      "transition-all bg-card rounded-lg relative min-w-[280px]",
       className
     )}>
       <div className="p-4">
