@@ -67,9 +67,10 @@ function AuthWrapper({ children }: { children: React.ReactNode }) {
   // Check if we should direct users straight to login
   const directToLogin = process.env.NEXT_PUBLIC_DIRECT_TO_LOGIN === 'true';
   
-  // Only allow dynamic evaluation pages (with an ID) to be public
+  // Only allow dynamic evaluation and report pages (with an ID) to be public
   const isPublicPath = publicPaths.includes(pathname) || 
-    (pathname.startsWith('/evaluations/') && pathname.split('/').length === 3 && !pathname.startsWith('/evaluations/lab'));
+    (pathname.startsWith('/evaluations/') && pathname.split('/').length === 3 && !pathname.startsWith('/evaluations/lab')) ||
+    (pathname.startsWith('/reports/') && pathname.split('/').length === 3 && !pathname.startsWith('/reports/lab'));
     
   // If directToLogin is true, only /dashboard should be accessible for unauthenticated users
   const isAccessiblePublicPath = directToLogin 
