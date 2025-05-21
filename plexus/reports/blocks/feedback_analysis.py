@@ -606,47 +606,17 @@ class FeedbackAnalysis(BaseReportBlock):
                             raise ValueError("Invalid response format")
                             
                     except Exception as e:
-                        self._log(f"Error with GSI query, falling back to standard query: {e}", level="WARNING")
-                        # Clear items and use standard method below
+                        self._log(f"Error during GSI query execution: {e}. No fallback will be attempted. Current items (if any from GSI) will be cleared.", level="WARNING")
+                        # Clear items and break GSI pagination loop.
                         all_items_for_score = []
-                        break
+                        break # This break exits the GSI pagination loop.
             
-            # If we have no items yet (either we didn't try GSI or it failed), use standard filtering
-            if not all_items_for_score:
-                self._log("Using standard query method", level="DEBUG")
-                
-                # Build filter for standard query
-                filter_params = {
-                    "accountId": {"eq": account_id},
-                    "scorecardId": {"eq": plexus_scorecard_id},
-                    "scoreId": {"eq": plexus_score_id}
-                }
-                
-                # Add date filtering if provided
-                if start_date and end_date:
-                    filter_params["updatedAt"] = {"between": [start_date.isoformat(), end_date.isoformat()]}
-                
-                next_token = None
-                
-                # Use standard list query
-                while True:
-                    items, next_token = await asyncio.to_thread(
-                        FeedbackItem.list,
-                        client=self.api_client,
-                        filter=filter_params,
-                        limit=100,
-                        next_token=next_token
-                    )
-                    
-                    all_items_for_score.extend(items)
-                    self._log(f"Fetched {len(items)} items using standard query (total: {len(all_items_for_score)})")
-                    
-                    if not next_token:
-                        break
-        
-        except Exception as e:
+            # The 'if plexus_scorecard_id and plexus_score_id and start_date and end_date:' block (for GSI query) ends above.
+            # The standard query fallback logic (which started with 'if not all_items_for_score:')
+            # that was previously located here has been completely removed.
+            
+        except Exception as e: # This is the outer catch block for the _fetch_feedback_items_for_score method
             self._log(f"Error during feedback item fetch for score {plexus_score_id}: {str(e)}", level="ERROR")
-            # Don't log full traceback, just the error message
         
         self._log(f"Total items fetched for score {plexus_score_id}: {len(all_items_for_score)}")
         return all_items_for_score
