@@ -310,7 +310,7 @@ export function PublicReport({
   // Show loading state
   if (loading) {
     return (
-      <div className="container mx-auto p-4">
+      <div className="px-4 w-full">
         <Card>
           <CardContent className="pt-6">
             <div className="flex flex-col items-center justify-center gap-4 min-h-[300px]">
@@ -337,7 +337,7 @@ export function PublicReport({
   // Show error state
   if (error) {
     return (
-      <div className="container mx-auto p-4">
+      <div className="px-4 w-full">
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Error</AlertTitle>
@@ -422,7 +422,7 @@ export function PublicReport({
     // Render the report task with data
     return (
       <div className="flex flex-col flex-1 min-h-0">
-        <div className="container mx-auto mt-4 flex-1">
+        <div className="px-4 w-full mt-4 flex-1">
           <BlockRegistryInitializer />
           <ReportTask
             variant={isShareView ? "bare" : "detail"}
@@ -454,8 +454,8 @@ export function PublicReport({
           />
         </div>
         {isShareView && displayTimestamp && (
-          <footer className="py-4 px-6 flex-shrink-0">
-            <div className="container mx-auto">
+          <footer className="py-4 px-4 flex-shrink-0">
+            <div className="w-full">
               <div className="flex items-center justify-between">
                 <Timestamp
                   time={displayTimestamp}

@@ -88,114 +88,116 @@ const ScorecardReport: React.FC<ScorecardReportProps> = ({
   // Prepare the content to pass to the ReportBlock
   const scoreCardContent = (
     <>
-      {/* Score Cards Section */}
+      {/* Score Cards Section - Updated to use responsive container queries */}
       {hasData && scoreData.scores.length > 0 && (
-        <div className="space-y-2">
-          {scoreData.scores
-            .map((scoreItem, originalIdx) => ({ // Add originalIndex before sorting
-              scoreData: scoreItem,
-              originalIndex: originalIdx
-            }))
-            .sort((a, b) => {
-              // Sort by accuracy if available, otherwise sorting can be customized
-              // Now access accuracy via a.scoreData.accuracy
-              if (a.scoreData.accuracy === undefined && b.scoreData.accuracy !== undefined) return 1;
-              if (a.scoreData.accuracy !== undefined && b.scoreData.accuracy === undefined) return -1;
-              if (a.scoreData.accuracy !== undefined && b.scoreData.accuracy !== undefined) {
-                return b.scoreData.accuracy - a.scoreData.accuracy;
-              }
-              return 0;
-            })
-            .map((item, sortedMapIndex) => ( // item now contains scoreData and originalIndex
-              <ScorecardReportEvaluation 
-                key={item.scoreData.id || `score-eval-${item.originalIndex}`} // Use originalIndex or id for a stable key
-                score={item.scoreData}
-                scoreIndex={item.originalIndex} // Pass the ORIGINAL index
-                detailsFiles={restProps.detailsFiles}
-                showPrecisionRecall={showPrecisionRecall}
-              />
-            ))}
+        <div className="@container">
+          <div className="grid grid-cols-1 @[60rem]:grid-cols-2 gap-4">
+            {scoreData.scores
+              .map((scoreItem, originalIdx) => ({ // Add originalIndex before sorting
+                scoreData: scoreItem,
+                originalIndex: originalIdx
+              }))
+              .sort((a, b) => {
+                // Sort by accuracy if available, otherwise sorting can be customized
+                // Now access accuracy via a.scoreData.accuracy
+                if (a.scoreData.accuracy === undefined && b.scoreData.accuracy !== undefined) return 1;
+                if (a.scoreData.accuracy !== undefined && b.scoreData.accuracy === undefined) return -1;
+                if (a.scoreData.accuracy !== undefined && b.scoreData.accuracy !== undefined) {
+                  return b.scoreData.accuracy - a.scoreData.accuracy;
+                }
+                return 0;
+              })
+              .map((item, sortedMapIndex) => ( // item now contains scoreData and originalIndex
+                <ScorecardReportEvaluation 
+                  key={item.scoreData.id || `score-eval-${item.originalIndex}`} // Use originalIndex or id for a stable key
+                  score={item.scoreData}
+                  scoreIndex={item.originalIndex} // Pass the ORIGINAL index
+                  detailsFiles={restProps.detailsFiles}
+                  showPrecisionRecall={showPrecisionRecall}
+                />
+              ))}
+          </div>
         </div>
       )}
 
       {/* Summary Card - Conditionally Rendered with flat styling */}
       {showSummary && (
-        <div className="bg-card rounded-lg p-4">
+        <div className="bg-card rounded-lg p-4 mt-4">
           <div className="flex justify-between items-start mb-4">
             <h3 className="text-base font-medium">Summary</h3>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
-            {/* Left side - metadata */}
-            <div className="md:col-span-4">
-              <div className="text-sm space-y-1">
-                <div>
-                  <span className="text-muted-foreground">Agreements:</span>{' '}
-                  <span>{scoreData.total_agreements}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Items:</span>{' '}
-                  <span>{scoreData.total_items}</span>
+          <div className="@container">
+            <div className="grid grid-cols-1 @[30rem]:grid-cols-12 gap-4 items-start">
+              <div className="@[30rem]:col-span-4">
+                <div className="text-sm space-y-1">
+                  <div>
+                    <span className="text-muted-foreground">Agreements:</span>{' '}
+                    <span>{scoreData.total_agreements}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Items:</span>{' '}
+                    <span>{scoreData.total_items}</span>
+                  </div>
                 </div>
               </div>
-            </div>
-            
-            {/* Right side - Gauges - Use more flexible grid that responds to container width */}
-            <div className="md:col-span-8">
-              <div className="@container">
-                <div className="grid grid-cols-1 @xs:grid-cols-2 @lg:grid-cols-4 gap-3">
-                  {/* Agreement Gauge - Only show if available */}
-                  {hasAgreementGauge && (
-                    <div className="flex flex-col items-center">
-                      <div className="w-full max-w-[140px] mx-auto">
-                        <Gauge
-                          value={scoreData.overall_agreement ?? 0}
-                          title="Agreement"
-                          valueUnit=""
-                          min={-1}
-                          max={1}
-                          decimalPlaces={2}
-                          segments={ac1GaugeSegments}
+              
+              <div className="@[30rem]:col-span-8">
+                <div className="@container">
+                  <div className="grid grid-cols-1 @[20rem]:grid-cols-2 @[40rem]:grid-cols-4 gap-3">
+                    {/* Agreement Gauge - Only show if available */}
+                    {hasAgreementGauge && (
+                      <div className="flex flex-col items-center px-2">
+                        <div className="w-full min-w-[100px] max-w-[140px] mx-auto">
+                          <Gauge
+                            value={scoreData.overall_agreement ?? 0}
+                            title="Agreement"
+                            valueUnit=""
+                            min={-1}
+                            max={1}
+                            decimalPlaces={2}
+                            segments={ac1GaugeSegments}
+                          />
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Accuracy Gauge */}
+                    <div className="flex flex-col items-center px-2">
+                      <div className="w-full min-w-[100px] max-w-[140px] mx-auto">
+                        <Gauge 
+                          value={accuracy} 
+                          title="Accuracy"
+                          segments={accuracySegments}
                         />
                       </div>
                     </div>
-                  )}
-                  
-                  {/* Accuracy Gauge */}
-                  <div className="flex flex-col items-center">
-                    <div className="w-full max-w-[140px] mx-auto">
-                      <Gauge 
-                        value={accuracy} 
-                        title="Accuracy"
-                        segments={accuracySegments}
-                      />
-                    </div>
-                  </div>
 
-                  {/* Precision and Recall gauges - only if showPrecisionRecall is true and we have values */}
-                  {hasPrecisionGauge && (
-                    <div className="flex flex-col items-center">
-                      <div className="w-full max-w-[140px] mx-auto">
-                        <Gauge 
-                          value={averagePrecision}
-                          title="Precision"
-                          segments={accuracySegments}
-                        />
+                    {/* Precision and Recall gauges - only if showPrecisionRecall is true and we have values */}
+                    {hasPrecisionGauge && (
+                      <div className="flex flex-col items-center px-2">
+                        <div className="w-full min-w-[100px] max-w-[140px] mx-auto">
+                          <Gauge 
+                            value={averagePrecision}
+                            title="Precision"
+                            segments={accuracySegments}
+                          />
+                        </div>
                       </div>
-                    </div>
-                  )}
-                  
-                  {hasRecallGauge && (
-                    <div className="flex flex-col items-center">
-                      <div className="w-full max-w-[140px] mx-auto">
-                        <Gauge 
-                          value={averageRecall}
-                          title="Recall"
-                          segments={accuracySegments}
-                        />
+                    )}
+                    
+                    {hasRecallGauge && (
+                      <div className="flex flex-col items-center px-2">
+                        <div className="w-full min-w-[100px] max-w-[140px] mx-auto">
+                          <Gauge 
+                            value={averageRecall}
+                            title="Recall"
+                            segments={accuracySegments}
+                          />
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
