@@ -1409,6 +1409,7 @@ Question:     {mismatch['question']}
 
 Predicted:    {mismatch['predicted']}
 Ground Truth: {mismatch['ground_truth']}
+QA Reasoning for Ground Truth: {mismatch['human_explanation']}
 
 Explanation:
 {mismatch['explanation']}
@@ -2010,7 +2011,8 @@ class AccuracyEvaluation(Evaluation):
                             'predicted': score_value,
                             'ground_truth': human_label,
                             'explanation': score_result.metadata['explanation'] if score_result and hasattr(score_result, 'metadata') and 'explanation' in score_result.metadata else None,
-                            'transcript': score_result.metadata['text'] if score_result and hasattr(score_result, 'metadata') and 'text' in score_result.metadata else None
+                            'transcript': score_result.metadata['text'] if score_result and hasattr(score_result, 'metadata') and 'text' in score_result.metadata else None,
+                            'human_explanation': score_result.metadata['human_explanation'] if score_result and hasattr(score_result, 'metadata') and 'human_explanation' in score_result.metadata else None
                         }
                         # Only append if we have either a transcript or an explanation
                         if mismatch_data['transcript'] is not None or mismatch_data['explanation'] is not None:
