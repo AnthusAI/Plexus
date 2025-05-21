@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "@radix-ui/react-tabs": "^1.1.11",
     "framer-motion": "^12.4.12"
   }
 }
