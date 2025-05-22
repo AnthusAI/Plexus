@@ -35,7 +35,7 @@ export interface ReportTaskData {
     log?: string;
     name?: string;
     position: number;
-    detailsFiles?: string | null;
+    attachedFiles?: string | null;
   }>;
 }
 
@@ -53,7 +53,13 @@ interface ReportBlock {
   output: Record<string, any>
   log?: string | null
   config?: Record<string, any>  // Add config field
-  detailsFiles?: string | null  // Add detailsFiles field
+  attachedFiles?: string | null  // Add attachedFiles field
+}
+
+interface ReportBlockDisplayProps {
+  block: any;
+  attachedFiles?: string | null;
+  onContentChange: (content: string) => void;
 }
 
 const ReportTask: React.FC<ReportTaskProps> = ({ 
@@ -106,7 +112,7 @@ const ReportTask: React.FC<ReportTaskProps> = ({
                   type
                   output
                   log
-                  detailsFiles
+                  attachedFiles
                 }
               }
             }
@@ -156,7 +162,7 @@ const ReportTask: React.FC<ReportTaskProps> = ({
           output: parsedOutput,
           log: blockProp.log || null,
           config: blockProp.config || parsedOutput,
-          detailsFiles: blockProp.detailsFiles || null
+          attachedFiles: blockProp.attachedFiles || null
         };
       });
       
@@ -321,7 +327,7 @@ const ReportTask: React.FC<ReportTaskProps> = ({
           name: blockData.name || blockConfig.name || undefined,
           position: blockData.position,
           type: blockData.type,
-          detailsFiles: blockData.detailsFiles,
+          attachedFiles: blockData.attachedFiles,
           // Add a note when the block is generating
           subtitle: !complete ? "Generating..." : undefined,
           // Add any error or warning from the block output if available
@@ -334,7 +340,7 @@ const ReportTask: React.FC<ReportTaskProps> = ({
             <BlockRenderer {...blockProps} />
             
             {/* If not using a Block component that handles logs/files, show them directly */}
-            {!complete && !blockData.detailsFiles && blockData.log && (
+            {!complete && !blockData.attachedFiles && blockData.log && (
               <div className="mt-2 p-2 bg-muted/20 rounded text-xs text-muted-foreground">
                 <details open>
                   <summary className="cursor-pointer font-medium">Processing Log</summary>

@@ -287,6 +287,8 @@ const schema = a.schema({
             isEvaluation: a.boolean().required(),
             identifiers: a.json(),
             feedbackItems: a.hasMany('FeedbackItem', 'itemId'),
+            attachedFiles: a.string().array(),
+            text: a.string()
         })
         .authorization((allow) => [
             allow.publicApiKey(),
@@ -623,7 +625,7 @@ const schema = a.schema({
             type: a.string().required(), // Required type for the block
             output: a.json().required(), // JSON output from the block's execution
             log: a.string(), // Optional log output from the block
-            detailsFiles: a.json(), // JSON array of objects with {name: "display_name", path: "s3_file_path"}
+            attachedFiles: a.string().array(), // This is the corrected field name and type
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
         })

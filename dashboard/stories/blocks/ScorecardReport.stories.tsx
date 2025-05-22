@@ -106,29 +106,10 @@ const scoreTemplate = (
   return baseScore;
 };
 
-// Add mock detailsFiles for testing the UI buttons
-const mockDetailsFiles = JSON.stringify([
-  {
-    name: 'log.txt',
-    path: 'files/mock-log.txt',
-    description: 'Log file for the report',
-    size: 2048,
-    type: 'text/plain'
-  },
-  {
-    name: 'results.json',
-    path: 'files/results.json',
-    description: 'JSON results data',
-    size: 4096,
-    type: 'application/json'
-  },
-  {
-    name: 'chart-data.csv',
-    path: 'files/chart-data.csv',
-    description: 'CSV data for charts',
-    size: 3072,
-    type: 'text/csv'
-  }
+// Add mock attachedFiles for testing the UI buttons
+const mockAttachedFiles = JSON.stringify([
+  { name: 'Full Report.pdf', path: 'dummy/report.pdf' },
+  { name: 'Data Export.csv', path: 'dummy/data.csv' },
 ]);
 
 export const BasicScorecardReport: Story = {
@@ -137,7 +118,7 @@ export const BasicScorecardReport: Story = {
     type: 'ScorecardReport',
     position: 0,
     log: 'Log for scorecard report analysis.',
-    detailsFiles: mockDetailsFiles, // Add the mock details files
+    attachedFiles: mockAttachedFiles, // Add the mock attached files
     config: { // Mock config passed to the block
       class: 'ScorecardReport',
       model_id: 'some-model-id',
@@ -471,7 +452,7 @@ export const WithAttachmentsAndLogs: Story = {
     type: 'ScorecardReport',
     position: 10,
     log: 'This is an example log content.\nIt contains multiple lines.\nEach line demonstrates some log information.\n\nLogs are important for debugging and understanding what happened during report generation.\n\nThis is a lot of log content to demonstrate scrolling behavior.\nMore lines...\nAnd more lines...\nAnd even more lines...',
-    detailsFiles: mockDetailsFiles,
+    attachedFiles: mockAttachedFiles,
     config: {
       class: 'ScorecardReport',
       model_id: 'logs-attachments-model',
@@ -489,7 +470,9 @@ export const WithAttachmentsAndLogs: Story = {
       total_items: 100,
       total_agreements: 90,
       accuracy: 90.0,
-      label_distribution: { 'ClassA': 50, 'ClassB': 50 }
+      label_distribution: { 'ClassA': 50, 'ClassB': 50 },
+      updatedAt: '2023-10-26T10:00:00Z',
+      log: "Evaluation task completed successfully"
     },
   },
 }; 

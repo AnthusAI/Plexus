@@ -11,4 +11,15 @@ export const reportBlockDetails = defineStorage({
       allow.authenticated.to(['read', 'write', 'delete'])
     ]
   })
+});
+
+// Define a storage bucket for item attachments
+export const attachments = defineStorage({
+  name: 'attachments',
+  access: (allow) => ({
+    'attachments/*': [
+      allow.guest.to(['read']),
+      allow.authenticated.to(['read', 'write', 'delete'])
+    ]
+  })
 }); 

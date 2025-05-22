@@ -3,6 +3,7 @@ import { ScrollText, Download, Paperclip, AlertTriangle, AlertCircle, Eye } from
 import { Button } from '@/components/ui/button';
 import { downloadData, getUrl } from 'aws-amplify/storage';
 import { CardButton } from '@/components/CardButton';
+import { DropdownMenuItem, DropdownMenu, DropdownMenuContent } from '@/components/ui/dropdown-menu';
 
 // Define DetailFile locally, ensure it includes 'path'
 // Export DetailFile to be used in other components
@@ -38,7 +39,7 @@ export interface ReportBlockProps {
   /** The block's unique identifier */
   id: string
   /** JSON string containing details files information */
-  detailsFiles?: string | null
+  attachedFiles?: string | null
   /** Optional title to override the name */
   title?: string
   /** Optional subtitle for additional context */
@@ -79,7 +80,7 @@ const ReportBlock: BlockComponent = ({
   config,
   position,
   id,
-  detailsFiles,
+  attachedFiles,
   title,
   subtitle,
   notes,
@@ -120,25 +121,25 @@ const ReportBlock: BlockComponent = ({
     return () => window.removeEventListener('resize', updateLayoutMode);
   }, []);
 
-  // Parse detailsFiles JSON string once
-  const parsedDetailsFiles = React.useMemo(() => {
-    if (typeof detailsFiles === 'string') {
+  // Parse attachedFiles JSON string once
+  const parsedAttachedFiles = React.useMemo(() => {
+    if (typeof attachedFiles === 'string') {
       try {
-        return JSON.parse(detailsFiles) as DetailFile[];
+        return JSON.parse(attachedFiles) as DetailFile[];
       } catch (error) {
-        console.error('Failed to parse detailsFiles JSON string:', error);
+        console.error('Failed to parse attachedFiles JSON string:', error);
         return [];
       }
     }
-    return []; // Handle as empty if not string
-  }, [detailsFiles]);
+    return [];
+  }, [attachedFiles]);
 
-  const logFileFromDetails = React.useMemo(() => {
-    return parsedDetailsFiles.find(f => f.name === 'log.txt');
-  }, [parsedDetailsFiles]);
+  const logFile = React.useMemo(() => {
+    return parsedAttachedFiles.find(f => f.name === 'log.txt');
+  }, [parsedAttachedFiles]);
 
-  const hasAttachedFiles = parsedDetailsFiles.length > 0;
-  const hasLog = !!log || !!logFileFromDetails;
+  const hasAttachedFiles = parsedAttachedFiles.length > 0;
+  const hasLog = !!log || !!logFile;
 
   const imageExtensions = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'svg', 'webp'];
   const isImageFile = (fileName: string): boolean => {
@@ -154,10 +155,10 @@ const ReportBlock: BlockComponent = ({
   };
 
   const fetchLogFileContent = React.useCallback(async () => {
-    if (!logFileFromDetails || !logFileFromDetails.path) return;
+    if (!logFile || !logFile.path) return;
     setIsLoadingLog(true);
     try {
-      const downloadResult = await downloadData({ path: logFileFromDetails.path }).result;
+      const downloadResult = await downloadData({ path: logFile.path }).result;
       const text = await downloadResult.body.text();
       setLogText(text);
     } catch (error) {
@@ -166,7 +167,7 @@ const ReportBlock: BlockComponent = ({
     } finally {
       setIsLoadingLog(false);
     }
-  }, [logFileFromDetails]);
+  }, [logFile]);
 
   const fetchFileContent = React.useCallback(async (file: DetailFile) => {
     // If this file is already selected, toggle it off
@@ -222,7 +223,7 @@ const ReportBlock: BlockComponent = ({
   const toggleShowLog = () => {
     const newShowLogState = !showLog;
     setShowLog(newShowLogState);
-    if (newShowLogState && !logText && logFileFromDetails && !isLoadingLog) {
+    if (newShowLogState && !logText && logFile && !isLoadingLog) {
       fetchLogFileContent();
     }
   };
@@ -255,9 +256,9 @@ const ReportBlock: BlockComponent = ({
   };
 
   const handleDownloadLog = async () => {
-    if (!logFileFromDetails || !logFileFromDetails.path) return;
+    if (!logFile || !logFile.path) return;
     try {
-      const urlResult = await getUrl({ path: logFileFromDetails.path });
+      const urlResult = await getUrl({ path: logFile.path });
       if (urlResult.url) {
         window.open(urlResult.url.toString(), '_blank');
       } else {
@@ -295,7 +296,7 @@ const ReportBlock: BlockComponent = ({
       <div className={`my-3 bg-card p-3 overflow-hidden rounded-lg ${isWideLayout ? "w-full" : "@[30rem]:w-[350px]"}`}>
         <div className="flex flex-row justify-between items-center mb-3">
           <h4 className="text-base font-medium">Log</h4>
-          {logFileFromDetails && (
+          {logFile && (
             <CardButton 
               icon={Download} 
               onClick={handleDownloadLog}
@@ -338,7 +339,7 @@ const ReportBlock: BlockComponent = ({
           {/* File list */}
           <div className="bg-muted/50 py-2 px-0 rounded-sm">
             <div className="space-y-1">
-              {parsedDetailsFiles.map((file, index) => (
+              {parsedAttachedFiles.map((file, index) => (
                 <div key={index} className="flex flex-col -mx-1">
                   <div className={`flex justify-between items-center ${index % 2 === 0 ? 'bg-card-selected' : 'bg-card'} rounded-sm p-1 w-full`}>
                     <span className="text-sm truncate flex-1">{file.name}</span>
@@ -462,7 +463,7 @@ const ReportBlock: BlockComponent = ({
                     className="h-8 bg-card hover:bg-card/90 border-0 w-full"
                   >
                     <Paperclip className="mr-2 h-4 w-4" />
-                    {showAttachedFiles ? "Hide Files" : parsedDetailsFiles.length === 1 ? "Attached File" : "Attached Files"}
+                    {showAttachedFiles ? "Hide Files" : parsedAttachedFiles.length === 1 ? "Attached File" : "Attached Files"}
                   </Button>
                   
                   {/* Only render inline (below the button) in narrow layout */}
