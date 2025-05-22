@@ -631,6 +631,7 @@ const schema = a.schema({
             allow.publicApiKey(),
             allow.authenticated(),
             allow.public().to(['read'])
+        ])
         .secondaryIndexes((idx: (field: ReportBlockIndexFields) => any) => [
             idx("reportId").sortKeys(["name"]).name("byReportAndName"),
             idx("reportId").sortKeys(["position"]).name("byReportAndPosition")
