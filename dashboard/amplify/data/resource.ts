@@ -21,7 +21,7 @@ type EvaluationIndexFields = "accountId" | "scorecardId" | "type" | "accuracy" |
     "scoreGoal" | "metricsExplanation" | "inferences" | "cost";
 type BatchJobIndexFields = "accountId" | "scorecardId" | "type" | "scoreId" | 
     "status" | "modelProvider" | "modelName" | "batchId";
-type ItemIndexFields = "name" | "description" | "accountId" | "evaluationId" | "updatedAt" | "createdAt" | "isEvaluation";
+type ItemIndexFields = "name" | "description" | "accountId" | "evaluationId" | "updatedAt" | "createdAt" | "isEvaluation" | "scorecardId";
 type ScoringJobIndexFields = "accountId" | "scorecardId" | "itemId" | "status" | 
     "scoreId" | "evaluationId" | "startedAt" | "completedAt" | "errorMessage" | "updatedAt" | "createdAt";
 type ScoreResultIndexFields = "accountId" | "scorecardId" | "itemId" | 
@@ -288,7 +288,10 @@ const schema = a.schema({
             identifiers: a.json(),
             feedbackItems: a.hasMany('FeedbackItem', 'itemId'),
             attachedFiles: a.string().array(),
-            text: a.string()
+            text: a.string(),
+            metadata: a.json(),
+            scorecardId: a.string(),
+            scorecard: a.belongsTo('Scorecard', 'scorecardId'),
         })
         .authorization((allow) => [
             allow.publicApiKey(),
@@ -299,7 +302,9 @@ const schema = a.schema({
             idx("externalId"),
             idx("scoreId").sortKeys(["updatedAt"]),
             // Composite GSI for accountId+externalId to enforce uniqueness within an account
-            idx("accountId").sortKeys(["externalId"]).name("byAccountAndExternalId")
+            idx("accountId").sortKeys(["externalId"]).name("byAccountAndExternalId"),
+            // Add index for querying items by scorecardId sorted by updatedAt
+            idx("scorecardId").sortKeys(["updatedAt"]).name("byScoreCardUpdatedAt")
         ]),
 
     ScoringJob: a
