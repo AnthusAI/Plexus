@@ -24,6 +24,19 @@ function AuthWrapper({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   
+  // Helper functions to check path types
+  const isPublicReport = (path: string) => 
+    path.startsWith('/reports/') && 
+    path.split('/').length === 3 && 
+    !path.startsWith('/reports/lab');
+
+  const isPublicEvaluation = (path: string) => 
+    path.startsWith('/evaluations/') && 
+    !path.startsWith('/evaluations/lab');
+    
+  const isDocumentation = (path: string) =>
+    path.startsWith('/documentation');
+  
   // Allow unauthenticated access to marketing pages and solutions
   const publicPaths = [
     '/',
@@ -69,12 +82,16 @@ function AuthWrapper({ children }: { children: React.ReactNode }) {
   
   // Only allow dynamic evaluation and report pages (with an ID) to be public
   const isPublicPath = publicPaths.includes(pathname) || 
-    (pathname.startsWith('/evaluations/') && pathname.split('/').length === 3 && !pathname.startsWith('/evaluations/lab')) ||
-    (pathname.startsWith('/reports/') && pathname.split('/').length === 3 && !pathname.startsWith('/reports/lab'));
+    isPublicEvaluation(pathname) ||
+    isPublicReport(pathname) ||
+    isDocumentation(pathname);
     
-  // If directToLogin is true, only /dashboard should be accessible for unauthenticated users
+  // Allow public reports, evaluations, and documentation even in minimal branding mode
   const isAccessiblePublicPath = directToLogin 
-    ? pathname === '/dashboard'
+    ? pathname === '/dashboard' || 
+      isPublicEvaluation(pathname) || 
+      isPublicReport(pathname) || 
+      isDocumentation(pathname)
     : isPublicPath;
   
   useEffect(() => {
@@ -84,8 +101,9 @@ function AuthWrapper({ children }: { children: React.ReactNode }) {
     
     // Redirect logic based on authentication status and directToLogin setting
     if (authStatus === 'unauthenticated') {
-      if (directToLogin && pathname !== '/dashboard') {
+      if (directToLogin && pathname !== '/dashboard' && !isAccessiblePublicPath) {
         // When directToLogin is true, redirect all unauthenticated traffic to login page
+        // except for paths explicitly allowed in isAccessiblePublicPath
         router.push('/dashboard');
       } else if (!isPublicPath) {
         // Normal behavior: redirect to home if trying to access protected page
@@ -95,7 +113,7 @@ function AuthWrapper({ children }: { children: React.ReactNode }) {
       // Redirect authenticated users from home to lab/items
       router.push('/lab/items');
     }
-  }, [authStatus, router, pathname, directToLogin, isPublicPath]);
+  }, [authStatus, router, pathname, directToLogin, isPublicPath, isAccessiblePublicPath]);
 
   // While auth is loading, render nothing
   if (!authStatus) {
