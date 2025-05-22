@@ -92,6 +92,7 @@ const schema = a.schema({
             externalId: a.string(),
             itemId: a.string(),
             item: a.belongsTo('Item', 'itemId'),
+            exampleItems: a.hasMany('Item', 'scorecardId'),
         })
         .authorization((allow) => [
             allow.publicApiKey(),
