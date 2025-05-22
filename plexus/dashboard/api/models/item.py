@@ -13,6 +13,9 @@ class Item(BaseModel):
     prediction: Optional[str] = None
     groundTruth: Optional[str] = None
     isCorrect: Optional[bool] = None
+    identifiers: Optional[Dict] = None
+    externalId: Optional[str] = None
+    description: Optional[str] = None
 
     def __init__(
         self,
@@ -24,6 +27,9 @@ class Item(BaseModel):
         prediction: Optional[str] = None,
         groundTruth: Optional[str] = None,
         isCorrect: Optional[bool] = None,
+        identifiers: Optional[Dict] = None,
+        externalId: Optional[str] = None,
+        description: Optional[str] = None,
         client: Optional[_BaseAPIClient] = None
     ):
         super().__init__(id, client)
@@ -34,6 +40,9 @@ class Item(BaseModel):
         self.prediction = prediction
         self.groundTruth = groundTruth
         self.isCorrect = isCorrect
+        self.identifiers = identifiers
+        self.externalId = externalId
+        self.description = description
 
     @classmethod
     def fields(cls) -> str:
@@ -46,6 +55,9 @@ class Item(BaseModel):
             prediction
             groundTruth
             isCorrect
+            identifiers
+            externalId
+            description
         """
 
     @classmethod
@@ -82,13 +94,16 @@ class Item(BaseModel):
 
         return cls(
             id=data['id'],
-            evaluationId=data['evaluationId'],
-            data=data['data'],
-            createdAt=data['createdAt'],
-            updatedAt=data['updatedAt'],
+            evaluationId=data.get('evaluationId', ''),
+            data=data.get('data', {}),
+            createdAt=data.get('createdAt', datetime.now(timezone.utc)),
+            updatedAt=data.get('updatedAt', datetime.now(timezone.utc)),
             prediction=data.get('prediction'),
             groundTruth=data.get('groundTruth'),
             isCorrect=data.get('isCorrect'),
+            identifiers=data.get('identifiers'),
+            externalId=data.get('externalId'),
+            description=data.get('description'),
             client=client
         )
 

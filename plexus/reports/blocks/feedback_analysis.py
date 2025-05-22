@@ -11,6 +11,7 @@ from plexus.dashboard.api.models.feedback_item import FeedbackItem
 from plexus.dashboard.api.models.score import Score
 from plexus.dashboard.api.models.scorecard import Scorecard
 from plexus.dashboard.api.models.report_block import ReportBlock
+from plexus.dashboard.api.models.item import Item  # Add Item model import
 
 from .base import BaseReportBlock
 
@@ -257,7 +258,7 @@ class FeedbackAnalysis(BaseReportBlock):
                         analysis_for_this_score["cc_question_id"] = score_info['cc_question_id']
                         
                         # Create indexed feedback items structure for this score
-                        indexed_items = self._create_indexed_feedback_items(items_for_this_score)
+                        indexed_items = await self._create_indexed_feedback_items(items_for_this_score)
                         
                         # Export the indexed items to a JSON file
                         if indexed_items and report_block_id:
@@ -499,15 +500,23 @@ class FeedbackAnalysis(BaseReportBlock):
                             accountId
                             scorecardId
                             scoreId
+                            itemId
                             cacheKey
                             initialAnswerValue
                             finalAnswerValue
                             initialCommentValue
                             finalCommentValue
                             editCommentValue
+                            editedAt
+                            editorName
                             isAgreement
                             createdAt
                             updatedAt
+                            item {
+                                id
+                                identifiers
+                                externalId
+                            }
                         }
                         nextToken
                     }
@@ -570,6 +579,13 @@ class FeedbackAnalysis(BaseReportBlock):
                                   accountId
                                   scorecardId
                                   scoreId
+                                  itemId
+                                  editedAt
+                                  editorName
+                                  item {
+                                    id
+                                    identifiers
+                                  }
                                 }
                                 nextToken
                               }
@@ -588,8 +604,24 @@ class FeedbackAnalysis(BaseReportBlock):
                             result = response['listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt']
                             item_dicts = result.get('items', [])
                             
+                            # Log the first few items to verify we're getting identifiers
+                            if item_dicts:
+                                for i, item_dict in enumerate(item_dicts[:3]):  # Show first 3 items
+                                    if 'item' in item_dict and item_dict['item'] and 'identifiers' in item_dict['item']:
+                                        self._log(f"Found item with identifiers: {item_dict['item']['identifiers']}", level="INFO")
+                                    else:
+                                        self._log(f"Item {i} missing nested item or identifiers", level="WARNING")
+                            
                             # Convert to FeedbackItem objects
                             items = [FeedbackItem.from_dict(item_dict, client=self.api_client) for item_dict in item_dicts]
+                            
+                            # Log sample items to verify item relationships are correctly loaded
+                            for i, item in enumerate(items[:2]):  # Show first 2 items
+                                if hasattr(item, 'item') and item.item:
+                                    self._log(f"Processed FeedbackItem {item.id} has linked Item: {item.item.id}, identifiers: {item.item.identifiers}", level="INFO")
+                                else:
+                                    self._log(f"Processed FeedbackItem {item.id} is missing linked Item", level="WARNING")
+                            
                             all_items_for_score.extend(items)
                             
                             self._log(f"Fetched {len(items)} items using GSI query (total: {len(all_items_for_score)})")
@@ -994,7 +1026,7 @@ class FeedbackAnalysis(BaseReportBlock):
             else:
                 self.log_messages.append(f"{datetime.now().isoformat()} - {message}")
 
-    def _create_indexed_feedback_items(self, feedback_items: List[FeedbackItem]) -> Dict[str, Any]:
+    async def _create_indexed_feedback_items(self, feedback_items: List[FeedbackItem]) -> Dict[str, Any]:
         """
         Creates an indexed structure of feedback items organized by initial (predicted) and final (actual) answers.
         This allows for quick lookup of feedback items for any cell in the confusion matrix.
@@ -1029,6 +1061,9 @@ class FeedbackAnalysis(BaseReportBlock):
         
         # Process each valid item
         for item in valid_items:
+            # Ensure the item relationship is loaded
+            await self._ensure_item_loaded(item)
+            
             # Convert values to strings to ensure consistent keys
             initial_value = str(item.initialAnswerValue)
             final_value = str(item.finalAnswerValue)
@@ -1051,27 +1086,108 @@ class FeedbackAnalysis(BaseReportBlock):
                 "initialCommentValue": item.initialCommentValue,
                 "finalCommentValue": item.finalCommentValue,
                 "editCommentValue": item.editCommentValue,
+                "editedAt": item.editedAt,
+                "editorName": item.editorName,
                 "isAgreement": item.isAgreement,
                 "scorecardId": item.scorecardId,
                 "scoreId": item.scoreId,
+                "itemId": item.itemId,
                 "cacheKey": item.cacheKey,
                 "createdAt": item.createdAt,
                 "updatedAt": item.updatedAt
             }
             
+            # Add item identifiers if available
+            if hasattr(item, 'item') and item.item and hasattr(item.item, 'identifiers'):
+                item_dict["item"] = {
+                    "id": item.item.id if hasattr(item.item, 'id') else None,
+                    "identifiers": item.item.identifiers,
+                    "externalId": item.item.externalId if hasattr(item.item, 'externalId') else None,
+                }
+                # Log to confirm we're including identifiers
+                self._log(f"Including item identifiers for feedback item {item.id}: {item.item.identifiers}", level="DEBUG")
+            else:
+                # Add a message if identifiers are not available
+                self._log(f"Item identifiers not available for feedback item {item.id}", level="DEBUG")
+                item_dict["item"] = {
+                    "id": item.itemId,
+                    "identifiers": None,
+                    "message": "Item details not available"
+                }
+            
             # Add the item to the appropriate list
             indexed_structure[initial_value][final_value].append(item_dict)
         
-        # Log summary of indexed structure
+        # Add summary count of items with identifiers
+        items_with_identifiers = 0
         total_indexed = 0
         for initial_value, final_values_dict in indexed_structure.items():
             for final_value, items_list in final_values_dict.items():
                 count = len(items_list)
                 total_indexed += count
                 self._log(f"Indexed {count} items with initial={initial_value}, final={final_value}")
+                
+                for item in items_list:
+                    if "item" in item and item["item"] and "identifiers" in item["item"] and item["item"]["identifiers"] is not None:
+                        items_with_identifiers += 1
         
         self._log(f"Total indexed items: {total_indexed}")
+        self._log(f"Indexed items with identifiers: {items_with_identifiers} out of {total_indexed}")
         return indexed_structure
+
+    async def _ensure_item_loaded(self, feedback_item: FeedbackItem):
+        """
+        Ensures the Item relationship is loaded for a FeedbackItem.
+        This is necessary because the relationship might not be automatically loaded, 
+        especially when the feedback item is created without the nested item data.
+        
+        Args:
+            feedback_item: The FeedbackItem to ensure item is loaded for
+        
+        Returns:
+            True if the item was loaded successfully, False otherwise
+        """
+        if hasattr(feedback_item, 'item') and feedback_item.item is not None:
+            # Item is already loaded
+            return True
+            
+        if not feedback_item.itemId or not self.api_client:
+            # No itemId or client to load with
+            return False
+            
+        try:
+            # Import here to avoid circular imports
+            from plexus.dashboard.api.models.item import Item
+            
+            # Construct a GraphQL query to fetch the item
+            query = """
+            query GetItem($id: ID!) {
+                getItem(id: $id) {
+                    id
+                    identifiers
+                    externalId
+                }
+            }
+            """
+            
+            variables = {"id": feedback_item.itemId}
+            
+            # Execute the query
+            result = await asyncio.to_thread(self.api_client.execute, query, variables)
+            
+            if result and 'getItem' in result and result['getItem']:
+                item_data = result['getItem']
+                # Create an Item instance and attach it
+                feedback_item.item = Item.from_dict(item_data, client=self.api_client)
+                self._log(f"Successfully loaded Item for FeedbackItem {feedback_item.id}: identifiers={feedback_item.item.identifiers}")
+                return True
+            else:
+                self._log(f"Failed to load Item {feedback_item.itemId} for FeedbackItem {feedback_item.id}", level="WARNING")
+                return False
+                
+        except Exception as e:
+            self._log(f"Error loading Item for FeedbackItem {feedback_item.id}: {e}", level="ERROR")
+            return False
 
 # Example of how this block might be configured in a ReportConfiguration:
 """
