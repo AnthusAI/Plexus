@@ -8,5 +8,9 @@ export const reportBlockDetails = defineStorage({
     'reportblocks/{entity_id}/*': [
       allow.authenticated.to(['read', 'write', 'delete'])
     ],
+    // Add guest access for report block details to enable public shared reports
+    'reportblocks/*': [
+      allow.guest.to(['read'])
+    ],
   })
 }); 
