@@ -142,7 +142,7 @@ export class ReportService {
                     type
                     output
                     log
-                    detailsFiles
+                    attachedFiles
                   }
                   nextToken
                 }
@@ -162,7 +162,7 @@ export class ReportService {
                 type: string; // Ensure type is requested
                 output: any;
                 log?: string;
-                detailsFiles?: string;
+                attachedFiles?: string;
               }>;
               nextToken?: string;
             };
@@ -271,7 +271,7 @@ export class ReportService {
         reportData = result.data;
       }
       
-      // If we have a reportId, fetch the full report data to ensure we have detailsFiles
+      // If we have a reportId, fetch the full report data to ensure we have attachedFiles
       if (reportId) {
         try {
           const fullReportResponse = await this.client.graphql({
@@ -318,7 +318,7 @@ export class ReportService {
                       type
                       output
                       log
-                      detailsFiles
+                      attachedFiles
                     }
                   }
                 }
@@ -473,7 +473,7 @@ export function PublicReport({
         log: block.log || undefined,
         name: block.name || undefined, // Use API block name if available
         position: block.position,
-        detailsFiles: block.detailsFiles,
+        attachedFiles: block.attachedFiles,
         // Pass the original block ID as well, might be useful for keys or debugging
         originalBlockId: block.id 
       };

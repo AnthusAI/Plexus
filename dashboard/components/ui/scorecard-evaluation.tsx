@@ -56,7 +56,7 @@ export interface ScorecardReportEvaluationData {
 interface ScorecardReportEvaluationProps {
   score: ScorecardReportEvaluationData;
   scoreIndex: number;
-  detailsFiles?: string | null;
+  attachedFiles?: string | null;
   className?: string;
   showPrecisionRecall?: boolean;
 }
@@ -64,7 +64,7 @@ interface ScorecardReportEvaluationProps {
 export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps> = ({ 
   score,
   scoreIndex,
-  detailsFiles,
+  attachedFiles,
   className,
   showPrecisionRecall = true
 }) => {
@@ -78,31 +78,31 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
   const [showRawJson, setShowRawJson] = useState(false);
   const [showDetailsSection, setShowDetailsSection] = useState(false);
 
-  const parsedDetailsFiles = useMemo(() => {
-    if (typeof detailsFiles === 'string') {
+  const parsedAttachedFiles = useMemo(() => {
+    if (typeof attachedFiles === 'string') {
       try {
-        return JSON.parse(detailsFiles) as DetailFile[];
+        return JSON.parse(attachedFiles) as DetailFile[];
       } catch (error) {
-        console.error('Failed to parse detailsFiles JSON string in ScorecardReportEvaluation:', error);
+        console.error('Failed to parse attachedFiles JSON string in ScorecardReportEvaluation:', error);
         return [];
       }
     }
     return [];
-  }, [detailsFiles]);
+  }, [attachedFiles]);
 
   const scoreDetailsFileName = `score-${scoreIndex + 1}-results.json`;
-  const scoreDetailFile = useMemo(() => {
-    return parsedDetailsFiles.find(f => f.name === scoreDetailsFileName);
-  }, [parsedDetailsFiles, scoreDetailsFileName]);
+  const scoreDetailsFile = useMemo(() => {
+    return parsedAttachedFiles.find(f => f.name === scoreDetailsFileName);
+  }, [parsedAttachedFiles, scoreDetailsFileName]);
 
   const fetchScoreDetailsContent = useCallback(async () => {
-    if (!scoreDetailFile || !scoreDetailFile.path) return;
+    if (!scoreDetailsFile || !scoreDetailsFile.path) return;
     
     if (isLoadingScoreDetails || scoreDetailsContent) return;
 
     setIsLoadingScoreDetails(true);
     try {
-      const downloadResult = await downloadData({ path: scoreDetailFile.path }).result;
+      const downloadResult = await downloadData({ path: scoreDetailsFile.path }).result;
       const text = await downloadResult.body.text();
       setScoreDetailsContent(text);
     } catch (error) {
@@ -111,7 +111,7 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
     } finally {
       setIsLoadingScoreDetails(false);
     }
-  }, [scoreDetailFile, isLoadingScoreDetails, scoreDetailsContent]);
+  }, [scoreDetailsFile, isLoadingScoreDetails, scoreDetailsContent]);
   
   useEffect(() => {
     if (activeCellFilter && scoreDetailsContent && typeof scoreDetailsContent === 'string') {
@@ -157,7 +157,7 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
       setShowDetailsSection(true);
       
       // Fetch details if needed and not already loading
-      if (!scoreDetailsContent && scoreDetailFile && !isLoadingScoreDetails) {
+      if (!scoreDetailsContent && scoreDetailsFile && !isLoadingScoreDetails) {
         fetchScoreDetailsContent();
       }
     } else {
@@ -194,7 +194,7 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
   const hasClassDistribution = score.class_distribution && score.class_distribution.length > 0;
   const hasPredictedDistribution = score.predicted_class_distribution && score.predicted_class_distribution.length > 0;
   const hasConfusionMatrixData = score.confusion_matrix && score.confusion_matrix.matrix && score.confusion_matrix.labels && score.confusion_matrix.matrix.length > 0;
-  const hasVisualizationData = hasClassDistribution || hasPredictedDistribution || (hasConfusionMatrixData && scoreDetailFile);
+  const hasVisualizationData = hasClassDistribution || hasPredictedDistribution || (hasConfusionMatrixData && scoreDetailsFile);
   
   const hasExtendedData = hasClassDistribution || hasPredictedDistribution || hasDiscussion || hasItems;
   
@@ -341,7 +341,7 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
           </div>
         )}
 
-        {hasConfusionMatrixData && scoreDetailFile && (
+        {hasConfusionMatrixData && scoreDetailsFile && (
           <div className="mt-4">
             <ConfusionMatrix 
               data={score.confusion_matrix!}

@@ -14,7 +14,7 @@ interface ReportBlock {
   type: string;
   output: Record<string, any>;
   log?: string | null;
-  detailsFiles?: string | null;
+  attachedFiles?: string | null;
 }
 
 type DetailFile = {
@@ -35,15 +35,15 @@ const BlockDetails: React.FC<BlockDetailsProps> = ({ block }) => {
   const [dialogOpen, setDialogOpen] = useState<boolean>(false);
 
   const loadDetailFiles = async () => {
-    if (!block.detailsFiles) return;
+    if (!block.attachedFiles) return;
     
     setLoading(true);
     try {
       let files: DetailFile[] = [];
       try {
-        files = JSON.parse(block.detailsFiles);
+        files = JSON.parse(block.attachedFiles);
       } catch (err) {
-        console.error('Error parsing detailsFiles JSON:', err);
+        console.error('Error parsing attachedFiles JSON:', err);
         return;
       }
       
@@ -94,12 +94,12 @@ const BlockDetails: React.FC<BlockDetailsProps> = ({ block }) => {
   
   // Load detail files on first render
   React.useEffect(() => {
-    if (block.detailsFiles) {
+    if (block.attachedFiles) {
       loadDetailFiles();
     }
-  }, [block.detailsFiles]);
+  }, [block.attachedFiles]);
   
-  if (!block.detailsFiles) {
+  if (!block.attachedFiles) {
     return null;
   }
   
