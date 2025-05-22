@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Badge } from '@/components/ui/badge';
-import { ChevronDown, ChevronUp, AlertTriangle, Eye } from 'lucide-react';
+import { ChevronDown, ChevronUp, AlertTriangle, Eye, CheckCircle, XCircle } from 'lucide-react';
 import { CardButton } from '@/components/CardButton';
 import { Gauge, type Segment } from '@/components/gauge';
 import { cn } from '@/lib/utils';
@@ -44,6 +44,13 @@ export interface ScorecardReportEvaluationData {
   warning?: string;
   notes?: string;
   discussion?: string;
+  editorName?: string;
+  editedAt?: string;
+  item?: {
+    id: string;
+    identifiers?: string;
+    externalId?: string;
+  };
 }
 
 interface ScorecardReportEvaluationProps {
@@ -191,6 +198,33 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
   
   const hasExtendedData = hasClassDistribution || hasPredictedDistribution || hasDiscussion || hasItems;
   
+  const parsedIdentifiers = useMemo(() => {
+    if (score.item?.identifiers) {
+      try {
+        return JSON.parse(score.item.identifiers) as Array<{
+          name: string;
+          id: string;
+          url?: string;
+        }>;
+      } catch (error) {
+        console.error('Failed to parse identifiers JSON string:', error);
+        return [];
+      }
+    }
+    return [];
+  }, [score.item?.identifiers]);
+  
+  // Format date to a more readable format
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return '';
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleString();
+    } catch (e) {
+      return dateString;
+    }
+  };
+
   return (
     <div className={cn(
       "transition-all bg-card rounded-lg relative min-w-[280px]",
@@ -372,6 +406,64 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
               </div>
             </div>
           )}
+        </div>
+      )}
+      
+      {/* Editor information and identifiers */}
+      {(score.editorName || parsedIdentifiers.length > 0) && (
+        <div className="px-4 pb-4 mt-4 pt-4 border-t border-border">
+          <div className="flex flex-col md:flex-row justify-between gap-4">
+            {/* Editor information on the left */}
+            <div className="space-y-1">
+              {score.editorName && (
+                <>
+                  <div className="text-sm">
+                    <span className="font-medium">Edited by:</span> {score.editorName}
+                  </div>
+                  {score.editedAt && (
+                    <div className="text-xs text-muted-foreground">
+                      {formatDate(score.editedAt)}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+            
+            {/* Identifiers on the right */}
+            {parsedIdentifiers.length > 0 && (
+              <div className="w-full md:w-auto">
+                <h6 className="text-xs text-muted-foreground mb-1">Identifiers</h6>
+                <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+                  {parsedIdentifiers.map((identifier, index) => (
+                    <React.Fragment key={`${identifier.name}-${index}`}>
+                      <div className="text-muted-foreground">{identifier.name}:</div>
+                      <div className="text-muted-foreground">
+                        {identifier.url ? (
+                          <a 
+                            href={identifier.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary hover:underline"
+                            title={identifier.id}
+                          >
+                            {identifier.id.length > 10 
+                              ? `${identifier.id.substring(0, 10)}...` 
+                              : identifier.id}
+                          </a>
+                        ) : (
+                          <span title={identifier.id}>
+                            {identifier.id.length > 10 
+                              ? `${identifier.id.substring(0, 10)}...` 
+                              : identifier.id}
+                          </span>
+                        )}
+                      </div>
+                    </React.Fragment>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

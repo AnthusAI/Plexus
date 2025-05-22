@@ -66,7 +66,7 @@ const schema = a.schema({
             reports: a.hasMany('Report', 'accountId'),
             feedbackItems: a.hasMany('FeedbackItem', 'accountId'),
         })
-        .authorization((allow: AuthorizationCallback) => [
+        .authorization((allow) => [
             allow.publicApiKey(),
             allow.authenticated()
         ])
@@ -93,7 +93,7 @@ const schema = a.schema({
             itemId: a.string(),
             item: a.belongsTo('Item', 'itemId'),
         })
-        .authorization((allow: AuthorizationCallback) => [
+        .authorization((allow) => [
             allow.publicApiKey(),
             allow.authenticated()
         ])
@@ -112,7 +112,7 @@ const schema = a.schema({
             scorecard: a.belongsTo('Scorecard', 'scorecardId'),
             scores: a.hasMany('Score', 'sectionId'),
         })
-        .authorization((allow: AuthorizationCallback) => [
+        .authorization((allow) => [
             allow.publicApiKey(),
             allow.authenticated()
         ])
@@ -147,7 +147,7 @@ const schema = a.schema({
             championVersion: a.belongsTo('ScoreVersion', 'championVersionId'),
             externalId: a.string().required()
         })
-        .authorization((allow: AuthorizationCallback) => [
+        .authorization((allow) => [
             allow.publicApiKey(),
             allow.authenticated()
         ])
@@ -174,7 +174,7 @@ const schema = a.schema({
             childVersions: a.hasMany('ScoreVersion', 'parentVersionId'),
             evaluations: a.hasMany('Evaluation', 'scoreVersionId')
         })
-        .authorization((allow: AuthorizationCallback) => [
+        .authorization((allow) => [
             allow.publicApiKey(),
             allow.authenticated()
         ])
@@ -222,10 +222,10 @@ const schema = a.schema({
             taskId: a.string(),
             task: a.belongsTo('Task', 'taskId')
         })
-        .authorization((allow: AuthorizationCallback) => [
+        .authorization((allow) => [
             allow.publicApiKey(),
-            allow.authenticated(),
-            allow.public().to(['read']) // Only accessible if the full UUID is known.
+            allow.authenticated()
+            // Public access removed - use API key authentication for unauthenticated access
         ])
         .secondaryIndexes((idx) => [
             idx("accountId").sortKeys(["updatedAt"]),
@@ -258,7 +258,7 @@ const schema = a.schema({
             modelProvider: a.string().required(),
             modelName: a.string().required(),
         })
-        .authorization((allow: AuthorizationCallback) => [
+        .authorization((allow) => [
             allow.publicApiKey(),
             allow.authenticated()
         ])
@@ -288,7 +288,7 @@ const schema = a.schema({
             identifiers: a.json(),
             feedbackItems: a.hasMany('FeedbackItem', 'itemId'),
         })
-        .authorization((allow: AuthorizationCallback) => [
+        .authorization((allow) => [
             allow.publicApiKey(),
             allow.authenticated()
         ])
@@ -323,7 +323,7 @@ const schema = a.schema({
             updatedAt: a.datetime(),
             createdAt: a.datetime(),
         })
-        .authorization((allow: AuthorizationCallback) => [
+        .authorization((allow) => [
             allow.publicApiKey(),
             allow.authenticated()
         ])
@@ -360,7 +360,7 @@ const schema = a.schema({
             updatedAt: a.datetime(),
             createdAt: a.datetime(),
         })
-        .authorization((allow: AuthorizationCallback) => [
+        .authorization((allow) => [
             allow.publicApiKey(),
             allow.authenticated()
         ])
@@ -381,7 +381,7 @@ const schema = a.schema({
             batchJob: a.belongsTo('BatchJob', 'batchJobId'),
             scoringJob: a.belongsTo('ScoringJob', 'scoringJobId'),
         })
-        .authorization((allow: AuthorizationCallback) => [
+        .authorization((allow) => [
             allow.publicApiKey(),
             allow.authenticated()
         ])
@@ -421,10 +421,10 @@ const schema = a.schema({
             evaluation: a.hasOne('Evaluation', 'taskId'),
             report: a.hasOne('Report', 'taskId')
         })
-        .authorization((allow: AuthorizationCallback) => [
+        .authorization((allow) => [
             allow.publicApiKey(),
-            allow.authenticated(),
-            allow.public().to(['read']) // Only accessible if the full UUID is known.
+            allow.authenticated()
+            // Public access removed - use API key authentication for unauthenticated access
         ])
         .secondaryIndexes((idx) => [
             idx("accountId").sortKeys(["updatedAt"]),
@@ -448,10 +448,10 @@ const schema = a.schema({
             totalItems: a.integer(),
             tasksAsCurrentStage: a.hasMany('Task', 'currentStageId'),
         })
-        .authorization((allow: AuthorizationCallback) => [
+        .authorization((allow) => [
             allow.publicApiKey(),
-            allow.authenticated(),
-            allow.public().to(['read']) // Only accessible if the full UUID is known.
+            allow.authenticated()
+            // Public access removed - use API key authentication for unauthenticated access
         ])
         .secondaryIndexes((idx: (field: TaskStageIndexFields) => any) => [
             idx("taskId"),
@@ -475,7 +475,7 @@ const schema = a.schema({
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
         })
-        .authorization((allow: AuthorizationCallback) => [
+        .authorization((allow) => [
             allow.publicApiKey(),
             allow.authenticated()
         ])
@@ -494,7 +494,7 @@ const schema = a.schema({
             profiles: a.hasMany('DatasetProfile', 'datasetVersionId'),
             datasetsAsCurrentVersion: a.hasMany('Dataset', 'currentVersionId'),
         })
-        .authorization((allow: AuthorizationCallback) => [
+        .authorization((allow) => [
             allow.publicApiKey(),
             allow.authenticated()
         ])
@@ -513,7 +513,7 @@ const schema = a.schema({
             answerDistribution: a.json().required(),
             createdAt: a.datetime().required(),
         })
-        .authorization((allow: AuthorizationCallback) => [
+        .authorization((allow) => [
             allow.publicApiKey(),
             allow.authenticated()
         ])
@@ -578,10 +578,10 @@ const schema = a.schema({
             updatedAt: a.datetime().required(),
             reports: a.hasMany('Report', 'reportConfigurationId'),
         })
-        .authorization((allow: AuthorizationCallback) => [
+        .authorization((allow) => [
             allow.publicApiKey(),
-            allow.authenticated(),
-            allow.public().to(['read']) // Only accessible if the full UUID is known.
+            allow.authenticated()
+            // Public access removed - use API key authentication for unauthenticated access
         ])
         .secondaryIndexes((idx: (field: ReportConfigurationIndexFields) => any) => [
             idx("accountId").sortKeys(["updatedAt"]),
@@ -603,10 +603,10 @@ const schema = a.schema({
             taskId: a.string(), // Add foreign key for Task
             task: a.belongsTo('Task', 'taskId'), // Add relationship to Task
         })
-        .authorization((allow: AuthorizationCallback) => [
+        .authorization((allow) => [
             allow.publicApiKey(),
-            allow.authenticated(),
-            allow.public().to(['read']) // Only accessible if the full UUID is known.
+            allow.authenticated()
+            // Public access removed - use API key authentication for unauthenticated access
         ])
         .secondaryIndexes((idx: (field: ReportIndexFields) => any) => [
             idx("accountId").sortKeys(["updatedAt"]),
@@ -627,10 +627,10 @@ const schema = a.schema({
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
         })
-        .authorization((allow: AuthorizationCallback) => [
+        .authorization((allow) => [
             allow.publicApiKey(),
-            allow.authenticated(),
-            allow.public().to(['read'])
+            allow.authenticated()
+            // Public access removed - use API key authentication for unauthenticated access
         ])
         .secondaryIndexes((idx: (field: ReportBlockIndexFields) => any) => [
             idx("reportId").sortKeys(["name"]).name("byReportAndName"),
@@ -659,7 +659,7 @@ const schema = a.schema({
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
         })
-        .authorization((allow: AuthorizationCallback) => [
+        .authorization((allow) => [
             allow.publicApiKey(),
             allow.authenticated()
         ])
