@@ -8,12 +8,12 @@ import ReportBlock, { ReportBlockProps } from './ReportBlock'; // Corrected impo
  */
 const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
   // For now, TopicAnalysis will display a simple message and let the
-  // default block rendering handle the display of `detailsFiles`.
+  // default block rendering handle the display of `attachedFiles`.
   // We can enhance this component later to display specific visualizations
   // if the output structure of the Python block evolves.
 
   // You can use the props like props.name, props.output, props.log, props.config
-  // props.detailsFiles should be available if files were attached.
+  // props.attachedFiles should be available if files were attached.
 
   if (!props.output) {
     return <p>Topic analysis data is loading or not available.</p>;

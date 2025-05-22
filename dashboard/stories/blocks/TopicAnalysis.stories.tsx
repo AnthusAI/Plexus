@@ -46,7 +46,7 @@ export const DefaultView: Story = {
       summary: "Topic analysis completed successfully. No files attached yet."
     },
     config: commonConfig,
-    detailsFiles: null, // No files attached initially
+    attachedFiles: null, // No files attached initially
   },
 };
 
@@ -63,8 +63,8 @@ export const WithAttachedFiles: Story = {
       skipped_files: ["image.png"],
     },
     config: commonConfig,
-    // Simulate what detailsFiles would look like after attachments
-    detailsFiles: JSON.stringify([
+    // Simulate what attachedFiles would look like after attachments
+    attachedFiles: JSON.stringify([
       {
         name: "bertopic_plot.html",
         path: "dummy/path/bertopic_plot.html",
@@ -94,7 +94,7 @@ export const WithErrorState: Story = {
       attached_files: [],
     },
     config: commonConfig,
-    detailsFiles: null,
+    attachedFiles: null,
     error: "Topic analysis encountered critical errors. Check logs for details."
   },
 };
@@ -107,7 +107,7 @@ export const LoadingState: Story = {
     id: 'topic-analysis-loading',
     output: null, // Simulate loading state for the block
     config: commonConfig,
-    detailsFiles: null,
+    attachedFiles: null,
   },
 };
 
@@ -126,6 +126,6 @@ export const TransformationOnly: Story = {
       ...commonConfig,
       skip_analysis: true,
     },
-    detailsFiles: null,
+    attachedFiles: null,
   },
 }; 

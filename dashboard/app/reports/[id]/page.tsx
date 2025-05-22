@@ -48,7 +48,48 @@ export class ReportService {
   // Fetch report by ID for dashboard deep links
   async fetchReportById(id: string): Promise<any> {
     try {
-      const reportData = await this.safeGet<Schema['Report']['type']>('Report', id);
+      // Determine auth mode for unauthenticated access
+      let authMode: 'userPool' | 'apiKey' | undefined = undefined;
+      try {
+        const session = await fetchAuthSession();
+        if (session.tokens?.idToken) {
+          authMode = 'userPool';
+        } else {
+          authMode = 'apiKey';
+        }
+      } catch (error) {
+        authMode = 'apiKey';
+      }
+
+      // Use the graphql API directly with auth mode instead of safeGet
+      const response = await this.client.graphql({
+        query: `
+          query GetReport($id: ID!) {
+            getReport(id: $id) {
+              id
+              name
+              createdAt
+              updatedAt
+              parameters
+              output
+              accountId
+              reportConfigurationId
+              reportConfiguration {
+                id
+                name
+                description
+              }
+              taskId
+            }
+          }
+        `,
+        variables: { id },
+        authMode
+      }) as GraphQLResult<{
+        getReport: Schema['Report']['type'];
+      }>;
+
+      const reportData = response.data?.getReport;
       
       if (!reportData) {
         throw new Error('Report not found');
@@ -66,6 +107,19 @@ export class ReportService {
   // Fetch report blocks
   async fetchReportBlocks(report: any): Promise<any> {
     try {
+      // Determine auth mode for unauthenticated access
+      let authMode: 'userPool' | 'apiKey' | undefined = undefined;
+      try {
+        const session = await fetchAuthSession();
+        if (session.tokens?.idToken) {
+          authMode = 'userPool';
+        } else {
+          authMode = 'apiKey';
+        }
+      } catch (error) {
+        authMode = 'apiKey';
+      }
+
       // Condition to (re-)fetch blocks:
       // Simplified check: if reportBlocks or its items are missing, or if the first block lacks a type.
       const shouldFetchBlocks = 
@@ -88,14 +142,15 @@ export class ReportService {
                     type
                     output
                     log
-                    detailsFiles
+                    attachedFiles
                   }
                   nextToken
                 }
               }
             }
           `,
-          variables: { reportId: report.id }
+          variables: { reportId: report.id },
+          authMode
         }) as GraphQLResult<{
           getReport: {
             id: string;
@@ -107,7 +162,7 @@ export class ReportService {
                 type: string; // Ensure type is requested
                 output: any;
                 log?: string;
-                detailsFiles?: string;
+                attachedFiles?: string;
               }>;
               nextToken?: string;
             };
@@ -138,16 +193,19 @@ export class ReportService {
   async fetchReportByShareToken(token: string): Promise<any> {
     try {
       // Determine auth mode based on user's session
-      let authMode: 'userPool' | 'identityPool' = 'identityPool'; // Default to guest access
+      let authMode: 'userPool' | 'apiKey' | undefined = undefined; // Default to public access
       try {
         const session = await fetchAuthSession();
         if (session.tokens?.idToken) {
           authMode = 'userPool';
         } else {
-          console.log('Using guest access mode');
+          // For unauthenticated access, use API key instead of identity pool
+          authMode = 'apiKey';
+          console.log('Using API key access mode');
         }
       } catch (error) {
-        console.log('Error checking auth session, falling back to guest access');
+        console.log('Error checking auth session, falling back to API key access');
+        authMode = 'apiKey';
       }
       
       // First get the share link data and resource ID
@@ -213,7 +271,7 @@ export class ReportService {
         reportData = result.data;
       }
       
-      // If we have a reportId, fetch the full report data to ensure we have detailsFiles
+      // If we have a reportId, fetch the full report data to ensure we have attachedFiles
       if (reportId) {
         try {
           const fullReportResponse = await this.client.graphql({
@@ -260,7 +318,7 @@ export class ReportService {
                       type
                       output
                       log
-                      detailsFiles
+                      attachedFiles
                     }
                   }
                 }
@@ -415,7 +473,7 @@ export function PublicReport({
         log: block.log || undefined,
         name: block.name || undefined, // Use API block name if available
         position: block.position,
-        detailsFiles: block.detailsFiles,
+        attachedFiles: block.attachedFiles,
         // Pass the original block ID as well, might be useful for keys or debugging
         originalBlockId: block.id 
       };

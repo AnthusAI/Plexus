@@ -4,9 +4,22 @@ import { defineStorage } from '@aws-amplify/backend';
 export const reportBlockDetails = defineStorage({
   name: 'reportBlockDetails',
   access: (allow) => ({
-    // Allow authenticated users to read/write/delete their own report block details
-    'reportblocks/{entity_id}/*': [
+    // Option 1: Combined approach - allow guest read access to all report blocks
+    // and authenticated users get additional write/delete permissions to their own files
+    'reportblocks/*': [
+      allow.guest.to(['read']),
       allow.authenticated.to(['read', 'write', 'delete'])
-    ],
+    ]
+  })
+});
+
+// Define a storage bucket for item attachments
+export const attachments = defineStorage({
+  name: 'attachments',
+  access: (allow) => ({
+    'attachments/*': [
+      allow.guest.to(['read']),
+      allow.authenticated.to(['read', 'write', 'delete'])
+    ]
   })
 }); 
