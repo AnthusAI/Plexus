@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Badge } from '@/components/ui/badge';
-import { ChevronDown, ChevronUp, AlertTriangle, Eye } from 'lucide-react';
+import { ChevronDown, ChevronUp, AlertTriangle, Eye, CheckCircle, XCircle } from 'lucide-react';
 import { CardButton } from '@/components/CardButton';
 import { Gauge, type Segment } from '@/components/gauge';
 import { cn } from '@/lib/utils';
@@ -44,12 +44,19 @@ export interface ScorecardReportEvaluationData {
   warning?: string;
   notes?: string;
   discussion?: string;
+  editorName?: string;
+  editedAt?: string;
+  item?: {
+    id: string;
+    identifiers?: string;
+    externalId?: string;
+  };
 }
 
 interface ScorecardReportEvaluationProps {
   score: ScorecardReportEvaluationData;
   scoreIndex: number;
-  detailsFiles?: string | null;
+  attachedFiles?: string | null;
   className?: string;
   showPrecisionRecall?: boolean;
 }
@@ -57,7 +64,7 @@ interface ScorecardReportEvaluationProps {
 export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps> = ({ 
   score,
   scoreIndex,
-  detailsFiles,
+  attachedFiles,
   className,
   showPrecisionRecall = true
 }) => {
@@ -71,31 +78,31 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
   const [showRawJson, setShowRawJson] = useState(false);
   const [showDetailsSection, setShowDetailsSection] = useState(false);
 
-  const parsedDetailsFiles = useMemo(() => {
-    if (typeof detailsFiles === 'string') {
+  const parsedAttachedFiles = useMemo(() => {
+    if (typeof attachedFiles === 'string') {
       try {
-        return JSON.parse(detailsFiles) as DetailFile[];
+        return JSON.parse(attachedFiles) as DetailFile[];
       } catch (error) {
-        console.error('Failed to parse detailsFiles JSON string in ScorecardReportEvaluation:', error);
+        console.error('Failed to parse attachedFiles JSON string in ScorecardReportEvaluation:', error);
         return [];
       }
     }
     return [];
-  }, [detailsFiles]);
+  }, [attachedFiles]);
 
   const scoreDetailsFileName = `score-${scoreIndex + 1}-results.json`;
-  const scoreDetailFile = useMemo(() => {
-    return parsedDetailsFiles.find(f => f.name === scoreDetailsFileName);
-  }, [parsedDetailsFiles, scoreDetailsFileName]);
+  const scoreDetailsFile = useMemo(() => {
+    return parsedAttachedFiles.find(f => f.name === scoreDetailsFileName);
+  }, [parsedAttachedFiles, scoreDetailsFileName]);
 
   const fetchScoreDetailsContent = useCallback(async () => {
-    if (!scoreDetailFile || !scoreDetailFile.path) return;
+    if (!scoreDetailsFile || !scoreDetailsFile.path) return;
     
     if (isLoadingScoreDetails || scoreDetailsContent) return;
 
     setIsLoadingScoreDetails(true);
     try {
-      const downloadResult = await downloadData({ path: scoreDetailFile.path }).result;
+      const downloadResult = await downloadData({ path: scoreDetailsFile.path }).result;
       const text = await downloadResult.body.text();
       setScoreDetailsContent(text);
     } catch (error) {
@@ -104,7 +111,7 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
     } finally {
       setIsLoadingScoreDetails(false);
     }
-  }, [scoreDetailFile, isLoadingScoreDetails, scoreDetailsContent]);
+  }, [scoreDetailsFile, isLoadingScoreDetails, scoreDetailsContent]);
   
   useEffect(() => {
     if (activeCellFilter && scoreDetailsContent && typeof scoreDetailsContent === 'string') {
@@ -150,7 +157,7 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
       setShowDetailsSection(true);
       
       // Fetch details if needed and not already loading
-      if (!scoreDetailsContent && scoreDetailFile && !isLoadingScoreDetails) {
+      if (!scoreDetailsContent && scoreDetailsFile && !isLoadingScoreDetails) {
         fetchScoreDetailsContent();
       }
     } else {
@@ -187,10 +194,37 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
   const hasClassDistribution = score.class_distribution && score.class_distribution.length > 0;
   const hasPredictedDistribution = score.predicted_class_distribution && score.predicted_class_distribution.length > 0;
   const hasConfusionMatrixData = score.confusion_matrix && score.confusion_matrix.matrix && score.confusion_matrix.labels && score.confusion_matrix.matrix.length > 0;
-  const hasVisualizationData = hasClassDistribution || hasPredictedDistribution || (hasConfusionMatrixData && scoreDetailFile);
+  const hasVisualizationData = hasClassDistribution || hasPredictedDistribution || (hasConfusionMatrixData && scoreDetailsFile);
   
   const hasExtendedData = hasClassDistribution || hasPredictedDistribution || hasDiscussion || hasItems;
   
+  const parsedIdentifiers = useMemo(() => {
+    if (score.item?.identifiers) {
+      try {
+        return JSON.parse(score.item.identifiers) as Array<{
+          name: string;
+          id: string;
+          url?: string;
+        }>;
+      } catch (error) {
+        console.error('Failed to parse identifiers JSON string:', error);
+        return [];
+      }
+    }
+    return [];
+  }, [score.item?.identifiers]);
+  
+  // Format date to a more readable format
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return '';
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleString();
+    } catch (e) {
+      return dateString;
+    }
+  };
+
   return (
     <div className={cn(
       "transition-all bg-card rounded-lg relative min-w-[280px]",
@@ -248,6 +282,7 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
                           max={1}
                           decimalPlaces={2}
                           segments={ac1GaugeSegments}
+                          showTicks={true}
                         />
                       </div>
                     </div>
@@ -260,6 +295,7 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
                           value={score.accuracy ?? 0} 
                           title="Accuracy"
                           segments={accuracySegments}
+                          showTicks={true}
                         />
                       </div>
                     </div>
@@ -272,6 +308,7 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
                           value={score.precision ?? 0} 
                           title="Precision"
                           segments={accuracySegments}
+                          showTicks={true}
                         />
                       </div>
                     </div>
@@ -284,6 +321,7 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
                           value={score.recall ?? 0} 
                           title="Recall"
                           segments={accuracySegments}
+                          showTicks={true}
                         />
                       </div>
                     </div>
@@ -303,7 +341,7 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
           </div>
         )}
 
-        {hasConfusionMatrixData && scoreDetailFile && (
+        {hasConfusionMatrixData && scoreDetailsFile && (
           <div className="mt-4">
             <ConfusionMatrix 
               data={score.confusion_matrix!}
@@ -372,6 +410,64 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
               </div>
             </div>
           )}
+        </div>
+      )}
+      
+      {/* Editor information and identifiers */}
+      {(score.editorName || parsedIdentifiers.length > 0) && (
+        <div className="px-4 pb-4 mt-4 pt-4 border-t border-border">
+          <div className="flex flex-col md:flex-row justify-between gap-4">
+            {/* Editor information on the left */}
+            <div className="space-y-1">
+              {score.editorName && (
+                <>
+                  <div className="text-sm">
+                    <span className="font-medium">Edited by:</span> {score.editorName}
+                  </div>
+                  {score.editedAt && (
+                    <div className="text-xs text-muted-foreground">
+                      {formatDate(score.editedAt)}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+            
+            {/* Identifiers on the right */}
+            {parsedIdentifiers.length > 0 && (
+              <div className="w-full md:w-auto">
+                <h6 className="text-xs text-muted-foreground mb-1">Identifiers</h6>
+                <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+                  {parsedIdentifiers.map((identifier, index) => (
+                    <React.Fragment key={`${identifier.name}-${index}`}>
+                      <div className="text-muted-foreground">{identifier.name}:</div>
+                      <div className="text-muted-foreground">
+                        {identifier.url ? (
+                          <a 
+                            href={identifier.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary hover:underline"
+                            title={identifier.id}
+                          >
+                            {identifier.id.length > 10 
+                              ? `${identifier.id.substring(0, 10)}...` 
+                              : identifier.id}
+                          </a>
+                        ) : (
+                          <span title={identifier.id}>
+                            {identifier.id.length > 10 
+                              ? `${identifier.id.substring(0, 10)}...` 
+                              : identifier.id}
+                          </span>
+                        )}
+                      </div>
+                    </React.Fragment>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

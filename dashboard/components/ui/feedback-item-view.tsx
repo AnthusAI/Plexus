@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
-import { Code, List, X } from 'lucide-react';
+import { Code, List, X, CheckCircle, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { CardButton } from '@/components/CardButton';
 
@@ -20,6 +20,13 @@ export interface FeedbackItem {
   cacheKey?: string;
   createdAt?: string;
   updatedAt?: string;
+  editedAt?: string;
+  editorName?: string;
+  item?: {
+    id: string;
+    identifiers?: string;
+    externalId?: string;
+  };
   [key: string]: any; // Allow for additional fields
 }
 
@@ -43,6 +50,22 @@ export const FeedbackItemView: React.FC<FeedbackItemViewProps> = ({
     }
   };
 
+  const parsedIdentifiers = useMemo(() => {
+    if (item.item?.identifiers) {
+      try {
+        return JSON.parse(item.item.identifiers) as Array<{
+          name: string;
+          id: string;
+          url?: string;
+        }>;
+      } catch (error) {
+        console.error('Failed to parse identifiers JSON string:', error);
+        return [];
+      }
+    }
+    return [];
+  }, [item.item?.identifiers]);
+
   return (
     <div className={cn("p-3 mb-3 bg-muted rounded-md", className)}>
       <div className="grid grid-cols-2 gap-3">
@@ -53,7 +76,21 @@ export const FeedbackItemView: React.FC<FeedbackItemViewProps> = ({
         </div>
         <div className="py-2">
           <div className="text-xs text-muted-foreground mb-1">Answer</div>
-          <div className="text-sm">{item.finalAnswerValue || 'N/A'}</div>
+          <div className="text-sm flex items-center">
+            <span className="mr-2">{item.finalAnswerValue || 'N/A'}</span>
+            {item.isAgreement !== undefined && (
+              <span className={cn(
+                "flex items-center text-xs px-1.5 py-0.5 rounded-sm",
+                item.isAgreement 
+                  ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" 
+                  : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+              )}>
+                {item.isAgreement 
+                  ? <><CheckCircle className="h-3 w-3 mr-1" /> Match</> 
+                  : <><XCircle className="h-3 w-3 mr-1" /> Mismatch</>}
+              </span>
+            )}
+          </div>
         </div>
         
         {/* Comment Values */}
@@ -78,26 +115,58 @@ export const FeedbackItemView: React.FC<FeedbackItemViewProps> = ({
           )}
           
           <div className="grid grid-cols-2 gap-3 mt-2">
+            {/* Editor information if available */}
             <div>
-              <div className="text-xs text-muted-foreground mb-1">Created</div>
-              <div className="text-sm">{formatDate(item.createdAt)}</div>
+              {item.editorName && (
+                <div>
+                  <div className="text-xs text-muted-foreground mb-1">Edited by</div>
+                  <div className="text-sm">{item.editorName}</div>
+                  {item.editedAt && (
+                    <div className="text-xs text-muted-foreground mt-1">
+                      {formatDate(item.editedAt)}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
+            
+            {/* Item identifiers if available - now in right column */}
             <div>
-              <div className="text-xs text-muted-foreground mb-1">Updated</div>
-              <div className="text-sm">{formatDate(item.updatedAt)}</div>
+              {parsedIdentifiers.length > 0 && (
+                <div>
+                  <div className="text-xs text-muted-foreground mb-1">Identifiers</div>
+                  <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+                    {parsedIdentifiers.map((identifier, index) => (
+                      <React.Fragment key={`${identifier.name}-${index}`}>
+                        <div className="text-muted-foreground">{identifier.name}:</div>
+                        <div className="text-muted-foreground">
+                          {identifier.url ? (
+                            <a 
+                              href={identifier.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary hover:underline"
+                              title={identifier.id}
+                            >
+                              {identifier.id.length > 10 
+                                ? `${identifier.id.substring(0, 10)}...` 
+                                : identifier.id}
+                            </a>
+                          ) : (
+                            <span title={identifier.id}>
+                              {identifier.id.length > 10 
+                                ? `${identifier.id.substring(0, 10)}...` 
+                                : identifier.id}
+                            </span>
+                          )}
+                        </div>
+                      </React.Fragment>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
-          
-          {item.isAgreement !== undefined && (
-            <div className="mt-2">
-              <div className="text-xs text-muted-foreground mb-1">Agreement Status</div>
-              <div className="text-sm">
-                {item.isAgreement 
-                  ? <span className="text-green-600">Agreement</span> 
-                  : <span className="text-red-600">Disagreement</span>}
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>

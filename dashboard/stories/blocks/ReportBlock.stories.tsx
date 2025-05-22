@@ -1,6 +1,6 @@
 import React from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
-import ReportBlock from '@/components/blocks/ReportBlock';
+import ReportBlock, { ReportBlockProps } from '@/components/blocks/ReportBlock';
 
 const meta: Meta<typeof ReportBlock> = {
   title: 'Report Blocks/ReportBlock',
@@ -38,6 +38,12 @@ const sampleDetailsFiles = JSON.stringify([
   }
 ]);
 
+const sampleFiles = [
+  { name: 'Log File', path: 'dummy/log.txt' },
+  { name: 'Output Data', path: 'dummy/output.csv' },
+];
+const sampleAttachedFiles = JSON.stringify(sampleFiles);
+
 export const Basic: Story = {
   args: {
     name: 'Basic Report',
@@ -47,13 +53,9 @@ export const Basic: Story = {
     id: 'basic-report-block',
     position: 0,
     type: 'CustomReport',
-    log: 'Sample log content for the report. This would typically contain execution details.',
-    detailsFiles: sampleDetailsFiles,
-    output: {
-      someValue: 42,
-      someText: 'Sample output data',
-      items: [1, 2, 3, 4, 5]
-    },
+    log: 'This is a sample log output for the report block.',
+    attachedFiles: sampleAttachedFiles,
+    output: JSON.stringify({ message: 'This is a sample JSON output.' }),
     config: {
       blockType: 'CustomReport',
       settings: {
@@ -185,5 +187,23 @@ export const Minimal: Story = {
         </p>
       </div>
     ),
+  },
+};
+
+export const Default: Story = {
+  args: {
+    block: {
+      id: 'block1',
+      reportId: 'report1',
+      name: 'Sample Report Block',
+      type: 'TextBlock',
+      position: 1,
+      output: JSON.stringify({ message: 'This is a sample JSON output.' }),
+      log: 'This is a sample log output for the report block.',
+      attachedFiles: sampleAttachedFiles,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      configuration: JSON.stringify({ setting: 'value' }),
+    },
   },
 }; 

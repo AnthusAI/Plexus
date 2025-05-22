@@ -20,6 +20,9 @@ export interface ScorecardReportData {
   label_distribution?: Record<string, number>;
   warning?: string;
   error?: string;
+  rawOutput?: string | null;
+  log?: string | null;
+  attachedFiles?: string | null;
 }
 
 export interface ScorecardReportProps extends ReportBlockProps {
@@ -112,7 +115,7 @@ const ScorecardReport: React.FC<ScorecardReportProps> = ({
                   key={item.scoreData.id || `score-eval-${item.originalIndex}`} // Use originalIndex or id for a stable key
                   score={item.scoreData}
                   scoreIndex={item.originalIndex} // Pass the ORIGINAL index
-                  detailsFiles={restProps.detailsFiles}
+                  attachedFiles={restProps.attachedFiles}
                   showPrecisionRecall={showPrecisionRecall}
                 />
               ))}
@@ -157,6 +160,7 @@ const ScorecardReport: React.FC<ScorecardReportProps> = ({
                             max={1}
                             decimalPlaces={2}
                             segments={ac1GaugeSegments}
+                            showTicks={true}
                           />
                         </div>
                       </div>
@@ -169,6 +173,7 @@ const ScorecardReport: React.FC<ScorecardReportProps> = ({
                           value={accuracy} 
                           title="Accuracy"
                           segments={accuracySegments}
+                          showTicks={true}
                         />
                       </div>
                     </div>
@@ -181,6 +186,7 @@ const ScorecardReport: React.FC<ScorecardReportProps> = ({
                             value={averagePrecision}
                             title="Precision"
                             segments={accuracySegments}
+                            showTicks={true}
                           />
                         </div>
                       </div>
@@ -193,6 +199,7 @@ const ScorecardReport: React.FC<ScorecardReportProps> = ({
                             value={averageRecall}
                             title="Recall"
                             segments={accuracySegments}
+                            showTicks={true}
                           />
                         </div>
                       </div>
@@ -231,6 +238,9 @@ const ScorecardReport: React.FC<ScorecardReportProps> = ({
       dateRange={showDateRange ? scoreData.date_range : undefined}
       error={scoreData.error}
       warning={scoreData.warning}
+      title={restProps.title || "Scorecard Report"}
+      attachedFiles={restProps.attachedFiles}
+      log={restProps.log}
       {...restProps}
     >
       {scoreCardContent}
