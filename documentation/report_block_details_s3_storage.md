@@ -12,9 +12,91 @@ Previously, all log data from report blocks was stored directly in the ReportBlo
 
 To solve this, we've implemented S3 storage for report block details, where:
 
-1. The ReportBlock model includes a `attachedFiles` field that contains a JSON array of file references
-2. Each file reference includes a `name` (display name) and `path` (S3 key)
+1. The ReportBlock model includes a `attachedFiles` field that contains a JSON array of file paths
+2. Each path is a string that points to the S3 key where the file is stored
 3. Files are stored in the Amplify-managed S3 bucket with a structure of `reportblocks/{report_block_id}/{filename}`
+
+## Implementation Details
+
+### S3 Bucket
+
+We use an Amplify-managed S3 bucket for storing report block details. This bucket is defined in `dashboard/amplify/storage/resource.ts`:
+
+```typescript
+export const reportBlockDetails = defineStorage({
+  name: 'reportBlockDetails',
+  access: (allow) => ({
+    'reportblocks/*': [
+      allow.guest.to(['read']),
+      allow.authenticated.to(['read', 'write', 'delete'])
+    ]
+  })
+});
+```
+
+### ReportBlock Model
+
+The ReportBlock model in `plexus/dashboard/api/models/report_block.py` includes an `attachedFiles` field that stores a JSON array of file paths:
+
+```python
+class ReportBlock(BaseModel):
+    # ... other fields ...
+    attachedFiles = attr.Field(null=True)  # JSON array of file paths (strings)
+```
+
+### File Upload
+
+Files are uploaded to S3 and added to the ReportBlock's `attachedFiles` field using the `add_file_to_report_block` function in `plexus/reports/s3_utils.py`:
+
+```python
+def add_file_to_report_block(report_block_id, file_name, content, content_type=None, client=None):
+    # Upload the file to S3 and get the path
+    file_path = upload_report_block_file(
+        report_block_id=report_block_id,
+        file_name=file_name,
+        content=content,
+        content_type=content_type
+    )
+    
+    # Get existing attachedFiles
+    report_block = ReportBlock.get_by_id(report_block_id, client)
+    file_paths = []
+    if report_block.attachedFiles:
+        file_paths = json.loads(report_block.attachedFiles)
+    
+    # Add the new file path
+    file_paths.append(file_path)
+    
+    # Update the report block
+    report_block.update(attachedFiles=json.dumps(file_paths), client=client)
+    
+    return file_paths
+```
+
+### Using Amplify Storage APIs
+
+In the frontend, we use the Amplify Storage APIs to get URLs for the files stored in S3:
+
+```typescript
+import { Storage } from 'aws-amplify';
+
+// Get URLs for files
+const getFileUrls = async (filePaths: string[]) => {
+  return Promise.all(
+    filePaths.map(async (path) => {
+      const url = await Storage.get(path);
+      return { path, url };
+    })
+  );
+};
+```
+
+## Important Notes
+
+1. The `attachedFiles` field should always be a JSON array of string paths
+2. When adding new file attachments, always fetch the existing `attachedFiles`, append to it, and update
+3. Never store the file content directly in the `attachedFiles` field
+4. Use the Amplify Storage APIs to work with the files in the frontend
 
 ## Backend Components
 
@@ -27,9 +109,10 @@ The S3 bucket is defined in Amplify:
 export const reportBlockDetails = defineStorage({
   name: 'reportBlockDetails',
   access: (allow) => ({
-    'reportblocks/{entity_id}/*': [
+    'reportblocks/*': [
+      allow.guest.to(['read']),
       allow.authenticated.to(['read', 'write', 'delete'])
-    ],
+    ]
   })
 });
 ```
@@ -43,7 +126,7 @@ The ReportBlock model includes a `attachedFiles` field:
 ReportBlock: a
     .model({
         // ... other fields ...
-        attachedFiles: a.json(), // JSON array of objects with {name: "display_name", path: "s3_file_path"}
+        attachedFiles: a.json(), // JSON array of file paths (strings)
     })
 ```
 
@@ -120,14 +203,8 @@ The `attachedFiles` field contains a JSON array like:
 
 ```json
 [
-  {
-    "name": "log.txt",
-    "path": "reportblocks/01234567-89ab-cdef-0123-456789abcdef/log.txt"
-  },
-  {
-    "name": "data.csv",
-    "path": "reportblocks/01234567-89ab-cdef-0123-456789abcdef/data.csv"
-  }
+  "reportblocks/01234567-89ab-cdef-0123-456789abcdef/log.txt",
+  "reportblocks/01234567-89ab-cdef-0123-456789abcdef/data.csv"
 ]
 ```
 

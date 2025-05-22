@@ -38,8 +38,8 @@ export interface ReportBlockProps {
   className?: string
   /** The block's unique identifier */
   id: string
-  /** JSON string containing details files information */
-  attachedFiles?: string | null
+  /** Array of file paths for attached files */
+  attachedFiles?: string[] | null
   /** Optional title to override the name */
   title?: string
   /** Optional subtitle for additional context */
@@ -121,15 +121,16 @@ const ReportBlock: BlockComponent = ({
     return () => window.removeEventListener('resize', updateLayoutMode);
   }, []);
 
-  // Parse attachedFiles JSON string once
+  // Convert string array of file paths to DetailFile objects
   const parsedAttachedFiles = React.useMemo(() => {
-    if (typeof attachedFiles === 'string') {
-      try {
-        return JSON.parse(attachedFiles) as DetailFile[];
-      } catch (error) {
-        console.error('Failed to parse attachedFiles JSON string:', error);
-        return [];
-      }
+    if (Array.isArray(attachedFiles) && attachedFiles.length > 0) {
+      return attachedFiles.map(filePath => {
+        const fileName = filePath.split('/').pop() || 'file';
+        return {
+          name: fileName,
+          path: filePath
+        };
+      });
     }
     return [];
   }, [attachedFiles]);

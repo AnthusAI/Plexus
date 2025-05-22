@@ -4,39 +4,56 @@ export interface BlockDetailsHookProps {
   blockId?: string | null;
   hasLogs?: boolean;
   hasAttachedFiles?: boolean;
-  attachedFiles?: string | null;
+  attachedFiles?: string[] | null;
 }
 
 /**
  * Custom hook for managing block details viewing functionality
  */
-export function useBlockDetails(props: BlockDetailsHookProps) {
-  const {
-    blockId,
-    hasLogs,
-    hasAttachedFiles,
-    attachedFiles
-  }: BlockDetailsHookProps = props;
+export function useBlockDetails({
+  blockId,
+  hasLogs = false,
+  hasAttachedFiles = false,
+  attachedFiles = null
+}: BlockDetailsHookProps) {
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
+  const [showLog, setShowLog] = useState(false);
+  const [showFiles, setShowFiles] = useState(false);
 
-  const [showDetailsDialog, setShowDetailsDialog] = useState(false);
-
-  const openDetailsDialog = () => {
-    if (hasLogs || hasAttachedFiles) {
-      setShowDetailsDialog(true);
-    }
+  // Open dialog for a specific block
+  const openBlockDetails = (id: string) => {
+    setSelectedBlockId(id);
+    setIsDialogOpen(true);
   };
 
-  const closeDetailsDialog = () => {
-    setShowDetailsDialog(false);
+  // Close dialog
+  const closeBlockDetails = () => {
+    setIsDialogOpen(false);
+    setSelectedBlockId(null);
+    setShowLog(false);
+    setShowFiles(false);
+  };
+
+  // Toggle log visibility
+  const toggleLog = () => {
+    setShowLog(!showLog);
+  };
+
+  // Toggle files visibility
+  const toggleFiles = () => {
+    setShowFiles(!showFiles);
   };
 
   return {
-    showDetailsDialog,
-    openDetailsDialog,
-    closeDetailsDialog,
-    hasDetails: hasLogs || hasAttachedFiles,
-    attachedFiles,
-    blockId
+    isDialogOpen,
+    selectedBlockId,
+    showLog,
+    showFiles,
+    openBlockDetails,
+    closeBlockDetails,
+    toggleLog,
+    toggleFiles
   };
 }
 
@@ -44,13 +61,13 @@ export interface BlockDetailsSummary {
   hasLogs: boolean;
   hasDetails: boolean;
   hasAttachedFiles: boolean;
-  attachedFiles?: string | null;
+  attachedFiles?: string[] | null;
 }
 
 export function useBlockDetailsSummary(block: any): BlockDetailsSummary {
   const [hasLogs, hasAttachedFiles, attachedFiles] = React.useMemo(() => {
     const hasLogs = block && typeof block.log === 'string' && block.log.trim() !== '';
-    const hasAttachedFiles = block && typeof block.attachedFiles === 'string' && block.attachedFiles.trim() !== '';
+    const hasAttachedFiles = block && Array.isArray(block.attachedFiles) && block.attachedFiles.length > 0;
 
     if (hasLogs || hasAttachedFiles) {
       return [hasLogs, hasAttachedFiles, block?.attachedFiles || null];

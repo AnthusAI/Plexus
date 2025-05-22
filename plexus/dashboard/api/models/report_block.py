@@ -298,20 +298,10 @@ class ReportBlock(BaseModel):
                     logger.info(f"ReportBlock update: Converted 'output' dict to JSON string ({len(input_data[key])} bytes)")
                 elif key == 'attachedFiles': # Renamed from detailsFiles
                     # Log original value
-                    logger.info(f"ReportBlock update: attachedFiles before processing - Type: {type(value)}, Value: {value}") # Renamed from detailsFiles
+                    logger.info(f"ReportBlock update: attachedFiles before processing - Type: {type(value)}, Value: {value}") 
                     
-                    # Ensure attachedFiles is stringified JSON
-                    if not isinstance(value, str):
-                        input_data[key] = json.dumps(value)
-                        logger.info(f"ReportBlock update: Converted 'attachedFiles' to JSON string ({len(input_data[key])} bytes)") # Renamed from detailsFiles
-                    else:
-                        input_data[key] = value
-                        # Validate it's proper JSON
-                        try:
-                            json.loads(value)
-                            logger.info(f"ReportBlock update: 'attachedFiles' is valid JSON string ({len(value)} bytes)") # Renamed from detailsFiles
-                        except json.JSONDecodeError as e:
-                            logger.warning(f"ReportBlock update: 'attachedFiles' is not valid JSON: {e}") # Renamed from detailsFiles
+                    # Don't convert attachedFiles to JSON string - it's already a string array in the schema
+                    input_data[key] = value
                 else:
                     input_data[key] = value
             else:
@@ -336,21 +326,6 @@ class ReportBlock(BaseModel):
             if 'attachedFiles' in kwargs:
                 if 'attachedFiles' in updated_data:
                     logger.info(f"attachedFiles after update: {updated_data['attachedFiles']}")
-                    
-                    # Try to parse it to validate
-                    try:
-                        if updated_data['attachedFiles']:
-                            # Check if it's already a list or a JSON string
-                            if isinstance(updated_data['attachedFiles'], list):
-                                details_files_parsed = updated_data['attachedFiles']
-                                logger.info(f"attachedFiles is already a list: {details_files_parsed}")
-                            else:
-                                details_files_parsed = json.loads(updated_data['attachedFiles'])
-                                logger.info(f"attachedFiles parsed successfully: {details_files_parsed}")
-                        else:
-                            logger.info("attachedFiles is empty in response")
-                    except json.JSONDecodeError as e:
-                        logger.warning(f"attachedFiles in response is not valid JSON: {e}")
                 else:
                     logger.warning("attachedFiles missing from update response")
             
@@ -363,9 +338,9 @@ class ReportBlock(BaseModel):
                             logger.warning(f"Could not parse output from update response: {value}")
                             setattr(self, field_name, {"error": "Failed to parse output JSON", "raw_output": value})
                     elif field_name == 'attachedFiles': # Renamed from detailsFiles
-                        # Just store the raw attachedFiles string on the instance
+                        # Store attachedFiles directly - it's already a string array
                         setattr(self, field_name, value)
-                        logger.info(f"Set attachedFiles attribute on instance: {value}") # Renamed from detailsFiles
+                        logger.info(f"Set attachedFiles attribute on instance: {value}")
                     elif field_name in ['createdAt', 'updatedAt'] and isinstance(value, str):
                         try:
                             setattr(self, field_name, datetime.fromisoformat(value.replace('Z', '+00:00')))

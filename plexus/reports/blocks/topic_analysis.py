@@ -284,13 +284,15 @@ class TopicAnalysis(BaseReportBlock):
                                     elif file_ext == ".md":
                                         content_type = "text/markdown"
 
-                                    file_details = self.attach_detail_file(
+                                    # Attach the file - returns path to S3 file
+                                    s3_file_path = self.attach_detail_file(
                                         report_block_id=report_block_id,
                                         file_name=relative_file_path, # Use relative path for S3 name
                                         content=content.encode('utf-8'), # Encode string content to bytes
                                         content_type=content_type
                                     )
-                                    final_output_data["attached_files"].append(file_details)
+                                    # Add the path to our tracking
+                                    final_output_data["attached_files"].append(s3_file_path)
                                 except Exception as e:
                                     self._log(f"Failed to attach text file {file_path}: {e}", level="ERROR")
                                     final_output_data["errors"].append(f"Error attaching {file_path}: {e}")
@@ -302,13 +304,15 @@ class TopicAnalysis(BaseReportBlock):
                                     relative_file_path = str(file_path.relative_to(main_temp_dir))
                                     content_type = "image/png" # Assuming only PNG for now
                                         
-                                    file_details = self.attach_detail_file(
+                                    # Attach the file - returns path to S3 file
+                                    s3_file_path = self.attach_detail_file(
                                         report_block_id=report_block_id,
                                         file_name=relative_file_path,
                                         content=content, # Pass bytes directly
                                         content_type=content_type
                                     )
-                                    final_output_data["attached_files"].append(file_details)
+                                    # Add the path to our tracking
+                                    final_output_data["attached_files"].append(s3_file_path)
                                 except Exception as e:
                                     self._log(f"Failed to attach image file {file_path}: {e}", level="ERROR")
                                     final_output_data["errors"].append(f"Error attaching {file_path}: {e}")

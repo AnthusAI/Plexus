@@ -276,14 +276,14 @@ class FeedbackAnalysis(BaseReportBlock):
                                 except Exception as e:
                                     self._log(f"Error fetching ReportBlock before attach: {e}", level="WARNING")
                                 
-                                # Attach the file
-                                file_details = self.attach_detail_file(
+                                # Attach the file - this now returns a path string, not an object
+                                file_path = self.attach_detail_file(
                                     report_block_id=report_block_id,
                                     file_name=file_name,
                                     content=detailed_json_content,
                                     content_type="application/json"
                                 )
-                                self._log(f"Successfully attached indexed feedback items file: {file_name}, details: {file_details}")
+                                self._log(f"Successfully attached indexed feedback items file: {file_name}, path: {file_path}")
                                 
                                 # Log the state of the ReportBlock after attaching file
                                 try:
@@ -294,16 +294,22 @@ class FeedbackAnalysis(BaseReportBlock):
                                         # Try to parse and validate the attachedFiles content
                                         if block_after.attachedFiles:
                                             try:
-                                                details_files_obj = json.loads(block_after.attachedFiles)
-                                                self._log(f"attachedFiles parsed successfully, contains {len(details_files_obj)} files: {details_files_obj}", level="INFO")
+                                                # Check if already a list
+                                                if isinstance(block_after.attachedFiles, list):
+                                                    paths_list = block_after.attachedFiles
+                                                    self._log(f"attachedFiles is already a list with {len(paths_list)} paths: {paths_list}", level="INFO")
+                                                else:
+                                                    # For backward compatibility - try to parse JSON if it's a string
+                                                    paths_list = json.loads(block_after.attachedFiles)
+                                                    self._log(f"attachedFiles parsed from JSON string (for backward compatibility): {paths_list}", level="INFO")
                                             except json.JSONDecodeError as je:
-                                                self._log(f"attachedFiles is not valid JSON: {je}", level="ERROR")
+                                                self._log(f"attachedFiles is not valid JSON but should be a list: {je}", level="WARNING")
                                         else:
                                             self._log(f"attachedFiles is empty or None", level="WARNING")
                                 except Exception as e:
                                     self._log(f"Error fetching ReportBlock after attach: {e}", level="WARNING")
                                 
-                                # Add reference to the file in the analysis result
+                                # Add reference to the file in the analysis result - just the filename since paths are now in attachedFiles
                                 analysis_for_this_score["indexed_items_file"] = file_name
                             except Exception as e:
                                 self._log(f"Error attaching indexed feedback items file: {e}", level="ERROR")

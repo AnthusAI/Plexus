@@ -35,7 +35,7 @@ export interface ReportTaskData {
     log?: string;
     name?: string;
     position: number;
-    attachedFiles?: string | null;
+    attachedFiles?: string[];
   }>;
 }
 
@@ -53,12 +53,12 @@ interface ReportBlock {
   output: Record<string, any>
   log?: string | null
   config?: Record<string, any>  // Add config field
-  attachedFiles?: string | null  // Add attachedFiles field
+  attachedFiles?: string[]  // Updated to string array
 }
 
 interface ReportBlockDisplayProps {
   block: any;
-  attachedFiles?: string | null;
+  attachedFiles?: string[]; // Updated to string array
   onContentChange: (content: string) => void;
 }
 
@@ -125,7 +125,9 @@ const ReportTask: React.FC<ReportTaskProps> = ({
         const blocks = response.data.getReport.reportBlocks.items.map((block: any) => ({
           ...block,
           output: JSON.parse(block.output),
-          config: {}  // Add empty config object by default
+          config: {},  // Add empty config object by default
+          // Ensure attachedFiles is always an array
+          attachedFiles: Array.isArray(block.attachedFiles) ? block.attachedFiles : []
         }))
         setReportBlocks(blocks)
       } else {
@@ -162,7 +164,7 @@ const ReportTask: React.FC<ReportTaskProps> = ({
           output: parsedOutput,
           log: blockProp.log || null,
           config: blockProp.config || parsedOutput,
-          attachedFiles: blockProp.attachedFiles || null
+          attachedFiles: Array.isArray(blockProp.attachedFiles) ? blockProp.attachedFiles : []
         };
       });
       
@@ -314,6 +316,9 @@ const ReportTask: React.FC<ReportTaskProps> = ({
         // Add a unique key that includes task.id to force re-render when report data changes
         const blockKey = `${task.id}-block-${blockData.id}-${blockData.position}-${Date.now()}`;
         
+        // Make sure attachedFiles is always an array
+        const attachedFiles = Array.isArray(blockData.attachedFiles) ? blockData.attachedFiles : [];
+        
         // Set up enhanced props for the block when the report is not complete
         const blockProps = {
           id: blockData.id,
@@ -327,7 +332,7 @@ const ReportTask: React.FC<ReportTaskProps> = ({
           name: blockData.name || blockConfig.name || undefined,
           position: blockData.position,
           type: blockData.type,
-          attachedFiles: blockData.attachedFiles,
+          attachedFiles: attachedFiles,
           // Add a note when the block is generating
           subtitle: !complete ? "Generating..." : undefined,
           // Add any error or warning from the block output if available
@@ -340,7 +345,7 @@ const ReportTask: React.FC<ReportTaskProps> = ({
             <BlockRenderer {...blockProps} />
             
             {/* If not using a Block component that handles logs/files, show them directly */}
-            {!complete && !blockData.attachedFiles && blockData.log && (
+            {!complete && !attachedFiles.length && blockData.log && (
               <div className="mt-2 p-2 bg-muted/20 rounded text-xs text-muted-foreground">
                 <details open>
                   <summary className="cursor-pointer font-medium">Processing Log</summary>
