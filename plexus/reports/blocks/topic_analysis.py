@@ -270,7 +270,7 @@ class TopicAnalysis(BaseReportBlock):
                                     with open(file_path, 'r', encoding='utf-8') as f:
                                         content = f.read()
                                     
-                                    # Use relative path for display name in detailsFiles
+                                    # Use relative path for display name in attachedFiles
                                     relative_file_path = str(file_path.relative_to(main_temp_dir))
                                     
                                     # Dynamically determine content type for common text files
