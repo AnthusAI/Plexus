@@ -157,6 +157,7 @@ const ScorecardReport: React.FC<ScorecardReportProps> = ({
                             max={1}
                             decimalPlaces={2}
                             segments={ac1GaugeSegments}
+                            showTicks={true}
                           />
                         </div>
                       </div>
@@ -169,6 +170,7 @@ const ScorecardReport: React.FC<ScorecardReportProps> = ({
                           value={accuracy} 
                           title="Accuracy"
                           segments={accuracySegments}
+                          showTicks={true}
                         />
                       </div>
                     </div>
@@ -181,6 +183,7 @@ const ScorecardReport: React.FC<ScorecardReportProps> = ({
                             value={averagePrecision}
                             title="Precision"
                             segments={accuracySegments}
+                            showTicks={true}
                           />
                         </div>
                       </div>
@@ -193,6 +196,7 @@ const ScorecardReport: React.FC<ScorecardReportProps> = ({
                             value={averageRecall}
                             title="Recall"
                             segments={accuracySegments}
+                            showTicks={true}
                           />
                         </div>
                       </div>

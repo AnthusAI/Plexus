@@ -282,6 +282,7 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
                           max={1}
                           decimalPlaces={2}
                           segments={ac1GaugeSegments}
+                          showTicks={true}
                         />
                       </div>
                     </div>
@@ -294,6 +295,7 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
                           value={score.accuracy ?? 0} 
                           title="Accuracy"
                           segments={accuracySegments}
+                          showTicks={true}
                         />
                       </div>
                     </div>
@@ -306,6 +308,7 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
                           value={score.precision ?? 0} 
                           title="Precision"
                           segments={accuracySegments}
+                          showTicks={true}
                         />
                       </div>
                     </div>
@@ -318,6 +321,7 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
                           value={score.recall ?? 0} 
                           title="Recall"
                           segments={accuracySegments}
+                          showTicks={true}
                         />
                       </div>
                     </div>
