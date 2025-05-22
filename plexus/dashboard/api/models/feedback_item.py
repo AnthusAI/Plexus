@@ -25,11 +25,14 @@ class FeedbackItem(BaseModel):
     scorecardId: Optional[str] = None
     cacheKey: Optional[str] = None # Maps to Call Criteria form_id
     scoreId: Optional[str] = None # Maps to Call Criteria question_id
+    itemId: Optional[str] = None # Add the itemId field
     initialAnswerValue: Optional[str] = None
     finalAnswerValue: Optional[str] = None
     initialCommentValue: Optional[str] = None
     finalCommentValue: Optional[str] = None
     editCommentValue: Optional[str] = None
+    editedAt: Optional[datetime] = None  # Add the missing editedAt field
+    editorName: Optional[str] = None
     isAgreement: Optional[bool] = None
     createdAt: Optional[datetime] = None
     updatedAt: Optional[datetime] = None
@@ -38,14 +41,15 @@ class FeedbackItem(BaseModel):
     account: Optional['Account'] = field(default=None, repr=False)
     scorecard: Optional['Scorecard'] = field(default=None, repr=False)
     score: Optional['Score'] = field(default=None, repr=False)
+    item: Optional['Item'] = field(default=None, repr=False)  # Add the item relationship
 
     _client: Optional['PlexusDashboardClient'] = field(default=None, repr=False)
     _raw_data: Optional[Dict[str, Any]] = field(default=None, repr=False)
 
     GRAPHQL_BASE_FIELDS = [
-        'id', 'accountId', 'scorecardId', 'cacheKey', 'scoreId',
+        'id', 'accountId', 'scorecardId', 'cacheKey', 'scoreId', 'itemId',
         'initialAnswerValue', 'finalAnswerValue', 'initialCommentValue',
-        'finalCommentValue', 'editCommentValue', 'isAgreement', 'createdAt', 'updatedAt'
+        'finalCommentValue', 'editCommentValue', 'editedAt', 'editorName', 'isAgreement', 'createdAt', 'updatedAt'
     ]
     GRAPHQL_RELATIONSHIP_FIELDS = {
         # Relationship fields can be added here if needed
@@ -68,6 +72,8 @@ class FeedbackItem(BaseModel):
             data['createdAt'] = datetime.fromisoformat(data['createdAt'].replace('Z', '+00:00'))
         if 'updatedAt' in data and data['updatedAt'] and isinstance(data['updatedAt'], str):
             data['updatedAt'] = datetime.fromisoformat(data['updatedAt'].replace('Z', '+00:00'))
+        if 'editedAt' in data and data['editedAt'] and isinstance(data['editedAt'], str):
+            data['editedAt'] = datetime.fromisoformat(data['editedAt'].replace('Z', '+00:00'))
             
         # Create instance with data
         instance = cls(
@@ -76,11 +82,14 @@ class FeedbackItem(BaseModel):
             scorecardId=data.get('scorecardId'),
             cacheKey=data.get('cacheKey'),
             scoreId=data.get('scoreId'),
+            itemId=data.get('itemId'),
             initialAnswerValue=data.get('initialAnswerValue'),
             finalAnswerValue=data.get('finalAnswerValue'),
             initialCommentValue=data.get('initialCommentValue'),
             finalCommentValue=data.get('finalCommentValue'),
             editCommentValue=data.get('editCommentValue'),
+            editedAt=data.get('editedAt'),
+            editorName=data.get('editorName'),
             isAgreement=data.get('isAgreement'),
             createdAt=data.get('createdAt'),
             updatedAt=data.get('updatedAt')
@@ -89,6 +98,12 @@ class FeedbackItem(BaseModel):
         # Set client and raw data
         instance._client = client
         instance._raw_data = data
+        
+        # Handle nested relationships if present in the data
+        if 'item' in data and data['item']:
+            # Import here to avoid circular imports
+            from plexus.dashboard.api.models.item import Item
+            instance.item = Item.from_dict(data['item'], client=client)
         
         return instance
 
