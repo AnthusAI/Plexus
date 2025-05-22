@@ -20,7 +20,7 @@ class ReportBlock(BaseModel):
     output: Optional[Dict[str, Any]] = field(default_factory=dict) # Store parsed JSON
     name: Optional[str] = None
     log: Optional[str] = None
-    detailsFiles: Optional[str] = None  # JSON string of files attached to this block
+    attachedFiles: Optional[str] = None  # Renamed from detailsFiles
     createdAt: Optional[datetime] = None # Assuming these are set by backend
     updatedAt: Optional[datetime] = None # Assuming these are set by backend
 
@@ -39,7 +39,7 @@ class ReportBlock(BaseModel):
             type
             output # Expecting JSON string from API
             log
-            detailsFiles # JSON string containing attached file details
+            attachedFiles # Renamed from detailsFiles
             createdAt
             updatedAt
         """
@@ -77,7 +77,7 @@ class ReportBlock(BaseModel):
         # Handle potential missing optional fields gracefully
         name = data.get('name')
         log = data.get('log')
-        details_files = data.get('detailsFiles')  # Get detailsFiles field
+        attached_files = data.get('attachedFiles')  # Renamed from details_files / detailsFiles
         position = data.get('position')
         if position is None:
             # Position is required in our plan, raise error or default?
@@ -100,7 +100,7 @@ class ReportBlock(BaseModel):
             output=output_data, # Store the parsed dict/None
             name=name,
             log=log,
-            detailsFiles=details_files,  # Add detailsFiles to instance
+            attachedFiles=attached_files,  # Renamed from detailsFiles
             createdAt=data['createdAt'],
             updatedAt=data['updatedAt']
             # Removed: client=client
@@ -121,7 +121,7 @@ class ReportBlock(BaseModel):
         output: Optional[str] = None, # Expecting JSON string as input here
         name: Optional[str] = None,
         log: Optional[str] = None,
-        detailsFiles: Optional[str] = None,  # JSON string of file details
+        attachedFiles: Optional[str] = None,  # Renamed from detailsFiles
     ) -> 'ReportBlock':
         """Create a new ReportBlock record via GraphQL mutation."""
         mutation = f"""
@@ -140,7 +140,7 @@ class ReportBlock(BaseModel):
             'output': output, 
             'name': name,
             'log': log,
-            'detailsFiles': detailsFiles,  # Add detailsFiles to input data
+            'attachedFiles': attachedFiles,  # Renamed from detailsFiles
             # createdAt/updatedAt are usually set by the backend automatically
         }
         # Remove keys with None values if the mutation expects them to be absent
@@ -157,9 +157,9 @@ class ReportBlock(BaseModel):
             logger.info(f"ReportBlock create sizes - Other fields: {other_fields_size} bytes")
             
             # Log detailsFiles size if present
-            if 'detailsFiles' in input_data:
-                details_size = len(input_data['detailsFiles']) if isinstance(input_data['detailsFiles'], str) else 0
-                logger.info(f"ReportBlock create sizes - detailsFiles field: {details_size} bytes")
+            if 'attachedFiles' in input_data: # Renamed from detailsFiles
+                details_size = len(input_data['attachedFiles']) if isinstance(input_data['attachedFiles'], str) else 0 # Renamed from detailsFiles
+                logger.info(f"ReportBlock create sizes - attachedFiles field: {details_size} bytes") # Renamed from detailsFiles
             
             if output_size > 350000:
                 logger.warning(f"ReportBlock output field size ({output_size} bytes) approaching DynamoDB limit!")
@@ -286,7 +286,7 @@ class ReportBlock(BaseModel):
         # Only include fields that are part of the model and were actually passed
         allowed_update_fields = {
             'reportId', 'name', 'position', 'type', 
-            'output', 'log', 'detailsFiles' # Add other mutable fields as needed
+            'output', 'log', 'attachedFiles' # Renamed from detailsFiles
         }
         
         # Special handling for specific fields
@@ -296,22 +296,22 @@ class ReportBlock(BaseModel):
                 if key == 'output' and isinstance(value, dict):
                     input_data[key] = json.dumps(value)
                     logger.info(f"ReportBlock update: Converted 'output' dict to JSON string ({len(input_data[key])} bytes)")
-                elif key == 'detailsFiles':
+                elif key == 'attachedFiles': # Renamed from detailsFiles
                     # Log original value
-                    logger.info(f"ReportBlock update: detailsFiles before processing - Type: {type(value)}, Value: {value}")
+                    logger.info(f"ReportBlock update: attachedFiles before processing - Type: {type(value)}, Value: {value}") # Renamed from detailsFiles
                     
-                    # Ensure detailsFiles is stringified JSON
+                    # Ensure attachedFiles is stringified JSON
                     if not isinstance(value, str):
                         input_data[key] = json.dumps(value)
-                        logger.info(f"ReportBlock update: Converted 'detailsFiles' to JSON string ({len(input_data[key])} bytes)")
+                        logger.info(f"ReportBlock update: Converted 'attachedFiles' to JSON string ({len(input_data[key])} bytes)") # Renamed from detailsFiles
                     else:
                         input_data[key] = value
                         # Validate it's proper JSON
                         try:
                             json.loads(value)
-                            logger.info(f"ReportBlock update: 'detailsFiles' is valid JSON string ({len(value)} bytes)")
+                            logger.info(f"ReportBlock update: 'attachedFiles' is valid JSON string ({len(value)} bytes)") # Renamed from detailsFiles
                         except json.JSONDecodeError as e:
-                            logger.warning(f"ReportBlock update: 'detailsFiles' is not valid JSON: {e}")
+                            logger.warning(f"ReportBlock update: 'attachedFiles' is not valid JSON: {e}") # Renamed from detailsFiles
                 else:
                     input_data[key] = value
             else:
@@ -332,22 +332,27 @@ class ReportBlock(BaseModel):
             updated_data = result['updateReportBlock']
             logger.info(f"Update result for ReportBlock {self.id}: {updated_data}")
             
-            # Specifically log detailsFiles to track if it was properly updated
-            if 'detailsFiles' in kwargs:
-                if 'detailsFiles' in updated_data:
-                    logger.info(f"detailsFiles after update: {updated_data['detailsFiles']}")
+            # Specifically log attachedFiles to track if it was properly updated
+            if 'attachedFiles' in kwargs:
+                if 'attachedFiles' in updated_data:
+                    logger.info(f"attachedFiles after update: {updated_data['attachedFiles']}")
                     
                     # Try to parse it to validate
                     try:
-                        if updated_data['detailsFiles']:
-                            details_files_parsed = json.loads(updated_data['detailsFiles'])
-                            logger.info(f"detailsFiles parsed successfully: {details_files_parsed}")
+                        if updated_data['attachedFiles']:
+                            # Check if it's already a list or a JSON string
+                            if isinstance(updated_data['attachedFiles'], list):
+                                details_files_parsed = updated_data['attachedFiles']
+                                logger.info(f"attachedFiles is already a list: {details_files_parsed}")
+                            else:
+                                details_files_parsed = json.loads(updated_data['attachedFiles'])
+                                logger.info(f"attachedFiles parsed successfully: {details_files_parsed}")
                         else:
-                            logger.info("detailsFiles is empty in response")
+                            logger.info("attachedFiles is empty in response")
                     except json.JSONDecodeError as e:
-                        logger.warning(f"detailsFiles in response is not valid JSON: {e}")
+                        logger.warning(f"attachedFiles in response is not valid JSON: {e}")
                 else:
-                    logger.warning("detailsFiles missing from update response")
+                    logger.warning("attachedFiles missing from update response")
             
             for field_name, value in updated_data.items():
                 if hasattr(self, field_name):
@@ -357,10 +362,10 @@ class ReportBlock(BaseModel):
                         except json.JSONDecodeError:
                             logger.warning(f"Could not parse output from update response: {value}")
                             setattr(self, field_name, {"error": "Failed to parse output JSON", "raw_output": value})
-                    elif field_name == 'detailsFiles':
-                        # Just store the raw detailsFiles string on the instance
+                    elif field_name == 'attachedFiles': # Renamed from detailsFiles
+                        # Just store the raw attachedFiles string on the instance
                         setattr(self, field_name, value)
-                        logger.info(f"Set detailsFiles attribute on instance: {value}")
+                        logger.info(f"Set attachedFiles attribute on instance: {value}") # Renamed from detailsFiles
                     elif field_name in ['createdAt', 'updatedAt'] and isinstance(value, str):
                         try:
                             setattr(self, field_name, datetime.fromisoformat(value.replace('Z', '+00:00')))

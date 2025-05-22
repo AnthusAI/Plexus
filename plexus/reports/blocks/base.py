@@ -26,7 +26,7 @@ class BaseReportBlock(ABC):
         """
         Attach a detail file to this report block.
         
-        This uploads the file to S3 and adds its reference to the ReportBlock's detailsFiles field.
+        This uploads the file to S3 and adds its reference to the ReportBlock's attachedFiles field.
         
         Args:
             report_block_id: ID of the report block to attach the file to

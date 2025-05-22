@@ -12,7 +12,7 @@ Previously, all log data from report blocks was stored directly in the ReportBlo
 
 To solve this, we've implemented S3 storage for report block details, where:
 
-1. The ReportBlock model includes a `detailsFiles` field that contains a JSON array of file references
+1. The ReportBlock model includes a `attachedFiles` field that contains a JSON array of file references
 2. Each file reference includes a `name` (display name) and `path` (S3 key)
 3. Files are stored in the Amplify-managed S3 bucket with a structure of `reportblocks/{report_block_id}/{filename}`
 
@@ -36,14 +36,14 @@ export const reportBlockDetails = defineStorage({
 
 ### ReportBlock Model
 
-The ReportBlock model includes a `detailsFiles` field:
+The ReportBlock model includes a `attachedFiles` field:
 
 ```typescript
 // dashboard/amplify/data/resource.ts
 ReportBlock: a
     .model({
         // ... other fields ...
-        detailsFiles: a.json(), // JSON array of objects with {name: "display_name", path: "s3_file_path"}
+        attachedFiles: a.json(), // JSON array of objects with {name: "display_name", path: "s3_file_path"}
     })
 ```
 
@@ -80,7 +80,7 @@ const BlockDetails: React.FC<BlockDetailsProps> = ({ block }) => {
 ### ReportTask Integration
 
 The ReportTask component has been updated to:
-1. Include `detailsFiles` in GraphQL queries
+1. Include `attachedFiles` in GraphQL queries
 2. Render the BlockDetails component for each report block
 
 ## Usage
@@ -116,7 +116,7 @@ async def generate(self):
 
 ## Example JSON
 
-The `detailsFiles` field contains a JSON array like:
+The `attachedFiles` field contains a JSON array like:
 
 ```json
 [

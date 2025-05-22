@@ -271,7 +271,7 @@ class FeedbackAnalysis(BaseReportBlock):
                                 try:
                                     block_before = ReportBlock.get_by_id(report_block_id, self.api_client)
                                     if block_before:
-                                        self._log(f"BEFORE ATTACH - ReportBlock {report_block_id} state: detailsFiles={block_before.detailsFiles}", level="DEBUG")
+                                        self._log(f"BEFORE ATTACH - ReportBlock {report_block_id} state: attachedFiles={block_before.attachedFiles}", level="DEBUG")
                                 except Exception as e:
                                     self._log(f"Error fetching ReportBlock before attach: {e}", level="WARNING")
                                 
@@ -288,17 +288,17 @@ class FeedbackAnalysis(BaseReportBlock):
                                 try:
                                     block_after = ReportBlock.get_by_id(report_block_id, self.api_client)
                                     if block_after:
-                                        self._log(f"AFTER ATTACH - ReportBlock {report_block_id} state: detailsFiles={block_after.detailsFiles}", level="INFO")
+                                        self._log(f"AFTER ATTACH - ReportBlock {report_block_id} state: attachedFiles={block_after.attachedFiles}", level="INFO")
                                         
-                                        # Try to parse and validate the detailsFiles content
-                                        if block_after.detailsFiles:
+                                        # Try to parse and validate the attachedFiles content
+                                        if block_after.attachedFiles:
                                             try:
-                                                details_files_obj = json.loads(block_after.detailsFiles)
-                                                self._log(f"detailsFiles parsed successfully, contains {len(details_files_obj)} files: {details_files_obj}", level="INFO")
+                                                details_files_obj = json.loads(block_after.attachedFiles)
+                                                self._log(f"attachedFiles parsed successfully, contains {len(details_files_obj)} files: {details_files_obj}", level="INFO")
                                             except json.JSONDecodeError as je:
-                                                self._log(f"detailsFiles is not valid JSON: {je}", level="ERROR")
+                                                self._log(f"attachedFiles is not valid JSON: {je}", level="ERROR")
                                         else:
-                                            self._log(f"detailsFiles is empty or None", level="WARNING")
+                                            self._log(f"attachedFiles is empty or None", level="WARNING")
                                 except Exception as e:
                                     self._log(f"Error fetching ReportBlock after attach: {e}", level="WARNING")
                                 

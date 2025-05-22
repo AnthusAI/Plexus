@@ -509,6 +509,11 @@ def _generate_report_core(
         logger.info(f"{log_prefix} Starting processing of {num_blocks} report blocks.")
         tracker.set_total_items(num_blocks)
 
+        # Initialize default values for ReportBlock creation
+        initial_output: Optional[Dict[str, Any]] = {"status": "pending"}
+        initial_log: Optional[str] = "Block execution pending."
+        initial_attached_files: Optional[str] = None # Or json.dumps([]) if you prefer an empty list string
+
         for i, block_def in enumerate(block_definitions):
             position = block_def.get("position", i)
             block_class_name = block_def["class_name"]
@@ -522,14 +527,14 @@ def _generate_report_core(
             try:
                 logger.info(f"{log_prefix} Creating initial ReportBlock record for {block_display_name}")
                 current_report_block = ReportBlock.create(
+                    client=client,
                     reportId=report_id,
                     position=position,
                     name=block_display_name,
-                    type=block_class_name,
-                    output=json.dumps({"status": "pending_execution"}), # Initial status
-                    log="Processing...", # Initial log
-                    detailsFiles=None, # Start with no details files
-                    client=client
+                    type=block_class_name, # Pass the determined block type
+                    output=json.dumps(initial_output), # Ensure output is JSON string
+                    log=initial_log,
+                    attachedFiles=initial_attached_files # Renamed from detailsFiles
                 )
                 logger.info(f"{log_prefix} Created ReportBlock ID {current_report_block.id} for {block_display_name}")
             except Exception as e:
@@ -549,7 +554,7 @@ def _generate_report_core(
                 report_block_id=current_report_block.id # Pass the ID
             )
 
-            # Fetch the latest state of the ReportBlock, as the block itself might have updated detailsFiles
+            # Fetch the latest state of the ReportBlock, as the block itself might have updated attachedFiles
             existing_details_files_list = [] # Initialize before try block
             try:
                 logger.info(f"{log_prefix} Re-fetching ReportBlock ID {current_report_block.id} after block execution.")
@@ -559,19 +564,27 @@ def _generate_report_core(
                     # Fallback to an empty list if fetch fails, though this is problematic
                     # existing_details_files_list is already []
                 else:
-                    logger.info(f"{log_prefix} Fetched DB state. Current detailsFiles: {db_block_state.detailsFiles}")
-                    if db_block_state.detailsFiles:
+                    logger.info(f"{log_prefix} Fetched DB state. Current attachedFiles: {db_block_state.attachedFiles}")
+                    if db_block_state.attachedFiles:
                         try:
-                            existing_details_files_list = json.loads(db_block_state.detailsFiles)
+                            # Check if attachedFiles is already a list
+                            if isinstance(db_block_state.attachedFiles, list):
+                                existing_details_files_list = db_block_state.attachedFiles
+                                logger.info(f"{log_prefix} attachedFiles is already a list with {len(existing_details_files_list)} items")
+                            else:
+                                # Parse the JSON string to get the list
+                                existing_details_files_list = json.loads(db_block_state.attachedFiles)
+                                logger.info(f"{log_prefix} Successfully parsed existing attachedFiles JSON")
+                                
                             if not isinstance(existing_details_files_list, list):
-                                logger.warning(f"{log_prefix} detailsFiles for ReportBlock {current_report_block.id} was not a list: {existing_details_files_list}. Resetting.")
+                                logger.warning(f"{log_prefix} attachedFiles for ReportBlock {current_report_block.id} was not a list: {existing_details_files_list}. Resetting.")
                                 existing_details_files_list = []
                         except json.JSONDecodeError:
-                            logger.warning(f"{log_prefix} Failed to parse existing detailsFiles for ReportBlock {current_report_block.id}: {db_block_state.detailsFiles}. Resetting.")
+                            logger.warning(f"{log_prefix} Failed to parse existing attachedFiles for ReportBlock {current_report_block.id}: {db_block_state.attachedFiles}. Resetting.")
                             existing_details_files_list = []
                     # else: existing_details_files_list is already []
             except Exception as e:
-                logger.exception(f"{log_prefix} Error fetching or parsing ReportBlock {current_report_block.id} detailsFiles: {e}. Proceeding with empty list.")
+                logger.exception(f"{log_prefix} Error fetching or parsing ReportBlock {current_report_block.id} attachedFiles: {e}. Proceeding with empty list.")
                 existing_details_files_list = [] # Ensure it's an empty list on error
             
             # Handle log content attachment
@@ -587,8 +600,8 @@ def _generate_report_core(
                             content_type="text/plain"
                         )
                         existing_details_files_list.append(log_file_info)
-                        logger.info(f"{log_prefix} Appended log.txt info. New detailsFiles list: {existing_details_files_list}")
-                        final_log_message_for_db = "See log.txt in detailsFiles."
+                        logger.info(f"{log_prefix} Appended log.txt info. New attachedFiles list: {existing_details_files_list}")
+                        final_log_message_for_db = "See log.txt in attachedFiles."
                     except Exception as e:
                         logger.exception(f"{log_prefix} Failed to upload log.txt to S3 for ReportBlock {current_report_block.id}: {str(e)}. Storing log inline (truncated).", exc_info=True)
                         final_log_message_for_db = log_string[:10000] # Truncate if storing inline
@@ -600,15 +613,20 @@ def _generate_report_core(
             # Final update to the ReportBlock record
             try:
                 logger.info(f"{log_prefix} Performing final update for ReportBlock {current_report_block.id}")
-                final_details_files_json = json.dumps(existing_details_files_list) if existing_details_files_list else None
                 
-                current_report_block.update( # Use the 'current_report_block' instance that has the .update method
+                # Ensure final_details_files_json is a string if not None
+                if existing_details_files_list:
+                    final_details_files_json = json.dumps(existing_details_files_list) 
+                else:
+                    final_details_files_json = None
+                
+                current_report_block.update(
                     output=json.dumps(output_json if output_json is not None else {"status": "failed", "error": log_string}),
                     log=final_log_message_for_db,
-                    detailsFiles=final_details_files_json,
+                    attachedFiles=final_details_files_json,
                     client=client
                 )
-                logger.info(f"{log_prefix} Successfully finalized ReportBlock {current_report_block.id}. detailsFiles: {final_details_files_json}")
+                logger.info(f"{log_prefix} Successfully finalized ReportBlock {current_report_block.id}. attachedFiles: {final_details_files_json}")
             except Exception as e:
                  logger.exception(f"{log_prefix} Failed to finalize ReportBlock {current_report_block.id}: {e}")
                  if first_block_error_message is None:

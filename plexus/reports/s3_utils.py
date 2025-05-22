@@ -106,7 +106,7 @@ def upload_report_block_file(report_block_id, file_name, content, content_type=N
 
 def add_file_to_report_block(report_block_id, file_name, content: bytes, content_type=None, client=None):
     """
-    Upload a file to S3 and add it to an existing report block's detailsFiles.
+    Upload a file to S3 and add it to an existing report block's attachedFiles.
     
     Args:
         report_block_id: ID of the existing report block
@@ -116,7 +116,7 @@ def add_file_to_report_block(report_block_id, file_name, content: bytes, content
         client: Optional PlexusDashboardClient instance
     
     Returns:
-        Updated list of detailsFiles
+        Updated list of attachedFiles
     """
     from plexus.dashboard.api.models.report_block import ReportBlock
     import json
@@ -136,34 +136,34 @@ def add_file_to_report_block(report_block_id, file_name, content: bytes, content
         raise ValueError(f"Report block with ID {report_block_id} not found")
     
     # Log the current state
-    logger.info(f"Current detailsFiles before update for block {report_block_id}: {report_block.detailsFiles}")
+    logger.info(f"Current attachedFiles before update for block {report_block_id}: {report_block.attachedFiles}")
     
-    # Get existing detailsFiles or initialize as empty list
+    # Get existing attachedFiles or initialize as empty list
     details_files = []
-    if report_block.detailsFiles:
+    if report_block.attachedFiles:
         try:
-            details_files = json.loads(report_block.detailsFiles)
-            logger.info(f"Successfully parsed existing detailsFiles: {details_files}")
+            details_files = json.loads(report_block.attachedFiles)
+            logger.info(f"Successfully parsed existing attachedFiles: {details_files}")
         except json.JSONDecodeError:
-            logger.warning(f"Could not parse detailsFiles for report block {report_block_id}: {report_block.detailsFiles}")
+            logger.warning(f"Could not parse attachedFiles for report block {report_block_id}: {report_block.attachedFiles}")
     
     # Add the new file info
     details_files.append(file_info)
     
     # Convert to JSON string
     details_files_json = json.dumps(details_files)
-    logger.info(f"New detailsFiles JSON to be saved: {details_files_json}")
+    logger.info(f"New attachedFiles JSON to be saved: {details_files_json}")
     
     # Update the report block
-    report_block.update(detailsFiles=details_files_json, client=client)
-    logger.info(f"Updated report block {report_block_id} with detailsFiles")
+    report_block.update(attachedFiles=details_files_json, client=client)
+    logger.info(f"Updated report block {report_block_id} with attachedFiles")
     
     # Verify the update
     updated_block = ReportBlock.get_by_id(report_block_id, client)
     if updated_block:
-        logger.info(f"After update, detailsFiles for block {report_block_id}: {updated_block.detailsFiles}")
-        if updated_block.detailsFiles != details_files_json:
-            logger.warning(f"detailsFiles mismatch! Expected {details_files_json}, got {updated_block.detailsFiles}")
+        logger.info(f"After update, attachedFiles for block {report_block_id}: {updated_block.attachedFiles}")
+        if updated_block.attachedFiles != details_files_json:
+            logger.warning(f"attachedFiles mismatch! Expected {details_files_json}, got {updated_block.attachedFiles}")
     else:
         logger.warning(f"Could not verify update - block {report_block_id} not found after update")
     
