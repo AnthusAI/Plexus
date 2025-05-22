@@ -224,7 +224,8 @@ const schema = a.schema({
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
-            allow.authenticated()
+            allow.authenticated(),
+            allow.public().to(['read']) // Only accessible if the full UUID is known.
         ])
         .secondaryIndexes((idx) => [
             idx("accountId").sortKeys(["updatedAt"]),
@@ -422,7 +423,8 @@ const schema = a.schema({
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
-            allow.authenticated()
+            allow.authenticated(),
+            allow.public().to(['read']) // Only accessible if the full UUID is known.
         ])
         .secondaryIndexes((idx) => [
             idx("accountId").sortKeys(["updatedAt"]),
@@ -448,7 +450,8 @@ const schema = a.schema({
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
-            allow.authenticated()
+            allow.authenticated(),
+            allow.public().to(['read']) // Only accessible if the full UUID is known.
         ])
         .secondaryIndexes((idx: (field: TaskStageIndexFields) => any) => [
             idx("taskId"),
@@ -577,7 +580,8 @@ const schema = a.schema({
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
-            allow.authenticated()
+            allow.authenticated(),
+            allow.public().to(['read']) // Only accessible if the full UUID is known.
         ])
         .secondaryIndexes((idx: (field: ReportConfigurationIndexFields) => any) => [
             idx("accountId").sortKeys(["updatedAt"]),
@@ -601,7 +605,8 @@ const schema = a.schema({
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
-            allow.authenticated()
+            allow.authenticated(),
+            allow.public().to(['read']) // Only accessible if the full UUID is known.
         ])
         .secondaryIndexes((idx: (field: ReportIndexFields) => any) => [
             idx("accountId").sortKeys(["updatedAt"]),
@@ -624,8 +629,8 @@ const schema = a.schema({
         })
         .authorization((allow: AuthorizationCallback) => [
             allow.publicApiKey(),
-            allow.authenticated()
-        ])
+            allow.authenticated(),
+            allow.public().to(['read'])
         .secondaryIndexes((idx: (field: ReportBlockIndexFields) => any) => [
             idx("reportId").sortKeys(["name"]).name("byReportAndName"),
             idx("reportId").sortKeys(["position"]).name("byReportAndPosition")
