@@ -14,7 +14,7 @@ interface ReportBlock {
   type: string;
   output: Record<string, any>;
   log?: string | null;
-  attachedFiles?: string | null;
+  attachedFiles?: string[] | null;
 }
 
 type DetailFile = {
@@ -35,17 +35,15 @@ const BlockDetails: React.FC<BlockDetailsProps> = ({ block }) => {
   const [dialogOpen, setDialogOpen] = useState<boolean>(false);
 
   const loadDetailFiles = async () => {
-    if (!block.attachedFiles) return;
+    if (!block.attachedFiles || block.attachedFiles.length === 0) return;
     
     setLoading(true);
     try {
-      let files: DetailFile[] = [];
-      try {
-        files = JSON.parse(block.attachedFiles);
-      } catch (err) {
-        console.error('Error parsing attachedFiles JSON:', err);
-        return;
-      }
+      // Convert string array to DetailFile objects
+      const files: DetailFile[] = block.attachedFiles.map(filePath => {
+        const fileName = filePath.split('/').pop() || 'file';
+        return { name: fileName, path: filePath };
+      });
       
       // Get signed URLs for each file using Amplify Storage
       const filesWithUrls = await Promise.all(
@@ -94,12 +92,12 @@ const BlockDetails: React.FC<BlockDetailsProps> = ({ block }) => {
   
   // Load detail files on first render
   React.useEffect(() => {
-    if (block.attachedFiles) {
+    if (block.attachedFiles && block.attachedFiles.length > 0) {
       loadDetailFiles();
     }
   }, [block.attachedFiles]);
   
-  if (!block.attachedFiles) {
+  if (!block.attachedFiles || block.attachedFiles.length === 0) {
     return null;
   }
   

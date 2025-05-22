@@ -20,7 +20,7 @@ def get_bucket_name():
 
 def upload_report_block_file(report_block_id, file_name, content, content_type=None):
     """
-    Upload a file to the report block details S3 bucket.
+    Upload a file to the report block details S3 bucket using the format expected by Amplify Gen2.
     
     Args:
         report_block_id: ID of the report block this file belongs to
@@ -29,11 +29,7 @@ def upload_report_block_file(report_block_id, file_name, content, content_type=N
         content_type: Optional MIME type for the file
     
     Returns:
-        Dict with information about the uploaded file:
-        {
-            'name': display name for the file,
-            'path': S3 path for the file
-        }
+        The S3 path (key) for the file, formatted for Amplify Gen2
     """
     bucket_name = get_bucket_name()
     
@@ -50,6 +46,9 @@ def upload_report_block_file(report_block_id, file_name, content, content_type=N
         logger.warning(f"Content for file {file_name} is empty or None!")
     
     s3_client = boto3.client('s3')
+    
+    # Format path according to Amplify Gen2 expectations
+    # The path should match what's defined in amplify/storage/resource.ts
     s3_key = f"reportblocks/{report_block_id}/{file_name}"
     
     logger.info(f"Creating temporary file for content (content length: {len(content) if content else 0})")
@@ -84,11 +83,8 @@ def upload_report_block_file(report_block_id, file_name, content, content_type=N
         
         logger.info(f"Successfully uploaded {file_name} to s3://{bucket_name}/{s3_key}")
         
-        # Return file info
-        return {
-            'name': file_name,
-            'path': s3_key
-        }
+        # Return just the S3 key (path) to match Amplify expectations
+        return s3_key
     except ClientError as e:
         logger.error(f"AWS ClientError uploading file to S3: {str(e)}")
         logger.error(f"Error details: {e.response['Error'] if hasattr(e, 'response') else 'No response details'}")
@@ -106,7 +102,7 @@ def upload_report_block_file(report_block_id, file_name, content, content_type=N
 
 def add_file_to_report_block(report_block_id, file_name, content: bytes, content_type=None, client=None):
     """
-    Upload a file to S3 and add it to an existing report block's attachedFiles.
+    Upload a file to S3 and add its path to an existing report block's attachedFiles array.
     
     Args:
         report_block_id: ID of the existing report block
@@ -116,13 +112,12 @@ def add_file_to_report_block(report_block_id, file_name, content: bytes, content
         client: Optional PlexusDashboardClient instance
     
     Returns:
-        Updated list of attachedFiles
+        Updated list of file paths in attachedFiles
     """
     from plexus.dashboard.api.models.report_block import ReportBlock
-    import json
     
-    # Upload the file to S3
-    file_info = upload_report_block_file(
+    # Upload the file to S3 and get the path
+    file_path = upload_report_block_file(
         report_block_id=report_block_id,
         file_name=file_name,
         content=content,
@@ -139,35 +134,43 @@ def add_file_to_report_block(report_block_id, file_name, content: bytes, content
     logger.info(f"Current attachedFiles before update for block {report_block_id}: {report_block.attachedFiles}")
     
     # Get existing attachedFiles or initialize as empty list
-    details_files = []
+    file_paths = []
     if report_block.attachedFiles:
-        try:
-            details_files = json.loads(report_block.attachedFiles)
-            logger.info(f"Successfully parsed existing attachedFiles: {details_files}")
-        except json.JSONDecodeError:
-            logger.warning(f"Could not parse attachedFiles for report block {report_block_id}: {report_block.attachedFiles}")
+        # Handle various formats that might exist in older data
+        if isinstance(report_block.attachedFiles, list):
+            file_paths = report_block.attachedFiles
+            logger.info(f"attachedFiles is already a list with {len(file_paths)} items")
+        else:
+            # For backward compatibility - try to parse JSON if it's a string
+            try:
+                import json
+                file_paths = json.loads(report_block.attachedFiles)
+                logger.info(f"Successfully parsed existing attachedFiles JSON (for backward compatibility)")
+                
+                # Check if we have old format objects and extract just paths
+                if file_paths and isinstance(file_paths[0], dict) and 'path' in file_paths[0]:
+                    logger.warning(f"Converting old format attachedFiles to just paths")
+                    file_paths = [item['path'] for item in file_paths]
+            except (json.JSONDecodeError, TypeError):
+                # If not valid JSON or not string, just use as a single item
+                logger.warning(f"Could not parse attachedFiles - treating as a single item")
+                file_paths = [report_block.attachedFiles]
     
-    # Add the new file info
-    details_files.append(file_info)
+    # Add the new file path
+    file_paths.append(file_path)
     
-    # Convert to JSON string
-    details_files_json = json.dumps(details_files)
-    logger.info(f"New attachedFiles JSON to be saved: {details_files_json}")
-    
-    # Update the report block
-    report_block.update(attachedFiles=details_files_json, client=client)
+    # Update the report block - pass the array directly without JSON conversion
+    report_block.update(attachedFiles=file_paths, client=client)
     logger.info(f"Updated report block {report_block_id} with attachedFiles")
     
     # Verify the update
     updated_block = ReportBlock.get_by_id(report_block_id, client)
     if updated_block:
         logger.info(f"After update, attachedFiles for block {report_block_id}: {updated_block.attachedFiles}")
-        if updated_block.attachedFiles != details_files_json:
-            logger.warning(f"attachedFiles mismatch! Expected {details_files_json}, got {updated_block.attachedFiles}")
     else:
         logger.warning(f"Could not verify update - block {report_block_id} not found after update")
     
-    return details_files
+    return file_paths
 
 def download_report_block_file(s3_path, local_path=None):
     """

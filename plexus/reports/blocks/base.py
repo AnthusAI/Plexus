@@ -22,11 +22,12 @@ class BaseReportBlock(ABC):
         """Helper method to add log messages during generation."""
         self.log_messages.append(message)
         
-    def attach_detail_file(self, report_block_id: str, file_name: str, content: str, content_type: Optional[str] = None) -> Dict[str, Any]:
+    def attach_detail_file(self, report_block_id: str, file_name: str, content: str, content_type: Optional[str] = None) -> str:
         """
         Attach a detail file to this report block.
         
-        This uploads the file to S3 and adds its reference to the ReportBlock's attachedFiles field.
+        This uploads the file to S3 and adds its path to the ReportBlock's attachedFiles field.
+        The Amplify Gen2 storage expects paths to be stored, not complex objects.
         
         Args:
             report_block_id: ID of the report block to attach the file to
@@ -35,11 +36,11 @@ class BaseReportBlock(ABC):
             content_type: Optional MIME type for the file
             
         Returns:
-            The file info dict: {'name': file_name, 'path': s3_path}
+            The S3 path to the file
         """
         from plexus.reports.s3_utils import add_file_to_report_block
         
-        file_details = add_file_to_report_block(
+        file_path = add_file_to_report_block(
             report_block_id=report_block_id,
             file_name=file_name,
             content=content,
@@ -48,7 +49,7 @@ class BaseReportBlock(ABC):
         )
         
         self._log(f"Attached detail file '{file_name}' to report block {report_block_id}")
-        return file_details
+        return file_path
 
     @abstractmethod
     async def generate(

@@ -566,23 +566,29 @@ def _generate_report_core(
                 else:
                     logger.info(f"{log_prefix} Fetched DB state. Current attachedFiles: {db_block_state.attachedFiles}")
                     if db_block_state.attachedFiles:
-                        try:
-                            # Check if attachedFiles is already a list
-                            if isinstance(db_block_state.attachedFiles, list):
-                                existing_details_files_list = db_block_state.attachedFiles
-                                logger.info(f"{log_prefix} attachedFiles is already a list with {len(existing_details_files_list)} items")
-                            else:
-                                # Parse the JSON string to get the list
+                        # Handle both list and potential legacy JSON string formats
+                        if isinstance(db_block_state.attachedFiles, list):
+                            existing_details_files_list = db_block_state.attachedFiles
+                            logger.info(f"{log_prefix} attachedFiles is already a list with {len(existing_details_files_list)} items")
+                        else:
+                            # For backward compatibility - try to parse JSON if it's a string
+                            try:
                                 existing_details_files_list = json.loads(db_block_state.attachedFiles)
-                                logger.info(f"{log_prefix} Successfully parsed existing attachedFiles JSON")
+                                logger.info(f"{log_prefix} Successfully parsed existing attachedFiles JSON (for backward compatibility)")
                                 
-                            if not isinstance(existing_details_files_list, list):
-                                logger.warning(f"{log_prefix} attachedFiles for ReportBlock {current_report_block.id} was not a list: {existing_details_files_list}. Resetting.")
-                                existing_details_files_list = []
-                        except json.JSONDecodeError:
-                            logger.warning(f"{log_prefix} Failed to parse existing attachedFiles for ReportBlock {current_report_block.id}: {db_block_state.attachedFiles}. Resetting.")
+                                # Check if we have old format objects and extract just paths
+                                if existing_details_files_list and isinstance(existing_details_files_list[0], dict) and 'path' in existing_details_files_list[0]:
+                                    logger.warning(f"{log_prefix} Converting old format attachedFiles to just paths")
+                                    existing_details_files_list = [item['path'] for item in existing_details_files_list]
+                            except (json.JSONDecodeError, TypeError):
+                                # If not valid JSON or not string, treat as a single item
+                                logger.warning(f"{log_prefix} Could not parse attachedFiles as JSON - treating as a single item")
+                                existing_details_files_list = [db_block_state.attachedFiles]
+                            
+                        # Ensure it's a list
+                        if not isinstance(existing_details_files_list, list):
+                            logger.warning(f"{log_prefix} attachedFiles for ReportBlock {current_report_block.id} was not a list: {existing_details_files_list}. Resetting.")
                             existing_details_files_list = []
-                    # else: existing_details_files_list is already []
             except Exception as e:
                 logger.exception(f"{log_prefix} Error fetching or parsing ReportBlock {current_report_block.id} attachedFiles: {e}. Proceeding with empty list.")
                 existing_details_files_list = [] # Ensure it's an empty list on error
@@ -614,19 +620,13 @@ def _generate_report_core(
             try:
                 logger.info(f"{log_prefix} Performing final update for ReportBlock {current_report_block.id}")
                 
-                # Ensure final_details_files_json is a string if not None
-                if existing_details_files_list:
-                    final_details_files_json = json.dumps(existing_details_files_list) 
-                else:
-                    final_details_files_json = None
-                
                 current_report_block.update(
                     output=json.dumps(output_json if output_json is not None else {"status": "failed", "error": log_string}),
                     log=final_log_message_for_db,
-                    attachedFiles=final_details_files_json,
+                    attachedFiles=existing_details_files_list, # Pass array directly without JSON conversion
                     client=client
                 )
-                logger.info(f"{log_prefix} Successfully finalized ReportBlock {current_report_block.id}. attachedFiles: {final_details_files_json}")
+                logger.info(f"{log_prefix} Successfully finalized ReportBlock {current_report_block.id}. attachedFiles: {existing_details_files_list}")
             except Exception as e:
                  logger.exception(f"{log_prefix} Failed to finalize ReportBlock {current_report_block.id}: {e}")
                  if first_block_error_message is None:
