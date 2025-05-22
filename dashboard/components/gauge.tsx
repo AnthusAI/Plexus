@@ -27,6 +27,7 @@ interface GaugeProps {
   valueFormatter?: (value: number) => string
   valueUnit?: string
   decimalPlaces?: number
+  tickSpacingThreshold?: number
 }
 
 const calculateAngle = (percent: number) => {
@@ -66,7 +67,8 @@ const GaugeComponent: React.FC<GaugeProps> = ({
   priority = false,
   valueFormatter,
   valueUnit = '%',
-  decimalPlaces = 1
+  decimalPlaces = 1,
+  tickSpacingThreshold = 5
 }) => {
   const [animatedValue, setAnimatedValue] = useState(0)
   const [animatedBeforeValue, setAnimatedBeforeValue] = useState(0)
@@ -229,54 +231,81 @@ const GaugeComponent: React.FC<GaugeProps> = ({
   }
 
   const renderTicks = (minValue: number, maxValue: number) => {
-    return [...segments || [], { start: 100, end: 100, color: 'transparent' }].map((segment, index) => {
-      const angle = calculateAngle(segment.start)
-      const { x, y } = calculateCoordinates(angle)
-      
-      const lineEndX = x * 1.08
-      const lineEndY = y * 1.08
-      
-      const angleInDegrees = (angle * 180) / Math.PI
-      const isNearTop = Math.abs(angleInDegrees - 90) < 15
-      const verticalAdjustment = isNearTop 
-        ? 0.95
-        : Math.pow(Math.abs(angleInDegrees - 90) / 90, 0.5) * 0.3
-      
-      const textOffset = radius + 25 - (verticalAdjustment * 10) + (segment.start === 100 ? 3 : 0)
-      
-      const textX = textOffset * Math.cos(angle - Math.PI / 2)
-      const textY = textOffset * Math.sin(angle - Math.PI / 2)
+    // Create an array with all segment starts plus 100
+    const allTicks = [...segments || [], { start: 100, end: 100, color: 'transparent' }]
+      .map(segment => segment.start)
+      .sort((a, b) => a - b); // Sort in ascending order
 
-      // Calculate the actual value based on min/max
-      const tickValue = minValue + (segment.start / 100) * (maxValue - minValue)
-      // Format decimal values without leading zeros
-      const formattedTickValue = formatDecimalValue(tickValue, decimalPlaces)
+    // Use the provided threshold for displaying ticks (percentage of total range)
+    const thresholdPercentage = tickSpacingThreshold;
 
-      return (
-        <g key={index}>
-          <line
-            x1={x}
-            y1={y}
-            x2={lineEndX}
-            y2={lineEndY}
-            className="stroke-muted-foreground"
-            strokeWidth="0.5"
-          />
-          <g transform={`translate(${textX} ${textY}) rotate(105)`}>
-            <text
-              x="0"
-              y="0"
-              textAnchor="middle"
-              dominantBaseline="middle"
-              fontSize="12"
-              className="fill-muted-foreground"
-            >
-              {formattedTickValue}
-            </text>
+    // Filter ticks starting from highest to lowest
+    // Keep a tick if it's at least thresholdPercentage away from the next higher tick
+    const visibleTicks = new Set<number>();
+    visibleTicks.add(100); // Always show the maximum tick
+
+    // Process remaining ticks from highest to lowest
+    for (let i = allTicks.length - 2; i >= 0; i--) {
+      const currentTick = allTicks[i];
+      const nextHigherTick = allTicks[i + 1]; // The next element is guaranteed to be higher since we sorted
+      
+      // If this tick is at least thresholdPercentage away from the next higher tick, show it
+      if (nextHigherTick - currentTick >= thresholdPercentage) {
+        visibleTicks.add(currentTick);
+      }
+    }
+
+    // Render only the visible ticks
+    return [...segments || [], { start: 100, end: 100, color: 'transparent' }]
+      .filter(segment => visibleTicks.has(segment.start))
+      .map((segment, index) => {
+        const angle = calculateAngle(segment.start)
+        const { x, y } = calculateCoordinates(angle)
+        
+        const lineEndX = x * 1.08
+        const lineEndY = y * 1.08
+        
+        const angleInDegrees = (angle * 180) / Math.PI
+        const isNearTop = Math.abs(angleInDegrees - 90) < 15
+        const verticalAdjustment = isNearTop 
+          ? 0.95
+          : Math.pow(Math.abs(angleInDegrees - 90) / 90, 0.5) * 0.3
+        
+        const textOffset = radius + 25 - (verticalAdjustment * 10) + (segment.start === 100 ? 3 : 0)
+        
+        const textX = textOffset * Math.cos(angle - Math.PI / 2)
+        const textY = textOffset * Math.sin(angle - Math.PI / 2)
+
+        // Calculate the actual value based on min/max
+        const tickValue = minValue + (segment.start / 100) * (maxValue - minValue)
+        // Format decimal values without leading zeros
+        const formattedTickValue = formatDecimalValue(tickValue, decimalPlaces)
+
+        return (
+          <g key={index}>
+            <line
+              x1={x}
+              y1={y}
+              x2={lineEndX}
+              y2={lineEndY}
+              className="stroke-muted-foreground"
+              strokeWidth="0.5"
+            />
+            <g transform={`translate(${textX} ${textY}) rotate(105)`}>
+              <text
+                x="0"
+                y="0"
+                textAnchor="middle"
+                dominantBaseline="middle"
+                fontSize="12"
+                className="fill-muted-foreground"
+              >
+                {formattedTickValue}
+              </text>
+            </g>
           </g>
-        </g>
-      )
-    })
+        )
+      })
   }
 
   const renderTargetTick = () => {

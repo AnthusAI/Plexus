@@ -421,3 +421,85 @@ export const MetricsGrid: Story = {
     </div>
   )
 }
+
+export const TickSpacing: Story = {
+  args: {
+    value: 80,
+    title: 'Dense Segments',
+    showTicks: true,
+    segments: [
+      { start: 0, end: 70, color: 'var(--gauge-inviable)' },
+      { start: 70, end: 75, color: 'var(--gauge-converging)' },
+      { start: 75, end: 80, color: 'var(--gauge-almost)' },
+      { start: 80, end: 85, color: 'var(--gauge-viable)' },
+      { start: 85, end: 90, color: 'var(--gauge-viable)' },
+      { start: 90, end: 95, color: 'var(--gauge-viable)' },
+      { start: 95, end: 100, color: 'var(--gauge-great)' }
+    ],
+    tickSpacingThreshold: 5
+  },
+  decorators: [
+    (Story) => (
+      <div className="bg-card-light p-6 rounded-lg">
+        <Story />
+      </div>
+    )
+  ],
+  parameters: {
+    docs: {
+      description: {
+        story: 'This example demonstrates the `tickSpacingThreshold` prop which controls how close tick marks can be. Ticks that are closer than the threshold (as a percentage of the total range) will not be shown.'
+      }
+    }
+  }
+}
+
+export const TickSpacingComparison: Story = {
+  render: () => (
+    <div className="grid grid-cols-2 gap-8 max-w-4xl bg-card-light p-6 rounded-lg">
+      <div>
+        <h3 className="text-center mb-2 font-medium">Default spacing (5%)</h3>
+        <Gauge
+          value={80}
+          title="Dense Segments"
+          showTicks={true}
+          segments={[
+            { start: 0, end: 70, color: 'var(--gauge-inviable)' },
+            { start: 70, end: 75, color: 'var(--gauge-converging)' },
+            { start: 75, end: 80, color: 'var(--gauge-almost)' },
+            { start: 80, end: 85, color: 'var(--gauge-viable)' },
+            { start: 85, end: 90, color: 'var(--gauge-viable)' },
+            { start: 90, end: 95, color: 'var(--gauge-viable)' },
+            { start: 95, end: 100, color: 'var(--gauge-great)' }
+          ]}
+          tickSpacingThreshold={5}
+        />
+      </div>
+      <div>
+        <h3 className="text-center mb-2 font-medium">Smaller spacing (2%)</h3>
+        <Gauge
+          value={80}
+          title="Dense Segments"
+          showTicks={true}
+          segments={[
+            { start: 0, end: 70, color: 'var(--gauge-inviable)' },
+            { start: 70, end: 75, color: 'var(--gauge-converging)' },
+            { start: 75, end: 80, color: 'var(--gauge-almost)' },
+            { start: 80, end: 85, color: 'var(--gauge-viable)' },
+            { start: 85, end: 90, color: 'var(--gauge-viable)' },
+            { start: 90, end: 95, color: 'var(--gauge-viable)' },
+            { start: 95, end: 100, color: 'var(--gauge-great)' }
+          ]}
+          tickSpacingThreshold={2}
+        />
+      </div>
+    </div>
+  ),
+  parameters: {
+    docs: {
+      description: {
+        story: 'This comparison shows how different `tickSpacingThreshold` values affect which ticks are displayed. The left gauge uses the default 5% threshold, while the right uses a smaller 2% threshold, showing more tick marks.'
+      }
+    }
+  }
+}
