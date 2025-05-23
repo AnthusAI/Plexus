@@ -667,54 +667,53 @@ export const DetailContent = React.memo(function DetailContent({
             )}
           </div>
 
-          {score.sections?.items?.map((section, index) => (
-            <div key={section.id} className="space-y-2 w-full">
-              <div className="flex justify-between items-center w-full">
-                <div className="flex-1">
-                  <EditableHeader
-                    value={sectionNameChanges[section.id] ?? section.name}
-                    onChange={(value) => handleSectionNameChange(section.id, value)}
-                    level="h3"
-                    className="text-base"
-                  />
+          {score.sections?.items?.map((section, index) => {
+            // Process scores for this section
+            const processedScores = section.scores?.items?.map((score) => ({
+              id: score.id,
+              name: score.name,
+              description: score.description || '',
+              type: score.type,
+              order: score.order,
+              key: score.key || '',
+              icon: <CheckSquare className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
+            })) || [];
+            
+            return (
+              <div key={section.id} className="space-y-2 w-full">
+                <div className="flex justify-between items-center w-full">
+                  <div className="flex-1">
+                    <EditableHeader
+                      value={sectionNameChanges[section.id] ?? section.name}
+                      onChange={(value) => handleSectionNameChange(section.id, value)}
+                      level="h3"
+                      className="text-base"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 ml-4">
+                    <CardButton
+                      icon={X}
+                      onClick={() => handleDeleteSectionClick(section, index)}
+                    />
+                    <CardButton
+                      icon={ChevronUp}
+                      onClick={() => onMoveSection?.(index, 'up')}
+                    />
+                    <CardButton
+                      icon={ChevronDown}
+                      onClick={() => onMoveSection?.(index, 'down')}
+                    />
+                    <CardButton
+                      icon={Plus}
+                      label="Create Score"
+                      onClick={() => {}}
+                    />
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 ml-4">
-                  <CardButton
-                    icon={X}
-                    onClick={() => handleDeleteSectionClick(section, index)}
-                  />
-                  <CardButton
-                    icon={ChevronUp}
-                    onClick={() => onMoveSection?.(index, 'up')}
-                  />
-                  <CardButton
-                    icon={ChevronDown}
-                    onClick={() => onMoveSection?.(index, 'down')}
-                  />
-                  <CardButton
-                    icon={Plus}
-                    label="Create Score"
-                    onClick={() => {}}
-                  />
-                </div>
-              </div>
-              <div className="bg-background rounded-lg w-full">
-                <div className="@container w-full p-4">
-                  <div className="grid grid-cols-1 @[400px]:grid-cols-1 @[600px]:grid-cols-2 @[900px]:grid-cols-3 gap-4 w-full">
-                    {React.useMemo(() => {
-                      // Pre-process all score data in a single batch before rendering
-                      // This ensures all descriptions are processed together with names
-                      const processedScores = section.scores?.items?.map((score) => ({
-                        id: score.id,
-                        name: score.name,
-                        description: score.description || '',
-                        type: score.type,
-                        order: score.order,
-                        key: score.key || '',
-                        icon: <CheckSquare className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
-                      })) || [];
-                      
-                      return processedScores.map((scoreData) => (
+                <div className="bg-background rounded-lg w-full">
+                  <div className="@container w-full p-4">
+                    <div className="grid grid-cols-1 @[400px]:grid-cols-1 @[600px]:grid-cols-2 @[900px]:grid-cols-3 gap-4 w-full">
+                      {processedScores.map((scoreData) => (
                         <ScoreComponent
                           key={scoreData.id}
                           variant="grid"
@@ -725,13 +724,13 @@ export const DetailContent = React.memo(function DetailContent({
                             section.id
                           )}
                         />
-                      ));
-                    }, [section.scores?.items, selectedScoreId, onScoreSelect, section.id])}
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
           <div className="flex justify-end w-full">
             <CardButton
               icon={Plus}
