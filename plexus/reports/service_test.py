@@ -108,8 +108,8 @@ def test_generate_report_success(
 
     # --- Configure the mock for _instantiate_and_run_block ---
     mock_run_block.side_effect = [
-        ({"status": "pending"}, "Processing..."), # Return tuple with status pending
-        ({"status": "pending"}, "Processing..."), # Return tuple with status pending
+        ({"status": "pending_execution"}, "Processing..."), # Return tuple with status pending_execution
+        ({"status": "pending_execution"}, "Processing..."), # Return tuple with status pending_execution
     ]
 
     # --- Mock TaskProgressTracker --- 
