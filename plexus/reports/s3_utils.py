@@ -83,8 +83,11 @@ def upload_report_block_file(report_block_id, file_name, content, content_type=N
         
         logger.info(f"Successfully uploaded {file_name} to s3://{bucket_name}/{s3_key}")
         
-        # Return just the S3 key (path) to match Amplify expectations
-        return s3_key
+        # Return a dictionary with file name and path to match test expectations
+        return {
+            "name": file_name,
+            "path": s3_key
+        }
     except ClientError as e:
         logger.error(f"AWS ClientError uploading file to S3: {str(e)}")
         logger.error(f"Error details: {e.response['Error'] if hasattr(e, 'response') else 'No response details'}")
