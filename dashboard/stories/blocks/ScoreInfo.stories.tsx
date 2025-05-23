@@ -4,7 +4,7 @@ import { BlockRenderer } from '@/components/blocks/BlockRegistry';
 import ScoreInfo from '@/components/blocks/ScoreInfo';
 
 const meta: Meta<typeof BlockRenderer> = {
-  title: 'Report Blocks/ScoreInfo',
+  title: 'Reports/Blocks/ScoreInfo',
   component: BlockRenderer,
   parameters: {
     layout: 'padded',

@@ -32,7 +32,7 @@ type ScorecardReportEvaluationData = {
 };
 
 const meta: Meta<typeof ScorecardReportEvaluation> = {
-  title: 'Report Blocks/ScorecardReport/Evaluation',
+  title: 'Reports/Components/ScorecardReportEvaluation',
   component: ScorecardReportEvaluation,
   parameters: {
     layout: 'padded',

@@ -4,7 +4,7 @@ import { expect, within, userEvent } from '@storybook/test'
 import { Gauge } from '../components/gauge'
 
 export default {
-  title: 'Visualization/Gauge',
+  title: 'General/Components/Gauge',
   component: Gauge,
   tags: ['autodocs'],
 } satisfies Meta<typeof Gauge>

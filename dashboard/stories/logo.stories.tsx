@@ -3,7 +3,7 @@ import type { Meta, StoryObj, StoryFn } from '@storybook/react'
 import SquareLogo, { LogoVariant } from '../components/logo-square'
 
 const meta = {
-  title: 'Logo/Plexus Logo',
+  title: 'Theme/Logo',
   component: SquareLogo,
   parameters: {
     layout: 'padded',

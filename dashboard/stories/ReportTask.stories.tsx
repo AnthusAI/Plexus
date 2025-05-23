@@ -8,7 +8,7 @@ import ReportTask, { ReportTaskProps } from '../components/ReportTask';
 // If ReportTaskData fields are needed explicitly for mocking, they should be aligned with the actual interface.
 
 const meta: Meta<typeof ReportTask> = {
-  title: 'Tasks/Types/ReportTask',
+  title: 'Reports/ReportTask',
   component: ReportTask,
   parameters: {
     layout: 'centered',

@@ -20,7 +20,7 @@ const Container = ({ children }: { children: React.ReactNode }) => (
 )
 
 const meta = {
-  title: 'Workflow Pictograms/Diagrams',
+  title: 'Landing Pages/Pictograms/Diagrams',
   component: Workflow,
   parameters: {
     layout: 'centered',

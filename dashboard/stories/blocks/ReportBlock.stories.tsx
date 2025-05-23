@@ -3,7 +3,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import ReportBlock, { ReportBlockProps } from '@/components/blocks/ReportBlock';
 
 const meta: Meta<typeof ReportBlock> = {
-  title: 'Report Blocks/ReportBlock',
+  title: 'Reports/Blocks/ReportBlock',
   component: ReportBlock,
   parameters: {
     layout: 'padded',

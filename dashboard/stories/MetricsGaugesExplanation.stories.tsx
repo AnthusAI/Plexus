@@ -3,7 +3,7 @@ import MetricsGaugesExplanation from '../components/MetricsGaugesExplanation'
 import { Card, CardContent } from '@/components/ui/card'
 
 const meta: Meta<typeof MetricsGaugesExplanation> = {
-  title: 'Components/MetricsGaugesExplanation',
+  title: 'General/Components/MetricsGaugesExplanation',
   component: MetricsGaugesExplanation,
   tags: ['autodocs'],
   decorators: [

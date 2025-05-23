@@ -5,7 +5,7 @@ import MetricsGauges from '@/components/MetricsGauges'
 import { Card } from '@/components/ui/card'
 
 const meta = {
-  title: 'Visualization/MetricsGauges',
+  title: 'General/Components/MetricsGauges',
   component: MetricsGauges,
   parameters: {
     layout: 'centered',

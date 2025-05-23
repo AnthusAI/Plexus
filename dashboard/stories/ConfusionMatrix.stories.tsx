@@ -5,7 +5,7 @@ import { ConfusionMatrix, ConfusionMatrixData } from '../components/confusion-ma
 import { Card } from '@/components/ui/card'
 
 const meta: Meta<typeof ConfusionMatrix> = {
-  title: "Visualization/ConfusionMatrix",
+  title: "General/Components/ConfusionMatrix",
   component: ConfusionMatrix,
   parameters: {
     layout: "padded",

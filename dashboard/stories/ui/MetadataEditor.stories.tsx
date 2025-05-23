@@ -5,7 +5,7 @@ import { MetadataEditor, MetadataEditorProps } from '../../components/ui/metadat
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card'
 
 const meta = {
-  title: 'Components/MetadataEditor',
+  title: 'General/UI/MetadataEditor',
   component: MetadataEditor,
   parameters: {
     layout: 'padded',

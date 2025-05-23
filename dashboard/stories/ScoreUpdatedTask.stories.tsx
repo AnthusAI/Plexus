@@ -4,7 +4,7 @@ import ScoreUpdatedTask from '@/components/ScoreUpdatedTask';
 import { BaseTaskProps } from '@/components/Task';
 
 const meta: Meta<typeof ScoreUpdatedTask> = {
-  title: 'Tasks/Types/ScoreUpdatedTask',
+  title: 'Scorecards/Tasks/ScoreUpdatedTask',
   component: ScoreUpdatedTask,
   parameters: {
     layout: 'centered',
