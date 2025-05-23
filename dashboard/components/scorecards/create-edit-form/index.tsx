@@ -1,3 +1,26 @@
+import React, { useState } from 'react'
+import { Button } from '@/components/ui/button'
+import { CardButton } from '@/components/CardButton'
+import { X, Plus, ChevronDown, ChevronRight } from 'lucide-react'
+import type { Schema } from '@/amplify/data/resource'
+
+interface SectionFormState {
+  id?: string
+  name: string
+  order: number
+  scores: any[]
+}
+
+interface ScorecardFormProps {
+  scorecard: Schema['Scorecard']['type'] | null
+  accountId: string
+  onSave?: (formData: FormData) => Promise<void>
+  onCancel?: () => void
+  isFullWidth?: boolean
+  onToggleWidth?: () => void
+  isNarrowViewport?: boolean
+}
+
 interface FormData {
   id?: string
   name: string
@@ -71,9 +94,18 @@ export function ScorecardForm({
       // Log examples for future implementation
       console.log('Examples to be saved:', formData.examples)
       
-      // ... existing code ...
+      // TODO: Implement actual save logic here
+      // For now, just call the onSave callback
+      if (onSave) {
+        await onSave(formData)
+      }
       
-  // ... existing code ...
+    } catch (error) {
+      console.error('Error saving scorecard:', error)
+    } finally {
+      setIsSaving(false)
+    }
+  }
 
   return (
     <div className="border text-card-foreground shadow rounded-lg h-full flex flex-col bg-card-light border-none">
