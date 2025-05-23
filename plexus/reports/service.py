@@ -510,7 +510,7 @@ def _generate_report_core(
         tracker.set_total_items(num_blocks)
 
         # Initialize default values for ReportBlock creation
-        initial_output: Optional[Dict[str, Any]] = {"status": "pending_execution"}
+        initial_output: Optional[Dict[str, Any]] = {"status": "pending"}
         initial_log: Optional[str] = "Block execution pending."
         initial_attached_files: Optional[str] = None # Or json.dumps([]) if you prefer an empty list string
 
