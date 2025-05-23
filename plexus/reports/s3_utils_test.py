@@ -48,10 +48,7 @@ class TestS3Utils(unittest.TestCase):
         )
         
         # Assert the returned structure
-        self.assertEqual(result, {
-            "name": "test.txt",
-            "path": "reportblocks/test-block-id/test.txt"
-        })
+        self.assertEqual(result, "reportblocks/test-block-id/test.txt")
         
     @patch('boto3.client')
     @patch('plexus.reports.s3_utils.get_bucket_name')
