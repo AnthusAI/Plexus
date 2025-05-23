@@ -3,7 +3,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { ScorecardEvaluation, ScorecardReportEvaluationData } from '@/components/ui/scorecard-evaluation';
 
 const meta: Meta<typeof ScorecardEvaluation> = {
-  title: 'Report Blocks/ScorecardReport/Evaluation',
+  title: 'Reports/Components/ScorecardEvaluation',
   component: ScorecardEvaluation,
   parameters: {
     layout: 'padded',

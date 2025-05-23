@@ -3,7 +3,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { FeedbackItemView, FeedbackItemsList, FeedbackItemsView, type FeedbackItem } from '@/components/ui/feedback-item-view';
 
 const meta: Meta<typeof FeedbackItemView> = {
-  title: 'UI/FeedbackItemView',
+  title: 'General/UI/FeedbackItemView',
   component: FeedbackItemView,
   parameters: {
     layout: 'padded',

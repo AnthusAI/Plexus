@@ -3,7 +3,7 @@ import type { Meta, StoryObj } from '@storybook/react'
 import { Timestamp } from '../components/ui/timestamp'
 
 const meta = {
-  title: 'UI/Timestamp',
+  title: 'General/UI/Timestamp',
   component: Timestamp,
   parameters: {
     layout: 'centered',

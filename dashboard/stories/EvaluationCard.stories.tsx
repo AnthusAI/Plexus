@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react'
 import EvaluationCard from '../components/EvaluationCard'
 
 const meta: Meta<typeof EvaluationCard> = {
-  title: 'Cards/EvaluationCard',
+  title: 'Evaluations/EvaluationCard',
   component: EvaluationCard,
   parameters: {
     layout: 'padded',

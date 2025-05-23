@@ -4,7 +4,7 @@ import { BlockRenderer } from '@/components/blocks/BlockRegistry';
 import TopicAnalysis from '@/components/blocks/TopicAnalysis'; // Assuming this is the component
 
 const meta: Meta<typeof BlockRenderer> = {
-  title: 'Report Blocks/TopicAnalysis',
+  title: 'Reports/Blocks/TopicAnalysis',
   component: BlockRenderer, // Use BlockRenderer to test the registration
   parameters: {
     layout: 'padded',

@@ -241,7 +241,7 @@ const ItemDetailWrapper = (args: any) => {
 };
 
 const meta = {
-  title: 'Items/ItemDetail',
+  title: 'Scorecards/ItemDetail',
   component: ItemDetailWrapper,
   parameters: {
     layout: 'centered',

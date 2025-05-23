@@ -3,7 +3,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { FeedbackAnalysisEvaluation, FeedbackAnalysisEvaluationData } from '@/components/ui/feedback-analysis-evaluation';
 
 const meta: Meta<typeof FeedbackAnalysisEvaluation> = {
-  title: 'Report Blocks/FeedbackAnalysis/Evaluation',
+  title: 'Reports/Components/FeedbackAnalysisEvaluation',
   component: FeedbackAnalysisEvaluation,
   parameters: {
     layout: 'padded',

@@ -6,7 +6,7 @@ import { type ClassDistribution } from '@/components/ClassDistributionVisualizer
 import { type ConfusionMatrixData } from '@/components/confusion-matrix';
 
 const meta: Meta<typeof BlockRenderer> = {
-  title: 'Report Blocks/ScorecardReport',
+  title: 'Reports/Blocks/ScorecardReport',
   component: BlockRenderer,
   parameters: {
     layout: 'padded',
