@@ -99,25 +99,21 @@ const DetailContent = React.memo(({
               <div key={section.id} className="space-y-2">
                 <h4 className="font-medium text-sm text-muted-foreground">{section.name}</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-                  {React.useMemo(() => {
-                    // Pre-process all score data in a single batch before rendering
-                    // This ensures all descriptions are processed together with names
-                    return section.scores?.items?.map(score => (
-                      <ScoreComponent
-                        key={score.id}
-                        score={{
-                          id: score.id,
-                          name: score.name,
-                          description: score.description || '',
-                          type: score.type,
-                          order: score.order,
-                          key: score.key || ''
-                        }}
-                        onClick={() => onScoreSelect?.(score)}
-                        variant="grid"
-                      />
-                    ));
-                  }, [section.scores?.items, onScoreSelect])}
+                  {section.scores?.items?.map(score => (
+                    <ScoreComponent
+                      key={score.id}
+                      score={{
+                        id: score.id,
+                        name: score.name,
+                        description: score.description || '',
+                        type: score.type,
+                        order: score.order,
+                        key: score.key || ''
+                      }}
+                      onClick={() => onScoreSelect?.(score)}
+                      variant="grid"
+                    />
+                  ))}
                 </div>
               </div>
             ))}
