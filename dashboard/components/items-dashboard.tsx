@@ -52,8 +52,6 @@ interface Item {
   externalId?: string;
   description?: string;
   accountId: string;
-  scorecardId?: string;
-  scoreId?: string;
   evaluationId?: string;
   updatedAt?: string;
   createdAt?: string;
@@ -478,43 +476,65 @@ export default function ItemsDashboard() {
             console.warn('No more items found in direct GraphQL query response');
           }
         } else if (useScorecard) {
-          // If only a scorecard is selected, filter by scorecardId
+          // If only a scorecard is selected, get items through ItemScorecard join table
           console.log('Attempting direct GraphQL query for more items with scorecardId:', selectedScorecard);
-          const directQuery = await graphqlRequest<{ listItemByScorecardIdAndUpdatedAt: { items: any[], nextToken: string | null } }>(`
-            query ListItemsMoreDirect($scorecardId: String!, $limit: Int!, $nextToken: String) {
-              listItemByScorecardIdAndUpdatedAt(
-                scorecardId: $scorecardId, 
-                sortDirection: DESC,
+          const directQuery = await graphqlRequest<{ 
+            listItemScorecardByScorecardId: { 
+              items: Array<{
+                itemId: string;
+                item: {
+                  id: string;
+                  externalId?: string;
+                  description?: string;
+                  accountId: string;
+                  evaluationId?: string;
+                  updatedAt?: string;
+                  createdAt?: string;
+                  isEvaluation: boolean;
+                  scoreResults: {
+                    items: any[];
+                  };
+                };
+              }>;
+              nextToken: string | null;
+            }
+          }>(`
+            query ListItemsMoreDirect($scorecardId: ID!, $limit: Int!, $nextToken: String) {
+              listItemScorecardByScorecardId(
+                scorecardId: $scorecardId,
                 limit: $limit,
                 nextToken: $nextToken
               ) {
                 items {
-                  id
-                  externalId
-                  description
-                  accountId
-                  evaluationId
-                  updatedAt
-                  createdAt
-                  isEvaluation
-                  scoreResults {
-                    items {
-                      id
-                      value
-                      explanation
-                      confidence
-                      scorecardId
-                      scoreId
-                      scorecard {
+                  itemId
+                  item {
+                    id
+                    externalId
+                    description
+                    accountId
+                    evaluationId
+                    updatedAt
+                    createdAt
+                    isEvaluation
+                    scoreResults {
+                      items {
                         id
-                        name
+                        value
+                        explanation
+                        confidence
+                        scorecardId
+                        scoreId
+                        scorecard {
+                          id
+                          name
+                        }
+                        score {
+                          id
+                          name
+                        }
+                        updatedAt
+                        createdAt
                       }
-                      score {
-                        id
-                        name
-                      }
-                      updatedAt
-                      createdAt
                     }
                   }
                 }
@@ -529,11 +549,18 @@ export default function ItemsDashboard() {
           
           console.log('Direct GraphQL query response for more items:', JSON.stringify(directQuery, null, 2));
           
-          if (directQuery.data?.listItemByScorecardIdAndUpdatedAt?.items) {
-            console.log(`Found ${directQuery.data.listItemByScorecardIdAndUpdatedAt.items.length} more items via direct GraphQL query`);
-            // No need to sort as the GSI already returns items sorted by updatedAt
-            itemsFromDirectQuery = directQuery.data.listItemByScorecardIdAndUpdatedAt.items;
-            nextTokenFromDirectQuery = directQuery.data.listItemByScorecardIdAndUpdatedAt.nextToken;
+          if (directQuery.data?.listItemScorecardByScorecardId?.items) {
+            console.log(`Found ${directQuery.data.listItemScorecardByScorecardId.items.length} more items via direct GraphQL query`);
+            // Extract items and sort by updatedAt in descending order
+            itemsFromDirectQuery = directQuery.data.listItemScorecardByScorecardId.items
+              .map(association => association.item)
+              .filter(item => item !== null)
+              .sort((a, b) => {
+                const dateA = new Date(a.updatedAt || a.createdAt || '').getTime();
+                const dateB = new Date(b.updatedAt || b.createdAt || '').getTime();
+                return dateB - dateA; // DESC order (newest first)
+              });
+            nextTokenFromDirectQuery = directQuery.data.listItemScorecardByScorecardId.nextToken;
           } else {
             console.warn('No more items found in direct GraphQL query response');
           }
@@ -620,8 +647,6 @@ export default function ItemsDashboard() {
           id: item.id,
           externalId: item.externalId,
           accountId: item.accountId,
-          scorecardId: item.scorecardId,
-          scoreId: item.scoreId,
           hasScoreResults: !!item.scoreResults,
           scoreResultsItemsCount: item.scoreResults?.items?.length,
           firstScoreResult: item.scoreResults?.items?.[0] 
@@ -651,23 +676,6 @@ export default function ItemsDashboard() {
               }
             }
           });
-        } else if (item.scorecardId && !Object.keys(groupedScoreResults).length) {
-          // If item has a scorecardId but no scoreResults, create a placeholder entry
-          console.log('Item has scorecardId but no scoreResults:', item.scorecardId);
-          
-          // Try to add a placeholder entry using the scorecardId
-          groupedScoreResults[item.scorecardId] = {
-            scorecardName: `Scorecard ${item.scorecardId.substring(0, 8)}`,
-            scores: []
-          };
-          
-          // Add score if available
-          if (item.scoreId) {
-            groupedScoreResults[item.scorecardId].scores.push({
-              scoreId: item.scoreId,
-              scoreName: `Score ${item.scoreId.substring(0, 8)}`
-            });
-          }
         }
         
         console.log('Generated groupedScoreResults:', groupedScoreResults);
@@ -863,42 +871,64 @@ export default function ItemsDashboard() {
             console.warn('No items found in direct GraphQL query response');
           }
         } else if (useScorecard) {
-          // If only a scorecard is selected, filter by scorecardId
+          // If only a scorecard is selected, get items through ItemScorecard join table
           console.log('Attempting direct GraphQL query for items with scorecardId:', selectedScorecard);
-          const directQuery = await graphqlRequest<{ listItemByScorecardIdAndUpdatedAt: { items: any[], nextToken: string | null } }>(`
-            query ListItemsDirect($scorecardId: String!, $limit: Int!) {
-              listItemByScorecardIdAndUpdatedAt(
-                scorecardId: $scorecardId, 
-                sortDirection: DESC,
+          const directQuery = await graphqlRequest<{ 
+            listItemScorecardByScorecardId: { 
+              items: Array<{
+                itemId: string;
+                item: {
+                  id: string;
+                  externalId?: string;
+                  description?: string;
+                  accountId: string;
+                  evaluationId?: string;
+                  updatedAt?: string;
+                  createdAt?: string;
+                  isEvaluation: boolean;
+                  scoreResults: {
+                    items: any[];
+                  };
+                };
+              }>;
+              nextToken: string | null;
+            }
+          }>(`
+            query ListItemsDirect($scorecardId: ID!, $limit: Int!) {
+              listItemScorecardByScorecardId(
+                scorecardId: $scorecardId,
                 limit: $limit
               ) {
                 items {
-                  id
-                  externalId
-                  description
-                  accountId
-                  evaluationId
-                  updatedAt
-                  createdAt
-                  isEvaluation
-                  scoreResults {
-                    items {
-                      id
-                      value
-                      explanation
-                      confidence
-                      scorecardId
-                      scoreId
-                      scorecard {
+                  itemId
+                  item {
+                    id
+                    externalId
+                    description
+                    accountId
+                    evaluationId
+                    updatedAt
+                    createdAt
+                    isEvaluation
+                    scoreResults {
+                      items {
                         id
-                        name
+                        value
+                        explanation
+                        confidence
+                        scorecardId
+                        scoreId
+                        scorecard {
+                          id
+                          name
+                        }
+                        score {
+                          id
+                          name
+                        }
+                        updatedAt
+                        createdAt
                       }
-                      score {
-                        id
-                        name
-                      }
-                      updatedAt
-                      createdAt
                     }
                   }
                 }
@@ -912,11 +942,18 @@ export default function ItemsDashboard() {
           
           console.log('Direct GraphQL query response for items:', JSON.stringify(directQuery, null, 2));
           
-          if (directQuery.data?.listItemByScorecardIdAndUpdatedAt?.items) {
-            console.log(`Found ${directQuery.data.listItemByScorecardIdAndUpdatedAt.items.length} items via direct GraphQL query`);
-            // No need to sort as the GSI already returns items sorted by updatedAt
-            itemsFromDirectQuery = directQuery.data.listItemByScorecardIdAndUpdatedAt.items;
-            nextTokenFromDirectQuery = directQuery.data.listItemByScorecardIdAndUpdatedAt.nextToken;
+          if (directQuery.data?.listItemScorecardByScorecardId?.items) {
+            console.log(`Found ${directQuery.data.listItemScorecardByScorecardId.items.length} items via direct GraphQL query`);
+            // Extract items and sort by updatedAt in descending order
+            itemsFromDirectQuery = directQuery.data.listItemScorecardByScorecardId.items
+              .map(association => association.item)
+              .filter(item => item !== null)
+              .sort((a, b) => {
+                const dateA = new Date(a.updatedAt || a.createdAt || '').getTime();
+                const dateB = new Date(b.updatedAt || b.createdAt || '').getTime();
+                return dateB - dateA; // DESC order (newest first)
+              });
+            nextTokenFromDirectQuery = directQuery.data.listItemScorecardByScorecardId.nextToken;
           } else {
             console.warn('No items found in direct GraphQL query response');
           }
@@ -1001,7 +1038,6 @@ export default function ItemsDashboard() {
           id: item.id,
           externalId: item.externalId,
           accountId: item.accountId,
-          scoreId: item.scoreId,
           hasScoreResults: !!item.scoreResults,
           scoreResultsItemsCount: item.scoreResults?.items?.length,
           firstScoreResult: item.scoreResults?.items?.[0] 
@@ -1031,23 +1067,6 @@ export default function ItemsDashboard() {
               }
             }
           });
-        } else if (item.scorecardId && !Object.keys(groupedScoreResults).length) {
-          // If item has a scorecardId but no scoreResults, create a placeholder entry
-          console.log('Item has scorecardId but no scoreResults:', item.scorecardId);
-          
-          // Try to add a placeholder entry using the scorecardId
-          groupedScoreResults[item.scorecardId] = {
-            scorecardName: `Scorecard ${item.scorecardId.substring(0, 8)}`,
-            scores: []
-          };
-          
-          // Add score if available
-          if (item.scoreId) {
-            groupedScoreResults[item.scorecardId].scores.push({
-              scoreId: item.scoreId,
-              scoreName: `Score ${item.scoreId.substring(0, 8)}`
-            });
-          }
         }
         
         console.log('Generated groupedScoreResults:', groupedScoreResults);
@@ -1169,15 +1188,13 @@ export default function ItemsDashboard() {
                 accountId: newItem.accountId,
                 externalId: newItem.externalId || undefined,
                 description: newItem.description || undefined,
-                scorecardId: newItem.scorecardId || undefined,
-                scoreId: newItem.scoreId || undefined,
                 evaluationId: newItem.evaluationId || undefined,
                 updatedAt: newItem.updatedAt || undefined,
                 createdAt: newItem.createdAt || undefined,
                 isEvaluation: newItem.isEvaluation,
                 // UI compatibility fields
-                scorecard: newItem.scorecardId ? `Scorecard ${newItem.scorecardId.substring(0, 8)}` : undefined,
-                score: newItem.scoreId ? `Score ${newItem.scoreId.substring(0, 8)}` : undefined,
+                scorecard: undefined, // Will be determined by scoreResults if any
+                score: undefined, // Will be determined by scoreResults if any
                 date: (newItem.updatedAt || newItem.createdAt) || undefined,
                 status: "Done",
                 results: 0,
@@ -1287,9 +1304,11 @@ export default function ItemsDashboard() {
     return items.filter(item => {
       if (!selectedScorecard && !selectedScore && filterConfig.length === 0) return true
       
-      // Check for scorecard and score matches
-      let scorecardMatch = !selectedScorecard || item.scorecardId === selectedScorecard
-      let scoreMatch = !selectedScore || item.scoreId === selectedScore
+      // Check for scorecard and score matches using groupedScoreResults
+      let scorecardMatch = !selectedScorecard || (item.groupedScoreResults && Object.keys(item.groupedScoreResults).includes(selectedScorecard))
+      let scoreMatch = !selectedScore || (item.groupedScoreResults && Object.values(item.groupedScoreResults).some(scorecard => 
+        scorecard.scores.some(score => score.scoreId === selectedScore)
+      ))
       
       if (filterConfig.length === 0) return scorecardMatch && scoreMatch
       

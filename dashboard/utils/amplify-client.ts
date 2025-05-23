@@ -295,14 +295,91 @@ export const amplifyClient = {
     create: async (data: {
       externalId?: string;
       description?: string;
+      text?: string;
+      metadata?: Record<string, any>;
+      attachedFiles?: string[];
       accountId: string;
-      scorecardId?: string;
       scoreId?: string;
       evaluationId?: string;
       isEvaluation: boolean;
     }) => {
       const response = await (getClient().models.Item as any).create(data)
       return { data: response.data as Schema['Item']['type'] }
+    },
+    update: async (data: {
+      id: string;
+      externalId?: string;
+      description?: string;
+      text?: string;
+      metadata?: Record<string, any>;
+      attachedFiles?: string[];
+    }) => {
+      const response = await (getClient().models.Item as any).update(data)
+      return { data: response.data as Schema['Item']['type'] }
+    }
+  },
+  ItemScorecard: {
+    create: async (data: {
+      itemId: string;
+      scorecardId: string;
+      assignedAt?: string;
+      assignedBy?: string;
+      notes?: string;
+    }) => {
+      const response = await (getClient().models.ItemScorecard as any).create(data)
+      return { data: response.data as Schema['ItemScorecard']['type'] }
+    },
+    delete: async (params: {
+      itemId: string;
+      scorecardId: string;
+    }) => {
+      // First find the record by the composite key
+      const listResponse = await (getClient().models.ItemScorecard as any).list({
+        filter: {
+          and: [
+            { itemId: { eq: params.itemId } },
+            { scorecardId: { eq: params.scorecardId } }
+          ]
+        }
+      });
+      
+      if (listResponse.data && listResponse.data.length > 0) {
+        const record = listResponse.data[0];
+        const response = await (getClient().models.ItemScorecard as any).delete({ id: record.id });
+        return { data: response.data as Schema['ItemScorecard']['type'] };
+      } else {
+        throw new Error('ItemScorecard association not found');
+      }
+    },
+    get: async (params: {
+      itemId: string;
+      scorecardId: string;
+    }) => {
+      const response = await (getClient().models.ItemScorecard as any).list({
+        filter: {
+          and: [
+            { itemId: { eq: params.itemId } },
+            { scorecardId: { eq: params.scorecardId } }
+          ]
+        }
+      });
+      return { data: response.data && response.data.length > 0 ? response.data[0] as Schema['ItemScorecard']['type'] : null };
+    },
+    listByScorecard: async (scorecardId: string) => {
+      const response = await (getClient().models.ItemScorecard as any).list({
+        filter: { scorecardId: { eq: scorecardId } }
+      });
+      return response as AmplifyResponse<Schema['ItemScorecard']['type'][]>;
+    },
+    listByItem: async (itemId: string) => {
+      const response = await (getClient().models.ItemScorecard as any).list({
+        filter: { itemId: { eq: itemId } }
+      });
+      return response as AmplifyResponse<Schema['ItemScorecard']['type'][]>;
+    },
+    list: async (params?: any) => {
+      const response = await (getClient().models.ItemScorecard as any).list(params)
+      return response as AmplifyResponse<Schema['ItemScorecard']['type'][]>
     }
   },
   ScoringJob: {

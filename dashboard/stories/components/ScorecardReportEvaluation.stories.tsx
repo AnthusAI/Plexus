@@ -1,6 +1,6 @@
 import React from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
-import { ScorecardReportEvaluation } from '../../../components/ui/scorecard-evaluation';
+import { ScorecardReportEvaluation } from '../../components/ui/scorecard-evaluation';
 
 // Create type locally to avoid import issues
 type ScorecardReportEvaluationData = {

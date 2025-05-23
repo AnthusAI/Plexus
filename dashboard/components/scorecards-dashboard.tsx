@@ -33,11 +33,12 @@ import { CardButton } from "./CardButton"
 import { DatasetConfigFormComponent } from "./dataset-config-form"
 import { listFromModel } from "@/utils/amplify-helpers"
 import { AmplifyListResult } from '@/types/shared'
-import { getClient } from "@/utils/amplify-client"
+import { getClient, graphqlRequest } from "@/utils/amplify-client"
 import { generateClient } from "aws-amplify/data"
 import ScorecardComponent from "./scorecards/ScorecardComponent"
 import { cn } from "@/lib/utils"
 import { ScoreComponent } from "./ui/score-component"
+import { ItemComponent, type ItemData } from "./ui/item-component"
 import ScorecardDetailView from "./scorecards/ScorecardDetailView"
 import { useRouter, usePathname, useParams } from "next/navigation"
 
@@ -50,6 +51,9 @@ export default function ScorecardsComponent({
   initialSelectedScorecardId?: string | null,
   initialSelectedScoreId?: string | null
 } = {}) {
+  // Get the Amplify client for Tasks model
+  const client = getClient();
+  
   const [scorecards, setScorecards] = useState<Schema['Scorecard']['type'][]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [selectedScorecard, setSelectedScorecard] = useState<Schema['Scorecard']['type'] | null>(null)
@@ -89,37 +93,54 @@ export default function ScorecardsComponent({
   const [scorecardScoreCounts, setScorecardScoreCounts] = useState<Record<string, number>>({})
   const [scorecardDetailWidth, setScorecardDetailWidth] = useState(50)
   const [maximizedScoreId, setMaximizedScoreId] = useState<string | null>(null)
+  const [selectedItem, setSelectedItem] = useState<any | null>(null)
+  const [isCreatingItem, setIsCreatingItem] = useState(false)
+  const [scorecardExamples, setScorecardExamples] = useState<string[]>([])
+  const [shouldExpandExamples, setShouldExpandExamples] = useState(false)
   const router = useRouter()
   const pathname = usePathname()
   const params = useParams()
 
   // Handle deep linking - check if we're on a specific scorecard or score page
   useEffect(() => {
+    console.log('🔵 Deep linking useEffect triggered:', {
+      initialSelectedScorecardId,
+      scorecardsCount: scorecards.length,
+      scorecardIds: scorecards.map(sc => sc.id)
+    });
+    
     if (initialSelectedScorecardId) {
       // Find the scorecard in the list
       const scorecard = scorecards.find(sc => sc.id === initialSelectedScorecardId);
+      console.log('🔵 Looking for scorecard in deep linking:', {
+        targetId: initialSelectedScorecardId,
+        found: !!scorecard,
+        foundScorecard: scorecard ? {
+          id: scorecard.id,
+          name: scorecard.name,
+          hasExampleItems: 'exampleItems' in scorecard
+        } : null
+      });
+      
       if (scorecard) {
         handleSelectScorecard(scorecard);
-        
-        // If we also have a score ID, select that score
-        if (initialSelectedScoreId) {
-          // We need to wait for sections to load before selecting the score
-          fetchSectionsWithScores(initialSelectedScorecardId).then(() => {
-            // Find the score in the sections
-            if (selectedScorecardSections) {
-              for (const section of selectedScorecardSections.items) {
-                const score = section.scores.items.find(s => s.id === initialSelectedScoreId);
-                if (score) {
-                  handleScoreSelect({...score, sectionId: section.id}, section.id);
-                  break;
-                }
-              }
-            }
-          });
+      }
+    }
+  }, [initialSelectedScorecardId, scorecards]);
+
+  // Handle deep linking for score selection - runs after scorecard sections are loaded
+  useEffect(() => {
+    if (initialSelectedScoreId && selectedScorecardSections) {
+      // Find the score in the sections
+      for (const section of selectedScorecardSections.items) {
+        const score = section.scores.items.find(s => s.id === initialSelectedScoreId);
+        if (score) {
+          handleScoreSelect({...score, sectionId: section.id}, section.id);
+          break;
         }
       }
     }
-  }, [initialSelectedScorecardId, initialSelectedScoreId, scorecards, selectedScorecardSections]);
+  }, [initialSelectedScoreId, selectedScorecardSections]);
 
   // Handle browser back/forward navigation with popstate event
   useEffect(() => {
@@ -173,11 +194,24 @@ export default function ScorecardsComponent({
   }, [scorecards, selectedScorecardSections, isNarrowViewport]);
 
   // Custom setter for selectedScorecard that handles both state and URL
-  const handleSelectScorecard = (scorecard: Schema['Scorecard']['type'] | null) => {
+  const handleSelectScorecard = async (scorecard: Schema['Scorecard']['type'] | null) => {
+    console.log('🔵 handleSelectScorecard called:', {
+      newScorecardId: scorecard?.id,
+      newScorecardName: scorecard?.name,
+      currentScorecardId: selectedScorecard?.id,
+      willUpdate: scorecard?.id !== selectedScorecard?.id
+    });
+
     // Only update state if the selected scorecard has changed
     if (scorecard?.id !== selectedScorecard?.id) {
+      console.log('🔵 Scorecard selection changed, updating state...');
+      
       setSelectedScorecard(scorecard);
       setSelectedScore(null); // Reset selected score when changing scorecard
+      
+      // Reset scorecard examples for the new scorecard
+      setScorecardExamples([]);
+      setShouldExpandExamples(false); // Reset expand flag
       
       // Update URL without triggering a navigation/re-render
       const newPathname = scorecard ? `/lab/scorecards/${scorecard.id}` : '/lab/scorecards';
@@ -187,9 +221,146 @@ export default function ScorecardsComponent({
         setIsFullWidth(true);
       }
       
-      // Load sections for the selected scorecard
+      // Load sections and example items for the selected scorecard and wait for all data before setting state
       if (scorecard) {
-        fetchSectionsWithScores(scorecard.id);
+        console.log('🔵 Loading data for scorecard:', {
+          scorecardId: scorecard.id,
+          scorecardName: scorecard.name
+        });
+        try {
+          console.log('🟡 Getting full scorecard object with all relationships...');
+          
+          // Get the full scorecard object from the API with all its relationship methods
+          const fullScorecard = await amplifyClient.Scorecard.get({ id: scorecard.id });
+          const fullScorecardData = fullScorecard.data;
+          
+          if (!fullScorecardData) {
+            throw new Error(`Could not find scorecard with ID ${scorecard.id}`);
+          }
+          
+          console.log('🟡 Full scorecard object inspection:', {
+            scorecardId: fullScorecardData.id,
+            scorecardName: fullScorecardData.name,
+            hasExampleItemsProperty: 'exampleItems' in fullScorecardData,
+            exampleItemsType: typeof fullScorecardData.exampleItems,
+            allMethods: Object.getOwnPropertyNames(fullScorecardData).filter(prop => {
+              try {
+                return typeof fullScorecardData[prop] === 'function';
+              } catch {
+                return false;
+              }
+            })
+          });
+          
+          // Load sections first
+          console.log('🟡 Loading sections...');
+          const sectionsResult = await fullScorecardData.sections();
+          const sections = sectionsResult.data || [];
+          
+          // Load items associated with this scorecard via the ItemScorecard join table
+          console.log('🟡 Loading example items using ItemScorecard join table...');
+          let exampleItems: any[] = [];
+          
+          try {
+            // Query the ItemScorecard join table to get associated items
+            const itemAssociationsResult = await graphqlRequest<{
+              listItemScorecardByScorecardId: {
+                items: Array<{
+                  itemId: string;
+                  item: {
+                    id: string;
+                    externalId?: string;
+                    description?: string;
+                    text?: string;
+                    updatedAt?: string;
+                    createdAt?: string;
+                  };
+                }>;
+              };
+            }>(`
+              query ListItemsByScorecardId($scorecardId: ID!) {
+                listItemScorecardByScorecardId(scorecardId: $scorecardId) {
+                  items {
+                    itemId
+                    item {
+                      id
+                      externalId
+                      description
+                      text
+                      updatedAt
+                      createdAt
+                    }
+                  }
+                }
+              }
+            `, { scorecardId: fullScorecardData.id });
+            
+            // Extract the actual items from the associations and sort by updatedAt
+            exampleItems = (itemAssociationsResult.data?.listItemScorecardByScorecardId?.items || [])
+              .map(association => association.item)
+              .filter(item => item !== null) // Filter out any null items
+              .sort((a, b) => {
+                const dateA = new Date(a.updatedAt || a.createdAt || '').getTime();
+                const dateB = new Date(b.updatedAt || b.createdAt || '').getTime();
+                return dateB - dateA; // DESC order (newest first)
+              });
+              
+            console.log('🟡 Items loaded via ItemScorecard join table:', {
+              itemCount: exampleItems.length,
+              items: exampleItems
+            });
+          } catch (error) {
+            console.error('🔴 Error loading items via ItemScorecard join table:', error);
+          }
+          
+          console.log('🟢 Data loaded successfully:', {
+            scorecardId: fullScorecardData.id,
+            scorecardName: fullScorecardData.name,
+            sectionsCount: sections.length,
+            exampleItemsCount: exampleItems.length,
+            exampleItemsDetails: exampleItems.map(item => ({
+              id: item?.id,
+              externalId: item?.externalId,
+              description: item?.description,
+              scorecardId: item?.scorecardId
+            }))
+          });
+          
+          // Set the example items in the format expected by the component
+          const exampleItemsFormatted = exampleItems.map(item => `item:${item.id}`);
+          setScorecardExamples(exampleItemsFormatted);
+          
+          // Fetch ALL score data in parallel before setting state
+          const transformedSections = {
+            items: await Promise.all(sections.map(async section => {
+              const allScores = await fetchAllScoresForSection(section.id);
+              
+              return {
+                id: section.id,
+                name: section.name,
+                order: section.order,
+                scores: {
+                  items: allScores.map(score => ({
+                    id: score.id,
+                    name: score.name,
+                    key: score.key || '',
+                    description: score.description || '',
+                    order: score.order,
+                    type: score.type,
+                  }))
+                }
+              }
+            }))
+          };
+          
+          // Set all sections with complete score data at once
+          setSelectedScorecardSections(transformedSections);
+        } catch (error) {
+          console.error('Error loading scorecard sections and example items:', error);
+          setError(error as Error);
+        }
+      } else {
+        setSelectedScorecardSections(null);
       }
     }
   };
@@ -199,6 +370,9 @@ export default function ScorecardsComponent({
     // Only update state if the selected score has changed
     if (score?.id !== selectedScore?.id) {
       setSelectedScore({...score, sectionId});
+      // Reset item selection when selecting a score
+      setSelectedItem(null);
+      setIsCreatingItem(false);
       
       // Update URL without triggering a navigation/re-render
       if (selectedScorecard) {
@@ -208,11 +382,129 @@ export default function ScorecardsComponent({
     }
   };
 
+  // Handle creating a new item
+  const handleCreateItem = (initialContent?: string) => {
+    const newItem: ItemData = {
+      id: '', // Will be set when saved
+      externalId: '',
+      description: '',
+      text: initialContent || '',
+      metadata: {},
+      attachedFiles: [],
+      accountId: accountId || '',
+      isEvaluation: false
+    };
+    
+    setSelectedItem(newItem);
+    setIsCreatingItem(true);
+    // Reset score selection when creating an item
+    setSelectedScore(null);
+    setMaximizedScoreId(null);
+  };
+
+  // Handle saving an item
+  const handleSaveItem = async (item: ItemData) => {
+    try {
+      if (item.id) {
+        // Update existing item
+        const updateInput = {
+          id: item.id,
+          externalId: item.externalId,
+          description: item.description,
+          text: item.text,
+          // Only include metadata if it has actual content
+          ...(item.metadata && Object.keys(item.metadata).length > 0 ? { metadata: item.metadata } : {}),
+          attachedFiles: item.attachedFiles && item.attachedFiles.length > 0 ? item.attachedFiles : undefined
+        };
+        const result = await client.models.Item.update(updateInput);
+        console.log('Item updated successfully:', result.data?.id);
+        
+        // Update the local state with the saved item
+        setSelectedItem({ ...item, ...result.data });
+      } else {
+        // Create new item
+        const createInput = {
+          externalId: item.externalId || undefined,
+          description: item.description || undefined,
+          text: item.text || undefined,
+          // Only include metadata if it has actual content
+          ...(item.metadata && Object.keys(item.metadata).length > 0 ? { metadata: item.metadata } : {}),
+          attachedFiles: item.attachedFiles && item.attachedFiles.length > 0 ? item.attachedFiles : undefined,
+          accountId: item.accountId || accountId!,
+          isEvaluation: item.isEvaluation || false
+        };
+        
+        // Clean up the input by removing any undefined values
+        const cleanedInput = Object.fromEntries(
+          Object.entries(createInput).filter(([_, value]) => value !== undefined)
+        );
+        
+        console.log('Creating item with cleaned input:', cleanedInput);
+        console.log('Metadata value type and content:', {
+          hasMetadata: 'metadata' in cleanedInput,
+          metadataType: typeof cleanedInput.metadata,
+          metadataKeys: cleanedInput.metadata ? Object.keys(cleanedInput.metadata) : [],
+          metadataValue: cleanedInput.metadata
+        });
+        
+        const result = await client.models.Item.create(cleanedInput);
+        console.log('Full result object:', result);
+        console.log('Result data:', result.data);
+        console.log('Result errors:', result.errors);
+        console.log('Item created successfully:', result.data?.id);
+        
+        // Check if the creation actually succeeded
+        if (!result.data?.id) {
+          console.error('Item creation failed - no ID returned:', result);
+          throw new Error('Item creation failed: No ID returned from server');
+        }
+
+        // Create ItemScorecard association if we have a selected scorecard
+        if (selectedScorecard?.id && result.data.id) {
+          try {
+            await amplifyClient.ItemScorecard.create({
+              itemId: result.data.id,
+              scorecardId: selectedScorecard.id
+            });
+            console.log('ItemScorecard association created successfully');
+          } catch (associationError) {
+            console.error('Error creating ItemScorecard association:', associationError);
+            // Don't throw here - the item was created successfully, just log the association error
+          }
+        }
+        
+        // Update the item with the new ID and mark it as no longer being created
+        setSelectedItem({ ...item, id: result.data.id });
+        setIsCreatingItem(false);
+        
+        // Add the new item to the scorecard's examples list
+        setScorecardExamples(prev => [...prev, `item:${result.data.id}`]);
+        
+        // Signal that we should expand the examples section
+        setShouldExpandExamples(true);
+        
+        // Optionally, you could also refresh the scorecard data here if you want to show
+        // the newly created item in the scorecard's example items section
+      }
+      
+      return true; // Indicate success
+    } catch (error) {
+      console.error('Error saving item:', error);
+      // Provide more specific error information
+      if (error instanceof Error) {
+        throw new Error(`Failed to save item: ${error.message}`);
+      } else {
+        throw new Error('Failed to save item: Unknown error occurred');
+      }
+    }
+  };
+
   // Handle closing the selected scorecard
   const handleCloseScorecard = () => {
     setSelectedScorecard(null);
     setSelectedScore(null);
     setIsFullWidth(false);
+    setShouldExpandExamples(false); // Reset expand flag
     
     // Update URL without triggering a navigation/re-render
     window.history.pushState(null, '', '/lab/scorecards');
@@ -305,49 +597,7 @@ export default function ScorecardsComponent({
     fetchScorecards()
   }, [])
 
-  useEffect(() => {
-    async function loadScorecardSections() {
-      if (!selectedScorecard) {
-        setSelectedScorecardSections(null)
-        return
-      }
-
-      try {
-        const sectionsResult = await selectedScorecard.sections()
-        const sections = sectionsResult.data || []
-        
-        const transformedSections = {
-          items: await Promise.all(sections.map(async section => {
-            // Use fetchAllScoresForSection instead of section.scores() to ensure all scores are fetched
-            const allScores = await fetchAllScoresForSection(section.id);
-            
-            return {
-              id: section.id,
-              name: section.name,
-              order: section.order,
-              scores: {
-                items: allScores.map(score => ({
-                  id: score.id,
-                  name: score.name,
-                  key: score.key || '',
-                  description: score.description || '',
-                  order: score.order,
-                  type: score.type,
-                }))
-              }
-            }
-          }))
-        }
-
-        setSelectedScorecardSections(transformedSections)
-      } catch (error) {
-        console.error('Error loading scorecard sections:', error)
-        setError(error as Error)
-      }
-    }
-
-    loadScorecardSections()
-  }, [selectedScorecard])
+  // Removed redundant useEffect for loadScorecardSections - now handled in handleSelectScorecard
 
   // Helper function to fetch all scores for a section
   const fetchAllScoresForSection = async (sectionId: string) => {
@@ -360,43 +610,29 @@ export default function ScorecardsComponent({
         ...(nextToken ? { nextToken } : {})
       })
       
-      allScores = [...allScores, ...(scoresResult.data || [])]
+
+      
+      // Process scores to ensure complete data before adding to state
+      // This helps React render name and description together
+      const scoresWithDefaults = (scoresResult.data || []).map(score => {
+        // Create complete score objects with all required fields
+        return {
+          ...score,
+          name: score.name || 'Unnamed Score',
+          description: score.description || '',
+          key: score.key || '',
+          type: score.type || 'Score'
+        };
+      });
+      
+      allScores = [...allScores, ...scoresWithDefaults]
       nextToken = scoresResult.nextToken
     } while (nextToken)
     
     return allScores
   }
 
-  // Helper function to fetch sections with scores
-  const fetchSectionsWithScores = async (scorecardId: string) => {
-    const sectionsResult = await amplifyClient.ScorecardSection.list({
-      filter: { scorecardId: { eq: scorecardId } }
-    })
-    
-    const sortedSections = sectionsResult.data.sort((a, b) => a.order - b.order)
-    
-    const sectionsWithScores = await Promise.all(sortedSections.map(async (section) => {
-      const allScores = await fetchAllScoresForSection(section.id)
-      
-      return {
-        id: section.id,
-        name: section.name,
-        order: section.order,
-        scorecardId,
-        createdAt: section.createdAt,
-        updatedAt: section.updatedAt,
-        scorecard: async () => amplifyClient.Scorecard.get({ id: scorecardId }),
-        scores: async () => {
-          return {
-            data: allScores.sort((a, b) => a.order - b.order),
-            nextToken: null
-          }
-        }
-      }
-    }))
-    
-    return sectionsWithScores
-  }
+  // Removed fetchSectionsWithScores - functionality moved to handleSelectScorecard
 
   // Handle creating a new scorecard
   const handleCreate = async () => {
@@ -543,7 +779,9 @@ export default function ScorecardsComponent({
       configuration: {},
       order: 0,
       externalId: selectedScorecard.externalId || '',
-      sections: selectedScorecardSections || { items: [] }
+      sections: selectedScorecardSections || { items: [] },
+      // Combine existing examples with newly created ones
+      examples: [...(scorecardExamples || [])]
     }
 
     return (
@@ -551,7 +789,7 @@ export default function ScorecardsComponent({
         "h-full overflow-y-auto overflow-x-hidden",
         maximizedScoreId ? "hidden" : ""
       )}
-      style={selectedScore && !maximizedScoreId ? {
+      style={(selectedScore || selectedItem) && !maximizedScoreId ? {
         width: `${scorecardDetailWidth}%`
       } : { width: '100%' }}>
         <ScorecardComponent
@@ -570,14 +808,35 @@ export default function ScorecardsComponent({
           }}
           onScoreSelect={handleScoreSelect}
           selectedScoreId={selectedScore?.id}
+          onCreateItem={(initialContent) => {
+            // Pass a callback that will update the scorecard when item is saved
+            handleCreateItem(initialContent);
+          }}
+          shouldExpandExamples={shouldExpandExamples}
+          onExamplesExpanded={() => setShouldExpandExamples(false)}
         />
       </div>
     );
   };
 
+  // Memoize the processed score data to ensure stable rendering
+  const processedScore = React.useMemo(() => {
+    if (!selectedScore) return null;
+    
+    // Pre-process the score data to ensure name and description render together
+    return {
+      id: selectedScore.id,
+      name: selectedScore.name,
+      description: selectedScore.description || '',
+      type: selectedScore.type,
+      order: selectedScore.order,
+      key: selectedScore.key || ''
+    };
+  }, [selectedScore]);
+
   // Add back the renderSelectedScore function
   const renderSelectedScore = () => {
-    if (!selectedScore) return null;
+    if (!selectedScore || !processedScore) return null;
 
     return (
       <div className={cn(
@@ -588,13 +847,47 @@ export default function ScorecardsComponent({
         width: `${100 - scorecardDetailWidth}%`
       } : undefined}>
         <ScoreComponent
-          score={selectedScore}
+          score={processedScore}
           variant="detail"
           isFullWidth={maximizedScoreId === selectedScore.id}
           onToggleFullWidth={() => setMaximizedScoreId(maximizedScoreId ? null : selectedScore.id)}
           onClose={() => {
             setSelectedScore(null);
             setMaximizedScoreId(null);
+          }}
+        />
+      </div>
+    );
+  };
+
+  // Add renderSelectedItem function
+  const renderSelectedItem = () => {
+    if (!selectedItem) return null;
+
+    return (
+      <div className={cn(
+        "h-full overflow-y-auto overflow-x-hidden"
+      )}
+      style={{
+        width: `${100 - scorecardDetailWidth}%`
+      }}>
+        <ItemComponent
+          item={selectedItem}
+          variant="detail"
+          onSave={async (item) => {
+            const success = await handleSaveItem(item);
+            if (success && isCreatingItem) {
+              // Close the item view after successful creation and show a helpful message
+              setTimeout(() => {
+                setSelectedItem(null);
+                setIsCreatingItem(false);
+                // You can expand the examples section here if needed
+              }, 1500); // Give user time to see the success message
+            }
+          }}
+          onClose={() => {
+            setSelectedItem(null);
+            setIsCreatingItem(false);
           }}
         />
       </div>
@@ -683,8 +976,8 @@ export default function ScorecardsComponent({
         <div className="flex-1 flex overflow-hidden">
           {renderSelectedScorecard()}
           
-          {/* Resize Handle between Scorecard and Score */}
-          {selectedScore && !maximizedScoreId && (
+          {/* Resize Handle between Scorecard and Score/Item */}
+          {(selectedScore || selectedItem) && !maximizedScoreId && (
             <div
               className="w-[12px] relative cursor-col-resize flex-shrink-0 group mx-1"
               onMouseDown={(e: React.MouseEvent<HTMLDivElement>) => {
@@ -721,6 +1014,7 @@ export default function ScorecardsComponent({
           )}
           
           {renderSelectedScore()}
+          {renderSelectedItem()}
         </div>
       </div>
 
