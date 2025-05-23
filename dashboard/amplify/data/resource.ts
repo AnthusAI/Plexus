@@ -11,7 +11,7 @@ type AuthorizationCallback = {
 // Define model-specific index types
 type AccountIndexFields = "name" | "key" | "description";
 type ScorecardIndexFields = "name" | "key" | "description" | "accountId" | 
-    "externalId" | "itemId";
+    "externalId";
 type ScorecardSectionIndexFields = "name" | "scorecardId" | "order";
 type ScoreIndexFields = "name" | "order" | "sectionId" | "type" | "accuracy" | 
     "version" | "aiProvider" | "aiModel" | "externalId" | "key";
@@ -21,7 +21,7 @@ type EvaluationIndexFields = "accountId" | "scorecardId" | "type" | "accuracy" |
     "scoreGoal" | "metricsExplanation" | "inferences" | "cost";
 type BatchJobIndexFields = "accountId" | "scorecardId" | "type" | "scoreId" | 
     "status" | "modelProvider" | "modelName" | "batchId";
-type ItemIndexFields = "name" | "description" | "accountId" | "evaluationId" | "updatedAt" | "createdAt" | "isEvaluation" | "scorecardId";
+type ItemIndexFields = "name" | "description" | "accountId" | "evaluationId" | "updatedAt" | "createdAt" | "isEvaluation";
 type ScoringJobIndexFields = "accountId" | "scorecardId" | "itemId" | "status" | 
     "scoreId" | "evaluationId" | "startedAt" | "completedAt" | "errorMessage" | "updatedAt" | "createdAt";
 type ScoreResultIndexFields = "accountId" | "scorecardId" | "itemId" | 
@@ -39,6 +39,7 @@ type ReportConfigurationIndexFields = "accountId" | "name";
 type ReportIndexFields = "accountId" | "reportConfigurationId" | "createdAt" | "updatedAt" | "taskId";
 type ReportBlockIndexFields = "reportId" | "name" | "position";
 type FeedbackItemIndexFields = "accountId" | "scorecardId" | "scoreId" | "cacheKey" | "updatedAt" | "itemId"; // UPDATED: Renamed externalId to cacheKey and added itemId
+type ItemScorecardIndexFields = "itemId" | "scorecardId";
 
 // New index types for Feedback Analysis
 // type FeedbackAnalysisIndexFields = "accountId" | "scorecardId" | "createdAt"; // REMOVED
@@ -90,9 +91,7 @@ const schema = a.schema({
             datasets: a.hasMany('Dataset', 'scorecardId'),
             feedbackItems: a.hasMany('FeedbackItem', 'scorecardId'),
             externalId: a.string(),
-            itemId: a.string(),
-            item: a.belongsTo('Item', 'itemId'),
-            exampleItems: a.hasMany('Item', 'scorecardId'),
+            items: a.hasMany('ItemScorecard', 'scorecardId'),
         })
         .authorization((allow) => [
             allow.publicApiKey(),
@@ -278,7 +277,6 @@ const schema = a.schema({
             account: a.belongsTo('Account', 'accountId'),
             scoringJobs: a.hasMany('ScoringJob', 'itemId'),
             scoreResults: a.hasMany('ScoreResult', 'itemId'),
-            scorecards: a.hasMany('Scorecard', 'itemId'),
             evaluationId: a.string(),
             evaluation: a.belongsTo('Evaluation', 'evaluationId'),
             scoreId: a.string(),
@@ -291,8 +289,7 @@ const schema = a.schema({
             attachedFiles: a.string().array(),
             text: a.string(),
             metadata: a.json(),
-            scorecardId: a.string(),
-            scorecard: a.belongsTo('Scorecard', 'scorecardId'),
+            scorecards: a.hasMany('ItemScorecard', 'itemId'),
         })
         .authorization((allow) => [
             allow.publicApiKey(),
@@ -304,8 +301,6 @@ const schema = a.schema({
             idx("scoreId").sortKeys(["updatedAt"]),
             // Composite GSI for accountId+externalId to enforce uniqueness within an account
             idx("accountId").sortKeys(["externalId"]).name("byAccountAndExternalId"),
-            // Add index for querying items by scorecardId sorted by updatedAt
-            idx("scorecardId").sortKeys(["updatedAt"]).name("byScoreCardUpdatedAt")
         ]),
 
     ScoringJob: a
@@ -677,6 +672,29 @@ const schema = a.schema({
             idx("accountId").sortKeys(["scorecardId", "scoreId", "updatedAt"]).name("byAccountScorecardScoreUpdatedAt"),
             idx("accountId").sortKeys(["scorecardId", "scoreId", "editedAt"]).name("byAccountScorecardScoreEditedAt"),
             idx("itemId")
+        ]),
+
+    ItemScorecard: a
+        .model({
+            itemId: a.id().required(),
+            scorecardId: a.id().required(),
+            
+            // You can add additional metadata fields here if needed:
+            assignedAt: a.datetime(),
+            assignedBy: a.string(),
+            notes: a.string(),
+            
+            // Relationships to both ends
+            item: a.belongsTo('Item', 'itemId'),
+            scorecard: a.belongsTo('Scorecard', 'scorecardId'),
+        })
+        .authorization((allow) => [
+            allow.publicApiKey(),
+            allow.authenticated()
+        ])
+        .secondaryIndexes((idx: (field: ItemScorecardIndexFields) => any) => [
+            idx("itemId"),
+            idx("scorecardId"),
         ]),
 });
 
