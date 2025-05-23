@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { Card } from '@/components/ui/card'
-import { MoreHorizontal, Pencil, Database, ListTodo, X, Square, Columns2, Plus, ChevronUp, ChevronDown, CheckSquare, ChevronRight, FileText, Key, StickyNote } from 'lucide-react'
+import { MoreHorizontal, Pencil, Database, ListTodo, X, Square, Columns2, Plus, ChevronUp, ChevronDown, CheckSquare, ChevronRight, FileText, Key, StickyNote, Edit } from 'lucide-react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { cn } from '@/lib/utils'
 import { CardButton } from '@/components/CardButton'
@@ -69,6 +69,7 @@ interface ScorecardComponentProps extends React.HTMLAttributes<HTMLDivElement> {
   onScoreSelect?: (score: any, sectionId: string) => void
   selectedScoreId?: string
   onCreateItem?: (initialContent?: string) => void
+  onEditItem?: (itemId: string) => void
   shouldExpandExamples?: boolean
   onExamplesExpanded?: () => void
 }
@@ -114,6 +115,7 @@ interface DetailContentProps {
   onScoreSelect?: (score: any, sectionId: string) => void
   selectedScoreId?: string
   onCreateItem?: (initialContent?: string) => void
+  onEditItem?: (itemId: string) => void
   shouldExpandExamples?: boolean
   onExamplesExpanded?: () => void
 }
@@ -134,6 +136,7 @@ export const DetailContent = React.memo(function DetailContent({
   onScoreSelect,
   selectedScoreId,
   onCreateItem,
+  onEditItem,
   shouldExpandExamples,
   onExamplesExpanded
 }: DetailContentProps) {
@@ -632,13 +635,29 @@ export const DetailContent = React.memo(function DetailContent({
                             <StickyNote className="h-4 w-4 mr-2 text-muted-foreground" />
                             <span>{displayValue}</span>
                           </div>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            onClick={() => setItemToRemove({index, example})}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
+                          <div className="flex items-center gap-1">
+                            {isItemReference && onEditItem && (
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                onClick={() => {
+                                  const itemId = example.substring(5);
+                                  onEditItem(itemId);
+                                }}
+                                title="Edit item"
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                            )}
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              onClick={() => setItemToRemove({index, example})}
+                              title="Remove from scorecard"
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
                       );
                     })}
@@ -762,6 +781,7 @@ export default function ScorecardComponent({
   onScoreSelect,
   selectedScoreId,
   onCreateItem,
+  onEditItem,
   shouldExpandExamples,
   onExamplesExpanded,
   className, 
@@ -915,6 +935,7 @@ export default function ScorecardComponent({
               onScoreSelect={onScoreSelect}
               selectedScoreId={selectedScoreId}
               onCreateItem={onCreateItem}
+              onEditItem={onEditItem}
               shouldExpandExamples={shouldExpandExamples}
               onExamplesExpanded={onExamplesExpanded}
             />

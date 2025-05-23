@@ -382,6 +382,33 @@ export default function ScorecardsComponent({
     }
   };
 
+  // Handle editing an existing item
+  const handleEditItem = async (itemId: string) => {
+    try {
+      const result = await amplifyClient.Item.get({ id: itemId });
+      if (result.data) {
+        const itemData: ItemData = {
+          id: result.data.id,
+          externalId: result.data.externalId || '',
+          description: result.data.description || '',
+          text: result.data.text || '',
+          metadata: result.data.metadata || {},
+          attachedFiles: result.data.attachedFiles || [],
+          accountId: result.data.accountId,
+          isEvaluation: result.data.isEvaluation
+        };
+        
+        setSelectedItem(itemData);
+        setIsCreatingItem(false); // This is an edit, not a creation
+        // Reset score selection when editing an item
+        setSelectedScore(null);
+        setMaximizedScoreId(null);
+      }
+    } catch (error) {
+      console.error('Error loading item for editing:', error);
+    }
+  };
+
   // Handle creating a new item
   const handleCreateItem = (initialContent?: string) => {
     const newItem: ItemData = {
@@ -812,6 +839,7 @@ export default function ScorecardsComponent({
             // Pass a callback that will update the scorecard when item is saved
             handleCreateItem(initialContent);
           }}
+          onEditItem={handleEditItem}
           shouldExpandExamples={shouldExpandExamples}
           onExamplesExpanded={() => setShouldExpandExamples(false)}
         />
