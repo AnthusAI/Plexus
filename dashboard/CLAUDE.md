@@ -15,10 +15,16 @@
 - Storybook: `npm run storybook`
 - Test storybook: `npm run test:storybook`
 
+## CI Commands (mirrors production pipeline)
+- Run full CI pipeline: `npm run ci`
+- Type checking only: `npm run ci:typecheck`
+- Unit tests with coverage: `npm run ci:unit`
+- Storybook tests: `npm run ci:storybook`
+
 ## Code Style Guidelines
 - Use TypeScript with strict type checking
 - Follow Next.js conventions for file/folder structure
-- Import order: React ’ external libraries ’ internal modules
+- Import order: React ï¿½ external libraries ï¿½ internal modules
 - Use absolute imports with `@/` prefix
 - Prefer functional components with hooks over class components
 - Use shadcn UI components from `/components/ui/`
