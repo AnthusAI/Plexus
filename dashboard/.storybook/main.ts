@@ -3,7 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 // ESM module equivalent for __dirname
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const currentDir = path.dirname(fileURLToPath(import.meta.url));
 
 const config: StorybookConfig = {
   stories: [
@@ -29,7 +29,7 @@ const config: StorybookConfig = {
     if (config.resolve) {
       config.resolve.alias = {
         ...config.resolve.alias,
-        '@': path.resolve(__dirname, '../'),
+        '@': path.resolve(currentDir, '../'),
       };
     }
     return config;
