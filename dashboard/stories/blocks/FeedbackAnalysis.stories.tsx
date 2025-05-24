@@ -18,6 +18,7 @@ type Story = StoryObj<typeof BlockRenderer>;
 
 const baseFeedbackAnalysisData = {
   total_items: 0, // Will be overridden
+  total_agreements: 0, // Will be overridden  
   total_mismatches: 0, // Will be overridden
   accuracy: 0, // Will be overridden
   date_range: {
@@ -122,6 +123,7 @@ export const SingleScore: Story = {
         scoreTemplate('score1', 'Agent Empathy', 0.75, 50, 12, 76.0, { 'Excellent': 30, 'Good': 15, 'Poor': 5 }),
       ],
       total_items: 50,
+      total_agreements: 38, // 50 - 12
       total_mismatches: 12,
       accuracy: 76.0,
       label_distribution: { 'Excellent': 30, 'Good': 15, 'Poor': 5 }
@@ -150,7 +152,8 @@ export const MultipleScores: Story = {
         scoreTemplate('score4', 'Call Opening', null, 10, 5, 50.0, { 'Good': 5, 'Poor': 5 }),
       ],
       total_items: 165, // Sum of comparisons
-      total_mismatches: 40, // Sum of mismatches
+      total_agreements: 125, // Sum of agreements (165 - 40)
+      total_mismatches: 40, // Sum of mismatches  
       accuracy: Number(((165 - 40) / 165 * 100).toFixed(1)), // Calculated accuracy
       label_distribution: { 'High': 25, 'Medium': 15, 'Low': 10, 'Resolved': 45, 'Unresolved': 15, 'Expert': 15, 'Proficient': 20, 'Basic': 10, 'Good': 5, 'Poor': 5 }
     },
