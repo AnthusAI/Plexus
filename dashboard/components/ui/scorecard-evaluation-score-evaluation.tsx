@@ -25,7 +25,7 @@ export const ac1GaugeSegments: Segment[] = [
   { start: 90, end: 100, color: 'var(--gauge-great)' }        // Excellent alignment (0.8 to 1.0)
 ];
 
-export interface ScorecardReportEvaluationData {
+export interface ScorecardEvaluationScoreEvaluationData {
   id: string;
   question?: string;
   score_name: string;
@@ -53,15 +53,15 @@ export interface ScorecardReportEvaluationData {
   };
 }
 
-interface ScorecardReportEvaluationProps {
-  score: ScorecardReportEvaluationData;
+interface ScorecardEvaluationScoreEvaluationProps {
+  score: ScorecardEvaluationScoreEvaluationData;
   scoreIndex: number;
-  attachedFiles?: string | null;
+  attachedFiles?: string[] | null;
   className?: string;
   showPrecisionRecall?: boolean;
 }
 
-export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps> = ({ 
+export const ScorecardEvaluationScoreEvaluation: React.FC<ScorecardEvaluationScoreEvaluationProps> = ({ 
   score,
   scoreIndex,
   attachedFiles,
@@ -79,12 +79,42 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
   const [showDetailsSection, setShowDetailsSection] = useState(false);
 
   const parsedAttachedFiles = useMemo(() => {
-    if (typeof attachedFiles === 'string') {
+    if (Array.isArray(attachedFiles)) {
+      // If it's already an array of storage paths or DetailFile objects
+      return attachedFiles.map((file: string | DetailFile) => {
+        if (typeof file === 'string') {
+          // Treat as Amplify storage path - extract filename from path
+          const fileName = file.split('/').pop() || file;
+          return {
+            name: fileName,
+            path: file // This is the Amplify storage path
+          } as DetailFile;
+        }
+        return file as DetailFile;
+      }).filter(Boolean) as DetailFile[];
+    } else if (typeof attachedFiles === 'string') {
+      // Could be a single path or a JSON string of paths
       try {
-        return JSON.parse(attachedFiles) as DetailFile[];
+        const parsed = JSON.parse(attachedFiles);
+        if (Array.isArray(parsed)) {
+          return parsed.map((file: string | DetailFile) => {
+            if (typeof file === 'string') {
+              const fileName = file.split('/').pop() || file;
+              return {
+                name: fileName,
+                path: file
+              } as DetailFile;
+            }
+            return file as DetailFile;
+          });
+        }
       } catch (error) {
-        console.error('Failed to parse attachedFiles JSON string in ScorecardReportEvaluation:', error);
-        return [];
+        // Not JSON, treat as single storage path
+        const fileName = (attachedFiles as string).split('/').pop() || (attachedFiles as string);
+        return [{
+          name: fileName,
+          path: attachedFiles as string
+        }] as DetailFile[];
       }
     }
     return [];
@@ -92,8 +122,20 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
 
   const scoreDetailsFileName = `score-${scoreIndex + 1}-results.json`;
   const scoreDetailsFile = useMemo(() => {
-    return parsedAttachedFiles.find(f => f.name === scoreDetailsFileName);
-  }, [parsedAttachedFiles, scoreDetailsFileName]);
+    // First try to find in parsedAttachedFiles
+    let file = parsedAttachedFiles.find(f => f.name === scoreDetailsFileName);
+    
+    // If not found and score has indexed_items_file, create a file entry
+    if (!file && (score as any).indexed_items_file) {
+      const indexedFile = (score as any).indexed_items_file;
+      file = {
+        name: indexedFile,
+        path: indexedFile // The backend should provide the full path
+      };
+    }
+    
+    return file;
+  }, [parsedAttachedFiles, scoreDetailsFileName, score]);
 
   const fetchScoreDetailsContent = useCallback(async () => {
     if (!scoreDetailsFile || !scoreDetailsFile.path) return;
@@ -194,9 +236,9 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
   const hasClassDistribution = score.class_distribution && score.class_distribution.length > 0;
   const hasPredictedDistribution = score.predicted_class_distribution && score.predicted_class_distribution.length > 0;
   const hasConfusionMatrixData = score.confusion_matrix && score.confusion_matrix.matrix && score.confusion_matrix.labels && score.confusion_matrix.matrix.length > 0;
-  const hasVisualizationData = hasClassDistribution || hasPredictedDistribution || (hasConfusionMatrixData && scoreDetailsFile);
+  const hasVisualizationData = hasClassDistribution || hasPredictedDistribution || hasConfusionMatrixData;
   
-  const hasExtendedData = hasClassDistribution || hasPredictedDistribution || hasDiscussion || hasItems;
+  const hasExtendedData = hasClassDistribution || hasPredictedDistribution || hasConfusionMatrixData || hasDiscussion || hasItems;
   
   const parsedIdentifiers = useMemo(() => {
     if (score.item?.identifiers) {
@@ -341,11 +383,11 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
           </div>
         )}
 
-        {hasConfusionMatrixData && scoreDetailsFile && (
+        {hasConfusionMatrixData && (
           <div className="mt-4">
             <ConfusionMatrix 
               data={score.confusion_matrix!}
-              onSelectionChange={handleConfusionMatrixSelection} 
+              onSelectionChange={scoreDetailsFile ? handleConfusionMatrixSelection : () => {}} 
             />
           </div>
         )}
@@ -474,7 +516,10 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
   );
 };
 
-// Compatibility alias for backward compatibility
-export const ScorecardEvaluation = ScorecardReportEvaluation;
+// Backward compatibility aliases
+export const ScorecardReportEvaluation = ScorecardEvaluationScoreEvaluation;
+export const ScorecardEvaluation = ScorecardEvaluationScoreEvaluation;
+export type ScorecardReportEvaluationData = ScorecardEvaluationScoreEvaluationData;
+export type ScorecardReportEvaluationProps = ScorecardEvaluationScoreEvaluationProps;
 
-export default ScorecardReportEvaluation; 
+export default ScorecardEvaluationScoreEvaluation; 

@@ -1,7 +1,7 @@
 import React from 'react';
 import { GaugeThresholdComputer } from '@/utils/gauge-thresholds';
 import ReportBlock, { ReportBlockProps } from './ReportBlock';
-import { ScorecardReportEvaluation, ScorecardReportEvaluationData, ac1GaugeSegments } from '@/components/ui/scorecard-evaluation';
+import { ScorecardReportEvaluation, ScorecardReportEvaluationData, ac1GaugeSegments } from '@/components/ui/scorecard-evaluation-score-evaluation';
 import { RawAgreementBar } from '@/components/RawAgreementBar';
 import { Gauge, type Segment } from '@/components/gauge';
 
@@ -22,7 +22,7 @@ export interface ScorecardReportData {
   error?: string;
   rawOutput?: string | null;
   log?: string | null;
-  attachedFiles?: string | null;
+  attachedFiles?: string[] | null;
 }
 
 export interface ScorecardReportProps extends ReportBlockProps {
