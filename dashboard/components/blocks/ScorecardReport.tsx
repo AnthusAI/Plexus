@@ -1,7 +1,7 @@
 import React from 'react';
 import { GaugeThresholdComputer } from '@/utils/gauge-thresholds';
 import ReportBlock, { ReportBlockProps } from './ReportBlock';
-import { ScorecardReportEvaluation, ScorecardReportEvaluationData, ac1GaugeSegments } from '@/components/ui/scorecard-evaluation-score-evaluation';
+import { ScorecardReportEvaluation, ScorecardReportEvaluationData, ac1GaugeSegments } from '@/components/ui/scorecard-evaluation';
 import { RawAgreementBar } from '@/components/RawAgreementBar';
 import { Gauge, type Segment } from '@/components/gauge';
 

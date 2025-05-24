@@ -25,7 +25,7 @@ export const ac1GaugeSegments: Segment[] = [
   { start: 90, end: 100, color: 'var(--gauge-great)' }        // Excellent alignment (0.8 to 1.0)
 ];
 
-export interface ScorecardEvaluationScoreEvaluationData {
+export interface ScorecardEvaluationData {
   id: string;
   question?: string;
   score_name: string;
@@ -53,15 +53,15 @@ export interface ScorecardEvaluationScoreEvaluationData {
   };
 }
 
-interface ScorecardEvaluationScoreEvaluationProps {
-  score: ScorecardEvaluationScoreEvaluationData;
+interface ScorecardEvaluationProps {
+  score: ScorecardEvaluationData;
   scoreIndex: number;
   attachedFiles?: string[] | null;
   className?: string;
   showPrecisionRecall?: boolean;
 }
 
-export const ScorecardEvaluationScoreEvaluation: React.FC<ScorecardEvaluationScoreEvaluationProps> = ({ 
+export const ScorecardEvaluation: React.FC<ScorecardEvaluationProps> = ({ 
   score,
   scoreIndex,
   attachedFiles,
@@ -516,10 +516,9 @@ export const ScorecardEvaluationScoreEvaluation: React.FC<ScorecardEvaluationSco
   );
 };
 
-// Backward compatibility aliases
-export const ScorecardReportEvaluation = ScorecardEvaluationScoreEvaluation;
-export const ScorecardEvaluation = ScorecardEvaluationScoreEvaluation;
-export type ScorecardReportEvaluationData = ScorecardEvaluationScoreEvaluationData;
-export type ScorecardReportEvaluationProps = ScorecardEvaluationScoreEvaluationProps;
+// Backward compatibility alias
+export const ScorecardReportEvaluation = ScorecardEvaluation;
+export type ScorecardReportEvaluationData = ScorecardEvaluationData;
+export type ScorecardReportEvaluationProps = ScorecardEvaluationProps;
 
-export default ScorecardEvaluationScoreEvaluation; 
+export default ScorecardEvaluation; 
