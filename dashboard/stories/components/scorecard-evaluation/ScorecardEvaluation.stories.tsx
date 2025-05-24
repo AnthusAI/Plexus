@@ -1,10 +1,10 @@
 import React from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
-import { ScorecardEvaluation, type ScorecardEvaluationData } from '@/components/ui/scorecard-evaluation';
+import { ScorecardReportEvaluation, type ScorecardReportEvaluationData } from '@/components/ui/scorecard-evaluation';
 
-const meta: Meta<typeof ScorecardEvaluation> = {
-  title: 'Reports/Components/ScorecardEvaluation',
-  component: ScorecardEvaluation,
+const meta: Meta<typeof ScorecardReportEvaluation> = {
+  title: 'Reports/Components/ScorecardReportEvaluation',
+  component: ScorecardReportEvaluation,
   parameters: {
     layout: 'padded',
   },
@@ -18,7 +18,7 @@ const meta: Meta<typeof ScorecardEvaluation> = {
 };
 
 export default meta;
-type Story = StoryObj<typeof ScorecardEvaluation>;
+type Story = StoryObj<typeof ScorecardReportEvaluation>;
 
 // Helper function to create score templates
 const createScoreData = (
@@ -28,8 +28,8 @@ const createScoreData = (
   mismatches: number,
   accuracy: number,
   labelDistribution?: Record<string, number>,
-  extraData?: Partial<ScorecardEvaluationData>
-): ScorecardEvaluationData => ({
+  extraData?: Partial<ScorecardReportEvaluationData>
+): ScorecardReportEvaluationData => ({
   id,
   score_name: name,
   item_count: comparisons,
@@ -463,7 +463,7 @@ export const MultipleScoresGrid: Story = {
             <Story />
             <div className="min-w-[280px]">
               {/* Second score */}
-              <ScorecardEvaluation
+              <ScorecardReportEvaluation
                 score={createScoreData(
                   'score2',
                   'Sentiment Analysis',
@@ -486,7 +486,7 @@ export const MultipleScoresGrid: Story = {
             </div>
             <div className="min-w-[280px]">
               {/* Third score */}
-              <ScorecardEvaluation
+              <ScorecardReportEvaluation
                 score={createScoreData(
                   'score3',
                   'Intent Recognition',
@@ -510,7 +510,7 @@ export const MultipleScoresGrid: Story = {
             </div>
             <div className="min-w-[280px]">
               {/* Fourth score */}
-              <ScorecardEvaluation
+              <ScorecardReportEvaluation
                 score={createScoreData(
                   'score4',
                   'Call Quality Assessment',
