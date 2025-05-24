@@ -79,7 +79,7 @@ const GaugeComponent: React.FC<GaugeProps> = ({
   const strokeWidth = 25
   const normalizedValue = value !== undefined 
     ? ((value - min) / (max - min)) * 100
-    : 0
+    : ((0 - min) / (max - min)) * 100  // When no data, point needle at 0 position
 
   useEffect(() => {
     const startTime = performance.now()

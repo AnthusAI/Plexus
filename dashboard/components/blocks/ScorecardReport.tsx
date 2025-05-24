@@ -133,16 +133,7 @@ const ScorecardReport: React.FC<ScorecardReportProps> = ({
           <div className="@container">
             <div className="grid grid-cols-1 @[30rem]:grid-cols-12 gap-3 items-start">
               <div className="@[30rem]:col-span-4">
-                <div className="text-sm space-y-1">
-                  <div>
-                    <span className="text-muted-foreground">Agreements:</span>{' '}
-                    <span>{scoreData.total_agreements}</span>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Items:</span>{' '}
-                    <span>{scoreData.total_items}</span>
-                  </div>
-                </div>
+                {/* Space reserved for notes if needed in summary */}
               </div>
               
               <div className="@[30rem]:col-span-8">

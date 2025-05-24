@@ -41,6 +41,10 @@ class FeedbackAnalysis(BaseReportBlock):
         score_id (str, optional): Specific Call Criteria Question ID to analyze.
                                  If specified, only this score will be analyzed.
     """
+    
+    # Class-level defaults for name and description
+    DEFAULT_NAME = "Feedback Analysis"
+    DEFAULT_DESCRIPTION = "Inter-rater Reliability Assessment"
 
     async def generate(self) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         """Fetches feedback data and performs agreement analysis."""
@@ -203,7 +207,11 @@ class FeedbackAnalysis(BaseReportBlock):
                     "total_feedback_items_retrieved": 0,
                     "date_range": {"start": start_date.isoformat(), "end": end_date.isoformat()},
                     "message": msg,
-                    "classes_count": 2  # Default to binary classification for overall
+                    "classes_count": 2,  # Default to binary classification for overall
+                    "warning": None,
+                    "warnings": None,
+                    "notes": None,
+                    "discussion": None
                 }, "\n".join(self.log_messages)
 
             # --- 4. Fetch and Analyze Feedback for Each Score ---
@@ -245,6 +253,9 @@ class FeedbackAnalysis(BaseReportBlock):
                         "predicted_class_distribution": [],
                         "precision": None,
                         "recall": None,
+                        "warning": "No data.",
+                        "warnings": "No data.",
+                        "notes": None,
                         "discussion": None
                     }
                 else:
@@ -329,7 +340,7 @@ class FeedbackAnalysis(BaseReportBlock):
             if not all_date_filtered_feedback_items:
                 overall_analysis = {"ac1": None, "item_count": 0, "mismatches": 0, "agreements": 0, "accuracy": None, "classes_count": 2, 
                                     "label_distribution": {}, "confusion_matrix": None, "class_distribution": [], 
-                                    "predicted_class_distribution": [], "precision": None, "recall": None, "discussion": None}
+                                    "predicted_class_distribution": [], "precision": None, "recall": None, "warning": None, "warnings": None, "notes": None, "discussion": None}
                 self._log("No date-filtered items available for overall analysis.", level="WARNING")
             else:
                 # Use a generic score_id_info for the overall log
@@ -339,7 +350,10 @@ class FeedbackAnalysis(BaseReportBlock):
             accuracy_str = f"{overall_analysis.get('accuracy'):.2f}%" if overall_analysis.get('accuracy') is not None else "N/A"
             self._log(f"Overall analysis summary: AC1={overall_analysis.get('ac1')}, Items={overall_analysis.get('item_count')}, Agreements={overall_analysis.get('agreements')}, Mismatches={overall_analysis.get('mismatches')}, Accuracy={accuracy_str}, Classes={overall_analysis.get('classes_count', 2)}")
 
-            # --- 6. Structure Final Output ---
+            # --- 6. Generate Summary Warning ---
+            summary_warning = self._generate_summary_warning(per_score_analysis_results)
+            
+            # --- 7. Structure Final Output ---
             final_output_data = {
                 "overall_ac1": overall_analysis.get("ac1"), # Renamed from overall_ac1
                 "total_items": overall_analysis.get("item_count"), # Renamed from item_count
@@ -361,7 +375,13 @@ class FeedbackAnalysis(BaseReportBlock):
                 "predicted_class_distribution": overall_analysis.get("predicted_class_distribution", []),
                 "precision": overall_analysis.get("precision"),
                 "recall": overall_analysis.get("recall"),
-                "discussion": overall_analysis.get("discussion")
+                "warning": summary_warning,  # Summary warning for ReportBlock display
+                "warnings": overall_analysis.get("warnings"),  # Keep individual warnings for backwards compatibility
+                "notes": overall_analysis.get("notes"),
+                "discussion": overall_analysis.get("discussion"),
+                # Add block metadata for frontend display
+                "block_title": self.DEFAULT_NAME,
+                "block_description": self.DEFAULT_DESCRIPTION
             }
             # Don't log the full output data - it's redundant and can be large
             self._log(f"Finished generating analysis for {len(scores_to_process)} scores with {all_feedback_items_retrieved_count} total feedback items.")
@@ -677,7 +697,7 @@ class FeedbackAnalysis(BaseReportBlock):
             self._log(f"No feedback items to analyze for {score_id_info}.", level="WARNING")
             return {"ac1": None, "item_count": 0, "mismatches": 0, "agreements": 0, "accuracy": None, "classes_count": 2, 
                     "label_distribution": {}, "confusion_matrix": None, "class_distribution": [], 
-                    "predicted_class_distribution": [], "precision": None, "recall": None, "discussion": None}
+                    "predicted_class_distribution": [], "precision": None, "recall": None, "warning": "No data.", "warnings": "No data.", "notes": None, "discussion": None}
             
         # Don't log intermediate data processing details unless debugging
         valid_pairs_count = 0
@@ -698,7 +718,7 @@ class FeedbackAnalysis(BaseReportBlock):
             self._log(f"No valid (non-None initial and final) pairs to analyze for {score_id_info}.", level="WARNING")
             return {"ac1": None, "item_count": 0, "mismatches": 0, "agreements": 0, "accuracy": None, "classes_count": 2, 
                     "label_distribution": {}, "confusion_matrix": None, "class_distribution": [], 
-                    "predicted_class_distribution": [], "precision": None, "recall": None, "discussion": None}
+                    "predicted_class_distribution": [], "precision": None, "recall": None, "warning": "No data.", "warnings": "No data.", "notes": None, "discussion": None}
 
         # Calculate label distribution
         label_distribution = dict(Counter(paired_final))
@@ -763,6 +783,9 @@ class FeedbackAnalysis(BaseReportBlock):
             # Final answer is the reference (ground truth), Initial answer is the prediction
             precision_recall = self._calculate_precision_recall(paired_final, paired_initial, label_distribution.keys())
             
+            # Generate warnings based on heuristics
+            warnings = self._generate_warnings(ac1_value, label_distribution)
+            
             return {
                 "ac1": ac1_value,
                 "item_count": valid_pairs_count,
@@ -776,7 +799,10 @@ class FeedbackAnalysis(BaseReportBlock):
                 "predicted_class_distribution": predicted_class_distribution,
                 "precision": precision_recall.get("precision"),
                 "recall": precision_recall.get("recall"),
-                "discussion": self._generate_discussion(ac1_value, accuracy_percentage, precision_recall, confusion_matrix)
+                "warning": warnings,  # Individual score warning for frontend display
+                "warnings": warnings,  # Keep for backwards compatibility
+                "notes": None,
+                "discussion": None
             }
             
         except Exception as e:
@@ -934,81 +960,151 @@ class FeedbackAnalysis(BaseReportBlock):
         
         return result
     
-    def _generate_discussion(self, ac1: Optional[float], accuracy: Optional[float], 
-                            precision_recall: Dict[str, float], confusion_matrix: Dict[str, Any]) -> Optional[str]:
+    def _generate_warnings(self, ac1: Optional[float], label_distribution: Dict[Any, int]) -> Optional[str]:
         """
-        Generate a discussion text based on the analysis results.
+        Generate concise warnings based on simple heuristics for problematic analysis conditions.
         
         Args:
-            ac1: Gwet's AC1 value
-            accuracy: Raw agreement percentage
-            precision_recall: Dictionary with precision and recall values
-            confusion_matrix: Confusion matrix data
+            ac1: Gwet's AC1 value (agreement coefficient)
+            label_distribution: Dictionary mapping class labels to their counts in the data
             
         Returns:
-            Discussion text or None if there's insufficient data
+            Warning text if warnings are needed, None otherwise
         """
-        if ac1 is None or accuracy is None:
+        warnings = []
+        
+        # Check for negative agreement (systematic disagreement)
+        if ac1 is not None and ac1 < 0:
+            warnings.append("Systematic disagreement.")
+        
+        # Check for zero agreement (random chance)
+        elif ac1 is not None and ac1 == 0:
+            warnings.append("Random chance.")
+        
+        # Check for class imbalance (only one class present)
+        if label_distribution and len(label_distribution) == 1:
+            single_class = list(label_distribution.keys())[0]
+            warnings.append(f"Single class ({single_class}).")
+        
+        # Check for imbalanced class distribution (multiple classes, but not balanced)
+        # Using same 20% tolerance as ClassDistributionVisualizer component
+        elif label_distribution and len(label_distribution) > 1:
+            if not self._is_distribution_balanced(label_distribution):
+                warnings.append("Imbalanced classes.")
+        
+        # Return combined warnings or None if no warnings
+        if warnings:
+            return " ".join(warnings)
+        else:
+            return None
+    
+    def _is_distribution_balanced(self, label_distribution: Dict[Any, int]) -> bool:
+        """
+        Check if class distribution is balanced using same logic as ClassDistributionVisualizer.
+        Uses 20% tolerance from perfect balance.
+        
+        Args:
+            label_distribution: Dictionary mapping class labels to their counts
+            
+        Returns:
+            True if distribution is balanced, False if imbalanced
+        """
+        if not label_distribution or len(label_distribution) <= 1:
+            return True  # Single class or no classes are considered "balanced" (no imbalance warning needed)
+        
+        total = sum(label_distribution.values())
+        expected_count = total / len(label_distribution)
+        tolerance = 0.2  # 20% tolerance, same as Evaluation.py
+        
+        # Check if all classes are within 20% tolerance of expected count
+        return all(
+            abs(count - expected_count) <= expected_count * tolerance 
+            for count in label_distribution.values()
+        )
+    
+    def _generate_summary_warning(self, score_results: List[Dict[str, Any]]) -> Optional[str]:
+        """
+        Generate a concise summary warning based on individual score warnings.
+        
+        Args:
+            score_results: List of score analysis results, each potentially containing a 'warning' field
+            
+        Returns:
+            Summary warning text if warnings are present, None otherwise
+        """
+        if not score_results:
+            return None
+        
+        # Count warning types
+        warning_counts = {
+            'systematic_disagreement': 0,
+            'random_chance': 0,
+            'single_class': 0,
+            'imbalanced_classes': 0,
+            'no_data': 0
+        }
+        
+        total_scores = len(score_results)
+        scores_with_warnings = 0
+        
+        for result in score_results:
+            warning = result.get('warning')
+            if warning:
+                scores_with_warnings += 1
+                # Check for specific warning types (using our Hemingway-style phrases)
+                if 'Systematic disagreement' in warning:
+                    warning_counts['systematic_disagreement'] += 1
+                elif 'Random chance' in warning:
+                    warning_counts['random_chance'] += 1
+                elif 'Single class' in warning:
+                    warning_counts['single_class'] += 1
+                elif 'Imbalanced classes' in warning:
+                    warning_counts['imbalanced_classes'] += 1
+                elif 'No data' in warning:
+                    warning_counts['no_data'] += 1
+        
+        if scores_with_warnings == 0:
             return None
             
-        discussion_parts = []
+        # Generate concise summary following Hemingway style
         
-        # AC1 interpretation
-        if ac1 >= 0.8:
-            discussion_parts.append("The agreement level is strong, indicating high consistency between initial and final assessments.")
-        elif ac1 >= 0.6:
-            discussion_parts.append("The agreement level is moderate, showing reasonable consistency between assessments.")
-        elif ac1 >= 0.4:
-            discussion_parts.append("The agreement level is fair, with some inconsistency between initial and final assessments.")
-        elif ac1 >= 0.0:
-            discussion_parts.append("The agreement level is slight, suggesting substantial inconsistency between assessments.")
+        # If all scores have warnings, just say "All scores" 
+        if scores_with_warnings == total_scores:
+            score_phrase = "All scores"
+        elif scores_with_warnings == 1:
+            score_phrase = "1 score"
         else:
-            discussion_parts.append("The agreement level is poor, indicating systematic disagreement beyond chance.")
+            score_phrase = f"{scores_with_warnings} scores with"
         
-        # Accuracy context
-        raw_agreement_text = f"The raw agreement rate is {accuracy:.1f}%."
-        discussion_parts.append(raw_agreement_text)
+        # List the warning types found
+        warning_types = []
+        if warning_counts['systematic_disagreement'] > 0:
+            warning_types.append("disagreement")
+        if warning_counts['random_chance'] > 0:
+            warning_types.append("random chance")
+        if warning_counts['single_class'] > 0:
+            warning_types.append("single class")
+        if warning_counts['imbalanced_classes'] > 0:
+            warning_types.append("imbalanced")
+        if warning_counts['no_data'] > 0:
+            warning_types.append("no data")
         
-        # Precision/recall if available
-        if precision_recall.get("precision") is not None and precision_recall.get("recall") is not None:
-            precision = precision_recall["precision"]
-            recall = precision_recall["recall"]
-            precision_recall_text = f"Precision is {precision:.1f}% and recall is {recall:.1f}%."
-            
-            if precision < 70 or recall < 70:
-                precision_recall_text += " This suggests potential issues with consistent application of assessment criteria."
-            
-            discussion_parts.append(precision_recall_text)
-        
-        # Confusion matrix analysis
-        if confusion_matrix and confusion_matrix.get("matrix") and confusion_matrix.get("labels"):
-            # Identify most common confusion patterns
-            labels = confusion_matrix["labels"]
-            matrix_rows = confusion_matrix["matrix"]
-            
-            # Find off-diagonal maximum (indicating the most common confusion)
-            max_confusion = 0
-            max_confusion_pair = None
-            
-            for i, row in enumerate(matrix_rows):
-                actual_class = row["actualClassLabel"]
-                for j, predicted_class in enumerate(labels):
-                    # Skip diagonal (when actual == predicted)
-                    if actual_class == predicted_class:
-                        continue
-                    
-                    # Get count from predictedClassCounts dictionary
-                    value = row["predictedClassCounts"].get(predicted_class, 0)
-                    
-                    if value > max_confusion:
-                        max_confusion = value
-                        max_confusion_pair = (actual_class, predicted_class)
-            
-            if max_confusion_pair and max_confusion > 0:
-                confusion_text = f"The most common confusion occurs between '{max_confusion_pair[0]}' and '{max_confusion_pair[1]}', occurring {max_confusion} times."
-                discussion_parts.append(confusion_text)
-        
-        return " ".join(discussion_parts)
+        if len(warning_types) == 1:
+            if scores_with_warnings == total_scores or scores_with_warnings == 1:
+                return f"{score_phrase}: {warning_types[0]}."
+            else:
+                return f"{score_phrase} {warning_types[0]}."
+        elif len(warning_types) == 2:
+            if scores_with_warnings == total_scores or scores_with_warnings == 1:
+                return f"{score_phrase}: {warning_types[0]} and {warning_types[1]}."
+            else:
+                return f"{score_phrase} {warning_types[0]} and {warning_types[1]}."
+        else:
+            # 3 or more warning types - use "multiple issues" and put each on separate line
+            if scores_with_warnings == total_scores or scores_with_warnings == 1:
+                return f"{score_phrase} with multiple issues:\n" + "\n".join(f"• {wtype}" for wtype in warning_types) + "."
+            else:
+                return f"{score_phrase} multiple issues:\n" + "\n".join(f"• {wtype}" for wtype in warning_types) + "."
 
     def _log(self, message: str, level="INFO"):
         """Helper method to log messages and store them for the report block's log output.

@@ -496,7 +496,7 @@ const ReportBlock: BlockComponent = ({
       
       {/* Display warning message if present */}
       {!displayError && displayWarning && (
-        <div className="mt-4 bg-amber-600 text-white p-3 rounded-md w-full">
+        <div className="mt-4 bg-false text-foreground p-3 rounded-md w-full">
           <div className="flex items-start gap-2">
             <AlertTriangle size={18} className="mt-0.5 flex-shrink-0" />
             <p className="text-sm font-medium">{displayWarning}</p>

@@ -10,6 +10,10 @@ class BaseReportBlock(ABC):
     Each subclass is responsible for generating a specific section or data
     point within a report.
     """
+    
+    # Class-level defaults that subclasses can override
+    DEFAULT_NAME: Optional[str] = None
+    DEFAULT_DESCRIPTION: Optional[str] = None
 
     def __init__(self, config: Dict[str, Any], params: Optional[Dict[str, Any]], api_client: 'PlexusDashboardClient'):
         self.config = config

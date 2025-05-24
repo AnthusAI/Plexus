@@ -8,7 +8,7 @@ interface BeforeAfterGaugesProps {
   segments?: Segment[]
   min?: number
   max?: number
-  variant?: 'grid' | 'detail'
+  variant?: 'grid' | 'detail' | 'bare'
   backgroundColor?: string
 }
 
@@ -59,6 +59,8 @@ const BeforeAfterGauges: React.FC<BeforeAfterGaugesProps> = ({
           style={{
             bottom: variant === 'detail'
               ? 'max(-30px, calc(-32px + 18%))'
+              : variant === 'bare'
+              ? 'max(-30px, calc(-38px + 24%))'
               : 'max(-30px, calc(-38px + 24%))'
           }}
         >

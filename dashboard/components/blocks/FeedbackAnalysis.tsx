@@ -10,6 +10,8 @@ export interface FeedbackAnalysisData extends ScorecardReportData {
     start: string;
     end: string;
   };
+  block_title?: string;
+  block_description?: string;
 }
 
 /**
@@ -34,12 +36,15 @@ const FeedbackAnalysis: React.FC<ReportBlockProps> = (props) => {
     overall_agreement: feedbackData.overall_ac1
   };
 
+  // Use a meaningful name, ignoring generic block names
+  const title = (props.name && !props.name.startsWith('block_')) ? props.name : 'Feedback Analysis';
+
   return (
     <ScorecardReport 
       {...props}
       output={modifiedOutput}
-      title={props.name || 'Feedback Analysis'}
-      subtitle="Inter-rater reliability assessment"
+      title={title}
+      subtitle={feedbackData.block_description || "Inter-rater reliability assessment"}
       showPrecisionRecall={false} // Don't show precision/recall gauges in feedback analysis
     />
   );
