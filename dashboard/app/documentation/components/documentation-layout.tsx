@@ -91,7 +91,6 @@ const docSections: DocSidebarItem[] = [
       { name: "Scorecards", href: "/documentation/concepts/scorecards" },
       { name: "Score Results", href: "/documentation/concepts/score-results" },
       { name: "Evaluations", href: "/documentation/concepts/evaluations" },
-      { name: "Evaluation Metrics", href: "/documentation/concepts/evaluation-metrics" },
       { name: "Tasks", href: "/documentation/concepts/tasks" },
       { name: "Reports", href: "/documentation/concepts/reports" },
     ],
@@ -106,6 +105,20 @@ const docSections: DocSidebarItem[] = [
       { name: "Add/Edit a Score", href: "/documentation/methods/add-edit-score" },
       { name: "Evaluate a Score", href: "/documentation/methods/evaluate-score" },
       { name: "Monitor Tasks", href: "/documentation/methods/monitor-tasks" },
+    ],
+  },
+  {
+    name: "Evaluation Metrics",
+    href: "/documentation/evaluation-metrics",
+    items: [
+      { name: "Gauges with Context", href: "/documentation/evaluation-metrics/gauges-with-context" },
+      { name: "Agreement", href: "/documentation/evaluation-metrics/gauges/agreement" },
+      { name: "Accuracy", href: "/documentation/evaluation-metrics/gauges/accuracy" },
+      { name: "Precision", href: "/documentation/evaluation-metrics/gauges/precision" },
+      { name: "Recall", href: "/documentation/evaluation-metrics/gauges/recall" },
+      { name: "Class Number Impact", href: "/documentation/evaluation-metrics/gauges/class-number" },
+      { name: "Class Imbalance", href: "/documentation/evaluation-metrics/gauges/class-imbalance" },
+      { name: "Examples", href: "/documentation/evaluation-metrics/examples" },
     ],
   },
   {
