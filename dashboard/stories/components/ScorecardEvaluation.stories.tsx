@@ -1,6 +1,6 @@
 import React from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
-import { ScorecardEvaluation, ScorecardReportEvaluationData } from '@/components/ui/scorecard-evaluation';
+import { ScorecardEvaluation, ScorecardReportEvaluationData } from '@/components/ui/scorecard-evaluation-score-evaluation';
 
 const meta: Meta<typeof ScorecardEvaluation> = {
   title: 'Reports/Components/ScorecardEvaluation',
@@ -10,7 +10,7 @@ const meta: Meta<typeof ScorecardEvaluation> = {
   },
   decorators: [
     (Story) => (
-      <div className="max-w-md mx-auto">
+      <div className="w-full">
         <Story />
       </div>
     ),

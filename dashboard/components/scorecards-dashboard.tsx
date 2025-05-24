@@ -242,10 +242,9 @@ export default function ScorecardsComponent({
             scorecardId: fullScorecardData.id,
             scorecardName: fullScorecardData.name,
             hasExampleItemsProperty: 'exampleItems' in fullScorecardData,
-            exampleItemsType: typeof fullScorecardData.exampleItems,
             allMethods: Object.getOwnPropertyNames(fullScorecardData).filter(prop => {
               try {
-                return typeof fullScorecardData[prop] === 'function';
+                return typeof (fullScorecardData as any)[prop] === 'function';
               } catch {
                 return false;
               }
@@ -392,8 +391,12 @@ export default function ScorecardsComponent({
           externalId: result.data.externalId || '',
           description: result.data.description || '',
           text: result.data.text || '',
-          metadata: result.data.metadata || {},
-          attachedFiles: result.data.attachedFiles || [],
+          metadata: (result.data.metadata && typeof result.data.metadata === 'object' && !Array.isArray(result.data.metadata)) 
+            ? result.data.metadata as Record<string, string> 
+            : {},
+          attachedFiles: Array.isArray(result.data.attachedFiles) 
+            ? result.data.attachedFiles.filter((file): file is string => typeof file === 'string')
+            : [],
           accountId: result.data.accountId,
           isEvaluation: result.data.isEvaluation
         };
@@ -434,47 +437,67 @@ export default function ScorecardsComponent({
     try {
       if (item.id) {
         // Update existing item
-        const updateInput = {
-          id: item.id,
-          externalId: item.externalId,
-          description: item.description,
-          text: item.text,
-          // Only include metadata if it has actual content
-          ...(item.metadata && Object.keys(item.metadata).length > 0 ? { metadata: item.metadata } : {}),
-          attachedFiles: item.attachedFiles && item.attachedFiles.length > 0 ? item.attachedFiles : undefined
+        const updateInput: {
+          id: string;
+          externalId?: string;
+          description?: string;
+          text?: string;
+          metadata?: string;
+          attachedFiles?: string[];
+        } = {
+          id: item.id
         };
-        const result = await client.models.Item.update(updateInput);
+
+        // Add optional fields only if they have values
+        if (item.externalId) updateInput.externalId = item.externalId;
+        if (item.description) updateInput.description = item.description;
+        if (item.text) updateInput.text = item.text;
+        if (item.metadata && Object.keys(item.metadata).length > 0) {
+          updateInput.metadata = JSON.stringify(item.metadata);
+        }
+        if (item.attachedFiles && item.attachedFiles.length > 0) {
+          updateInput.attachedFiles = item.attachedFiles;
+        }
+
+        const result = await (client.models.Item.update as any)(updateInput);
         console.log('Item updated successfully:', result.data?.id);
         
         // Update the local state with the saved item
         setSelectedItem({ ...item, ...result.data });
       } else {
         // Create new item
-        const createInput = {
-          externalId: item.externalId || undefined,
-          description: item.description || undefined,
-          text: item.text || undefined,
-          // Only include metadata if it has actual content
-          ...(item.metadata && Object.keys(item.metadata).length > 0 ? { metadata: item.metadata } : {}),
-          attachedFiles: item.attachedFiles && item.attachedFiles.length > 0 ? item.attachedFiles : undefined,
+        const createInput: {
+          externalId?: string;
+          description?: string;
+          text?: string;
+          metadata?: string;
+          attachedFiles?: string[];
+          accountId: string;
+          isEvaluation: boolean;
+        } = {
           accountId: item.accountId || accountId!,
           isEvaluation: item.isEvaluation || false
         };
+
+        // Add optional fields only if they have values
+        if (item.externalId) createInput.externalId = item.externalId;
+        if (item.description) createInput.description = item.description;
+        if (item.text) createInput.text = item.text;
+        if (item.metadata && Object.keys(item.metadata).length > 0) {
+          createInput.metadata = JSON.stringify(item.metadata);
+        }
+        if (item.attachedFiles && item.attachedFiles.length > 0) {
+          createInput.attachedFiles = item.attachedFiles;
+        }
         
-        // Clean up the input by removing any undefined values
-        const cleanedInput = Object.fromEntries(
-          Object.entries(createInput).filter(([_, value]) => value !== undefined)
-        );
-        
-        console.log('Creating item with cleaned input:', cleanedInput);
+        console.log('Creating item with input:', createInput);
         console.log('Metadata value type and content:', {
-          hasMetadata: 'metadata' in cleanedInput,
-          metadataType: typeof cleanedInput.metadata,
-          metadataKeys: cleanedInput.metadata ? Object.keys(cleanedInput.metadata) : [],
-          metadataValue: cleanedInput.metadata
+          hasMetadata: 'metadata' in createInput,
+          metadataType: typeof createInput.metadata,
+          metadataValue: createInput.metadata
         });
         
-        const result = await client.models.Item.create(cleanedInput);
+        const result = await (client.models.Item.create as any)(createInput);
         console.log('Full result object:', result);
         console.log('Result data:', result.data);
         console.log('Result errors:', result.errors);
@@ -505,7 +528,9 @@ export default function ScorecardsComponent({
         setIsCreatingItem(false);
         
         // Add the new item to the scorecard's examples list
-        setScorecardExamples(prev => [...prev, `item:${result.data.id}`]);
+        if (result.data?.id) {
+          setScorecardExamples(prev => [...prev, `item:${result.data!.id}`]);
+        }
         
         // Signal that we should expand the examples section
         setShouldExpandExamples(true);
@@ -748,9 +773,7 @@ export default function ScorecardsComponent({
         batchJobs: async () => amplifyClient.BatchJob.list({
           filter: { scorecardId: { eq: scorecardData.id } }
         }),
-        item: async () => scorecardData.itemId ? 
-          amplifyClient.Item.get({ id: scorecardData.itemId }) :
-          Promise.resolve({ data: null }),
+        item: async () => Promise.resolve({ data: null }),
         scoringJobs: async () => amplifyClient.ScoringJob.list({
           filter: { scorecardId: { eq: scorecardData.id } }
         }),
