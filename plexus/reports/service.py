@@ -289,8 +289,8 @@ def _parse_report_configuration(config_markdown: str) -> List[Dict[str, Any]]:
     for item in parsed_data:
         if item["type"] == "block_config":
             item["position"] = block_position
-            # Ensure block_name follows the expected pattern
-            item["block_name"] = f"block_{block_position}"
+            # Use custom block name if provided, otherwise use generic pattern
+            item["block_name"] = item.get("block_name") or f"block_{block_position}"
             block_definitions.append(item)
             block_position += 1
         elif item["type"] == "error":
@@ -519,7 +519,17 @@ def _generate_report_core(
         for i, block_def in enumerate(block_definitions):
             position = block_def.get("position", i)
             block_class_name = block_def["class_name"]
-            block_display_name = block_def.get("block_name", f"{block_class_name} at pos {position}")
+            
+            # Determine the display name with proper fallback logic
+            block_display_name = block_def.get("block_name")
+            if not block_display_name:
+                # Try to get the DEFAULT_NAME from the block class
+                block_class = BLOCK_CLASSES.get(block_class_name)
+                if block_class and hasattr(block_class, 'DEFAULT_NAME') and block_class.DEFAULT_NAME:
+                    block_display_name = block_class.DEFAULT_NAME
+                else:
+                    # Final fallback to generic pattern
+                    block_display_name = f"{block_class_name} at pos {position}"
             
             logger.info(f"{log_prefix} Preparing block {i+1}/{num_blocks}: {block_display_name} (Class: {block_class_name}, Pos: {position})")
 

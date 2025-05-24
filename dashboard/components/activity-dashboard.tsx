@@ -681,14 +681,7 @@ export default function ActivityDashboard({
               completedAt: null,
               processedItems: 0,
               totalItems: stage.totalItems || null, // Preserve total items if it exists
-              statusMessage: "Not started",
-              errorMessage: null, // Reset error fields if they exist
-              errorDetails: null,
-              metadata: null, // Reset any stage-specific metadata
-              progress: null, // Reset any progress tracking
-              elapsedTime: null, // Reset timing information
-              estimatedTimeRemaining: null,
-              lastUpdateTime: null
+              statusMessage: "Not started"
             }, 'TaskStage')
             console.log('Stage update result:', updatedStage)
           }

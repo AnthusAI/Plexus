@@ -273,51 +273,33 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
       className
     )}>
       <div className="p-4">
-        <div className="flex justify-between items-start mb-4">
+        <div className="mb-4">
           <h3 className="text-base font-medium">{displayName}</h3>
-          {hasExtendedData && (
-            <CardButton 
-              icon={expanded ? ChevronUp : ChevronDown}
-              onClick={() => setExpanded(!expanded)}
-              aria-label={expanded ? "Collapse details" : "Expand details"}
-              className="ml-2"
-            />
-          )}
         </div>
         
         <div className="@container">
-          <div className="grid grid-cols-1 @[30rem]:grid-cols-12 gap-4 items-start">
-            <div className="@[30rem]:col-span-4">
-              <div className="text-sm space-y-1">
-                {itemCount > 0 && (
-                  <>
-                    <div>
-                      <span className="text-muted-foreground">Agreements:</span>{' '}
-                      <span>{agreements}</span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Items:</span>{' '}
-                      <span>{itemCount}</span>
-                    </div>
-                  </>
-                )}
-              </div>
-              
-              {hasNotes && (
-                <div className="mt-3 text-sm">
-                  <p className="text-foreground">{score.notes}</p>
+          <div className="relative">
+            {/* Warning - always in left column */}
+            {hasWarning && (
+              <div className="@[30rem]:w-1/3 @[30rem]:float-left mb-3">
+                <div className="bg-false text-foreground p-3 rounded-sm">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle size={16} className="mt-0.5 flex-shrink-0" />
+                    <p className="text-sm font-medium">{score.warning}</p>
+                  </div>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
             
-            <div className="@[30rem]:col-span-8">
+            {/* Gauges - floated to the right */}
+            <div className="@[30rem]:float-right @[30rem]:w-2/3 @[30rem]:pl-4">
               <div className="@container">
                 <div className="grid grid-cols-1 @[20rem]:grid-cols-2 @[40rem]:grid-cols-4 gap-3">
-                  {score.ac1 !== undefined && (
+                  {score.ac1 !== undefined && score.ac1 !== null && (
                     <div className="flex flex-col items-center px-2">
                       <div className="w-full min-w-[100px] max-w-[140px] mx-auto">
                         <Gauge 
-                          value={score.ac1 ?? 0} 
+                          value={score.ac1} 
                           title="Agreement"
                           valueUnit=""
                           min={-1}
@@ -330,11 +312,27 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
                     </div>
                   )}
                   
-                  {score.accuracy !== undefined && (
+                  {score.ac1 === null && (
                     <div className="flex flex-col items-center px-2">
                       <div className="w-full min-w-[100px] max-w-[140px] mx-auto">
                         <Gauge 
-                          value={score.accuracy ?? 0} 
+                          title="Agreement"
+                          valueUnit=""
+                          min={-1}
+                          max={1}
+                          decimalPlaces={2}
+                          segments={ac1GaugeSegments}
+                          showTicks={true}
+                        />
+                      </div>
+                    </div>
+                  )}
+                  
+                  {score.accuracy !== undefined && score.accuracy !== null && (
+                    <div className="flex flex-col items-center px-2">
+                      <div className="w-full min-w-[100px] max-w-[140px] mx-auto">
+                        <Gauge 
+                          value={score.accuracy} 
                           title="Accuracy"
                           segments={accuracySegments}
                           showTicks={true}
@@ -343,11 +341,23 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
                     </div>
                   )}
                   
-                  {showPrecisionRecall && score.precision !== undefined && (
+                  {score.accuracy === null && (
                     <div className="flex flex-col items-center px-2">
                       <div className="w-full min-w-[100px] max-w-[140px] mx-auto">
                         <Gauge 
-                          value={score.precision ?? 0} 
+                          title="Accuracy"
+                          segments={accuracySegments}
+                          showTicks={true}
+                        />
+                      </div>
+                    </div>
+                  )}
+                  
+                  {showPrecisionRecall && score.precision !== undefined && score.precision !== null && (
+                    <div className="flex flex-col items-center px-2">
+                      <div className="w-full min-w-[100px] max-w-[140px] mx-auto">
+                        <Gauge 
+                          value={score.precision} 
                           title="Precision"
                           segments={accuracySegments}
                           showTicks={true}
@@ -356,11 +366,35 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
                     </div>
                   )}
                   
-                  {showPrecisionRecall && score.recall !== undefined && (
+                  {showPrecisionRecall && score.precision === null && (
                     <div className="flex flex-col items-center px-2">
                       <div className="w-full min-w-[100px] max-w-[140px] mx-auto">
                         <Gauge 
-                          value={score.recall ?? 0} 
+                          title="Precision"
+                          segments={accuracySegments}
+                          showTicks={true}
+                        />
+                      </div>
+                    </div>
+                  )}
+                  
+                  {showPrecisionRecall && score.recall !== undefined && score.recall !== null && (
+                    <div className="flex flex-col items-center px-2">
+                      <div className="w-full min-w-[100px] max-w-[140px] mx-auto">
+                        <Gauge 
+                          value={score.recall} 
+                          title="Recall"
+                          segments={accuracySegments}
+                          showTicks={true}
+                        />
+                      </div>
+                    </div>
+                  )}
+                  
+                  {showPrecisionRecall && score.recall === null && (
+                    <div className="flex flex-col items-center px-2">
+                      <div className="w-full min-w-[100px] max-w-[140px] mx-auto">
+                        <Gauge 
                           title="Recall"
                           segments={accuracySegments}
                           showTicks={true}
@@ -371,17 +405,21 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
                 </div>
               </div>
             </div>
+            
+            {/* Notes - start under warning, flow around gauges */}
+            {hasNotes && (
+              <div className={cn(
+                "text-sm",
+                hasWarning ? "clear-left @[30rem]:clear-none" : ""
+              )}>
+                <p className="text-foreground">{score.notes}</p>
+              </div>
+            )}
+            
+            {/* Clear floats */}
+            <div className="clear-both"></div>
           </div>
         </div>
-        
-        {hasWarning && (
-          <div className="mt-4 bg-red-600 text-white p-3 rounded-sm w-full">
-            <div className="flex items-start gap-2">
-              <AlertTriangle size={16} className="mt-0.5 flex-shrink-0" />
-              <p className="text-sm font-medium">{score.warning}</p>
-            </div>
-          </div>
-        )}
 
         {hasConfusionMatrixData && (
           <div className="mt-4">
@@ -389,6 +427,24 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
               data={score.confusion_matrix!}
               onSelectionChange={scoreDetailsFile ? handleConfusionMatrixSelection : () => {}} 
             />
+          </div>
+        )}
+
+        {/* Centered expand/collapse UI */}
+        {hasExtendedData && (
+          <div className="mt-4 flex flex-col items-center">
+            <div className="w-full h-px bg-border mb-1"></div>
+            <button
+              onClick={() => setExpanded(!expanded)}
+              className="flex items-center justify-center rounded-full hover:bg-muted/50 transition-colors"
+              aria-label={expanded ? "Collapse details" : "Expand details"}
+            >
+              {expanded ? (
+                <ChevronUp className="h-3 w-3 text-muted-foreground" />
+              ) : (
+                <ChevronDown className="h-3 w-3 text-muted-foreground" />
+              )}
+            </button>
           </div>
         )}
       </div>

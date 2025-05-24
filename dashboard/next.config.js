@@ -10,8 +10,8 @@ const nextConfig = {
         dirs: ['app', 'components', 'utils', 'stories']
     },
     typescript: {
-        // Speed up type checking in all environments
-        ignoreBuildErrors: true,
+        // Catch TypeScript errors in all environments to match production
+        ignoreBuildErrors: false,
     },
     // Only include type checking on your own code files
     transpilePackages: []
