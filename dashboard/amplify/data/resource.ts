@@ -626,6 +626,8 @@ const schema = a.schema({
             type: a.string().required(), // Required type for the block
             output: a.json().required(), // JSON output from the block's execution
             log: a.string(), // Optional log output from the block
+            warning: a.string(), // Optional warning message (styled as 'false' alert)
+            error: a.string(), // Optional error message (styled as red 'danger' alert)
             attachedFiles: a.string().array(), // This is the corrected field name and type
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
