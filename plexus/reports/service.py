@@ -289,6 +289,8 @@ def _parse_report_configuration(config_markdown: str) -> List[Dict[str, Any]]:
     for item in parsed_data:
         if item["type"] == "block_config":
             item["position"] = block_position
+            # Ensure block_name follows the expected pattern
+            item["block_name"] = f"block_{block_position}"
             block_definitions.append(item)
             block_position += 1
         elif item["type"] == "error":
@@ -510,8 +512,8 @@ def _generate_report_core(
         tracker.set_total_items(num_blocks)
 
         # Initialize default values for ReportBlock creation
-        initial_output: Optional[Dict[str, Any]] = {"status": "pending_execution"}
-        initial_log: Optional[str] = "Block execution pending."
+        initial_output: Optional[Dict[str, Any]] = {"status": "pending"}
+        initial_log: Optional[str] = "Processing..."
         initial_attached_files: Optional[str] = None # Or json.dumps([]) if you prefer an empty list string
 
         for i, block_def in enumerate(block_definitions):
