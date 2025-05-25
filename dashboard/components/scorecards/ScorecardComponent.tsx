@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { Card } from '@/components/ui/card'
-import { MoreHorizontal, Pencil, Database, ListTodo, X, Square, Columns2, Plus, ChevronUp, ChevronDown, CheckSquare, ChevronRight, FileText, Key, StickyNote, Edit } from 'lucide-react'
+import { MoreHorizontal, Pencil, Database, ListTodo, X, Square, Columns2, Plus, ChevronUp, ChevronDown, CheckSquare, ChevronRight, FileText, Key, StickyNote, Edit, IdCard } from 'lucide-react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { cn } from '@/lib/utils'
 import { CardButton } from '@/components/CardButton'
@@ -88,7 +88,10 @@ const GridContent = React.memo(({
     <div className="flex justify-between items-start w-full">
       <div className="space-y-1.5">
         <div className="font-medium">{score.name}</div>
-        <div className="text-sm text-muted-foreground">ID: {score.externalId || '-'}</div>
+        <div className="text-sm text-muted-foreground flex items-center gap-1">
+          <IdCard className="h-3 w-3" />
+          <span>{score.externalId || '-'}</span>
+        </div>
         <div className="text-sm text-muted-foreground">{scoreCount} {scoreText}</div>
       </div>
       <div className="text-muted-foreground">
