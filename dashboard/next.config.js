@@ -14,7 +14,28 @@ const nextConfig = {
         ignoreBuildErrors: false,
     },
     // Only include type checking on your own code files
-    transpilePackages: []
+    transpilePackages: [],
+    webpack: (config, { dev, isServer }) => {
+        config.module.rules.forEach(rule => {
+            if (rule.oneOf) {
+                rule.oneOf.forEach(one => {
+                    if (one.use && Array.isArray(one.use)) {
+                        one.use.forEach(use => {
+                            if (use.loader && use.loader.includes('postcss-loader')) {
+                                use.options.postcssOptions = {
+                                    plugins: [
+                                        'tailwindcss',
+                                        'autoprefixer',
+                                    ],
+                                };
+                            }
+                        });
+                    }
+                });
+            }
+        });
+        return config;
+    },
 }
 
 module.exports = withHydrationOverlay()(nextConfig);
