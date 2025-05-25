@@ -2,7 +2,6 @@ version: 1
 applications:
   - appRoot: dashboard
     backend:
-      image: amazonlinux:2023
       phases:
         build:
           commands:
@@ -11,7 +10,6 @@ applications:
             - npm ci --cache .npm --prefer-offline
             - npx ampx pipeline-deploy --branch $AWS_BRANCH --app-id $AWS_APP_ID
     frontend:
-      image: amazonlinux:2023
       phases:
         preBuild:
           commands:
