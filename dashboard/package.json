@@ -2,6 +2,9 @@
   "name": "aws-amplify-gen2",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "dev": "NEXT_TYPESCRIPT_CHECK=0 next dev",
     "build": "next build",
