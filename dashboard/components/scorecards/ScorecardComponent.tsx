@@ -339,20 +339,19 @@ export const DetailContent = React.memo(function DetailContent({
   const associateItem = async (item: {id: string, externalId: string, description?: string}) => {
     try {
       // Check if association already exists
-      const existingAssociation = await amplifyClient.ItemScorecard.get({
-        itemId: item.id,
-        scorecardId: score.id
-      });
+      const existingAssociations = await amplifyClient.ScorecardExampleItem.listByScorecard(score.id);
+      const existingAssociation = existingAssociations.data.find(assoc => assoc.itemId === item.id);
 
-      if (existingAssociation.data) {
+      if (existingAssociation) {
         toast.error("This item is already associated with this scorecard");
         return;
       }
 
-      // Create the ItemScorecard association
-      await amplifyClient.ItemScorecard.create({
+      // Create the ScorecardExampleItem association
+      await amplifyClient.ScorecardExampleItem.create({
         itemId: item.id,
-        scorecardId: score.id
+        scorecardId: score.id,
+        addedAt: new Date().toISOString()
       });
 
       // Add to the examples list for UI display
@@ -383,12 +382,12 @@ export const DetailContent = React.memo(function DetailContent({
     updatedExamples.splice(index, 1);
     onEditChange?.({ examples: updatedExamples });
 
-    // If this is an item reference, we need to remove the association from the ItemScorecard table
+    // If this is an item reference, we need to remove the association from the ScorecardExampleItem table
     if (example.startsWith('item:')) {
       const itemId = example.substring(5);
       try {
-        // Delete the ItemScorecard association
-        await amplifyClient.ItemScorecard.delete({
+        // Delete the ScorecardExampleItem association
+        await amplifyClient.ScorecardExampleItem.delete({
           itemId: itemId,
           scorecardId: score.id
         });
