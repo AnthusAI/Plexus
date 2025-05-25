@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ChevronDown, ChevronRight, Eye, EyeOff, TrendingUp } from 'lucide-react';
+import * as yaml from 'js-yaml';
 
 interface TopicAnalysisData {
   summary?: string;

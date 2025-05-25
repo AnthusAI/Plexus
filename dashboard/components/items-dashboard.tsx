@@ -457,12 +457,13 @@ export default function ItemsDashboard() {
             console.warn('No more items found in direct GraphQL query response');
           }
         } else if (useScorecard) {
-          // If only a scorecard is selected, get items through ItemScorecard join table
+          // If only a scorecard is selected, get items through ScorecardProcessedItem join table
           console.log('Attempting direct GraphQL query for more items with scorecardId:', selectedScorecard);
           const directQuery = await graphqlRequest<{ 
-            listItemScorecardByScorecardId: { 
+            listScorecardProcessedItemByScorecardId: { 
               items: Array<{
                 itemId: string;
+                processedAt?: string;
                 item: {
                   id: string;
                   externalId?: string;
@@ -478,13 +479,14 @@ export default function ItemsDashboard() {
             }
           }>(`
             query ListItemsMoreDirect($scorecardId: ID!, $limit: Int!, $nextToken: String) {
-              listItemScorecardByScorecardId(
+              listScorecardProcessedItemByScorecardId(
                 scorecardId: $scorecardId,
                 limit: $limit,
                 nextToken: $nextToken
               ) {
                 items {
                   itemId
+                  processedAt
                   item {
                     id
                     externalId
@@ -507,18 +509,19 @@ export default function ItemsDashboard() {
           
           console.log('Direct GraphQL query response for more items:', JSON.stringify(directQuery, null, 2));
           
-          if (directQuery.data?.listItemScorecardByScorecardId?.items) {
-            console.log(`Found ${directQuery.data.listItemScorecardByScorecardId.items.length} more items via direct GraphQL query`);
-            // Extract items and sort by updatedAt in descending order
-            itemsFromDirectQuery = directQuery.data.listItemScorecardByScorecardId.items
+          if (directQuery.data?.listScorecardProcessedItemByScorecardId?.items) {
+            console.log(`Found ${directQuery.data.listScorecardProcessedItemByScorecardId.items.length} more items via direct GraphQL query`);
+            // Extract items and sort by processedAt in descending order (most recent first)
+            itemsFromDirectQuery = directQuery.data.listScorecardProcessedItemByScorecardId.items
               .map(association => association.item)
               .filter(item => item !== null)
               .sort((a, b) => {
+                // Sort by processedAt if available, otherwise by updatedAt/createdAt
                 const dateA = new Date(a.updatedAt || a.createdAt || '').getTime();
                 const dateB = new Date(b.updatedAt || b.createdAt || '').getTime();
                 return dateB - dateA; // DESC order (newest first)
               });
-            nextTokenFromDirectQuery = directQuery.data.listItemScorecardByScorecardId.nextToken;
+            nextTokenFromDirectQuery = directQuery.data.listScorecardProcessedItemByScorecardId.nextToken;
           } else {
             console.warn('No more items found in direct GraphQL query response');
           }
@@ -578,57 +581,10 @@ export default function ItemsDashboard() {
       
       // Transform the data to match the expected format
       const transformedItems = itemsToUse.map(item => {
-        // Group scoreResults by scorecard
         const groupedScoreResults: GroupedScoreResults = {};
         
-        // console.log('Raw item before transformation:', { // Keep for debugging if needed, but scoreResults will be absent
-        //   id: item.id,
-        //   externalId: item.externalId,
-        //   accountId: item.accountId,
-        //   hasScoreResults: !!item.scoreResults, // This will be false
-        //   scoreResultsItemsCount: item.scoreResults?.items?.length, // This will be undefined
-        //   firstScoreResult: item.scoreResults?.items?.[0] 
-        // });
-        
-        // item.scoreResults will not be present here anymore for the list view
-        // if (item.scoreResults && item.scoreResults.items) {
-        //   item.scoreResults.items.forEach((result: any) => {
-        //     if (result.scorecardId) {
-        //       if (!groupedScoreResults[result.scorecardId]) {
-        //         groupedScoreResults[result.scorecardId] = {
-        //           scorecardName: result.scorecard?.name || `Scorecard ${result.scorecardId.substring(0, 8)}`,
-        //           scores: []
-        //         };
-        //       }
-        //       const scoreExists = groupedScoreResults[result.scorecardId].scores.some(
-        //         s => s.scoreId === result.scoreId
-        //       );
-        //       if (!scoreExists && result.scoreId) {
-        //         groupedScoreResults[result.scorecardId].scores.push({
-        //           scoreId: result.scoreId,
-        //           scoreName: result.score?.name || `Score ${result.scoreId.substring(0, 8)}`
-        //         });
-        //       }
-        //     }
-        //   });
-        // }
-        
-        // console.log('Generated groupedScoreResults:', groupedScoreResults); // This will be empty
-        
-        let primaryScorecardName = null; // Will remain null
-        let primaryScoreName = null; // Will remain null
-        
-        // Logic to determine primary scorecard (first one with scores, or just first one)
-        // const scorecardIds = Object.keys(groupedScoreResults); // groupedScoreResults is empty
-        // if (scorecardIds.length > 0) {
-        //   const firstScorecardWithScores = scorecardIds.find(
-        //     id => groupedScoreResults[id].scores.length > 0
-        //   ) || scorecardIds[0];
-        //   primaryScorecardName = groupedScoreResults[firstScorecardWithScores].scorecardName;
-        //   if (groupedScoreResults[firstScorecardWithScores].scores.length > 0) {
-        //     primaryScoreName = groupedScoreResults[firstScorecardWithScores].scores[0].scoreName;
-        //   }
-        // }
+        // ScoreResults will be loaded separately to avoid resolver limits
+        // For now, items will show as "Processing..." until we implement lazy loading
         
         const transformedItem = {
           id: item.id,
@@ -639,15 +595,15 @@ export default function ItemsDashboard() {
           updatedAt: item.updatedAt,
           createdAt: item.createdAt,
           isEvaluation: item.isEvaluation,
-          scorecard: primaryScorecardName, // Will be null
-          score: primaryScoreName, // Will be null
+          scorecard: null, // Will be populated via lazy loading
+          score: null, // Will be populated via lazy loading
           date: item.updatedAt || item.createdAt,
           status: "Done", 
-          results: 0, // Placeholder
-          inferences: 0, // Placeholder
+          results: 0, // Will be populated via lazy loading
+          inferences: 0, // Will be populated via lazy loading
           cost: "$0.000", // Placeholder
           isNew: true, 
-          groupedScoreResults: groupedScoreResults // Will be empty
+          groupedScoreResults: groupedScoreResults
         } as Item;
         
         // console.log('Final transformed item:', { // Keep for debugging if needed
@@ -756,12 +712,13 @@ export default function ItemsDashboard() {
             console.warn('No items found in direct GraphQL query response');
           }
         } else if (useScorecard) {
-          // If only a scorecard is selected, get items through ItemScorecard join table
+          // If only a scorecard is selected, get items through ScorecardProcessedItem join table
           console.log('Attempting direct GraphQL query for items with scorecardId:', selectedScorecard);
           const directQuery = await graphqlRequest<{ 
-            listItemScorecardByScorecardId: { 
+            listScorecardProcessedItemByScorecardId: { 
               items: Array<{
                 itemId: string;
+                processedAt?: string;
                 item: {
                   id: string;
                   externalId?: string;
@@ -777,12 +734,13 @@ export default function ItemsDashboard() {
             }
           }>(`
             query ListItemsDirect($scorecardId: ID!, $limit: Int!) {
-              listItemScorecardByScorecardId(
+              listScorecardProcessedItemByScorecardId(
                 scorecardId: $scorecardId,
                 limit: $limit
               ) {
                 items {
                   itemId
+                  processedAt
                   item {
                     id
                     externalId
@@ -804,9 +762,9 @@ export default function ItemsDashboard() {
           
           console.log('Direct GraphQL query response for items:', JSON.stringify(directQuery, null, 2));
           
-          if (directQuery.data?.listItemScorecardByScorecardId?.items) {
-            console.log(`Found ${directQuery.data.listItemScorecardByScorecardId.items.length} items via direct GraphQL query`);
-            itemsFromDirectQuery = directQuery.data.listItemScorecardByScorecardId.items
+          if (directQuery.data?.listScorecardProcessedItemByScorecardId?.items) {
+            console.log(`Found ${directQuery.data.listScorecardProcessedItemByScorecardId.items.length} items via direct GraphQL query`);
+            itemsFromDirectQuery = directQuery.data.listScorecardProcessedItemByScorecardId.items
               .map(association => association.item)
               .filter(item => item !== null)
               .sort((a, b) => {
@@ -814,7 +772,7 @@ export default function ItemsDashboard() {
                 const dateB = new Date(b.updatedAt || b.createdAt || '').getTime();
                 return dateB - dateA; // DESC order (newest first)
               });
-            nextTokenFromDirectQuery = directQuery.data.listItemScorecardByScorecardId.nextToken;
+            nextTokenFromDirectQuery = directQuery.data.listScorecardProcessedItemByScorecardId.nextToken;
           } else {
             console.warn('No items found in direct GraphQL query response');
           }
@@ -869,10 +827,9 @@ export default function ItemsDashboard() {
       
       const transformedItems = itemsToUse.map(item => {
         const groupedScoreResults: GroupedScoreResults = {};
-         // item.scoreResults will not be present here anymore for the list view
         
-        let primaryScorecardName = null;
-        let primaryScoreName = null;
+        // ScoreResults will be loaded separately to avoid resolver limits
+        // For now, items will show as "Processing..." until we implement lazy loading
         
         return {
           id: item.id,
@@ -883,15 +840,15 @@ export default function ItemsDashboard() {
           updatedAt: item.updatedAt,
           createdAt: item.createdAt,
           isEvaluation: item.isEvaluation,
-          scorecard: primaryScorecardName, // Will be null
-          score: primaryScoreName, // Will be null
+          scorecard: null, // Will be populated via lazy loading
+          score: null, // Will be populated via lazy loading
           date: item.updatedAt || item.createdAt,
           status: "Done",
-          results: 0, // Placeholder
-          inferences: 0, // Placeholder
+          results: 0, // Will be populated via lazy loading
+          inferences: 0, // Will be populated via lazy loading
           cost: "$0.000", // Placeholder
           isNew: true,
-          groupedScoreResults: groupedScoreResults // Will be empty
+          groupedScoreResults: groupedScoreResults
         } as Item;
       });
       
