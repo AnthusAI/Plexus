@@ -331,20 +331,27 @@ def analyze_topics(
     try:
         logger.info("Generating BERTopic visualizations...")
         
-        # Visualize Topics (HTML and PNG)
-        fig_topics = topic_model.visualize_topics()
-        save_visualization(fig_topics, str(Path(output_dir) / "topic_visualization.html"))
-        try:
-            topics_png_path = str(Path(output_dir) / "topics_visualization.png")
-            fig_topics.write_image(topics_png_path)
-            os.chmod(topics_png_path, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH)
-            logger.info(f"Saved topics visualization to {topics_png_path}")
-        except Exception as e:
-            logger.error(f"Failed to save topics visualization as PNG: {e}", exc_info=True)
+        # Get number of topics (excluding the outlier topic -1)
+        num_topics = len(topic_model.get_topic_info()) - 1
+        logger.info(f"Found {num_topics} topics for visualization")
+        
+        # Visualize Topics (HTML and PNG) - only if we have enough topics
+        if num_topics >= 2:
+            fig_topics = topic_model.visualize_topics()
+            save_visualization(fig_topics, str(Path(output_dir) / "topic_visualization.html"))
+            try:
+                topics_png_path = str(Path(output_dir) / "topics_visualization.png")
+                fig_topics.write_image(topics_png_path)
+                os.chmod(topics_png_path, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH)
+                logger.info(f"Saved topics visualization to {topics_png_path}")
+            except Exception as e:
+                logger.error(f"Failed to save topics visualization as PNG: {e}", exc_info=True)
+        else:
+            logger.warning(f"Skipping topics visualization as there are fewer than 2 topics ({num_topics} found). Need at least 2 topics for 2D visualization.")
 
         # Visualize Heatmap (HTML and PNG)
         # Check if there are enough topics to generate a heatmap (BERTopic requires at least 2 topics for heatmap)
-        if len(topic_model.get_topic_info())-1 >= 2:
+        if num_topics >= 2:
             fig_heatmap = topic_model.visualize_heatmap()
             save_visualization(fig_heatmap, str(Path(output_dir) / "heatmap.html"))
             try:
@@ -355,11 +362,11 @@ def analyze_topics(
             except Exception as e:
                 logger.error(f"Failed to save heatmap visualization as PNG: {e}", exc_info=True)
         else:
-            logger.warning("Skipping heatmap visualization as there are fewer than 2 topics.")
+            logger.warning(f"Skipping heatmap visualization as there are fewer than 2 topics ({num_topics} found).")
 
         # Visualize Documents (HTML only, as it's highly interactive and large)
         # Check if there are enough documents and topics for document visualization
-        if len(docs) >= umap_n_neighbors and len(topic_model.get_topic_info())-1 >=1:
+        if len(docs) >= umap_n_neighbors and num_topics >= 1:
             try:
                 fig_documents = topic_model.visualize_documents(docs, topics=topics) # Pass topics, remove umap_model
                 save_visualization(fig_documents, str(Path(output_dir) / "document_visualization.html"))
@@ -367,7 +374,7 @@ def analyze_topics(
                 # Log error but continue, as this is a non-critical visualization
                 logger.error(f"Failed to generate or save document visualization: {e}", exc_info=True)
         else:
-            logger.warning("Skipping document visualization due to insufficient documents or topics for UMAP.")
+            logger.warning(f"Skipping document visualization due to insufficient documents ({len(docs)} docs, need {umap_n_neighbors}) or topics ({num_topics} topics, need 1).")
 
 
         # Visualize Topic Hierarchy (HTML only)

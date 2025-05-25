@@ -13,11 +13,29 @@ interface TopicAnalysisData {
   transformed_text_file?: string;
   skipped_files?: string[];
   preprocessing?: {
+    method?: string;
+    input_file?: string;
+    content_column?: string;
+    sample_size?: number;
+    customer_only?: boolean;
+  };
+  llm_extraction?: {
     llm_model?: string;
     method?: string;
     prompt_used?: string;
     examples?: string[];
     llm_provider?: string;
+  };
+  bertopic_analysis?: {
+    num_topics_requested?: number;
+    min_topic_size?: number;
+    top_n_words?: number;
+    min_ngram?: number;
+    max_ngram?: number;
+    skip_analysis?: boolean;
+  };
+  fine_tuning?: {
+    use_representation_model?: boolean;
     representation_model_provider?: string;
     representation_model_name?: string;
   };
@@ -71,6 +89,9 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
 
   const data = props.output as TopicAnalysisData;
   const preprocessing = data.preprocessing || {};
+  const llmExtraction = data.llm_extraction || {};
+  const bertopicAnalysis = data.bertopic_analysis || {};
+  const fineTuning = data.fine_tuning || {};
   const topics = data.topics || [];
   const errors = data.errors || [];
 
@@ -104,82 +125,68 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
                 {preprocessing.method || 'programmatic'}
               </Badge>
             </AccordionTrigger>
-          <AccordionContent>
-            <div className="space-y-3 pt-2">
-              <p className="text-sm text-muted-foreground">
-                Programmatic data preparation and filtering step.
-              </p>
-              {preprocessing.method && (
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium">Method:</span>
-                  <Badge variant="secondary">{preprocessing.method}</Badge>
-                </div>
+            <AccordionContent>
+              <PreprocessingSection preprocessing={preprocessing} />
+            </AccordionContent>
+          </AccordionItem>
+
+          {/* LLM Extraction Section */}
+          <AccordionItem value="llm-extraction">
+            <AccordionTrigger className="text-base font-medium">
+              LLM Extraction
+              {llmExtraction.examples && (
+                <Badge variant="default" className="ml-2">
+                  {llmExtraction.examples.length} examples
+                </Badge>
               )}
-              {data.transformed_text_file && (
-                <div className="text-xs text-muted-foreground">
-                  Output: {data.transformed_text_file.split('/').pop()}
-                </div>
+            </AccordionTrigger>
+            <AccordionContent>
+              <LLMExtractionSection 
+                llmExtraction={llmExtraction}
+                promptExpanded={promptExpanded}
+                setPromptExpanded={setPromptExpanded}
+                examplesExpanded={examplesExpanded}
+                setExamplesExpanded={setExamplesExpanded}
+              />
+            </AccordionContent>
+          </AccordionItem>
+
+          {/* BERTopic Analysis Section */}
+          <AccordionItem value="bertopic">
+            <AccordionTrigger className="text-base font-medium">
+              BERTopic Analysis
+              {topics.length > 0 && (
+                <Badge variant="default" className="ml-2">
+                  {topics.length} topics
+                </Badge>
               )}
-            </div>
-          </AccordionContent>
-        </AccordionItem>
+            </AccordionTrigger>
+            <AccordionContent>
+              <BERTopicSection 
+                topics={topics}
+                bertopicAnalysis={bertopicAnalysis}
+                visualizationNotes={data.visualization_notes}
+                attachedFiles={props.attachedFiles || undefined}
+              />
+            </AccordionContent>
+          </AccordionItem>
 
-        {/* LLM Extraction Section */}
-        <AccordionItem value="llm-extraction">
-          <AccordionTrigger className="text-base font-medium">
-            LLM Extraction
-            {preprocessing.examples && (
-              <Badge variant="default" className="ml-2">
-                {preprocessing.examples.length} examples
-              </Badge>
-            )}
-          </AccordionTrigger>
-          <AccordionContent>
-            <LLMExtractionSection 
-              preprocessing={preprocessing}
-              promptExpanded={promptExpanded}
-              setPromptExpanded={setPromptExpanded}
-              examplesExpanded={examplesExpanded}
-              setExamplesExpanded={setExamplesExpanded}
-            />
-          </AccordionContent>
-        </AccordionItem>
-
-        {/* BERTopic Analysis Section */}
-        <AccordionItem value="bertopic">
-          <AccordionTrigger className="text-base font-medium">
-            BERTopic Analysis
-            {topics.length > 0 && (
-              <Badge variant="default" className="ml-2">
-                {topics.length} topics
-              </Badge>
-            )}
-          </AccordionTrigger>
-          <AccordionContent>
-            <BERTopicSection 
-              topics={topics}
-              visualizationNotes={data.visualization_notes}
-              attachedFiles={props.attachedFiles || undefined}
-            />
-          </AccordionContent>
-        </AccordionItem>
-
-        {/* Fine-tuning Section */}
-        <AccordionItem value="fine-tuning">
-          <AccordionTrigger className="text-base font-medium">
-            Fine-tuning
-            {preprocessing.representation_model_provider && (
-              <Badge variant="outline" className="ml-2">
-                {preprocessing.representation_model_name || preprocessing.representation_model_provider}
-              </Badge>
-            )}
-          </AccordionTrigger>
-          <AccordionContent>
-            <FineTuningSection 
-              preprocessing={preprocessing}
-              topics={topics}
-            />
-          </AccordionContent>
+          {/* Fine-tuning Section */}
+          <AccordionItem value="fine-tuning">
+            <AccordionTrigger className="text-base font-medium">
+              Fine-tuning
+              {fineTuning.representation_model_provider && (
+                <Badge variant="outline" className="ml-2">
+                  {fineTuning.representation_model_name || fineTuning.representation_model_provider}
+                </Badge>
+              )}
+            </AccordionTrigger>
+            <AccordionContent>
+              <FineTuningSection 
+                fineTuning={fineTuning}
+                topics={topics}
+              />
+            </AccordionContent>
           </AccordionItem>
         </Accordion>
       </div>
@@ -259,20 +266,75 @@ const TopicAnalysisResults: React.FC<{
 };
 
 /**
+ * Preprocessing Section Component
+ * Shows programmatic data preparation steps
+ */
+const PreprocessingSection: React.FC<{
+  preprocessing: any;
+}> = ({ preprocessing }) => {
+  return (
+    <div className="space-y-4 pt-2">
+      <p className="text-sm text-muted-foreground">
+        Programmatic data preparation and filtering steps performed before LLM processing.
+      </p>
+      
+      <div className="grid gap-3">
+        {preprocessing.method && (
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium">Transform Method:</span>
+            <Badge variant="secondary">{preprocessing.method}</Badge>
+          </div>
+        )}
+        {preprocessing.input_file && (
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium">Input File:</span>
+            <span className="text-sm text-muted-foreground font-mono">
+              {preprocessing.input_file.split('/').pop()}
+            </span>
+          </div>
+        )}
+        {preprocessing.content_column && (
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium">Content Column:</span>
+            <span className="text-sm text-muted-foreground font-mono">
+              {preprocessing.content_column}
+            </span>
+          </div>
+        )}
+        {preprocessing.sample_size && (
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium">Sample Size:</span>
+            <Badge variant="outline">{preprocessing.sample_size}</Badge>
+          </div>
+        )}
+        {typeof preprocessing.customer_only === 'boolean' && (
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium">Customer Only:</span>
+            <Badge variant={preprocessing.customer_only ? "default" : "secondary"}>
+              {preprocessing.customer_only ? "Yes" : "No"}
+            </Badge>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+/**
  * LLM Extraction Section Component
  * Displays the prompt and extracted examples with collapsible/expandable sections
  */
 const LLMExtractionSection: React.FC<{
-  preprocessing: any;
+  llmExtraction: any;
   promptExpanded: boolean;
   setPromptExpanded: (expanded: boolean) => void;
   examplesExpanded: boolean;
   setExamplesExpanded: (expanded: boolean) => void;
-}> = ({ preprocessing, promptExpanded, setPromptExpanded, examplesExpanded, setExamplesExpanded }) => {
+}> = ({ llmExtraction, promptExpanded, setPromptExpanded, examplesExpanded, setExamplesExpanded }) => {
   const [selectedExamples, setSelectedExamples] = useState<Set<number>>(new Set());
   const [showAllExamples, setShowAllExamples] = useState(false);
   
-  const examples = preprocessing.examples || [];
+  const examples = llmExtraction.examples || [];
   const displayedExamples = showAllExamples ? examples : examples.slice(0, 5);
   
   const toggleExampleSelection = (index: number) => {
@@ -293,22 +355,22 @@ const LLMExtractionSection: React.FC<{
       
       {/* Model Info */}
       <div className="flex flex-wrap gap-2">
-        {preprocessing.llm_provider && (
+        {llmExtraction.llm_provider && (
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium">Provider:</span>
-            <Badge variant="secondary">{preprocessing.llm_provider}</Badge>
+            <Badge variant="secondary">{llmExtraction.llm_provider}</Badge>
           </div>
         )}
-        {preprocessing.llm_model && (
+        {llmExtraction.llm_model && (
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium">Model:</span>
-            <Badge variant="outline">{preprocessing.llm_model}</Badge>
+            <Badge variant="outline">{llmExtraction.llm_model}</Badge>
           </div>
         )}
       </div>
 
       {/* Collapsible Prompt Section */}
-      {preprocessing.prompt_used && (
+      {llmExtraction.prompt_used && (
         <div className="border rounded-md">
           <Collapsible open={promptExpanded} onOpenChange={setPromptExpanded}>
             <CollapsibleTrigger asChild>
@@ -319,7 +381,7 @@ const LLMExtractionSection: React.FC<{
                 <div className="flex items-center gap-2">
                   <span className="font-medium">Extraction Prompt</span>
                   <Badge variant="secondary">
-                    {preprocessing.prompt_used.length} chars
+                    {llmExtraction.prompt_used.length} chars
                   </Badge>
                 </div>
                 {promptExpanded ? (
@@ -332,7 +394,7 @@ const LLMExtractionSection: React.FC<{
             <CollapsibleContent>
               <div className="px-4 pb-4">
                 <pre className="text-xs bg-muted p-3 rounded border overflow-x-auto whitespace-pre-wrap">
-                  {preprocessing.prompt_used}
+                  {llmExtraction.prompt_used}
                 </pre>
               </div>
             </CollapsibleContent>
@@ -459,18 +521,47 @@ const BERTopicSection: React.FC<{
     representation: string;
     words: Array<{ word: string; weight: number }>;
   }>;
+  bertopicAnalysis: any;
   visualizationNotes?: {
     topics_visualization?: string;
     heatmap_visualization?: string;
     available_files?: string;
   };
   attachedFiles?: string[];
-}> = ({ topics, visualizationNotes, attachedFiles }) => {
+}> = ({ topics, bertopicAnalysis, visualizationNotes, attachedFiles }) => {
   return (
     <div className="space-y-4 pt-2">
       <p className="text-sm text-muted-foreground">
         Automated topic discovery and clustering using BERTopic.
       </p>
+      
+      {/* BERTopic Configuration */}
+      <div className="grid gap-2">
+        {bertopicAnalysis.min_topic_size && (
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium">Min Topic Size:</span>
+            <Badge variant="outline">{bertopicAnalysis.min_topic_size}</Badge>
+          </div>
+        )}
+        {bertopicAnalysis.num_topics_requested && (
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium">Requested Topics:</span>
+            <Badge variant="outline">{bertopicAnalysis.num_topics_requested}</Badge>
+          </div>
+        )}
+        {bertopicAnalysis.top_n_words && (
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium">Top Words:</span>
+            <Badge variant="outline">{bertopicAnalysis.top_n_words}</Badge>
+          </div>
+        )}
+        {bertopicAnalysis.min_ngram && bertopicAnalysis.max_ngram && (
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium">N-gram Range:</span>
+            <Badge variant="outline">{bertopicAnalysis.min_ngram}-{bertopicAnalysis.max_ngram}</Badge>
+          </div>
+        )}
+      </div>
       
       {topics.length > 0 ? (
         <div className="space-y-3">
@@ -540,7 +631,7 @@ const BERTopicSection: React.FC<{
  * Displays representation model configuration and topic refinement
  */
 const FineTuningSection: React.FC<{
-  preprocessing: any;
+  fineTuning: any;
   topics: Array<{
     id: number;
     name: string;
@@ -548,32 +639,32 @@ const FineTuningSection: React.FC<{
     representation: string;
     words: Array<{ word: string; weight: number }>;
   }>;
-}> = ({ preprocessing, topics }) => {
+}> = ({ fineTuning, topics }) => {
   return (
     <div className="space-y-4 pt-2">
       <p className="text-sm text-muted-foreground">
         LLM-powered topic naming and representation refinement.
       </p>
       
-      {preprocessing.representation_model_provider && (
+      {fineTuning.use_representation_model && fineTuning.representation_model_provider && (
         <div className="space-y-2">
           <h4 className="font-medium">Representation Model</h4>
           <div className="flex gap-2">
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium">Provider:</span>
-              <Badge variant="secondary">{preprocessing.representation_model_provider}</Badge>
+              <Badge variant="secondary">{fineTuning.representation_model_provider}</Badge>
             </div>
-            {preprocessing.representation_model_name && (
+            {fineTuning.representation_model_name && (
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium">Model:</span>
-                <Badge variant="outline">{preprocessing.representation_model_name}</Badge>
+                <Badge variant="outline">{fineTuning.representation_model_name}</Badge>
               </div>
             )}
           </div>
         </div>
       )}
       
-      {topics.length > 0 && (
+      {topics.length > 0 && fineTuning.use_representation_model && (
         <div className="space-y-3">
           <h4 className="font-medium">Refined Topic Names</h4>
           <div className="grid gap-2">
@@ -590,7 +681,7 @@ const FineTuningSection: React.FC<{
         </div>
       )}
       
-      {!preprocessing.representation_model_provider && (
+      {!fineTuning.use_representation_model && (
         <div className="text-center py-8 text-muted-foreground">
           No representation model was used for topic refinement.
         </div>
