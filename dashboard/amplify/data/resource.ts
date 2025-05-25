@@ -222,7 +222,8 @@ const schema = a.schema({
             predictedClassDistribution: a.json(),
             isPredictedClassDistributionBalanced: a.boolean(),
             taskId: a.string(),
-            task: a.belongsTo('Task', 'taskId')
+            task: a.belongsTo('Task', 'taskId'),
+            universalCode: a.string()
         })
         .authorization((allow) => [
             allow.publicApiKey(),
