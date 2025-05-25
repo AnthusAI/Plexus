@@ -125,6 +125,11 @@ module.exports = {
                 'gauge-almost': 'var(--gauge-almost)',
                 'gauge-viable': 'var(--gauge-viable)',
                 'gauge-great': 'var(--gauge-great)',
+                'editor-comment': 'var(--editor-comment)',
+                'editor-key': 'var(--editor-key)',
+                'editor-string': 'var(--editor-string)',
+                'editor-number': 'var(--editor-number)',
+                'editor-keyword': 'var(--editor-keyword)',
             },
             keyframes: {
                 'accordion-down': {

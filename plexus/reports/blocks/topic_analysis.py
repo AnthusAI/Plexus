@@ -27,6 +27,7 @@ SUPPORTED_TEXT_EXTENSIONS = ['.html', '.csv', '.json', '.txt', '.md']
 SUPPORTED_IMAGE_EXTENSIONS = ['.png']
 
 class TopicAnalysis(BaseReportBlock):
+    DEFAULT_NAME = "Topic Analysis"
     """
     Performs topic analysis on transcript data and attaches resulting artifacts.
 
@@ -62,7 +63,6 @@ class TopicAnalysis(BaseReportBlock):
     async def generate(self) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         self.log_messages: List[str] = []
         final_output_data: Dict[str, Any] = {
-            "attached_files": [],
             "skipped_files": [],
             "errors": [],
             "summary": "Topic analysis block execution."
@@ -101,6 +101,7 @@ class TopicAnalysis(BaseReportBlock):
             sample_size = self.config.get("sample_size")
             transform_method = self.config.get("transform_method", "chunk")
             prompt_template_path = self.config.get("prompt_template_path")
+            prompt_template = self.config.get("prompt_template")  # Inline prompt support
             llm_model = self.config.get("llm_model", "gemma3:27b")
             llm_provider = self.config.get("llm_provider", "ollama")
             
@@ -110,7 +111,15 @@ class TopicAnalysis(BaseReportBlock):
                 self._log(f"OpenAI API key not found in env var '{openai_api_key_env_var}'. Certain features might fail.", level="WARNING")
 
             max_retries_itemize = self.config.get("max_retries_itemize", 2)
+            
+            # Check for fresh_transform_cache in both config and runtime params (CLI --fresh flag)
+            # Runtime params take precedence over config
             fresh_transform_cache = self.config.get("fresh_transform_cache", False)
+            if hasattr(self, 'params') and self.params and 'fresh_transform_cache' in self.params:
+                fresh_transform_cache = self.params['fresh_transform_cache'].lower() in ('true', '1', 'yes')
+                self._log(f"Fresh transform cache enabled via CLI --fresh flag")
+            elif fresh_transform_cache:
+                self._log(f"Fresh transform cache enabled via configuration")
 
             # BERTopic params
             skip_analysis = self.config.get("skip_analysis", False)
@@ -120,7 +129,10 @@ class TopicAnalysis(BaseReportBlock):
             min_topic_size = self.config.get("min_topic_size", 10)
             top_n_words = self.config.get("top_n_words", 10)
             use_representation_model = self.config.get("use_representation_model", False)
-            use_langchain_representation = self.config.get("use_langchain_representation", False)
+            
+            # Representation model configuration (for BERTopic topic naming)
+            representation_model_provider = self.config.get("representation_model_provider", "openai")  # openai, anthropic, etc.
+            representation_model_name = self.config.get("representation_model_name", "gpt-4o-mini")  # specific model name
 
             self._log(f"Configuration loaded: input_file_path='{input_file_path}', transform_method='{transform_method}', skip_analysis={skip_analysis}")
 
@@ -139,11 +151,11 @@ class TopicAnalysis(BaseReportBlock):
 
             if transform_method == 'itemize':
                 self._log(f"Using itemized LLM transformation with {llm_provider} model: {llm_model}")
-                _, text_file_path_str = await asyncio.to_thread(
-                    transform_transcripts_itemize,
+                _, text_file_path_str, preprocessing_info = await transform_transcripts_itemize(
                     input_file=input_file_path,
                     content_column=content_column,
                     prompt_template_file=prompt_template_path,
+                    prompt_template=prompt_template,
                     model=llm_model,
                     provider=llm_provider,
                     customer_only=customer_only,
@@ -154,11 +166,11 @@ class TopicAnalysis(BaseReportBlock):
                 )
             elif transform_method == 'llm':
                 self._log(f"Using LLM transformation with {llm_provider} model: {llm_model}")
-                _, text_file_path_str = await asyncio.to_thread(
-                    transform_transcripts_llm,
+                _, text_file_path_str, preprocessing_info = await transform_transcripts_llm(
                     input_file=input_file_path,
                     content_column=content_column,
                     prompt_template_file=prompt_template_path,
+                    prompt_template=prompt_template,
                     model=llm_model,
                     provider=llm_provider,
                     customer_only=customer_only,
@@ -168,7 +180,7 @@ class TopicAnalysis(BaseReportBlock):
                 )
             else: # 'chunk'
                 self._log("Using default chunking transformation.")
-                _, text_file_path_str = await asyncio.to_thread(
+                _, text_file_path_str, preprocessing_info = await asyncio.to_thread(
                     transform_transcripts,
                     input_file=input_file_path,
                     content_column=content_column,
@@ -187,7 +199,10 @@ class TopicAnalysis(BaseReportBlock):
                 return final_output_data, self._get_log_string()
 
             self._log(f"Transcript transformation completed. Text file for BERTopic: {text_file_path_str}")
+            self._log(f"Preprocessing method: {preprocessing_info.get('method', 'unknown')}")
+            self._log(f"Preprocessing examples count: {len(preprocessing_info.get('examples', []))}")
             final_output_data["transformed_text_file"] = text_file_path_str
+            final_output_data["preprocessing"] = preprocessing_info
 
 
             # --- 3. Perform BERTopic Analysis (if not skipped) ---
@@ -210,6 +225,11 @@ class TopicAnalysis(BaseReportBlock):
                 self._log(f"Set OMP_NUM_THREADS for BERTopic: {os.environ.get('OMP_NUM_THREADS')}", level="DEBUG")
 
                 # Capture the return value from analyze_topics (it returns just one value, not a tuple)
+                # Add representation model configuration to preprocessing info for display
+                if use_representation_model:
+                    final_output_data["preprocessing"]["representation_model_provider"] = representation_model_provider
+                    final_output_data["preprocessing"]["representation_model_name"] = representation_model_name
+                
                 topic_model = await asyncio.to_thread(
                     analyze_topics,
                     text_file_path=text_file_path_str,
@@ -220,7 +240,8 @@ class TopicAnalysis(BaseReportBlock):
                     top_n_words=top_n_words,
                     use_representation_model=use_representation_model,
                     openai_api_key=openai_api_key, # Passed directly
-                    use_langchain=use_langchain_representation
+                    representation_model_provider=representation_model_provider,
+                    representation_model_name=representation_model_name
                 )
                 self._log("BERTopic analysis completed.")
                 
@@ -291,8 +312,7 @@ class TopicAnalysis(BaseReportBlock):
                                         content=content.encode('utf-8'), # Encode string content to bytes
                                         content_type=content_type
                                     )
-                                    # Add the path to our tracking
-                                    final_output_data["attached_files"].append(s3_file_path)
+                                    # File is automatically tracked in ReportBlock.attachedFiles
                                 except Exception as e:
                                     self._log(f"Failed to attach text file {file_path}: {e}", level="ERROR")
                                     final_output_data["errors"].append(f"Error attaching {file_path}: {e}")
@@ -311,15 +331,14 @@ class TopicAnalysis(BaseReportBlock):
                                         content=content, # Pass bytes directly
                                         content_type=content_type
                                     )
-                                    # Add the path to our tracking
-                                    final_output_data["attached_files"].append(s3_file_path)
+                                    # File is automatically tracked in ReportBlock.attachedFiles
                                 except Exception as e:
                                     self._log(f"Failed to attach image file {file_path}: {e}", level="ERROR")
                                     final_output_data["errors"].append(f"Error attaching {file_path}: {e}")
                             else:
                                 self._log(f"Skipping unsupported file type: {file_path}", level="DEBUG")
                                 final_output_data["skipped_files"].append(str(file_path))
-                final_output_data["summary"] = f"Topic analysis completed. {len(final_output_data['attached_files'])} files attached."
+                final_output_data["summary"] = "Topic analysis completed successfully."
 
         except Exception as e:
             import traceback
@@ -340,8 +359,11 @@ class TopicAnalysis(BaseReportBlock):
                 final_output_data["errors"].append(f"Cleanup error for {main_temp_dir}: {str(e)}")
         
         # Ensure summary reflects final state if errors occurred
-        if final_output_data["errors"] and not final_output_data["summary"].endswith("failed.") and not final_output_data["summary"].endswith("error.") :
-             final_output_data["summary"] = f"Topic analysis completed with errors. Attached {len(final_output_data['attached_files'])} files."
+        if final_output_data["errors"] and not final_output_data["summary"].endswith("failed.") and not final_output_data["summary"].endswith("error."):
+             final_output_data["summary"] = "Topic analysis completed with errors."
+
+        # Add block metadata for frontend display
+        final_output_data["block_title"] = self.config.get("name", self.DEFAULT_NAME)
 
         return final_output_data, self._get_log_string()
 

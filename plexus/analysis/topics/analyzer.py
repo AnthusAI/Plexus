@@ -163,7 +163,9 @@ def analyze_topics(
     top_n_words: int = 10,
     use_representation_model: bool = True,
     openai_api_key: Optional[str] = None,
-    use_langchain: bool = False
+    use_langchain: bool = False,
+    representation_model_provider: str = "openai",
+    representation_model_name: str = "gpt-4o-mini"
 ) -> None:
     """
     Perform BERTopic analysis on transformed transcripts.
@@ -174,10 +176,12 @@ def analyze_topics(
         nr_topics: Target number of topics after reduction (default: None, no reduction)
         n_gram_range: The lower and upper boundary of the n-gram range (default: (1, 2))
         min_topic_size: Minimum size of topics (default: 10)
-        top_n_words: Number of words to represent each topic (default: 10)
-        use_representation_model: Whether to use OpenAI to generate better topic representations (default: True)
-        openai_api_key: OpenAI API key (if not provided, will use environment variable)
-        use_langchain: Whether to use LangChain for representation model instead of direct OpenAI (default: False)
+        top_n_words: Number of words per topic (default: 10)
+        use_representation_model: Whether to use LLM for better topic naming (default: True)
+        openai_api_key: OpenAI API key for representation model (default: None, uses env var)
+        use_langchain: Whether to use LangChain for representation model (default: False)
+        representation_model_provider: LLM provider for topic naming (default: "openai")
+        representation_model_name: Specific model name for topic naming (default: "gpt-4o-mini")
     """
     # Create output directory if it doesn't exist
     ensure_directory(output_dir)
@@ -237,14 +241,22 @@ def analyze_topics(
             else:
                 if use_langchain:
                     # Using simplified LangChain integration directly from docs
-                    logger.info("Initializing LangChain representation model with gpt-4o-mini...")
+                    logger.info(f"Initializing LangChain representation model with {representation_model_name} from {representation_model_provider}...")
                     
                     # Create a llm for LangChain
-                    llm = ChatOpenAI(
-                        model="gpt-4o-mini",
-                        temperature=0.0,
-                        openai_api_key=api_key
-                    )
+                    if representation_model_provider.lower() == "openai":
+                        llm = ChatOpenAI(
+                            model=representation_model_name,
+                            temperature=0.0,
+                            openai_api_key=api_key
+                        )
+                    else:
+                        logger.warning(f"Provider {representation_model_provider} not supported for LangChain integration, falling back to OpenAI")
+                        llm = ChatOpenAI(
+                            model=representation_model_name,
+                            temperature=0.0,
+                            openai_api_key=api_key
+                        )
                     
                     # Create a simple QA chain  
                     chain = load_qa_chain(llm, chain_type="stuff")
@@ -261,8 +273,13 @@ def analyze_topics(
                     logger.info("LangChain representation model initialized successfully.")
                 else:
                     # Using direct OpenAI integration
-                    logger.info("Initializing OpenAI representation model with gpt-4o-mini...")
-                    client = openai.OpenAI(api_key=api_key)
+                    logger.info(f"Initializing OpenAI representation model with {representation_model_name} from {representation_model_provider}...")
+                    
+                    if representation_model_provider.lower() == "openai":
+                        client = openai.OpenAI(api_key=api_key)
+                    else:
+                        logger.warning(f"Provider {representation_model_provider} not supported for direct integration, falling back to OpenAI")
+                        client = openai.OpenAI(api_key=api_key)
                     
                     # Custom prompt for OpenAI
                     summarization_prompt = """
@@ -276,7 +293,7 @@ def analyze_topics(
                     
                     representation_model = OpenAI(
                         client=client, 
-                        model="gpt-4o-mini", 
+                        model=representation_model_name, 
                         prompt=summarization_prompt,
                         delay_in_seconds=1
                     )

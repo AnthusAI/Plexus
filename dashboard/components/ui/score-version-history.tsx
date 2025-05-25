@@ -2,12 +2,12 @@ import * as React from 'react'
 import { cn } from '@/lib/utils'
 import { Timestamp } from './timestamp'
 import { Badge } from './badge'
-import { Star, StarIcon, FileStack, ChevronDown, ChevronUp, Award } from 'lucide-react'
+import { Star, FileStack, ChevronDown, ChevronUp, Award } from 'lucide-react'
 import { Button } from './button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { ToggleGroup, ToggleGroupItem } from './toggle-group'
+import { CardButton } from '@/components/CardButton'
 import { parse as parseYaml } from 'yaml'
-import { Switch } from './switch'
-import { Label } from './label'
 
 export interface ScoreVersion {
   id: string
@@ -34,6 +34,7 @@ export interface ScoreVersionHistoryProps extends React.HTMLAttributes<HTMLDivEl
   onPromoteToChampion?: (versionId: string) => void
   showOnlyFeatured?: boolean
   onToggleShowOnlyFeatured?: () => void
+  forceExpanded?: boolean
 }
 
 export function ScoreVersionHistory({
@@ -45,10 +46,30 @@ export function ScoreVersionHistory({
   onPromoteToChampion,
   showOnlyFeatured = false,
   onToggleShowOnlyFeatured,
+  forceExpanded = false,
   className,
   ...props
 }: ScoreVersionHistoryProps) {
-  const [isHistoryExpanded, setIsHistoryExpanded] = React.useState(false)
+  const [isHistoryExpanded, setIsHistoryExpanded] = React.useState(forceExpanded) // Collapsed by default, unless forceExpanded
+  
+  // Update expansion state when forceExpanded changes
+  React.useEffect(() => {
+    if (forceExpanded) {
+      setIsHistoryExpanded(true)
+    }
+  }, [forceExpanded])
+  
+  // Smart default for featured filter based on version count
+  const defaultShowOnlyFeatured = versions.length > 3
+  const [internalShowOnlyFeatured, setInternalShowOnlyFeatured] = React.useState(defaultShowOnlyFeatured)
+  
+  // Use internal state if no external control is provided
+  // If onToggleShowOnlyFeatured is provided, use external control, otherwise use internal
+  const useInternalState = !onToggleShowOnlyFeatured
+  const effectiveShowOnlyFeatured = useInternalState ? internalShowOnlyFeatured : showOnlyFeatured
+  const effectiveOnToggleShowOnlyFeatured = useInternalState ? (() => {
+    setInternalShowOnlyFeatured(prev => !prev);
+  }) : onToggleShowOnlyFeatured
 
   // Sort versions by createdAt in descending order (newest first)
   const sortedVersions = [...versions].sort(
@@ -58,8 +79,8 @@ export function ScoreVersionHistory({
   // Find champion version if it exists
   const championVersion = championVersionId ? versions.find(v => v.id === championVersionId) : null
   
-  // Filter versions based on showOnlyFeatured toggle
-  const filteredVersions = showOnlyFeatured 
+  // Filter versions based on effective showOnlyFeatured toggle
+  const filteredVersions = effectiveShowOnlyFeatured 
     ? sortedVersions.filter(v => v.isFeatured || v.id === championVersionId)
     : sortedVersions
   
@@ -121,7 +142,7 @@ export function ScoreVersionHistory({
                 className="h-8 w-8"
               >
                 {version.isFeatured ? (
-                  <StarIcon className="h-4 w-4 fill-current" />
+                  <Star className="h-4 w-4" fill="currentColor" />
                 ) : (
                   <Star className="h-4 w-4" />
                 )}
@@ -173,43 +194,53 @@ export function ScoreVersionHistory({
           
           {/* Show expand/collapse button if there are more versions */}
           {otherVersions.length > 0 && (
-            <Button
-              variant="ghost"
-              className="w-full flex items-center justify-between gap-2 h-auto py-2 px-0 font-medium hover:bg-transparent"
-              onClick={() => setIsHistoryExpanded(!isHistoryExpanded)}
-            >
+            <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <FileStack className="h-4 w-4" />
-                <span>Version History</span>
+                <span className="text-sm font-medium">Version History</span>
               </div>
               
-              {onToggleShowOnlyFeatured && (
-                <div className="flex items-center gap-2">
-                  <Switch 
-                    id="show-featured-history" 
-                    checked={showOnlyFeatured}
-                    onCheckedChange={onToggleShowOnlyFeatured}
-                  />
-                  <Label htmlFor="show-featured-history" className="text-xs">
-                    Featured
-                  </Label>
-                </div>
-              )}
-              
-              <div>
-                {isHistoryExpanded ? (
-                  <ChevronUp className="h-4 w-4" />
-                ) : (
-                  <ChevronDown className="h-4 w-4" />
+              <div className="flex items-center gap-2">
+                {/* Featured filter toggle group - only show when expanded */}
+                {isHistoryExpanded && (
+                  <ToggleGroup 
+                    type="single" 
+                    value={effectiveShowOnlyFeatured ? "featured" : "all"}
+                    onValueChange={(value) => {
+                      if (value === "featured" && !effectiveShowOnlyFeatured) {
+                        effectiveOnToggleShowOnlyFeatured();
+                      } else if (value === "all" && effectiveShowOnlyFeatured) {
+                        effectiveOnToggleShowOnlyFeatured();
+                      }
+                    }}
+                    variant="outline"
+                    className="h-8"
+                  >
+                    <ToggleGroupItem value="all" className="h-8 px-2 gap-1 text-xs">
+                      <Star className="h-3 w-3" />
+                      All
+                    </ToggleGroupItem>
+                    <ToggleGroupItem value="featured" className="h-8 px-2 gap-1 text-xs">
+                      <Star className="h-3 w-3" fill="currentColor" />
+                      Featured
+                    </ToggleGroupItem>
+                  </ToggleGroup>
                 )}
+                
+                <CardButton
+                  icon={isHistoryExpanded ? ChevronUp : ChevronDown}
+                  onClick={() => setIsHistoryExpanded(!isHistoryExpanded)}
+                  aria-label={isHistoryExpanded ? 'Collapse version history' : 'Expand version history'}
+                  className="bg-card"
+                />
               </div>
-            </Button>
+            </div>
           )}
           
-          {/* Show other versions when expanded with proper scrolling */}
+          {/* Show versions when expanded */}
           {isHistoryExpanded && otherVersions.length > 0 && (
-            <div className="max-h-[300px] overflow-y-auto pr-1">
-              <div className="space-y-2">
+            <div className="mt-3 max-h-[300px] overflow-y-auto pr-1">
+              <div className="space-y-3">
                 {otherVersions.map(version => renderVersion(version, false))}
               </div>
             </div>

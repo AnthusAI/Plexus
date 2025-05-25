@@ -335,7 +335,9 @@ const GridContent = React.memo(({ data, extra, isSelected }: {
     variant: 'grid' as const,
     extra,
     isSelected,
-    commandDisplay: 'hide' as const
+    commandDisplay: 'hide' as const,
+    elapsedSeconds: data.elapsedSeconds,
+    estimatedRemainingSeconds: data.estimatedRemainingSeconds
   }), [
     data.task?.status,
     data.status,
@@ -351,7 +353,9 @@ const GridContent = React.memo(({ data, extra, isSelected }: {
     data.task?.command,
     data.command,
     extra,
-    isSelected
+    isSelected,
+    data.elapsedSeconds,
+    data.estimatedRemainingSeconds
   ]);
 
   return (
@@ -797,6 +801,8 @@ const DetailContent = React.memo(({
                     isSelected={effectiveIsSelected}
                     commandDisplay={commandDisplay}
                     onCommandDisplayChange={onCommandDisplayChange}
+                    elapsedSeconds={data.elapsedSeconds}
+                    estimatedRemainingSeconds={data.estimatedRemainingSeconds}
                   />
                 </div>
 
@@ -1076,7 +1082,9 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
       errorMessage: data.task?.errorMessage || data.errorMessage || undefined,
       command: data.task?.command || data.command,
       statusMessage: data.task?.stages?.items?.find(s => s.status === 'RUNNING')?.statusMessage || undefined,
-      isSelected
+      isSelected,
+      elapsedSeconds: data.elapsedSeconds,
+      estimatedRemainingSeconds: data.estimatedRemainingSeconds
     } as const
 
     return <TaskStatus {...taskStatus} />

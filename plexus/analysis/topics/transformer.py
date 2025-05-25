@@ -174,7 +174,7 @@ def transform_transcripts(
     fresh: bool = False,
     inspect: bool = True,
     sample_size: Optional[int] = None
-) -> Tuple[str, str]:
+) -> Tuple[str, str, Dict[str, Any]]:
     """
     Transform transcript data into BERTopic-compatible format.
     
@@ -187,7 +187,7 @@ def transform_transcripts(
         sample_size: Number of transcripts to sample from the dataset
         
     Returns:
-        Tuple of (cached_parquet_path, text_file_path)
+        Tuple of (cached_parquet_path, text_file_path, preprocessing_info)
     """
     # Generate output file paths
     base_path = os.path.splitext(input_file)[0]
@@ -245,7 +245,19 @@ def transform_transcripts(
         for turn in transformed_df[content_column]:
             f.write(f"{turn}\n")
     
-    return cached_parquet_path, text_file_path
+    # Show first 20 examples of preprocessing output
+    examples = []
+    for i in range(min(20, len(transformed_df))):
+        processed_row = transformed_df.iloc[i]
+        example = processed_row[content_column][:500] + ("..." if len(processed_row[content_column]) > 500 else "")
+        examples.append(example)
+    
+    preprocessing_info = {
+        "method": "chunk",
+        "examples": examples
+    }
+    
+    return cached_parquet_path, text_file_path, preprocessing_info
 
 async def _process_transcript_async(
     llm, prompt, text, provider, i, total_count
@@ -329,6 +341,7 @@ async def transform_transcripts_llm(
     input_file: str,
     content_column: str = 'content',
     prompt_template_file: str = None,
+    prompt_template: str = None,
     model: str = 'gemma3:27b',
     provider: str = 'ollama',
     customer_only: bool = False,
@@ -336,7 +349,7 @@ async def transform_transcripts_llm(
     inspect: bool = True,
     openai_api_key: str = None,
     sample_size: Optional[int] = None
-) -> Tuple[str, str]:
+) -> Tuple[str, str, Dict[str, Any]]:
     """
     Transform transcript data using a language model.
     
@@ -356,12 +369,13 @@ async def transform_transcripts_llm(
         sample_size: Number of transcripts to sample from the dataset
         
     Returns:
-        Tuple of (cached_parquet_path, text_file_path)
+        Tuple of (cached_parquet_path, text_file_path, preprocessing_info)
     """
     result = await _transform_transcripts_llm_async(
         input_file=input_file, 
         content_column=content_column, 
-        prompt_template_file=prompt_template_file, 
+        prompt_template_file=prompt_template_file,
+        prompt_template=prompt_template, 
         model=model, 
         provider=provider, 
         customer_only=customer_only, 
@@ -376,6 +390,7 @@ async def _transform_transcripts_llm_async(
     input_file: str,
     content_column: str = 'content',
     prompt_template_file: str = None,
+    prompt_template: str = None,
     model: str = 'gemma3:27b',
     provider: str = 'ollama',
     customer_only: bool = False,
@@ -383,7 +398,7 @@ async def _transform_transcripts_llm_async(
     inspect: bool = True,
     openai_api_key: str = None,
     sample_size: Optional[int] = None
-) -> Tuple[str, str]:
+) -> Tuple[str, str, Dict[str, Any]]:
     """
     Async implementation of transform_transcripts_llm.
     """
@@ -399,7 +414,62 @@ async def _transform_transcripts_llm_async(
     
     if not fresh and os.path.exists(cached_parquet_path) and os.path.exists(text_file_path):
         logging.info(f"Using cached files: {cached_parquet_path} and {text_file_path}")
-        return cached_parquet_path, text_file_path
+        
+        # Even when using cached data, we can still capture examples
+        # by reading the preprocessed data and showing what the LLM output looks like
+        try:
+            cached_df = pd.read_parquet(cached_parquet_path)
+            
+            # Get first 20 examples of preprocessing output
+            examples = []
+            for i in range(min(20, len(cached_df))):
+                cached_row = cached_df.iloc[i]
+                example = cached_row[content_column][:500] + ("..." if len(cached_row[content_column]) > 500 else "")
+                examples.append(example)
+            
+            # Always determine what template was used, even from cached data
+            if prompt_template_file:
+                try:
+                    with open(prompt_template_file, 'r') as f:
+                        template_data = json.load(f)
+                        template = template_data.get('template', 
+                            """Summarize the key topics in this transcript in 3-5 concise bullet points:
+                            
+                            {text}
+                            
+                            Key topics:"""
+                        )
+                except Exception as e:
+                    template = f"Error loading template from {prompt_template_file}: {e}"
+            else:
+                template = """Summarize the key topics in this transcript in 3-5 concise bullet points:
+                
+                {text}
+                
+                Key topics:"""
+            
+            # Build preprocessing info from cached context
+            preprocessing_info = {
+                "method": "llm",
+                "prompt_used": template,
+                "llm_provider": provider,
+                "llm_model": model,
+                "examples": examples
+            }
+            
+            return cached_parquet_path, text_file_path, preprocessing_info
+            
+        except Exception as e:
+            logging.warning(f"Could not extract examples from cached data: {e}")
+            # Fallback to minimal preprocessing info
+            preprocessing_info = {
+                "method": "llm", 
+                "prompt_used": "Unknown (cached)",
+                "llm_provider": provider,
+                "llm_model": model,
+                "examples": []
+            }
+            return cached_parquet_path, text_file_path, preprocessing_info
     
     logging.info(f"Loading transcript data from {input_file}")
     df = pd.read_parquet(input_file)
@@ -415,7 +485,11 @@ async def _transform_transcripts_llm_async(
     if inspect:
         inspect_data(df, content_column)
     
-    if prompt_template_file:
+    # Determine template: inline prompt takes precedence over file
+    if prompt_template:
+        template = prompt_template
+        logging.info("Using inline prompt template")
+    elif prompt_template_file:
         try:
             with open(prompt_template_file, 'r') as f:
                 template_data = json.load(f)
@@ -426,6 +500,7 @@ async def _transform_transcripts_llm_async(
                     
                     Key topics:"""
                 )
+            logging.info(f"Using prompt template from file: {prompt_template_file}")
         except Exception as e:
             logging.error(f"Error loading prompt template: {e}. Using default template.")
             template = """Summarize the key topics in this transcript in 3-5 concise bullet points:
@@ -439,6 +514,7 @@ async def _transform_transcripts_llm_async(
         {text}
         
         Key topics:"""
+        logging.info("Using default prompt template")
     
     prompt = ChatPromptTemplate.from_template(template)
     
@@ -479,6 +555,8 @@ async def _transform_transcripts_llm_async(
         valid_indices.append(i)
     
     transformed_rows = []
+    preprocessing_examples = []
+    
     if valid_texts:
         logging.info(f"Processing all {len(valid_texts)} valid transcripts concurrently.")
         
@@ -487,7 +565,7 @@ async def _transform_transcripts_llm_async(
         )
         
         with open(text_file_path, 'w') as f:
-            for response, row in all_results:
+            for i, (response, row) in enumerate(all_results):
                 if isinstance(response, Exception):
                     logging.error(f"Error processing transcript: {response}")
                     continue
@@ -497,6 +575,10 @@ async def _transform_transcripts_llm_async(
                     response_text = response.content
                 else:
                     response_text = response
+                
+                # Capture first 20 examples for preprocessing info
+                if i < 20:
+                    preprocessing_examples.append(response_text[:500] + ("..." if len(response_text) > 500 else ""))
                 
                 # Create new row with LLM response
                 new_row = row.copy()
@@ -514,8 +596,18 @@ async def _transform_transcripts_llm_async(
     logging.info(f"Saving transformed data to {cached_parquet_path}")
     transformed_df.to_parquet(cached_parquet_path)
     logging.info(f"Saved LLM-processed text to {text_file_path}")
+    
+    # Create preprocessing info with examples and prompt
+    preprocessing_info = {
+        "method": "llm",
+        "prompt_used": template,
+        "llm_provider": provider,
+        "llm_model": model,
+        "examples": preprocessing_examples
+    }
+    
     gc.collect()
-    return cached_parquet_path, text_file_path
+    return cached_parquet_path, text_file_path, preprocessing_info
 
 class TranscriptItem(BaseModel):
     """Model for a single item extracted from a transcript."""
@@ -530,6 +622,7 @@ async def transform_transcripts_itemize(
     input_file: str,
     content_column: str = 'content',
     prompt_template_file: str = None,
+    prompt_template: str = None,
     model: str = 'gemma3:27b',
     provider: str = 'ollama',
     customer_only: bool = False,
@@ -539,7 +632,7 @@ async def transform_transcripts_itemize(
     retry_delay: float = 1.0,
     openai_api_key: str = None,
     sample_size: Optional[int] = None
-) -> Tuple[str, str]:
+) -> Tuple[str, str, Dict[str, Any]]:
     """
     Transform transcript data using a language model with itemization.
     
@@ -561,12 +654,13 @@ async def transform_transcripts_itemize(
         sample_size: Number of transcripts to sample from the dataset
         
     Returns:
-        Tuple of (cached_parquet_path, text_file_path)
+        Tuple of (cached_parquet_path, text_file_path, preprocessing_info)
     """
     return await _transform_transcripts_itemize_async(
         input_file=input_file, 
         content_column=content_column, 
-        prompt_template_file=prompt_template_file, 
+        prompt_template_file=prompt_template_file,
+        prompt_template=prompt_template, 
         model=model, 
         provider=provider, 
         customer_only=customer_only,
@@ -772,6 +866,7 @@ async def _transform_transcripts_itemize_async(
     input_file: str,
     content_column: str = 'content',
     prompt_template_file: str = None,
+    prompt_template: str = None,
     model: str = 'gemma3:27b',
     provider: str = 'ollama',
     customer_only: bool = False,
@@ -781,7 +876,7 @@ async def _transform_transcripts_itemize_async(
     retry_delay: float = 1.0,
     openai_api_key: str = None,
     sample_size: Optional[int] = None
-) -> Tuple[str, str]:
+) -> Tuple[str, str, Dict[str, Any]]:
     """
     Async implementation of transform_transcripts_itemize.
     """
@@ -797,7 +892,62 @@ async def _transform_transcripts_itemize_async(
 
     if not fresh and os.path.exists(cached_parquet_path) and os.path.exists(text_file_path):
         logging.info(f"Using cached files: {cached_parquet_path} and {text_file_path}")
-        return cached_parquet_path, text_file_path
+        
+        # Even when using cached data, we can still capture examples
+        # by reading the preprocessed data and showing what the LLM output looks like
+        try:
+            cached_df = pd.read_parquet(cached_parquet_path)
+            
+            # Get first 20 examples of preprocessing output
+            examples = []
+            for i in range(min(20, len(cached_df))):
+                cached_row = cached_df.iloc[i]
+                example = cached_row[content_column][:500] + ("..." if len(cached_row[content_column]) > 500 else "")
+                examples.append(example)
+            
+            # Always determine what template was used, even from cached data
+            if prompt_template_file:
+                try:
+                    with open(prompt_template_file, 'r') as f:
+                        template_data = json.load(f)
+                        template = template_data.get('template', 
+                            """Summarize the key topics in this transcript in 3-5 concise bullet points:
+                            
+                            {text}
+                            
+                            Key topics:"""
+                        )
+                except Exception as e:
+                    template = f"Error loading template from {prompt_template_file}: {e}"
+            else:
+                template = """Summarize the key topics in this transcript in 3-5 concise bullet points:
+                
+                {text}
+                
+                Key topics:"""
+            
+            # Build preprocessing info from cached context
+            preprocessing_info = {
+                "method": "itemize",
+                "prompt_used": template,
+                "llm_provider": provider,
+                "llm_model": model,
+                "examples": examples
+            }
+            
+            return cached_parquet_path, text_file_path, preprocessing_info
+            
+        except Exception as e:
+            logging.warning(f"Could not extract examples from cached data: {e}")
+            # Fallback to minimal preprocessing info
+            preprocessing_info = {
+                "method": "itemize",
+                "prompt_used": "Unknown (cached)",
+                "llm_provider": provider,
+                "llm_model": model,
+                "examples": []
+            }
+            return cached_parquet_path, text_file_path, preprocessing_info
 
     logging.info(f"Loading transcript data from {input_file}")
     df = pd.read_parquet(input_file)
@@ -846,7 +996,11 @@ async def _transform_transcripts_itemize_async(
         max_retries=max_retries
     )
 
-    if prompt_template_file:
+    # Determine template: inline prompt takes precedence over file
+    if prompt_template:
+        template = prompt_template
+        logging.info("Using inline prompt template for itemization")
+    elif prompt_template_file:
         try:
             with open(prompt_template_file, 'r') as f:
                 template_data = json.load(f)
@@ -857,6 +1011,7 @@ async def _transform_transcripts_itemize_async(
 
 {format_instructions}"""
                 )
+            logging.info(f"Using prompt template from file: {prompt_template_file}")
         except Exception as e:
             logging.error(f"Error loading prompt template: {e}. Using default template.")
             template = """Extract the main topics from this transcript. For each topic, provide a concise description.
@@ -870,6 +1025,7 @@ async def _transform_transcripts_itemize_async(
 {text}
 
 {format_instructions}"""
+        logging.info("Using default prompt template for itemization")
     
     prompt = ChatPromptTemplate.from_template(template)
     logging.info(f"Using prompt template:\n{template}")
@@ -885,6 +1041,8 @@ async def _transform_transcripts_itemize_async(
         valid_indices.append(i)
     
     transformed_rows = []
+    preprocessing_examples = []
+    
     if valid_rows:
         logging.info(f"Processing all {len(valid_rows)} valid transcripts concurrently for itemization.")
         
@@ -894,7 +1052,7 @@ async def _transform_transcripts_itemize_async(
         )
         
         with open(text_file_path, 'w') as f:
-            for result_pair, row in all_results:
+            for i, (result_pair, row) in enumerate(all_results):
                 if isinstance(result_pair, Exception):
                     logging.error(f"Error processing transcript: {result_pair}")
                     error_text = f"ERROR: Unexpected error: {str(result_pair)}"
@@ -904,6 +1062,17 @@ async def _transform_transcripts_itemize_async(
                     f.write(f"{error_text}\n")
                     continue
                 success, data = result_pair
+                
+                # Capture first 20 examples for preprocessing info
+                if i < 20:
+                    if success:
+                        # For successful itemization, show the parsed items
+                        after_text = "\n".join([f"{item.category}: {item.question}" for item in data.items])
+                    else:
+                        # For failed itemization, show the error
+                        after_text = str(data)
+                    preprocessing_examples.append(after_text[:500] + ("..." if len(after_text) > 500 else ""))
+                
                 if success:
                     logging.info(f"SUCCESSFULLY PARSED {len(data.items)} ITEMS:")
                     for idx, item in enumerate(data.items):
@@ -933,5 +1102,15 @@ async def _transform_transcripts_itemize_async(
     logging.info(f"Saving transformed data to {cached_parquet_path}")
     transformed_df.to_parquet(cached_parquet_path)
     logging.info(f"Saved itemized text to {text_file_path}")
+    
+    # Create preprocessing info with examples and prompt
+    preprocessing_info = {
+        "method": "itemize",
+        "prompt_used": template,
+        "llm_provider": provider,
+        "llm_model": model,
+        "examples": preprocessing_examples
+    }
+    
     gc.collect()
-    return cached_parquet_path, text_file_path 
+    return cached_parquet_path, text_file_path, preprocessing_info 

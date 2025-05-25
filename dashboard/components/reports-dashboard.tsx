@@ -34,7 +34,7 @@ import type { LazyLoader } from '@/utils/types'
 import { toast } from "sonner"
 import { shareLinkClient, ShareLinkViewOptions } from "@/utils/share-link-client"
 import { ShareResourceModal } from "@/components/share-resource-modal"
-import { EvaluationDashboardSkeleton } from "@/components/loading-skeleton" // Placeholder skeleton
+import { ReportsDashboardSkeleton } from "@/components/loading-skeleton"
 import ReportTask, { ReportTaskData } from "@/components/ReportTask" // Import ReportTask with its types
 import { RunReportButton } from '@/components/task-dispatch' // Import direct button
 
@@ -1110,7 +1110,7 @@ export default function ReportsDashboard({
         <div className="mb-4 text-sm text-muted-foreground">
           {error ? `Error: ${error}` : ''}
         </div>
-        <EvaluationDashboardSkeleton /> {/* Use placeholder */}
+        <ReportsDashboardSkeleton />
       </div>
     )
   }
@@ -1131,7 +1131,6 @@ export default function ReportsDashboard({
       <div className="flex-none p-1.5">
         <div className="flex justify-between items-start">
           <div>
-            <h1 className="text-xl font-semibold">Reports</h1>
             {error && <p className="text-xs text-destructive">{error}</p>}
           </div>
           <div className="flex gap-2">
@@ -1172,14 +1171,6 @@ export default function ReportsDashboard({
               {reports.map((report) => {
                 const clickHandler = getReportClickHandler(report.id);
                 
-                // ADD DEBUG CODE
-                console.log('🔍 DEBUG GRID ITEM:', {
-                  reportId: report.id.substring(0, 6),
-                  reportName: report.name,
-                  reportHasName: !!report.name,
-                  reportNameType: typeof report.name
-                });
-                
                 // Safely extract stages (reuse the same approach as above)
                 const stages = [];
                 if (report.task && 'stages' in report.task && report.task.stages) {
@@ -1210,13 +1201,7 @@ export default function ReportsDashboard({
                 
                 // Ensure we have a valid display name for the report - USE FORCED STRING TYPE
                 const displayName = String(report.name || 'Report');
-                
-                console.log(`🔍 Grid item ${report.id} name debug:`, {
-                  reportName: report.name, 
-                  displayName,
-                  configName: report.reportConfiguration?.name
-                });
-                
+                                
                 // The ReportTask component uses configName as the primary display name
                 // We need to pass the report name both as title and as configName to ensure it displays correctly
                 const taskData = {

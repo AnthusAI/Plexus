@@ -242,7 +242,7 @@ def topics(
             if prompt_template:
                 logging.info(f"Using prompt template from: {prompt_template}")
             try:
-                _, text_file_path = asyncio.run(transform_transcripts_itemize(
+                _, text_file_path, _ = asyncio.run(transform_transcripts_itemize(
                     input_file=str(input_path),
                     content_column=content_column,
                     prompt_template_file=prompt_template,
@@ -265,7 +265,7 @@ def topics(
             if prompt_template:
                 logging.info(f"Using prompt template from: {prompt_template}")
             try:
-                _, text_file_path = asyncio.run(transform_transcripts_llm(
+                _, text_file_path, _ = asyncio.run(transform_transcripts_llm(
                     input_file=str(input_path),
                     content_column=content_column,
                     prompt_template_file=prompt_template,
@@ -285,7 +285,7 @@ def topics(
         else:  # Default chunking method (transform == 'chunk')
             logging.info("Using default chunking transformation")
             try:
-                _, text_file_path = transform_transcripts(
+                _, text_file_path, _ = transform_transcripts(
                     input_file=str(input_path),
                     content_column=content_column,
                     customer_only=customer_only,

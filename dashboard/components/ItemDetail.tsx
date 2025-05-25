@@ -6,7 +6,7 @@ import { ChevronUp, ChevronDown, Square, Columns2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CardButton } from '@/components/CardButton'
 import ItemDetailScoreResult from './ItemDetailScoreResult'
-import { formatTimeAgo } from '@/utils/format-time'
+import { Timestamp } from '@/components/ui/timestamp'
 
 interface Score {
   name: string
@@ -124,7 +124,7 @@ const ItemDetail: React.FC<ItemDetailProps> = ({
         <div>
           <h2 className="text-xl font-semibold">{item.scorecard}</h2>
           <p className="text-sm text-muted-foreground">
-            {formatTimeAgo(item.date)}
+            <Timestamp time={item.date} variant="relative" />
           </p>
         </div>
         <div className="flex items-center space-x-2">
