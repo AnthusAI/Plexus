@@ -295,7 +295,12 @@ const ReportTask: React.FC<ReportTaskProps> = ({
         const parts = line.split(':');
         if (parts.length >= 2) {
           const key = parts[0].trim();
-          const value = parts.slice(1).join(':').trim();
+          let value = parts.slice(1).join(':').trim();
+          // Remove quotes if present
+          if ((value.startsWith('"') && value.endsWith('"')) || 
+              (value.startsWith("'") && value.endsWith("'"))) {
+            value = value.slice(1, -1);
+          }
           if (key) {
             blockConfig[key] = value;
           }
@@ -308,11 +313,23 @@ const ReportTask: React.FC<ReportTaskProps> = ({
           type: b.type,
           name: b.name,
           position: b.position
-        }))
+        })),
+        searchingForName: blockConfig.name,
+        searchingForClass: blockConfig.class
       });
       
       // Try to match blocks by class/type and then by position if available
       const blockData = reportBlocks.find(block => {
+        console.log('🔍 Checking block:', {
+          blockName: block.name,
+          blockType: block.type,
+          blockPosition: block.position,
+          configName: blockConfig.name,
+          configClass: blockConfig.class,
+          nameMatch: blockConfig.name && block.name === blockConfig.name,
+          typeMatch: block.type === blockConfig.class
+        });
+        
         // Primary match: if markdown has a name, it must match block.name
         if (blockConfig.name && block.name === blockConfig.name) {
           console.log('✅ Block matched by name:', block.name);
@@ -340,6 +357,12 @@ const ReportTask: React.FC<ReportTaskProps> = ({
         // This is similar to the above but explicit.
         if (!blockConfig.name && !blockConfig.position && block.type === blockConfig.class) {
             console.log('✅ Block matched by type (fallback):', block.type);
+            return true;
+        }
+        
+        // Additional fallback: match by class if we have a class and it matches block type
+        if (blockConfig.class && block.type === blockConfig.class) {
+            console.log('✅ Block matched by class:', block.type);
             return true;
         }
 
@@ -393,6 +416,8 @@ const ReportTask: React.FC<ReportTaskProps> = ({
           </div>
         );
       } else {
+        // No matching block found, log for debugging
+        console.error('❌ No matching block found for config:', blockConfig);
         // Instead of showing a loading placeholder, return an empty div
         // This prevents flickering while still reserving space for the block
         return <div className="my-2"></div>;

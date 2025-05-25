@@ -37,6 +37,7 @@ import { ShareResourceModal } from "@/components/share-resource-modal"
 import { ReportsDashboardSkeleton } from "@/components/loading-skeleton"
 import ReportTask, { ReportTaskData } from "@/components/ReportTask" // Import ReportTask with its types
 import { RunReportButton } from '@/components/task-dispatch' // Import direct button
+import ReportConfigurationSelector from "@/components/ReportConfigurationSelector"
 
 // Define types based on Amplify schema
 type Report = Schema['Report']['type'] & {
@@ -86,6 +87,72 @@ const LIST_REPORTS = `
   ) {
     listReportByAccountIdAndUpdatedAt(
       accountId: $accountId
+      sortDirection: $sortDirection
+      limit: $limit
+      nextToken: $nextToken
+    ) {
+      items {
+        id
+        name
+        createdAt
+        updatedAt
+        parameters
+        output
+        accountId
+        reportConfigurationId
+        reportConfiguration {
+          id
+          name
+          description
+        }
+        taskId
+        task {
+          id
+          type
+          status
+          target
+          command
+          description
+          dispatchStatus
+          metadata
+          createdAt
+          startedAt
+          completedAt
+          estimatedCompletionAt
+          errorMessage
+          errorDetails
+          currentStageId
+          stages {
+            items {
+              id
+              name
+              order
+              status
+              statusMessage
+              startedAt
+              completedAt
+              estimatedCompletionAt
+              processedItems
+              totalItems
+            }
+          }
+        }
+      }
+      nextToken
+    }
+  }
+`
+
+// GraphQL query to list reports by report configuration ID and creation timestamp
+const LIST_REPORTS_BY_CONFIG = `
+  query ListReportByReportConfigurationIdAndCreatedAt(
+    $reportConfigurationId: String!
+    $sortDirection: ModelSortDirection
+    $limit: Int
+    $nextToken: String
+  ) {
+    listReportByReportConfigurationIdAndCreatedAt(
+      reportConfigurationId: $reportConfigurationId
       sortDirection: $sortDirection
       limit: $limit
       nextToken: $nextToken
@@ -351,6 +418,13 @@ interface ListReportsResponse {
   };
 }
 
+interface ListReportsByConfigResponse {
+  listReportByReportConfigurationIdAndCreatedAt: {
+    items: Report[];
+    nextToken: string | null;
+  };
+}
+
 interface GetReportResponse {
   getReport: Report & {
     reportBlocks: {
@@ -472,6 +546,7 @@ export default function ReportsDashboard({
   const [isShareModalOpen, setIsShareModalOpen] = useState(false)
   const [shareUrl, setShareUrl] = useState<string | null>(null)
   const [nextToken, setNextToken] = useState<string | null>(null); // For pagination
+  const [selectedReportConfiguration, setSelectedReportConfiguration] = useState<string | null>(null); // For filtering by report configuration
   const [selectedReportBlocks, setSelectedReportBlocks] = useState<Array<{
     type: string;
     config: Record<string, any>;
@@ -511,39 +586,72 @@ export default function ReportsDashboard({
   }, [])
 
   // Fetch Reports Data
-  const fetchReports = useCallback(async (currentAccountId: string, currentNextToken: string | null) => {
+  const fetchReports = useCallback(async (currentAccountId: string, currentNextToken: string | null, reportConfigId?: string | null) => {
     setIsLoading(true);
     setError(null);
     try {
-      console.log(`Fetching reports for account ${currentAccountId} with nextToken: ${currentNextToken}`);
-      const reportsResponse = await getClient().graphql<ListReportsResponse>({
-        query: LIST_REPORTS,
-        variables: {
-          accountId: currentAccountId,
-          sortDirection: 'DESC', // Get newest first
-          limit: 20, // Adjust limit as needed
-          nextToken: currentNextToken,
-        }
-      });
+      let reportsResponse;
+      
+      if (reportConfigId) {
+        // Fetch reports by report configuration ID
+        console.log(`Fetching reports for config ${reportConfigId} with nextToken: ${currentNextToken}`);
+        reportsResponse = await getClient().graphql<ListReportsByConfigResponse>({
+          query: LIST_REPORTS_BY_CONFIG,
+          variables: {
+            reportConfigurationId: reportConfigId,
+            sortDirection: 'DESC', // Get newest first
+            limit: 20, // Adjust limit as needed
+            nextToken: currentNextToken,
+          }
+        });
+        
+        if ('data' in reportsResponse && reportsResponse.data?.listReportByReportConfigurationIdAndCreatedAt) {
+          const fetchedItems = reportsResponse.data.listReportByReportConfigurationIdAndCreatedAt.items || [];
+          const transformedItems = fetchedItems
+            .map(transformReportData)
+            .filter((item: unknown): item is ReportDisplayData => item !== null);
 
-      if ('data' in reportsResponse && reportsResponse.data?.listReportByAccountIdAndUpdatedAt) {
-        const fetchedItems = reportsResponse.data.listReportByAccountIdAndUpdatedAt.items || [];
-        const transformedItems = fetchedItems
-          .map(transformReportData)
-          .filter((item: unknown): item is ReportDisplayData => item !== null);
+          console.log(`Fetched ${transformedItems.length} reports for config ${reportConfigId}`);
 
-        console.log(`Fetched ${transformedItems.length} reports`);
-
-        setReports(prevReports => currentNextToken ? [...prevReports, ...transformedItems] : transformedItems);
-        setNextToken(reportsResponse.data.listReportByAccountIdAndUpdatedAt.nextToken);
-
-        if (!dataHasLoadedOnce) {
-          setDataHasLoadedOnce(true);
+          setReports(prevReports => currentNextToken ? [...prevReports, ...transformedItems] : transformedItems);
+          setNextToken(reportsResponse.data.listReportByReportConfigurationIdAndCreatedAt.nextToken);
+        } else {
+          console.warn('No reports data found for config:', reportConfigId);
+          setReports(prevReports => currentNextToken ? prevReports : []);
+          setNextToken(null);
         }
       } else {
-        console.warn('No reports data found in response:', reportsResponse);
-        setReports(prevReports => currentNextToken ? prevReports : []); // Clear if initial fetch is empty
-        setNextToken(null);
+        // Fetch all reports by account ID
+        console.log(`Fetching reports for account ${currentAccountId} with nextToken: ${currentNextToken}`);
+        reportsResponse = await getClient().graphql<ListReportsResponse>({
+          query: LIST_REPORTS,
+          variables: {
+            accountId: currentAccountId,
+            sortDirection: 'DESC', // Get newest first
+            limit: 20, // Adjust limit as needed
+            nextToken: currentNextToken,
+          }
+        });
+
+        if ('data' in reportsResponse && reportsResponse.data?.listReportByAccountIdAndUpdatedAt) {
+          const fetchedItems = reportsResponse.data.listReportByAccountIdAndUpdatedAt.items || [];
+          const transformedItems = fetchedItems
+            .map(transformReportData)
+            .filter((item: unknown): item is ReportDisplayData => item !== null);
+
+          console.log(`Fetched ${transformedItems.length} reports`);
+
+          setReports(prevReports => currentNextToken ? [...prevReports, ...transformedItems] : transformedItems);
+          setNextToken(reportsResponse.data.listReportByAccountIdAndUpdatedAt.nextToken);
+        } else {
+          console.warn('No reports data found in response:', reportsResponse);
+          setReports(prevReports => currentNextToken ? prevReports : []);
+          setNextToken(null);
+        }
+      }
+
+      if (!dataHasLoadedOnce) {
+        setDataHasLoadedOnce(true);
       }
     } catch (err: any) {
       console.error('Error fetching reports:', err);
@@ -558,9 +666,18 @@ export default function ReportsDashboard({
   // Add the effect for initial fetch when accountId is available
   useEffect(() => {
     if (accountId && !dataHasLoadedOnce) { // Only fetch initially if data hasn't loaded
-      fetchReports(accountId, null);
+      fetchReports(accountId, null, selectedReportConfiguration);
     }
-  }, [accountId, dataHasLoadedOnce, fetchReports]);
+  }, [accountId, dataHasLoadedOnce, selectedReportConfiguration, fetchReports]);
+
+  // Refetch reports when selectedReportConfiguration changes
+  useEffect(() => {
+    if (accountId && dataHasLoadedOnce) {
+      // Reset pagination and fetch new data
+      setNextToken(null);
+      fetchReports(accountId, null, selectedReportConfiguration);
+    }
+  }, [selectedReportConfiguration, accountId, dataHasLoadedOnce, fetchReports]);
 
   // Fetch Report Blocks when selectedReportId changes
   useEffect(() => {
@@ -1120,17 +1237,21 @@ export default function ReportsDashboard({
       <div className="space-y-4 p-4">
         <h1 className="text-2xl font-bold">Reports</h1>
         <div className="text-sm text-destructive">Error fetching reports: {error}</div>
-        <Button onClick={() => accountId && fetchReports(accountId, null)}>Retry</Button>
+        <Button onClick={() => accountId && fetchReports(accountId, null, selectedReportConfiguration)}>Retry</Button>
       </div>
     )
   }
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header Area - TODO: Add filtering/sorting controls */}
+      {/* Header Area - Report Configuration Filtering */}
       <div className="flex-none p-1.5">
         <div className="flex justify-between items-start">
-          <div>
+          <div className="flex flex-col gap-2">
+            <ReportConfigurationSelector
+              selectedReportConfiguration={selectedReportConfiguration}
+              setSelectedReportConfiguration={setSelectedReportConfiguration}
+            />
             {error && <p className="text-xs text-destructive">{error}</p>}
           </div>
           <div className="flex gap-2">
@@ -1159,7 +1280,6 @@ export default function ReportsDashboard({
             width: `${leftPanelWidth}%`
           } : undefined}
         >
-          {isLoading && reports.length > 0 && <p className="text-sm text-muted-foreground p-2">Loading more...</p>}
           {!isLoading && reports.length === 0 && !error && (
             <div className="text-sm text-muted-foreground p-4 text-center">No reports found for this account.</div>
           )}
@@ -1241,7 +1361,7 @@ export default function ReportsDashboard({
               {/* Placeholder for infinite scroll trigger */}
               {nextToken && !isLoading && (
                 <div className="col-span-full flex justify-center p-4">
-                   <Button variant="outline" onClick={() => accountId && fetchReports(accountId, nextToken)}>Load More</Button>
+                   <Button variant="outline" onClick={() => accountId && fetchReports(accountId, nextToken, selectedReportConfiguration)}>Load More</Button>
                 </div>
               )}
             </div>
