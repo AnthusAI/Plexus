@@ -2,6 +2,7 @@ version: 1
 applications:
   - appRoot: dashboard
     backend:
+      image: amazonlinux:2023
       phases:
         build:
           commands:
