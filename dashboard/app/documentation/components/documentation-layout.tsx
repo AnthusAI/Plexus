@@ -188,15 +188,17 @@ export default function DocumentationLayout({ children, tableOfContents }: Docum
                     <TooltipTrigger asChild>
                       <Link href={section.href}>
                         <DocButton
-                          variant={pathname === section.href ? "secondary" : "ghost"}
+                          variant={isLeftSidebarOpen && pathname === section.href ? "secondary" : "ghost"}
                           className={`w-full justify-start group !rounded-[4px] ${
                             isLeftSidebarOpen ? '' : 'px-2'
                           }`}
                         >
-                          {section.name === "plexus CLI Tool" ? (
-                            <code className="text-sm">{section.name}</code>
-                          ) : (
-                            section.name
+                          {isLeftSidebarOpen && (
+                            section.name === "plexus CLI Tool" ? (
+                              <code className="text-sm">{section.name}</code>
+                            ) : (
+                              section.name
+                            )
                           )}
                         </DocButton>
                       </Link>

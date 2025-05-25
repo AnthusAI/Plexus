@@ -34,6 +34,7 @@ import { ScorecardContextProps } from "./ScorecardContext"
 import { observeItemCreations } from '@/utils/subscriptions'
 import { toast } from 'sonner'
 import { useAccount } from '@/app/contexts/AccountContext'
+import { ItemsDashboardSkeleton, ItemCardSkeleton } from './loading-skeleton'
 
 // Get the current date and time
 const now = new Date();
@@ -58,7 +59,7 @@ interface Item {
   isEvaluation: boolean;
   
   // Fields for UI compatibility with existing code
-  scorecard?: string;
+  scorecard?: string | null;
   score?: string | number | null;
   date?: string;
   status?: string;
@@ -378,7 +379,7 @@ export default function ItemsDashboard() {
   const [nextToken, setNextToken] = useState<string | null>(null);
   const { user } = useAuthenticator();
   // Use the account context instead of local state
-  const { selectedAccount } = useAccount();
+  const { selectedAccount, isLoadingAccounts } = useAccount();
   const itemSubscriptionRef = useRef<{ unsubscribe: () => void } | null>(null);
   
   // Add a ref for the intersection observer
@@ -435,26 +436,6 @@ export default function ItemsDashboard() {
                   updatedAt
                   createdAt
                   isEvaluation
-                  scoreResults {
-                    items {
-                      id
-                      value
-                      explanation
-                      confidence
-                      scorecardId
-                      scoreId
-                      scorecard {
-                        id
-                        name
-                      }
-                      score {
-                        id
-                        name
-                      }
-                      updatedAt
-                      createdAt
-                    }
-                  }
                 }
                 nextToken
               }
@@ -491,9 +472,6 @@ export default function ItemsDashboard() {
                   updatedAt?: string;
                   createdAt?: string;
                   isEvaluation: boolean;
-                  scoreResults: {
-                    items: any[];
-                  };
                 };
               }>;
               nextToken: string | null;
@@ -516,26 +494,6 @@ export default function ItemsDashboard() {
                     updatedAt
                     createdAt
                     isEvaluation
-                    scoreResults {
-                      items {
-                        id
-                        value
-                        explanation
-                        confidence
-                        scorecardId
-                        scoreId
-                        scorecard {
-                          id
-                          name
-                        }
-                        score {
-                          id
-                          name
-                        }
-                        updatedAt
-                        createdAt
-                      }
-                    }
                   }
                 }
                 nextToken
@@ -584,26 +542,6 @@ export default function ItemsDashboard() {
                   updatedAt
                   createdAt
                   isEvaluation
-                  scoreResults {
-                    items {
-                      id
-                      value
-                      explanation
-                      confidence
-                      scorecardId
-                      scoreId
-                      scorecard {
-                        id
-                        name
-                      }
-                      score {
-                        id
-                        name
-                      }
-                      updatedAt
-                      createdAt
-                    }
-                  }
                 }
                 nextToken
               }
@@ -643,63 +581,55 @@ export default function ItemsDashboard() {
         // Group scoreResults by scorecard
         const groupedScoreResults: GroupedScoreResults = {};
         
-        console.log('Raw item before transformation:', {
-          id: item.id,
-          externalId: item.externalId,
-          accountId: item.accountId,
-          hasScoreResults: !!item.scoreResults,
-          scoreResultsItemsCount: item.scoreResults?.items?.length,
-          firstScoreResult: item.scoreResults?.items?.[0] 
-        });
+        // console.log('Raw item before transformation:', { // Keep for debugging if needed, but scoreResults will be absent
+        //   id: item.id,
+        //   externalId: item.externalId,
+        //   accountId: item.accountId,
+        //   hasScoreResults: !!item.scoreResults, // This will be false
+        //   scoreResultsItemsCount: item.scoreResults?.items?.length, // This will be undefined
+        //   firstScoreResult: item.scoreResults?.items?.[0] 
+        // });
         
-        if (item.scoreResults && item.scoreResults.items) {
-          item.scoreResults.items.forEach((result: any) => {
-            if (result.scorecardId) {
-              // Create scorecard entry if it doesn't exist
-              if (!groupedScoreResults[result.scorecardId]) {
-                groupedScoreResults[result.scorecardId] = {
-                  scorecardName: result.scorecard?.name || `Scorecard ${result.scorecardId.substring(0, 8)}`,
-                  scores: []
-                };
-              }
-              
-              // Add score to the scorecard's scores if not already present
-              const scoreExists = groupedScoreResults[result.scorecardId].scores.some(
-                s => s.scoreId === result.scoreId
-              );
-              
-              if (!scoreExists && result.scoreId) {
-                groupedScoreResults[result.scorecardId].scores.push({
-                  scoreId: result.scoreId,
-                  scoreName: result.score?.name || `Score ${result.scoreId.substring(0, 8)}`
-                });
-              }
-            }
-          });
-        }
+        // item.scoreResults will not be present here anymore for the list view
+        // if (item.scoreResults && item.scoreResults.items) {
+        //   item.scoreResults.items.forEach((result: any) => {
+        //     if (result.scorecardId) {
+        //       if (!groupedScoreResults[result.scorecardId]) {
+        //         groupedScoreResults[result.scorecardId] = {
+        //           scorecardName: result.scorecard?.name || `Scorecard ${result.scorecardId.substring(0, 8)}`,
+        //           scores: []
+        //         };
+        //       }
+        //       const scoreExists = groupedScoreResults[result.scorecardId].scores.some(
+        //         s => s.scoreId === result.scoreId
+        //       );
+        //       if (!scoreExists && result.scoreId) {
+        //         groupedScoreResults[result.scorecardId].scores.push({
+        //           scoreId: result.scoreId,
+        //           scoreName: result.score?.name || `Score ${result.scoreId.substring(0, 8)}`
+        //         });
+        //       }
+        //     }
+        //   });
+        // }
         
-        console.log('Generated groupedScoreResults:', groupedScoreResults);
+        // console.log('Generated groupedScoreResults:', groupedScoreResults); // This will be empty
         
-        // Get the primary scorecard and score name to display
-        let primaryScorecardName = null;
-        let primaryScoreName = null;
+        let primaryScorecardName = null; // Will remain null
+        let primaryScoreName = null; // Will remain null
         
         // Logic to determine primary scorecard (first one with scores, or just first one)
-        const scorecardIds = Object.keys(groupedScoreResults);
-        if (scorecardIds.length > 0) {
-          const firstScorecardWithScores = scorecardIds.find(
-            id => groupedScoreResults[id].scores.length > 0
-          ) || scorecardIds[0];
-          
-          primaryScorecardName = groupedScoreResults[firstScorecardWithScores].scorecardName;
-          
-          // Get first score if any exist
-          if (groupedScoreResults[firstScorecardWithScores].scores.length > 0) {
-            primaryScoreName = groupedScoreResults[firstScorecardWithScores].scores[0].scoreName;
-          }
-        }
+        // const scorecardIds = Object.keys(groupedScoreResults); // groupedScoreResults is empty
+        // if (scorecardIds.length > 0) {
+        //   const firstScorecardWithScores = scorecardIds.find(
+        //     id => groupedScoreResults[id].scores.length > 0
+        //   ) || scorecardIds[0];
+        //   primaryScorecardName = groupedScoreResults[firstScorecardWithScores].scorecardName;
+        //   if (groupedScoreResults[firstScorecardWithScores].scores.length > 0) {
+        //     primaryScoreName = groupedScoreResults[firstScorecardWithScores].scores[0].scoreName;
+        //   }
+        // }
         
-        // Create the transformed item with all required fields
         const transformedItem = {
           id: item.id,
           accountId: item.accountId,
@@ -709,25 +639,23 @@ export default function ItemsDashboard() {
           updatedAt: item.updatedAt,
           createdAt: item.createdAt,
           isEvaluation: item.isEvaluation,
-          // UI compatibility fields
-          scorecard: primaryScorecardName,
-          score: primaryScoreName, 
+          scorecard: primaryScorecardName, // Will be null
+          score: primaryScoreName, // Will be null
           date: item.updatedAt || item.createdAt,
-          status: "Done", // Default status
-          results: 0,
-          inferences: 0,
-          cost: "$0.000",
-          isNew: true, // Mark all items as new for animation
-          // Add grouped scoreResults
-          groupedScoreResults: groupedScoreResults
+          status: "Done", 
+          results: 0, // Placeholder
+          inferences: 0, // Placeholder
+          cost: "$0.000", // Placeholder
+          isNew: true, 
+          groupedScoreResults: groupedScoreResults // Will be empty
         } as Item;
         
-        console.log('Final transformed item:', {
-          id: transformedItem.id,
-          primaryScorecard: transformedItem.scorecard,
-          primaryScore: transformedItem.score,
-          groupedScoreResultsKeys: Object.keys(transformedItem.groupedScoreResults || {})
-        });
+        // console.log('Final transformed item:', { // Keep for debugging if needed
+        //   id: transformedItem.id,
+        //   primaryScorecard: transformedItem.scorecard,
+        //   primaryScore: transformedItem.score,
+        //   groupedScoreResultsKeys: Object.keys(transformedItem.groupedScoreResults || {})
+        // });
         
         return transformedItem;
       });
@@ -774,29 +702,7 @@ export default function ItemsDashboard() {
       // Use the account ID from the context
       const accountId = selectedAccount.id;
       
-      // Try using the Amplify client first
-      try {
-        const itemsResult = await amplifyClient.Item.list({
-          filter: { accountId: { eq: accountId } },
-          limit: 100,
-          sort: { field: 'updatedAt', direction: 'DESC' },
-          // Unfortunately, adding scoreResults here doesn't work well with Amplify Gen2
-          // so we'll fall back to the direct GraphQL query
-        });
-        
-        console.log(`Found ${itemsResult.data.length} items using Amplify client`);
-        
-        // Skip this approach to make this change complete
-        if (false && itemsResult.data.length > 0) {
-          // The Amplify client approach is disabled because we need scoreResults
-        }
-      } catch (error) {
-        console.error("Error using Amplify client to fetch items:", error);
-        // Continue with the direct GraphQL query approach
-      }
-      
-      // Skip the amplifyClient.Item.list() call that's causing the error
-      // and only use the direct GraphQL query approach
+      // Skip the amplifyClient.Item.list() call and only use the direct GraphQL query approach
       let itemsFromDirectQuery: any[] = [];
       let nextTokenFromDirectQuery: string | null = null;
       
@@ -831,26 +737,6 @@ export default function ItemsDashboard() {
                   updatedAt
                   createdAt
                   isEvaluation
-                  scoreResults {
-                    items {
-                      id
-                      value
-                      explanation
-                      confidence
-                      scorecardId
-                      scoreId
-                      scorecard {
-                        id
-                        name
-                      }
-                      score {
-                        id
-                        name
-                      }
-                      updatedAt
-                      createdAt
-                    }
-                  }
                 }
                 nextToken
               }
@@ -864,7 +750,6 @@ export default function ItemsDashboard() {
           
           if (directQuery.data?.listItemByScoreIdAndUpdatedAt?.items) {
             console.log(`Found ${directQuery.data.listItemByScoreIdAndUpdatedAt.items.length} items via direct GraphQL query`);
-            // No need to sort as the GSI already returns items sorted by updatedAt
             itemsFromDirectQuery = directQuery.data.listItemByScoreIdAndUpdatedAt.items;
             nextTokenFromDirectQuery = directQuery.data.listItemByScoreIdAndUpdatedAt.nextToken;
           } else {
@@ -886,9 +771,6 @@ export default function ItemsDashboard() {
                   updatedAt?: string;
                   createdAt?: string;
                   isEvaluation: boolean;
-                  scoreResults: {
-                    items: any[];
-                  };
                 };
               }>;
               nextToken: string | null;
@@ -910,26 +792,6 @@ export default function ItemsDashboard() {
                     updatedAt
                     createdAt
                     isEvaluation
-                    scoreResults {
-                      items {
-                        id
-                        value
-                        explanation
-                        confidence
-                        scorecardId
-                        scoreId
-                        scorecard {
-                          id
-                          name
-                        }
-                        score {
-                          id
-                          name
-                        }
-                        updatedAt
-                        createdAt
-                      }
-                    }
                   }
                 }
                 nextToken
@@ -944,7 +806,6 @@ export default function ItemsDashboard() {
           
           if (directQuery.data?.listItemScorecardByScorecardId?.items) {
             console.log(`Found ${directQuery.data.listItemScorecardByScorecardId.items.length} items via direct GraphQL query`);
-            // Extract items and sort by updatedAt in descending order
             itemsFromDirectQuery = directQuery.data.listItemScorecardByScorecardId.items
               .map(association => association.item)
               .filter(item => item !== null)
@@ -976,26 +837,6 @@ export default function ItemsDashboard() {
                   updatedAt
                   createdAt
                   isEvaluation
-                  scoreResults {
-                    items {
-                      id
-                      value
-                      explanation
-                      confidence
-                      scorecardId
-                      scoreId
-                      scorecard {
-                        id
-                        name
-                      }
-                      score {
-                        id
-                        name
-                      }
-                      updatedAt
-                      createdAt
-                    }
-                  }
                 }
                 nextToken
               }
@@ -1009,7 +850,6 @@ export default function ItemsDashboard() {
           
           if (directQuery.data?.listItemByAccountIdAndUpdatedAt?.items) {
             console.log(`Found ${directQuery.data.listItemByAccountIdAndUpdatedAt.items.length} items via direct GraphQL query`);
-            // No need to sort as the GSI already returns items sorted by updatedAt
             itemsFromDirectQuery = directQuery.data.listItemByAccountIdAndUpdatedAt.items;
             nextTokenFromDirectQuery = directQuery.data.listItemByAccountIdAndUpdatedAt.nextToken;
           } else {
@@ -1020,78 +860,21 @@ export default function ItemsDashboard() {
         console.error('Error in direct GraphQL query:', error);
       }
       
-      // Use the items from the direct query
       const itemsToUse = itemsFromDirectQuery;
       const nextTokenToUse = nextTokenFromDirectQuery;
       
-      // If no items are found, we'll log this information
       if (itemsToUse.length === 0) {
         console.log('No items found for this account. You may need to create some items first.');
       }
       
-      // Transform the data to match the expected format
       const transformedItems = itemsToUse.map(item => {
-        // Group scoreResults by scorecard
         const groupedScoreResults: GroupedScoreResults = {};
+         // item.scoreResults will not be present here anymore for the list view
         
-        console.log('Raw item before transformation:', {
-          id: item.id,
-          externalId: item.externalId,
-          accountId: item.accountId,
-          hasScoreResults: !!item.scoreResults,
-          scoreResultsItemsCount: item.scoreResults?.items?.length,
-          firstScoreResult: item.scoreResults?.items?.[0] 
-        });
-        
-        if (item.scoreResults && item.scoreResults.items) {
-          item.scoreResults.items.forEach((result: any) => {
-            if (result.scorecardId) {
-              // Create scorecard entry if it doesn't exist
-              if (!groupedScoreResults[result.scorecardId]) {
-                groupedScoreResults[result.scorecardId] = {
-                  scorecardName: result.scorecard?.name || `Scorecard ${result.scorecardId.substring(0, 8)}`,
-                  scores: []
-                };
-              }
-              
-              // Add score to the scorecard's scores if not already present
-              const scoreExists = groupedScoreResults[result.scorecardId].scores.some(
-                s => s.scoreId === result.scoreId
-              );
-              
-              if (!scoreExists && result.scoreId) {
-                groupedScoreResults[result.scorecardId].scores.push({
-                  scoreId: result.scoreId,
-                  scoreName: result.score?.name || `Score ${result.scoreId.substring(0, 8)}`
-                });
-              }
-            }
-          });
-        }
-        
-        console.log('Generated groupedScoreResults:', groupedScoreResults);
-        
-        // Get the primary scorecard and score name to display
         let primaryScorecardName = null;
         let primaryScoreName = null;
         
-        // Logic to determine primary scorecard (first one with scores, or just first one)
-        const scorecardIds = Object.keys(groupedScoreResults);
-        if (scorecardIds.length > 0) {
-          const firstScorecardWithScores = scorecardIds.find(
-            id => groupedScoreResults[id].scores.length > 0
-          ) || scorecardIds[0];
-          
-          primaryScorecardName = groupedScoreResults[firstScorecardWithScores].scorecardName;
-          
-          // Get first score if any exist
-          if (groupedScoreResults[firstScorecardWithScores].scores.length > 0) {
-            primaryScoreName = groupedScoreResults[firstScorecardWithScores].scores[0].scoreName;
-          }
-        }
-        
-        // Create the transformed item with all required fields
-        const transformedItem = {
+        return {
           id: item.id,
           accountId: item.accountId,
           externalId: item.externalId,
@@ -1100,62 +883,61 @@ export default function ItemsDashboard() {
           updatedAt: item.updatedAt,
           createdAt: item.createdAt,
           isEvaluation: item.isEvaluation,
-          // UI compatibility fields
-          scorecard: primaryScorecardName,
-          score: primaryScoreName,
+          scorecard: primaryScorecardName, // Will be null
+          score: primaryScoreName, // Will be null
           date: item.updatedAt || item.createdAt,
-          status: "Done", // Default status
-          results: 0,
-          inferences: 0,
-          cost: "$0.000",
-          isNew: true, // Mark all items as new for animation
-          // Add grouped scoreResults
-          groupedScoreResults: groupedScoreResults
+          status: "Done",
+          results: 0, // Placeholder
+          inferences: 0, // Placeholder
+          cost: "$0.000", // Placeholder
+          isNew: true,
+          groupedScoreResults: groupedScoreResults // Will be empty
         } as Item;
-        
-        console.log('Final transformed item:', {
-          id: transformedItem.id,
-          primaryScorecard: transformedItem.scorecard,
-          primaryScore: transformedItem.score,
-          groupedScoreResultsKeys: Object.keys(transformedItem.groupedScoreResults || {})
-        });
-        
-        return transformedItem;
       });
       
       setItems(transformedItems);
       setNextToken(nextTokenToUse);
       
-      // After a delay, remove the "isNew" flag
       setTimeout(() => {
         setItems(prevItems => 
-          prevItems.map(item => 
-            item.isNew ? { ...item, isNew: false } : item
+          prevItems.map(i => 
+            i.isNew ? { ...i, isNew: false } : i
           )
         );
-      }, 3000); // Remove the flag after 3 seconds
+      }, 3000);
       
       setIsLoading(false);
     } catch (error) {
       console.error('Error fetching items:', error);
       setIsLoading(false);
     }
-  }, [user, amplifyClient, selectedAccount, setItems, setIsLoading, setNextToken, selectedScorecard, selectedScore]);
+  }, [user, selectedAccount, setIsLoading, setItems, setNextToken, graphqlRequest, selectedScorecard, selectedScore]);
   
-  // Initial data load
+  // Fetch items when the selected account or other filters change
   useEffect(() => {
-    fetchItems();
-  }, [user, fetchItems, selectedAccount, selectedScorecard, selectedScore]);
-  
+    console.log("useEffect triggered for fetchItems. isLoadingAccounts:", isLoadingAccounts, "selectedAccount:", selectedAccount, "selectedScorecard:", selectedScorecard, "selectedScore:", selectedScore);
+    if (!isLoadingAccounts && selectedAccount) {
+      // Reset items and nextToken when filters change
+      setItems([]);
+      setNextToken(null);
+      fetchItems();
+    } else if (!isLoadingAccounts && !selectedAccount) {
+      // Accounts loaded, but no account selected (e.g. user has no accounts)
+      console.log("Accounts loaded, but no account selected or found.");
+      setItems([]); // Ensure items are cleared
+      setNextToken(null);
+      setIsLoading(false); // Stop loading indicator
+    }
+  }, [fetchItems, selectedAccount, isLoadingAccounts, selectedScorecard, selectedScore, setItems, setNextToken]);
+
   // Set up subscription for item creations
   useEffect(() => {
-    if (!selectedAccount) return;
+    if (!selectedAccount || isLoadingAccounts) return; // Also wait for accounts to be loaded
     
     console.log('Setting up item creation subscription for account:', selectedAccount.id);
     
     const subscription = observeItemCreations().subscribe({
       next: async ({ data: newItem }) => {
-        // Skip if we received null data (common with Amplify Gen2)
         if (!newItem) {
           console.log('Received null item data from subscription - ignoring');
           return;
@@ -1164,64 +946,15 @@ export default function ItemsDashboard() {
         console.log('New item created notification received:', newItem);
         
         if (newItem.accountId === selectedAccount.id) {
-          // Set loading state while we fetch
-          setIsLoading(true);
-          
-          try {
-            // Immediately fetch updated items list
-            await fetchItems();
-            console.log('Successfully fetched updated items after new item creation');
-          } catch (error) {
-            console.error('Error fetching updated items:', error);
-            
-            // As a fallback, manually add the new item to the state
-            setItems(prevItems => {
-              // Check if the item already exists in the list
-              const exists = prevItems.some(item => item.id === newItem.id);
-              if (exists) {
-                return prevItems;
-              }
-              
-              // Create a new item with the UI compatibility fields
-              const newItemWithUIFields: Item = {
-                id: newItem.id,
-                accountId: newItem.accountId,
-                externalId: newItem.externalId || undefined,
-                description: newItem.description || undefined,
-                evaluationId: newItem.evaluationId || undefined,
-                updatedAt: newItem.updatedAt || undefined,
-                createdAt: newItem.createdAt || undefined,
-                isEvaluation: newItem.isEvaluation,
-                // UI compatibility fields
-                scorecard: undefined, // Will be determined by scoreResults if any
-                score: undefined, // Will be determined by scoreResults if any
-                date: (newItem.updatedAt || newItem.createdAt) || undefined,
-                status: "Done",
-                results: 0,
-                inferences: 0,
-                cost: "$0.000",
-                isNew: true // Mark as new for animation
-              };
-              
-              // Add the new item to the beginning of the list
-              return [newItemWithUIFields, ...prevItems];
-            });
-            
-            // After a delay, remove the "isNew" flag from the newly added item
-            setTimeout(() => {
-              setItems(prevItems => 
-                prevItems.map(item => 
-                  item.id === newItem.id ? { ...item, isNew: false } : item
-                )
-              );
-            }, 3000); // Remove the flag after 3 seconds
-          } finally {
-            setIsLoading(false);
-          }
+          toast.info(`New item (${newItem.id.substring(0,8)}) received, refreshing list.`);
+          // Fetching the entire list again to ensure consistency and avoid complex state merging.
+          // This also handles cases where an item might be updated server-side before subscription event.
+          await fetchItems(); 
         }
       },
       error: (error) => {
         console.error('Error in item creation subscription:', error);
+        toast.error("Error in item subscription.");
       }
     });
     
@@ -1234,7 +967,7 @@ export default function ItemsDashboard() {
         itemSubscriptionRef.current = null;
       }
     };
-  }, [selectedAccount, fetchItems]);
+  }, [selectedAccount, isLoadingAccounts, fetchItems]); // Added isLoadingAccounts and fetchItems
 
   useEffect(() => {
     const checkViewportWidth = () => {
@@ -1777,6 +1510,11 @@ export default function ItemsDashboard() {
     };
   }, [nextToken, isLoadingMore, handleLoadMore]); // Add handleLoadMore to dependencies
 
+  // Show loading skeleton for initial load
+  if (isLoading && items.length === 0) {
+    return <ItemsDashboardSkeleton />
+  }
+
   return (
     <div className="flex flex-col h-full p-1.5">
       <div className="flex items-center justify-between pb-3">
@@ -1809,37 +1547,27 @@ export default function ItemsDashboard() {
             >
               <div>
                 <div className="@container h-full">
-                  {isLoading && items.length === 0 ? (
-                    <div className="flex justify-center items-center h-40">
-                      <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                      <span className="ml-2 text-lg">Loading items...</span>
+                  {filteredItems.length === 0 ? (
+                    // Show skeleton instead of "No items found" message
+                    <div className="grid grid-cols-2 @[500px]:grid-cols-3 @[700px]:grid-cols-4 @[900px]:grid-cols-5 @[1100px]:grid-cols-6 gap-3 animate-pulse">
+                      {[...Array(12)].map((_, i) => (
+                        <ItemCardSkeleton key={i} />
+                      ))}
                     </div>
                   ) : (
                     <>
-                      {filteredItems.length === 0 ? (
-                        <div className="flex flex-col justify-center items-center h-40 text-center">
-                          <Info className="h-8 w-8 text-muted-foreground mb-2" />
-                          <h3 className="text-lg font-medium">No items found</h3>
-                          <p className="text-muted-foreground mt-1">
-                            {filterConfig.length > 0 || selectedScorecard 
-                              ? "Try adjusting your filters" 
-                              : "Create your first item to get started"}
-                          </p>
-                        </div>
-                      ) : (
-                        <div className="grid grid-cols-2 @[500px]:grid-cols-3 @[700px]:grid-cols-4 @[900px]:grid-cols-5 @[1100px]:grid-cols-6 gap-3">
-                          {filteredItems.map((item) => (
-                            <ItemCard
-                              key={item.id}
-                              variant="grid"
-                              item={item as ItemData}
-                              isSelected={selectedItem === item.id}
-                              onClick={() => handleItemClick(item.id)}
-                              getBadgeVariant={getBadgeVariant}
-                            />
-                          ))}
-                        </div>
-                      )}
+                      <div className="grid grid-cols-2 @[500px]:grid-cols-3 @[700px]:grid-cols-4 @[900px]:grid-cols-5 @[1100px]:grid-cols-6 gap-3">
+                        {filteredItems.map((item) => (
+                          <ItemCard
+                            key={item.id}
+                            variant="grid"
+                            item={item as ItemData}
+                            isSelected={selectedItem === item.id}
+                            onClick={() => handleItemClick(item.id)}
+                            getBadgeVariant={getBadgeVariant}
+                          />
+                        ))}
+                      </div>
                       
                       {/* Replace the Load More button with an invisible loading indicator */}
                       {nextToken && filteredItems.length > 0 && (

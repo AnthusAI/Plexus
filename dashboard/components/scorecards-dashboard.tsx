@@ -41,6 +41,7 @@ import { ScoreComponent } from "./ui/score-component"
 import { ItemComponent, type ItemData } from "./ui/item-component"
 import ScorecardDetailView from "./scorecards/ScorecardDetailView"
 import { useRouter, usePathname, useParams } from "next/navigation"
+import { ScorecardDashboardSkeleton } from "./loading-skeleton"
 
 const ACCOUNT_KEY = 'call-criteria'
 
@@ -955,6 +956,10 @@ export default function ScorecardsComponent({
     )
   }
 
+  if (isLoading) {
+    return <ScorecardDashboardSkeleton />
+  }
+
   return (
     <div className="h-full flex flex-col">
       <div className="flex h-full w-full">
@@ -969,7 +974,7 @@ export default function ScorecardsComponent({
             width: `${leftPanelWidth}%`
           } : undefined}
         >
-          <div className="space-y-2 p-1.5 w-full">
+          <div className="space-y-3 p-1.5 w-full">
             <div className="flex justify-end">
               <Button 
                 onClick={handleCreate} 

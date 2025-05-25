@@ -20,6 +20,7 @@ import { toast } from 'sonner'
 import EvaluationTask, { type EvaluationTaskProps, type EvaluationTaskData } from '@/components/EvaluationTask'
 import { observeRecentTasks } from '@/utils/subscriptions'
 import type { AmplifyTask, ProcessedTask } from '@/utils/data-operations'
+import { ActivityDashboardSkeleton } from '@/components/loading-skeleton'
 
 type TaskStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
 
@@ -748,6 +749,11 @@ export default function ActivityDashboard({
   // Early return for unauthenticated state
   if (authStatus !== 'authenticated') {
     return null;
+  }
+
+  // Show loading skeleton during initial load
+  if (isInitialLoading) {
+    return <ActivityDashboardSkeleton />
   }
 
   return (

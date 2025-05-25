@@ -85,6 +85,11 @@
     --gauge-almost: hsl(var(--green-5));
     --gauge-viable: hsl(var(--green-8));
     --gauge-great: hsl(var(--green-10));
+    --editor-comment: hsl(var(--mauve-9));
+    --editor-key: hsl(var(--blue-9));
+    --editor-string: hsl(var(--violet-9));
+    --editor-number: hsl(var(--pink-9));
+    --editor-keyword: hsl(var(--violet-9));
   }
 
   .dark {
@@ -154,6 +159,11 @@
     --gauge-almost: hsl(var(--green-7));
     --gauge-viable: hsl(var(--green-8));
     --gauge-great: hsl(var(--green-10));
+    --editor-comment: hsl(var(--mauve-9));
+    --editor-key: hsl(var(--blue-9));
+    --editor-string: hsl(var(--violet-9));
+    --editor-number: hsl(var(--pink-9));
+    --editor-keyword: hsl(var(--violet-9));
   }
 }
 

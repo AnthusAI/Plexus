@@ -46,6 +46,15 @@ export type BlockRendererProps = ReportBlockProps
  */
 export function BlockRenderer(props: BlockRendererProps) {
   const { type = 'default' } = props  // Use type from props, fallback to default
+  
+  console.log('🔧 BlockRenderer called with:', {
+    type,
+    hasOutput: !!props.output,
+    outputKeys: props.output ? Object.keys(props.output) : 'none',
+    name: props.name,
+    position: props.position
+  });
+  
   let BlockComponent = getBlock(type)
   let componentProps = { ...props } // Create a copy to potentially modify
   let isDefaultOrError = false;

@@ -1,10 +1,16 @@
 import * as React from 'react'
 import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { MoreHorizontal, X, Square, Columns2, FileStack, ChevronDown, ChevronUp, Award, FileCode, Minimize, Maximize, ArrowDownWideNarrow, Expand, Shrink } from 'lucide-react'
+import { MoreHorizontal, X, Square, Columns2, FileStack, ChevronDown, ChevronUp, Award, FileCode, Minimize, Maximize, ArrowDownWideNarrow, Expand, Shrink, TestTube, FlaskConical, FlaskRound, TestTubes } from 'lucide-react'
 import { CardButton } from '@/components/CardButton'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Popover from '@radix-ui/react-popover'
+import {
+  DropdownMenu as ShadcnDropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { generateClient } from 'aws-amplify/api'
@@ -16,6 +22,7 @@ import * as monaco from 'monaco-editor'
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import type { editor } from 'monaco-editor'
+import { defineCustomMonacoThemes, applyMonacoTheme, setupMonacoThemeWatcher, getCommonMonacoOptions } from '@/lib/monaco-theme'
 
 const client = generateClient();
 
@@ -114,6 +121,7 @@ interface DetailContentProps {
   versionNote: string
   onNoteChange: (note: string) => void
   resetEditingCounter: number
+  forceExpandHistory?: boolean
 }
 
 const GridContent = React.memo(({ 
@@ -224,6 +232,7 @@ const DetailContent = React.memo(({
   versionNote,
   onNoteChange,
   resetEditingCounter,
+  forceExpandHistory,
 }: DetailContentProps) => {
   // Get the current version's configuration
   const currentVersion = versions?.find(v => 
@@ -243,10 +252,7 @@ const DetailContent = React.memo(({
   // Track if we're currently editing to prevent useEffect from overriding changes
   const [isEditing, setIsEditing] = React.useState(false)
   
-  // Add showOnlyFeatured state directly to the DetailContent component
-  // Default to false to show all versions, not just featured ones
-  // This ensures all versions are visible, including the champion version
-  const [showOnlyFeatured, setShowOnlyFeatured] = React.useState(false)
+  // Let ScoreVersionHistory component handle its own featured filtering with smart defaults
   
   // Reset isEditing when resetEditingCounter changes
   React.useEffect(() => {
@@ -357,152 +363,13 @@ const DetailContent = React.memo(({
   // Create a ref to store the Monaco instance
   const monacoRef = useRef<Monaco | null>(null);
   
-  // Define a custom Monaco Editor theme that matches our Tailwind theme
-  const defineCustomTheme = useCallback((monaco: Monaco) => {
-    // Helper function to get CSS variable value
-    const getCssVar = (name: string) => {
-      const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-      
-      // If the value is an HSL color, convert it to hex
-      if (value.startsWith('hsl(')) {
-        // Create a temporary element to use the browser's color conversion
-        const tempEl = document.createElement('div');
-        tempEl.style.color = value;
-        document.body.appendChild(tempEl);
-        const computedColor = getComputedStyle(tempEl).color;
-        document.body.removeChild(tempEl);
-        
-        // Convert rgb() format to hex
-        if (computedColor.startsWith('rgb')) {
-          const rgbValues = computedColor.match(/\d+/g);
-          if (rgbValues && rgbValues.length >= 3) {
-            const hex = rgbValues.slice(0, 3).map(x => {
-              const hex = parseInt(x).toString(16);
-              return hex.length === 1 ? '0' + hex : hex;
-            }).join('');
-            return hex; // Return without # prefix as Monaco requires
-          }
-        }
-      }
-      
-      // If it's already a hex color, remove the # prefix
-      if (value.startsWith('#')) {
-        return value.substring(1);
-      }
-      
-      return value;
-    };
-
-    // More comprehensive token rules for YAML syntax highlighting
-    const commonRules = [
-      // Comments - muted foreground with italic style
-      { token: 'comment', foreground: getCssVar('--muted-foreground'), fontStyle: 'italic' },
-      
-      // Keys - primary color (blue in your theme)
-      { token: 'type', foreground: getCssVar('--primary') },
-      { token: 'key', foreground: getCssVar('--primary') },
-      
-      // Values - foreground color (main text color)
-      { token: 'string', foreground: getCssVar('--foreground') },
-      { token: 'number', foreground: getCssVar('--foreground') },
-      { token: 'boolean', foreground: getCssVar('--foreground') },
-      
-      // Structural elements - muted color
-      { token: 'delimiter', foreground: getCssVar('--muted-foreground') },
-      { token: 'bracket', foreground: getCssVar('--muted-foreground') },
-      
-      // Keywords - accent color (violet in your theme)
-      { token: 'keyword', foreground: getCssVar('--accent') },
-      
-      // Identifiers - foreground color
-      { token: 'identifier', foreground: getCssVar('--foreground') },
-      
-      // YAML specific
-      { token: 'tag', foreground: getCssVar('--primary') },
-      { token: 'number.yaml', foreground: getCssVar('--foreground') },
-      { token: 'string.yaml', foreground: getCssVar('--foreground') },
-      { token: 'keyword.yaml', foreground: getCssVar('--accent') },
-    ];
-
-    // Create a light theme that uses CSS variables
-    monaco.editor.defineTheme('plexusLightTheme', {
-      base: 'vs',
-      inherit: true,
-      rules: commonRules,
-      colors: {
-        'editor.background': '#' + getCssVar('--background'),
-        'editor.foreground': '#' + getCssVar('--foreground'),
-        'editor.lineHighlightBackground': '#' + getCssVar('--muted'),
-        'editorLineNumber.foreground': '#' + getCssVar('--muted-foreground'),
-        'editor.selectionBackground': '#' + getCssVar('--primary'),
-        'editorIndentGuide.background': '#' + getCssVar('--border'),
-        'editor.selectionHighlightBackground': '#' + getCssVar('--muted'),
-        'editorCursor.foreground': '#' + getCssVar('--foreground'),
-        'editorWhitespace.foreground': '#' + getCssVar('--border'),
-        'editorLineNumber.activeForeground': '#' + getCssVar('--foreground'),
-      }
-    } as editor.IStandaloneThemeData);
-
-    // Create a dark theme that uses CSS variables
-    monaco.editor.defineTheme('plexusDarkTheme', {
-      base: 'vs-dark',
-      inherit: true,
-      rules: commonRules,
-      colors: {
-        'editor.background': '#' + getCssVar('--background'),
-        'editor.foreground': '#' + getCssVar('--foreground'),
-        'editor.lineHighlightBackground': '#' + getCssVar('--muted'),
-        'editorLineNumber.foreground': '#' + getCssVar('--muted-foreground'),
-        'editor.selectionBackground': '#' + getCssVar('--primary'),
-        'editorIndentGuide.background': '#' + getCssVar('--border'),
-        'editor.selectionHighlightBackground': '#' + getCssVar('--muted'),
-        'editorCursor.foreground': '#' + getCssVar('--foreground'),
-        'editorWhitespace.foreground': '#' + getCssVar('--border'),
-        'editorLineNumber.activeForeground': '#' + getCssVar('--foreground'),
-      }
-    } as editor.IStandaloneThemeData);
-  }, []);
-
-  // Detect theme changes and update Monaco theme accordingly
+  // Set up Monaco theme watcher
   useEffect(() => {
-    // Function to apply the appropriate theme
-    const applyTheme = () => {
-      if (!monacoRef.current) return;
-      
-      // Check if we're in dark mode
-      const isDarkMode = document.documentElement.classList.contains('dark');
-      
-      // Force a refresh of CSS variables before applying theme
-      const background = getComputedStyle(document.documentElement).getPropertyValue('--background').trim();
-      const foreground = getComputedStyle(document.documentElement).getPropertyValue('--foreground').trim();
-      
-      // Redefine themes to ensure they have the latest CSS variables
-      defineCustomTheme(monacoRef.current);
-      
-      // Apply the appropriate theme
-      monacoRef.current.editor.setTheme(isDarkMode ? 'plexusDarkTheme' : 'plexusLightTheme');
-    };
+    if (!monacoRef.current) return
     
-    // Apply theme immediately if Monaco is available
-    applyTheme();
-    
-    // Set up a mutation observer to detect theme changes
-    const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        if (mutation.attributeName === 'class') {
-          applyTheme();
-        }
-      });
-    });
-    
-    // Start observing the document element for class changes
-    observer.observe(document.documentElement, { attributes: true });
-    
-    // Clean up the observer when the component unmounts
-    return () => {
-      observer.disconnect();
-    };
-  }, [defineCustomTheme]);
+    const cleanup = setupMonacoThemeWatcher(monacoRef.current)
+    return cleanup
+  }, [monacoRef.current])
 
   // Add state for editor height with localStorage persistence
   const [editorHeight, setEditorHeight] = useState(() => {
@@ -562,7 +429,7 @@ const DetailContent = React.memo(({
 
   return (
     <div className={cn(
-      "w-full flex flex-col min-h-0 overflow-y-auto",
+      "w-full flex flex-col min-h-0 h-full",
       isEditorFullscreen && "absolute inset-0 z-10 bg-background p-4 rounded-lg"
     )}>
       {/* Hide the header section when in fullscreen mode */}
@@ -615,19 +482,48 @@ const DetailContent = React.memo(({
             />
           </div>
           <div className="flex gap-2 ml-4">
-            <DropdownMenu.Root>
-              <DropdownMenu.Trigger asChild>
-                <CardButton
-                  icon={MoreHorizontal}
-                  onClick={() => {}}
+            <ShadcnDropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 rounded-md border-0 shadow-none bg-border"
                   aria-label="More options"
-                />
-              </DropdownMenu.Trigger>
-              <DropdownMenu.Portal>
-                <DropdownMenu.Content align="end" className="min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md">
-                </DropdownMenu.Content>
-              </DropdownMenu.Portal>
-            </DropdownMenu.Root>
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => {
+                  console.log('Test clicked');
+                  toast.success('Test action triggered');
+                }}>
+                  <TestTube className="mr-2 h-4 w-4" />
+                  Test
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => {
+                  console.log('Evaluate Accuracy clicked');
+                  toast.success('Evaluate Accuracy action triggered');
+                }}>
+                  <FlaskConical className="mr-2 h-4 w-4" />
+                  Evaluate Accuracy
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => {
+                  console.log('Evaluate Consistency clicked');
+                  toast.success('Evaluate Consistency action triggered');
+                }}>
+                  <FlaskRound className="mr-2 h-4 w-4" />
+                  Evaluate Consistency
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => {
+                  console.log('Evaluate Alignment clicked');
+                  toast.success('Evaluate Alignment action triggered');
+                }}>
+                  <TestTubes className="mr-2 h-4 w-4" />
+                  Evaluate Alignment
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </ShadcnDropdownMenu>
             {onToggleFullWidth && (
               <CardButton
                 icon={isFullWidth ? Columns2 : Square}
@@ -660,6 +556,50 @@ const DetailContent = React.memo(({
           )}
         </div>
         <div className="flex items-center gap-2">
+          {isEditorFullscreen && (
+            <ShadcnDropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 rounded-md border-0 shadow-none bg-border"
+                  aria-label="More options"
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => {
+                  console.log('Test clicked');
+                  toast.success('Test action triggered');
+                }}>
+                  <TestTube className="mr-2 h-4 w-4" />
+                  Test
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => {
+                  console.log('Evaluate Accuracy clicked');
+                  toast.success('Evaluate Accuracy action triggered');
+                }}>
+                  <FlaskConical className="mr-2 h-4 w-4" />
+                  Evaluate Accuracy
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => {
+                  console.log('Evaluate Consistency clicked');
+                  toast.success('Evaluate Consistency action triggered');
+                }}>
+                  <FlaskRound className="mr-2 h-4 w-4" />
+                  Evaluate Consistency
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => {
+                  console.log('Evaluate Alignment clicked');
+                  toast.success('Evaluate Alignment action triggered');
+                }}>
+                  <TestTubes className="mr-2 h-4 w-4" />
+                  Evaluate Alignment
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </ShadcnDropdownMenu>
+          )}
           <CardButton
             icon={isEditorFullscreen ? Shrink : Expand}
             onClick={() => setIsEditorFullscreen(!isEditorFullscreen)}
@@ -668,18 +608,91 @@ const DetailContent = React.memo(({
         </div>
       </div>
 
-      {/* YAML Editor */}
+      {/* YAML Editor - Make it flex to fill available space */}
       <div className={cn(
-        "mt-2",
-        isEditorFullscreen && "flex-1"
+        "flex-1 flex flex-col min-h-0",
+        isEditorFullscreen ? "mt-2" : "mt-2"
       )} style={{ transition: 'none' }}>
-        <ResizableEditorContainer 
-          height={isEditorFullscreen ? 
-            // Use a percentage of the container height instead of window height
-            800 : editorHeight}
-          onHeightChange={handleHeightChange}
-          isFullscreen={isEditorFullscreen}
-        >
+        {!isEditorFullscreen ? (
+          // Normal mode: flexible height container
+          <div className="flex-1 border bg-background rounded-md relative min-h-[300px]">
+            <Editor
+              height="100%"
+              defaultLanguage="yaml"
+              value={currentConfig}
+              key={`editor-${selectedVersionId || championVersionId}`}
+              onMount={(editor, monaco) => {
+                // Store the editor instance
+                editorInstanceRef.current = editor;
+                
+                // Store the Monaco instance
+                monacoRef.current = monaco;
+                
+                // Apply our custom theme when the editor mounts
+                defineCustomMonacoThemes(monaco);
+                applyMonacoTheme(monaco);
+                
+                // Force immediate layout to ensure correct sizing
+                editor.layout();
+                
+                // Add error handling for iPad-specific issues
+                window.addEventListener('error', (event) => {
+                  if (event.message === 'Canceled: Canceled' || 
+                      event.error?.message === 'Canceled: Canceled') {
+                    event.preventDefault();
+                    return true; // Prevent the error from propagating
+                  }
+                  return false;
+                });
+              }}
+              onChange={(value) => {
+                if (!value) return;
+                
+                try {
+                  // Set editing flag to prevent useEffect from overriding our changes
+                  setIsEditing(true);
+                  
+                  // Parse YAML to validate it and get values for form
+                  const parsed = parseYaml(value)
+                  
+                  // Extract external ID from all possible formats
+                  const externalIdValue = parsed.externalId !== undefined ? 
+                    parsed.externalId : 
+                    (parsed.external_id !== undefined ? parsed.external_id : 
+                     (parsed.id !== undefined ? parsed.id : undefined));
+
+                  
+                  // Update our local state
+                  setCurrentConfig(value);
+                  
+                  // Pass the updated configuration to the parent
+                  onEditChange?.({
+                    name: parsed.name,
+                    externalId: externalIdValue !== undefined ? String(externalIdValue) : undefined,
+                    key: parsed.key,
+                    description: parsed.description,
+                    configuration: value // Store the original YAML string
+                  });
+                } catch (error) {
+                  // Handle cancellation errors gracefully
+                  if (error instanceof Error && 
+                      (error.message === 'Canceled' || error.message === 'Canceled: Canceled')) {
+                    return; // Just ignore the error
+                  }
+                  
+                  // Ignore other parse errors while typing
+                }
+              }}
+              options={getCommonMonacoOptions(isMobileDevice)}
+            />
+          </div>
+        ) : (
+          // Fullscreen mode: use the old resizable container
+          <ResizableEditorContainer 
+            height={800}
+            onHeightChange={handleHeightChange}
+            isFullscreen={isEditorFullscreen}
+          >
           <Editor
             height="100%"
             defaultLanguage="yaml"
@@ -693,17 +706,8 @@ const DetailContent = React.memo(({
               monacoRef.current = monaco;
               
               // Apply our custom theme when the editor mounts
-              defineCustomTheme(monaco);
-              
-              // Set the initial theme based on current mode
-              const isDarkMode = document.documentElement.classList.contains('dark');
-              
-              // Force a refresh of CSS variables before applying theme
-              const background = getComputedStyle(document.documentElement).getPropertyValue('--background').trim();
-              const foreground = getComputedStyle(document.documentElement).getPropertyValue('--foreground').trim();
-              
-              // Apply the appropriate theme
-              monaco.editor.setTheme(isDarkMode ? 'plexusDarkTheme' : 'plexusLightTheme');
+              defineCustomMonacoThemes(monaco);
+              applyMonacoTheme(monaco);
               
               // Force immediate layout to ensure correct sizing
               editor.layout();
@@ -756,84 +760,63 @@ const DetailContent = React.memo(({
                 // Ignore other parse errors while typing
               }
             }}
-            options={{
-              minimap: { enabled: false },
-              fontSize: 14,
-              lineNumbers: 'on',
-              scrollBeyondLastLine: false,
-              wordWrap: 'on',
-              wrappingIndent: 'indent',
-              automaticLayout: true,
-              fontFamily: 'monospace',
-              fontLigatures: true,
-              contextmenu: true,
-              cursorBlinking: 'smooth',
-              cursorSmoothCaretAnimation: 'on',
-              smoothScrolling: true,
-              renderLineHighlight: 'all',
-              colorDecorators: true,
-              // iPad/mobile specific options
-              ...(isMobileDevice ? {
-                // Reduce features that might cause issues on mobile
-                quickSuggestions: false,
-                parameterHints: { enabled: false },
-                folding: false,
-                dragAndDrop: false,
-                links: false,
-                // Optimize touch handling
-                mouseWheelZoom: false,
-                scrollbar: {
-                  useShadows: false,
-                  verticalHasArrows: true,
-                  horizontalHasArrows: true,
-                  vertical: 'visible',
-                  horizontal: 'visible',
-                  verticalScrollbarSize: 20,
-                  horizontalScrollbarSize: 20,
-                },
-                // Improve performance
-                renderWhitespace: 'none',
-                renderControlCharacters: false,
-                renderIndentGuides: false,
-              } : {})
-            }}
+            options={getCommonMonacoOptions(isMobileDevice)}
           />
-        </ResizableEditorContainer>
+          </ResizableEditorContainer>
+        )}
       </div>
 
-      {/* Hide the action buttons and version history when in fullscreen mode */}
-      {!isEditorFullscreen && (
-        <>
-          {hasChanges && (
-            <div className="mt-4 space-y-4">
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => {
-                  setIsEditing(false); // Reset editing flag
-                  onCancel?.();
-                }}>Cancel</Button>
-                <Button onClick={() => {
-                  setIsEditing(false); // Reset editing flag
-                  onSave?.();
-                }}>Save Changes</Button>
-              </div>
-            </div>
-          )}
-
-          {versions && (
-            <div className="mt-6 overflow-hidden">
-              <ScoreVersionHistory
-                versions={versions}
-                championVersionId={championVersionId}
-                selectedVersionId={selectedVersionId}
-                onVersionSelect={onVersionSelect}
-                onToggleFeature={onToggleFeature}
-                onPromoteToChampion={onPromoteToChampion}
-                showOnlyFeatured={showOnlyFeatured}
-                onToggleShowOnlyFeatured={() => setShowOnlyFeatured(prev => !prev)}
+      {/* Action buttons - show in both normal and fullscreen modes */}
+      {hasChanges && (
+        <div className={cn(
+          "mt-4 space-y-4",
+          isEditorFullscreen && "mt-4"
+        )}>
+          <div className={cn(
+            "flex gap-2",
+            isEditorFullscreen ? "flex-row items-end" : "justify-end"
+          )}>
+            {isEditorFullscreen && (
+              <textarea
+                value={versionNote}
+                onChange={(e) => onNoteChange(e.target.value)}
+                placeholder="Add a note about this version..."
+                className="flex-1 px-3 py-2 rounded-md bg-background border border-input text-sm resize-none h-10
+                         focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2
+                         placeholder:text-muted-foreground"
+                rows={1}
               />
+            )}
+            <div className="flex gap-2">
+              <Button className="bg-card hover:bg-card/80 text-card-foreground shadow-none border-0" onClick={() => {
+                setIsEditing(false); // Reset editing flag
+                onCancel?.();
+              }}>Cancel</Button>
+              <Button onClick={() => {
+                setIsEditing(false); // Reset editing flag
+                if (isEditorFullscreen) {
+                  setIsEditorFullscreen(false); // Exit fullscreen after save
+                }
+                onSave?.();
+              }}>Save Changes</Button>
             </div>
-          )}
-        </>
+          </div>
+        </div>
+      )}
+
+      {/* Version history - hide in fullscreen mode */}
+      {!isEditorFullscreen && versions && (
+        <div className="mt-6 overflow-hidden flex-shrink-0">
+          <ScoreVersionHistory
+            versions={versions}
+            championVersionId={championVersionId}
+            selectedVersionId={selectedVersionId}
+            onVersionSelect={onVersionSelect}
+            onToggleFeature={onToggleFeature}
+            onPromoteToChampion={onPromoteToChampion}
+            forceExpanded={forceExpandHistory}
+          />
+        </div>
       )}
     </div>
   )
@@ -858,6 +841,7 @@ export function ScoreComponent({
   const [selectedVersionId, setSelectedVersionId] = React.useState<string>()
   const [versionNote, setVersionNote] = React.useState('')
   const [resetEditingCounter, setResetEditingCounter] = React.useState(0)
+  const [forceExpandHistory, setForceExpandHistory] = React.useState(false)
   
 
   
@@ -867,6 +851,7 @@ export function ScoreComponent({
     setVersionNote('') // Reset note when score changes
     setHasChanges(false) // Reset changes flag when score changes
     setResetEditingCounter(prev => prev + 1) // Signal to DetailContent to reset editing state
+    setForceExpandHistory(false) // Reset expansion when score changes
   }, [score])
   
   // Fetch versions when score changes
@@ -1325,6 +1310,7 @@ export function ScoreComponent({
       
       setHasChanges(false);
       setVersionNote('');
+      setForceExpandHistory(true); // Auto-expand version history after save
     } catch (error) {
       console.error('Error saving score:', error);
       toast.error(error instanceof Error ? error.message : 'Error updating score');
@@ -1422,6 +1408,7 @@ export function ScoreComponent({
               versionNote={versionNote}
               onNoteChange={handleNoteChange}
               resetEditingCounter={resetEditingCounter}
+              forceExpandHistory={forceExpandHistory}
             />
           )}
         </div>

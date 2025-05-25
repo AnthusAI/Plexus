@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { ScrollText, Download, Paperclip, AlertTriangle, AlertCircle, Eye } from 'lucide-react';
+import { ScrollText, Download, Paperclip, AlertTriangle, AlertCircle, Code, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { downloadData, getUrl } from 'aws-amplify/storage';
 import { CardButton } from '@/components/CardButton';
@@ -98,6 +98,9 @@ const ReportBlock: BlockComponent = ({
   const [selectedFileContent, setSelectedFileContent] = useState<string | null>(null);
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
   const [isLoadingFile, setIsLoadingFile] = useState(false);
+  
+  // State for raw output display
+  const [showRawOutput, setShowRawOutput] = useState(false);
   const [selectedFileUrl, setSelectedFileUrl] = useState<string | null>(null);
   const [selectedFileIsImage, setSelectedFileIsImage] = useState<boolean | null>(null);
   const [selectedFileIsHtml, setSelectedFileIsHtml] = useState<boolean | null>(null);
@@ -227,6 +230,10 @@ const ReportBlock: BlockComponent = ({
     if (newShowLogState && !logText && logFile && !isLoadingLog) {
       fetchLogFileContent();
     }
+  };
+
+  const toggleShowRawOutput = () => {
+    setShowRawOutput(!showRawOutput);
   };
 
   const toggleShowAttachedFiles = () => {
@@ -414,6 +421,27 @@ const ReportBlock: BlockComponent = ({
     );
   };
 
+  // Render the raw output details
+  const renderRawOutput = () => {
+    if (!showRawOutput) return null;
+    
+    return (
+      <div className={`my-3 bg-card p-3 overflow-hidden rounded-lg ${isWideLayout ? "w-full" : "@[30rem]:w-[350px]"}`}>
+        <div className="flex flex-row justify-between items-center mb-3">
+          <h4 className="text-base font-medium">Raw Output</h4>
+        </div>
+        <div className="text-xs text-muted-foreground mb-2">
+          Raw JSON output from the report block execution
+        </div>
+        <div className="max-h-96 overflow-auto">
+          <pre className="text-xs bg-muted p-2 rounded whitespace-pre-wrap break-words">
+            {JSON.stringify(output, null, 2)}
+          </pre>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-2">
       <div className="flex flex-col gap-2">
@@ -447,7 +475,7 @@ const ReportBlock: BlockComponent = ({
                     className="h-8 bg-card hover:bg-card/90 border-0 w-full"
                   >
                     <ScrollText className="mr-2 h-4 w-4" />
-                    {showLog ? "Hide Log" : "View Log"}
+                    {showLog ? "Hide Log" : "Log"}
                   </Button>
                   
                   {/* Only render inline (below the button) in narrow layout */}
@@ -464,13 +492,29 @@ const ReportBlock: BlockComponent = ({
                     className="h-8 bg-card hover:bg-card/90 border-0 w-full"
                   >
                     <Paperclip className="mr-2 h-4 w-4" />
-                    {showAttachedFiles ? "Hide Files" : parsedAttachedFiles.length === 1 ? "Attached File" : "Attached Files"}
+                    {showAttachedFiles ? "Hide Files" : "Files"}
                   </Button>
                   
                   {/* Only render inline (below the button) in narrow layout */}
                   {showAttachedFiles && !isWideLayout && renderFileDetails()}
                 </div>
               )}
+              
+              {/* Raw Output Button - Always available */}
+              <div className="w-full @[30rem]:w-auto">
+                <Button 
+                  variant="secondary"
+                  size="sm"
+                  onClick={toggleShowRawOutput}
+                  className="h-8 bg-card hover:bg-card/90 border-0 w-full"
+                >
+                  <Code className="mr-2 h-4 w-4" />
+                  {showRawOutput ? "Hide Raw" : "Raw"}
+                </Button>
+                
+                {/* Only render inline (below the button) in narrow layout */}
+                {showRawOutput && !isWideLayout && renderRawOutput()}
+              </div>
             </div>
           </div>
         </div>
@@ -481,6 +525,7 @@ const ReportBlock: BlockComponent = ({
         <div className="mt-2">
           {showLog && renderLogDetails()}
           {showAttachedFiles && renderFileDetails()}
+          {showRawOutput && renderRawOutput()}
         </div>
       )}
 

@@ -978,8 +978,6 @@ export function observeItemCreations() {
               externalId
               description
               accountId
-              scorecardId
-              scoreId
               evaluationId
               updatedAt
               createdAt

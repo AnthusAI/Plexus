@@ -152,11 +152,21 @@ const ReportTask: React.FC<ReportTaskProps> = ({
   // Use reportBlocks from task.data for bare mode
   useEffect(() => {
     if (variant === 'bare' && task.data?.reportBlocks && task.data.reportBlocks.length > 0) {
+      console.log('📋 ReportTask processing reportBlocks for bare mode:', {
+        blocksCount: task.data.reportBlocks.length,
+        blocks: task.data.reportBlocks.map(b => ({
+          type: b.type,
+          name: b.name,
+          position: b.position,
+          hasOutput: !!b.output
+        }))
+      });
+      
       const transformedBlocks = task.data.reportBlocks.map(blockProp => {
         const parsedOutput = parseOutput(blockProp.output);
         const blockTypeToUse = blockProp.type || parsedOutput.class || 'unknown';
 
-        return {
+        const transformed = {
           id: blockProp.name || `block-${blockProp.position}`,
           name: blockProp.name,
           position: blockProp.position,
@@ -166,6 +176,15 @@ const ReportTask: React.FC<ReportTaskProps> = ({
           config: blockProp.config || parsedOutput,
           attachedFiles: Array.isArray(blockProp.attachedFiles) ? blockProp.attachedFiles : []
         };
+        
+        console.log('🔄 Transformed block:', {
+          originalType: blockProp.type,
+          transformedType: transformed.type,
+          name: transformed.name,
+          position: transformed.position
+        });
+        
+        return transformed;
       });
       
       setReportBlocks(transformedBlocks);
@@ -283,26 +302,44 @@ const ReportTask: React.FC<ReportTaskProps> = ({
         }
       });
       
+      console.log('🔍 Looking for block to match:', {
+        blockConfig,
+        availableBlocks: reportBlocks.map(b => ({
+          type: b.type,
+          name: b.name,
+          position: b.position
+        }))
+      });
+      
       // Try to match blocks by class/type and then by position if available
       const blockData = reportBlocks.find(block => {
         // Primary match: if markdown has a name, it must match block.name
         if (blockConfig.name && block.name === blockConfig.name) {
+          console.log('✅ Block matched by name:', block.name);
           return true;
         }
         // Secondary match: if markdown does not have a name, match by class/type AND (position if available in markdown OR it's the only one of its type)
         if (!blockConfig.name && block.type === blockConfig.class) {
           if (blockConfig.position) {
-            return block.position.toString() === blockConfig.position;
+            const matches = block.position.toString() === blockConfig.position;
+            console.log(`${matches ? '✅' : '❌'} Block position match:`, {
+              blockPosition: block.position,
+              configPosition: blockConfig.position,
+              matches
+            });
+            return matches;
           }
           // If no position in markdown, and no name, it implies we might be looking for *any* block of this type.
           // This could be ambiguous if there are multiple. For now, let's assume if no name/position, it's the first one.
           // A more robust solution might involve ensuring markdown provides enough info or a different matching strategy.
+          console.log('✅ Block matched by type (first match):', block.type);
           return true; // Matches the first block of this type if no name/position specified in markdown
         }
         
         // Fallback: if markdown only has class, and no name, and block.type matches.
         // This is similar to the above but explicit.
         if (!blockConfig.name && !blockConfig.position && block.type === blockConfig.class) {
+            console.log('✅ Block matched by type (fallback):', block.type);
             return true;
         }
 
