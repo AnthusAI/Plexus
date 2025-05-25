@@ -7,6 +7,7 @@ import shutil
 from pathlib import Path
 import pandas as pd # Added for inspect_data if called directly
 import json # For potentially writing a summary JSON
+import yaml # For YAML formatted output with contextual comments
 
 from plexus.analysis.topics.transformer import (
     transform_transcripts, 
@@ -403,6 +404,27 @@ class TopicAnalysis(BaseReportBlock):
 
         # Add block metadata for frontend display
         final_output_data["block_title"] = self.config.get("name", self.DEFAULT_NAME)
+
+        # Return YAML formatted output with contextual comments
+        try:
+            contextual_comment = """# Topic Analysis Report Output
+# 
+# This is the structured output from a multi-stage topic analysis pipeline that:
+# 1. Preprocesses data through programmatic filtering and preparation
+# 2. Extracts content using LLM-powered transformation with custom prompts  
+# 3. Discovers topics using BERTopic clustering and analysis
+# 4. Fine-tunes topic representations using LLM-based naming models
+#
+# The output contains configuration parameters, extracted examples, discovered topics,
+# visualization metadata, and file attachments from the complete analysis workflow.
+
+"""
+            yaml_output = yaml.dump(final_output_data, indent=2, allow_unicode=True, sort_keys=False)
+            final_output_data = contextual_comment + yaml_output
+        except Exception as e:
+            self._log(f"Failed to create YAML formatted output: {e}", level="ERROR")
+            # Fallback to basic YAML without comments
+            final_output_data = yaml.dump(final_output_data, indent=2, allow_unicode=True, sort_keys=False)
 
         return final_output_data, self._get_log_string()
 
