@@ -39,7 +39,8 @@ type ReportConfigurationIndexFields = "accountId" | "name";
 type ReportIndexFields = "accountId" | "reportConfigurationId" | "createdAt" | "updatedAt" | "taskId";
 type ReportBlockIndexFields = "reportId" | "name" | "position";
 type FeedbackItemIndexFields = "accountId" | "scorecardId" | "scoreId" | "cacheKey" | "updatedAt" | "itemId"; // UPDATED: Renamed externalId to cacheKey and added itemId
-type ItemScorecardIndexFields = "itemId" | "scorecardId";
+type ScorecardExampleItemIndexFields = "scorecardId" | "itemId" | "addedAt";
+type ScorecardProcessedItemIndexFields = "scorecardId" | "itemId" | "processedAt";
 
 // New index types for Feedback Analysis
 // type FeedbackAnalysisIndexFields = "accountId" | "scorecardId" | "createdAt"; // REMOVED
@@ -91,7 +92,8 @@ const schema = a.schema({
             datasets: a.hasMany('Dataset', 'scorecardId'),
             feedbackItems: a.hasMany('FeedbackItem', 'scorecardId'),
             externalId: a.string(),
-            items: a.hasMany('ItemScorecard', 'scorecardId'),
+            exampleItems: a.hasMany('ScorecardExampleItem', 'scorecardId'),
+            processedItems: a.hasMany('ScorecardProcessedItem', 'scorecardId'),
         })
         .authorization((allow) => [
             allow.publicApiKey(),
@@ -290,7 +292,8 @@ const schema = a.schema({
             attachedFiles: a.string().array(),
             text: a.string(),
             metadata: a.json(),
-            scorecards: a.hasMany('ItemScorecard', 'itemId'),
+            asExampleFor: a.hasMany('ScorecardExampleItem', 'itemId'),
+            processedFor: a.hasMany('ScorecardProcessedItem', 'itemId'),
         })
         .authorization((allow) => [
             allow.publicApiKey(),
@@ -677,27 +680,47 @@ const schema = a.schema({
             idx("itemId")
         ]),
 
-    ItemScorecard: a
+    ScorecardExampleItem: a
         .model({
-            itemId: a.id().required(),
             scorecardId: a.id().required(),
-            
-            // You can add additional metadata fields here if needed:
-            assignedAt: a.datetime(),
-            assignedBy: a.string(),
+            itemId: a.id().required(),
+            addedAt: a.datetime(),
+            addedBy: a.string(),
             notes: a.string(),
             
             // Relationships to both ends
-            item: a.belongsTo('Item', 'itemId'),
             scorecard: a.belongsTo('Scorecard', 'scorecardId'),
+            item: a.belongsTo('Item', 'itemId'),
         })
         .authorization((allow) => [
             allow.publicApiKey(),
             allow.authenticated()
         ])
-        .secondaryIndexes((idx: (field: ItemScorecardIndexFields) => any) => [
-            idx("itemId"),
+        .secondaryIndexes((idx: (field: ScorecardExampleItemIndexFields) => any) => [
             idx("scorecardId"),
+            idx("itemId"),
+            idx("scorecardId").sortKeys(["addedAt"]),
+        ]),
+
+    ScorecardProcessedItem: a
+        .model({
+            scorecardId: a.id().required(),
+            itemId: a.id().required(),
+            processedAt: a.datetime(),
+            lastScoreResultId: a.string(), // Reference to most recent result
+            
+            // Relationships to both ends
+            scorecard: a.belongsTo('Scorecard', 'scorecardId'),
+            item: a.belongsTo('Item', 'itemId'),
+        })
+        .authorization((allow) => [
+            allow.publicApiKey(),
+            allow.authenticated()
+        ])
+        .secondaryIndexes((idx: (field: ScorecardProcessedItemIndexFields) => any) => [
+            idx("scorecardId"),
+            idx("itemId"),
+            idx("scorecardId").sortKeys(["processedAt"]),
         ]),
 });
 

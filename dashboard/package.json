@@ -2,6 +2,9 @@
   "name": "aws-amplify-gen2",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=18.17.0"
+  },
   "scripts": {
     "dev": "NEXT_TYPESCRIPT_CHECK=0 next dev",
     "build": "next build",
@@ -128,7 +131,7 @@
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^14.3.1",
     "@types/jest": "^29.5.14",
-    "@types/node": "^20.17.48",
+    "@types/node": "^18.19.0",
     "@types/node-fetch": "^2.6.11",
     "@types/react": "^18",
     "@types/react-dom": "^18",
@@ -166,5 +169,8 @@
         "prerelease": true
       }
     ]
+  },
+  "optionalDependencies": {
+    "@parcel/watcher": "^2.5.1"
   }
 }
