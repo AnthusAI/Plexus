@@ -257,14 +257,14 @@ export default function ScorecardsComponent({
           const sectionsResult = await fullScorecardData.sections();
           const sections = sectionsResult.data || [];
           
-          // Load items associated with this scorecard via the ItemScorecard join table
-          console.log('🟡 Loading example items using ItemScorecard join table...');
+          // Load items associated with this scorecard via the ScorecardExampleItem join table
+          console.log('🟡 Loading example items using ScorecardExampleItem join table...');
           let exampleItems: any[] = [];
           
           try {
-            // Query the ItemScorecard join table to get associated items
+            // Query the ScorecardExampleItem join table to get associated items
             const itemAssociationsResult = await graphqlRequest<{
-              listItemScorecardByScorecardId: {
+              listScorecardExampleItemByScorecardId: {
                 items: Array<{
                   itemId: string;
                   item: {
@@ -278,8 +278,8 @@ export default function ScorecardsComponent({
                 }>;
               };
             }>(`
-              query ListItemsByScorecardId($scorecardId: ID!) {
-                listItemScorecardByScorecardId(scorecardId: $scorecardId) {
+              query ListExampleItemsByScorecardId($scorecardId: ID!) {
+                listScorecardExampleItemByScorecardId(scorecardId: $scorecardId) {
                   items {
                     itemId
                     item {
@@ -296,7 +296,7 @@ export default function ScorecardsComponent({
             `, { scorecardId: fullScorecardData.id });
             
             // Extract the actual items from the associations and sort by updatedAt
-            exampleItems = (itemAssociationsResult.data?.listItemScorecardByScorecardId?.items || [])
+            exampleItems = (itemAssociationsResult.data?.listScorecardExampleItemByScorecardId?.items || [])
               .map(association => association.item)
               .filter(item => item !== null) // Filter out any null items
               .sort((a, b) => {
@@ -305,12 +305,12 @@ export default function ScorecardsComponent({
                 return dateB - dateA; // DESC order (newest first)
               });
               
-            console.log('🟡 Items loaded via ItemScorecard join table:', {
+            console.log('🟡 Items loaded via ScorecardExampleItem join table:', {
               itemCount: exampleItems.length,
               items: exampleItems
             });
           } catch (error) {
-            console.error('🔴 Error loading items via ItemScorecard join table:', error);
+            console.error('🔴 Error loading items via ScorecardExampleItem join table:', error);
           }
           
           console.log('🟢 Data loaded successfully:', {
@@ -510,16 +510,17 @@ export default function ScorecardsComponent({
           throw new Error('Item creation failed: No ID returned from server');
         }
 
-        // Create ItemScorecard association if we have a selected scorecard
+        // Create ScorecardExampleItem association if we have a selected scorecard
         if (selectedScorecard?.id && result.data.id) {
           try {
-            await amplifyClient.ItemScorecard.create({
+            await amplifyClient.ScorecardExampleItem.create({
               itemId: result.data.id,
-              scorecardId: selectedScorecard.id
+              scorecardId: selectedScorecard.id,
+              addedAt: new Date().toISOString()
             });
-            console.log('ItemScorecard association created successfully');
+            console.log('ScorecardExampleItem association created successfully');
           } catch (associationError) {
-            console.error('Error creating ItemScorecard association:', associationError);
+            console.error('Error creating ScorecardExampleItem association:', associationError);
             // Don't throw here - the item was created successfully, just log the association error
           }
         }

@@ -102,8 +102,8 @@ const GridContent = React.memo(({
       }];
     } else {
       return [{
-        scorecard: 'Unknown Scorecard',
-        scores: ["No score"]
+        scorecard: 'Item',
+        scores: []
       }];
     }
   };
@@ -114,7 +114,7 @@ const GridContent = React.memo(({
   
   // Determine what to show when collapsed
   const primaryScorecard = scoreDisplays[0]?.scorecard || 'Untitled Item';
-  const primaryScore = scoreDisplays[0]?.scores[0] || 'No score';
+  const primaryScore = scoreDisplays[0]?.scores[0] || '';
   
   // Get total score count
   const totalScores = scoreDisplays.reduce((total, display) => total + display.scores.length, 0);
@@ -148,11 +148,13 @@ const GridContent = React.memo(({
         )}
         
         {/* Header order: 4. Score name or count */}
-        <div className="font-semibold text-sm truncate" title={hasMultipleScores ? `${totalScores} scores` : `Score: ${primaryScore}`}>
-          {hasMultipleScores ? 
-            `${totalScores} ${totalScores === 1 ? 'score' : 'scores'}` : 
-            primaryScore}
-        </div>
+        {(hasMultipleScores || primaryScore) && (
+          <div className="font-semibold text-sm truncate" title={hasMultipleScores ? `${totalScores} scores` : `Score: ${primaryScore}`}>
+            {hasMultipleScores ? 
+              `${totalScores} ${totalScores === 1 ? 'score' : 'scores'}` : 
+              primaryScore}
+          </div>
+        )}
       </div>
       <div className="flex flex-col items-end space-y-1">
         {item.icon || <StickyNote className="h-[1.75rem] w-[1.75rem]" strokeWidth={1.25} />}
@@ -208,11 +210,8 @@ const DetailContent = React.memo(({
       }];
     } else {
       return [{
-        scorecardName: 'Unknown Scorecard',
-        scores: [{
-          scoreName: "No score",
-          createdAt: item.createdAt
-        }]
+        scorecardName: 'Item',
+        scores: []
       }];
     }
   };
@@ -227,8 +226,8 @@ const DetailContent = React.memo(({
 
   // Get a single display name for the primary score (for the basic info section)
   const getPrimaryScoreDisplay = () => {
-    if (scoreInfo.length === 0) return "No score";
-    if (scoreInfo[0].scores.length === 0) return "No score";
+    if (scoreInfo.length === 0) return "";
+    if (scoreInfo[0].scores.length === 0) return "";
     
     // If we have one scorecard with one score, just show that
     if (scoreInfo.length === 1 && scoreInfo[0].scores.length === 1) {
@@ -247,7 +246,7 @@ const DetailContent = React.memo(({
   const totalScores = scoreInfo.reduce((total, info) => total + info.scores.length, 0);
   
   // Get primary score
-  const primaryScore = scoreInfo[0]?.scores[0]?.scoreName || 'No score';
+  const primaryScore = scoreInfo[0]?.scores[0]?.scoreName || '';
 
   return (
     <div className="w-full flex flex-col min-h-0">
@@ -276,11 +275,13 @@ const DetailContent = React.memo(({
           )}
           
           {/* Header order: 4. Score name or count - reduced text size to match grid view */}
-          <div className="text-sm font-semibold truncate" title={hasMultipleScores ? `${totalScores} scores` : `Score: ${primaryScore}`}>
-            {hasMultipleScores ? 
-              `${totalScores} ${totalScores === 1 ? 'score' : 'scores'}` : 
-              primaryScore}
-          </div>
+          {(hasMultipleScores || primaryScore) && (
+            <div className="text-sm font-semibold truncate" title={hasMultipleScores ? `${totalScores} scores` : `Score: ${primaryScore}`}>
+              {hasMultipleScores ? 
+                `${totalScores} ${totalScores === 1 ? 'score' : 'scores'}` : 
+                primaryScore}
+            </div>
+          )}
         </div>
         <div className="flex gap-2 ml-4">
           <DropdownMenu.Root>
