@@ -158,12 +158,27 @@ module.exports = {
                     '30%': {
                         transform: 'translateY(-2px)'
                     }
+                },
+                'attention-bounce': {
+                    '0%, 15%, 35%, 55%, 100%': {
+                        transform: 'translateY(0)'
+                    },
+                    '5%': {
+                        transform: 'translateY(-8px)'
+                    },
+                    '25%': {
+                        transform: 'translateY(-6px)'
+                    },
+                    '45%': {
+                        transform: 'translateY(-4px)'
+                    }
                 }
             },
             animation: {
                 'accordion-down': 'accordion-down 0.2s ease-out',
                 'accordion-up': 'accordion-up 0.2s ease-out',
-                'gentle-bounce': 'gentle-bounce 2.5s ease-in-out infinite'
+                'gentle-bounce': 'gentle-bounce 2.5s ease-in-out infinite',
+                'attention-bounce': 'attention-bounce 2s ease-in-out infinite'
             }
         },
         screens: {

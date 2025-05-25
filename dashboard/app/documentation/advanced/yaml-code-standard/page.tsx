@@ -275,7 +275,7 @@ scores:
             <div className="flex justify-end mb-2">
               <div className="flex flex-col items-center">
                 <div className="text-sm text-muted-foreground font-medium mb-1">Universal Code</div>
-                <div className="text-muted-foreground animate-gentle-bounce">↓</div>
+                <div className="text-muted-foreground text-3xl font-black animate-attention-bounce">↓</div>
               </div>
             </div>
             <div className="rounded-lg p-4 bg-frame">
