@@ -199,10 +199,22 @@ class TopicAnalysis(BaseReportBlock):
                 return final_output_data, self._get_log_string()
 
             self._log(f"Transcript transformation completed. Text file for BERTopic: {text_file_path_str}")
-            self._log(f"Preprocessing method: {preprocessing_info.get('method', 'unknown')}")
-            self._log(f"Preprocessing examples count: {len(preprocessing_info.get('examples', []))}")
+            self._log(f"LLM extraction method: {preprocessing_info.get('method', 'unknown')}")
+            self._log(f"LLM extraction examples count: {len(preprocessing_info.get('examples', []))}")
             final_output_data["transformed_text_file"] = text_file_path_str
-            final_output_data["preprocessing"] = preprocessing_info
+            
+            # Restructure output to match UI stages
+            # 1. Preprocessing (programmatic steps)
+            final_output_data["preprocessing"] = {
+                "method": transform_method,
+                "input_file": input_file_path,
+                "content_column": content_column,
+                "sample_size": sample_size,
+                "customer_only": customer_only
+            }
+            
+            # 2. LLM Extraction (what was previously called preprocessing)
+            final_output_data["llm_extraction"] = preprocessing_info
 
 
             # --- 3. Perform BERTopic Analysis (if not skipped) ---
@@ -225,10 +237,12 @@ class TopicAnalysis(BaseReportBlock):
                 self._log(f"Set OMP_NUM_THREADS for BERTopic: {os.environ.get('OMP_NUM_THREADS')}", level="DEBUG")
 
                 # Capture the return value from analyze_topics (it returns just one value, not a tuple)
-                # Add representation model configuration to preprocessing info for display
-                if use_representation_model:
-                    final_output_data["preprocessing"]["representation_model_provider"] = representation_model_provider
-                    final_output_data["preprocessing"]["representation_model_name"] = representation_model_name
+                # 4. Fine-tuning section (representation model configuration)
+                final_output_data["fine_tuning"] = {
+                    "use_representation_model": use_representation_model,
+                    "representation_model_provider": representation_model_provider if use_representation_model else None,
+                    "representation_model_name": representation_model_name if use_representation_model else None
+                }
                 
                 topic_model = await asyncio.to_thread(
                     analyze_topics,
@@ -244,6 +258,16 @@ class TopicAnalysis(BaseReportBlock):
                     representation_model_name=representation_model_name
                 )
                 self._log("BERTopic analysis completed.")
+                
+                # 3. BERTopic Analysis section
+                final_output_data["bertopic_analysis"] = {
+                    "num_topics_requested": num_topics,
+                    "min_topic_size": min_topic_size,
+                    "top_n_words": top_n_words,
+                    "min_ngram": min_ngram,
+                    "max_ngram": max_ngram,
+                    "skip_analysis": skip_analysis
+                }
                 
                 # Extract topic information and add to the final output data
                 if topic_model and hasattr(topic_model, 'get_topic_info'):
@@ -271,6 +295,14 @@ class TopicAnalysis(BaseReportBlock):
                     
                             final_output_data["topics"] = topics_list
                             self._log(f"Added {len(topics_list)} topics to output data")
+                            
+                            # Add visualization info based on topic count
+                            if len(topics_list) < 2:
+                                final_output_data["visualization_notes"] = {
+                                    "topics_visualization": "Skipped - requires 2+ topics for 2D visualization",
+                                    "heatmap_visualization": "Skipped - requires 2+ topics",
+                                    "available_files": "Topic information CSV and individual topic details available"
+                                }
                     except Exception as e:
                         self._log(f"Failed to extract topic information: {e}", level="ERROR")
                         final_output_data["errors"].append(f"Error extracting topics: {str(e)}")
@@ -338,7 +370,14 @@ class TopicAnalysis(BaseReportBlock):
                             else:
                                 self._log(f"Skipping unsupported file type: {file_path}", level="DEBUG")
                                 final_output_data["skipped_files"].append(str(file_path))
-                final_output_data["summary"] = "Topic analysis completed successfully."
+                # Generate summary based on the number of topics found
+                topic_count = len(final_output_data.get("topics", []))
+                if topic_count == 0:
+                    final_output_data["summary"] = "Topic analysis completed, but no distinct topics were identified in the data. Consider increasing sample size or adjusting min_topic_size parameter."
+                elif topic_count == 1:
+                    final_output_data["summary"] = f"Topic analysis completed with {topic_count} topic identified. Limited visualizations available due to single topic. Consider decreasing min_topic_size (currently {min_topic_size}) or increasing sample size."
+                else:
+                    final_output_data["summary"] = f"Topic analysis completed successfully with {topic_count} topics identified."
 
         except Exception as e:
             import traceback
