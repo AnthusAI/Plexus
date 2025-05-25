@@ -4,6 +4,7 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 from collections import Counter
 import json # Ensure json import at the top
+import yaml # For YAML formatted output with contextual comments
 
 from plexus.analysis.metrics import GwetAC1
 from plexus.analysis.metrics.metric import Metric
@@ -406,6 +407,28 @@ class FeedbackAnalysis(BaseReportBlock):
             final_output_data = {"error": str(e), "scores": []}
             summary_log = f"Error: {str(e)}"
             detailed_log = "\n".join(self.log_messages) if self.log_messages else f"Error: {str(e)}"
+
+        # Return YAML formatted output with contextual comments
+        if final_output_data and not final_output_data.get("error"):
+            try:
+                contextual_comment = """# Feedback Analysis Report Output
+# 
+# This is the structured output from a feedback analysis process that:
+# 1. Retrieves feedback items from scorecards within a specified time range
+# 2. Analyzes agreement between initial and final answer values using Gwet's AC1 coefficient
+# 3. Provides statistical measures of inter-rater reliability and agreement
+# 4. Generates insights about feedback quality and consistency across evaluators
+#
+# The output contains agreement scores, statistical measures, detailed breakdowns,
+# and analytical insights for understanding feedback consistency and reliability.
+
+"""
+                yaml_output = yaml.dump(final_output_data, indent=2, allow_unicode=True, sort_keys=False)
+                final_output_data = contextual_comment + yaml_output
+            except Exception as e:
+                logger.error(f"Failed to create YAML formatted output: {e}")
+                # Fallback to basic YAML without comments
+                final_output_data = yaml.dump(final_output_data, indent=2, allow_unicode=True, sort_keys=False)
 
         # Always return the detailed_log as the second return value to ensure logs are saved to S3
         # The service.py code will use this to upload to S3

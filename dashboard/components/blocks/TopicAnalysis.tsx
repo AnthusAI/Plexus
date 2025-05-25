@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ChevronDown, ChevronRight, Eye, EyeOff, TrendingUp } from 'lucide-react';
+import * as yaml from 'js-yaml';
 
 interface TopicAnalysisData {
   summary?: string;
@@ -64,6 +65,7 @@ interface TopicAnalysisData {
  * - BERTopic Analysis
  * - Fine-tuning
  */
+
 const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
   const [promptExpanded, setPromptExpanded] = useState(false);
   const [examplesExpanded, setExamplesExpanded] = useState(false);
@@ -87,7 +89,24 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
     );
   }
 
-  const data = props.output as TopicAnalysisData;
+  // Parse YAML if output is string, otherwise use as object (legacy support)
+  let data: TopicAnalysisData;
+  try {
+    if (typeof props.output === 'string') {
+      // New format: parse YAML string
+      data = yaml.parse(props.output) as TopicAnalysisData;
+    } else {
+      // Legacy format: use object directly
+      data = props.output as TopicAnalysisData;
+    }
+  } catch (error) {
+    console.error('❌ TopicAnalysis: Failed to parse output data:', error);
+    return (
+      <div className="p-4 text-center text-destructive">
+        Error parsing topic analysis data. Please check the report generation.
+      </div>
+    );
+  }
   const preprocessing = data.preprocessing || {};
   const llmExtraction = data.llm_extraction || {};
   const bertopicAnalysis = data.bertopic_analysis || {};

@@ -147,11 +147,23 @@ module.exports = {
                     to: {
                         height: '0'
                     }
+                },
+                'gentle-bounce': {
+                    '0%, 20%, 50%, 80%, 100%': {
+                        transform: 'translateY(0)'
+                    },
+                    '10%': {
+                        transform: 'translateY(-3px)'
+                    },
+                    '30%': {
+                        transform: 'translateY(-2px)'
+                    }
                 }
             },
             animation: {
                 'accordion-down': 'accordion-down 0.2s ease-out',
-                'accordion-up': 'accordion-up 0.2s ease-out'
+                'accordion-up': 'accordion-up 0.2s ease-out',
+                'gentle-bounce': 'gentle-bounce 2.5s ease-in-out infinite'
             }
         },
         screens: {

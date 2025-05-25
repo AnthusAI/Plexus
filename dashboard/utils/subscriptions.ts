@@ -201,6 +201,7 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
                   isDatasetClassDistributionBalanced
                   predictedClassDistribution
                   isPredictedClassDistributionBalanced
+                  universalCode
                   taskId
                   task {
                     id

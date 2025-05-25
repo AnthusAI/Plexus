@@ -28,6 +28,7 @@ export const EVALUATION_UPDATE_SUBSCRIPTION = `
       isDatasetClassDistributionBalanced
       predictedClassDistribution
       isPredictedClassDistributionBalanced
+      universalCode
       taskId
       task {
         id

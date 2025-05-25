@@ -1,10 +1,12 @@
 import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react'
 import { Task, TaskHeader, TaskContent, BaseTaskProps } from '@/components/Task'
-import { FlaskConical, Square, X, Split, ChevronLeft } from 'lucide-react'
+import { FlaskConical, Square, X, Split, ChevronLeft, MoreHorizontal, MessageSquareCode } from 'lucide-react'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { CardButton } from '@/components/CardButton'
+import { toast } from '@/components/ui/use-toast'
 import MetricsGauges from '@/components/MetricsGauges'
 import { TaskStatus, type TaskStageConfig } from '@/components/ui/task-status'
 import { ConfusionMatrix, type ConfusionMatrixData, type ConfusionMatrixRow } from '@/components/confusion-matrix'
-import { CardButton } from '@/components/CardButton'
 import ClassDistributionVisualizer from '@/components/ClassDistributionVisualizer'
 import PredictedClassDistributionVisualizer from '@/components/PredictedClassDistributionVisualizer'
 import { EvaluationTaskScoreResults } from './EvaluationTaskScoreResults'
@@ -111,6 +113,7 @@ export interface EvaluationTaskData extends BaseTaskData {
   scoreResults?: ScoreResult[]
   selectedScoreResult?: Schema['ScoreResult']['type'] | null
   task?: TaskData | null
+  universalCode?: string | null
 }
 
 export interface EvaluationTaskProps extends Omit<BaseTaskProps<EvaluationTaskData>, 'variant'> {
@@ -941,6 +944,74 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
     taskStatus: data.task?.status
   });
 
+  // Function to generate universal YAML code for evaluation
+  const generateUniversalCode = useCallback((evaluationData: EvaluationTaskData) => {
+    const yamlContent = `# Universal Code Snippet - Evaluation Results
+# Generated for: ${evaluationData.title || 'Evaluation'}
+# Type: Accuracy Evaluation
+# Date: ${new Date().toISOString()}
+
+evaluation:
+  id: "${evaluationData.id}"
+  type: "${task.type || 'Accuracy Evaluation'}"
+  scorecard: "${task.scorecard || ''}"
+  score: "${task.score || ''}"
+  status: "${evaluationData.status}"
+  
+  # Performance Metrics
+  accuracy: ${evaluationData.accuracy || 0}
+  processed_items: ${evaluationData.processedItems || 0}
+  total_items: ${evaluationData.totalItems || 0}
+  inferences: ${evaluationData.inferences || 0}
+  cost: ${evaluationData.cost || 0}
+  
+  # Timing Information
+  started_at: "${evaluationData.startedAt || ''}"
+  elapsed_seconds: ${evaluationData.elapsedSeconds || 0}
+  estimated_remaining_seconds: ${evaluationData.estimatedRemainingSeconds || 0}
+  
+  # Additional Metrics
+  metrics:${evaluationData.metrics?.map(metric => `
+    - name: "${metric.name}"
+      value: ${metric.value}
+      unit: "${metric.unit || ''}"
+      priority: ${metric.priority || false}`).join('') || ''}
+  
+  # Error Information
+  error_message: "${evaluationData.errorMessage || ''}"
+  
+  # Score Results Summary
+  score_results_count: ${evaluationData.scoreResults?.length || 0}
+  
+  # Class Distribution
+  dataset_balanced: ${evaluationData.isDatasetClassDistributionBalanced || false}
+  predicted_balanced: ${evaluationData.isPredictedClassDistributionBalanced || false}
+
+# Context: This YAML contains evaluation results and metrics for analysis by humans, AI models, and other systems.
+# Usage: Can be used for reporting, monitoring, or further automated analysis.
+`;
+    return yamlContent;
+  }, [task.type, task.scorecard, task.score]);
+
+  // Function to handle copying universal code to clipboard
+  const handleGetCode = useCallback(async () => {
+    try {
+      const universalCode = data.universalCode || generateUniversalCode(data);
+      await navigator.clipboard.writeText(universalCode);
+      toast({
+        description: "Copied Universal Code to clipboard",
+        duration: 2000,
+      });
+    } catch (error) {
+      console.error('Failed to copy universal code:', error);
+      toast({
+        variant: "destructive",
+        description: "Failed to copy code to clipboard",
+        duration: 2000,
+      });
+    }
+  }, [data, generateUniversalCode]);
+
   const metrics = useMemo(() => 
     variant === 'detail' ? 
       (data.metrics ?? []).map(metric => ({
@@ -964,6 +1035,20 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
   const headerContent = useMemo(() => (
     variant === 'detail' ? (
       <div className="flex items-center space-x-2">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <CardButton
+              icon={MoreHorizontal}
+              onClick={() => {}}
+            />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={handleGetCode}>
+              <MessageSquareCode className="mr-2 h-4 w-4" />
+              Get Code
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
         {typeof onToggleFullWidth === 'function' && (
           <CardButton
             icon={Square}
@@ -981,7 +1066,7 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
         )}
       </div>
     ) : null
-  ), [variant, onToggleFullWidth, onClose])
+  ), [variant, onToggleFullWidth, onClose, handleGetCode])
 
   const taskData = task.data?.task as TaskData | undefined;
 
