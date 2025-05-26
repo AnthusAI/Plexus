@@ -431,9 +431,9 @@ function ItemsDashboardInner() {
         if (useScore) {
           // If a score is selected, filter by scoreId
           console.log('Attempting direct GraphQL query for more items with scoreId:', selectedScore);
-          const directQuery = await graphqlRequest<{ listItemByScoreIdAndUpdatedAt: { items: any[], nextToken: string | null } }>(`
+          const directQuery = await graphqlRequest<{ listItemByScoreIdAndCreatedAt: { items: any[], nextToken: string | null } }>(`
             query ListItemsMoreDirect($scoreId: String!, $limit: Int!, $nextToken: String) {
-              listItemByScoreIdAndUpdatedAt(
+              listItemByScoreIdAndCreatedAt(
                 scoreId: $scoreId, 
                 sortDirection: DESC,
                 limit: $limit,
@@ -460,11 +460,11 @@ function ItemsDashboardInner() {
           
           console.log('Direct GraphQL query response for more items:', JSON.stringify(directQuery, null, 2));
           
-          if (directQuery.data?.listItemByScoreIdAndUpdatedAt?.items) {
-            console.log(`Found ${directQuery.data.listItemByScoreIdAndUpdatedAt.items.length} more items via direct GraphQL query`);
-            // No need to sort as the GSI already returns items sorted by updatedAt
-            itemsFromDirectQuery = directQuery.data.listItemByScoreIdAndUpdatedAt.items;
-            nextTokenFromDirectQuery = directQuery.data.listItemByScoreIdAndUpdatedAt.nextToken;
+          if (directQuery.data?.listItemByScoreIdAndCreatedAt?.items) {
+            console.log(`Found ${directQuery.data.listItemByScoreIdAndCreatedAt.items.length} more items via direct GraphQL query`);
+            // No need to sort as the GSI already returns items sorted by createdAt
+            itemsFromDirectQuery = directQuery.data.listItemByScoreIdAndCreatedAt.items;
+            nextTokenFromDirectQuery = directQuery.data.listItemByScoreIdAndCreatedAt.nextToken;
           } else {
             console.warn('No more items found in direct GraphQL query response');
           }
@@ -523,14 +523,14 @@ function ItemsDashboardInner() {
           
           if (directQuery.data?.listScorecardProcessedItemByScorecardId?.items) {
             console.log(`Found ${directQuery.data.listScorecardProcessedItemByScorecardId.items.length} more items via direct GraphQL query`);
-            // Extract items and sort by processedAt in descending order (most recent first)
+            // Extract items and sort by createdAt in descending order (most recent first)
             itemsFromDirectQuery = directQuery.data.listScorecardProcessedItemByScorecardId.items
               .map(association => association.item)
               .filter(item => item !== null)
               .sort((a, b) => {
-                // Sort by processedAt if available, otherwise by updatedAt/createdAt
-                const dateA = new Date(a.updatedAt || a.createdAt || '').getTime();
-                const dateB = new Date(b.updatedAt || b.createdAt || '').getTime();
+                // Sort by createdAt (newest first)
+                const dateA = new Date(a.createdAt || '').getTime();
+                const dateB = new Date(b.createdAt || '').getTime();
                 return dateB - dateA; // DESC order (newest first)
               });
             nextTokenFromDirectQuery = directQuery.data.listScorecardProcessedItemByScorecardId.nextToken;
@@ -540,9 +540,9 @@ function ItemsDashboardInner() {
         } else {
           // If neither scorecard nor score is selected, filter by accountId
           console.log('Attempting direct GraphQL query for more items with accountId:', selectedAccount.id);
-          const directQuery = await graphqlRequest<{ listItemByAccountIdAndUpdatedAt: { items: any[], nextToken: string | null } }>(`
+          const directQuery = await graphqlRequest<{ listItemByAccountIdAndCreatedAt: { items: any[], nextToken: string | null } }>(`
             query ListItemsMoreDirect($accountId: String!, $limit: Int!, $nextToken: String) {
-              listItemByAccountIdAndUpdatedAt(
+              listItemByAccountIdAndCreatedAt(
                 accountId: $accountId, 
                 sortDirection: DESC,
                 limit: $limit,
@@ -569,11 +569,11 @@ function ItemsDashboardInner() {
           
           console.log('Direct GraphQL query response for more items:', JSON.stringify(directQuery, null, 2));
           
-          if (directQuery.data?.listItemByAccountIdAndUpdatedAt?.items) {
-            console.log(`Found ${directQuery.data.listItemByAccountIdAndUpdatedAt.items.length} more items via direct GraphQL query`);
-            // No need to sort as the GSI already returns items sorted by updatedAt
-            itemsFromDirectQuery = directQuery.data.listItemByAccountIdAndUpdatedAt.items;
-            nextTokenFromDirectQuery = directQuery.data.listItemByAccountIdAndUpdatedAt.nextToken;
+          if (directQuery.data?.listItemByAccountIdAndCreatedAt?.items) {
+            console.log(`Found ${directQuery.data.listItemByAccountIdAndCreatedAt.items.length} more items via direct GraphQL query`);
+            // No need to sort as the GSI already returns items sorted by createdAt
+            itemsFromDirectQuery = directQuery.data.listItemByAccountIdAndCreatedAt.items;
+            nextTokenFromDirectQuery = directQuery.data.listItemByAccountIdAndCreatedAt.nextToken;
           } else {
             console.warn('No items found in direct GraphQL query response');
           }
@@ -609,7 +609,7 @@ function ItemsDashboardInner() {
           isEvaluation: item.isEvaluation,
           scorecard: null, // Will be populated via lazy loading
           score: null, // Will be populated via lazy loading
-          date: item.updatedAt || item.createdAt,
+          date: item.createdAt || item.updatedAt,
           status: "Done", 
           results: 0, // Will be populated via lazy loading
           inferences: 0, // Will be populated via lazy loading
@@ -689,9 +689,9 @@ function ItemsDashboardInner() {
         if (useScore) {
           // If a score is selected, filter by scoreId
           console.log('Attempting direct GraphQL query for items with scoreId:', selectedScore);
-          const directQuery = await graphqlRequest<{ listItemByScoreIdAndUpdatedAt: { items: any[], nextToken: string | null } }>(`
+          const directQuery = await graphqlRequest<{ listItemByScoreIdAndCreatedAt: { items: any[], nextToken: string | null } }>(`
             query ListItemsDirect($scoreId: String!, $limit: Int!) {
-              listItemByScoreIdAndUpdatedAt(
+              listItemByScoreIdAndCreatedAt(
                 scoreId: $scoreId, 
                 sortDirection: DESC,
                 limit: $limit
@@ -716,10 +716,10 @@ function ItemsDashboardInner() {
           
           console.log('Direct GraphQL query response for items:', JSON.stringify(directQuery, null, 2));
           
-          if (directQuery.data?.listItemByScoreIdAndUpdatedAt?.items) {
-            console.log(`Found ${directQuery.data.listItemByScoreIdAndUpdatedAt.items.length} items via direct GraphQL query`);
-            itemsFromDirectQuery = directQuery.data.listItemByScoreIdAndUpdatedAt.items;
-            nextTokenFromDirectQuery = directQuery.data.listItemByScoreIdAndUpdatedAt.nextToken;
+          if (directQuery.data?.listItemByScoreIdAndCreatedAt?.items) {
+            console.log(`Found ${directQuery.data.listItemByScoreIdAndCreatedAt.items.length} items via direct GraphQL query`);
+            itemsFromDirectQuery = directQuery.data.listItemByScoreIdAndCreatedAt.items;
+            nextTokenFromDirectQuery = directQuery.data.listItemByScoreIdAndCreatedAt.nextToken;
           } else {
             console.warn('No items found in direct GraphQL query response');
           }
@@ -780,8 +780,8 @@ function ItemsDashboardInner() {
               .map(association => association.item)
               .filter(item => item !== null)
               .sort((a, b) => {
-                const dateA = new Date(a.updatedAt || a.createdAt || '').getTime();
-                const dateB = new Date(b.updatedAt || b.createdAt || '').getTime();
+                const dateA = new Date(a.createdAt || '').getTime();
+                const dateB = new Date(b.createdAt || '').getTime();
                 return dateB - dateA; // DESC order (newest first)
               });
             nextTokenFromDirectQuery = directQuery.data.listScorecardProcessedItemByScorecardId.nextToken;
@@ -791,9 +791,9 @@ function ItemsDashboardInner() {
         } else {
           // If neither scorecard nor score is selected, filter by accountId
           console.log('Attempting direct GraphQL query for items with accountId:', accountId);
-          const directQuery = await graphqlRequest<{ listItemByAccountIdAndUpdatedAt: { items: any[], nextToken: string | null } }>(`
+          const directQuery = await graphqlRequest<{ listItemByAccountIdAndCreatedAt: { items: any[], nextToken: string | null } }>(`
             query ListItemsDirect($accountId: String!, $limit: Int!) {
-              listItemByAccountIdAndUpdatedAt(
+              listItemByAccountIdAndCreatedAt(
                 accountId: $accountId, 
                 sortDirection: DESC,
                 limit: $limit
@@ -818,10 +818,10 @@ function ItemsDashboardInner() {
           
           console.log('Direct GraphQL query response for items:', JSON.stringify(directQuery, null, 2));
           
-          if (directQuery.data?.listItemByAccountIdAndUpdatedAt?.items) {
-            console.log(`Found ${directQuery.data.listItemByAccountIdAndUpdatedAt.items.length} items via direct GraphQL query`);
-            itemsFromDirectQuery = directQuery.data.listItemByAccountIdAndUpdatedAt.items;
-            nextTokenFromDirectQuery = directQuery.data.listItemByAccountIdAndUpdatedAt.nextToken;
+          if (directQuery.data?.listItemByAccountIdAndCreatedAt?.items) {
+            console.log(`Found ${directQuery.data.listItemByAccountIdAndCreatedAt.items.length} items via direct GraphQL query`);
+            itemsFromDirectQuery = directQuery.data.listItemByAccountIdAndCreatedAt.items;
+            nextTokenFromDirectQuery = directQuery.data.listItemByAccountIdAndCreatedAt.nextToken;
           } else {
             console.warn('No items found in direct GraphQL query response');
           }
@@ -854,7 +854,7 @@ function ItemsDashboardInner() {
           isEvaluation: item.isEvaluation,
           scorecard: null, // Will be populated via lazy loading
           score: null, // Will be populated via lazy loading
-          date: item.updatedAt || item.createdAt,
+          date: item.createdAt || item.updatedAt,
           status: "Done",
           results: 0, // Will be populated via lazy loading
           inferences: 0, // Will be populated via lazy loading
@@ -929,7 +929,7 @@ function ItemsDashboardInner() {
             isEvaluation: newItem.isEvaluation,
             scorecard: null,
             score: null,
-            date: newItem.updatedAt || newItem.createdAt,
+            date: newItem.createdAt || newItem.updatedAt,
             status: "New", // Mark as new for special styling!
             results: 0,
             inferences: 0,
