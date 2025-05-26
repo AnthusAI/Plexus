@@ -18,7 +18,6 @@ import openai
 from pathlib import Path
 
 # Configure logging
-logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 # LangChain imports
@@ -166,7 +165,7 @@ def analyze_topics(
     use_langchain: bool = False,
     representation_model_provider: str = "openai",
     representation_model_name: str = "gpt-4o-mini"
-) -> None:
+) -> Optional[BERTopic]:
     """
     Perform BERTopic analysis on transformed transcripts.
     
@@ -182,6 +181,9 @@ def analyze_topics(
         use_langchain: Whether to use LangChain for representation model (default: False)
         representation_model_provider: LLM provider for topic naming (default: "openai")
         representation_model_name: Specific model name for topic naming (default: "gpt-4o-mini")
+        
+    Returns:
+        BERTopic: The fitted topic model with discovered topics, or None if analysis fails
     """
     # Create output directory if it doesn't exist
     ensure_directory(output_dir)
@@ -432,4 +434,7 @@ def analyze_topics(
             # Do not re-raise here, allow to proceed with unreduced topics if reduction fails
             logger.warning("Proceeding with unreduced topics after reduction failure.")
     
-    logger.info(f"Analysis complete. Results saved to {output_dir}") 
+    logger.info(f"Analysis complete. Results saved to {output_dir}")
+    
+    # Return the topic model for further use
+    return topic_model 
