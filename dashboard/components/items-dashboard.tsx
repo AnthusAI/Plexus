@@ -27,7 +27,7 @@ import ScorecardContext from "@/components/ScorecardContext"
 import ItemContext from "@/components/ItemContext"
 import ItemDetail from './ItemDetail'
 import { formatTimeAgo } from '@/utils/format-time'
-import type { FeedbackItem } from '@/components/feedback-dashboard'
+import type { FeedbackItem } from '@/types/feedback'
 import ItemCard, { ItemData } from './items/ItemCard'
 import { amplifyClient, graphqlRequest } from '@/utils/amplify-client'
 import { useAuthenticator } from '@aws-amplify/ui-react'

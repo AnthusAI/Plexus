@@ -66,7 +66,7 @@ const ScoreResultCard: React.FC<{ result: ScoreResultWithDetails }> = ({ result 
             <h4 className="text-sm font-semibold">{result.score?.name || 'Unknown Score'}</h4>
           </div>
           <div className="text-xs text-muted-foreground mb-2">
-            <Timestamp time={result.updatedAt || result.createdAt} variant="relative" />
+            <Timestamp time={result.updatedAt || result.createdAt || new Date().toISOString()} variant="relative" />
           </div>
         </div>
         <div className="flex flex-col items-end gap-1">
