@@ -39,37 +39,60 @@ class TopicAnalysis(BaseReportBlock):
     Expected configuration in ReportConfiguration:
     {
         "class": "TopicAnalysis",
-        "input_file_path": "/path/to/your/transcripts.parquet", // Required
-        "content_column": "text", // Optional, default: "text"
-        "customer_only": false, // Optional, default: false
-        "sample_size": null, // Optional, default: null (process all)
-        "transform_method": "chunk", // Optional, 'chunk', 'llm', 'itemize', default: "chunk"
-        "prompt_template_path": null, // Optional, for 'llm'/'itemize'
-        "llm_model": "gemma3:27b", // Optional, for 'llm'/'itemize'
-        "llm_provider": "ollama", // Optional, 'ollama', 'openai', for 'llm'/'itemize'
-        "openai_api_key_env_var": "OPENAI_API_KEY", // Optional, name of env var for OpenAI key
-        "max_retries_itemize": 2, // Optional, for 'itemize'
-        "fresh_transform_cache": false, // Optional, force regenerate transform cache
-        // Preprocessing (before LLM processing) - Uses same format as scorecard YAML
-        "preprocessing": [ // Optional, list of preprocessing steps
-            {
-                "class": "RemoveSpeakerIdentifiersTranscriptFilter", // Processor class name
-                "parameters": {} // Optional parameters for the processor
-            },
-            {
-                "class": "ColumnDatasetFilter",
-                "parameters": {"column": "call_type", "value": "inbound"}
-            }
-        ],
-        // BERTopic analysis parameters (ignored if skip_analysis is true)
-        "skip_analysis": false, // Optional, default: false
-        "num_topics": null, // Optional, auto-determined by BERTopic if null
-        "min_ngram": 1, // Optional, default: 1
-        "max_ngram": 2, // Optional, default: 2
-        "min_topic_size": 10, // Optional, default: 10
-        "top_n_words": 10, // Optional, default: 10
-        "use_representation_model": false, // Optional, OpenAI for topic representation
-        "use_langchain_representation": false // Optional, LangChain for representation
+        "name": "My Topic Analysis", // Optional, display name
+        
+        // Data source configuration
+        "data_source": {
+            "input_file_path": "/path/to/your/transcripts.parquet", // Required
+            "content_column": "text", // Optional, default: "text"
+            "customer_only": false, // Optional, default: false
+            "sample_size": null // Optional, default: null (process all)
+        },
+        
+        // Stage 1: Preprocessing configuration
+        "preprocessing": {
+            "steps": [ // Optional, list of preprocessing steps
+                {
+                    "class": "RemoveSpeakerIdentifiersTranscriptFilter", // Processor class name
+                    "parameters": {} // Optional parameters for the processor
+                },
+                {
+                    "class": "ColumnDatasetFilter",
+                    "parameters": {"column": "call_type", "value": "inbound"}
+                }
+            ]
+        },
+        
+        // Stage 2: LLM extraction configuration
+        "llm_extraction": {
+            "method": "chunk", // Required: 'chunk', 'llm', 'itemize', default: "chunk"
+            "provider": "ollama", // Optional: 'ollama', 'openai', 'anthropic', default: "ollama"
+            "model": "gemma3:27b", // Optional, default: "gemma3:27b"
+            "system_prompt": "You are an expert at analyzing conversation transcripts...", // Optional, for 'llm'/'itemize'
+            "user_prompt": "Extract key themes from the following text: {text}", // Optional, for 'llm'/'itemize'
+            "api_key_env_var": "OPENAI_API_KEY", // Optional, env var for API key
+            "max_retries": 2, // Optional, for 'itemize', default: 2
+            "fresh_cache": false // Optional, force regenerate cache, default: false
+        },
+        
+        // Stage 3: BERTopic analysis configuration
+        "bertopic_analysis": {
+            "skip_analysis": false, // Optional, default: false
+            "num_topics": null, // Optional, auto-determined if null
+            "min_ngram": 1, // Optional, default: 1
+            "max_ngram": 2, // Optional, default: 2
+            "min_topic_size": 10, // Optional, default: 10
+            "top_n_words": 10 // Optional, default: 10
+        },
+        
+        // Stage 4: Fine-tuning configuration
+        "fine_tuning": {
+            "use_representation_model": false, // Optional, default: false
+            "provider": "openai", // Optional: 'openai', 'anthropic', default: "openai"
+            "model": "gpt-4o-mini", // Optional, default: "gpt-4o-mini"
+            "system_prompt": "You are an expert at creating concise, descriptive topic names...", // Optional
+            "user_prompt": "Create a brief, descriptive name for this topic based on these keywords: {keywords}" // Optional
+        }
     }
     """
 
@@ -96,64 +119,93 @@ class TopicAnalysis(BaseReportBlock):
 
         try:
             # --- 1. Extract and Validate Configuration ---
-            self._log("Extracting and validating configuration...")
-            # Transformation params
-            input_file_path = self.config.get("input_file_path")
+            self._log("="*60)
+            self._log("🚀 STAGE 1: CONFIGURATION EXTRACTION AND VALIDATION")
+            self._log("="*60)
+            
+            # Data source configuration
+            data_source = self.config.get("data_source", {})
+            input_file_path = data_source.get("input_file_path") or self.config.get("input_file_path")  # Backward compatibility
             if not input_file_path or not Path(input_file_path).exists():
-                msg = f"'input_file_path' is required and must exist. Provided: {input_file_path}"
+                msg = f"'data_source.input_file_path' is required and must exist. Provided: {input_file_path}"
                 self._log(msg, level="ERROR")
                 final_output_data["errors"].append(msg)
                 final_output_data["summary"] = "Configuration error."
-                # Clean up before raising or returning
                 shutil.rmtree(main_temp_dir)
                 self._log(f"Cleaned up main temporary directory: {main_temp_dir}")
                 return final_output_data, self._get_log_string()
 
-            content_column = self.config.get("content_column", "text")
-            customer_only = self.config.get("customer_only", False)
-            sample_size = self.config.get("sample_size")
-            transform_method = self.config.get("transform_method", "chunk")
-            prompt_template_path = self.config.get("prompt_template_path")
-            prompt_template = self.config.get("prompt_template")  # Inline prompt support
-            llm_model = self.config.get("llm_model", "gemma3:27b")
-            llm_provider = self.config.get("llm_provider", "ollama")
+            content_column = data_source.get("content_column", self.config.get("content_column", "text"))
+            customer_only = data_source.get("customer_only", self.config.get("customer_only", False))
+            sample_size = data_source.get("sample_size", self.config.get("sample_size"))
             
-            openai_api_key_env_var = self.config.get("openai_api_key_env_var", "OPENAI_API_KEY")
-            openai_api_key = os.environ.get(openai_api_key_env_var) if llm_provider == "openai" or self.config.get("use_representation_model") else None
-            if (llm_provider == "openai" or self.config.get("use_representation_model")) and not openai_api_key:
-                self._log(f"OpenAI API key not found in env var '{openai_api_key_env_var}'. Certain features might fail.", level="WARNING")
-
-            max_retries_itemize = self.config.get("max_retries_itemize", 2)
+            # LLM extraction configuration
+            llm_extraction = self.config.get("llm_extraction", {})
+            transform_method = llm_extraction.get("method", self.config.get("transform_method", "chunk"))
+            llm_provider = llm_extraction.get("provider", self.config.get("llm_provider", "ollama"))
+            llm_model = llm_extraction.get("model", self.config.get("llm_model", "gemma3:27b"))
+            system_prompt = llm_extraction.get("system_prompt")
+            user_prompt = llm_extraction.get("user_prompt")
+            # Legacy support for old prompt fields
+            prompt_template_path = llm_extraction.get("prompt_template_path", self.config.get("prompt_template_path"))
+            prompt_template = llm_extraction.get("prompt_template", self.config.get("prompt_template"))
+            
+            api_key_env_var = llm_extraction.get("api_key_env_var", self.config.get("openai_api_key_env_var", "OPENAI_API_KEY"))
+            max_retries_itemize = llm_extraction.get("max_retries", self.config.get("max_retries_itemize", 2))
             
             # Check for fresh_transform_cache in both config and runtime params (CLI --fresh flag)
             # Runtime params take precedence over config
-            fresh_transform_cache = self.config.get("fresh_transform_cache", False)
+            fresh_transform_cache = llm_extraction.get("fresh_cache", self.config.get("fresh_transform_cache", False))
             if hasattr(self, 'params') and self.params and 'fresh_transform_cache' in self.params:
                 fresh_transform_cache = self.params['fresh_transform_cache'].lower() in ('true', '1', 'yes')
                 self._log(f"Fresh transform cache enabled via CLI --fresh flag")
             elif fresh_transform_cache:
                 self._log(f"Fresh transform cache enabled via configuration")
 
-            # BERTopic params
-            skip_analysis = self.config.get("skip_analysis", False)
-            num_topics = self.config.get("num_topics") # Default is None (auto)
-            min_ngram = self.config.get("min_ngram", 1)
-            max_ngram = self.config.get("max_ngram", 2)
-            min_topic_size = self.config.get("min_topic_size", 10)
-            top_n_words = self.config.get("top_n_words", 10)
-            use_representation_model = self.config.get("use_representation_model", False)
+            # Fine-tuning configuration (define early since it's needed for API key handling)
+            fine_tuning = self.config.get("fine_tuning", {})
+            use_representation_model = fine_tuning.get("use_representation_model", self.config.get("use_representation_model", False))
+            representation_model_provider = fine_tuning.get("provider", self.config.get("representation_model_provider", "openai"))
+            representation_model_name = fine_tuning.get("model", self.config.get("representation_model_name", "gpt-4o-mini"))
+            representation_system_prompt = fine_tuning.get("system_prompt")
+            representation_user_prompt = fine_tuning.get("user_prompt")
+
+            # API key handling
+            openai_api_key = os.environ.get(api_key_env_var) if llm_provider == "openai" or use_representation_model else None
+            if (llm_provider == "openai" or use_representation_model) and not openai_api_key:
+                self._log(f"OpenAI API key not found in env var '{api_key_env_var}'. Certain features might fail.", level="WARNING")
             
-            # Representation model configuration (for BERTopic topic naming)
-            representation_model_provider = self.config.get("representation_model_provider", "openai")  # openai, anthropic, etc.
-            representation_model_name = self.config.get("representation_model_name", "gpt-4o-mini")  # specific model name
+            # BERTopic analysis configuration
+            bertopic_analysis = self.config.get("bertopic_analysis", {})
+            skip_analysis = bertopic_analysis.get("skip_analysis", self.config.get("skip_analysis", False))
+            num_topics = bertopic_analysis.get("num_topics", self.config.get("num_topics"))  # Default is None (auto)
+            min_ngram = bertopic_analysis.get("min_ngram", self.config.get("min_ngram", 1))
+            max_ngram = bertopic_analysis.get("max_ngram", self.config.get("max_ngram", 2))
+            min_topic_size = bertopic_analysis.get("min_topic_size", self.config.get("min_topic_size", 10))
+            top_n_words = bertopic_analysis.get("top_n_words", self.config.get("top_n_words", 10))
 
             # Preprocessing configuration
-            preprocessing_config = self.config.get("preprocessing", [])
+            preprocessing_config = self.config.get("preprocessing", {}).get("steps", self.config.get("preprocessing", []))
             
-            self._log(f"Configuration loaded: input_file_path='{input_file_path}', transform_method='{transform_method}', skip_analysis={skip_analysis}, preprocessing_steps={len(preprocessing_config)}")
+            # Log comprehensive configuration summary
+            self._log("📋 CONFIGURATION SUMMARY:")
+            self._log(f"   • Input File: {input_file_path}")
+            self._log(f"   • Content Column: {content_column}")
+            self._log(f"   • Transform Method: {transform_method}")
+            self._log(f"   • LLM Provider: {llm_provider}")
+            self._log(f"   • LLM Model: {llm_model}")
+            self._log(f"   • Sample Size: {sample_size or 'All data'}")
+            self._log(f"   • Customer Only: {customer_only}")
+            self._log(f"   • Skip Analysis: {skip_analysis}")
+            self._log(f"   • Min Topic Size: {min_topic_size}")
+            self._log(f"   • Use Representation Model: {use_representation_model}")
+            self._log(f"   • Preprocessing Steps: {len(preprocessing_config)}")
+            self._log("="*60)
 
             # --- 2. Apply Preprocessing (if configured) ---
             if preprocessing_config:
+                self._log("🔧 STAGE 2: DATA PREPROCESSING")
+                self._log("="*60)
                 self._log(f"Applying {len(preprocessing_config)} preprocessing steps...")
                 # Load the input data for preprocessing
                 df = pd.read_parquet(input_file_path)
@@ -190,15 +242,19 @@ class TopicAnalysis(BaseReportBlock):
                 input_file_path = temp_preprocessed_file.name  # Use preprocessed file for transformation
                 self._log(f"Preprocessed data saved to temporary file: {input_file_path}")
                 
-                # Update final output to include preprocessing info
-                final_output_data["preprocessing"]["steps"] = preprocessing_steps_info
-                final_output_data["preprocessing"]["original_input_file"] = self.config.get("input_file_path")
-                final_output_data["preprocessing"]["preprocessed_rows"] = len(df)
+                # Store preprocessing info for later use in final output
+                preprocessing_steps_applied = preprocessing_steps_info
+                original_input_file = self.config.get("data_source", {}).get("input_file_path") or self.config.get("input_file_path")
+                preprocessed_rows_count = len(df)
             else:
-                self._log("No preprocessing steps configured, using original input file")
+                self._log("🔧 STAGE 2: DATA PREPROCESSING")
+                self._log("="*60)
+                self._log("No preprocessing steps configured, using original input file directly")
+                self._log("="*60)
 
             # --- 3. Transform Transcripts ---
-            self._log("Starting transcript transformation...")
+            self._log("⚡ STAGE 3: TRANSCRIPT TRANSFORMATION") 
+            self._log("="*60)
             text_file_path_str: Optional[str] = None # Path to the text file for BERTopic
             
             # The transformer functions create their own temp subdirectories.
@@ -211,7 +267,16 @@ class TopicAnalysis(BaseReportBlock):
             # The BERTopic *output* artifacts are what we need to control into our `main_temp_dir`.
 
             if transform_method == 'itemize':
-                self._log(f"Using itemized LLM transformation with {llm_provider} model: {llm_model}")
+                self._log(f"🤖 TRANSFORMATION METHOD: Itemized LLM")
+                self._log(f"   • Provider: {llm_provider}")
+                self._log(f"   • Model: {llm_model}")
+                if system_prompt:
+                    self._log("   • System Prompt:")
+                    self._log("     " + "\n     ".join(system_prompt.split('\n')))
+                if user_prompt:
+                    self._log("   • User Prompt:")
+                    self._log("     " + "\n     ".join(user_prompt.split('\n')))
+                self._log("-" * 40)
                 _, text_file_path_str, preprocessing_info = await transform_transcripts_itemize(
                     input_file=input_file_path,
                     content_column=content_column,
@@ -226,7 +291,16 @@ class TopicAnalysis(BaseReportBlock):
                     sample_size=sample_size
                 )
             elif transform_method == 'llm':
-                self._log(f"Using LLM transformation with {llm_provider} model: {llm_model}")
+                self._log(f"🤖 TRANSFORMATION METHOD: LLM")
+                self._log(f"   • Provider: {llm_provider}")
+                self._log(f"   • Model: {llm_model}")
+                if system_prompt:
+                    self._log("   • System Prompt:")
+                    self._log("     " + "\n     ".join(system_prompt.split('\n')))
+                if user_prompt:
+                    self._log("   • User Prompt:")
+                    self._log("     " + "\n     ".join(user_prompt.split('\n')))
+                self._log("-" * 40)
                 _, text_file_path_str, preprocessing_info = await transform_transcripts_llm(
                     input_file=input_file_path,
                     content_column=content_column,
@@ -240,7 +314,9 @@ class TopicAnalysis(BaseReportBlock):
                     sample_size=sample_size
                 )
             else: # 'chunk'
-                self._log("Using default chunking transformation.")
+                self._log(f"🤖 TRANSFORMATION METHOD: Chunking (default)")
+                self._log(f"   • No LLM processing - direct text chunking")
+                self._log("-" * 40)
                 _, text_file_path_str, preprocessing_info = await asyncio.to_thread(
                     transform_transcripts,
                     input_file=input_file_path,
@@ -259,9 +335,11 @@ class TopicAnalysis(BaseReportBlock):
                 self._log(f"Cleaned up main temporary directory: {main_temp_dir}")
                 return final_output_data, self._get_log_string()
 
-            self._log(f"Transcript transformation completed. Text file for BERTopic: {text_file_path_str}")
-            self._log(f"LLM extraction method: {preprocessing_info.get('method', 'unknown')}")
-            self._log(f"LLM extraction examples count: {len(preprocessing_info.get('examples', []))}")
+            self._log("✅ TRANSFORMATION COMPLETED")
+            self._log(f"   • Output file: {text_file_path_str}")
+            self._log(f"   • Extraction method: {preprocessing_info.get('method', 'unknown')}")
+            self._log(f"   • Examples generated: {len(preprocessing_info.get('examples', []))}")
+            self._log("="*60)
             final_output_data["transformed_text_file"] = text_file_path_str
             
             # Restructure output to match UI stages
@@ -273,6 +351,12 @@ class TopicAnalysis(BaseReportBlock):
                 "sample_size": sample_size,
                 "customer_only": customer_only
             }
+            
+            # Add preprocessing steps info if they were applied
+            if 'preprocessing_steps_applied' in locals():
+                final_output_data["preprocessing"]["steps"] = preprocessing_steps_applied
+                final_output_data["preprocessing"]["original_input_file"] = original_input_file  
+                final_output_data["preprocessing"]["preprocessed_rows"] = preprocessed_rows_count
             
             # 2. LLM Extraction (what was previously called preprocessing)
             final_output_data["llm_extraction"] = preprocessing_info
@@ -306,10 +390,20 @@ class TopicAnalysis(BaseReportBlock):
 
             # --- 4. Perform BERTopic Analysis (if not skipped) ---
             if skip_analysis:
-                self._log("Skipping BERTopic analysis as requested.")
+                self._log("🔬 STAGE 4: BERTOPIC ANALYSIS")
+                self._log("="*60)
+                self._log("⚠️  BERTopic analysis SKIPPED as requested in configuration")
+                self._log("="*60)
                 final_output_data["summary"] = "Transformation completed, analysis skipped."
             else:
-                self._log("Starting BERTopic analysis...")
+                self._log("🔬 STAGE 4: BERTOPIC ANALYSIS")
+                self._log("="*60)
+                self._log("📊 BERTOPIC PARAMETERS:")
+                self._log(f"   • Min Topic Size: {min_topic_size}")
+                self._log(f"   • N-gram Range: {min_ngram}-{max_ngram}")
+                self._log(f"   • Top N Words: {top_n_words}")
+                self._log(f"   • Requested Topics: {num_topics or 'Auto-determined'}")
+                self._log("-" * 40)
                 # BERTopic analysis will write its outputs into a subdirectory of `main_temp_dir`
                 # The `analyze_topics` function from `plexus.analysis.topics.analyzer`
                 # creates its own descriptive subdirectory based on parameters.
@@ -344,7 +438,8 @@ class TopicAnalysis(BaseReportBlock):
                     representation_model_provider=representation_model_provider,
                     representation_model_name=representation_model_name
                 )
-                self._log("BERTopic analysis completed.")
+                self._log("✅ BERTopic analysis completed successfully")
+                self._log("="*60)
                 
                 # 3. BERTopic Analysis section
                 final_output_data["bertopic_analysis"] = {
@@ -360,12 +455,28 @@ class TopicAnalysis(BaseReportBlock):
                 if topic_model and hasattr(topic_model, 'get_topic_info'):
                     try:
                         topic_info = topic_model.get_topic_info()
+                        self._log(f"🔍 BERTopic topic_info shape: {topic_info.shape}")
+                        self._log(f"🔍 BERTopic topic_info columns: {list(topic_info.columns)}")
+                        self._log(f"🔍 BERTopic topic IDs found: {topic_info['Topic'].tolist()}")
+                        
+                        # Add debugging info to the output so it shows up in universal code
+                        final_output_data["bertopic_debug"] = {
+                            "topic_info_shape": list(topic_info.shape),
+                            "topic_info_columns": list(topic_info.columns),
+                            "topic_ids_found": topic_info['Topic'].tolist(),
+                            "topic_info_empty": topic_info.empty
+                        }
+                        
                         if not topic_info.empty:
                             # Convert to dictionary format suitable for JSON
                             topics_list = []
+                            valid_topic_count = 0
+                            noise_topic_count = 0
+                            
                             for _, row in topic_info.iterrows():
                                 topic_id = row.get('Topic', -1)
                                 if topic_id != -1:  # Skip the -1 topic which is usually "noise"
+                                    valid_topic_count += 1
                                     # Get the topic words and weights if available
                                     topic_words = []
                                     if hasattr(topic_model, 'get_topic'):
@@ -379,9 +490,33 @@ class TopicAnalysis(BaseReportBlock):
                                         "representation": row.get('Representation', ''),
                                         "words": topic_words
                                     })
-                    
+                                else:
+                                    noise_topic_count += 1
+                            
+                            # Add topic processing debug info to output
+                            final_output_data["bertopic_debug"]["valid_topic_count"] = valid_topic_count
+                            final_output_data["bertopic_debug"]["noise_topic_count"] = noise_topic_count
+                            final_output_data["bertopic_debug"]["topics_list_length"] = len(topics_list)
+                            
+                            self._log(f"🔍 Topic processing: {valid_topic_count} valid topics, {noise_topic_count} noise topics")
                             final_output_data["topics"] = topics_list
-                            self._log(f"Added {len(topics_list)} topics to output data")
+                            
+                            # This is critical information - ensure it goes to both console AND attached log
+                            self._log("🎯 TOPIC DISCOVERY RESULTS")
+                            self._log("-" * 40)
+                            self._log(f"📈 FOUND {len(topics_list)} DISTINCT TOPICS")
+                            
+                            # Log top topic details for visibility
+                            if topics_list:
+                                sorted_topics = sorted(topics_list, key=lambda t: t.get('count', 0), reverse=True)
+                                self._log("📊 TOP TOPICS SUMMARY:")
+                                for i, topic in enumerate(sorted_topics[:5]):  # Top 5 topics
+                                    top_words = [w['word'] for w in topic.get('words', [])[:8]]  # Top 8 words
+                                    self._log(f"   {i+1}. Topic {topic['id']}: {topic['count']} items")
+                                    self._log(f"      Name: {topic.get('name', 'Unnamed')}")
+                                    self._log(f"      Keywords: {', '.join(top_words)}")
+                                
+                                self._log("-" * 40)
                             
                             # Add visualization info based on topic count
                             if len(topics_list) < 2:
@@ -391,13 +526,35 @@ class TopicAnalysis(BaseReportBlock):
                                     "available_files": "Topic information CSV and individual topic details available"
                                 }
                     except Exception as e:
-                        self._log(f"Failed to extract topic information: {e}", level="ERROR")
+                        final_output_data["bertopic_debug"] = {
+                            "topic_model_exists": topic_model is not None,
+                            "has_get_topic_info": hasattr(topic_model, 'get_topic_info') if topic_model else False,
+                            "error_reason": f"Exception during topic extraction: {str(e)}"
+                        }
+                        self._log(f"Failed to extract topic information: {e}", "ERROR")
                         final_output_data["errors"].append(f"Error extracting topics: {str(e)}")
+                else:
+                    # No topic model or couldn't get topic info
+                    final_output_data["bertopic_debug"] = {
+                        "topic_model_exists": topic_model is not None,
+                        "has_get_topic_info": hasattr(topic_model, 'get_topic_info') if topic_model else False,
+                        "error_reason": "No topic model returned or missing get_topic_info method"
+                    }
+                    self._log("🎯 TOPIC DISCOVERY RESULTS")
+                    self._log("-" * 40)
+                    self._log("⚠️  NO TOPICS DISCOVERED")
+                    self._log("   This could be due to:")
+                    self._log(f"   • Min topic size too high (current: {min_topic_size})")
+                    self._log("   • Insufficient data diversity")
+                    self._log("   • Text preprocessing issues")
+                    self._log("-" * 40)
 
                 # --- 5. Attach Artifacts ---
-                self._log(f"Scanning for BERTopic artifacts in temporary directory: {main_temp_dir}")
+                self._log("📎 STAGE 5: FILE ATTACHMENT")
+                self._log("="*60)
+                self._log(f"Scanning artifacts in: {main_temp_dir}")
                 if not report_block_id:
-                    self._log("No report_block_id, cannot attach files.", level="ERROR")
+                    self._log("❌ No report_block_id available - cannot attach files", level="ERROR")
                     final_output_data["errors"].append("Cannot attach files: report_block_id is missing.")
                 else:
                     for root, _, files in os.walk(main_temp_dir):
@@ -460,19 +617,25 @@ class TopicAnalysis(BaseReportBlock):
                 # Generate summary based on the number of topics found
                 topic_count = len(final_output_data.get("topics", []))
                 if topic_count == 0:
-                    final_output_data["summary"] = "Topic analysis completed, but no distinct topics were identified in the data. Consider increasing sample size or adjusting min_topic_size parameter."
+                    summary_msg = "Topic analysis completed, but no distinct topics were identified in the data. Consider increasing sample size or adjusting min_topic_size parameter."
+                    final_output_data["summary"] = summary_msg
+                    self._log(f"⚠️ Analysis Summary: {summary_msg}", "WARNING")
                 elif topic_count == 1:
-                    final_output_data["summary"] = f"Topic analysis completed with {topic_count} topic identified. Limited visualizations available due to single topic. Consider decreasing min_topic_size (currently {min_topic_size}) or increasing sample size."
+                    summary_msg = f"Topic analysis completed with {topic_count} topic identified. Limited visualizations available due to single topic. Consider decreasing min_topic_size (currently {min_topic_size}) or increasing sample size."
+                    final_output_data["summary"] = summary_msg
+                    self._log(f"📋 Analysis Summary: {summary_msg}", "INFO") 
                 else:
-                    final_output_data["summary"] = f"Topic analysis completed successfully with {topic_count} topics identified."
+                    summary_msg = f"Topic analysis completed successfully with {topic_count} topics identified."
+                    final_output_data["summary"] = summary_msg
+                    self._log(f"✅ Analysis Summary: {summary_msg}", "INFO")
 
         except Exception as e:
             import traceback
             error_msg = f"An error occurred during TopicAnalysis block generation: {str(e)}"
             tb_str = traceback.format_exc()
-            self._log(error_msg, level="ERROR")
-            self._log("Traceback:", level="ERROR")
-            self._log(tb_str, level="ERROR")
+            self._log(error_msg, "ERROR")
+            self._log("Traceback:", "ERROR")
+            self._log(tb_str, "ERROR")
             final_output_data["errors"].append(error_msg)
             final_output_data["summary"] = "Topic analysis failed."
         finally:
@@ -506,24 +669,16 @@ class TopicAnalysis(BaseReportBlock):
 
 """
             yaml_output = yaml.dump(final_output_data, indent=2, allow_unicode=True, sort_keys=False)
-            final_output_data = contextual_comment + yaml_output
+            formatted_output = contextual_comment + yaml_output
         except Exception as e:
             self._log(f"Failed to create YAML formatted output: {e}", level="ERROR")
             # Fallback to basic YAML without comments
-            final_output_data = yaml.dump(final_output_data, indent=2, allow_unicode=True, sort_keys=False)
+            formatted_output = yaml.dump(final_output_data, indent=2, allow_unicode=True, sort_keys=False)
 
-        return final_output_data, self._get_log_string()
+        # Return both the structured data and the formatted YAML for universal code
+        return {
+            "rawOutput": formatted_output,
+            **final_output_data  # Include all the structured data for frontend parsing
+        }, self._get_log_string()
 
-    def _log(self, message: str, level="INFO"):
-        log_method = getattr(logger, level.lower(), logger.info)
-        # Add block name if available, otherwise use class name
-        block_name_prefix = f"[ReportBlock {self.config.get('name', 'TopicAnalysis')}]"
-        log_method(f"{block_name_prefix} {message}")
-        
-        # Store log messages for the report block's log field
-        # Prefix with timestamp and level for clarity in the stored log
-        if level.upper() != "DEBUG": # Don't store DEBUG logs in the block's output log
-            self.log_messages.append(f"{pd.Timestamp.now(tz='UTC').isoformat()} [{level.upper()}] {message}")
-
-    def _get_log_string(self) -> str:
-        return "\n".join(self.log_messages) 
+    # Remove custom _log method - now inherited from BaseReportBlock with unified logging 

@@ -214,19 +214,19 @@ const TaskHeader = <TData extends BaseTaskData = BaseTaskData>({
       "space-y-1.5 p-0 flex flex-col items-start",
       variant === 'detail' && "px-1"
     )}>
-      <div className="flex justify-between items-start w-full">
-        <div className="flex flex-col pb-1 leading-none">
+      <div className="flex justify-between items-start w-full gap-3">
+        <div className="flex flex-col pb-1 leading-none min-w-0 flex-shrink overflow-hidden">
           {task.name && (
-            <div className="font-semibold text-sm truncate max-w-[200px]">{task.name}</div>
+            <div className="font-semibold text-sm truncate">{task.name}</div>
           )}
           {task.description && (
-            <div className="font-semibold text-sm truncate max-w-[200px]">{task.description}</div>
+            <div className="font-semibold text-sm truncate">{task.description}</div>
           )}
           {task.scorecard && task.scorecard.trim() !== '' && (
-            <div className="font-semibold text-sm truncate max-w-[200px]">{task.scorecard}</div>
+            <div className="font-semibold text-sm truncate">{task.scorecard}</div>
           )}
           {task.score && task.score.trim() !== '' && (
-            <div className="font-semibold text-sm truncate max-w-[200px]">{task.score}</div>
+            <div className="font-semibold text-sm truncate">{task.score}</div>
           )}
           {variant !== 'grid' && (
             <div className="text-sm text-muted-foreground">{task.type}</div>
