@@ -1,8 +1,9 @@
 import React, { useState } from 'react'
-import { ScrollText, Download, Paperclip, AlertTriangle, AlertCircle, Code, Eye } from 'lucide-react';
+import { ScrollText, Download, Paperclip, AlertTriangle, AlertCircle, Code, Eye, MessageSquareCode, Copy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { downloadData, getUrl } from 'aws-amplify/storage';
 import { CardButton } from '@/components/CardButton';
+import { toast } from 'sonner';
 import { DropdownMenuItem, DropdownMenu, DropdownMenuContent } from '@/components/ui/dropdown-menu';
 
 // Define DetailFile locally, ensure it includes 'path'
@@ -421,21 +422,54 @@ const ReportBlock: BlockComponent = ({
     );
   };
 
-  // Render the raw output details
+  // Render the raw output details using CodeDisplay component
   const renderRawOutput = () => {
     if (!showRawOutput) return null;
+    
+    // Determine output format and content
+    let displayOutput: string;
+    let outputType: 'YAML' | 'JSON';
+    let description: string;
+    
+    if (typeof output === 'string') {
+      // New format: output is already YAML string with comments
+      displayOutput = output;
+      outputType = "YAML";
+      description = "Structured YAML code with contextual information for humans, AI models, and other code";
+    } else if (output && typeof output === 'object' && 'rawOutput' in output && typeof output.rawOutput === 'string') {
+      // New format: rawOutput field contains YAML string with comments
+      displayOutput = output.rawOutput;
+      outputType = "YAML";
+      description = "Structured YAML code with contextual information for humans, AI models, and other code";
+    } else {
+      // Legacy format: output is object, convert to JSON
+      displayOutput = JSON.stringify(output, null, 2);
+      outputType = "JSON";
+      description = "Legacy JSON code output from the report block execution";
+    }
     
     return (
       <div className={`my-3 bg-card p-3 overflow-hidden rounded-lg ${isWideLayout ? "w-full" : "@[30rem]:w-[350px]"}`}>
         <div className="flex flex-row justify-between items-center mb-3">
-          <h4 className="text-base font-medium">Raw Output</h4>
+          <h4 className="text-base font-medium">Universal Code ({outputType})</h4>
+          <CardButton 
+            icon={Copy} 
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(displayOutput);
+                toast.success("Universal Code copied to clipboard");
+              } catch (error) {
+                console.error('Failed to copy code:', error);
+                toast.error("Failed to copy code to clipboard");
+              }
+            }}
+            label="Copy"
+            aria-label="Copy code to clipboard"
+          />
         </div>
-        <div className="text-xs text-muted-foreground mb-2">
-          Raw JSON output from the report block execution
-        </div>
-        <div className="max-h-96 overflow-auto">
-          <pre className="text-xs bg-muted p-2 rounded whitespace-pre-wrap break-words">
-            {JSON.stringify(output, null, 2)}
+        <div className="w-full overflow-hidden">
+          <pre className="whitespace-pre-wrap text-xs bg-white overflow-y-auto overflow-x-auto font-mono max-h-[400px] px-2 py-2 max-w-full">
+            {displayOutput}
           </pre>
         </div>
       </div>
@@ -508,8 +542,8 @@ const ReportBlock: BlockComponent = ({
                   onClick={toggleShowRawOutput}
                   className="h-8 bg-card hover:bg-card/90 border-0 w-full"
                 >
-                  <Code className="mr-2 h-4 w-4" />
-                  {showRawOutput ? "Hide Raw" : "Raw"}
+                  <MessageSquareCode className="mr-2 h-4 w-4" />
+                  {showRawOutput ? "Hide Code" : "Code"}
                 </Button>
                 
                 {/* Only render inline (below the button) in narrow layout */}

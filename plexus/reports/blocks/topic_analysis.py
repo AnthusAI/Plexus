@@ -7,6 +7,7 @@ import shutil
 from pathlib import Path
 import pandas as pd # Added for inspect_data if called directly
 import json # For potentially writing a summary JSON
+import yaml # For YAML formatted output with contextual comments
 
 from plexus.analysis.topics.transformer import (
     transform_transcripts, 
@@ -16,6 +17,7 @@ from plexus.analysis.topics.transformer import (
 )
 from plexus.analysis.topics.analyzer import analyze_topics
 from plexus.dashboard.api.models.report_block import ReportBlock # For type hinting if needed
+from plexus.processors.ProcessorFactory import ProcessorFactory
 
 from .base import BaseReportBlock
 
@@ -48,6 +50,17 @@ class TopicAnalysis(BaseReportBlock):
         "openai_api_key_env_var": "OPENAI_API_KEY", // Optional, name of env var for OpenAI key
         "max_retries_itemize": 2, // Optional, for 'itemize'
         "fresh_transform_cache": false, // Optional, force regenerate transform cache
+        // Preprocessing (before LLM processing) - Uses same format as scorecard YAML
+        "preprocessing": [ // Optional, list of preprocessing steps
+            {
+                "class": "RemoveSpeakerIdentifiersTranscriptFilter", // Processor class name
+                "parameters": {} // Optional parameters for the processor
+            },
+            {
+                "class": "ColumnDatasetFilter",
+                "parameters": {"column": "call_type", "value": "inbound"}
+            }
+        ],
         // BERTopic analysis parameters (ignored if skip_analysis is true)
         "skip_analysis": false, // Optional, default: false
         "num_topics": null, // Optional, auto-determined by BERTopic if null
@@ -134,9 +147,57 @@ class TopicAnalysis(BaseReportBlock):
             representation_model_provider = self.config.get("representation_model_provider", "openai")  # openai, anthropic, etc.
             representation_model_name = self.config.get("representation_model_name", "gpt-4o-mini")  # specific model name
 
-            self._log(f"Configuration loaded: input_file_path='{input_file_path}', transform_method='{transform_method}', skip_analysis={skip_analysis}")
+            # Preprocessing configuration
+            preprocessing_config = self.config.get("preprocessing", [])
+            
+            self._log(f"Configuration loaded: input_file_path='{input_file_path}', transform_method='{transform_method}', skip_analysis={skip_analysis}, preprocessing_steps={len(preprocessing_config)}")
 
-            # --- 2. Transform Transcripts ---
+            # --- 2. Apply Preprocessing (if configured) ---
+            if preprocessing_config:
+                self._log(f"Applying {len(preprocessing_config)} preprocessing steps...")
+                # Load the input data for preprocessing
+                df = pd.read_parquet(input_file_path)
+                self._log(f"Loaded {len(df)} rows for preprocessing")
+                
+                preprocessing_steps_info = []
+                for i, step_config in enumerate(preprocessing_config, 1):
+                    processor_class = step_config.get("class")
+                    processor_params = step_config.get("parameters", {})
+                    
+                    if not processor_class:
+                        self._log(f"Skipping preprocessing step {i}: no class specified", level="WARNING")
+                        continue
+                    
+                    try:
+                        self._log(f"Applying preprocessing step {i}: {processor_class}")
+                        processor = ProcessorFactory.create_processor(processor_class, **processor_params)
+                        df = processor.process(df)
+                        preprocessing_steps_info.append({
+                            "step": i,
+                            "class": processor_class,
+                            "parameters": processor_params
+                        })
+                        self._log(f"Preprocessing step {i} completed, {len(df)} rows remaining")
+                    except Exception as e:
+                        error_msg = f"Error in preprocessing step {i} ({processor_class}): {e}"
+                        self._log(error_msg, level="ERROR")
+                        final_output_data["errors"].append(error_msg)
+                        # Continue with other preprocessing steps
+                
+                # Save preprocessed data to a temporary file
+                temp_preprocessed_file = tempfile.NamedTemporaryFile(suffix=".parquet", delete=False)
+                df.to_parquet(temp_preprocessed_file.name, index=False)
+                input_file_path = temp_preprocessed_file.name  # Use preprocessed file for transformation
+                self._log(f"Preprocessed data saved to temporary file: {input_file_path}")
+                
+                # Update final output to include preprocessing info
+                final_output_data["preprocessing"]["steps"] = preprocessing_steps_info
+                final_output_data["preprocessing"]["original_input_file"] = self.config.get("input_file_path")
+                final_output_data["preprocessing"]["preprocessed_rows"] = len(df)
+            else:
+                self._log("No preprocessing steps configured, using original input file")
+
+            # --- 3. Transform Transcripts ---
             self._log("Starting transcript transformation...")
             text_file_path_str: Optional[str] = None # Path to the text file for BERTopic
             
@@ -215,9 +276,35 @@ class TopicAnalysis(BaseReportBlock):
             
             # 2. LLM Extraction (what was previously called preprocessing)
             final_output_data["llm_extraction"] = preprocessing_info
+            
+            # 3. Add debugging information - show sample of transformed text file
+            debug_info = {}
+            if text_file_path_str and Path(text_file_path_str).exists():
+                try:
+                    with open(text_file_path_str, 'r', encoding='utf-8') as f:
+                        lines = f.readlines()
+                        debug_info["transformed_text_lines_count"] = len(lines)
+                        debug_info["transformed_text_sample"] = lines[:5] if lines else []
+                        # Count unique lines to detect repetition
+                        unique_lines = set(lines)
+                        debug_info["unique_lines_count"] = len(unique_lines)
+                        debug_info["repetition_detected"] = len(unique_lines) < len(lines) / 2
+                        
+                        # Show most common lines if there's repetition
+                        if debug_info["repetition_detected"]:
+                            from collections import Counter
+                            line_counts = Counter(lines)
+                            debug_info["most_common_lines"] = [
+                                {"line": line.strip(), "count": count} 
+                                for line, count in line_counts.most_common(3)
+                            ]
+                except Exception as e:
+                    debug_info["error_reading_transformed_file"] = str(e)
+            
+            final_output_data["debug_info"] = debug_info
 
 
-            # --- 3. Perform BERTopic Analysis (if not skipped) ---
+            # --- 4. Perform BERTopic Analysis (if not skipped) ---
             if skip_analysis:
                 self._log("Skipping BERTopic analysis as requested.")
                 final_output_data["summary"] = "Transformation completed, analysis skipped."
@@ -307,7 +394,7 @@ class TopicAnalysis(BaseReportBlock):
                         self._log(f"Failed to extract topic information: {e}", level="ERROR")
                         final_output_data["errors"].append(f"Error extracting topics: {str(e)}")
 
-                # --- 4. Attach Artifacts ---
+                # --- 5. Attach Artifacts ---
                 self._log(f"Scanning for BERTopic artifacts in temporary directory: {main_temp_dir}")
                 if not report_block_id:
                     self._log("No report_block_id, cannot attach files.", level="ERROR")
@@ -389,7 +476,7 @@ class TopicAnalysis(BaseReportBlock):
             final_output_data["errors"].append(error_msg)
             final_output_data["summary"] = "Topic analysis failed."
         finally:
-            # --- 5. Clean up temporary directory ---
+            # --- 6. Clean up temporary directory ---
             try:
                 shutil.rmtree(main_temp_dir)
                 self._log(f"Successfully cleaned up main temporary directory: {main_temp_dir}")
@@ -403,6 +490,27 @@ class TopicAnalysis(BaseReportBlock):
 
         # Add block metadata for frontend display
         final_output_data["block_title"] = self.config.get("name", self.DEFAULT_NAME)
+
+        # Return YAML formatted output with contextual comments
+        try:
+            contextual_comment = """# Topic Analysis Report Output
+# 
+# This is the structured output from a multi-stage topic analysis pipeline that:
+# 1. Preprocesses data through programmatic filtering and preparation
+# 2. Extracts content using LLM-powered transformation with custom prompts  
+# 3. Discovers topics using BERTopic clustering and analysis
+# 4. Fine-tunes topic representations using LLM-based naming models
+#
+# The output contains configuration parameters, extracted examples, discovered topics,
+# visualization metadata, and file attachments from the complete analysis workflow.
+
+"""
+            yaml_output = yaml.dump(final_output_data, indent=2, allow_unicode=True, sort_keys=False)
+            final_output_data = contextual_comment + yaml_output
+        except Exception as e:
+            self._log(f"Failed to create YAML formatted output: {e}", level="ERROR")
+            # Fallback to basic YAML without comments
+            final_output_data = yaml.dump(final_output_data, indent=2, allow_unicode=True, sort_keys=False)
 
         return final_output_data, self._get_log_string()
 

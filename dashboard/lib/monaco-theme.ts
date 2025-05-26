@@ -186,7 +186,7 @@ export const getCommonMonacoOptions = (isMobileDevice = false): editor.IStandalo
   minimap: { enabled: false },
   fontSize: 15, // Increased from 14 for better readability
   lineHeight: 22, // Better line spacing
-  lineNumbers: 'on',
+  lineNumbers: 'off', // Disabled line numbers
   scrollBeyondLastLine: false,
   wordWrap: 'on',
   wrappingIndent: 'indent',
@@ -205,6 +205,9 @@ export const getCommonMonacoOptions = (isMobileDevice = false): editor.IStandalo
     bracketPairs: true,
     indentation: true,
   },
+  // Remove editor borders/outlines
+  overviewRulerBorder: false,
+  hideCursorInOverviewRuler: true,
   // iPad/mobile specific options
   ...(isMobileDevice ? {
     // Reduce features that might cause issues on mobile
