@@ -521,14 +521,6 @@ export default function ScorecardsComponent({
               addedAt: new Date().toISOString()
             });
             console.log('ItemScorecard association result:', associationResult);
-            console.log('Association errors:', associationResult.errors);
-            
-            // Check for GraphQL errors first
-            if (associationResult.errors && associationResult.errors.length > 0) {
-              console.error('GraphQL errors creating association:', associationResult.errors);
-              throw new Error('Association creation failed with GraphQL errors: ' + 
-                associationResult.errors.map((e: any) => e.message).join(', '));
-            }
             
             // Verify the association was actually created
             if (!associationResult.data?.id) {
