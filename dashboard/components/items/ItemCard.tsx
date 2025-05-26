@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { Card } from '@/components/ui/card'
-import { MoreHorizontal, X, Square, Columns2, StickyNote, Info, ChevronDown, ChevronUp, Clock, IdCard, Loader2 } from 'lucide-react'
+import { MoreHorizontal, X, Square, Columns2, StickyNote, Info, ChevronDown, ChevronUp, Clock, Loader2 } from 'lucide-react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { cn } from '@/lib/utils'
 import { CardButton } from '@/components/CardButton'
@@ -132,14 +132,13 @@ const GridContent = React.memo(({
   const totalScores = scoreDisplays.reduce((total, display) => total + display.scores.length, 0);
 
   return (
-    <div className="relative w-full">
-      <div className="absolute top-0 right-0 flex flex-col items-end space-y-1">
+    <div className="w-full">
+      <div className="float-right flex flex-col items-end space-y-1 ml-2 mt-0">
         {item.icon || <StickyNote className="h-[1.75rem] w-[1.75rem]" strokeWidth={1.25} />}
       </div>
-      <div className="space-y-1 pr-12">
+      <div className="space-y-1">
         {/* Header order: 1. Scorecard name */}
-        <div className="flex items-center gap-1 text-xs text-muted-foreground" title={primaryScorecard}>
-          <IdCard className="h-4 w-4 flex-shrink-0" />
+        <div className="text-xs text-muted-foreground" title={primaryScorecard}>
           <span className="font-semibold">{primaryScorecard}</span>
         </div>
         
@@ -182,11 +181,10 @@ const GridContent = React.memo(({
           ) : item.scorecardBreakdown && item.scorecardBreakdown.length > 0 ? (
             item.scorecardBreakdown.map((breakdown, index) => (
               <div key={breakdown.scorecardId || index} className="flex flex-col">
-                <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <IdCard className="h-4 w-4" />
+                <div className="text-xs text-muted-foreground">
                   <span className="font-medium">{breakdown.scorecardName}</span>
                 </div>
-                <div className="ml-5">{breakdown.count} result{breakdown.count !== 1 ? 's' : ''}</div>
+                <div>{breakdown.count} result{breakdown.count !== 1 ? 's' : ''}</div>
               </div>
             ))
           ) : (
@@ -194,6 +192,7 @@ const GridContent = React.memo(({
           )}
         </div>
       </div>
+      <div className="clear-both"></div>
     </div>
   )
 })
@@ -288,8 +287,7 @@ const DetailContent = React.memo(({
       <div className="flex justify-between items-start w-full">
         <div className="space-y-2 flex-1">
           {/* Header order: 1. Scorecard name - reduced text size to match grid view */}
-          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-            <IdCard className="h-4 w-4 flex-shrink-0" />
+          <div className="text-xs text-muted-foreground">
             <span className="font-semibold truncate">{scoreInfo[0]?.scorecardName || 'Untitled Item'}</span>
           </div>
           
@@ -331,11 +329,10 @@ const DetailContent = React.memo(({
             ) : item.scorecardBreakdown && item.scorecardBreakdown.length > 0 ? (
               item.scorecardBreakdown.map((breakdown, index) => (
                 <div key={breakdown.scorecardId || index} className="flex flex-col">
-                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <IdCard className="h-4 w-4" />
+                  <div className="text-xs text-muted-foreground">
                     <span className="font-medium">{breakdown.scorecardName}</span>
                   </div>
-                  <div className="ml-5">{breakdown.count} result{breakdown.count !== 1 ? 's' : ''}</div>
+                  <div>{breakdown.count} result{breakdown.count !== 1 ? 's' : ''}</div>
                 </div>
               ))
             ) : (
