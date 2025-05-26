@@ -360,12 +360,9 @@ export default function ItemCard({
   
   return (
     <motion.div
-      initial={item.isNew ? { opacity: 0 } : { opacity: 1 }}
+      initial={{ opacity: 1 }}
       animate={{ opacity: 1 }}
-      transition={{ 
-        duration: 1.0,
-        ease: "easeOut"
-      }}
+      transition={{ duration: 0.2 }}
       className={cn(
         "w-full rounded-lg text-card-foreground hover:bg-accent/50 relative",
         variant === 'grid' ? (
