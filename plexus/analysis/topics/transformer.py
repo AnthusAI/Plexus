@@ -418,14 +418,28 @@ async def _transform_transcripts_llm_async(
         # Even when using cached data, we can still capture examples
         # by reading the preprocessed data and showing what the LLM output looks like
         try:
-            cached_df = pd.read_parquet(cached_parquet_path)
-            
-            # Get first 20 examples of preprocessing output
-            examples = []
-            for i in range(min(20, len(cached_df))):
-                cached_row = cached_df.iloc[i]
-                example = cached_row[content_column][:500] + ("..." if len(cached_row[content_column]) > 500 else "")
-                examples.append(example)
+            # Load original data to show what was actually processed, not the LLM output
+            try:
+                original_df = pd.read_parquet(input_file)
+                if customer_only:
+                    original_df = apply_customer_only_filter(original_df, content_column, customer_only)
+                if sample_size is not None and sample_size > 0 and sample_size < len(original_df):
+                    original_df = original_df.sample(n=sample_size, random_state=42)
+                
+                examples = []
+                for i in range(min(20, len(original_df))):
+                    original_row = original_df.iloc[i]
+                    example = original_row[content_column][:500] + ("..." if len(original_row[content_column]) > 500 else "")
+                    examples.append(example)
+            except Exception as e:
+                logging.warning(f"Could not load original data for examples: {e}")
+                # Fallback: Load processed data but clearly mark what it is
+                cached_df = pd.read_parquet(cached_parquet_path)
+                examples = []
+                for i in range(min(5, len(cached_df))):
+                    cached_row = cached_df.iloc[i]
+                    example = f"[PROCESSED OUTPUT]: {cached_row[content_column][:200]}..."
+                    examples.append(example)
             
             # Always determine what template was used, even from cached data
             if prompt_template_file:
@@ -441,6 +455,9 @@ async def _transform_transcripts_llm_async(
                         )
                 except Exception as e:
                     template = f"Error loading template from {prompt_template_file}: {e}"
+            elif prompt_template:
+                # Use inline prompt template if provided
+                template = prompt_template
             else:
                 template = """Summarize the key topics in this transcript in 3-5 concise bullet points:
                 
@@ -487,8 +504,9 @@ async def _transform_transcripts_llm_async(
     
     # Determine template: inline prompt takes precedence over file
     if prompt_template:
-        template = prompt_template
-        logging.info("Using inline prompt template")
+        # Convert Jinja2 template syntax to Python format string syntax
+        template = prompt_template.replace('{{text}}', '{text}').replace('{{format_instructions}}', '{format_instructions}')
+        logging.info("Using inline prompt template (converted from Jinja2 to Python format)")
     elif prompt_template_file:
         try:
             with open(prompt_template_file, 'r') as f:
@@ -814,6 +832,14 @@ async def _process_itemize_transcript_async(
                 break
     
     if success:
+        # Enhanced debugging: Log the parsed items to detect repetition
+        items_str = str(parsed_items)
+        logging.info(f"SUCCESSFULLY PARSED ITEMS FOR TRANSCRIPT {i+1}: {items_str[:200]}...")
+        
+        # Check if this looks like template examples
+        if "What type of program are you looking for" in items_str or "What did you mean by that" in items_str:
+            logging.warning(f"⚠️ TRANSCRIPT {i+1} OUTPUT CONTAINS TEMPLATE EXAMPLES - POSSIBLE EXTRACTION FAILURE")
+        
         return True, parsed_items
     else:
         return False, error_message
@@ -844,10 +870,20 @@ async def _process_itemize_batch_async(
     tasks = []
     for j, (row, idx) in enumerate(zip(rows, indices)):
         text = row[content_column]
+        
+        # Enhanced debugging: Log the actual transcript content being processed
+        logging.info(f"TRANSCRIPT {idx+1} CONTENT (first 200 chars): {text[:200]}...")
+        if len(text) < 50:
+            logging.warning(f"TRANSCRIPT {idx+1} IS VERY SHORT ({len(text)} chars): '{text}'")
+        
         formatted_prompt = prompt.format(
             text=text, 
             format_instructions=parser.get_format_instructions()
         )
+        
+        # Enhanced debugging: Log the formatted prompt to see if transcript is included
+        logging.info(f"FORMATTED PROMPT FOR TRANSCRIPT {idx+1} (first 300 chars): {formatted_prompt[:300]}...")
+        
         task = _process_itemize_transcript_async(
             llm, prompt, formatted_prompt, text, parser, retry_parser, 
             provider, idx, total_count, max_retries, retry_delay
@@ -856,8 +892,23 @@ async def _process_itemize_batch_async(
     
     batch_results = await asyncio.gather(*tasks, return_exceptions=True)
     
+    # Enhanced debugging: Check for identical outputs across transcripts
+    successful_outputs = []
     for result_pair, row_item in zip(batch_results, rows):
         results.append((result_pair, row_item))
+        
+        # Collect successful outputs for comparison
+        if isinstance(result_pair, tuple) and result_pair[0] == True:
+            successful_outputs.append(str(result_pair[1]))
+    
+    # Check for repetition in outputs
+    if len(successful_outputs) > 1:
+        unique_outputs = set(successful_outputs)
+        if len(unique_outputs) == 1:
+            logging.error(f"🚨 CRITICAL ISSUE: ALL {len(successful_outputs)} TRANSCRIPTS PRODUCED IDENTICAL OUTPUT!")
+            logging.error(f"Identical output: {successful_outputs[0][:300]}...")
+        elif len(unique_outputs) < len(successful_outputs) * 0.5:  # If more than 50% repetition
+            logging.warning(f"⚠️ HIGH REPETITION: {len(successful_outputs)} outputs, only {len(unique_outputs)} unique")
     
     gc.collect()
     return results
@@ -894,16 +945,30 @@ async def _transform_transcripts_itemize_async(
         logging.info(f"Using cached files: {cached_parquet_path} and {text_file_path}")
         
         # Even when using cached data, we can still capture examples
-        # by reading the preprocessed data and showing what the LLM output looks like
+        # by reading the original input data and showing what was actually processed
         try:
-            cached_df = pd.read_parquet(cached_parquet_path)
-            
-            # Get first 20 examples of preprocessing output
-            examples = []
-            for i in range(min(20, len(cached_df))):
-                cached_row = cached_df.iloc[i]
-                example = cached_row[content_column][:500] + ("..." if len(cached_row[content_column]) > 500 else "")
-                examples.append(example)
+            # Load original data to show what was actually processed, not the LLM output
+            try:
+                original_df = pd.read_parquet(input_file)
+                if customer_only:
+                    original_df = apply_customer_only_filter(original_df, content_column, customer_only)
+                if sample_size is not None and sample_size > 0 and sample_size < len(original_df):
+                    original_df = original_df.sample(n=sample_size, random_state=42)
+                
+                examples = []
+                for i in range(min(20, len(original_df))):
+                    original_row = original_df.iloc[i]
+                    example = original_row[content_column][:500] + ("..." if len(original_row[content_column]) > 500 else "")
+                    examples.append(example)
+            except Exception as e:
+                logging.warning(f"Could not load original data for examples: {e}")
+                # Fallback: Load processed data but clearly mark what it is
+                cached_df = pd.read_parquet(cached_parquet_path)
+                examples = []
+                for i in range(min(5, len(cached_df))):
+                    cached_row = cached_df.iloc[i]
+                    example = f"[PROCESSED OUTPUT]: {cached_row[content_column][:200]}..."
+                    examples.append(example)
             
             # Always determine what template was used, even from cached data
             if prompt_template_file:
@@ -919,6 +984,9 @@ async def _transform_transcripts_itemize_async(
                         )
                 except Exception as e:
                     template = f"Error loading template from {prompt_template_file}: {e}"
+            elif prompt_template:
+                # Use inline prompt template if provided
+                template = prompt_template
             else:
                 template = """Summarize the key topics in this transcript in 3-5 concise bullet points:
                 
@@ -998,8 +1066,9 @@ async def _transform_transcripts_itemize_async(
 
     # Determine template: inline prompt takes precedence over file
     if prompt_template:
-        template = prompt_template
-        logging.info("Using inline prompt template for itemization")
+        # Convert Jinja2 template syntax to Python format string syntax
+        template = prompt_template.replace('{{text}}', '{text}').replace('{{format_instructions}}', '{format_instructions}')
+        logging.info("Using inline prompt template for itemization (converted from Jinja2 to Python format)")
     elif prompt_template_file:
         try:
             with open(prompt_template_file, 'r') as f:
