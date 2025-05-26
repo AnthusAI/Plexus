@@ -382,7 +382,7 @@ const PreprocessingSection: React.FC<{
         <div className="space-y-3 mt-4">
           <h4 className="font-medium text-sm">Preprocessing Steps Applied</h4>
           <div className="space-y-2">
-            {preprocessing.steps.map((step, index) => (
+            {preprocessing.steps.map((step: { step: number; class: string; parameters: Record<string, any> }, index: number) => (
               <div key={index} className="flex items-center justify-between p-2 border rounded-md bg-muted/20">
                 <div className="flex items-center gap-2">
                   <Badge variant="outline" className="text-xs">
