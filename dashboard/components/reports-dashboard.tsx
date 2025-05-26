@@ -6,7 +6,7 @@ import "@/components/blocks/registrySetup";
 import type { Schema } from "@/amplify/data/resource"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Square, Columns2, X, MoreHorizontal, Trash2, Share, Pencil, Play } from "lucide-react"
+import { Square, Columns2, X, MoreHorizontal, Trash2, Share, Pencil, Play, Settings } from "lucide-react"
 import { format, formatDistanceToNow, parseISO } from "date-fns"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -1192,6 +1192,12 @@ export default function ReportsDashboard({
                 <Share className="mr-2 h-4 w-4" />
                 <span>Share</span>
               </DropdownMenuItem>
+              {report.reportConfiguration?.id && (
+                <DropdownMenuItem onClick={() => router.push(`/lab/reports/edit/${report.reportConfiguration.id}`)}>
+                  <Settings className="mr-2 h-4 w-4" />
+                  <span>Edit Configuration</span>
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem onClick={() => handleDelete(report.id)}>
                 <Trash2 className="mr-2 h-4 w-4" />
                 <span>Delete</span>
@@ -1354,6 +1360,37 @@ export default function ReportsDashboard({
                       task={taskData}
                       isSelected={report.id === selectedReportId}
                       onClick={clickHandler}
+                      controlButtons={
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                             <Button 
+                               variant="ghost" 
+                               size="icon" 
+                               className="h-8 w-8 rounded-md bg-border hover:bg-accent"
+                               aria-label="More options"
+                               onClick={(e) => e.stopPropagation()} // Prevent card click when clicking dropdown
+                             >
+                               <MoreHorizontal className="h-4 w-4" />
+                             </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                             <DropdownMenuItem onClick={(e) => { e.stopPropagation(); copyLinkToClipboard(report.id); }}>
+                              <Share className="mr-2 h-4 w-4" />
+                              <span>Share</span>
+                            </DropdownMenuItem>
+                            {report.reportConfiguration?.id && (
+                              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); router.push(`/lab/reports/edit/${report.reportConfiguration.id}`); }}>
+                                <Settings className="mr-2 h-4 w-4" />
+                                <span>Edit Configuration</span>
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleDelete(report.id); }}>
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              <span>Delete</span>
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      }
                     />
                   </div>
                 );
