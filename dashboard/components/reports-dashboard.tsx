@@ -718,9 +718,9 @@ export default function ReportsDashboard({
               updatedAt: newReport.updatedAt,
               output: newReport.output || null,
               reportConfiguration: newReport.reportConfiguration ? {
-                id: newReport.reportConfiguration.id,
-                name: newReport.reportConfiguration.name,
-                description: newReport.reportConfiguration.description
+                id: newReport.reportConfiguration!.id,
+                name: newReport.reportConfiguration!.name,
+                description: newReport.reportConfiguration!.description
               } : null,
               task: newReport.task || null
             };
@@ -1193,7 +1193,7 @@ export default function ReportsDashboard({
                 <span>Share</span>
               </DropdownMenuItem>
               {report.reportConfiguration?.id && (
-                <DropdownMenuItem onClick={() => router.push(`/lab/reports/edit/${report.reportConfiguration.id}`)}>
+                <DropdownMenuItem onClick={() => router.push(`/lab/reports/edit/${report.reportConfiguration!.id}`)}>
                   <Settings className="mr-2 h-4 w-4" />
                   <span>Edit Configuration</span>
                 </DropdownMenuItem>
@@ -1379,7 +1379,7 @@ export default function ReportsDashboard({
                               <span>Share</span>
                             </DropdownMenuItem>
                             {report.reportConfiguration?.id && (
-                              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); router.push(`/lab/reports/edit/${report.reportConfiguration.id}`); }}>
+                              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); router.push(`/lab/reports/edit/${report.reportConfiguration!.id}`); }}>
                                 <Settings className="mr-2 h-4 w-4" />
                                 <span>Edit Configuration</span>
                               </DropdownMenuItem>
