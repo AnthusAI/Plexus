@@ -47,6 +47,12 @@ const formatElapsedTime = (start: Date, end: Date): string => {
   }).replace(/(\d+) (\w+)/g, '$1 $2') // Convert "1 hour 2 minutes" to "1 h 2 m"
 }
 
+const areDatesMeaningfullyDifferent = (start: Date, end: Date): boolean => {
+  // Return false if times are the same or within 1 second of each other
+  const diffInMs = Math.abs(end.getTime() - start.getTime())
+  return diffInMs > 1000 // More than 1 second difference
+}
+
 const formatRelativeTime = (date: Date): string => {
   try {
     // Check if date is valid
@@ -136,7 +142,13 @@ export function Timestamp({
         const endTime = completionTime 
           ? (typeof completionTime === 'string' ? new Date(completionTime) : completionTime)
           : new Date()
-        setDisplayText(formatElapsedTime(timeDate, endTime))
+        
+        // Only show elapsed time if the dates are meaningfully different
+        if (areDatesMeaningfullyDifferent(timeDate, endTime)) {
+          setDisplayText(formatElapsedTime(timeDate, endTime))
+        } else {
+          setDisplayText('') // Return empty string if times are effectively the same
+        }
       } else {
         setDisplayText(showAbsolute ? formatAbsoluteTime(timeDate) : formatRelativeTime(timeDate))
       }
@@ -158,6 +170,11 @@ export function Timestamp({
     if (variant === 'relative') {
       setShowAbsolute(!showAbsolute)
     }
+  }
+
+  // Don't render anything if there's no text to display (e.g., elapsed time with same timestamps)
+  if (!displayText) {
+    return null
   }
 
   return (
