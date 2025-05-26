@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "NEXT_TYPESCRIPT_CHECK=0 next dev",
     "build": "next build",
+    "build:fast": "NEXT_TYPESCRIPT_CHECK=0 next build --no-lint",
     "start": "next start",
     "lint": "next lint --no-cache",
     "storybook": "storybook dev -p 6006",
