@@ -136,6 +136,11 @@ const ItemDetail: React.FC<ItemDetailProps> = ({
           <p className="text-sm text-muted-foreground">
             <Timestamp time={item.date} variant="relative" />
           </p>
+          {(item as any).createdAt && (item as any).updatedAt && (item as any).createdAt !== (item as any).updatedAt && (
+            <p className="text-xs text-muted-foreground">
+              <Timestamp time={(item as any).createdAt} completionTime={(item as any).updatedAt} variant="elapsed" />
+            </p>
+          )}
         </div>
         <div className="flex items-center space-x-2">
           {!isNarrowViewport && (
