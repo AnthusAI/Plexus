@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { Card } from '@/components/ui/card'
-import { MoreHorizontal, Pencil, Database, ListTodo, X, Square, Columns2, Plus, ChevronUp, ChevronDown, CheckSquare, ChevronRight, FileText, Key, StickyNote, Edit, IdCard } from 'lucide-react'
+import { MoreHorizontal, Pencil, Database, ListTodo, X, Square, Columns2, Plus, ChevronUp, ChevronDown, CheckSquare, ChevronRight, FileText, Key, StickyNote, Edit, IdCard, TestTube } from 'lucide-react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { cn } from '@/lib/utils'
 import { CardButton } from '@/components/CardButton'
@@ -24,6 +24,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { useAccount } from '@/app/contexts/AccountContext'
+import { TestItemDialog } from './test-item-dialog'
 
 export interface ScorecardData {
   id: string
@@ -153,6 +154,11 @@ export const DetailContent = React.memo(function DetailContent({
   const [itemToRemove, setItemToRemove] = React.useState<{index: number, example: string} | null>(null)
   const [itemDetails, setItemDetails] = React.useState<Record<string, {externalId?: string, description?: string}>>({})
   const [loadingItemDetails, setLoadingItemDetails] = React.useState<Set<string>>(new Set())
+  const [testItemDialog, setTestItemDialog] = React.useState<{
+    isOpen: boolean
+    itemId: string
+    displayValue: string
+  }>({ isOpen: false, itemId: '', displayValue: '' })
 
   // Fetch item details for display when examples change
   React.useEffect(() => {
@@ -401,6 +407,37 @@ export const DetailContent = React.memo(function DetailContent({
     setItemToRemove(null);
   };
 
+  const handleTestItem = (itemId: string, displayValue: string) => {
+    setTestItemDialog({
+      isOpen: true,
+      itemId,
+      displayValue
+    });
+  };
+
+  const handleTestItemWithScore = (scoreId: string) => {
+    console.log('Testing item with score:', { itemId: testItemDialog.itemId, scoreId });
+    // TODO: Implement actual test logic
+    toast.success(`Testing item "${testItemDialog.displayValue}" with selected score`);
+  };
+
+  const closeTestItemDialog = () => {
+    setTestItemDialog({ isOpen: false, itemId: '', displayValue: '' });
+  };
+
+  // Get available scores from all sections
+  const availableScores = React.useMemo(() => {
+    if (!score.sections?.items) return [];
+    
+    return score.sections.items.flatMap(section => 
+      section.scores?.items?.map(scoreItem => ({
+        id: scoreItem.id,
+        name: scoreItem.name,
+        sectionName: section.name
+      })) || []
+    );
+  }, [score.sections]);
+
   return (
     <div className="w-full flex flex-col min-h-0">
       <div className="flex justify-between items-start w-full">
@@ -638,6 +675,22 @@ export const DetailContent = React.memo(function DetailContent({
                             <span>{displayValue}</span>
                           </div>
                           <div className="flex items-center gap-1">
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              onClick={() => {
+                                if (isItemReference) {
+                                  const itemId = example.substring(5);
+                                  handleTestItem(itemId, displayValue);
+                                } else {
+                                  // For content-based examples, use the example itself as the display value
+                                  handleTestItem(example, displayValue);
+                                }
+                              }}
+                              title="Test with this item"
+                            >
+                              <TestTube className="h-4 w-4" />
+                            </Button>
                             {isItemReference && onEditItem && (
                               <Button 
                                 variant="ghost" 
@@ -725,6 +778,31 @@ export const DetailContent = React.memo(function DetailContent({
                             section.scores?.items?.find(s => s.id === scoreData.id),
                             section.id
                           )}
+                          exampleItems={score.examples?.map((example, index) => {
+                            const isItemReference = example.startsWith('item:');
+                            let displayValue: string;
+                            
+                            if (isItemReference) {
+                              const itemId = example.substring(5);
+                              const details = itemDetails[itemId];
+                              if (loadingItemDetails.has(itemId)) {
+                                displayValue = `Item: Loading...`;
+                              } else if (details?.externalId) {
+                                displayValue = `Item: ${details.externalId}`;
+                              } else {
+                                displayValue = `Item: ${itemId}`;
+                              }
+                            } else if (example.startsWith('content:')) {
+                              displayValue = example.substring(8);
+                            } else {
+                              displayValue = example;
+                            }
+                            
+                            return {
+                              id: isItemReference ? example.substring(5) : `content_${index}`,
+                              displayValue
+                            };
+                          }) || []}
                         />
                       ))}
                     </div>
@@ -764,6 +842,15 @@ export const DetailContent = React.memo(function DetailContent({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Test Item Dialog */}
+      <TestItemDialog
+        isOpen={testItemDialog.isOpen}
+        onClose={closeTestItemDialog}
+        onTest={handleTestItemWithScore}
+        itemDisplayValue={testItemDialog.displayValue}
+        availableScores={availableScores}
+      />
     </div>
   )
 })
