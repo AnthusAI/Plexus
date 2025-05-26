@@ -26,6 +26,7 @@ import Link from 'next/link'
 import { FilterControl, FilterConfig } from "@/components/filter-control"
 import ItemDetail from './ItemDetail'
 import { ProgressBar } from "@/components/ui/progress-bar"
+import type { FeedbackItem } from '@/types/feedback'
 
 // Add this type definition
 type TimeRangeOption = {
@@ -88,8 +89,8 @@ const scorecardScoreCounts = {
   "SelectQuote Term Life v1": 42,
 };
 
-// Update the FeedbackItem interface to match actual data structure
-export interface FeedbackItem {
+// Local data structure for feedback dashboard - has different structure from the ItemDetail FeedbackItem
+export interface FeedbackDashboardItem {
   id: number
   scorecard: string
   score: number
@@ -152,7 +153,7 @@ const getScoreResults = (status: string) => {
 };
 
 // Now, let's update the initialFeedbackItems declaration
-const initialFeedbackItems: FeedbackItem[] = [
+const initialFeedbackItems: FeedbackDashboardItem[] = [
   { id: 30, scorecard: "CS3 Services v2", score: 80, date: relativeDate(0, 0, 5), status: "New", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Services v2"], lastUpdated: "", inferences: "", results: "", cost: "", sampleMetadata: [], sampleTranscript: [], sampleScoreResults: [], scoreResults: getScoreResults("New") },
   { id: 29, scorecard: "CS3 Audigy", score: 89, date: relativeDate(0, 0, 15), status: "New", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Audigy"], lastUpdated: "", inferences: "", results: "", cost: "", sampleMetadata: [], sampleTranscript: [], sampleScoreResults: [], scoreResults: getScoreResults("New") },
   { id: 28, scorecard: "AW IB Sales", score: 96, date: relativeDate(0, 0, 30), status: "New", hasFeedback: false, scoreCount: scorecardScoreCounts["AW IB Sales"], lastUpdated: "", inferences: "", results: "", cost: "", sampleMetadata: [], sampleTranscript: [], sampleScoreResults: [], scoreResults: getScoreResults("New") },
@@ -257,7 +258,7 @@ export default function FeedbackDashboard() {
   const [newAnnotation, setNewAnnotation] = useState({ value: "", explanation: "", annotation: "" });
   const [showNewAnnotationForm, setShowNewAnnotationForm] = useState<{ scoreName: string | null, isThumbsUp: boolean }>({ scoreName: null, isThumbsUp: false });
   const [thumbedUpScores, setThumbedUpScores] = useState<Set<string>>(new Set());
-  const [feedbackItems, setFeedbackItems] = useState<FeedbackItem[]>(initialFeedbackItems);
+  const [feedbackItems, setFeedbackItems] = useState<FeedbackDashboardItem[]>(initialFeedbackItems);
   const [isDataExpandedDefault, setIsDataExpandedDefault] = useState(false);
   const [isErrorExpanded, setIsErrorExpanded] = useState(true);
   const [sampleMetadata] = useState([
@@ -474,9 +475,9 @@ export default function FeedbackDashboard() {
     setFeedbackItems(prevItems => {
       return prevItems.map(item => {
         if (item.id === selectedItem) {
-          const updatedScoreResults = item.scoreResults?.map(section => ({
+          const updatedScoreResults = item.scoreResults?.map((section: any) => ({
             ...section,
-            scores: section.scores.map(score => 
+            scores: section.scores.map((score: any) => 
               score.name === scoreName 
                 ? { 
                     ...score, 
@@ -497,9 +498,9 @@ export default function FeedbackDashboard() {
     });
 
     setScoreResults(prevResults => 
-      prevResults.map(section => ({
+      prevResults.map((section: any) => ({
         ...section,
-        scores: section.scores.map(score => 
+        scores: section.scores.map((score: any) => 
           score.name === scoreName 
             ? { 
                 ...score, 
@@ -559,6 +560,20 @@ export default function FeedbackDashboard() {
     toggleNewAnnotationForm(scoreName, false);
   };
 
+  // Helper function to convert FeedbackDashboardItem to FeedbackItem for ItemDetail
+  const convertToFeedbackItem = (dashboardItem: FeedbackDashboardItem): FeedbackItem => ({
+    id: dashboardItem.id.toString(),
+    scorecard: dashboardItem.scorecard,
+    inferences: dashboardItem.inferences,
+    results: dashboardItem.results,
+    cost: dashboardItem.cost,
+    status: dashboardItem.status,
+    date: dashboardItem.date,
+    sampleMetadata: dashboardItem.sampleMetadata,
+    sampleTranscript: dashboardItem.sampleTranscript,
+    sampleScoreResults: dashboardItem.sampleScoreResults || []
+  });
+
   const renderSelectedItem = () => {
     if (!selectedItem) return null;
 
@@ -583,7 +598,7 @@ export default function FeedbackDashboard() {
 
     return (
       <ItemDetail
-        item={selectedItemData as unknown as FeedbackItem}
+        item={convertToFeedbackItem(selectedItemData)}
         controlButtons={DetailViewControlButtons}
         getBadgeVariant={getBadgeVariant}
         getRelativeTime={getRelativeTime}
