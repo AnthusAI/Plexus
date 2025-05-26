@@ -3,6 +3,6 @@
 import React from 'react'
 import ItemsDashboard from '@/components/items-dashboard'
 
-export default function LabItemsPage() {
+export default function LabItemPage() {
   return <ItemsDashboard />
 }
