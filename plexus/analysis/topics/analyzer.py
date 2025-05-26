@@ -337,15 +337,19 @@ def analyze_topics(
         
         # Visualize Topics (HTML and PNG) - only if we have enough topics
         if num_topics >= 2:
-            fig_topics = topic_model.visualize_topics()
-            save_visualization(fig_topics, str(Path(output_dir) / "topic_visualization.html"))
             try:
-                topics_png_path = str(Path(output_dir) / "topics_visualization.png")
-                fig_topics.write_image(topics_png_path)
-                os.chmod(topics_png_path, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH)
-                logger.info(f"Saved topics visualization to {topics_png_path}")
+                fig_topics = topic_model.visualize_topics()
+                save_visualization(fig_topics, str(Path(output_dir) / "topic_visualization.html"))
+                try:
+                    topics_png_path = str(Path(output_dir) / "topics_visualization.png")
+                    fig_topics.write_image(topics_png_path)
+                    os.chmod(topics_png_path, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH)
+                    logger.info(f"Saved topics visualization to {topics_png_path}")
+                except Exception as e:
+                    logger.error(f"Failed to save topics visualization as PNG: {e}", exc_info=True)
             except Exception as e:
-                logger.error(f"Failed to save topics visualization as PNG: {e}", exc_info=True)
+                logger.error(f"Error during visualization generation: {e}")
+                logger.info("Continuing without topic visualization due to insufficient data diversity for UMAP embedding")
         else:
             logger.warning(f"Skipping topics visualization as there are fewer than 2 topics ({num_topics} found). Need at least 2 topics for 2D visualization.")
 

@@ -23,6 +23,7 @@ import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import type { editor } from 'monaco-editor'
 import { defineCustomMonacoThemes, applyMonacoTheme, setupMonacoThemeWatcher, getCommonMonacoOptions } from '@/lib/monaco-theme'
+import { TestScoreDialog } from '@/components/scorecards/test-score-dialog'
 
 const client = generateClient();
 
@@ -101,6 +102,10 @@ interface ScoreComponentProps extends React.HTMLAttributes<HTMLDivElement> {
   onToggleFullWidth?: () => void
   isFullWidth?: boolean
   onSave?: () => void
+  exampleItems?: Array<{
+    id: string
+    displayValue: string
+  }>
 }
 
 interface DetailContentProps {
@@ -122,6 +127,10 @@ interface DetailContentProps {
   onNoteChange: (note: string) => void
   resetEditingCounter: number
   forceExpandHistory?: boolean
+  exampleItems?: Array<{
+    id: string
+    displayValue: string
+  }>
 }
 
 const GridContent = React.memo(({ 
@@ -181,9 +190,9 @@ const ResizableEditorContainer = ({
     <div 
       ref={containerRef}
       className={cn(
-        "relative border bg-background rounded-md",
-        isResizing && "border-accent",
-        isFullscreen ? "h-full" : "resize-y overflow-auto"
+        "relative bg-background rounded-lg",
+        isResizing && "border border-accent",
+        isFullscreen ? "h-full overflow-hidden" : "resize-y overflow-auto"
       )}
       style={!isFullscreen ? { 
         height: `${height}px`,
@@ -233,6 +242,7 @@ const DetailContent = React.memo(({
   onNoteChange,
   resetEditingCounter,
   forceExpandHistory,
+  exampleItems = [],
 }: DetailContentProps) => {
   // Get the current version's configuration
   const currentVersion = versions?.find(v => 
@@ -412,6 +422,9 @@ const DetailContent = React.memo(({
   // Add state to detect if we're on an iPad/mobile device
   const [isMobileDevice, setIsMobileDevice] = React.useState(false);
   
+  // Add state for test score dialog
+  const [isTestDialogOpen, setIsTestDialogOpen] = React.useState(false);
+  
   // Detect mobile devices on component mount
   React.useEffect(() => {
     const checkMobileDevice = () => {
@@ -426,6 +439,20 @@ const DetailContent = React.memo(({
     
     checkMobileDevice();
   }, []);
+
+  const handleTestScore = () => {
+    setIsTestDialogOpen(true);
+  };
+
+  const handleTestScoreWithItem = (itemId: string) => {
+    console.log('Testing score with item:', { scoreId: score.id, scoreName: score.name, itemId });
+    // TODO: Implement actual test logic
+    toast.success(`Testing score "${score.name}" with selected item`);
+  };
+
+  const closeTestScoreDialog = () => {
+    setIsTestDialogOpen(false);
+  };
 
   return (
     <div className={cn(
@@ -494,10 +521,7 @@ const DetailContent = React.memo(({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => {
-                  console.log('Test clicked');
-                  toast.success('Test action triggered');
-                }}>
+                <DropdownMenuItem onClick={handleTestScore}>
                   <TestTube className="mr-2 h-4 w-4" />
                   Test
                 </DropdownMenuItem>
@@ -569,10 +593,7 @@ const DetailContent = React.memo(({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => {
-                  console.log('Test clicked');
-                  toast.success('Test action triggered');
-                }}>
+                <DropdownMenuItem onClick={handleTestScore}>
                   <TestTube className="mr-2 h-4 w-4" />
                   Test
                 </DropdownMenuItem>
@@ -613,9 +634,9 @@ const DetailContent = React.memo(({
         "flex-1 flex flex-col min-h-0",
         isEditorFullscreen ? "mt-2" : "mt-2"
       )} style={{ transition: 'none' }}>
-        {!isEditorFullscreen ? (
+                  {!isEditorFullscreen ? (
           // Normal mode: flexible height container
-          <div className="flex-1 border bg-background rounded-md relative min-h-[300px]">
+          <div className="flex-1 bg-background rounded-lg overflow-hidden relative min-h-[300px]">
             <Editor
               height="100%"
               defaultLanguage="yaml"
@@ -818,6 +839,15 @@ const DetailContent = React.memo(({
           />
         </div>
       )}
+
+      {/* Test Score Dialog */}
+      <TestScoreDialog
+        isOpen={isTestDialogOpen}
+        onClose={closeTestScoreDialog}
+        onTest={handleTestScoreWithItem}
+        scoreName={score.name}
+        exampleItems={exampleItems}
+      />
     </div>
   )
 })
@@ -831,6 +861,7 @@ export function ScoreComponent({
   onToggleFullWidth,
   isFullWidth = false,
   onSave,
+  exampleItems = [],
   className,
   ...props
 }: ScoreComponentProps) {
@@ -1409,6 +1440,7 @@ export function ScoreComponent({
               onNoteChange={handleNoteChange}
               resetEditingCounter={resetEditingCounter}
               forceExpandHistory={forceExpandHistory}
+              exampleItems={exampleItems}
             />
           )}
         </div>

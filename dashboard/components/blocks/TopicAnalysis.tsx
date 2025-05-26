@@ -16,9 +16,16 @@ interface TopicAnalysisData {
   preprocessing?: {
     method?: string;
     input_file?: string;
+    original_input_file?: string;
     content_column?: string;
     sample_size?: number;
     customer_only?: boolean;
+    preprocessed_rows?: number;
+    steps?: Array<{
+      step: number;
+      class: string;
+      parameters: Record<string, any>;
+    }>;
   };
   llm_extraction?: {
     llm_model?: string;
@@ -52,6 +59,17 @@ interface TopicAnalysisData {
     heatmap_visualization?: string;
     available_files?: string;
   };
+  debug_info?: {
+    transformed_text_lines_count?: number;
+    transformed_text_sample?: string[];
+    unique_lines_count?: number;
+    repetition_detected?: boolean;
+    most_common_lines?: Array<{
+      line: string;
+      count: number;
+    }>;
+    error_reading_transformed_file?: string;
+  };
   block_title?: string;
   errors?: string[];
 }
@@ -65,6 +83,7 @@ interface TopicAnalysisData {
  * - BERTopic Analysis
  * - Fine-tuning
  */
+
 const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
   const [promptExpanded, setPromptExpanded] = useState(false);
   const [examplesExpanded, setExamplesExpanded] = useState(false);
@@ -88,7 +107,24 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
     );
   }
 
-  const data = props.output as TopicAnalysisData;
+  // Parse YAML if output is string, otherwise use as object (legacy support)
+  let data: TopicAnalysisData;
+  try {
+    if (typeof props.output === 'string') {
+      // New format: parse YAML string
+      data = yaml.load(props.output) as TopicAnalysisData;
+    } else {
+      // Legacy format: use object directly
+      data = props.output as TopicAnalysisData;
+    }
+  } catch (error) {
+    console.error('❌ TopicAnalysis: Failed to parse output data:', error);
+    return (
+      <div className="p-4 text-center text-destructive">
+        Error parsing topic analysis data. Please check the report generation.
+      </div>
+    );
+  }
   const preprocessing = data.preprocessing || {};
   const llmExtraction = data.llm_extraction || {};
   const bertopicAnalysis = data.bertopic_analysis || {};
@@ -189,6 +225,23 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
               />
             </AccordionContent>
           </AccordionItem>
+
+          {/* Debug Information Section */}
+          {data.debug_info && (
+            <AccordionItem value="debug-info">
+              <AccordionTrigger className="text-base font-medium">
+                Debug Information
+                {data.debug_info.repetition_detected && (
+                  <Badge variant="destructive" className="ml-2">
+                    Repetition Detected
+                  </Badge>
+                )}
+              </AccordionTrigger>
+              <AccordionContent>
+                <DebugInfoSection debugInfo={data.debug_info} />
+              </AccordionContent>
+            </AccordionItem>
+          )}
         </Accordion>
       </div>
     </ReportBlock>
@@ -286,12 +339,18 @@ const PreprocessingSection: React.FC<{
             <Badge variant="secondary">{preprocessing.method}</Badge>
           </div>
         )}
-        {preprocessing.input_file && (
+        {(preprocessing.input_file || preprocessing.original_input_file) && (
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium">Input File:</span>
             <span className="text-sm text-muted-foreground font-mono">
-              {preprocessing.input_file.split('/').pop()}
+              {(preprocessing.original_input_file || preprocessing.input_file)?.split('/').pop()}
             </span>
+          </div>
+        )}
+        {preprocessing.preprocessed_rows && (
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium">Preprocessed Rows:</span>
+            <Badge variant="outline">{preprocessing.preprocessed_rows.toLocaleString()}</Badge>
           </div>
         )}
         {preprocessing.content_column && (
@@ -317,6 +376,34 @@ const PreprocessingSection: React.FC<{
           </div>
         )}
       </div>
+      
+      {/* Preprocessing Steps */}
+      {preprocessing.steps && preprocessing.steps.length > 0 && (
+        <div className="space-y-3 mt-4">
+          <h4 className="font-medium text-sm">Preprocessing Steps Applied</h4>
+          <div className="space-y-2">
+            {preprocessing.steps.map((step: { step: number; class: string; parameters: Record<string, any> }, index: number) => (
+              <div key={index} className="flex items-center justify-between p-2 border rounded-md bg-muted/20">
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-xs">
+                    {step.step}
+                  </Badge>
+                  <span className="text-sm font-medium">{step.class}</span>
+                </div>
+                {Object.keys(step.parameters).length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {Object.entries(step.parameters).map(([key, value]) => (
+                      <Badge key={key} variant="secondary" className="text-xs">
+                        {key}: {String(value)}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -618,6 +705,99 @@ const BERTopicSection: React.FC<{
             {attachedFiles.map((file, i) => (
               <div key={i} className="text-sm text-muted-foreground">
                 📎 {file}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+/**
+ * Debug Information Section Component
+ * Displays debugging information about the transformed text and processing
+ */
+const DebugInfoSection: React.FC<{
+  debugInfo: {
+    transformed_text_lines_count?: number;
+    transformed_text_sample?: string[];
+    unique_lines_count?: number;
+    repetition_detected?: boolean;
+    most_common_lines?: Array<{
+      line: string;
+      count: number;
+    }>;
+    error_reading_transformed_file?: string;
+  };
+}> = ({ debugInfo }) => {
+  return (
+    <div className="space-y-4 pt-2">
+      <p className="text-sm text-muted-foreground">
+        Debugging information about the LLM-transformed text and processing pipeline.
+      </p>
+      
+      {debugInfo.error_reading_transformed_file && (
+        <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-md">
+          <p className="text-sm text-destructive">
+            Error reading transformed file: {debugInfo.error_reading_transformed_file}
+          </p>
+        </div>
+      )}
+      
+      <div className="grid gap-3">
+        {debugInfo.transformed_text_lines_count !== undefined && (
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium">Total Lines Generated:</span>
+            <Badge variant="outline">{debugInfo.transformed_text_lines_count.toLocaleString()}</Badge>
+          </div>
+        )}
+        
+        {debugInfo.unique_lines_count !== undefined && (
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium">Unique Lines:</span>
+            <Badge variant="outline">{debugInfo.unique_lines_count.toLocaleString()}</Badge>
+          </div>
+        )}
+        
+        {debugInfo.repetition_detected !== undefined && (
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium">Repetition Detected:</span>
+            <Badge variant={debugInfo.repetition_detected ? "destructive" : "default"}>
+              {debugInfo.repetition_detected ? "Yes" : "No"}
+            </Badge>
+          </div>
+        )}
+      </div>
+      
+      {debugInfo.transformed_text_sample && debugInfo.transformed_text_sample.length > 0 && (
+        <div className="space-y-2">
+          <h4 className="font-medium text-sm">Sample of Transformed Text</h4>
+          <div className="p-3 bg-muted/20 rounded-md border font-mono text-xs">
+            {debugInfo.transformed_text_sample.map((line, index) => (
+              <div key={index} className="py-1 border-b border-muted/30 last:border-b-0">
+                <span className="text-muted-foreground mr-2">{index + 1}:</span>
+                {line.trim()}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      
+      {debugInfo.most_common_lines && debugInfo.most_common_lines.length > 0 && (
+        <div className="space-y-2">
+          <h4 className="font-medium text-sm">Most Repeated Lines</h4>
+          <div className="space-y-2">
+            {debugInfo.most_common_lines.map((item, index) => (
+              <div key={index} className="p-2 bg-muted/20 rounded border">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Repeated {item.count} times
+                  </span>
+                </div>
+                <div className="text-sm font-mono">
+                  {item.line}
+                </div>
               </div>
             ))}
           </div>

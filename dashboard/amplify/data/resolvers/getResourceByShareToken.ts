@@ -186,6 +186,7 @@ export const handler: Schema["getResourceByShareToken"]["functionHandler"] = asy
               isDatasetClassDistributionBalanced
               predictedClassDistribution
               isPredictedClassDistributionBalanced
+              universalCode
               taskId
               task {
                 id
