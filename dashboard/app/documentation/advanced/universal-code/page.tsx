@@ -229,6 +229,8 @@ scores:
 
   return (
     <div className="max-w-4xl mx-auto py-8 px-6">
+
+      
       <div className="mb-6">
         <h1 className="text-4xl font-bold">Universal Code Snippets</h1>
         <p className="text-lg text-muted-foreground">
@@ -278,10 +280,10 @@ scores:
                 <div className="text-muted-foreground text-3xl font-black animate-attention-bounce">↓</div>
               </div>
             </div>
-            <div className="rounded-lg p-4 bg-frame">
+            <div className="rounded-lg p-4 bg-muted universal-code-demo">
               <FeedbackAnalysis
                 config={{}}
-                output={sampleYAMLCode}
+                output={sampleYAMLCode as any}
                 position={1}
                 type="FeedbackAnalysis"
                 id="call-center-feedback-example"
