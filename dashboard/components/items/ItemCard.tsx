@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { Card } from '@/components/ui/card'
-import { MoreHorizontal, X, Square, Columns2, StickyNote, Info, ChevronDown, ChevronUp, Clock, IdCard, Loader2, ListTodo } from 'lucide-react'
+import { MoreHorizontal, X, Square, Columns2, StickyNote, Info, ChevronDown, ChevronUp, Clock, IdCard, Loader2 } from 'lucide-react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { cn } from '@/lib/utils'
 import { CardButton } from '@/components/CardButton'
@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Timestamp } from '@/components/ui/timestamp'
 import { motion } from 'framer-motion'
 import ItemScoreResultCard from './ItemScoreResultCard'
+import { IdentifierDisplay } from '@/components/ui/identifier-display'
 
 // Interface for grouped score results
 interface GroupedScoreResults {
@@ -42,6 +43,7 @@ export interface ItemData {
   createdAt?: string
   isEvaluation?: boolean
   isNew?: boolean
+  identifiers?: string // JSON string
   
   // New field for grouped score results
   groupedScoreResults?: GroupedScoreResults
@@ -130,11 +132,15 @@ const GridContent = React.memo(({
   const totalScores = scoreDisplays.reduce((total, display) => total + display.scores.length, 0);
 
   return (
-    <div className="flex justify-between items-start w-full">
-      <div className="space-y-1 max-w-[70%]">
+    <div className="relative w-full">
+      <div className="absolute top-0 right-0 flex flex-col items-end space-y-1">
+        {item.icon || <StickyNote className="h-[1.75rem] w-[1.75rem]" strokeWidth={1.25} />}
+      </div>
+      <div className="space-y-1 pr-12">
         {/* Header order: 1. Scorecard name */}
-        <div className="font-semibold text-sm truncate" title={primaryScorecard}>
-          {primaryScorecard}
+        <div className="flex items-center gap-1 text-xs text-muted-foreground" title={primaryScorecard}>
+          <IdCard className="h-4 w-4 flex-shrink-0" />
+          <span className="font-semibold">{primaryScorecard}</span>
         </div>
         
         {/* Header order: 2. Timestamp */}
@@ -149,13 +155,13 @@ const GridContent = React.memo(({
           <div className="text-xs text-muted-foreground">No date</div>
         )}
         
-        {/* Header order: 3. External ID (if available) */}
-        {item.externalId && (
-          <div className="text-xs text-muted-foreground truncate flex items-center gap-1" title={`ID: ${item.externalId}`}>
-            <IdCard className="h-3 w-3" />
-            <span>{item.externalId}</span>
-          </div>
-        )}
+        {/* Header order: 3. Identifiers */}
+        <IdentifierDisplay 
+          externalId={item.externalId}
+          identifiers={item.identifiers}
+          iconSize="sm"
+          textSize="xs"
+        />
         
         {/* Header order: 4. Score name or count */}
         {(hasMultipleScores || primaryScore) && (
@@ -176,20 +182,17 @@ const GridContent = React.memo(({
           ) : item.scorecardBreakdown && item.scorecardBreakdown.length > 0 ? (
             item.scorecardBreakdown.map((breakdown, index) => (
               <div key={breakdown.scorecardId || index} className="flex flex-col">
-                <div className="font-medium text-xs flex items-center gap-1">
-                  <ListTodo className="h-3 w-3" />
-                  <span>{breakdown.scorecardName}</span>
+                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <IdCard className="h-4 w-4" />
+                  <span className="font-medium">{breakdown.scorecardName}</span>
                 </div>
-                <div>{breakdown.count} result{breakdown.count !== 1 ? 's' : ''}</div>
+                <div className="ml-5">{breakdown.count} result{breakdown.count !== 1 ? 's' : ''}</div>
               </div>
             ))
           ) : (
             <span>{item.results || 0} result{(item.results || 0) !== 1 ? 's' : ''}</span>
           )}
         </div>
-      </div>
-      <div className="flex flex-col items-end space-y-1">
-        {item.icon || <StickyNote className="h-[1.75rem] w-[1.75rem]" strokeWidth={1.25} />}
       </div>
     </div>
   )
@@ -285,7 +288,10 @@ const DetailContent = React.memo(({
       <div className="flex justify-between items-start w-full">
         <div className="space-y-2 flex-1">
           {/* Header order: 1. Scorecard name - reduced text size to match grid view */}
-          <h2 className="text-sm font-semibold truncate">{scoreInfo[0]?.scorecardName || 'Untitled Item'}</h2>
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+            <IdCard className="h-4 w-4 flex-shrink-0" />
+            <span className="font-semibold truncate">{scoreInfo[0]?.scorecardName || 'Untitled Item'}</span>
+          </div>
           
           {/* Header order: 2. Timestamp - reduced text size to match grid view */}
           {item.date ? (
@@ -298,13 +304,13 @@ const DetailContent = React.memo(({
             <p className="text-xs text-muted-foreground">No date</p>
           )}
           
-          {/* Header order: 3. External ID (if available) - reduced text size to match grid view */}
-          {item.externalId && (
-            <div className="text-xs text-muted-foreground truncate flex items-center gap-1" title={`ID: ${item.externalId}`}>
-              <IdCard className="h-3 w-3" />
-              <span>{item.externalId}</span>
-            </div>
-          )}
+          {/* Header order: 3. Identifiers */}
+          <IdentifierDisplay 
+            externalId={item.externalId}
+            identifiers={item.identifiers}
+            iconSize="sm"
+            textSize="xs"
+          />
           
           {/* Header order: 4. Score name or count - reduced text size to match grid view */}
           {(hasMultipleScores || primaryScore) && (
@@ -325,11 +331,11 @@ const DetailContent = React.memo(({
             ) : item.scorecardBreakdown && item.scorecardBreakdown.length > 0 ? (
               item.scorecardBreakdown.map((breakdown, index) => (
                 <div key={breakdown.scorecardId || index} className="flex flex-col">
-                  <div className="font-medium text-xs flex items-center gap-1">
-                    <ListTodo className="h-3 w-3" />
-                    <span>{breakdown.scorecardName}</span>
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <IdCard className="h-4 w-4" />
+                    <span className="font-medium">{breakdown.scorecardName}</span>
                   </div>
-                  <div>{breakdown.count} result{breakdown.count !== 1 ? 's' : ''}</div>
+                  <div className="ml-5">{breakdown.count} result{breakdown.count !== 1 ? 's' : ''}</div>
                 </div>
               ))
             ) : (

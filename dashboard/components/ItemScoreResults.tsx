@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, ExternalLink, ChevronDown, ChevronUp, ListTodo } from 'lucide-react';
+import { Loader2, ExternalLink, ChevronDown, ChevronUp, ListTodo, IdCard } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Timestamp } from '@/components/ui/timestamp';
 import Link from 'next/link';
 import { GroupedScoreResults, ScoreResultWithDetails } from '@/hooks/useItemScoreResults';
+import { IdentifierDisplay } from '@/components/ui/identifier-display';
 
 interface ItemScoreResultsProps {
   groupedResults: GroupedScoreResults;
@@ -67,9 +68,18 @@ const ScoreResultCard: React.FC<{ result: ScoreResultWithDetails }> = ({ result 
           </div>
           <div className="text-xs text-muted-foreground mb-2">
             <Timestamp time={result.updatedAt || result.createdAt || new Date().toISOString()} variant="relative" />
-            {result.createdAt && result.updatedAt && result.createdAt !== result.updatedAt && (
+            {result.createdAt && result.updatedAt && (
               <div className="mt-0.5">
                 <Timestamp time={result.createdAt} completionTime={result.updatedAt} variant="elapsed" />
+              </div>
+            )}
+            {result.score?.externalId && (
+              <div className="mt-1">
+                <IdentifierDisplay 
+                  externalId={result.score.externalId}
+                  iconSize="sm"
+                  textSize="xs"
+                />
               </div>
             )}
           </div>
@@ -164,9 +174,20 @@ const ItemScoreResults: React.FC<ItemScoreResultsProps> = ({
             <AccordionItem key={scorecardId} value={scorecardId}>
               <AccordionTrigger className="hover:no-underline">
                 <div className="flex items-center justify-between w-full pr-2">
-                  <div className="flex items-center gap-2">
-                    <ListTodo className="h-4 w-4" />
-                    <span className="font-medium">{group.scorecardName}</span>
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-2">
+                      <ListTodo className="h-4 w-4" />
+                      <span className="font-medium">{group.scorecardName}</span>
+                    </div>
+                    {group.scorecardExternalId && (
+                      <div>
+                        <IdentifierDisplay 
+                          externalId={group.scorecardExternalId}
+                          iconSize="sm"
+                          textSize="xs"
+                        />
+                      </div>
+                    )}
                   </div>
                   <span className="text-sm text-muted-foreground">
                     {group.scores.length} score{group.scores.length !== 1 ? 's' : ''}
