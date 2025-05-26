@@ -448,6 +448,36 @@ const ReportBlock: BlockComponent = ({
       description = "Legacy JSON code output from the report block execution";
     }
     
+    // Add original configuration to universal code snippet
+    if (config && Object.keys(config).length > 0) {
+      const formatValue = (value: any, indent: string = ''): string => {
+        if (value === null || value === undefined) return 'null';
+        if (typeof value === 'string') return value;
+        if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+        if (Array.isArray(value)) {
+          if (value.length === 0) return '[]';
+          return '\n' + value.map(item => `${indent}  - ${formatValue(item, indent + '  ')}`).join('\n');
+        }
+        if (typeof value === 'object') {
+          const entries = Object.entries(value);
+          if (entries.length === 0) return '{}';
+          return '\n' + entries.map(([k, v]) => `${indent}  ${k}: ${formatValue(v, indent + '  ')}`).join('\n');
+        }
+        return String(value);
+      };
+      
+      const configYaml = `
+# ====================================
+# Report Block Configuration
+# ====================================
+# This is the original configuration that was used to generate the output above.
+# It shows the exact parameters, prompts, and settings that created the results.
+
+${Object.entries(config).map(([key, value]) => `${key}: ${formatValue(value)}`).join('\n')}`;
+      
+      displayOutput = displayOutput + '\n\n' + configYaml;
+    }
+    
     return (
       <div className={`my-3 bg-card p-3 overflow-hidden rounded-lg ${isWideLayout ? "w-full" : "@[30rem]:w-[350px]"}`}>
         <div className="flex flex-row justify-between items-center mb-3">

@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ChevronDown, ChevronRight, Eye, EyeOff, TrendingUp } from 'lucide-react';
+import { ChevronDown, ChevronRight, Eye, EyeOff, MessagesSquare } from 'lucide-react';
 import * as yaml from 'js-yaml';
 
 interface TopicAnalysisData {
@@ -111,14 +111,26 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
   let data: TopicAnalysisData;
   try {
     if (typeof props.output === 'string') {
+      console.log('🔍 TopicAnalysis: Parsing YAML string output, first 1000 chars:', props.output.substring(0, 1000));
       // New format: parse YAML string
-      data = yaml.load(props.output) as TopicAnalysisData;
+      const parsedData = yaml.load(props.output);
+      console.log('🔍 TopicAnalysis: Parsed YAML data:', parsedData);
+      console.log('🔍 TopicAnalysis: Topics in parsed data:', (parsedData as any)?.topics);
+      console.log('🔍 TopicAnalysis: Type of topics:', typeof (parsedData as any)?.topics);
+      console.log('🔍 TopicAnalysis: Is topics array?', Array.isArray((parsedData as any)?.topics));
+      if ((parsedData as any)?.topics) {
+        console.log('🔍 TopicAnalysis: Topics length:', (parsedData as any).topics.length);
+        console.log('🔍 TopicAnalysis: First topic:', (parsedData as any).topics[0]);
+      }
+      data = parsedData as TopicAnalysisData;
     } else {
+      console.log('🔍 TopicAnalysis: Using object output directly:', props.output);
       // Legacy format: use object directly
       data = props.output as TopicAnalysisData;
     }
   } catch (error) {
     console.error('❌ TopicAnalysis: Failed to parse output data:', error);
+    console.error('❌ TopicAnalysis: Raw output that failed to parse:', props.output);
     return (
       <div className="p-4 text-center text-destructive">
         Error parsing topic analysis data. Please check the report generation.
@@ -132,7 +144,25 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
   const topics = data.topics || [];
   const errors = data.errors || [];
 
-  console.log('✅ TopicAnalysis: Rendering with structured data:', data);
+  console.log('✅ TopicAnalysis: Rendering with structured data:', {
+    hasTopics: !!data.topics,
+    topicsLength: data.topics?.length || 0,
+    topicsData: data.topics,
+    topicsIsArray: Array.isArray(data.topics),
+    topicsType: typeof data.topics,
+    summary: data.summary,
+    block_title: data.block_title,
+    allDataKeys: Object.keys(data)
+  });
+  
+  // Additional debugging for topics specifically
+  console.log('🔍 TopicAnalysis: Topics debugging:', {
+    originalTopics: data.topics,
+    extractedTopics: topics,
+    topicsLength: topics.length,
+    firstTopic: topics[0],
+    topicsArrayCheck: Array.isArray(topics)
+  });
 
   return (
     <ReportBlock {...props}>
@@ -158,9 +188,9 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
           <AccordionItem value="preprocessing">
             <AccordionTrigger className="text-base font-medium">
               Pre-processing
-              <Badge variant="outline" className="ml-2">
-                {preprocessing.method || 'programmatic'}
-              </Badge>
+              <div className="ml-2 px-2 py-1 text-xs bg-card rounded">
+                {preprocessing.method || 'itemize'}
+              </div>
             </AccordionTrigger>
             <AccordionContent>
               <PreprocessingSection preprocessing={preprocessing} />
@@ -172,9 +202,9 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
             <AccordionTrigger className="text-base font-medium">
               LLM Extraction
               {llmExtraction.examples && (
-                <Badge variant="default" className="ml-2">
+                <div className="ml-2 px-2 py-1 text-xs bg-card rounded">
                   {llmExtraction.examples.length} examples
-                </Badge>
+                </div>
               )}
             </AccordionTrigger>
             <AccordionContent>
@@ -193,9 +223,9 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
             <AccordionTrigger className="text-base font-medium">
               BERTopic Analysis
               {topics.length > 0 && (
-                <Badge variant="default" className="ml-2">
+                <div className="ml-2 px-2 py-1 text-xs bg-card rounded">
                   {topics.length} topics
-                </Badge>
+                </div>
               )}
             </AccordionTrigger>
             <AccordionContent>
@@ -213,9 +243,9 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
             <AccordionTrigger className="text-base font-medium">
               Fine-tuning
               {fineTuning.representation_model_provider && (
-                <Badge variant="outline" className="ml-2">
+                <div className="ml-2 px-2 py-1 text-xs bg-card rounded">
                   {fineTuning.representation_model_name || fineTuning.representation_model_provider}
-                </Badge>
+                </div>
               )}
             </AccordionTrigger>
             <AccordionContent>
@@ -265,14 +295,30 @@ const TopicAnalysisResults: React.FC<{
     return (
       <div className="space-y-4">
         <div className="flex items-center gap-2">
-          <TrendingUp className="h-5 w-5" />
+          <MessagesSquare className="h-5 w-5" />
           <h3 className="text-lg font-medium">Topic Analysis Results</h3>
         </div>
-        <div className="text-center py-12 text-muted-foreground bg-muted/20 rounded-lg border-2 border-dashed">
-          <TrendingUp className="h-12 w-12 mx-auto mb-4 opacity-50" />
-          <p className="text-lg mb-2">No Topics Discovered</p>
-          <p className="text-sm">The analysis did not identify distinct topics in the data.</p>
-          <p className="text-sm mt-2">Consider adjusting the configuration parameters or increasing the sample size.</p>
+        <div className="space-y-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base text-muted-foreground">Analyzing topics...</CardTitle>
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-muted border-t-foreground"></div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                <div className="h-4 bg-muted rounded animate-pulse w-3/4"></div>
+                <div className="space-y-2">
+                  <div className="flex flex-wrap gap-1">
+                    {[1, 2, 3, 4, 5, 6].map((j) => (
+                      <div key={j} className="h-6 bg-muted rounded animate-pulse w-16"></div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
     );
@@ -282,19 +328,19 @@ const TopicAnalysisResults: React.FC<{
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <TrendingUp className="h-5 w-5" />
+          <MessagesSquare className="h-5 w-5" />
           <h3 className="text-lg font-medium">Topic Analysis Results</h3>
         </div>
-        <Badge variant="default">{topics.length} topics discovered</Badge>
+        <span className="text-sm text-muted-foreground">{topics.length} topics discovered</span>
       </div>
       
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="space-y-4">
         {topics.map((topic) => (
-          <Card key={topic.id} className="border-l-4 border-l-primary">
+          <Card key={topic.id}>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base">Topic {topic.id}</CardTitle>
-                <Badge variant="secondary">{topic.count} items</Badge>
+                <span className="text-sm text-muted-foreground">{topic.count} items</span>
               </div>
             </CardHeader>
             <CardContent>
@@ -442,46 +488,52 @@ const LLMExtractionSection: React.FC<{
       </p>
       
       {/* Model Info */}
-      <div className="flex flex-wrap gap-2">
+      <div className="space-y-2">
         {llmExtraction.llm_provider && (
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium">Provider:</span>
-            <Badge variant="secondary">{llmExtraction.llm_provider}</Badge>
+            <div className="px-2 py-1 text-xs bg-card rounded">
+              {llmExtraction.llm_provider}
+            </div>
           </div>
         )}
         {llmExtraction.llm_model && (
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium">Model:</span>
-            <Badge variant="outline">{llmExtraction.llm_model}</Badge>
+            <div className="px-2 py-1 text-xs bg-card rounded">
+              {llmExtraction.llm_model}
+            </div>
           </div>
         )}
       </div>
 
-      {/* Collapsible Prompt Section */}
+      {/* Extraction Prompt Section */}
       {llmExtraction.prompt_used && (
-        <div className="border rounded-md">
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium">Extraction Prompt:</span>
+            <div className="px-2 py-1 text-xs bg-card rounded">
+              {llmExtraction.prompt_used.length} chars
+            </div>
+          </div>
           <Collapsible open={promptExpanded} onOpenChange={setPromptExpanded}>
             <CollapsibleTrigger asChild>
               <Button 
                 variant="ghost" 
-                className="w-full justify-between p-4 h-auto font-normal"
+                size="sm"
+                className="justify-start gap-2 p-0 h-auto font-normal"
               >
-                <div className="flex items-center gap-2">
-                  <span className="font-medium">Extraction Prompt</span>
-                  <Badge variant="secondary">
-                    {llmExtraction.prompt_used.length} chars
-                  </Badge>
-                </div>
                 {promptExpanded ? (
                   <ChevronDown className="h-4 w-4" />
                 ) : (
                   <ChevronRight className="h-4 w-4" />
                 )}
+                <span className="text-sm text-muted-foreground">Show prompt</span>
               </Button>
             </CollapsibleTrigger>
             <CollapsibleContent>
-              <div className="px-4 pb-4">
-                <pre className="text-xs bg-muted p-3 rounded border overflow-x-auto whitespace-pre-wrap">
+              <div className="mt-2">
+                <pre className="text-xs bg-muted p-3 rounded overflow-x-auto whitespace-pre-wrap">
                   {llmExtraction.prompt_used}
                 </pre>
               </div>
@@ -562,10 +614,10 @@ const ExampleCard: React.FC<{
 
   return (
     <div
-      className={`p-3 border rounded-md cursor-pointer transition-colors ${
+      className={`p-3 bg-card rounded cursor-pointer transition-colors ${
         isSelected 
-          ? 'border-primary bg-primary/5' 
-          : 'border-border hover:border-muted-foreground/20'
+          ? 'bg-primary/5' 
+          : 'hover:bg-muted/20'
       }`}
       onClick={onToggle}
     >
@@ -628,25 +680,25 @@ const BERTopicSection: React.FC<{
         {bertopicAnalysis.min_topic_size && (
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium">Min Topic Size:</span>
-            <Badge variant="outline">{bertopicAnalysis.min_topic_size}</Badge>
+            <div className="px-2 py-1 text-xs bg-card rounded">{bertopicAnalysis.min_topic_size}</div>
           </div>
         )}
         {bertopicAnalysis.num_topics_requested && (
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium">Requested Topics:</span>
-            <Badge variant="outline">{bertopicAnalysis.num_topics_requested}</Badge>
+            <div className="px-2 py-1 text-xs bg-card rounded">{bertopicAnalysis.num_topics_requested}</div>
           </div>
         )}
         {bertopicAnalysis.top_n_words && (
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium">Top Words:</span>
-            <Badge variant="outline">{bertopicAnalysis.top_n_words}</Badge>
+            <div className="px-2 py-1 text-xs bg-card rounded">{bertopicAnalysis.top_n_words}</div>
           </div>
         )}
         {bertopicAnalysis.min_ngram && bertopicAnalysis.max_ngram && (
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium">N-gram Range:</span>
-            <Badge variant="outline">{bertopicAnalysis.min_ngram}-{bertopicAnalysis.max_ngram}</Badge>
+            <div className="px-2 py-1 text-xs bg-card rounded">{bertopicAnalysis.min_ngram}-{bertopicAnalysis.max_ngram}</div>
           </div>
         )}
       </div>
@@ -656,10 +708,10 @@ const BERTopicSection: React.FC<{
           <h4 className="font-medium">Discovered Topics ({topics.length})</h4>
           <div className="grid gap-3">
             {topics.map((topic) => (
-              <div key={topic.id} className="p-3 border rounded-md">
+              <div key={topic.id} className="p-3 bg-card rounded">
                 <div className="flex items-center justify-between mb-2">
                   <h5 className="font-medium">Topic {topic.id}</h5>
-                  <Badge variant="secondary">{topic.count} items</Badge>
+                  <span className="text-sm text-muted-foreground">{topic.count} items</span>
                 </div>
                 <p className="text-sm mb-2">{topic.name}</p>
                 {topic.words && topic.words.length > 0 && (
@@ -749,23 +801,23 @@ const DebugInfoSection: React.FC<{
         {debugInfo.transformed_text_lines_count !== undefined && (
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium">Total Lines Generated:</span>
-            <Badge variant="outline">{debugInfo.transformed_text_lines_count.toLocaleString()}</Badge>
+            <div className="px-2 py-1 text-xs bg-card rounded">{debugInfo.transformed_text_lines_count.toLocaleString()}</div>
           </div>
         )}
         
         {debugInfo.unique_lines_count !== undefined && (
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium">Unique Lines:</span>
-            <Badge variant="outline">{debugInfo.unique_lines_count.toLocaleString()}</Badge>
+            <div className="px-2 py-1 text-xs bg-card rounded">{debugInfo.unique_lines_count.toLocaleString()}</div>
           </div>
         )}
         
         {debugInfo.repetition_detected !== undefined && (
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium">Repetition Detected:</span>
-            <Badge variant={debugInfo.repetition_detected ? "destructive" : "default"}>
+            <div className="px-2 py-1 text-xs bg-card rounded">
               {debugInfo.repetition_detected ? "Yes" : "No"}
-            </Badge>
+            </div>
           </div>
         )}
       </div>
@@ -830,15 +882,15 @@ const FineTuningSection: React.FC<{
       {fineTuning.use_representation_model && fineTuning.representation_model_provider && (
         <div className="space-y-2">
           <h4 className="font-medium">Representation Model</h4>
-          <div className="flex gap-2">
+          <div className="space-y-2">
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium">Provider:</span>
-              <Badge variant="secondary">{fineTuning.representation_model_provider}</Badge>
+              <div className="px-2 py-1 text-xs bg-card rounded">{fineTuning.representation_model_provider}</div>
             </div>
             {fineTuning.representation_model_name && (
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium">Model:</span>
-                <Badge variant="outline">{fineTuning.representation_model_name}</Badge>
+                <div className="px-2 py-1 text-xs bg-card rounded">{fineTuning.representation_model_name}</div>
               </div>
             )}
           </div>
@@ -850,12 +902,12 @@ const FineTuningSection: React.FC<{
           <h4 className="font-medium">Refined Topic Names</h4>
           <div className="grid gap-2">
             {topics.map((topic) => (
-              <div key={topic.id} className="flex items-center justify-between p-2 border rounded">
+              <div key={topic.id} className="flex items-center justify-between p-2 bg-card rounded">
                 <div>
                   <span className="font-medium">Topic {topic.id}:</span>
                   <span className="ml-2">{topic.name}</span>
                 </div>
-                <Badge variant="outline">{topic.count}</Badge>
+                <span className="text-sm text-muted-foreground">{topic.count}</span>
               </div>
             ))}
           </div>
