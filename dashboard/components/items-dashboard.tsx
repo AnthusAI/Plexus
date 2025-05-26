@@ -1,5 +1,5 @@
 "use client"
-import React, { useContext, useEffect, useMemo, useRef, useState, useCallback } from "react"
+import React, { useContext, useEffect, useMemo, useRef, useState, useCallback, Suspense } from "react"
 import { useRouter, useSearchParams, useParams } from 'next/navigation'
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -337,7 +337,7 @@ interface GroupedScoreResults {
   }
 }
 
-export default function ItemsDashboard() {
+function ItemsDashboardInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const params = useParams()
@@ -1611,6 +1611,15 @@ export default function ItemsDashboard() {
         )}
       </div>
     </div>
+  );
+}
+
+// Suspense wrapper to fix build issues with useSearchParams
+export default function ItemsDashboard() {
+  return (
+    <Suspense fallback={<ItemsDashboardSkeleton />}>
+      <ItemsDashboardInner />
+    </Suspense>
   );
 }
 
