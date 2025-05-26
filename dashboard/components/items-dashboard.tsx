@@ -1,5 +1,6 @@
 "use client"
 import React, { useContext, useEffect, useMemo, useRef, useState, useCallback } from "react"
+import { useRouter, useSearchParams, useParams } from 'next/navigation'
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
@@ -337,6 +338,9 @@ interface GroupedScoreResults {
 }
 
 export default function ItemsDashboard() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const params = useParams()
   const [selectedItem, setSelectedItem] = useState<string | null>(null)
   const [isFullWidth, setIsFullWidth] = useState(false)
   const [selectedScorecard, setSelectedScorecard] = useState<string | null>(null)
@@ -381,6 +385,14 @@ export default function ItemsDashboard() {
   // Use the account context instead of local state
   const { selectedAccount, isLoadingAccounts } = useAccount();
   const itemSubscriptionRef = useRef<{ unsubscribe: () => void } | null>(null);
+  
+  // Sync URL parameter with selected item
+  useEffect(() => {
+    const itemId = params.id as string
+    if (itemId && itemId !== selectedItem) {
+      setSelectedItem(itemId)
+    }
+  }, [params.id, selectedItem])
   
   // Add a ref for the intersection observer
   const observerRef = useRef<IntersectionObserver | null>(null);
@@ -903,10 +915,47 @@ export default function ItemsDashboard() {
         console.log('New item created notification received:', newItem);
         
         if (newItem.accountId === selectedAccount.id) {
-          toast.info(`New item (${newItem.id.substring(0,8)}) received, refreshing list.`);
-          // Fetching the entire list again to ensure consistency and avoid complex state merging.
-          // This also handles cases where an item might be updated server-side before subscription event.
-          await fetchItems(); 
+          console.log('🚀 NEW ITEM DETECTED! Adding to dashboard with ✨ SPARKLES ✨');
+          
+          // Transform the new item to match our expected format
+          const transformedNewItem = {
+            id: newItem.id,
+            accountId: newItem.accountId,
+            externalId: newItem.externalId,
+            description: newItem.description,
+            evaluationId: newItem.evaluationId,
+            updatedAt: newItem.updatedAt,
+            createdAt: newItem.createdAt,
+            isEvaluation: newItem.isEvaluation,
+            scorecard: null,
+            score: null,
+            date: newItem.updatedAt || newItem.createdAt,
+            status: "New", // Mark as new for special styling!
+            results: 0,
+            inferences: 0,
+            cost: "$0.000",
+            isNew: true, // This will trigger special animations!
+            groupedScoreResults: {}
+          };
+
+          // 🎉 Add the new item to the TOP of the list with celebration
+          setItems(prevItems => [transformedNewItem, ...prevItems]);
+          
+          // Show a fun toast notification
+          toast.success(`🎉 New item arrived: ${newItem.externalId || newItem.id.substring(0,8)}`, {
+            duration: 4000,
+          });
+          
+          // After 3 seconds, remove the "New" status and make it look normal
+          setTimeout(() => {
+            setItems(prevItems => 
+              prevItems.map(item => 
+                item.id === newItem.id 
+                  ? { ...item, status: "Done", isNew: false }
+                  : item
+              )
+            );
+          }, 3000);
         }
       },
       error: (error) => {
@@ -1029,6 +1078,7 @@ export default function ItemsDashboard() {
   const getBadgeVariant = (status: string) => {
     switch (status) {
       case 'New':
+        return 'bg-gradient-to-r from-green-400 to-green-600 text-white h-6 animate-pulse shadow-lg shadow-green-400/50';
       case 'Scoring...':
         return 'bg-neutral text-primary-foreground h-6';
       case 'Done':
@@ -1126,18 +1176,6 @@ export default function ItemsDashboard() {
 
     return (
       <div className="h-full flex flex-col">
-        <ItemCard
-          variant="detail"
-          item={selectedItemData as ItemData}
-          isFullWidth={isFullWidth}
-          onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
-          onClose={() => {
-            setSelectedItem(null);
-            setIsFullWidth(false);
-          }}
-          getBadgeVariant={getBadgeVariant}
-        />
-        
         <div className="flex-1 overflow-auto">
           <ItemDetail
             item={selectedItemData as unknown as FeedbackItem}
@@ -1169,6 +1207,8 @@ export default function ItemsDashboard() {
             onClose={() => {
               setSelectedItem(null);
               setIsFullWidth(false);
+              // Navigate back to items list
+              router.push(`/lab/items`, { scroll: false })
             }}
           />
         </div>
@@ -1386,6 +1426,9 @@ export default function ItemsDashboard() {
 
   const handleItemClick = (itemId: string) => {
     setSelectedItem(itemId)
+    // Navigate to the specific item URL
+    router.push(`/lab/items/${itemId}`, { scroll: false })
+    
     if (isNarrowViewport) {
       setIsFullWidth(true)
     }
