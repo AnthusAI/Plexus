@@ -19,10 +19,12 @@ Plexus is an orchestration system for AI/ML classification at scale. It provides
 - Storybook: `npm run storybook`
 
 ### Python Backend
+- **Environment**: Uses `py311` Conda environment 
 - Task worker: `plexus command worker`
 - Run evaluation: `plexus evaluate accuracy --scorecard-name <name>`
 - Create report: `plexus report config create --name "Test" --file config.md`
 - Generate report: `plexus report run --config "Test"`
+- View last report: `plexus report last`
 
 ## Project Structure
 - `/dashboard/`: Next.js application 
