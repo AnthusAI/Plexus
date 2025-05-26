@@ -380,7 +380,9 @@ const schema = a.schema({
             idx("scorecardId").sortKeys(["updatedAt"]),
             idx("evaluationId"),
             idx("scoreVersionId"),
-            idx("scoreId")
+            idx("scoreId"),
+            // Composite GSI for efficient cache lookups by scorecard + score + item
+            idx("scorecardId").sortKeys(["scoreId", "itemId"]).name("byScorecardScoreItem")
         ]),
 
     BatchJobScoringJob: a

@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional, Tuple, List
 from plexus.dashboard.api.client import PlexusDashboardClient
+from .report_block_orm import ReportBlockORM
 
 
 class BaseReportBlock(ABC):
@@ -19,14 +20,29 @@ class BaseReportBlock(ABC):
         self.config = config
         self.params = params if params is not None else {}
         self.api_client = api_client
-        self.log_messages = []
         self.report_block_id = None  # This will be set by the report service if available
-
-    def _log(self, message: str):
-        """Helper method to add log messages during generation."""
-        self.log_messages.append(message)
         
-    def attach_detail_file(self, report_block_id: str, file_name: str, content: str, content_type: Optional[str] = None) -> str:
+        # Initialize ORM-style logging and file management
+        self._orm = ReportBlockORM(api_client, self.report_block_id, config)
+        
+        # Backward compatibility - maintain old interface
+        self.log_messages = self._orm.log_messages
+
+    def _log(self, message: str, level: str = "INFO", console_only: bool = False):
+        """
+        Unified logging method that sends to both console and attached log by default.
+        
+        Args:
+            message: Log message to record
+            level: Log level (DEBUG, INFO, WARNING, ERROR) 
+            console_only: If True, only log to console, not to attached log
+        """
+        if self.report_block_id and not self._orm.report_block_id:
+            self._orm.set_report_block_id(self.report_block_id)
+            
+        self._orm.log(message, level, console_only)
+        
+    def attach_detail_file(self, report_block_id: str, file_name: str, content: bytes, content_type: Optional[str] = None) -> str:
         """
         Attach a detail file to this report block.
         
@@ -36,24 +52,21 @@ class BaseReportBlock(ABC):
         Args:
             report_block_id: ID of the report block to attach the file to
             file_name: Name of the file to create
-            content: String content of the file
+            content: Bytes content of the file (changed from str to bytes)
             content_type: Optional MIME type for the file
             
         Returns:
             The S3 path to the file
         """
-        from plexus.reports.s3_utils import add_file_to_report_block
-        
-        file_path = add_file_to_report_block(
-            report_block_id=report_block_id,
-            file_name=file_name,
-            content=content,
-            content_type=content_type,
-            client=self.api_client
-        )
-        
-        self._log(f"Attached detail file '{file_name}' to report block {report_block_id}")
-        return file_path
+        # Ensure ORM has the report block ID
+        if not self._orm.report_block_id:
+            self._orm.set_report_block_id(report_block_id)
+            
+        return self._orm.attach_file(file_name, content, content_type)
+    
+    def _get_log_string(self) -> str:
+        """Get the complete log string for this report block."""
+        return self._orm.get_log_string()
 
     @abstractmethod
     async def generate(

@@ -36,7 +36,21 @@ export async function countScoreResultsForItem(itemId: string): Promise<{
   
   try {
     do {
-      const response = await graphqlRequest<{
+      const response: {
+        data?: {
+          listScoreResultByItemId?: {
+            items: Array<{ 
+              id: string;
+              scorecardId: string;
+              scorecard?: {
+                name: string;
+              };
+            }>;
+            nextToken: string | null;
+          };
+        };
+        errors?: any[];
+      } = await graphqlRequest<{
         listScoreResultByItemId: {
           items: Array<{ 
             id: string;

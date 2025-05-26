@@ -1,7 +1,7 @@
 "use client"
 import React, { useState, useEffect } from "react"
 import { Button } from "./ui/button"
-import { amplifyClient } from "@/utils/amplify-client"
+import { amplifyClient, getClient } from "@/utils/amplify-client"
 import type { Schema } from "@/amplify/data/resource"
 import type { AuthModeStrategyType } from "aws-amplify/datastore"
 import {
@@ -33,7 +33,7 @@ import { CardButton } from "./CardButton"
 import { DatasetConfigFormComponent } from "./dataset-config-form"
 import { listFromModel } from "@/utils/amplify-helpers"
 import { AmplifyListResult } from '@/types/shared'
-import { getClient, graphqlRequest } from "@/utils/amplify-client"
+import { graphqlRequest } from "@/utils/amplify-client"
 import { generateClient } from "aws-amplify/data"
 import ScorecardComponent from "./scorecards/ScorecardComponent"
 import { cn } from "@/lib/utils"
@@ -513,15 +513,31 @@ export default function ScorecardsComponent({
         // Create ScorecardExampleItem association if we have a selected scorecard
         if (selectedScorecard?.id && result.data.id) {
           try {
-            await amplifyClient.ScorecardExampleItem.create({
+            // Use the amplifyClient wrapper which is working correctly
+            console.log('Creating ScorecardExampleItem association using amplifyClient wrapper...');
+            const associationResult = await amplifyClient.ScorecardExampleItem.create({
               itemId: result.data.id,
               scorecardId: selectedScorecard.id,
               addedAt: new Date().toISOString()
             });
-            console.log('ScorecardExampleItem association created successfully');
+            console.log('ItemScorecard association result:', associationResult);
+            console.log('Association errors:', associationResult.errors);
+            
+            // Check for GraphQL errors first
+            if (associationResult.errors && associationResult.errors.length > 0) {
+              console.error('GraphQL errors creating association:', associationResult.errors);
+              throw new Error('Association creation failed with GraphQL errors: ' + 
+                associationResult.errors.map((e: any) => e.message).join(', '));
+            }
+            
+            // Verify the association was actually created
+            if (!associationResult.data?.id) {
+              throw new Error('Association creation failed: No ID returned');
+            }
           } catch (associationError) {
             console.error('Error creating ScorecardExampleItem association:', associationError);
-            // Don't throw here - the item was created successfully, just log the association error
+            // This is a critical error - throw it so user knows the association failed
+            throw new Error(`Item created but failed to associate with scorecard: ${associationError instanceof Error ? associationError.message : 'Unknown error'}`);
           }
         }
         
@@ -529,13 +545,34 @@ export default function ScorecardsComponent({
         setSelectedItem({ ...item, id: result.data.id });
         setIsCreatingItem(false);
         
-        // Add the new item to the scorecard's examples list
-        if (result.data?.id) {
-          setScorecardExamples(prev => [...prev, `item:${result.data!.id}`]);
-        }
-        
         // Signal that we should expand the examples section
         setShouldExpandExamples(true);
+        
+        // Refresh the scorecard data to show the newly associated item
+        if (selectedScorecard?.id) {
+          console.log('Refreshing scorecard data after item creation...');
+          const updatedScorecards = await fetchScorecards();
+          console.log('Scorecard data refreshed, checking if new item appears...');
+          
+          // Update the selected scorecard with the refreshed data
+          if (updatedScorecards) {
+            const refreshedScorecard = updatedScorecards.find(s => s.id === selectedScorecard.id);
+            if (refreshedScorecard) {
+              console.log('Updating selected scorecard with refreshed data...');
+              console.log('Refreshed scorecard examples:', (refreshedScorecard as any).examples);
+              
+              // Update both the selected scorecard and the examples state
+              setSelectedScorecard(refreshedScorecard);
+              
+              // Update the scorecardExamples state directly from the refreshed data
+              const refreshedExamples = (refreshedScorecard as any).examples || [];
+              console.log('Setting scorecardExamples to:', refreshedExamples);
+              setScorecardExamples(refreshedExamples);
+              
+              console.log('Selected scorecard and examples updated, new item should now appear');
+            }
+          }
+        }
         
         // Optionally, you could also refresh the scorecard data here if you want to show
         // the newly created item in the scorecard's example items section
@@ -628,22 +665,37 @@ export default function ScorecardsComponent({
               [scorecard.id]: scoreCount
             }));
 
+            // Load associated example items for this scorecard
+            let exampleItems: string[] = [];
+            try {
+              const associationsResult = await amplifyClient.ScorecardExampleItem.listByScorecard(scorecard.id);
+              exampleItems = associationsResult.data.map(association => `item:${association.itemId}`);
+              console.log(`Loaded ${exampleItems.length} example items for scorecard ${scorecard.name}:`, exampleItems);
+            } catch (error) {
+              console.error(`Error loading example items for scorecard ${scorecard.id}:`, error);
+            }
+
             return {
               ...scorecard,
+              examples: exampleItems,
               sections: async () => ({
                 data: sections,
                 nextToken: null
               })
-            } as Schema['Scorecard']['type'];
+            } as Schema['Scorecard']['type'] & { examples: string[] };
           })
       );
 
       setScorecards(scorecardsWithCounts);
-      setIsLoading(false)
+      setIsLoading(false);
+      
+      // Return the updated scorecards for immediate use
+      return scorecardsWithCounts;
     } catch (error) {
       console.error('Error fetching scorecards:', error)
       setError(error as Error)
       setIsLoading(false)
+      return null; // Return null on error
     }
   }
 
