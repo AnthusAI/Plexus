@@ -24,7 +24,7 @@ export interface ReportBlockProps {
   /** The block's configuration from the markdown */
   config: Record<string, any>
   /** The block's output data from the backend */
-  output: Record<string, any>
+  output: string | Record<string, any>
   /** Optional log messages from the block's execution */
   log?: string
   /** The block's name if specified */
