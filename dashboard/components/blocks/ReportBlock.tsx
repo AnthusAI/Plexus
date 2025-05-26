@@ -540,7 +540,7 @@ const ReportBlock: BlockComponent = ({
                   variant="secondary"
                   size="sm"
                   onClick={toggleShowRawOutput}
-                  className="h-8 bg-background hover:bg-background/90 border-0 w-full"
+                  className="h-8 bg-card hover:bg-card/90 border-0 w-full"
                 >
                   <MessageSquareCode className="mr-2 h-4 w-4" />
                   {showRawOutput ? "Hide Code" : "Code"}

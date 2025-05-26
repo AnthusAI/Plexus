@@ -80,7 +80,7 @@ function AuthWrapper({ children }: { children: React.ReactNode }) {
     '/documentation/advanced/cli',
     '/documentation/advanced/worker-nodes',
     '/documentation/advanced/sdk',
-    '/documentation/advanced/yaml-code-standard',
+    '/documentation/advanced/universal-code',
     '/documentation/advanced/mcp-server',
     '/login',
     '/signup',

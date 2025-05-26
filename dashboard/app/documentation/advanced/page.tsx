@@ -63,7 +63,7 @@ export default function AdvancedPage() {
               Learn about Plexus's universal YAML code format designed for seamless communication 
               between humans, AI models, and other systems.
             </p>
-            <Link href="/documentation/advanced/yaml-code-standard">
+            <Link href="/documentation/advanced/universal-code">
               <DocButton>Explore Universal Code Snippets</DocButton>
             </Link>
           </div>
