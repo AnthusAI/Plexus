@@ -6,12 +6,12 @@ const nextConfig = {
         serverComponentsExternalPackages: ['@aws-crypto'],
     },
     eslint: {
-        ignoreDuringBuilds: false,
+        ignoreDuringBuilds: process.env.NEXT_TYPESCRIPT_CHECK === '0',
         dirs: ['app', 'components', 'utils', 'stories']
     },
     typescript: {
-        // Catch TypeScript errors in all environments to match production
-        ignoreBuildErrors: false,
+        // Catch TypeScript errors in all environments to match production, unless fast build
+        ignoreBuildErrors: process.env.NEXT_TYPESCRIPT_CHECK === '0',
     },
     // Only include type checking on your own code files
     transpilePackages: [],
