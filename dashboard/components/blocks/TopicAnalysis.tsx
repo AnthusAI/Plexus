@@ -111,26 +111,14 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
   let data: TopicAnalysisData;
   try {
     if (typeof props.output === 'string') {
-      console.log('🔍 TopicAnalysis: Parsing YAML string output, first 1000 chars:', props.output.substring(0, 1000));
       // New format: parse YAML string
-      const parsedData = yaml.load(props.output);
-      console.log('🔍 TopicAnalysis: Parsed YAML data:', parsedData);
-      console.log('🔍 TopicAnalysis: Topics in parsed data:', (parsedData as any)?.topics);
-      console.log('🔍 TopicAnalysis: Type of topics:', typeof (parsedData as any)?.topics);
-      console.log('🔍 TopicAnalysis: Is topics array?', Array.isArray((parsedData as any)?.topics));
-      if ((parsedData as any)?.topics) {
-        console.log('🔍 TopicAnalysis: Topics length:', (parsedData as any).topics.length);
-        console.log('🔍 TopicAnalysis: First topic:', (parsedData as any).topics[0]);
-      }
-      data = parsedData as TopicAnalysisData;
+      data = yaml.load(props.output) as TopicAnalysisData;
     } else {
-      console.log('🔍 TopicAnalysis: Using object output directly:', props.output);
       // Legacy format: use object directly
       data = props.output as TopicAnalysisData;
     }
   } catch (error) {
     console.error('❌ TopicAnalysis: Failed to parse output data:', error);
-    console.error('❌ TopicAnalysis: Raw output that failed to parse:', props.output);
     return (
       <div className="p-4 text-center text-destructive">
         Error parsing topic analysis data. Please check the report generation.
@@ -144,25 +132,7 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
   const topics = data.topics || [];
   const errors = data.errors || [];
 
-  console.log('✅ TopicAnalysis: Rendering with structured data:', {
-    hasTopics: !!data.topics,
-    topicsLength: data.topics?.length || 0,
-    topicsData: data.topics,
-    topicsIsArray: Array.isArray(data.topics),
-    topicsType: typeof data.topics,
-    summary: data.summary,
-    block_title: data.block_title,
-    allDataKeys: Object.keys(data)
-  });
-  
-  // Additional debugging for topics specifically
-  console.log('🔍 TopicAnalysis: Topics debugging:', {
-    originalTopics: data.topics,
-    extractedTopics: topics,
-    topicsLength: topics.length,
-    firstTopic: topics[0],
-    topicsArrayCheck: Array.isArray(topics)
-  });
+
 
   return (
     <ReportBlock {...props}>
