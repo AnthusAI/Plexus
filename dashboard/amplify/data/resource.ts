@@ -303,6 +303,7 @@ const schema = a.schema({
             idx("accountId").sortKeys(["updatedAt"]),
             idx("externalId"),
             idx("scoreId").sortKeys(["updatedAt"]),
+            idx("scoreId").sortKeys(["createdAt"]),
             // Composite GSI for accountId+externalId to enforce uniqueness within an account
             idx("accountId").sortKeys(["externalId"]).name("byAccountAndExternalId"),
         ]),
