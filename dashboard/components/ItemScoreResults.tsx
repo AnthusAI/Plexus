@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react';
+import { Loader2, ExternalLink, ChevronDown, ChevronUp, ListTodo } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Timestamp } from '@/components/ui/timestamp';
@@ -66,7 +66,12 @@ const ScoreResultCard: React.FC<{ result: ScoreResultWithDetails }> = ({ result 
             <h4 className="text-sm font-semibold">{result.score?.name || 'Unknown Score'}</h4>
           </div>
           <div className="text-xs text-muted-foreground mb-2">
-            <Timestamp time={result.updatedAt || result.createdAt} variant="relative" />
+            <Timestamp time={result.updatedAt || result.createdAt || new Date().toISOString()} variant="relative" />
+            {result.createdAt && result.updatedAt && result.createdAt !== result.updatedAt && (
+              <div className="mt-0.5">
+                <Timestamp time={result.createdAt} completionTime={result.updatedAt} variant="elapsed" />
+              </div>
+            )}
           </div>
         </div>
         <div className="flex flex-col items-end gap-1">
@@ -147,9 +152,9 @@ const ItemScoreResults: React.FC<ItemScoreResultsProps> = ({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold">Score Results</h3>
-        <Badge variant="secondary">
+        <span className="text-sm text-muted-foreground">
           {totalResults} result{totalResults !== 1 ? 's' : ''} across {scorecardIds.length} scorecard{scorecardIds.length !== 1 ? 's' : ''}
-        </Badge>
+        </span>
       </div>
 
       <Accordion type="multiple" defaultValue={scorecardIds} className="w-full">
@@ -160,11 +165,12 @@ const ItemScoreResults: React.FC<ItemScoreResultsProps> = ({
               <AccordionTrigger className="hover:no-underline">
                 <div className="flex items-center justify-between w-full pr-2">
                   <div className="flex items-center gap-2">
+                    <ListTodo className="h-4 w-4" />
                     <span className="font-medium">{group.scorecardName}</span>
                   </div>
-                  <Badge variant="outline">
+                  <span className="text-sm text-muted-foreground">
                     {group.scores.length} score{group.scores.length !== 1 ? 's' : ''}
-                  </Badge>
+                  </span>
                 </div>
               </AccordionTrigger>
               <AccordionContent>

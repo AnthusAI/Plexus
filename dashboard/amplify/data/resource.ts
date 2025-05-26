@@ -301,6 +301,7 @@ const schema = a.schema({
         ])
         .secondaryIndexes((idx) => [
             idx("accountId").sortKeys(["updatedAt"]),
+            idx("accountId").sortKeys(["createdAt"]),
             idx("externalId"),
             idx("scoreId").sortKeys(["updatedAt"]),
             idx("scoreId").sortKeys(["createdAt"]),
@@ -379,7 +380,9 @@ const schema = a.schema({
             idx("scorecardId").sortKeys(["updatedAt"]),
             idx("evaluationId"),
             idx("scoreVersionId"),
-            idx("scoreId")
+            idx("scoreId"),
+            // Composite GSI for efficient cache lookups by scorecard + score + item
+            idx("scorecardId").sortKeys(["scoreId", "itemId"]).name("byScorecardScoreItem")
         ]),
 
     BatchJobScoringJob: a
