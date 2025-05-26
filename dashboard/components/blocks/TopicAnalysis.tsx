@@ -94,7 +94,7 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
   try {
     if (typeof props.output === 'string') {
       // New format: parse YAML string
-      data = yaml.parse(props.output) as TopicAnalysisData;
+      data = yaml.load(props.output) as TopicAnalysisData;
     } else {
       // Legacy format: use object directly
       data = props.output as TopicAnalysisData;
