@@ -24,7 +24,7 @@ export interface ReportBlockProps {
   /** The block's configuration from the markdown */
   config: Record<string, any>
   /** The block's output data from the backend */
-  output: Record<string, any>
+  output: string | Record<string, any>
   /** Optional log messages from the block's execution */
   log?: string
   /** The block's name if specified */
@@ -446,6 +446,36 @@ const ReportBlock: BlockComponent = ({
       displayOutput = JSON.stringify(output, null, 2);
       outputType = "JSON";
       description = "Legacy JSON code output from the report block execution";
+    }
+    
+    // Add original configuration to universal code snippet
+    if (config && Object.keys(config).length > 0) {
+      const formatValue = (value: any, indent: string = ''): string => {
+        if (value === null || value === undefined) return 'null';
+        if (typeof value === 'string') return value;
+        if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+        if (Array.isArray(value)) {
+          if (value.length === 0) return '[]';
+          return '\n' + value.map(item => `${indent}  - ${formatValue(item, indent + '  ')}`).join('\n');
+        }
+        if (typeof value === 'object') {
+          const entries = Object.entries(value);
+          if (entries.length === 0) return '{}';
+          return '\n' + entries.map(([k, v]) => `${indent}  ${k}: ${formatValue(v, indent + '  ')}`).join('\n');
+        }
+        return String(value);
+      };
+      
+      const configYaml = `
+# ====================================
+# Report Block Configuration
+# ====================================
+# This is the original configuration that was used to generate the output above.
+# It shows the exact parameters, prompts, and settings that created the results.
+
+${Object.entries(config).map(([key, value]) => `${key}: ${formatValue(value)}`).join('\n')}`;
+      
+      displayOutput = displayOutput + '\n\n' + configYaml;
     }
     
     return (

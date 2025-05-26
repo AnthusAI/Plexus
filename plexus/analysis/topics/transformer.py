@@ -276,7 +276,7 @@ async def _process_transcript_async(
     Returns:
         LLM response text
     """
-    logging.info(f"Processing transcript {i+1}/{total_count} for LLM transformation (non-itemize)")
+    logger.debug(f"Processing transcript {i+1}/{total_count} for LLM transformation (non-itemize)")
     
     start_time = time.perf_counter()
     # Run LLM on transcript
@@ -296,9 +296,9 @@ async def _process_transcript_async(
     if len(log_response) > max_log_length:
         log_response = log_response[:max_log_length] + "... [truncated]"
     
-    logging.info(f"LLM Response {i+1}/{total_count} (took {duration:.2f}s):\n{log_response}")
+    logger.debug(f"LLM Response {i+1}/{total_count} (took {duration:.2f}s): {len(response_text)} chars")
     if duration < 0.1 and duration > 0: # Heuristic for likely cache hit, ignore 0 time for true first calls if super fast
-        logging.info(f"  (Response for transcript {i+1}/{total_count} was very fast - likely from cache)")
+        logger.debug(f"  (Response for transcript {i+1}/{total_count} was very fast - likely from cache)")
     
     return response_text
 
@@ -322,7 +322,7 @@ async def _process_transcript_batch_async(
     """
     results = []
     
-    logging.info(f"Concurrently processing {len(texts)} transcripts in this batch call.")
+    logger.info(f"Processing batch of {len(texts)} transcripts ({batch_indices[0]+1}-{batch_indices[-1]+1} of {total_count})")
     
     tasks = []
     for j, (text, idx) in enumerate(zip(texts, batch_indices)):
@@ -712,7 +712,7 @@ async def _process_itemize_transcript_async(
     Returns:
         Tuple of (success flag, parsed items or error message)
     """
-    logging.info(f"========= Processing transcript {i+1}/{total_count} for itemization =========")
+    logger.debug(f"Processing transcript {i+1}/{total_count} for itemization")
     
     retry_count = 0
     success = False
@@ -725,35 +725,35 @@ async def _process_itemize_transcript_async(
                 logging.info(f"Retry {retry_count}/{max_retries} for transcript {i+1}")
                 await asyncio.sleep(retry_delay)
                 
-            logging.info(f"SENDING PROMPT TO LLM FOR TRANSCRIPT {i+1}")
+            logger.debug(f"Sending prompt to LLM for transcript {i+1}")
             
             start_time = time.perf_counter()
             raw_response = await llm.ainvoke(formatted_prompt)
             end_time = time.perf_counter()
             duration = end_time - start_time
             
-            logging.info(f"COMPLETE RAW LLM RESPONSE FOR TRANSCRIPT {i+1} (took {duration:.2f}s):\n{raw_response}\n")
+            logger.debug(f"LLM response for transcript {i+1} (took {duration:.2f}s): {len(str(raw_response))} chars")
             if duration < 0.1 and duration > 0: # Heuristic for likely cache hit
-                logging.info(f"  (LLM call for transcript {i+1}/{total_count} was very fast - likely from cache)")
+                logger.debug(f"  (LLM call for transcript {i+1}/{total_count} was very fast - likely from cache)")
 
             try:
                 if provider.lower() == 'openai' and hasattr(raw_response, 'content'):
                     response_text = raw_response.content
-                    logging.info(f"Extracted content from AIMessage: {response_text[:200]}...")
+                    logger.debug(f"Extracted content from AIMessage: {len(response_text)} chars")
                 else:
                     response_text = str(raw_response)
-                    logging.info(f"Raw response content: {response_text[:200]}...")
+                    logger.debug(f"Raw response content: {len(response_text)} chars")
                 
                 # First attempt: direct JSON parsing
                 try:
                     json_data = json.loads(response_text)
-                    logging.info(f"PARSED JSON DIRECTLY: {json_data}")
+                    logger.debug(f"Parsed JSON directly with {len(json_data)} keys")
                     parsed_items = TranscriptItems(**json_data)
-                    logging.info(f"SUCCESSFULLY CREATED PYDANTIC MODEL: {parsed_items}")
+                    logger.debug(f"Successfully created Pydantic model")
                     success = True
                 except json.JSONDecodeError as json_err:
                     # If direct parsing fails, try extraction methods
-                    logging.info(f"DIRECT JSON PARSING FAILED: {str(json_err)}")
+                    logger.debug(f"Direct JSON parsing failed: {str(json_err)}")
                     
                     # The response text might already be in the current_response_text variable
                     # but let's make sure we're using the right one
@@ -768,15 +768,15 @@ async def _process_itemize_transcript_async(
                         match = re.search(r'```json\s*(.*?)\s*```', current_response_text, re.DOTALL)
                         if match:
                             extracted = match.group(1).strip()
-                            logging.info(f"EXTRACTED JSON FROM CODE BLOCK: {extracted[:100]}...")
+                            logger.debug(f"Extracted JSON from code block: {len(extracted)} chars")
                             try:
                                 json_data = json.loads(extracted)
-                                logging.info(f"PARSED EXTRACTED JSON: {json_data}")
+                                logger.debug(f"Parsed extracted JSON with {len(json_data)} keys")
                                 parsed_items = TranscriptItems(**json_data)
                                 success = True
                                 json_extracted = True
                             except Exception as je:
-                                logging.error(f"FAILED TO PARSE EXTRACTED JSON: {je}")
+                                logger.debug(f"Failed to parse extracted JSON: {je}")
                     
                     # Pattern 2: Any markdown code block (without specifying json)
                     if not json_extracted and "```" in current_response_text:
@@ -784,7 +784,7 @@ async def _process_itemize_transcript_async(
                         for match in matches:
                             try:
                                 json_data = json.loads(match.strip())
-                                logging.info(f"PARSED JSON FROM GENERIC CODE BLOCK: {json_data}")
+                                logger.debug(f"Parsed JSON from generic code block with {len(json_data)} keys")
                                 parsed_items = TranscriptItems(**json_data)
                                 success = True
                                 json_extracted = True
@@ -800,7 +800,7 @@ async def _process_itemize_transcript_async(
                             if match:
                                 potential_json = match.group(1)
                                 json_data = json.loads(potential_json)
-                                logging.info(f"PARSED JSON FROM CURLY BRACES: {json_data}")
+                                logger.debug(f"Parsed JSON from curly braces with {len(json_data)} keys")
                                 parsed_items = TranscriptItems(**json_data)
                                 success = True
                                 json_extracted = True
@@ -809,16 +809,16 @@ async def _process_itemize_transcript_async(
                     
                     # Fall back to retry parser if all extraction attempts fail
                     if not json_extracted:
-                        logging.info("ALL JSON EXTRACTION ATTEMPTS FAILED, ATTEMPTING RETRY PARSER")
+                        logger.debug("All JSON extraction attempts failed, attempting retry parser")
                         parsed_items = await retry_parser.aparse_with_prompt(response_text, formatted_prompt)
-                        logging.info("RETRY PARSER SUCCEEDED")
+                        logger.debug("Retry parser succeeded")
                         success = True
                 
             except ValidationError as ve:
-                logging.error(f"VALIDATION ERROR: {ve}")
-                logging.info("ATTEMPTING RETRY PARSER")
+                logger.debug(f"Validation error: {ve}")
+                logger.debug("Attempting retry parser")
                 parsed_items = await retry_parser.aparse_with_prompt(response_text, formatted_prompt)
-                logging.info("RETRY PARSER SUCCEEDED")
+                logger.debug("Retry parser succeeded")
                 success = True
             
         except Exception as e:
@@ -834,11 +834,11 @@ async def _process_itemize_transcript_async(
     if success:
         # Enhanced debugging: Log the parsed items to detect repetition
         items_str = str(parsed_items)
-        logging.info(f"SUCCESSFULLY PARSED ITEMS FOR TRANSCRIPT {i+1}: {items_str[:200]}...")
+        logger.debug(f"Successfully parsed items for transcript {i+1}: {len(items_str)} chars")
         
         # Check if this looks like template examples
         if "What type of program are you looking for" in items_str or "What did you mean by that" in items_str:
-            logging.warning(f"⚠️ TRANSCRIPT {i+1} OUTPUT CONTAINS TEMPLATE EXAMPLES - POSSIBLE EXTRACTION FAILURE")
+            logger.warning(f"⚠️ Transcript {i+1} output contains template examples - possible extraction failure")
         
         return True, parsed_items
     else:
@@ -865,16 +865,16 @@ async def _process_itemize_batch_async(
         List of results
     """
     results = []
-    logging.info(f"Concurrently processing {len(rows)} transcripts for itemization in this batch call.")
+    logger.info(f"Processing batch of {len(rows)} transcripts for itemization ({indices[0]+1}-{indices[-1]+1} of {total_count})")
 
     tasks = []
     for j, (row, idx) in enumerate(zip(rows, indices)):
         text = row[content_column]
         
         # Enhanced debugging: Log the actual transcript content being processed
-        logging.info(f"TRANSCRIPT {idx+1} CONTENT (first 200 chars): {text[:200]}...")
+        logger.debug(f"Transcript {idx+1} content: {len(text)} chars")
         if len(text) < 50:
-            logging.warning(f"TRANSCRIPT {idx+1} IS VERY SHORT ({len(text)} chars): '{text}'")
+            logger.warning(f"Transcript {idx+1} is very short ({len(text)} chars)")
         
         formatted_prompt = prompt.format(
             text=text, 
@@ -882,7 +882,7 @@ async def _process_itemize_batch_async(
         )
         
         # Enhanced debugging: Log the formatted prompt to see if transcript is included
-        logging.info(f"FORMATTED PROMPT FOR TRANSCRIPT {idx+1} (first 300 chars): {formatted_prompt[:300]}...")
+        logger.debug(f"Formatted prompt for transcript {idx+1}: {len(formatted_prompt)} chars")
         
         task = _process_itemize_transcript_async(
             llm, prompt, formatted_prompt, text, parser, retry_parser, 

@@ -6,225 +6,184 @@ import FeedbackAnalysis from '@/components/blocks/FeedbackAnalysis';
 
 export default function YAMLCodeStandardPage() {
   // Create the YAML data but also parse it into the object structure for the component
-  const sampleYAMLCode = `# Feedback Analysis Report Output
+  const sampleYAMLCode = `# Sales Lead Routing Analysis Report Output
 # 
-# This is the structured output from a feedback analysis process that:
-# 1. Retrieves feedback items from scorecards within a specified time range
-# 2. Analyzes agreement between initial and final answer values using Gwet's AC1 coefficient
+# This is the structured output from a sales lead routing analysis process that:
+# 1. Retrieves lead routing decisions from scorecards within a specified time range
+# 2. Analyzes agreement between initial and final routing decisions using Gwet's AC1 coefficient
 # 3. Provides statistical measures of inter-rater reliability and agreement
-# 4. Generates insights about feedback quality and consistency across evaluators
+# 4. Generates insights about routing quality and consistency across sales operations teams
 #
 # The output contains agreement scores, statistical measures, detailed breakdowns,
-# and analytical insights for understanding feedback consistency and reliability.
+# and analytical insights for understanding lead routing consistency and reliability.
 
-overall_ac1: 0.847
-total_items: 2847
-total_mismatches: 436
-total_agreements: 2411
-accuracy: 84.7
-total_feedback_items_retrieved: 2847
+overall_ac1: 0.912
+total_items: 28470
+total_mismatches: 2505
+total_agreements: 25965
+accuracy: 91.2
+total_feedback_items_retrieved: 28470
 date_range:
-  start: "2024-01-01T00:00:00"
-  end: "2024-01-31T23:59:59"
-message: "Processed 4 score(s)."
+  start: "2024-07-15T00:00:00"
+  end: "2024-07-21T23:59:59"
+message: "Processed 3 score(s)."
 classes_count: 2
 label_distribution:
-  "Yes": 1523
-  "No": 1324
+  "Yes": 15259
+  "No": 13211
 confusion_matrix:
   labels: ["Yes", "No"]
   matrix:
     - actualClassLabel: "Yes"
       predictedClassCounts:
-        "Yes": 1287
-        "No": 236
+        "Yes": 14096
+        "No": 1163
     - actualClassLabel: "No"
       predictedClassCounts:
-        "Yes": 200
-        "No": 1124
+        "Yes": 1342
+        "No": 11869
 class_distribution:
   - label: "Yes"
-    count: 1523
+    count: 15259
   - label: "No"
-    count: 1324
+    count: 13211
 predicted_class_distribution:
   - label: "Yes"
-    count: 1487
+    count: 15438
   - label: "No"
-    count: 1360
-precision: 86.5
-recall: 84.5
+    count: 13032
+precision: 91.3
+recall: 92.4
 warning: null
 warnings: null
 notes: null
 discussion: null
-block_title: "Feedback Analysis"
+block_title: "Sales Lead Routing Analysis"
 block_description: "Inter-rater Reliability Assessment"
 
 scores:
-  - score_id: "44246"
-    score_name: "Agent followed greeting protocol"
-    cc_question_id: "1234"
-    ac1: 0.923
-    item_count: 856
-    mismatches: 66
-    agreements: 790
-    accuracy: 92.3
+  - score_id: "55123"
+    score_name: "Lead properly categorized by product type"
+    cc_question_id: "2001"
+    ac1: 0.962
+    item_count: 9847
+    mismatches: 374
+    agreements: 9473
+    accuracy: 96.2
     classes_count: 2
     label_distribution:
-      "Yes": 634
-      "No": 222
+      "Yes": 6574
+      "No": 3273
     confusion_matrix:
       labels: ["Yes", "No"]
       matrix:
         - actualClassLabel: "Yes"
           predictedClassCounts:
-            "Yes": 590
-            "No": 44
+            "Yes": 6324
+            "No": 250
         - actualClassLabel: "No"
           predictedClassCounts:
-            "Yes": 22
-            "No": 200
+            "Yes": 124
+            "No": 3149
     class_distribution:
       - label: "Yes"
-        count: 634
+        count: 6574
       - label: "No" 
-        count: 222
+        count: 3273
     predicted_class_distribution:
       - label: "Yes"
-        count: 612
+        count: 6448
       - label: "No"
-        count: 244
-    precision: 96.4
-    recall: 93.1
+        count: 3399
+    precision: 98.1
+    recall: 96.2
     warning: null
     warnings: null
     notes: null
     discussion: null
-    indexed_items_file: "feedback_analysis_44246_items.json"
+    indexed_items_file: "lead_routing_analysis_55123_items.json"
     
-  - score_id: "44247"
-    score_name: "Agent provided accurate information"
-    cc_question_id: "1235"
-    ac1: 0.784
-    item_count: 743
-    mismatches: 160
-    agreements: 583
-    accuracy: 78.4
+  - score_id: "55124"
+    score_name: "Lead routed to appropriate sales team"
+    cc_question_id: "2002"
+    ac1: 0.889
+    item_count: 10156
+    mismatches: 1127
+    agreements: 9029
+    accuracy: 88.9
     classes_count: 2
     label_distribution:
-      "Yes": 421
-      "No": 322
+      "Yes": 5078
+      "No": 5078
     confusion_matrix:
       labels: ["Yes", "No"]
       matrix:
         - actualClassLabel: "Yes"
           predictedClassCounts:
-            "Yes": 321
-            "No": 100
+            "Yes": 4514
+            "No": 564
         - actualClassLabel: "No"
           predictedClassCounts:
-            "Yes": 60
-            "No": 262
+            "Yes": 563
+            "No": 4515
     class_distribution:
       - label: "Yes"
-        count: 421
+        count: 5078
       - label: "No"
-        count: 322
+        count: 5078
     predicted_class_distribution:
       - label: "Yes"
-        count: 381
+        count: 5077
       - label: "No"
-        count: 362
-    precision: 84.3
-    recall: 76.2
-    warning: "Lower than expected agreement - consider reviewer training"
-    warnings: "Lower than expected agreement - consider reviewer training"
-    notes: null
-    discussion: null
-    indexed_items_file: "feedback_analysis_44247_items.json"
-    
-  - score_id: "44248"
-    score_name: "Call resolution was complete"
-    cc_question_id: "1236"
-    ac1: 0.867
-    item_count: 692
-    mismatches: 92
-    agreements: 600
-    accuracy: 86.7
-    classes_count: 2
-    label_distribution:
-      "Yes": 412
-      "No": 280
-    confusion_matrix:
-      labels: ["Yes", "No"]
-      matrix:
-        - actualClassLabel: "Yes"
-          predictedClassCounts:
-            "Yes": 356
-            "No": 56
-        - actualClassLabel: "No"
-          predictedClassCounts:
-            "Yes": 36
-            "No": 244
-    class_distribution:
-      - label: "Yes"
-        count: 412
-      - label: "No"
-        count: 280
-    predicted_class_distribution:
-      - label: "Yes"
-        count: 392
-      - label: "No"
-        count: 300
-    precision: 90.8
-    recall: 86.4
+        count: 5079
+    precision: 88.9
+    recall: 88.9
     warning: null
     warnings: null
     notes: null
     discussion: null
-    indexed_items_file: "feedback_analysis_44248_items.json"
+    indexed_items_file: "lead_routing_analysis_55124_items.json"
     
-  - score_id: "44249"
-    score_name: "Customer satisfaction achieved"
-    cc_question_id: "1237"
-    ac1: 0.634
-    item_count: 556
-    mismatches: 118
-    agreements: 438
-    accuracy: 63.4
+  - score_id: "55125"
+    score_name: "Lead priority level correctly assessed"
+    cc_question_id: "2003"
+    ac1: 0.854
+    item_count: 8467
+    mismatches: 1004
+    agreements: 7463
+    accuracy: 85.4
     classes_count: 2
     label_distribution:
-      "Yes": 256
-      "No": 300
+      "Yes": 3607
+      "No": 4860
     confusion_matrix:
       labels: ["Yes", "No"]
       matrix:
         - actualClassLabel: "Yes"
           predictedClassCounts:
-            "Yes": 178
-            "No": 78
+            "Yes": 3155
+            "No": 452
         - actualClassLabel: "No"
           predictedClassCounts:
-            "Yes": 40
-            "No": 260
+            "Yes": 552
+            "No": 4308
     class_distribution:
       - label: "Yes"
-        count: 256
+        count: 3607
       - label: "No"
-        count: 300
+        count: 4860
     predicted_class_distribution:
       - label: "Yes"
-        count: 218
+        count: 3707
       - label: "No"
-        count: 338
-    precision: 81.7
-    recall: 69.5
-    warning: "Critical: Low agreement on customer satisfaction scores - systematic disagreement detected"
-    warnings: "Critical: Low agreement on customer satisfaction scores - systematic disagreement detected"
+        count: 4760
+    precision: 85.1
+    recall: 87.5
+    warning: null
+    warnings: null
     notes: null
-    discussion: "The customer satisfaction scoring shows concerning patterns with only 63.4% agreement between reviewers. This suggests either unclear scoring criteria, subjective interpretation differences, or inconsistent training. The confusion matrix reveals reviewers frequently disagree on borderline cases. Recommended actions: 1) Review and clarify customer satisfaction scoring rubric, 2) Conduct calibration sessions with reviewers, 3) Add more specific behavioral indicators for satisfaction levels, 4) Consider inter-rater reliability training focused on customer satisfaction assessment."
-    indexed_items_file: "feedback_analysis_44249_items.json"`;
+    discussion: "The lead priority assessment shows strong inter-rater reliability with 85.4% agreement between reviewers. This indicates well-defined priority criteria and consistent training across sales operations teams. Minor disagreements primarily occur at priority boundary cases, which is expected. The system demonstrates effective lead qualification processes that support optimal sales team allocation."
+    indexed_items_file: "lead_routing_analysis_55125_items.json"`;
 
 
   return (
@@ -262,7 +221,7 @@ scores:
           <h2 className="text-2xl font-semibold mb-4">Visual Report → Universal Code</h2>
           <p className="text-muted-foreground mb-6">
             Here's how it works: every graphical report in Plexus has a corresponding code representation. 
-            Below is a real call center feedback analysis report. The visual report displays agreement scores, confusion matrices, and insights beautifully. 
+            Below is a real sales lead routing analysis report. The visual report displays agreement scores, confusion matrices, and insights beautifully. 
             The Code button reveals the same data as contextual YAML that works everywhere.
           </p>
 
@@ -286,8 +245,8 @@ scores:
                 output={sampleYAMLCode as any}
                 position={1}
                 type="FeedbackAnalysis"
-                id="call-center-feedback-example"
-                name="Call Center Quality Feedback Analysis"
+                id="sales-lead-routing-example"
+                name="Sales Lead Routing Quality Analysis"
                 className="border-0 p-0"
               />
             </div>
@@ -297,7 +256,7 @@ scores:
             <p className="text-sm text-muted-foreground">
               💡 <strong>Try this:</strong> Use the Code button to reveal contextual YAML with explanatory comments. 
               Click the Copy button to copy the code to your clipboard. 
-              Paste it into ChatGPT or Claude and ask: "Which call center scores show the highest disagreement between reviewers?" or "What training recommendations would improve inter-rater reliability?" 
+              Paste it into ChatGPT or Claude and ask: "Which sales lead routing scores show the highest disagreement between reviewers?" or "What training recommendations would improve lead routing reliability?" 
               The AI will immediately understand the context and give you strategic recommendations.
             </p>
           </div>
