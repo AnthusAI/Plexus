@@ -190,9 +190,9 @@ const ResizableEditorContainer = ({
     <div 
       ref={containerRef}
       className={cn(
-        "relative border bg-background rounded-md",
-        isResizing && "border-accent",
-        isFullscreen ? "h-full" : "resize-y overflow-auto"
+        "relative bg-background rounded-lg",
+        isResizing && "border border-accent",
+        isFullscreen ? "h-full overflow-hidden" : "resize-y overflow-auto"
       )}
       style={!isFullscreen ? { 
         height: `${height}px`,
@@ -634,9 +634,9 @@ const DetailContent = React.memo(({
         "flex-1 flex flex-col min-h-0",
         isEditorFullscreen ? "mt-2" : "mt-2"
       )} style={{ transition: 'none' }}>
-        {!isEditorFullscreen ? (
+                  {!isEditorFullscreen ? (
           // Normal mode: flexible height container
-          <div className="flex-1 border bg-background rounded-md relative min-h-[300px]">
+          <div className="flex-1 bg-background rounded-lg overflow-hidden relative min-h-[300px]">
             <Editor
               height="100%"
               defaultLanguage="yaml"
