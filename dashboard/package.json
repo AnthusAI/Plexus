@@ -159,7 +159,8 @@
     "wait-on": "^8.0.1"
   },
   "overrides": {
-    "postcss": "8.4.31"
+    "postcss": "8.4.31",
+    "ajv": "^8.17.1"
   },
   "release": {
     "branches": [
