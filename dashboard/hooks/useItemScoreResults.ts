@@ -16,10 +16,12 @@ export interface ScoreResultWithDetails {
   scorecard?: {
     id: string;
     name: string;
+    externalId?: string;
   };
   score?: {
     id: string;
     name: string;
+    externalId?: string;
   };
 }
 
@@ -28,6 +30,7 @@ export interface GroupedScoreResults {
   [scorecardId: string]: {
     scorecardId: string;
     scorecardName: string;
+    scorecardExternalId?: string;
     scores: ScoreResultWithDetails[];
   };
 }
@@ -78,6 +81,16 @@ export function useItemScoreResults(itemId: string | null) {
                 scoreId
                 updatedAt
                 createdAt
+                scorecard {
+                  id
+                  name
+                  externalId
+                }
+                score {
+                  id
+                  name
+                  externalId
+                }
               }
               nextToken
             }
@@ -104,86 +117,29 @@ export function useItemScoreResults(itemId: string | null) {
           return dateB - dateA; // DESC order (newest first)
         });
 
-        // Group results by scorecard and fetch scorecard/score names
+        // Group results by scorecard using embedded data
         const grouped: GroupedScoreResults = {};
-        
-        // Create a map to store scorecard and score names to avoid duplicate fetches
-        const scorecardNames: { [id: string]: string } = {};
-        const scoreNames: { [id: string]: string } = {};
         
         console.log('useItemScoreResults: Starting to group results, count:', sortedResults.length);
         
-        // First pass: collect unique scorecard and score IDs
-        const uniqueScorecardIds = new Set<string>();
-        const uniqueScoreIds = new Set<string>();
-        
-        sortedResults.forEach(result => {
-          if (result.scorecardId) uniqueScorecardIds.add(result.scorecardId);
-          if (result.scoreId) uniqueScoreIds.add(result.scoreId);
-        });
-        
-        // Fetch all unique scorecard names
-        for (const scorecardId of uniqueScorecardIds) {
-          try {
-            const scorecardResponse = await amplifyClient.Scorecard.get({ id: scorecardId });
-            scorecardNames[scorecardId] = scorecardResponse.data?.name || 'Unknown Scorecard';
-          } catch (error) {
-            console.warn(`Failed to fetch scorecard ${scorecardId}:`, error);
-            scorecardNames[scorecardId] = 'Unknown Scorecard';
-          }
-        }
-        
-        // Fetch all unique score names
-        for (const scoreId of uniqueScoreIds) {
-          try {
-            const scoreResponse = await amplifyClient.Score.get({ id: scoreId });
-            scoreNames[scoreId] = scoreResponse.data?.name || 'Unknown Score';
-          } catch (error) {
-            console.warn(`Failed to fetch score ${scoreId}:`, error);
-            scoreNames[scoreId] = 'Unknown Score';
-          }
-        }
-        
         for (const result of sortedResults) {
           const scorecardId = result.scorecardId;
-          const scoreId = result.scoreId;
           
           // Add to grouped results
           if (!grouped[scorecardId]) {
             grouped[scorecardId] = {
               scorecardId,
-              scorecardName: scorecardNames[scorecardId] || 'Unknown Scorecard',
+              scorecardName: result.scorecard?.name || 'Unknown Scorecard',
+              scorecardExternalId: result.scorecard?.externalId,
               scores: []
             };
           }
           
-          // Convert to ScoreResultWithDetails format
-          const detailedResult: ScoreResultWithDetails = {
-            ...result,
-            scorecard: {
-              id: scorecardId,
-              name: scorecardNames[scorecardId] || 'Unknown Scorecard'
-            },
-            score: {
-              id: scoreId || '',
-              name: scoreNames[scoreId || ''] || 'Unknown Score'
-            }
-          };
-          
-          grouped[scorecardId].scores.push(detailedResult);
+          // The result already has scorecard and score data from the query
+          grouped[scorecardId].scores.push(result);
         }
 
-        const finalResults = sortedResults.map(result => ({
-          ...result,
-          scorecard: {
-            id: result.scorecardId,
-            name: scorecardNames[result.scorecardId] || 'Unknown Scorecard'
-          },
-          score: {
-            id: result.scoreId || '',
-            name: scoreNames[result.scoreId || ''] || 'Unknown Score'
-          }
-        }));
+        const finalResults = sortedResults;
         
         console.log('useItemScoreResults: Final grouped results:', grouped);
         console.log('useItemScoreResults: Grouped results keys:', Object.keys(grouped));

@@ -2,13 +2,14 @@ import React, { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table'
-import { ChevronUp, ChevronDown, Square, Columns2, X } from 'lucide-react'
+import { ChevronUp, ChevronDown, Square, Columns2, X, IdCard } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CardButton } from '@/components/CardButton'
 import ItemDetailScoreResult from './ItemDetailScoreResult'
 import { Timestamp } from '@/components/ui/timestamp'
 import { useItemScoreResults } from '@/hooks/useItemScoreResults'
 import ItemScoreResults from './ItemScoreResults'
+import { IdentifierDisplay } from '@/components/ui/identifier-display'
 
 interface Score {
   name: string
@@ -130,17 +131,23 @@ const ItemDetail: React.FC<ItemDetailProps> = ({
 
   return (
     <Card className="rounded-none sm:rounded-lg h-full flex flex-col bg-card border-none">
-      <CardHeader className="flex-shrink-0 flex flex-row items-center justify-between py-4 px-4 sm:px-3 space-y-0">
+      <CardHeader className="flex-shrink-0 flex flex-row items-start justify-between py-4 px-4 sm:px-3 space-y-0">
         <div>
           <h2 className="text-xl font-semibold">Item Details</h2>
           <p className="text-sm text-muted-foreground">
             <Timestamp time={item.date} variant="relative" />
           </p>
-          {(item as any).createdAt && (item as any).updatedAt && (item as any).createdAt !== (item as any).updatedAt && (
-            <p className="text-xs text-muted-foreground">
-              <Timestamp time={(item as any).createdAt} completionTime={(item as any).updatedAt} variant="elapsed" />
-            </p>
+          {(item as any).createdAt && (item as any).updatedAt && (
+            <Timestamp time={(item as any).createdAt} completionTime={(item as any).updatedAt} variant="elapsed" className="text-xs" />
           )}
+          <div className="mt-1">
+            <IdentifierDisplay 
+              externalId={(item as any).externalId}
+              identifiers={(item as any).identifiers}
+              iconSize="sm"
+              textSize="xs"
+            />
+          </div>
         </div>
         <div className="flex items-center space-x-2">
           {!isNarrowViewport && (
