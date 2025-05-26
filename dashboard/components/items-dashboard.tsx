@@ -32,10 +32,11 @@ import ItemCard, { ItemData } from './items/ItemCard'
 import { amplifyClient, graphqlRequest } from '@/utils/amplify-client'
 import { useAuthenticator } from '@aws-amplify/ui-react'
 import { ScorecardContextProps } from "./ScorecardContext"
-import { observeItemCreations } from '@/utils/subscriptions'
+import { observeItemCreations, observeItemUpdates } from '@/utils/subscriptions'
 import { toast } from 'sonner'
 import { useAccount } from '@/app/contexts/AccountContext'
 import { ItemsDashboardSkeleton, ItemCardSkeleton } from './loading-skeleton'
+import { ScoreResultCountManager, type ScoreResultCount } from '@/utils/score-result-counter'
 
 // Get the current date and time
 const now = new Date();
@@ -385,14 +386,112 @@ function ItemsDashboardInner() {
   // Use the account context instead of local state
   const { selectedAccount, isLoadingAccounts } = useAccount();
   const itemSubscriptionRef = useRef<{ unsubscribe: () => void } | null>(null);
+  const itemUpdateSubscriptionRef = useRef<{ unsubscribe: () => void } | null>(null);
+  const scoreCountManagerRef = useRef<ScoreResultCountManager | null>(null);
+  const [scoreResultCounts, setScoreResultCounts] = useState<Map<string, ScoreResultCount>>(new Map());
+  const [specificItemLoading, setSpecificItemLoading] = useState(false);
+  const [failedItemFetches, setFailedItemFetches] = useState<Set<string>>(new Set());
   
-  // Sync URL parameter with selected item
+  // Function to fetch a specific item by ID
+  const fetchSpecificItem = useCallback(async (itemId: string) => {
+    if (!selectedAccount) return null;
+    
+    setSpecificItemLoading(true);
+    
+    try {
+      const response = await graphqlRequest<{
+        getItem: {
+          id: string;
+          externalId?: string;
+          description?: string;
+          accountId: string;
+          evaluationId?: string;
+          updatedAt?: string;
+          createdAt?: string;
+          isEvaluation: boolean;
+        }
+      }>(`
+        query GetItem($id: ID!) {
+          getItem(id: $id) {
+            id
+            externalId
+            description
+            accountId
+            evaluationId
+            updatedAt
+            createdAt
+            isEvaluation
+          }
+        }
+      `, {
+        id: itemId
+      });
+      
+      
+      if (response.data?.getItem) {
+        const item = response.data.getItem;
+        
+        // Transform the item to match our expected format
+        const transformedItem = {
+          id: item.id,
+          accountId: item.accountId,
+          externalId: item.externalId,
+          description: item.description,
+          evaluationId: item.evaluationId,
+          updatedAt: item.updatedAt,
+          createdAt: item.createdAt,
+          isEvaluation: item.isEvaluation,
+          scorecard: null,
+          score: null,
+          date: item.createdAt || item.updatedAt,
+          status: "Done",
+          results: 0,
+          inferences: 0,
+          cost: "$0.000",
+          isNew: false,
+          groupedScoreResults: {}
+        } as Item;
+        
+        // Add the item to the beginning of the list if it's not already there
+        setItems(prevItems => {
+          const exists = prevItems.some(existingItem => existingItem.id === item.id);
+          if (!exists) {
+            return [transformedItem, ...prevItems];
+          }
+          return prevItems;
+        });
+        
+        return transformedItem;
+      }
+      
+      // Item not found, mark as failed
+      setFailedItemFetches(prev => new Set(prev).add(itemId));
+      return null;
+    } catch (error) {
+      console.error('Error fetching specific item:', error);
+      // Mark as failed on error too
+      setFailedItemFetches(prev => new Set(prev).add(itemId));
+      return null;
+    } finally {
+      setSpecificItemLoading(false);
+    }
+  }, [selectedAccount]);
+  
+  // Sync URL parameter with selected item and fetch if needed
   useEffect(() => {
     const itemId = params.id as string
     if (itemId && itemId !== selectedItem) {
       setSelectedItem(itemId)
+      
+      // Check if the item exists in the current list
+      const itemExists = items.some(item => item.id === itemId);
+      
+      // If item doesn't exist and we're not loading, fetch it specifically
+      if (!itemExists && !isLoading && selectedAccount) {
+        fetchSpecificItem(itemId);
+      }
     }
-  }, [params.id, selectedItem])
+  }, [params.id, selectedItem, items, isLoading, selectedAccount, fetchSpecificItem])
   
   // Add a ref for the intersection observer
   const observerRef = useRef<IntersectionObserver | null>(null);
@@ -403,7 +502,6 @@ function ItemsDashboardInner() {
     if (isLoadingMore || !nextToken) return;
     
     setIsLoadingMore(true);
-    console.log('Loading more items with nextToken:', nextToken);
     
     try {
       // Use the selectedAccount from context
@@ -611,7 +709,7 @@ function ItemsDashboardInner() {
           score: null, // Will be populated via lazy loading
           date: item.createdAt || item.updatedAt,
           status: "Done", 
-          results: 0, // Will be populated via lazy loading
+          results: 0, // Will be populated via lazy loading from scoreResultCounts
           inferences: 0, // Will be populated via lazy loading
           cost: "$0.000", // Placeholder
           isNew: true, 
@@ -663,7 +761,6 @@ function ItemsDashboardInner() {
       return;
     }
     
-    console.log('User authenticated, fetching items for account:', selectedAccount.id);
     setIsLoading(true);
     
     try {
@@ -856,7 +953,7 @@ function ItemsDashboardInner() {
           score: null, // Will be populated via lazy loading
           date: item.createdAt || item.updatedAt,
           status: "Done",
-          results: 0, // Will be populated via lazy loading
+          results: 0, // Will be populated via lazy loading from scoreResultCounts
           inferences: 0, // Will be populated via lazy loading
           cost: "$0.000", // Placeholder
           isNew: true,
@@ -884,39 +981,53 @@ function ItemsDashboardInner() {
   
   // Fetch items when the selected account or other filters change
   useEffect(() => {
-    console.log("useEffect triggered for fetchItems. isLoadingAccounts:", isLoadingAccounts, "selectedAccount:", selectedAccount, "selectedScorecard:", selectedScorecard, "selectedScore:", selectedScore);
     if (!isLoadingAccounts && selectedAccount) {
       // Reset items and nextToken when filters change
       setItems([]);
       setNextToken(null);
       fetchItems();
     } else if (!isLoadingAccounts && !selectedAccount) {
-      // Accounts loaded, but no account selected (e.g. user has no accounts)
-      console.log("Accounts loaded, but no account selected or found.");
       setItems([]); // Ensure items are cleared
       setNextToken(null);
       setIsLoading(false); // Stop loading indicator
     }
   }, [fetchItems, selectedAccount, isLoadingAccounts, selectedScorecard, selectedScore, setItems, setNextToken]);
 
-  // Set up subscription for item creations
+  // Initialize score count manager
+  useEffect(() => {
+    if (!scoreCountManagerRef.current) {
+      scoreCountManagerRef.current = new ScoreResultCountManager();
+      
+      // Subscribe to count changes
+      const unsubscribe = scoreCountManagerRef.current.subscribe((counts) => {
+        setScoreResultCounts(counts);
+      });
+      
+      return () => {
+        unsubscribe();
+        if (scoreCountManagerRef.current) {
+          scoreCountManagerRef.current.destroy();
+          scoreCountManagerRef.current = null;
+        }
+      };
+    }
+  }, []);
+
+  // Set up subscriptions for item creations and updates
   useEffect(() => {
     if (!selectedAccount || isLoadingAccounts) return; // Also wait for accounts to be loaded
     
-    console.log('Setting up item creation subscription for account:', selectedAccount.id);
     
-    const subscription = observeItemCreations().subscribe({
+    // Item creation subscription
+    const createSubscription = observeItemCreations().subscribe({
       next: async ({ data: newItem }) => {
+        console.log('Item creation subscription triggered:', newItem ? 'with data' : 'null data');
         if (!newItem) {
-          console.log('Received null item data from subscription - ignoring');
           return;
         }
         
-        console.log('New item created notification received:', newItem);
-        
+        console.log('New item data:', newItem);
         if (newItem.accountId === selectedAccount.id) {
-          console.log('🚀 NEW ITEM DETECTED! Adding to dashboard with ✨ SPARKLES ✨');
-          
           // Transform the new item to match our expected format
           const transformedNewItem = {
             id: newItem.id,
@@ -930,19 +1041,19 @@ function ItemsDashboardInner() {
             scorecard: null,
             score: null,
             date: newItem.createdAt || newItem.updatedAt,
-            status: "New", // Mark as new for special styling!
+            status: "New",
             results: 0,
             inferences: 0,
             cost: "$0.000",
-            isNew: true, // This will trigger special animations!
+            isNew: true,
             groupedScoreResults: {}
           };
 
-          // 🎉 Add the new item to the TOP of the list with celebration
+          // Add the new item to the TOP of the list
           setItems(prevItems => [transformedNewItem, ...prevItems]);
           
-          // Show a fun toast notification
-          toast.success(`🎉 New item arrived: ${newItem.externalId || newItem.id.substring(0,8)}`, {
+          // Show a toast notification
+          toast.success(`🎉 New item: ${newItem.externalId || newItem.id.substring(0,8)}`, {
             duration: 4000,
           });
           
@@ -959,21 +1070,61 @@ function ItemsDashboardInner() {
         }
       },
       error: (error) => {
-        console.error('Error in item creation subscription:', error);
+        console.error('Item creation subscription error:', error);
         toast.error("Error in item subscription.");
       }
     });
     
-    itemSubscriptionRef.current = subscription;
+    // Item update subscription
+    const updateSubscription = observeItemUpdates().subscribe({
+      next: async ({ data: updatedItem }) => {
+        if (!updatedItem) {
+          return;
+        }
+        
+        if (updatedItem.accountId === selectedAccount.id) {
+          // Update the item in the list if it exists
+          setItems(prevItems => 
+            prevItems.map(item => 
+              item.id === updatedItem.id 
+                ? {
+                    ...item,
+                    externalId: updatedItem.externalId,
+                    description: updatedItem.description,
+                    updatedAt: updatedItem.updatedAt,
+                    // Keep createdAt and date as they were (don't change sort order)
+                  }
+                : item
+            )
+          );
+          
+          // Trigger a re-count of score results for this item
+          if (scoreCountManagerRef.current) {
+            scoreCountManagerRef.current.clearCount(updatedItem.id);
+            scoreCountManagerRef.current.loadCountForItem(updatedItem.id);
+          }
+        }
+      },
+      error: (error) => {
+        console.error('Item update subscription error:', error);
+        toast.error("Error in item update subscription.");
+      }
+    });
+    
+    itemSubscriptionRef.current = createSubscription;
+    itemUpdateSubscriptionRef.current = updateSubscription;
     
     return () => {
-      console.log('Cleaning up item creation subscription');
       if (itemSubscriptionRef.current) {
         itemSubscriptionRef.current.unsubscribe();
         itemSubscriptionRef.current = null;
       }
+      if (itemUpdateSubscriptionRef.current) {
+        itemUpdateSubscriptionRef.current.unsubscribe();
+        itemUpdateSubscriptionRef.current = null;
+      }
     };
-  }, [selectedAccount, isLoadingAccounts, fetchItems]); // Added isLoadingAccounts and fetchItems
+  }, [selectedAccount, isLoadingAccounts, fetchItems]);
 
   useEffect(() => {
     const checkViewportWidth = () => {
@@ -1033,12 +1184,6 @@ function ItemsDashboardInner() {
   }, [])
 
   const filteredItems = useMemo(() => {
-    console.log("Filtering items:", {
-      itemsCount: items.length,
-      selectedScorecard,
-      selectedScore,
-      filterConfigLength: filterConfig.length
-    });
     
     return items.filter(item => {
       if (!selectedScorecard && !selectedScore && filterConfig.length === 0) return true
@@ -1172,13 +1317,59 @@ function ItemsDashboardInner() {
     if (!selectedItem) return null
 
     const selectedItemData = items.find(item => item.id === selectedItem)
-    if (!selectedItemData) return null
+    const scoreCount = scoreResultCounts.get(selectedItem)
+    const selectedItemWithCount = selectedItemData ? {
+      ...selectedItemData,
+      results: scoreCount?.count || selectedItemData.results,
+      isLoadingResults: scoreCount?.isLoading || false,
+      scorecardBreakdown: scoreCount?.scorecardBreakdown || undefined
+    } : null
+    
+    // If item is not found, check if we should attempt to fetch it or if we're already loading
+    if (!selectedItemWithCount) {
+      // If we're in any loading state, show loading spinner
+      if (isLoading || specificItemLoading) {
+        return (
+          <div className="h-full flex flex-col">
+            <div className="flex-1 flex items-center justify-center">
+              <div className="flex items-center space-x-2">
+                <Loader2 className="h-6 w-6 animate-spin" />
+                <span>Loading item details...</span>
+              </div>
+            </div>
+          </div>
+        )
+      }
+      
+      // If we have a selected account but item still not found, 
+      // it might be because we need to fetch it or it truly doesn't exist
+      // Let's be more conservative and only show error after we've attempted fetch
+      if (selectedAccount) {
+        // Check if we've already attempted to fetch this item
+        // If not, we should trigger the fetch (handled by useEffect)
+        // For now, show loading state while the useEffect handles the fetch
+        return (
+          <div className="h-full flex flex-col">
+            <div className="flex-1 flex items-center justify-center">
+              <div className="flex items-center space-x-2">
+                <Loader2 className="h-6 w-6 animate-spin" />
+                <span>Loading item details...</span>
+              </div>
+            </div>
+          </div>
+        )
+      }
+      
+      // Only show not found if we have no account (shouldn't happen) 
+      // or we've definitively determined the item doesn't exist
+      return null
+    }
 
     return (
       <div className="h-full flex flex-col">
         <div className="flex-1 overflow-auto">
           <ItemDetail
-            item={selectedItemData as unknown as FeedbackItem}
+            item={selectedItemWithCount as unknown as FeedbackItem}
             getBadgeVariant={getBadgeVariant}
             getRelativeTime={getRelativeTime}
             isMetadataExpanded={isMetadataExpanded}
@@ -1557,16 +1748,31 @@ function ItemsDashboardInner() {
                   ) : (
                     <>
                       <div className="grid grid-cols-2 @[500px]:grid-cols-3 @[700px]:grid-cols-4 @[900px]:grid-cols-5 @[1100px]:grid-cols-6 gap-3">
-                        {filteredItems.map((item) => (
-                          <ItemCard
-                            key={item.id}
-                            variant="grid"
-                            item={item as ItemData}
-                            isSelected={selectedItem === item.id}
-                            onClick={() => handleItemClick(item.id)}
-                            getBadgeVariant={getBadgeVariant}
-                          />
-                        ))}
+                        {filteredItems.map((item) => {
+                          const scoreCount = scoreResultCounts.get(item.id);
+                          const itemWithCount = {
+                            ...item,
+                            results: scoreCount?.count || item.results,
+                            isLoadingResults: scoreCount?.isLoading || false,
+                            scorecardBreakdown: scoreCount?.scorecardBreakdown || undefined
+                          } as ItemData & { isLoadingResults: boolean };
+                          
+                          return (
+                            <ItemCard
+                              key={item.id}
+                              variant="grid"
+                              item={itemWithCount}
+                              isSelected={selectedItem === item.id}
+                              onClick={() => handleItemClick(item.id)}
+                              getBadgeVariant={getBadgeVariant}
+                              ref={(el) => {
+                                if (el && scoreCountManagerRef.current) {
+                                  scoreCountManagerRef.current.observeItem(el, item.id);
+                                }
+                              }}
+                            />
+                          );
+                        })}
                       </div>
                       
                       {/* Replace the Load More button with an invisible loading indicator */}

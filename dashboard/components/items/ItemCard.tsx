@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { Card } from '@/components/ui/card'
-import { MoreHorizontal, X, Square, Columns2, StickyNote, Info, ChevronDown, ChevronUp, Clock, IdCard } from 'lucide-react'
+import { MoreHorizontal, X, Square, Columns2, StickyNote, Info, ChevronDown, ChevronUp, Clock, IdCard, Loader2, ListTodo } from 'lucide-react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { cn } from '@/lib/utils'
 import { CardButton } from '@/components/CardButton'
@@ -45,6 +45,16 @@ export interface ItemData {
   
   // New field for grouped score results
   groupedScoreResults?: GroupedScoreResults
+  
+  // Score result loading state
+  isLoadingResults?: boolean
+  
+  // Score result breakdown by scorecard
+  scorecardBreakdown?: Array<{
+    scorecardId: string;
+    scorecardName: string;
+    count: number;
+  }>
 }
 
 interface ItemCardProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -155,6 +165,28 @@ const GridContent = React.memo(({
               primaryScore}
           </div>
         )}
+        
+        {/* Score results count with loading state */}
+        <div className="flex flex-col gap-0.5 text-xs text-muted-foreground">
+          {item.isLoadingResults ? (
+            <div className="flex items-center gap-1">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              <span>Loading results...</span>
+            </div>
+          ) : item.scorecardBreakdown && item.scorecardBreakdown.length > 0 ? (
+            item.scorecardBreakdown.map((breakdown, index) => (
+              <div key={breakdown.scorecardId || index} className="flex flex-col">
+                <div className="font-medium text-xs flex items-center gap-1">
+                  <ListTodo className="h-3 w-3" />
+                  <span>{breakdown.scorecardName}</span>
+                </div>
+                <div>{breakdown.count} result{breakdown.count !== 1 ? 's' : ''}</div>
+              </div>
+            ))
+          ) : (
+            <span>{item.results || 0} result{(item.results || 0) !== 1 ? 's' : ''}</span>
+          )}
+        </div>
       </div>
       <div className="flex flex-col items-end space-y-1">
         {item.icon || <StickyNote className="h-[1.75rem] w-[1.75rem]" strokeWidth={1.25} />}
@@ -282,6 +314,28 @@ const DetailContent = React.memo(({
                 primaryScore}
             </div>
           )}
+          
+          {/* Score results count with loading state */}
+          <div className="flex flex-col gap-0.5 text-xs text-muted-foreground">
+            {item.isLoadingResults ? (
+              <div className="flex items-center gap-1">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                <span>Loading results...</span>
+              </div>
+            ) : item.scorecardBreakdown && item.scorecardBreakdown.length > 0 ? (
+              item.scorecardBreakdown.map((breakdown, index) => (
+                <div key={breakdown.scorecardId || index} className="flex flex-col">
+                  <div className="font-medium text-xs flex items-center gap-1">
+                    <ListTodo className="h-3 w-3" />
+                    <span>{breakdown.scorecardName}</span>
+                  </div>
+                  <div>{breakdown.count} result{breakdown.count !== 1 ? 's' : ''}</div>
+                </div>
+              ))
+            ) : (
+              <span>{item.results || 0} result{(item.results || 0) !== 1 ? 's' : ''}</span>
+            )}
+          </div>
         </div>
         <div className="flex gap-2 ml-4">
           <DropdownMenu.Root>
@@ -341,7 +395,7 @@ const DetailContent = React.memo(({
   )
 })
 
-export default function ItemCard({ 
+const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({ 
   item, 
   onEdit, 
   onViewData, 
@@ -354,12 +408,13 @@ export default function ItemCard({
   getBadgeVariant,
   className, 
   ...props 
-}: ItemCardProps) {
+}, ref) => {
   // Extract HTML props that might conflict with motion props
   const { onDrag, ...htmlProps } = props as any;
   
   return (
     <motion.div
+      ref={ref}
       initial={{ opacity: 1 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.2 }}
@@ -411,4 +466,8 @@ export default function ItemCard({
       </div>
     </motion.div>
   )
-} 
+});
+
+ItemCard.displayName = 'ItemCard';
+
+export default ItemCard; 
