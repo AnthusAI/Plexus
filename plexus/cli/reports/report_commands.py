@@ -477,8 +477,14 @@ def show_report(id_or_name: str, account_identifier: Optional[str]):
             task_details_panel = Panel(f"[red]{task_error}[/red]", title="[bold]Associated Task Details[/bold]", border_style="red", expand=True)
 
         # Report Output Panel
+        if report_instance.output:
+            # Convert \n to actual newlines for proper formatting
+            output_content = report_instance.output.replace('\\n', '\n')
+        else:
+            output_content = "[dim]No output generated.[/dim]"
+        
         report_output_panel = Panel(
-            report_instance.output or "[dim]No output generated.[/dim]",
+            output_content,
             title="[bold]Raw Report Output[/bold]",
             border_style="magenta",
             expand=True
@@ -506,7 +512,11 @@ def show_report(id_or_name: str, account_identifier: Optional[str]):
                 )
 
                 # Log panel (now first)
-                log_content = block_instance.log or "[dim]No log messages[/dim]"
+                if block_instance.log:
+                    # Convert \n to actual newlines for proper formatting
+                    log_content = block_instance.log.replace('\\n', '\n')
+                else:
+                    log_content = "[dim]No log messages[/dim]"
                 log_panel = Panel(
                     log_content,
                     title="[bold]Log[/bold]",
@@ -518,7 +528,12 @@ def show_report(id_or_name: str, account_identifier: Optional[str]):
                 output_content = "[dim]No output[/dim]"
                 if block_instance.output:
                     try:
-                        output_content = pretty_repr(block_instance.output, max_width=80)
+                        # If output is a string, handle newlines properly
+                        if isinstance(block_instance.output, str):
+                            output_content = block_instance.output.replace('\\n', '\n')
+                        else:
+                            # For non-string output (dicts, lists, etc.), use pretty_repr
+                            output_content = pretty_repr(block_instance.output, max_width=80)
                     except Exception:
                         output_content = "[red]Error rendering output[/red]"
                 output_panel = Panel(
@@ -737,8 +752,14 @@ def show_last_report(account_identifier: Optional[str]):
             task_details_panel = Panel(f"[red]Error fetching task details[/red]", title="[bold]Associated Task Details[/bold]", border_style="red", expand=True)
 
         # Report Output Panel
+        if report_instance.output:
+            # Convert \n to actual newlines for proper formatting
+            output_content = report_instance.output.replace('\\n', '\n')
+        else:
+            output_content = "[dim]No output generated.[/dim]"
+        
         report_output_panel = Panel(
-            report_instance.output or "[dim]No output generated.[/dim]",
+            output_content,
             title="[bold]Raw Report Output[/bold]",
             border_style="magenta",
             expand=True
@@ -766,7 +787,11 @@ def show_last_report(account_identifier: Optional[str]):
                 )
 
                 # Log panel (now first)
-                log_content = block_instance.log or "[dim]No log messages[/dim]"
+                if block_instance.log:
+                    # Convert \n to actual newlines for proper formatting
+                    log_content = block_instance.log.replace('\\n', '\n')
+                else:
+                    log_content = "[dim]No log messages[/dim]"
                 log_panel = Panel(
                     log_content,
                     title="[bold]Log[/bold]",
@@ -778,7 +803,12 @@ def show_last_report(account_identifier: Optional[str]):
                 output_content = "[dim]No output[/dim]"
                 if block_instance.output:
                     try:
-                        output_content = pretty_repr(block_instance.output, max_width=80)
+                        # If output is a string, handle newlines properly
+                        if isinstance(block_instance.output, str):
+                            output_content = block_instance.output.replace('\\n', '\n')
+                        else:
+                            # For non-string output (dicts, lists, etc.), use pretty_repr
+                            output_content = pretty_repr(block_instance.output, max_width=80)
                     except Exception:
                         output_content = "[red]Error rendering output[/red]"
                 output_panel = Panel(
