@@ -1017,17 +1017,20 @@ function ItemsDashboardInner() {
   useEffect(() => {
     if (!selectedAccount || isLoadingAccounts) return; // Also wait for accounts to be loaded
     
+    console.log('🔧 Setting up real-time subscriptions for account:', selectedAccount.id);
     
     // Item creation subscription
     const createSubscription = observeItemCreations().subscribe({
       next: async ({ data: newItem }) => {
-        console.log('Item creation subscription triggered:', newItem ? 'with data' : 'null data');
+        console.log('🎉 ITEM CREATED - Subscription triggered:', newItem ? 'with data' : 'null data');
         if (!newItem) {
+          console.log('❌ ITEM CREATED - No data received');
           return;
         }
         
-        console.log('New item data:', newItem);
+        console.log('🎉 ITEM CREATED - Full data:', newItem);
         if (newItem.accountId === selectedAccount.id) {
+          console.log('✅ ITEM CREATED - Account match! Adding to list. Item ID:', newItem.id);
           // Transform the new item to match our expected format
           const transformedNewItem = {
             id: newItem.id,
@@ -1067,10 +1070,12 @@ function ItemsDashboardInner() {
               )
             );
           }, 3000);
+        } else {
+          console.log('⚠️ ITEM CREATED - Account mismatch. Item account:', newItem.accountId, 'Selected account:', selectedAccount.id);
         }
       },
       error: (error) => {
-        console.error('Item creation subscription error:', error);
+        console.error('❌ ITEM CREATION SUBSCRIPTION ERROR:', error);
         toast.error("Error in item subscription.");
       }
     });
@@ -1078,11 +1083,15 @@ function ItemsDashboardInner() {
     // Item update subscription
     const updateSubscription = observeItemUpdates().subscribe({
       next: async ({ data: updatedItem }) => {
+        console.log('🔄 ITEM UPDATED - Subscription triggered:', updatedItem ? 'with data' : 'null data');
         if (!updatedItem) {
+          console.log('❌ ITEM UPDATED - No data received');
           return;
         }
         
+        console.log('🔄 ITEM UPDATED - Full data:', updatedItem);
         if (updatedItem.accountId === selectedAccount.id) {
+          console.log('✅ ITEM UPDATED - Account match! Updating item in list. Item ID:', updatedItem.id);
           // Update the item in the list if it exists
           setItems(prevItems => 
             prevItems.map(item => 
@@ -1103,10 +1112,12 @@ function ItemsDashboardInner() {
             scoreCountManagerRef.current.clearCount(updatedItem.id);
             scoreCountManagerRef.current.loadCountForItem(updatedItem.id);
           }
+        } else {
+          console.log('⚠️ ITEM UPDATED - Account mismatch. Item account:', updatedItem.accountId, 'Selected account:', selectedAccount.id);
         }
       },
       error: (error) => {
-        console.error('Item update subscription error:', error);
+        console.error('❌ ITEM UPDATE SUBSCRIPTION ERROR:', error);
         toast.error("Error in item update subscription.");
       }
     });
@@ -1115,13 +1126,16 @@ function ItemsDashboardInner() {
     itemUpdateSubscriptionRef.current = updateSubscription;
     
     return () => {
+      console.log('🔧 Tearing down real-time subscriptions for account:', selectedAccount?.id);
       if (itemSubscriptionRef.current) {
         itemSubscriptionRef.current.unsubscribe();
         itemSubscriptionRef.current = null;
+        console.log('🔧 Item creation subscription unsubscribed');
       }
       if (itemUpdateSubscriptionRef.current) {
         itemUpdateSubscriptionRef.current.unsubscribe();
         itemUpdateSubscriptionRef.current = null;
+        console.log('🔧 Item update subscription unsubscribed');
       }
     };
   }, [selectedAccount, isLoadingAccounts, fetchItems]);
