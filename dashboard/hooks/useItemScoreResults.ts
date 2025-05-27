@@ -43,20 +43,13 @@ export function useItemScoreResults(itemId: string | null) {
 
   const fetchScoreResults = useCallback(async (id: string) => {
     if (!id) {
-      console.log('useItemScoreResults: No item ID provided');
       return;
     }
     
-    console.log('useItemScoreResults: Starting fetch for item ID:', id);
     setIsLoading(true);
     setError(null);
     
     try {
-      console.log('useItemScoreResults: Fetching score results for item:', id);
-      
-      // Query the Item with its scoreResults relationship
-      console.log('useItemScoreResults: Querying item with scoreResults relationship');
-      
       const graphqlResponse = await graphqlRequest<{
         getItem: {
           id: string;
@@ -97,19 +90,11 @@ export function useItemScoreResults(itemId: string | null) {
           }
         }
       `, { id });
-
-      console.log('useItemScoreResults: GraphQL response:', graphqlResponse);
       
       const results = graphqlResponse.data?.getItem?.scoreResults?.items || [];
       const response = { data: results };
 
-      console.log('useItemScoreResults: Raw response:', response);
-      console.log('useItemScoreResults: Response data length:', results.length);
-      console.log('useItemScoreResults: Response data:', results);
-
-      if (results && results.length > 0) {
-        console.log(`Found ${results.length} score results for item ${id}`);
-        
+      if (results && results.length > 0) {        
         // Sort by creation time (most recent first)
         const sortedResults = results.sort((a, b) => {
           const dateA = new Date(a.createdAt || a.updatedAt || '').getTime();
@@ -119,8 +104,6 @@ export function useItemScoreResults(itemId: string | null) {
 
         // Group results by scorecard using embedded data
         const grouped: GroupedScoreResults = {};
-        
-        console.log('useItemScoreResults: Starting to group results, count:', sortedResults.length);
         
         for (const result of sortedResults) {
           const scorecardId = result.scorecardId;
@@ -141,14 +124,9 @@ export function useItemScoreResults(itemId: string | null) {
 
         const finalResults = sortedResults;
         
-        console.log('useItemScoreResults: Final grouped results:', grouped);
-        console.log('useItemScoreResults: Grouped results keys:', Object.keys(grouped));
-        console.log('useItemScoreResults: Setting state with results');
-        
         setScoreResults(finalResults);
         setGroupedResults(grouped);
       } else {
-        console.log('No score results found for item:', id);
         setScoreResults([]);
         setGroupedResults({});
       }
