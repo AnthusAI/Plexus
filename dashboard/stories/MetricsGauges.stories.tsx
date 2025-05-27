@@ -5,7 +5,7 @@ import MetricsGauges from '@/components/MetricsGauges'
 import { Card } from '@/components/ui/card'
 
 const meta = {
-  title: 'Visualization/MetricsGauges',
+  title: 'General/Components/MetricsGauges',
   component: MetricsGauges,
   parameters: {
     layout: 'centered',
@@ -20,6 +20,14 @@ const otherMetricsSegments = [
   { start: 0, end: 60, color: 'var(--gauge-inviable)' },
   { start: 60, end: 85, color: 'var(--gauge-converging)' },
   { start: 85, end: 100, color: 'var(--gauge-great)' }
+]
+
+const alignmentSegments = [
+  { start: 0, end: 50, color: 'var(--gauge-inviable)' },      // Negative values (-1 to 0)
+  { start: 50, end: 60, color: 'var(--gauge-converging)' },   // Low alignment (0 to 0.2)
+  { start: 60, end: 75, color: 'var(--gauge-almost)' },       // Moderate alignment (0.2 to 0.5)
+  { start: 75, end: 90, color: 'var(--gauge-viable)' },       // Good alignment (0.5 to 0.8)
+  { start: 90, end: 100, color: 'var(--gauge-great)' }        // Excellent alignment (0.8 to 1.0)
 ]
 
 const createGaugeConfig = (accuracy: number) => ({
@@ -57,6 +65,46 @@ const createDetailGaugeConfig = (
     {
       value: specificity,
       label: 'Specificity',
+      segments: otherMetricsSegments,
+      backgroundColor: 'var(--gauge-background)',
+    },
+  ]
+})
+
+const createAlignmentGaugeConfig = (
+  alignment: number,
+  alignmentTarget: number,
+  accuracy: number,
+  precision: number,
+  recall: number
+) => ({
+  gauges: [
+    {
+      value: alignment,
+      target: alignmentTarget,
+      label: 'Alignment',
+      segments: alignmentSegments,
+      min: -1,
+      max: 1,
+      valueUnit: '',
+      decimalPlaces: 2,
+      backgroundColor: 'var(--gauge-background)',
+      information: "Gwet's AC1 is an advanced agreement coefficient that measures inter-rater reliability, accounting for chance agreement more effectively than other metrics. Values range from -1 (complete disagreement) to 1 (perfect agreement), with 0 indicating random agreement. Values above 0.8 generally indicate strong agreement between multiple assessors."
+    },
+    {
+      value: accuracy,
+      label: 'Accuracy',
+      backgroundColor: 'var(--gauge-background)',
+    },
+    {
+      value: precision,
+      label: 'Precision',
+      segments: otherMetricsSegments,
+      backgroundColor: 'var(--gauge-background)',
+    },
+    {
+      value: recall,
+      label: 'Recall',
       segments: otherMetricsSegments,
       backgroundColor: 'var(--gauge-background)',
     },
@@ -113,6 +161,46 @@ export const Detail: Story = {
     await expect(within(sensitivityGauge!).getByText('89%', { selector: '.text-\\[2\\.25rem\\]' })).toBeInTheDocument()
     await expect(within(specificityGauge!).getByText('95%', { selector: '.text-\\[2\\.25rem\\]' })).toBeInTheDocument()
     await expect(within(precisionGauge!).getByText('91%', { selector: '.text-\\[2\\.25rem\\]' })).toBeInTheDocument()
+  }
+}
+
+export const DetailWithTarget: Story = {
+  args: {
+    ...createAlignmentGaugeConfig(0.82, 0.92, 88, 85, 82),
+    variant: 'detail'
+  },
+  render: (args) => (
+    <Card className="bg-card-light p-6">
+      <MetricsGauges {...args} />
+    </Card>
+  ),
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement)
+    
+    // First verify all labels are present
+    await expect(canvas.getByText('Alignment')).toBeInTheDocument()
+    await expect(canvas.getByText('Accuracy')).toBeInTheDocument()
+    await expect(canvas.getByText('Precision')).toBeInTheDocument()
+    await expect(canvas.getByText('Recall')).toBeInTheDocument()
+
+    // Get all gauge containers
+    const gauges = canvas.getAllByTestId('gauge-container')
+    
+    // Check the alignment gauge exists
+    const alignmentGauge = gauges.find(g => within(g).queryByText('Alignment'))
+    await expect(alignmentGauge).toBeInTheDocument()
+    
+    // Test for SVG and component structure without relying on specific rendered text
+    const svg = alignmentGauge?.querySelector('svg')
+    await expect(svg).toBeInTheDocument()
+    
+    // Test that there are needles visible in the gauge (at least 2 for value and target)
+    const needles = svg?.querySelectorAll('path[d^="M 0,-"]')
+    await expect(needles?.length).toBeGreaterThanOrEqual(2)
+    
+    // Test that the target is rendered with a dashed line
+    const targetLine = svg?.querySelector('line[stroke-dasharray="2,1"]')
+    await expect(targetLine).toBeInTheDocument()
   }
 }
 

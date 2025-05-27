@@ -6,7 +6,7 @@ import "@/components/blocks/registrySetup";
 import type { Schema } from "@/amplify/data/resource"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Square, Columns2, X, MoreHorizontal, Trash2, Share, Pencil, Play } from "lucide-react"
+import { Square, Columns2, X, MoreHorizontal, Trash2, Share, Pencil, Play, Settings } from "lucide-react"
 import { format, formatDistanceToNow, parseISO } from "date-fns"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -26,7 +26,7 @@ import {
 import { useAuthenticator } from '@aws-amplify/ui-react'
 import { useRouter, useParams, usePathname } from 'next/navigation'
 import { getClient } from '@/utils/amplify-client'
-import type { GraphQLResult } from '@aws-amplify/api'
+import type { GraphQLResult, GraphQLSubscription } from '@aws-amplify/api'
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { CardButton } from "@/components/CardButton"
 import { getValueFromLazyLoader } from '@/utils/data-operations'
@@ -34,9 +34,10 @@ import type { LazyLoader } from '@/utils/types'
 import { toast } from "sonner"
 import { shareLinkClient, ShareLinkViewOptions } from "@/utils/share-link-client"
 import { ShareResourceModal } from "@/components/share-resource-modal"
-import { EvaluationDashboardSkeleton } from "@/components/loading-skeleton" // Placeholder skeleton
+import { ReportsDashboardSkeleton } from "@/components/loading-skeleton"
 import ReportTask, { ReportTaskData } from "@/components/ReportTask" // Import ReportTask with its types
-import { TaskDispatchButton } from '@/components/task-dispatch' // Placeholder for dispatch
+import { RunReportButton } from '@/components/task-dispatch' // Import direct button
+import ReportConfigurationSelector from "@/components/ReportConfigurationSelector"
 
 // Define types based on Amplify schema
 type Report = Schema['Report']['type'] & {
@@ -59,26 +60,6 @@ type ReportDisplayData = {
     description?: string | null;
   } | null;
   task?: Task | null;
-};
-
-// TODO: Define actual report configuration for dispatch
-interface TaskConfigType {
-  taskType: string;
-  label: string;
-  icon: React.ComponentType;
-  requiredContext: string[];
-  getTaskMetadata: (context: Record<string, any>) => Record<string, any>;
-}
-
-const reportsConfig: TaskConfigType = {
-  taskType: 'REPORT_GENERATION', // Example
-  label: 'Generate Report',
-  icon: Play,
-  requiredContext: ['reportConfigurationId'], // Example
-  getTaskMetadata: (context: Record<string, any>) => ({
-    reportConfigurationId: context.reportConfigurationId,
-    // Add other necessary metadata
-  }),
 };
 
 const ACCOUNT_KEY = process.env.NEXT_PUBLIC_PLEXUS_ACCOUNT_KEY || 'call-criteria'
@@ -106,6 +87,72 @@ const LIST_REPORTS = `
   ) {
     listReportByAccountIdAndUpdatedAt(
       accountId: $accountId
+      sortDirection: $sortDirection
+      limit: $limit
+      nextToken: $nextToken
+    ) {
+      items {
+        id
+        name
+        createdAt
+        updatedAt
+        parameters
+        output
+        accountId
+        reportConfigurationId
+        reportConfiguration {
+          id
+          name
+          description
+        }
+        taskId
+        task {
+          id
+          type
+          status
+          target
+          command
+          description
+          dispatchStatus
+          metadata
+          createdAt
+          startedAt
+          completedAt
+          estimatedCompletionAt
+          errorMessage
+          errorDetails
+          currentStageId
+          stages {
+            items {
+              id
+              name
+              order
+              status
+              statusMessage
+              startedAt
+              completedAt
+              estimatedCompletionAt
+              processedItems
+              totalItems
+            }
+          }
+        }
+      }
+      nextToken
+    }
+  }
+`
+
+// GraphQL query to list reports by report configuration ID and creation timestamp
+const LIST_REPORTS_BY_CONFIG = `
+  query ListReportByReportConfigurationIdAndCreatedAt(
+    $reportConfigurationId: String!
+    $sortDirection: ModelSortDirection
+    $limit: Int
+    $nextToken: String
+  ) {
+    listReportByReportConfigurationIdAndCreatedAt(
+      reportConfigurationId: $reportConfigurationId
       sortDirection: $sortDirection
       limit: $limit
       nextToken: $nextToken
@@ -224,6 +271,137 @@ const GET_REPORT_WITH_BLOCKS = `
   }
 `
 
+// GraphQL subscription queries for real-time updates
+const SUBSCRIBE_ON_CREATE_REPORT = `
+  subscription OnCreateReport($accountId: String!) {
+    onCreateReport(filter: { accountId: { eq: $accountId } }) {
+      id
+      name
+      createdAt
+      updatedAt
+      parameters
+      output
+      accountId
+      reportConfigurationId
+      reportConfiguration {
+        id
+        name
+        description
+      }
+      taskId
+      task {
+        id
+        type
+        status
+        target
+        command
+        description
+        dispatchStatus
+        metadata
+        createdAt
+        startedAt
+        completedAt
+        estimatedCompletionAt
+        errorMessage
+        errorDetails
+        currentStageId
+        stages {
+          items {
+            id
+            name
+            order
+            status
+            statusMessage
+            startedAt
+            completedAt
+            estimatedCompletionAt
+            processedItems
+            totalItems
+          }
+        }
+      }
+    }
+  }
+`;
+
+const SUBSCRIBE_ON_UPDATE_REPORT = `
+  subscription OnUpdateReport($accountId: String!) {
+    onUpdateReport(filter: { accountId: { eq: $accountId } }) {
+      id
+      name
+      createdAt
+      updatedAt
+      parameters
+      output
+      accountId
+      reportConfigurationId
+      reportConfiguration {
+        id
+        name
+        description
+      }
+      taskId
+      task {
+        id
+        type
+        status
+        target
+        command
+        description
+        dispatchStatus
+        metadata
+        createdAt
+        startedAt
+        completedAt
+        estimatedCompletionAt
+        errorMessage
+        errorDetails
+        currentStageId
+        stages {
+          items {
+            id
+            name
+            order
+            status
+            statusMessage
+            startedAt
+            completedAt
+            estimatedCompletionAt
+            processedItems
+            totalItems
+          }
+        }
+      }
+    }
+  }
+`;
+
+const SUBSCRIBE_ON_CREATE_REPORT_BLOCK = `
+  subscription OnCreateReportBlock {
+    onCreateReportBlock {
+      id
+      name
+      position
+      output
+      log
+      reportId
+    }
+  }
+`;
+
+const SUBSCRIBE_ON_UPDATE_REPORT_BLOCK = `
+  subscription OnUpdateReportBlock {
+    onUpdateReportBlock {
+      id
+      name
+      position
+      output
+      log
+      reportId
+    }
+  }
+`;
+
 interface ListAccountResponse {
   listAccounts: {
     items: Array<{
@@ -235,6 +413,13 @@ interface ListAccountResponse {
 
 interface ListReportsResponse {
   listReportByAccountIdAndUpdatedAt: {
+    items: Report[];
+    nextToken: string | null;
+  };
+}
+
+interface ListReportsByConfigResponse {
+  listReportByReportConfigurationIdAndCreatedAt: {
     items: Report[];
     nextToken: string | null;
   };
@@ -268,6 +453,15 @@ const getNestedProperty = (obj: any, path: string[], defaultValue: any = null) =
 function transformReportData(report: Report): ReportDisplayData | null {
   if (!report) return null;
 
+  console.log('Raw report data in transform:', { 
+    id: report.id, 
+    name: report.name, 
+    hasName: !!report.name,
+    nameType: typeof report.name,
+    reportType: typeof report,
+    configId: report.reportConfigurationId
+  });
+
   const taskData = report.task ? getValueFromLazyLoader(report.task) : null;
   const configData = report.reportConfiguration ? getValueFromLazyLoader(report.reportConfiguration) : null;
 
@@ -288,15 +482,42 @@ function transformReportData(report: Report): ReportDisplayData | null {
     }
   }
 
-  return {
+  // Extract name with fallbacks in order:
+  // 1. Direct report.name
+  // 2. If report.name is an object with a name property, use that
+  // 3. Config name
+  // 4. ID-based name
+  let reportName = null;
+  
+  if (report.name) {
+    if (typeof report.name === 'string') {
+      reportName = report.name;
+    } else if (typeof report.name === 'object' && report.name !== null) {
+      // If it's an object, try to extract name from it
+      reportName = (report.name as any).name || null;
+    }
+  }
+  
+  // Final fallbacks if we still don't have a name
+  reportName = reportName || (configInfo?.name) || `Report ${report.id.substring(0, 6)}`;
+
+  const transformed = {
     id: report.id,
-    name: report.name || (configInfo?.name) || `Report ${report.id.substring(0, 6)}`,
+    name: reportName,
     createdAt: report.createdAt,
     updatedAt: report.updatedAt,
     output: report.output || null,
     reportConfiguration: configInfo,
     task: taskData as Task | null
   };
+
+  console.log('Transformed report data:', { 
+    id: transformed.id, 
+    name: transformed.name,
+    configName: transformed.reportConfiguration?.name
+  });
+
+  return transformed;
 }
 
 export default function ReportsDashboard({
@@ -325,6 +546,7 @@ export default function ReportsDashboard({
   const [isShareModalOpen, setIsShareModalOpen] = useState(false)
   const [shareUrl, setShareUrl] = useState<string | null>(null)
   const [nextToken, setNextToken] = useState<string | null>(null); // For pagination
+  const [selectedReportConfiguration, setSelectedReportConfiguration] = useState<string | null>(null); // For filtering by report configuration
   const [selectedReportBlocks, setSelectedReportBlocks] = useState<Array<{
     type: string;
     config: Record<string, any>;
@@ -333,6 +555,9 @@ export default function ReportsDashboard({
     name?: string;
     position: number;
   }> | null>(null);
+  const [subscriptions, setSubscriptions] = useState<{ unsubscribe: () => void }[]>([]);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
 
   // Fetch account ID
   useEffect(() => {
@@ -363,39 +588,76 @@ export default function ReportsDashboard({
   }, [])
 
   // Fetch Reports Data
-  const fetchReports = useCallback(async (currentAccountId: string, currentNextToken: string | null) => {
-    setIsLoading(true);
+  const fetchReports = useCallback(async (currentAccountId: string, currentNextToken: string | null, reportConfigId?: string | null) => {
+    if (currentNextToken) {
+      setIsLoadingMore(true);
+    } else {
+      setIsLoading(true);
+    }
     setError(null);
     try {
-      console.log(`Fetching reports for account ${currentAccountId} with nextToken: ${currentNextToken}`);
-      const reportsResponse = await getClient().graphql<ListReportsResponse>({
-        query: LIST_REPORTS,
-        variables: {
-          accountId: currentAccountId,
-          sortDirection: 'DESC', // Get newest first
-          limit: 20, // Adjust limit as needed
-          nextToken: currentNextToken,
-        }
-      });
+      let reportsResponse;
+      
+      if (reportConfigId) {
+        // Fetch reports by report configuration ID
+        console.log(`Fetching reports for config ${reportConfigId} with nextToken: ${currentNextToken}`);
+        reportsResponse = await getClient().graphql<ListReportsByConfigResponse>({
+          query: LIST_REPORTS_BY_CONFIG,
+          variables: {
+            reportConfigurationId: reportConfigId,
+            sortDirection: 'DESC', // Get newest first
+            limit: 20, // Adjust limit as needed
+            nextToken: currentNextToken,
+          }
+        });
+        
+        if ('data' in reportsResponse && reportsResponse.data?.listReportByReportConfigurationIdAndCreatedAt) {
+          const fetchedItems = reportsResponse.data.listReportByReportConfigurationIdAndCreatedAt.items || [];
+          const transformedItems = fetchedItems
+            .map(transformReportData)
+            .filter((item: unknown): item is ReportDisplayData => item !== null);
 
-      if ('data' in reportsResponse && reportsResponse.data?.listReportByAccountIdAndUpdatedAt) {
-        const fetchedItems = reportsResponse.data.listReportByAccountIdAndUpdatedAt.items || [];
-        const transformedItems = fetchedItems
-          .map(transformReportData)
-          .filter((item: unknown): item is ReportDisplayData => item !== null);
+          console.log(`Fetched ${transformedItems.length} reports for config ${reportConfigId}`);
 
-        console.log(`Fetched ${transformedItems.length} reports`);
-
-        setReports(prevReports => currentNextToken ? [...prevReports, ...transformedItems] : transformedItems);
-        setNextToken(reportsResponse.data.listReportByAccountIdAndUpdatedAt.nextToken);
-
-        if (!dataHasLoadedOnce) {
-          setDataHasLoadedOnce(true);
+          setReports(prevReports => currentNextToken ? [...prevReports, ...transformedItems] : transformedItems);
+          setNextToken(reportsResponse.data.listReportByReportConfigurationIdAndCreatedAt.nextToken);
+        } else {
+          console.warn('No reports data found for config:', reportConfigId);
+          setReports(prevReports => currentNextToken ? prevReports : []);
+          setNextToken(null);
         }
       } else {
-        console.warn('No reports data found in response:', reportsResponse);
-        setReports(prevReports => currentNextToken ? prevReports : []); // Clear if initial fetch is empty
-        setNextToken(null);
+        // Fetch all reports by account ID
+        console.log(`Fetching reports for account ${currentAccountId} with nextToken: ${currentNextToken}`);
+        reportsResponse = await getClient().graphql<ListReportsResponse>({
+          query: LIST_REPORTS,
+          variables: {
+            accountId: currentAccountId,
+            sortDirection: 'DESC', // Get newest first
+            limit: 20, // Adjust limit as needed
+            nextToken: currentNextToken,
+          }
+        });
+
+        if ('data' in reportsResponse && reportsResponse.data?.listReportByAccountIdAndUpdatedAt) {
+          const fetchedItems = reportsResponse.data.listReportByAccountIdAndUpdatedAt.items || [];
+          const transformedItems = fetchedItems
+            .map(transformReportData)
+            .filter((item: unknown): item is ReportDisplayData => item !== null);
+
+          console.log(`Fetched ${transformedItems.length} reports`);
+
+          setReports(prevReports => currentNextToken ? [...prevReports, ...transformedItems] : transformedItems);
+          setNextToken(reportsResponse.data.listReportByAccountIdAndUpdatedAt.nextToken);
+        } else {
+          console.warn('No reports data found in response:', reportsResponse);
+          setReports(prevReports => currentNextToken ? prevReports : []);
+          setNextToken(null);
+        }
+      }
+
+      if (!dataHasLoadedOnce) {
+        setDataHasLoadedOnce(true);
       }
     } catch (err: any) {
       console.error('Error fetching reports:', err);
@@ -404,45 +666,28 @@ export default function ReportsDashboard({
       setNextToken(null);
     } finally {
       setIsLoading(false);
+      setIsLoadingMore(false);
     }
   }, [dataHasLoadedOnce]); // Dependency array includes dataHasLoadedOnce
 
-  // Trigger initial fetch when accountId is available
+  // Add the effect for initial fetch when accountId is available
   useEffect(() => {
     if (accountId && !dataHasLoadedOnce) { // Only fetch initially if data hasn't loaded
-      fetchReports(accountId, null);
+      fetchReports(accountId, null, selectedReportConfiguration);
     }
-  }, [accountId, dataHasLoadedOnce, fetchReports]); // Add fetchReports to dependencies
+  }, [accountId, dataHasLoadedOnce, selectedReportConfiguration, fetchReports]);
 
-  // Fetch report blocks when a report is selected
+  // Refetch reports when selectedReportConfiguration changes
   useEffect(() => {
-    const fetchReportBlocks = async (reportId: string) => {
-      try {
-        const response = await getClient().graphql<GetReportResponse>({
-          query: GET_REPORT_WITH_BLOCKS,
-          variables: { id: reportId }
-        });
+    if (accountId && dataHasLoadedOnce) {
+      // Reset pagination and fetch new data
+      setNextToken(null);
+      fetchReports(accountId, null, selectedReportConfiguration);
+    }
+  }, [selectedReportConfiguration, accountId, dataHasLoadedOnce, fetchReports]);
 
-        if ('data' in response && response.data?.getReport?.reportBlocks?.items) {
-          // Transform the blocks to match the expected structure
-          const transformedBlocks = response.data.getReport.reportBlocks.items.map((block: RawReportBlock) => ({
-            type: block.output.class || 'unknown', // Extract type from output.class
-            config: block.output, // Use output as config
-            output: block.output,
-            log: block.log || undefined,
-            name: block.name || undefined,
-            position: block.position
-          }));
-          setSelectedReportBlocks(transformedBlocks);
-        } else {
-          setSelectedReportBlocks([]);
-        }
-      } catch (err: any) {
-        console.error('Error fetching report blocks:', err);
-        setSelectedReportBlocks([]);
-      }
-    };
-
+  // Fetch Report Blocks when selectedReportId changes
+  useEffect(() => {
     if (selectedReportId) {
       fetchReportBlocks(selectedReportId);
     } else {
@@ -450,12 +695,302 @@ export default function ReportsDashboard({
     }
   }, [selectedReportId]);
 
+  // Set up subscriptions for real-time updates
+  useEffect(() => {
+    if (!accountId) return;
+
+    console.log('Setting up report subscriptions for accountId:', accountId);
+    const subscriptionHandlers: { unsubscribe: () => void }[] = [];
+
+    // Subscribe to new report creations
+    try {
+      const createReportSubscription = (getClient().graphql({
+        query: SUBSCRIBE_ON_CREATE_REPORT,
+        variables: { accountId }
+      }) as unknown as { subscribe: Function }).subscribe({
+        next: ({ data }: { data?: { onCreateReport: any } }) => {
+          console.log('🔔 New report created SUB-EVENT:', data?.onCreateReport);
+          if (data?.onCreateReport) {
+            const newReport = data.onCreateReport;
+            console.log('🔔 SUB-EVENT: Original new report name:', newReport.name, 'type:', typeof newReport.name);
+            
+            // DIRECT APPROACH: Create a report display object manually to ensure name is preserved
+            const manualTransformedReport: ReportDisplayData = {
+              id: newReport.id,
+              name: typeof newReport.name === 'string' ? newReport.name : 
+                   (typeof newReport.name === 'object' && newReport.name !== null) ? 
+                   (newReport.name as any).name || `Report ${newReport.id.substring(0, 6)}` : 
+                   `Report ${newReport.id.substring(0, 6)}`,
+              createdAt: newReport.createdAt,
+              updatedAt: newReport.updatedAt,
+              output: newReport.output || null,
+              reportConfiguration: newReport.reportConfiguration ? {
+                id: newReport.reportConfiguration!.id,
+                name: newReport.reportConfiguration!.name,
+                description: newReport.reportConfiguration!.description
+              } : null,
+              task: newReport.task || null
+            };
+            
+            console.log('🔔 SUB-EVENT: Manually transformed report:', manualTransformedReport);
+            console.log('🔔 SUB-EVENT: Manual transformed name:', manualTransformedReport.name);
+            
+            // Use the manual transformation to ensure name is preserved
+            setReports(prevReports => {
+              const newReports = [manualTransformedReport, ...prevReports];
+              console.log('🔔 SUB-EVENT: Updated reports array:', newReports.map(r => ({ id: r.id, name: r.name })));
+              return newReports;
+            });
+          }
+        },
+        error: (error: Error) => {
+          console.error('Error in create report subscription:', error);
+        }
+      });
+
+      subscriptionHandlers.push(createReportSubscription);
+    } catch (error) {
+      console.error('Failed to set up create report subscription:', error);
+    }
+
+    // Subscribe to report updates
+    try {
+      const updateReportSubscription = (getClient().graphql({
+        query: SUBSCRIBE_ON_UPDATE_REPORT,
+        variables: { accountId }
+      }) as unknown as { subscribe: Function }).subscribe({
+        next: ({ data }: { data?: { onUpdateReport: any } }) => {
+          console.log('Report updated:', data?.onUpdateReport);
+          if (data?.onUpdateReport) {
+            const updatedReport = data.onUpdateReport;
+            // Cast to any to avoid type issues with transformReportData
+            const transformedReport = transformReportData(updatedReport as any);
+            console.log('Transformed report from update subscription:', transformedReport);
+            if (transformedReport) {
+              // Ensure the name is properly set
+              if (!transformedReport.name && updatedReport.name) {
+                transformedReport.name = updatedReport.name;
+              }
+              setReports(prevReports => 
+                prevReports.map(report => 
+                  report.id === transformedReport.id ? transformedReport : report
+                )
+              );
+            }
+          }
+        },
+        error: (error: Error) => {
+          console.error('Error in update report subscription:', error);
+        }
+      });
+
+      subscriptionHandlers.push(updateReportSubscription);
+    } catch (error) {
+      console.error('Failed to set up update report subscription:', error);
+    }
+
+    // Save subscriptions for cleanup
+    setSubscriptions(prevSubscriptions => [...prevSubscriptions, ...subscriptionHandlers]);
+
+    // Cleanup on unmount or accountId change
+    return () => {
+      console.log('Cleaning up report subscriptions');
+      subscriptionHandlers.forEach(subscription => {
+        try {
+          subscription.unsubscribe();
+        } catch (err) {
+          console.error('Error unsubscribing:', err);
+        }
+      });
+    };
+  }, [accountId]);
+
+  // Make fetchReportBlocks more robust by handling parsed JSON if needed
+  const fetchReportBlocks = async (reportId: string) => {
+    try {
+      // Keep this log to show when blocks are being fetched
+      console.log(`Fetching blocks for report ${reportId}`);
+      const response = await getClient().graphql<GetReportResponse>({
+        query: GET_REPORT_WITH_BLOCKS,
+        variables: { id: reportId }
+      });
+
+      if ('data' in response && response.data?.getReport?.reportBlocks?.items) {
+        // Transform the blocks to match the expected structure
+        const transformedBlocks = response.data.getReport.reportBlocks.items.map((block: RawReportBlock) => {
+          // Handle case where output is already parsed or is a string
+          let outputData;
+          try {
+            outputData = typeof block.output === 'string' ? JSON.parse(block.output) : block.output;
+          } catch (err) {
+            console.error('Error parsing block output:', err);
+            outputData = block.output || {};
+          }
+          
+          return {
+            type: outputData.class || 'unknown', // Extract type from output.class
+            config: outputData, // Use output as config
+            output: outputData,
+            log: block.log || undefined,
+            name: block.name || undefined,
+            position: block.position
+          };
+        });
+        
+        // Important log to verify block count
+        console.log(`Fetched ${transformedBlocks.length} blocks for report ${reportId}`);
+        
+        // Force a state update by creating a new array
+        setSelectedReportBlocks([...transformedBlocks]);
+        
+        // Create a new snapshot of the reports array with the updated report
+        // This forces a re-render of the component tree
+        setReports(prevReports => {
+          return prevReports.map(r => {
+            if (r.id === reportId) {
+              // Keep this log to verify the report is being updated
+              console.log(`Updating report ${reportId} with fresh data to trigger re-render`);
+              // Create a new object to trigger reference change
+              return { 
+                ...r,
+                // Add a timestamp to force React to detect the change
+                _lastUpdated: Date.now() 
+              };
+            }
+            return r;
+          });
+        });
+      } else {
+        console.log(`No blocks found for report ${reportId}`);
+        setSelectedReportBlocks([]);
+      }
+    } catch (err: any) {
+      console.error('Error fetching report blocks:', err);
+      setSelectedReportBlocks([]);
+    }
+  };
+
+  // Subscribe to report block updates for the selected report
+  useEffect(() => {
+    if (!selectedReportId) return;
+
+    console.log('Setting up report block subscriptions for reportId:', selectedReportId);
+    const blockSubscriptionHandlers: { unsubscribe: () => void }[] = [];
+
+    // Subscribe to new report block creations
+    try {
+      const createBlockSubscription = (getClient().graphql({
+        query: SUBSCRIBE_ON_CREATE_REPORT_BLOCK
+      }) as unknown as { subscribe: Function }).subscribe({
+        next: ({ data }: { data?: { onCreateReportBlock: { id: string, reportId: string, name?: string, position: number, output: any, log?: string } } }) => {
+          // Important log to verify subscription is receiving events
+          console.log('New report block created via subscription:', data?.onCreateReportBlock?.id);
+          if (data?.onCreateReportBlock && data.onCreateReportBlock.reportId === selectedReportId) {
+            // When a new block is created for the selected report, refresh blocks
+            fetchReportBlocks(selectedReportId);
+          }
+        },
+        error: (error: Error) => {
+          console.error('Error in create report block subscription:', error);
+        }
+      });
+
+      blockSubscriptionHandlers.push(createBlockSubscription);
+    } catch (error) {
+      console.error('Failed to set up create report block subscription:', error);
+    }
+
+    // Subscribe to report block updates
+    try {
+      const updateBlockSubscription = (getClient().graphql({
+        query: SUBSCRIBE_ON_UPDATE_REPORT_BLOCK
+      }) as unknown as { subscribe: Function }).subscribe({
+        next: ({ data }: { data?: { onUpdateReportBlock: { id: string, reportId: string, name?: string, position: number, output: any, log?: string } } }) => {
+          if (data?.onUpdateReportBlock && data.onUpdateReportBlock.reportId === selectedReportId) {
+            // Key log to verify subscription events
+            console.log('Report block updated via subscription:', data.onUpdateReportBlock.id);
+            
+            // When a block is updated for the selected report, refresh blocks
+            fetchReportBlocks(selectedReportId);
+          }
+        },
+        error: (error: Error) => {
+          console.error('Error in update report block subscription:', error);
+        }
+      });
+
+      blockSubscriptionHandlers.push(updateBlockSubscription);
+    } catch (error) {
+      console.error('Failed to set up update report block subscription:', error);
+    }
+
+    // Save subscriptions for cleanup
+    setSubscriptions(prevSubscriptions => [...prevSubscriptions, ...blockSubscriptionHandlers]);
+
+    // Cleanup on unmount or selectedReportId change
+    return () => {
+      console.log('Cleaning up report block subscriptions');
+      blockSubscriptionHandlers.forEach(subscription => {
+        try {
+          subscription.unsubscribe();
+        } catch (err) {
+          console.error('Error unsubscribing:', err);
+        }
+      });
+    };
+  }, [selectedReportId]);
+
+  // Cleanup all subscriptions on component unmount
+  useEffect(() => {
+    return () => {
+      console.log('Cleaning up all subscriptions on unmount');
+      subscriptions.forEach(subscription => {
+        try {
+          subscription.unsubscribe();
+        } catch (err) {
+          console.error('Error unsubscribing on unmount:', err);
+        }
+      });
+    };
+  }, [subscriptions]);
+
+  // Infinite scroll effect using Intersection Observer
+  useEffect(() => {
+    const currentRef = loadMoreRef.current;
+    if (!currentRef || !nextToken || isLoadingMore || !accountId) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const first = entries[0];
+        if (first.isIntersecting && !isLoadingMore) {
+          console.log('Loading more reports...');
+          fetchReports(accountId, nextToken, selectedReportConfiguration);
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    observer.observe(currentRef);
+
+    return () => {
+      if (currentRef) {
+        observer.unobserve(currentRef);
+      }
+    };
+  }, [nextToken, isLoadingMore, accountId, selectedReportConfiguration, fetchReports]);
+
   // Handle deep linking and browser navigation (similar to evaluations)
   useEffect(() => {
     const evalMatch = pathname.match(/\/lab\/reports\/([^\/]+)/);
     const idFromUrl = evalMatch ? evalMatch[1] : null;
+    
+    // This is the key change: we need to check explicitly if idFromUrl is null
     if (idFromUrl && idFromUrl !== selectedReportId) {
       setSelectedReportId(idFromUrl);
+    } else if (!idFromUrl && selectedReportId !== null) {
+      // Clear selectedReportId when URL no longer has a report ID
+      setSelectedReportId(null);
+      setIsFullWidth(false);
     }
 
     const handlePopState = () => {
@@ -486,21 +1021,44 @@ export default function ReportsDashboard({
     window.history.pushState(null, '', '/lab/reports');
   };
 
-  // Placeholder delete handler
+  // Delete handler
   const handleDelete = async (reportId: string) => {
-    console.log("Attempting to delete report:", reportId);
-    toast.info("Delete functionality not yet implemented.");
-    // try {
-    //   await getClient().graphql({ /* ... delete mutation ... */ });
-    //   setReports(prev => prev.filter(r => r.id !== reportId));
-    //   if (selectedReportId === reportId) {
-    //     handleCloseReport();
-    //   }
-    //   toast.success("Report deleted");
-    // } catch (error) {
-    //   console.error("Error deleting report:", error);
-    //   toast.error("Failed to delete report");
-    // }
+    try {
+      console.log("Attempting to delete report:", reportId);
+      
+      const currentClient = getClient();
+      await currentClient.graphql({
+        query: `
+          mutation DeleteReport($input: DeleteReportInput!) {
+            deleteReport(input: $input) {
+              id
+            }
+          }
+        `,
+        variables: { 
+          input: {
+            id: reportId
+          }
+        }
+      });
+      
+      // Remove the deleted report from the reports state
+      setReports(prev => prev.filter(r => r.id !== reportId));
+      
+      // If currently selected report is deleted, close the detail view
+      if (selectedReportId === reportId) {
+        handleCloseReport();
+      }
+      
+      toast.success("Report deleted successfully");
+      return true;
+    } catch (error) {
+      console.error("Error deleting report:", error);
+      toast.error("Failed to delete report", {
+        description: "An unexpected error occurred."
+      });
+      return false;
+    }
   };
 
   // Share functionality (similar to evaluations)
@@ -566,11 +1124,26 @@ export default function ReportsDashboard({
     return item !== null && typeof item === 'object' && 'id' in item;
   };
 
+  // Add useEffect to log reports state changes
+  useEffect(() => {
+    // Remove excessive logging of report state updates
+    if (reports.length > 0) {
+      console.log('Reports updated:', reports.length);
+    }
+  }, [reports]);
+
   // Memoized rendering of the selected report's details
   const renderSelectedReport = useMemo(() => {
     if (!selectedReportId) return null;
     const report = reports.find(r => r.id === selectedReportId);
     if (!report) return null; // Report might not be loaded yet
+
+    // Streamlined log with just key information
+    console.log('Rendering selected report:', {
+      id: report.id,
+      name: report.name,
+      blocks: selectedReportBlocks?.length || 0
+    });
 
     // Safely extract stages
     const stages = [];
@@ -600,6 +1173,12 @@ export default function ReportsDashboard({
       }
     }
 
+    // Ensure we have a valid display name for the report
+    const displayName = report.name || 'Report';
+
+    // Generate a unique key that changes whenever blocks are updated
+    const reportKey = `${report.id}-${selectedReportBlocks?.length || 0}-${Date.now()}`;
+
     return (
       <ReportTask
         variant="detail"
@@ -613,8 +1192,8 @@ export default function ReportsDashboard({
           time: report.updatedAt || report.createdAt || '',
           data: {
             id: report.id,
-            title: report.name || 'Report',
-            name: report.name,
+            title: displayName,
+            name: displayName,
             configName: report.reportConfiguration?.name,
             configDescription: report.reportConfiguration?.description,
             createdAt: report.createdAt,
@@ -631,13 +1210,26 @@ export default function ReportsDashboard({
         controlButtons={
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-               <CardButton icon={MoreHorizontal} aria-label="More options" onClick={() => {}} />
+               <Button 
+                 variant="ghost" 
+                 size="icon" 
+                 className="h-8 w-8 rounded-md bg-border"
+                 aria-label="More options"
+               >
+                 <MoreHorizontal className="h-4 w-4" />
+               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
                <DropdownMenuItem onClick={() => copyLinkToClipboard(report.id)}>
                 <Share className="mr-2 h-4 w-4" />
                 <span>Share</span>
               </DropdownMenuItem>
+              {report.reportConfiguration?.id && (
+                <DropdownMenuItem onClick={() => router.push(`/lab/reports/edit/${report.reportConfiguration!.id}`)}>
+                  <Settings className="mr-2 h-4 w-4" />
+                  <span>Edit Configuration</span>
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem onClick={() => handleDelete(report.id)}>
                 <Trash2 className="mr-2 h-4 w-4" />
                 <span>Delete</span>
@@ -648,6 +1240,7 @@ export default function ReportsDashboard({
         isFullWidth={isFullWidth}
         onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
         onClose={handleCloseReport}
+        key={reportKey} // Force re-render when blocks change with timestamp
       />
     );
   }, [selectedReportId, reports, selectedReportBlocks, isFullWidth, handleCloseReport, handleDelete, copyLinkToClipboard]); // Dependencies
@@ -672,7 +1265,7 @@ export default function ReportsDashboard({
         <div className="mb-4 text-sm text-muted-foreground">
           {error ? `Error: ${error}` : ''}
         </div>
-        <EvaluationDashboardSkeleton /> {/* Use placeholder */}
+        <ReportsDashboardSkeleton />
       </div>
     )
   }
@@ -682,27 +1275,32 @@ export default function ReportsDashboard({
       <div className="space-y-4 p-4">
         <h1 className="text-2xl font-bold">Reports</h1>
         <div className="text-sm text-destructive">Error fetching reports: {error}</div>
-        <Button onClick={() => accountId && fetchReports(accountId, null)}>Retry</Button>
+        <Button onClick={() => accountId && fetchReports(accountId, null, selectedReportConfiguration)}>Retry</Button>
       </div>
     )
   }
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header Area - TODO: Add filtering/sorting controls */}
+      {/* Header Area - Report Configuration Filtering */}
       <div className="flex-none p-1.5">
         <div className="flex justify-between items-start">
-          <div>
-            <h1 className="text-xl font-semibold">Reports</h1>
+          <div className="flex flex-col gap-2">
+            <ReportConfigurationSelector
+              selectedReportConfiguration={selectedReportConfiguration}
+              setSelectedReportConfiguration={setSelectedReportConfiguration}
+            />
             {error && <p className="text-xs text-destructive">{error}</p>}
           </div>
           <div className="flex gap-2">
-            <Button onClick={() => router.push('/lab/reports/edit')}>
+            <Button 
+              onClick={() => router.push('/lab/reports/edit')}
+              variant="ghost"
+              className="bg-card hover:bg-accent text-muted-foreground"
+            >
               <Pencil className="mr-2 h-4 w-4"/> Edit Configurations
             </Button>
-            <Button disabled>
-              <Play className="mr-2 h-4 w-4"/> Run Report
-            </Button>
+            <RunReportButton />
           </div>
         </div>
       </div>
@@ -720,7 +1318,6 @@ export default function ReportsDashboard({
             width: `${leftPanelWidth}%`
           } : undefined}
         >
-          {isLoading && reports.length > 0 && <p className="text-sm text-muted-foreground p-2">Loading more...</p>}
           {!isLoading && reports.length === 0 && !error && (
             <div className="text-sm text-muted-foreground p-4 text-center">No reports found for this account.</div>
           )}
@@ -760,41 +1357,87 @@ export default function ReportsDashboard({
                   }
                 }
                 
+                // Ensure we have a valid display name for the report - USE FORCED STRING TYPE
+                const displayName = String(report.name || 'Report');
+                                
+                // The ReportTask component uses configName as the primary display name
+                // We need to pass the report name both as title and as configName to ensure it displays correctly
+                const taskData = {
+                  id: report.id,
+                  type: 'Report',
+                  name: '',  // This isn't used directly by ReportTask
+                  description: '',
+                  scorecard: '',
+                  score: '',
+                  time: report.updatedAt || report.createdAt || '',
+                  data: {
+                    id: report.id,
+                    title: displayName,  // Used for TaskHeader
+                    name: displayName,   // Backup
+                    // CRITICAL FIX: ReportTask uses configName as primary display field
+                    configName: displayName,  // This is what ReportTask actually displays
+                    configDescription: report.reportConfiguration?.description,
+                    createdAt: report.createdAt,
+                    updatedAt: report.updatedAt
+                  },
+                  stages: stages,
+                  status: report.task?.status as any || 'PENDING',
+                  currentStageName: currentStageName
+                };
+                
                 return (
                   <div key={report.id} onClick={clickHandler} className="cursor-pointer">
                     <ReportTask
                       variant="grid"
-                      task={{
-                        id: report.id,
-                        type: 'Report',
-                        name: '',
-                        description: '',
-                        scorecard: '',
-                        score: '',
-                        time: report.updatedAt || report.createdAt || '',
-                        data: {
-                          id: report.id,
-                          title: report.name || 'Report',
-                          name: report.name,
-                          configName: report.reportConfiguration?.name,
-                          configDescription: report.reportConfiguration?.description,
-                          createdAt: report.createdAt,
-                          updatedAt: report.updatedAt
-                        },
-                        stages: stages,
-                        status: report.task?.status as any || 'PENDING',
-                        currentStageName: currentStageName
-                      }}
+                      task={taskData}
                       isSelected={report.id === selectedReportId}
                       onClick={clickHandler}
+                      controlButtons={
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                             <Button 
+                               variant="ghost" 
+                               size="icon" 
+                               className="h-8 w-8 rounded-md bg-border hover:bg-accent"
+                               aria-label="More options"
+                               onClick={(e) => e.stopPropagation()} // Prevent card click when clicking dropdown
+                             >
+                               <MoreHorizontal className="h-4 w-4" />
+                             </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                             <DropdownMenuItem onClick={(e) => { e.stopPropagation(); copyLinkToClipboard(report.id); }}>
+                              <Share className="mr-2 h-4 w-4" />
+                              <span>Share</span>
+                            </DropdownMenuItem>
+                            {report.reportConfiguration?.id && (
+                              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); router.push(`/lab/reports/edit/${report.reportConfiguration!.id}`); }}>
+                                <Settings className="mr-2 h-4 w-4" />
+                                <span>Edit Configuration</span>
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleDelete(report.id); }}>
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              <span>Delete</span>
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      }
                     />
                   </div>
                 );
               })}
-              {/* Placeholder for infinite scroll trigger */}
-              {nextToken && !isLoading && (
-                <div className="col-span-full flex justify-center p-4">
-                   <Button variant="outline" onClick={() => accountId && fetchReports(accountId, nextToken)}>Load More</Button>
+              {/* Infinite scroll trigger and loading indicator */}
+              {nextToken && (
+                <div className="col-span-full">
+                  {/* Invisible trigger element for intersection observer */}
+                  <div ref={loadMoreRef} className="h-4" />
+                  {/* Loading indicator */}
+                  {isLoadingMore && (
+                    <div className="flex justify-center p-4">
+                      <div className="text-sm text-muted-foreground">Loading more reports...</div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

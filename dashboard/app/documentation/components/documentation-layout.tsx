@@ -108,12 +108,28 @@ const docSections: DocSidebarItem[] = [
     ],
   },
   {
+    name: "Evaluation Metrics",
+    href: "/documentation/evaluation-metrics",
+    items: [
+      { name: "Gauges with Context", href: "/documentation/evaluation-metrics/gauges-with-context" },
+      { name: "Agreement", href: "/documentation/evaluation-metrics/gauges/agreement" },
+      { name: "Accuracy", href: "/documentation/evaluation-metrics/gauges/accuracy" },
+      { name: "Precision", href: "/documentation/evaluation-metrics/gauges/precision" },
+      { name: "Recall", href: "/documentation/evaluation-metrics/gauges/recall" },
+      { name: "Class Number Impact", href: "/documentation/evaluation-metrics/gauges/class-number" },
+      { name: "Class Imbalance", href: "/documentation/evaluation-metrics/gauges/class-imbalance" },
+      { name: "Examples", href: "/documentation/evaluation-metrics/examples" },
+    ],
+  },
+  {
     name: "Advanced",
     href: "/documentation/advanced",
     items: [
       { name: "plexus CLI Tool", href: "/documentation/advanced/cli" },
       { name: "Worker Nodes", href: "/documentation/advanced/worker-nodes" },
       { name: "Python SDK Reference", href: "/documentation/advanced/sdk" },
+      { name: "Universal Code Snippets", href: "/documentation/advanced/universal-code" },
+      { name: "MCP Server", href: "/documentation/advanced/mcp-server" },
     ],
   },
 ]
@@ -173,15 +189,17 @@ export default function DocumentationLayout({ children, tableOfContents }: Docum
                     <TooltipTrigger asChild>
                       <Link href={section.href}>
                         <DocButton
-                          variant={pathname === section.href ? "secondary" : "ghost"}
+                          variant={isLeftSidebarOpen && pathname === section.href ? "secondary" : "ghost"}
                           className={`w-full justify-start group !rounded-[4px] ${
                             isLeftSidebarOpen ? '' : 'px-2'
                           }`}
                         >
-                          {section.name === "plexus CLI Tool" ? (
-                            <code className="text-sm">{section.name}</code>
-                          ) : (
-                            section.name
+                          {isLeftSidebarOpen && (
+                            section.name === "plexus CLI Tool" ? (
+                              <code className="text-sm">{section.name}</code>
+                            ) : (
+                              section.name
+                            )
                           )}
                         </DocButton>
                       </Link>

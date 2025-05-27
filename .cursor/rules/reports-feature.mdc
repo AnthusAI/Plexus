@@ -3,51 +3,40 @@ description: Understanding how the reporting infrastructure works, for generatin
 globs: 
 alwaysApply: false
 ---
-# Plexus Reports Feature
+# Reports Feature
 
-The Reports feature in Plexus provides a flexible and extensible system for generating, storing, and viewing various types of reports and analyses.
+## Architecture
+- Reports consist of three core models: ReportConfiguration, Report, and ReportBlock
+- Reports are generated via Tasks with progress tracking using TaskProgressTracker
+- Each Report links to a Task for status tracking
+- ReportBlocks are the modular components that make up a report's content
 
-## Core Concepts
+## Key Locations
+- Backend:
+  - Report blocks: [plexus/reports/blocks/](mdc:plexus/reports/blocks)
+  - Report generation service: [plexus/reports/service.py](mdc:plexus/reports/service.py)
+  - CLI commands: [plexus/cli/commands/report/](mdc:plexus/cli/commands/report)
+  
+- Frontend:
+  - Report components: [dashboard/components/reports/](mdc:dashboard/components/reports)
+  - Block rendering system: [dashboard/components/blocks/](mdc:dashboard/components/blocks)
+  - Report pages: [dashboard/app/lab/reports/](mdc:dashboard/app/lab/reports)
 
-The reporting system is built around four core concepts:
+## Creating a New Report Block
+1. Backend: Create a new Python class in `plexus/reports/blocks/` that inherits from `BaseReportBlock`
+2. Implement the `generate` method that returns a JSON-serializable output
+3. Frontend: Create a React component in `dashboard/components/blocks/` to render your block's output
+4. Register your component in the `BlockRegistry`
 
-1. **ReportConfiguration**: Defines the structure and content of reports using Markdown and Jinja2 templating
-2. **Report**: Represents a specific instance of a generated report
-3. **ReportBlock**: Both a database model and Python class for generating specific sections
-4. **Task/TaskStage**: Standard mechanism for tracking report generation progress
-
-## Key Files & Directories
-
-### Backend (Python)
-- `plexus/reports/blocks/base.py`: Base class for report blocks
-- `plexus/reports/blocks/score_info.py`: Example block implementation
-- `plexus/reports/service.py`: Core report generation logic
-- `plexus/cli/commands/report.py`: CLI commands for report management
-
-### Frontend (Next.js/React)
-- `dashboard/app/reports/page.tsx`: Main reports dashboard
-- `dashboard/app/lab/reports/edit/page.tsx`: Report configuration management
-- `dashboard/components/reports/`: Report-related components
-- `dashboard/components/blocks/`: Block-specific renderers
-
-## Data Models
-
-### ReportConfiguration
-- Stored in DynamoDB
-- Contains name, description, accountId, configuration (YAML/JSON)
-- Links to Account
-
-### Report
-- Stored in DynamoDB
-- Links to ReportConfiguration and Task
-- Contains output (rendered Markdown)
-- Links to ReportBlocks
-
-### ReportBlock
-- Stored in DynamoDB
-- Links to Report
-- Contains output (JSON) and optional logs
-- Has position and optional name
+## Working with Report Block Output Data
+1. Block output data should be JSON-serializable and returned from the `generate` method
+2. Structure your output data with frontend rendering in mind:
+   - Use consistent field naming across blocks
+   - Include metadata fields like `title`, `description` when appropriate
+   - For data visualizations, format data in arrays/objects that match chart library expectations
+3. The output JSON is stored in `ReportBlock.output` and passed to your frontend component
+4. Complex data types should be serialized to strings (e.g., dates as ISO strings)
+5. Keep output size reasonable (under 400KB) for optimal performance
 
 ## Task Progress Tracking
 
@@ -55,39 +44,38 @@ Reports use the standard Task/TaskStage system for progress tracking:
 - Only stages with `total_items` show progress bars
 - Setup and Finalizing stages typically don't show progress
 - Main Processing stages show progress bars
+- Use the TaskProgressTracker for updating status during report generation
 
 ## CLI Commands
 
 Key commands for report management:
 - `report config list`: List configurations
 - `report config show <id_or_name>`: Show config details
-- `report config create`: Create new config
+- `report config create --name "Test Config" --file config.md`: Create new config
 - `report config delete`: Delete config
-- `report run`: Generate report
+- `report run --config "Test Config"`: Generate report
 - `report list`: List reports
-- `report show`: Show report details
+- `report show <id>`: Show report details
 - `report last`: Show most recent report
 
-## Block System
-
-### Python Blocks
-- Inherit from `BaseReportBlock`
-- Implement `generate(config, params)` method
-- Return JSON-serializable data
-- Can access Plexus data via API client
-
-### React Components
-- Registered in `BlockRegistry`
-- Rendered by `BlockRenderer`
-- Receive block output as props
-- Use Shadcn UI components for styling
-
-## Authentication & Authorization
-
-- Auth handled by AWS Amplify/Cognito
-- Routes checked against `publicPaths` in `client-layout.tsx`
-- Protected routes redirect to landing
-- Data operations flow through `amplify-client.ts`
+## File Attachments and Media
+1. For including static images, store them in `dashboard/public/` and reference via relative paths
+2. For dynamically generated files:
+   - Save files to S3 using the AWS SDK in your block's `generate` method
+   - Store the S3 URLs in your block's output JSON
+   - Use `client.storage.uploadData()` for uploading from the block
+3. Add media references in your output JSON:
+   ```json
+   {
+     "title": "Analysis Results",
+     "data": [...],
+     "attachments": [
+       {"type": "image", "url": "s3://bucket/path", "caption": "Figure 1"},
+       {"type": "file", "url": "s3://bucket/report.csv", "name": "Download CSV"}
+     ]
+   }
+   ```
+4. Reference these in your frontend component with appropriate renderers
 
 ## Example Report Configuration
 
@@ -103,9 +91,44 @@ score: ExampleScore
 ```
 ```
 
-## Current Development Focus
+## Example Report Blocks to Study
 
-The current focus is on:
-1. Feedback Analysis integration - Refactoring client-specific analysis into the Plexus platform
-2. Implementing specialized block components for various analysis types
-3. Frontend block rendering optimizations
+### FeedbackAnalysis
+- **Backend:** [plexus/reports/blocks/feedback_analysis.py](mdc:plexus/reports/blocks/feedback_analysis.py)
+- **Frontend:** [dashboard/components/blocks/FeedbackAnalysis.tsx](mdc:dashboard/components/blocks/FeedbackAnalysis.tsx)
+- **Purpose:** Analyzes feedback data and calculates agreement metrics (AC1, accuracy)
+- **Features:**
+  - Processes feedback items to calculate evaluator agreement
+  - Supports multiple scores or an entire scorecard
+  - Generates per-score metrics and overall aggregates
+  - Includes distribution analysis for context
+
+### TopicAnalysis
+- **Backend:** [plexus/reports/blocks/topic_analysis.py](mdc:plexus/reports/blocks/topic_analysis.py)
+- **Frontend:** [dashboard/components/blocks/TopicAnalysis.tsx](mdc:dashboard/components/blocks/TopicAnalysis.tsx)
+- **Purpose:** Performs NLP analysis to identify topics in text data
+- **Features:**
+  - Uses BERTopic for clustering texts into topics
+  - Generates topic prevalence visualizations
+  - Creates topic keyword lists with relevance scores
+  - Includes representative examples for each topic
+
+### ScoreInfo
+- **Backend:** [plexus/reports/blocks/score_info.py](mdc:plexus/reports/blocks/score_info.py)
+- **Frontend:** [dashboard/components/blocks/ScoreInfo.tsx](mdc:dashboard/components/blocks/ScoreInfo.tsx)
+- **Purpose:** Provides detailed information about a specific score
+- **Features:**
+  - Simpler example with straightforward data retrieval
+  - Good starting point for understanding the basic block structure
+  - Shows how to format dates and percentage values
+
+## Testing Reports
+- Use `python -m plexus.cli.CommandLineInterface report config create --name "Test Config" --file config.md`
+- Run a report with `python -m plexus.cli.CommandLineInterface report run --config "Test Config"`
+- View reports with `python -m plexus.cli.CommandLineInterface report list` and `report show <id>`
+
+## Common Patterns
+- Report blocks should follow the naming convention of their Python class
+- Block components receive the JSON output from the Python block via props
+- Report configurations use Markdown with code blocks for defining report blocks
+- Design blocks to handle missing or malformed data gracefully

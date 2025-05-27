@@ -201,6 +201,7 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
                   isDatasetClassDistributionBalanced
                   predictedClassDistribution
                   isPredictedClassDistributionBalanced
+                  universalCode
                   taskId
                   task {
                     id
@@ -978,8 +979,6 @@ export function observeItemCreations() {
               externalId
               description
               accountId
-              scorecardId
-              scoreId
               evaluationId
               updatedAt
               createdAt
@@ -991,13 +990,10 @@ export function observeItemCreations() {
 
       return subscription.subscribe({
         next: async ({ data }: { data?: { onCreateItem: Schema['Item']['type'] } }) => {
-          // Log the notification but with a note about null data
           if (!data?.onCreateItem) {
-            console.log('Item creation subscription received null data - this is expected with Amplify Gen2');
             return; // Skip processing for null data
           }
           
-          console.log('Item creation subscription received valid data:', data.onCreateItem);
           try {
             handler.next({ data: data.onCreateItem });
           } catch (error) {
@@ -1006,8 +1002,54 @@ export function observeItemCreations() {
           }
         },
         error: (error: Error) => {
+          console.error('Item creation subscription error:', error);
           handler.error(error);
-          console.error('Error in item creation subscription:', error);
+        }
+      });
+    }
+  };
+}
+
+export function observeItemUpdates() {
+  const client = getClient();
+  
+  return {
+    subscribe(handler: SubscriptionHandler<any>) {
+      const subscription = client.graphql({
+        query: `
+          subscription OnUpdateItem {
+            onUpdateItem {
+              id
+              externalId
+              description
+              accountId
+              evaluationId
+              updatedAt
+              createdAt
+              isEvaluation
+            }
+          }
+        `
+      }) as unknown as { subscribe: Function };
+
+      return subscription.subscribe({
+        next: async ({ data }: { data?: { onUpdateItem: Schema['Item']['type'] } }) => {
+          if (!data?.onUpdateItem) {
+            // Amplify Gen2 often sends empty notifications, so we treat this as a signal to refetch
+            handler.next({ data: null, needsRefetch: true });
+            return;
+          }
+          
+          try {
+            handler.next({ data: data.onUpdateItem });
+          } catch (error) {
+            console.error('Error processing item update:', error);
+            handler.error(error as Error);
+          }
+        },
+        error: (error: Error) => {
+          console.error('Item update subscription error:', error);
+          handler.error(error);
         }
       });
     }
