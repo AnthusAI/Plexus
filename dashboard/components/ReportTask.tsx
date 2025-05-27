@@ -7,6 +7,7 @@ import ReactMarkdown from 'react-markdown'
 import { BlockRenderer } from './blocks/BlockRegistry'
 import { getClient } from '@/utils/amplify-client'
 import BlockDetails from './reports/BlockDetails'
+import { parseOutputString } from '@/lib/utils'
 
 // Define the data structure for report tasks
 export interface ReportTaskData {
@@ -77,23 +78,8 @@ const ReportTask: React.FC<ReportTaskProps> = ({
   const [isLoadingBlocks, setIsLoadingBlocks] = useState(false)
   const [blockError, setBlockError] = useState<string | null>(null)
 
-  // Add a function to parse output if it's a string
-  const parseOutput = (output: any): Record<string, any> => {
-    if (typeof output === 'string') {
-      try {
-        return JSON.parse(output);
-      } catch (err) {
-        console.error('Failed to parse output string:', err);
-        return { error: 'Failed to parse output', raw: output };
-      }
-    }
-    
-    if (output && typeof output === 'object') {
-      return output;
-    }
-    
-    return {};
-  };
+  // Use the shared parsing utility function
+  const parseOutput = parseOutputString;
 
   // Function to fetch report blocks - needed for detail view in dashboard
   const fetchReportBlocks = async (reportId: string) => {
