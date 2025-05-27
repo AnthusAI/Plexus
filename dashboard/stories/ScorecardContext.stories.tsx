@@ -3,7 +3,7 @@ import { StoryFn, Meta } from "@storybook/react"
 import ScorecardContext, { ScorecardContextProps } from "@/components/ScorecardContext"
 
 export default {
-  title: "Context/ScorecardContext",
+  title: "General/ScorecardContext",
   component: ScorecardContext,
 } as Meta
 

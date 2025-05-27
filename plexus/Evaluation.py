@@ -1409,6 +1409,7 @@ Question:     {mismatch['question']}
 
 Predicted:    {mismatch['predicted']}
 Ground Truth: {mismatch['ground_truth']}
+QA Reasoning for Ground Truth: {mismatch['human_explanation']}
 
 Explanation:
 {mismatch['explanation']}
@@ -1987,11 +1988,61 @@ class AccuracyEvaluation(Evaluation):
             all_results = await asyncio.gather(*score_tasks)
             self.all_results = [result for score_results in all_results for result in score_results if not isinstance(result, Exception)]
 
+            # Reset counters and mismatches
+            self.total_correct = 0
+            self.total_questions = 0
+            self.mismatches = []
+            
+            # Count the number correct out of all questions and collect mismatches
+            for result in self.all_results:
+                for question in self.score_names():
+                    score_result = next((r for r in result['results'].values() if r.parameters.name == question), None)
+                    score_value = str(score_result.value).lower() if score_result else None
+                    human_label = str(score_result.metadata['human_label']).lower() if score_result and hasattr(score_result, 'metadata') and 'human_label' in score_result.metadata else None
+                    
+                    is_match = 1 if score_result and hasattr(score_result, 'metadata') and score_result.metadata.get('correct', False) else 0
+                    self.total_correct += is_match
+                    self.total_questions += 1
+
+                    if not is_match and len(self.mismatches) < self.max_mismatches_to_report:
+                        mismatch_data = {
+                            'form_id': result['form_id'],
+                            'question': question,
+                            'predicted': score_value,
+                            'ground_truth': human_label,
+                            'explanation': score_result.metadata['explanation'] if score_result and hasattr(score_result, 'metadata') and 'explanation' in score_result.metadata else None,
+                            'transcript': score_result.metadata['text'] if score_result and hasattr(score_result, 'metadata') and 'text' in score_result.metadata else None,
+                            'human_explanation': score_result.metadata['human_explanation'] if score_result and hasattr(score_result, 'metadata') and 'human_explanation' in score_result.metadata else None
+                        }
+                        # Only append if we have either a transcript or an explanation
+                        if mismatch_data['transcript'] is not None or mismatch_data['explanation'] is not None:
+                            self.mismatches.append(mismatch_data)
+
             # Calculate metrics from the results
             metrics = self.calculate_metrics(self.all_results)
 
             if hasattr(self, 'progress_callback') and self.progress_callback:
                 self.progress_callback(self.number_of_texts_to_sample)
+            
+            # Generate and print evaluation report
+            if self.all_results:
+                expenses = self.scorecard.get_accumulated_costs()
+                expenses['cost_per_text'] = expenses['total_cost'] / self.number_of_texts_to_sample
+                
+                # Get the primary score name if we're evaluating a specific score
+                primary_score_name = None
+                if self.subset_of_score_names and len(self.subset_of_score_names) == 1:
+                    primary_score_name = self.subset_of_score_names[0]
+                else:
+                    primary_score_name = self.score_names()[0]
+                
+                score_instance = Score.from_name(self.scorecard_name, primary_score_name)
+                
+                # Calculate overall_accuracy from the counters we just updated
+                overall_accuracy = (self.total_correct / self.total_questions * 100) if self.total_questions > 0 else 0
+                
+                report = self.generate_report(score_instance, overall_accuracy, expenses, self.number_of_texts_to_sample)
+                print("\n" + report + "\n")
 
             return metrics
         except Exception as e:

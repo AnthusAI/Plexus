@@ -48,8 +48,10 @@ logger = logging.getLogger(__name__)
 
 @click.command(name="run") # Changed from report.command to click.command
 @click.option('--config', 'config_identifier', required=True, help='ID or name of the ReportConfiguration to use.')
+@click.option('--days', type=int, help='Number of days to analyze (overrides the default in the report configuration).')
+@click.option('--fresh', is_flag=True, help='Force fresh processing, bypassing any cached transformations')
 @click.argument('params', nargs=-1)
-def run(config_identifier: str, params: Tuple[str]):
+def run(config_identifier: str, days: Optional[int], fresh: bool, params: Tuple[str]):
     """
     Generate a new report instance from a ReportConfiguration synchronously.
 
@@ -63,6 +65,16 @@ def run(config_identifier: str, params: Tuple[str]):
     try:
         # --- Step 1: Parse Parameters & Resolve Account ---
         run_parameters = parse_kv_pairs(params)
+        
+        # Add days parameter to run_parameters if provided
+        if days is not None:
+            run_parameters['days'] = str(days)
+            
+        # Add fresh flag to run_parameters if provided
+        if fresh:
+            run_parameters['fresh_transform_cache'] = 'true'
+            console.print("[dim]Fresh processing enabled - will bypass cached transformations[/dim]")
+            
         console.print(f"Attempting to run report from configuration: [cyan]'{config_identifier}'[/cyan] with parameters: {run_parameters}")
 
         # Resolve account ID first (needed for config lookup by name)
@@ -465,8 +477,14 @@ def show_report(id_or_name: str, account_identifier: Optional[str]):
             task_details_panel = Panel(f"[red]{task_error}[/red]", title="[bold]Associated Task Details[/bold]", border_style="red", expand=True)
 
         # Report Output Panel
+        if report_instance.output:
+            # Convert \n to actual newlines for proper formatting
+            output_content = report_instance.output.replace('\\n', '\n')
+        else:
+            output_content = "[dim]No output generated.[/dim]"
+        
         report_output_panel = Panel(
-            report_instance.output or "[dim]No output generated.[/dim]",
+            output_content,
             title="[bold]Raw Report Output[/bold]",
             border_style="magenta",
             expand=True
@@ -494,7 +512,11 @@ def show_report(id_or_name: str, account_identifier: Optional[str]):
                 )
 
                 # Log panel (now first)
-                log_content = block_instance.log or "[dim]No log messages[/dim]"
+                if block_instance.log:
+                    # Convert \n to actual newlines for proper formatting
+                    log_content = block_instance.log.replace('\\n', '\n')
+                else:
+                    log_content = "[dim]No log messages[/dim]"
                 log_panel = Panel(
                     log_content,
                     title="[bold]Log[/bold]",
@@ -506,7 +528,12 @@ def show_report(id_or_name: str, account_identifier: Optional[str]):
                 output_content = "[dim]No output[/dim]"
                 if block_instance.output:
                     try:
-                        output_content = pretty_repr(block_instance.output, max_width=80)
+                        # If output is a string, handle newlines properly
+                        if isinstance(block_instance.output, str):
+                            output_content = block_instance.output.replace('\\n', '\n')
+                        else:
+                            # For non-string output (dicts, lists, etc.), use pretty_repr
+                            output_content = pretty_repr(block_instance.output, max_width=80)
                     except Exception:
                         output_content = "[red]Error rendering output[/red]"
                 output_panel = Panel(
@@ -725,8 +752,14 @@ def show_last_report(account_identifier: Optional[str]):
             task_details_panel = Panel(f"[red]Error fetching task details[/red]", title="[bold]Associated Task Details[/bold]", border_style="red", expand=True)
 
         # Report Output Panel
+        if report_instance.output:
+            # Convert \n to actual newlines for proper formatting
+            output_content = report_instance.output.replace('\\n', '\n')
+        else:
+            output_content = "[dim]No output generated.[/dim]"
+        
         report_output_panel = Panel(
-            report_instance.output or "[dim]No output generated.[/dim]",
+            output_content,
             title="[bold]Raw Report Output[/bold]",
             border_style="magenta",
             expand=True
@@ -754,7 +787,11 @@ def show_last_report(account_identifier: Optional[str]):
                 )
 
                 # Log panel (now first)
-                log_content = block_instance.log or "[dim]No log messages[/dim]"
+                if block_instance.log:
+                    # Convert \n to actual newlines for proper formatting
+                    log_content = block_instance.log.replace('\\n', '\n')
+                else:
+                    log_content = "[dim]No log messages[/dim]"
                 log_panel = Panel(
                     log_content,
                     title="[bold]Log[/bold]",
@@ -766,7 +803,12 @@ def show_last_report(account_identifier: Optional[str]):
                 output_content = "[dim]No output[/dim]"
                 if block_instance.output:
                     try:
-                        output_content = pretty_repr(block_instance.output, max_width=80)
+                        # If output is a string, handle newlines properly
+                        if isinstance(block_instance.output, str):
+                            output_content = block_instance.output.replace('\\n', '\n')
+                        else:
+                            # For non-string output (dicts, lists, etc.), use pretty_repr
+                            output_content = pretty_repr(block_instance.output, max_width=80)
                     except Exception:
                         output_content = "[red]Error rendering output[/red]"
                 output_panel = Panel(

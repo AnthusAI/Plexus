@@ -473,3 +473,86 @@ This refactoring ensures the core report generation logic is DRY and consistentl
   - Missing data handling
   - Unknown block type handling (renders default block with error title).
 
+### Phase 7: Dynamic Gauge Thresholds for FeedbackAnalysis
+
+*   **Objective:** Enhance the FeedbackAnalysis gauge visualization by implementing dynamic thresholds based on class distribution, providing more meaningful context for interpreting agreement and accuracy metrics.
+
+*   ⬜ **Rationale & Background:**
+    *   **Problem:** Current gauge visualizations use fixed thresholds that don't account for class imbalance.
+    *   **Impact:** In datasets with significant class imbalance, even random guessing can achieve high accuracy, making fixed thresholds potentially misleading.
+    *   **Solution:** Calculate baseline "chance" accuracy from the empirical class distribution (label_distribution) and adjust gauge thresholds accordingly.
+
+*   ⬜ **Implement `GaugeThresholdComputer`:**
+    *   ⬜ Create a utility class/function to calculate appropriate thresholds based on label distribution.
+    *   ⬜ The utility should calculate:
+        *   Chance accuracy (baseline) using the formula: Σ pᵢ²
+        *   Yellow zone upper bound: chance + goodDelta (configurable margin)
+        *   Green zone lower bound: same as yellow zone upper bound
+    *   ⬜ Place this in an appropriate location (e.g., `dashboard/utils/gauge-thresholds.ts`)
+
+*   ⬜ **Update FeedbackAnalysis Component:**
+    *   ⬜ Modify the FeedbackAnalysis.tsx component to import and use the GaugeThresholdComputer.
+    *   ⬜ Extract label distribution from the reportBlock output data for each score.
+    *   ⬜ Calculate dynamic thresholds for both accuracy and AC1 gauges.
+    *   ⬜ Update the gauge segments based on these calculated thresholds.
+    *   ⬜ Add an indicator/tick on the gauge to show the "chance" baseline.
+    *   ⬜ (Optional) Add a tooltip explaining the threshold calculation.
+
+*   ⬜ **Enhance Gauge Component (if needed):**
+    *   ⬜ Modify the existing Gauge component to support displaying a reference tick/marker.
+    *   ⬜ Ensure the component can accept dynamic segment definitions.
+    *   ⬜ Add support for tooltips or information popups explaining the thresholds.
+
+*   ⬜ **Testing & Verification:**
+    *   ⬜ Create Storybook stories that demonstrate the dynamic threshold behavior with:
+        *   ⬜ Balanced class distribution (equal counts for all labels)
+        *   ⬜ Highly imbalanced distribution (one dominant class)
+        *   ⬜ Various intermediate scenarios
+    *   ⬜ Verify the gauge colors and zones adjust appropriately based on the distribution.
+    *   ⬜ Test with real data from generated reports to ensure proper integration.
+
+*   ⬜ **Documentation:**
+    *   ⬜ Add inline documentation explaining the threshold calculation.
+    *   ⬜ Update any relevant user-facing documentation about interpreting the gauges.
+    *   ⬜ Add developer notes in the code explaining the rationale and implementation details.
+
+*   ⬜ **Verify Phase 7:** Confirm the FeedbackAnalysis block's gauges now display meaningful thresholds based on class distribution, and that users can correctly interpret the results in the context of class imbalance.
+
+### Implementation Notes for Dynamic Threshold Calculation
+
+The key insight is that raw accuracy scores should be interpreted relative to what could be achieved by chance alone. With balanced classes (e.g., yes/no split 50/50), chance accuracy is 50%. But with imbalanced classes (e.g., yes=90%, no=10%), chance accuracy becomes 82% (0.9² + 0.1²).
+
+The proposed utility handles this calculation:
+
+```typescript
+/**
+ * GaugeThresholdComputer sets color-band breakpoints for a raw-accuracy gauge.
+ * Bands are derived from the dataset's empirical chance accuracy (Σ pᵢ²).
+ */
+export class GaugeThresholdComputer {
+  static computeThresholds(
+    labelCounts: Record<string, number>,
+    goodDelta = 0.05
+  ) {
+    const total = Object.values(labelCounts).reduce((a, b) => a + b, 0)
+    const probabilities = Object.values(labelCounts).map(c => c / total)
+    const chance = probabilities.reduce((sum, p) => sum + p * p, 0)          // 0–1
+    const cautionUpper = Math.min(chance + goodDelta, 1)
+    const goodLower = cautionUpper
+
+    return {
+      chance: chance * 100,
+      cautionUpper: cautionUpper * 100,
+      goodLower: goodLower * 100,
+    }
+  }
+}
+```
+
+This approach will make our visualizations more meaningful by setting:
+- Red zone (poor): 0 to chance
+- Yellow zone (caution): chance to chance+goodDelta
+- Green zone (good): chance+goodDelta to 100
+
+For AC1, a similar approach may be used, though the calculation and interpretation would differ slightly since AC1 is already chance-corrected.
+

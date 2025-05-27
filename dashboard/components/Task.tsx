@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils'
 import { Timestamp } from './ui/timestamp'
 
 export interface BaseTaskProps<TData extends BaseTaskData = BaseTaskData> {
-  variant: 'grid' | 'detail' | 'nested'
+  variant: 'grid' | 'detail' | 'nested' | 'bare'
   task: {
     id: string
     type: string
@@ -138,11 +138,16 @@ const Task = <TData extends BaseTaskData = BaseTaskData>({
     )
   }
 
+  // Add a check for the 'bare' variant to render only content
+  if (variant === 'bare') {
+    return <>{renderContent(childProps)}</>;
+  }
+
   return (
     <div 
       className={`
         transition-colors duration-200 
-        flex flex-col h-full p-3 rounded-lg
+        flex flex-col h-full rounded-lg w-full max-w-full
         ${variant === 'grid' ? 'cursor-pointer hover:bg-accent/50' : ''}
         ${effectiveIsSelected ? 'bg-card-selected' : 'bg-card'}
       `}
@@ -158,7 +163,7 @@ const Task = <TData extends BaseTaskData = BaseTaskData>({
       aria-busy={isLoading}
       aria-disabled={isLoading}
     >
-      <div className="flex-none">
+      <div className="flex-none p-3 w-full max-w-full overflow-hidden">
         {renderHeader(childProps)}
       </div>
       <div className="flex-1 min-h-0">
@@ -206,29 +211,31 @@ const TaskHeader = <TData extends BaseTaskData = BaseTaskData>({
 
   return (
     <CardHeader className={cn(
-      "space-y-1.5 p-0 flex flex-col items-start",
+      "space-y-1.5 p-0 flex flex-col items-start w-full max-w-full",
       variant === 'detail' && "px-1"
     )}>
-      <div className="flex justify-between items-start w-full">
-        <div className="flex flex-col pb-1 leading-none">
+      <div className="flex justify-between items-start w-full max-w-full gap-3 overflow-hidden">
+        <div className="flex flex-col pb-1 leading-none min-w-0 flex-1 overflow-hidden">
           {task.name && (
-            <div className="font-semibold text-sm truncate max-w-[200px]">{task.name}</div>
+            <div className="font-semibold text-sm truncate">{task.name}</div>
           )}
           {task.description && (
-            <div className="font-semibold text-sm truncate max-w-[200px]">{task.description}</div>
+            <div className={`text-sm text-muted-foreground ${variant === 'detail' ? '' : 'truncate'}`}>
+              {task.description}
+            </div>
           )}
           {task.scorecard && task.scorecard.trim() !== '' && (
-            <div className="font-semibold text-sm truncate max-w-[200px]">{task.scorecard}</div>
+            <div className="font-semibold text-sm truncate">{task.scorecard}</div>
           )}
           {task.score && task.score.trim() !== '' && (
-            <div className="font-semibold text-sm truncate max-w-[200px]">{task.score}</div>
+            <div className="font-semibold text-sm truncate">{task.score}</div>
           )}
           {variant !== 'grid' && (
             <div className="text-sm text-muted-foreground">{task.type}</div>
           )}
           <Timestamp time={task.time} variant="relative" />
         </div>
-        <div className="flex flex-col items-end">
+        <div className="flex flex-col items-end flex-shrink-0">
           {variant === 'grid' ? (
             <div className="flex items-start gap-2">
               <div className="text-sm text-muted-foreground text-right">
@@ -320,7 +327,7 @@ const TaskContent = <TData extends BaseTaskData = BaseTaskData>({
   })()
 
   return (
-    <CardContent className="h-full p-0 flex flex-col flex-1">
+    <CardContent className="h-full p-0 flex flex-col flex-1 px-3 pb-3">
       {!hideTaskStatus && (
         <div>
           <TaskStatus

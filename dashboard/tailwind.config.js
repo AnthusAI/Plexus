@@ -125,6 +125,11 @@ module.exports = {
                 'gauge-almost': 'var(--gauge-almost)',
                 'gauge-viable': 'var(--gauge-viable)',
                 'gauge-great': 'var(--gauge-great)',
+                'editor-comment': 'var(--editor-comment)',
+                'editor-key': 'var(--editor-key)',
+                'editor-string': 'var(--editor-string)',
+                'editor-number': 'var(--editor-number)',
+                'editor-keyword': 'var(--editor-keyword)',
             },
             keyframes: {
                 'accordion-down': {
@@ -142,11 +147,38 @@ module.exports = {
                     to: {
                         height: '0'
                     }
+                },
+                'gentle-bounce': {
+                    '0%, 20%, 50%, 80%, 100%': {
+                        transform: 'translateY(0)'
+                    },
+                    '10%': {
+                        transform: 'translateY(-3px)'
+                    },
+                    '30%': {
+                        transform: 'translateY(-2px)'
+                    }
+                },
+                'attention-bounce': {
+                    '0%, 15%, 35%, 55%, 100%': {
+                        transform: 'translateY(0)'
+                    },
+                    '5%': {
+                        transform: 'translateY(-8px)'
+                    },
+                    '25%': {
+                        transform: 'translateY(-6px)'
+                    },
+                    '45%': {
+                        transform: 'translateY(-4px)'
+                    }
                 }
             },
             animation: {
                 'accordion-down': 'accordion-down 0.2s ease-out',
-                'accordion-up': 'accordion-up 0.2s ease-out'
+                'accordion-up': 'accordion-up 0.2s ease-out',
+                'gentle-bounce': 'gentle-bounce 2.5s ease-in-out infinite',
+                'attention-bounce': 'attention-bounce 2s ease-in-out infinite'
             }
         },
         screens: {

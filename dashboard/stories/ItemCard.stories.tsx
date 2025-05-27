@@ -18,7 +18,7 @@ const sampleItems: ItemData[] = [
   { 
     id: 1, 
     scorecard: "CS3 Services v2", 
-    score: 80, 
+    score: "Email Compliance Assessment", 
     date: relativeDate(0, 0, 5), 
     status: "New", 
     results: 0, 
@@ -28,7 +28,7 @@ const sampleItems: ItemData[] = [
   { 
     id: 2, 
     scorecard: "CS3 Audigy", 
-    score: 89, 
+    score: "Phone Call Quality Review", 
     date: relativeDate(0, 0, 15), 
     status: "New", 
     results: 0, 
@@ -38,7 +38,7 @@ const sampleItems: ItemData[] = [
   { 
     id: 3, 
     scorecard: "AW IB Sales", 
-    score: 96, 
+    score: "Web Chat Support Evaluation", 
     date: relativeDate(0, 0, 30), 
     status: "New", 
     results: 0, 
@@ -48,7 +48,7 @@ const sampleItems: ItemData[] = [
   { 
     id: 4, 
     scorecard: "CS3 Nexstar v1", 
-    score: 88, 
+    score: "Customer Satisfaction Analysis", 
     date: relativeDate(0, 1, 0), 
     status: "Error", 
     results: 2, 
@@ -58,7 +58,7 @@ const sampleItems: ItemData[] = [
   { 
     id: 5, 
     scorecard: "SelectQuote Term Life v1", 
-    score: 83, 
+    score: "Email Security Compliance Check", 
     date: relativeDate(0, 1, 30), 
     status: "Scoring", 
     results: 6, 
@@ -68,7 +68,7 @@ const sampleItems: ItemData[] = [
   { 
     id: 6, 
     scorecard: "AW IB Sales", 
-    score: 94, 
+    score: "Telephone Transcript Analysis", 
     date: relativeDate(0, 2, 0), 
     status: "Done", 
     results: 19, 
@@ -78,7 +78,7 @@ const sampleItems: ItemData[] = [
   { 
     id: 7, 
     scorecard: "CS3 Services v2", 
-    score: 79, 
+    score: "Live Chat Performance Review", 
     date: relativeDate(0, 4, 0), 
     status: "Done", 
     results: 16, 
@@ -88,7 +88,7 @@ const sampleItems: ItemData[] = [
   { 
     id: 8, 
     scorecard: "CS3 Nexstar v1", 
-    score: 91, 
+    score: "Customer Experience Evaluation", 
     date: relativeDate(0, 5, 0), 
     status: "Done", 
     results: 17, 
@@ -98,7 +98,7 @@ const sampleItems: ItemData[] = [
   { 
     id: 9, 
     scorecard: "SelectQuote Term Life v1", 
-    score: 89, 
+    score: "Communication Quality Assessment", 
     date: relativeDate(0, 6, 0), 
     status: "Done", 
     results: 13, 
@@ -108,7 +108,7 @@ const sampleItems: ItemData[] = [
   { 
     id: 10, 
     scorecard: "CS3 Services v2", 
-    score: 82, 
+    score: "Digital Channel Compliance", 
     date: relativeDate(1, 0, 0), 
     status: "Done", 
     results: 15, 
@@ -118,7 +118,7 @@ const sampleItems: ItemData[] = [
   { 
     id: 11, 
     scorecard: "AW IB Sales", 
-    score: 93, 
+    score: "Voice Interaction Analysis", 
     date: relativeDate(1, 2, 0), 
     status: "Done", 
     results: 18, 
@@ -128,7 +128,7 @@ const sampleItems: ItemData[] = [
   { 
     id: 12, 
     scorecard: "CS3 Audigy", 
-    score: 87, 
+    score: "Multi Channel Support Review", 
     date: relativeDate(1, 4, 0), 
     status: "Done", 
     results: 16, 
@@ -157,7 +157,7 @@ const ItemCardDetailWrapper = (args: any) => {
   const [isFullWidth, setIsFullWidth] = React.useState(false);
   
   return (
-    <div className="h-[400px] w-full max-w-[800px]">
+    <div className="h-[400px] w-full">
       <ItemCard
         {...args}
         isFullWidth={isFullWidth}
@@ -169,10 +169,10 @@ const ItemCardDetailWrapper = (args: any) => {
 };
 
 const meta = {
-  title: 'Items/ItemCard',
+  title: 'Scorecards/ItemCard',
   component: ItemCard,
   parameters: {
-    layout: 'centered',
+    layout: 'fullscreen',
   },
   tags: ['autodocs'],
   argTypes: {
@@ -197,6 +197,13 @@ type Story = StoryObj<typeof meta>;
 
 // Grid variant stories
 export const GridNew: Story = {
+  render: (args) => (
+    <div className="w-full p-4">
+      <div className="max-w-sm">
+        <ItemCard {...args} />
+      </div>
+    </div>
+  ),
   args: {
     variant: 'grid',
     item: sampleItems[0],
@@ -205,6 +212,13 @@ export const GridNew: Story = {
 };
 
 export const GridError: Story = {
+  render: (args) => (
+    <div className="w-full p-4">
+      <div className="max-w-sm">
+        <ItemCard {...args} />
+      </div>
+    </div>
+  ),
   args: {
     variant: 'grid',
     item: sampleItems[3],
@@ -213,6 +227,13 @@ export const GridError: Story = {
 };
 
 export const GridDone: Story = {
+  render: (args) => (
+    <div className="w-full p-4">
+      <div className="max-w-sm">
+        <ItemCard {...args} />
+      </div>
+    </div>
+  ),
   args: {
     variant: 'grid',
     item: sampleItems[5],
@@ -221,6 +242,13 @@ export const GridDone: Story = {
 };
 
 export const GridSelected: Story = {
+  render: (args) => (
+    <div className="w-full p-4">
+      <div className="max-w-sm">
+        <ItemCard {...args} />
+      </div>
+    </div>
+  ),
   args: {
     variant: 'grid',
     item: sampleItems[0],
@@ -230,7 +258,11 @@ export const GridSelected: Story = {
 
 // Detail variant stories
 export const DetailNew: Story = {
-  render: (args) => <ItemCardDetailWrapper {...args} />,
+  render: (args) => (
+    <div className="w-full p-4">
+      <ItemCardDetailWrapper {...args} />
+    </div>
+  ),
   args: {
     variant: 'detail',
     item: sampleItems[0],
@@ -239,7 +271,11 @@ export const DetailNew: Story = {
 };
 
 export const DetailError: Story = {
-  render: (args) => <ItemCardDetailWrapper {...args} />,
+  render: (args) => (
+    <div className="w-full p-4">
+      <ItemCardDetailWrapper {...args} />
+    </div>
+  ),
   args: {
     variant: 'detail',
     item: sampleItems[3],
@@ -248,7 +284,11 @@ export const DetailError: Story = {
 };
 
 export const DetailDone: Story = {
-  render: (args) => <ItemCardDetailWrapper {...args} />,
+  render: (args) => (
+    <div className="w-full p-4">
+      <ItemCardDetailWrapper {...args} />
+    </div>
+  ),
   args: {
     variant: 'detail',
     item: sampleItems[5],
@@ -256,23 +296,21 @@ export const DetailDone: Story = {
   },
 };
 
-// Grid layout story showing multiple cards
-export const GridLayout: Story = {
+// Responsive grid layout story showing multiple cards
+export const ResponsiveGrid: Story = {
   render: () => (
-    <div className="w-full max-w-[1200px]">
-      <div className="@container">
-        <div className="grid grid-cols-2 @[500px]:grid-cols-3 @[700px]:grid-cols-4 @[900px]:grid-cols-5 @[1100px]:grid-cols-6 gap-3">
-          {sampleItems.map((item) => (
-            <ItemCard
-              key={item.id}
-              variant="grid"
-              item={item}
-              isSelected={false}
-              onClick={() => console.log(`Clicked item ${item.id}`)}
-              getBadgeVariant={getBadgeVariant}
-            />
-          ))}
-        </div>
+    <div className="w-full p-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
+        {sampleItems.slice(0, 6).map((item) => (
+          <ItemCard
+            key={item.id}
+            variant="grid"
+            item={item}
+            isSelected={false}
+            onClick={() => console.log(`Clicked item ${item.id}`)}
+            getBadgeVariant={getBadgeVariant}
+          />
+        ))}
       </div>
     </div>
   ),
@@ -281,4 +319,11 @@ export const GridLayout: Story = {
     item: sampleItems[0],
     getBadgeVariant,
   },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Responsive grid layout that adapts to different screen sizes. Resize the viewport to see how the cards respond.'
+      }
+    }
+  }
 }; 

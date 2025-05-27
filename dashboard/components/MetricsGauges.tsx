@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 
 interface GaugeConfig {
   value?: number
+  target?: number
   label: string
   segments?: Segment[]
   min?: number
@@ -15,6 +16,8 @@ interface GaugeConfig {
   showTicks?: boolean
   information?: string
   priority?: boolean
+  valueUnit?: string
+  decimalPlaces?: number
 }
 
 interface MetricsGaugesProps {
@@ -90,6 +93,7 @@ const MetricsGauges: React.FC<MetricsGaugesProps> = ({
           >
             <Gauge
               value={gauge.value}
+              target={gauge.target}
               title={gauge.label}
               min={gauge.min}
               max={gauge.max}
@@ -97,6 +101,8 @@ const MetricsGauges: React.FC<MetricsGaugesProps> = ({
               showTicks={variant === 'detail'}
               information={gauge.information}
               priority={index === selectedIndex}
+              valueUnit={gauge.valueUnit}
+              decimalPlaces={gauge.decimalPlaces}
             />
           </div>
         ))}

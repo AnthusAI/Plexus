@@ -77,7 +77,7 @@ export interface TaskStatusProps {
   showPreExecutionStages?: boolean
   completedAt?: string
   truncateMessages?: boolean
-  variant?: 'grid' | 'detail' | 'nested' | 'list'
+  variant?: 'grid' | 'detail' | 'nested' | 'list' | 'bare'
   isFullWidth?: boolean
   onToggleFullWidth?: () => void
   onClose?: () => void
@@ -86,6 +86,8 @@ export interface TaskStatusProps {
   commandDisplay?: 'hide' | 'show' | 'full'
   statusMessageDisplay?: 'always' | 'never' | 'error-only'
   onCommandDisplayChange?: (display: 'show' | 'full') => void
+  elapsedSeconds?: number | null
+  estimatedRemainingSeconds?: number | null
 }
 
 function formatDuration(seconds: number): string {
@@ -131,7 +133,9 @@ export const TaskStatus = React.memo(({
   isSelected = false,
   commandDisplay = 'show',
   statusMessageDisplay = 'always',
-  onCommandDisplayChange
+  onCommandDisplayChange,
+  elapsedSeconds,
+  estimatedRemainingSeconds
 }: TaskStatusProps) => {
 
   const [isMessageExpanded, setIsMessageExpanded] = useState(false);
@@ -141,6 +145,22 @@ export const TaskStatus = React.memo(({
 
   // Memoize timing calculations
   const timingValues = useMemo(() => {
+    // If we have pre-calculated elapsed seconds, use that instead of calculating from timestamps
+    if (elapsedSeconds !== null && elapsedSeconds !== undefined) {
+      const formattedElapsedTime = formatDuration(elapsedSeconds);
+      
+      let formattedEstimatedTime = '';
+      if (estimatedRemainingSeconds !== null && estimatedRemainingSeconds !== undefined && estimatedRemainingSeconds > 0) {
+        formattedEstimatedTime = formatDuration(estimatedRemainingSeconds);
+      }
+
+      return {
+        elapsedTime: formattedElapsedTime,
+        estimatedTimeRemaining: formattedEstimatedTime
+      };
+    }
+
+    // Fall back to timestamp calculation if no pre-calculated values
     if (!startedAt) {
       return {
         elapsedTime: '0s',
@@ -150,8 +170,8 @@ export const TaskStatus = React.memo(({
 
     const taskStartTime = new Date(startedAt);
     const endTime = completedAt ? new Date(completedAt) : new Date();
-    const elapsedSeconds = Math.floor((endTime.getTime() - taskStartTime.getTime()) / 1000);
-    const formattedElapsedTime = formatDuration(elapsedSeconds);
+    const calculatedElapsedSeconds = Math.floor((endTime.getTime() - taskStartTime.getTime()) / 1000);
+    const formattedElapsedTime = formatDuration(calculatedElapsedSeconds);
 
     let formattedEstimatedTime = '';
     if (isInProgress && estimatedCompletionAt) {
@@ -166,7 +186,7 @@ export const TaskStatus = React.memo(({
       elapsedTime: formattedElapsedTime,
       estimatedTimeRemaining: formattedEstimatedTime
     };
-  }, [startedAt, completedAt, isInProgress, estimatedCompletionAt]);
+  }, [elapsedSeconds, estimatedRemainingSeconds, startedAt, completedAt, isInProgress, estimatedCompletionAt]);
 
   // State for timing values
   const [elapsedTime, setElapsedTime] = useState(timingValues.elapsedTime);
@@ -440,6 +460,8 @@ export const TaskStatus = React.memo(({
             estimatedTimeRemaining={estimatedTimeRemaining}
             isInProgress={isInProgress}
             className="text-muted-foreground"
+            startedAt={startedAt}
+            completedAt={completedAt}
           />
         )}
         {showStages && (
@@ -533,11 +555,13 @@ export const TaskStatus = React.memo(({
         </div>
       ) : (
         startedAt && (
-          <Timestamp 
-            time={startedAt} 
-            completionTime={completedAt} 
-            variant="elapsed" 
+          <ProgressBarTiming
+            elapsedTime={elapsedTime}
+            estimatedTimeRemaining={estimatedTimeRemaining}
+            isInProgress={isInProgress}
             className="text-muted-foreground"
+            startedAt={startedAt}
+            completedAt={completedAt}
           />
         )
       )}
@@ -588,6 +612,8 @@ export const TaskStatus = React.memo(({
     prevProps.extra === nextProps.extra &&
     prevProps.isSelected === nextProps.isSelected &&
     prevProps.commandDisplay === nextProps.commandDisplay &&
-    prevProps.statusMessageDisplay === nextProps.statusMessageDisplay
+    prevProps.statusMessageDisplay === nextProps.statusMessageDisplay &&
+    prevProps.elapsedSeconds === nextProps.elapsedSeconds &&
+    prevProps.estimatedRemainingSeconds === nextProps.estimatedRemainingSeconds
   );
 }); 

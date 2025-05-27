@@ -5,7 +5,7 @@ import { Card, CardHeader } from '@/components/ui/card'
 import { Square, X } from 'lucide-react'
 
 const meta = {
-  title: 'UI/CardButton',
+  title: 'General/UI/CardButton',
   component: CardButton,
   parameters: {
     layout: 'centered',

@@ -1,10 +1,12 @@
 import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react'
 import { Task, TaskHeader, TaskContent, BaseTaskProps } from '@/components/Task'
-import { FlaskConical, Square, X, Split, ChevronLeft } from 'lucide-react'
+import { FlaskConical, Square, X, Split, ChevronLeft, MoreHorizontal, MessageSquareCode } from 'lucide-react'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { CardButton } from '@/components/CardButton'
+import { toast } from '@/components/ui/use-toast'
 import MetricsGauges from '@/components/MetricsGauges'
 import { TaskStatus, type TaskStageConfig } from '@/components/ui/task-status'
-import { ConfusionMatrix } from '@/components/confusion-matrix'
-import { CardButton } from '@/components/CardButton'
+import { ConfusionMatrix, type ConfusionMatrixData, type ConfusionMatrixRow } from '@/components/confusion-matrix'
 import ClassDistributionVisualizer from '@/components/ClassDistributionVisualizer'
 import PredictedClassDistributionVisualizer from '@/components/PredictedClassDistributionVisualizer'
 import { EvaluationTaskScoreResults } from './EvaluationTaskScoreResults'
@@ -111,6 +113,7 @@ export interface EvaluationTaskData extends BaseTaskData {
   scoreResults?: ScoreResult[]
   selectedScoreResult?: Schema['ScoreResult']['type'] | null
   task?: TaskData | null
+  universalCode?: string | null
 }
 
 export interface EvaluationTaskProps extends Omit<BaseTaskProps<EvaluationTaskData>, 'variant'> {
@@ -335,7 +338,9 @@ const GridContent = React.memo(({ data, extra, isSelected }: {
     variant: 'grid' as const,
     extra,
     isSelected,
-    commandDisplay: 'hide' as const
+    commandDisplay: 'hide' as const,
+    elapsedSeconds: data.elapsedSeconds,
+    estimatedRemainingSeconds: data.estimatedRemainingSeconds
   }), [
     data.task?.status,
     data.status,
@@ -351,7 +356,9 @@ const GridContent = React.memo(({ data, extra, isSelected }: {
     data.task?.command,
     data.command,
     extra,
-    isSelected
+    isSelected,
+    data.elapsedSeconds,
+    data.estimatedRemainingSeconds
   ]);
 
   return (
@@ -661,12 +668,59 @@ const DetailContent = React.memo(({
     onSelectScoreResult?.(null)
   }
 
+  const transformedConfusionMatrixData = useMemo((): ConfusionMatrixData | null => {
+    const cmInput = data.confusionMatrix;
+    if (!cmInput || !cmInput.matrix || !cmInput.labels || cmInput.matrix.length === 0 || cmInput.labels.length === 0) {
+      return null;
+    }
+    // Basic check: matrix rows should match labels length for a square matrix using labels for both axes
+    if (cmInput.matrix.length !== cmInput.labels.length) {
+        console.warn('Confusion matrix: matrix rows length does not match labels length.');
+        // This might indicate an issue, but ConfusionMatrix component itself has more robust validation.
+        // For now, we let it pass to the component for its validation.
+    }
+    if (cmInput.labels.some(l => l === '')) {
+        console.warn('EvaluationTask: Input confusion matrix labels contain empty strings. This can lead to errors.');
+    }
+
+    try {
+      const newMatrix: ConfusionMatrixRow[] = cmInput.matrix.map((row, actualIndex) => {
+        const actualClassLabel = cmInput.labels![actualIndex];
+        if (actualClassLabel === undefined) {
+          // Should not happen if matrix.length === labels.length and labels is not sparse
+          throw new Error(`Label not found for actual index ${actualIndex}`);
+        }
+        const predictedClassCounts: { [predictedClassLabel: string]: number } = {};
+        row.forEach((count, predictedIndex) => {
+          const predictedClassLabel = cmInput.labels![predictedIndex];
+          if (predictedClassLabel === undefined) {
+            throw new Error(`Label not found for predicted index ${predictedIndex}`);
+          }
+          // It's important that predictedClassLabel is a valid key (non-empty string)
+          // The ConfusionMatrix component will validate if these labels exist in its main `labels` prop.
+          predictedClassCounts[predictedClassLabel] = count;
+        });
+        return {
+          actualClassLabel: actualClassLabel, // Use the label as is, even if it's ""
+          predictedClassCounts,
+        };
+      });
+      return {
+        matrix: newMatrix,
+        labels: cmInput.labels, // Pass original labels, ConfusionMatrix will validate them
+      };
+    } catch (error) {
+      console.error("Error transforming confusion matrix data:", error);
+      return null; // Or a specific error structure if ConfusionMatrix can handle it
+    }
+  }, [data.confusionMatrix]);
+
   return (
     <div 
       ref={containerRef}
-      className="w-full min-w-[300px] h-full overflow-y-auto"
+      className="w-full p-3 min-w-[300px] h-full overflow-y-auto"
     >
-      <div className={`${showAsColumns ? 'grid gap-4' : 'space-y-4'} ${showAsColumns ? 'h-full' : 'h-auto'}`} 
+      <div className={`overflow-visible ${showAsColumns ? 'grid gap-4' : 'space-y-4'} ${showAsColumns ? 'h-full' : 'h-auto'}`} 
         style={{
           gridTemplateColumns: isWideEnoughForThree 
             ? selectedScoreResult ? '1fr 1fr 1fr' : '1fr 1fr'
@@ -690,9 +744,11 @@ const DetailContent = React.memo(({
 
         {/* Only show main panel if not showing score result in narrow view */}
         {showMainPanel && (
-          <div className={`w-full ${showAsColumns ? 'h-full' : 'h-auto'} flex flex-col overflow-hidden`}>
-            <div className={`${showAsColumns ? 'flex-1' : ''} overflow-y-auto max-h-full`}>
-              <div className="space-y-3 p-1">
+          <div 
+            className={`w-full ${showAsColumns ? 'h-full' : 'h-auto'} flex flex-col overflow-visible`}
+          >
+            <div className={`${showAsColumns ? 'flex-1' : ''} overflow-visible max-h-full`}>
+              <div className="space-y-3 p-1 overflow-visible">
                 <div className="mb-3">
                   <TaskStatus
                     variant="detail"
@@ -748,6 +804,8 @@ const DetailContent = React.memo(({
                     isSelected={effectiveIsSelected}
                     commandDisplay={commandDisplay}
                     onCommandDisplayChange={onCommandDisplayChange}
+                    elapsedSeconds={data.elapsedSeconds}
+                    estimatedRemainingSeconds={data.estimatedRemainingSeconds}
                   />
                 </div>
 
@@ -778,16 +836,12 @@ const DetailContent = React.memo(({
                   variant="detail"
                 />
 
-                {data.confusionMatrix?.matrix && 
-                 data.confusionMatrix.matrix.length > 0 && 
-                 data.confusionMatrix.labels && (
-                  <div className="mt-3">
-                    <ConfusionMatrix 
-                      data={{
-                        matrix: data.confusionMatrix.matrix,
-                        labels: data.confusionMatrix.labels
-                      }}
-                      onSelectionChange={setSelectedPredictedActual}
+                {/* Confusion Matrix Section */}
+                {transformedConfusionMatrixData && (
+                  <div className="mt-4 rounded-md bg-background/30 w-full" style={{ overflow: 'visible' }}>
+                    <ConfusionMatrix
+                      data={transformedConfusionMatrixData} // Pass the transformed data object
+                      onSelectionChange={setSelectedPredictedActual} // Reverted to original handler
                     />
                   </div>
                 )}
@@ -890,6 +944,74 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
     taskStatus: data.task?.status
   });
 
+  // Function to generate universal YAML code for evaluation
+  const generateUniversalCode = useCallback((evaluationData: EvaluationTaskData) => {
+    const yamlContent = `# Universal Code Snippet - Evaluation Results
+# Generated for: ${evaluationData.title || 'Evaluation'}
+# Type: Accuracy Evaluation
+# Date: ${new Date().toISOString()}
+
+evaluation:
+  id: "${evaluationData.id}"
+  type: "${task.type || 'Accuracy Evaluation'}"
+  scorecard: "${task.scorecard || ''}"
+  score: "${task.score || ''}"
+  status: "${evaluationData.status}"
+  
+  # Performance Metrics
+  accuracy: ${evaluationData.accuracy || 0}
+  processed_items: ${evaluationData.processedItems || 0}
+  total_items: ${evaluationData.totalItems || 0}
+  inferences: ${evaluationData.inferences || 0}
+  cost: ${evaluationData.cost || 0}
+  
+  # Timing Information
+  started_at: "${evaluationData.startedAt || ''}"
+  elapsed_seconds: ${evaluationData.elapsedSeconds || 0}
+  estimated_remaining_seconds: ${evaluationData.estimatedRemainingSeconds || 0}
+  
+  # Additional Metrics
+  metrics:${evaluationData.metrics?.map(metric => `
+    - name: "${metric.name}"
+      value: ${metric.value}
+      unit: "${metric.unit || ''}"
+      priority: ${metric.priority || false}`).join('') || ''}
+  
+  # Error Information
+  error_message: "${evaluationData.errorMessage || ''}"
+  
+  # Score Results Summary
+  score_results_count: ${evaluationData.scoreResults?.length || 0}
+  
+  # Class Distribution
+  dataset_balanced: ${evaluationData.isDatasetClassDistributionBalanced || false}
+  predicted_balanced: ${evaluationData.isPredictedClassDistributionBalanced || false}
+
+# Context: This YAML contains evaluation results and metrics for analysis by humans, AI models, and other systems.
+# Usage: Can be used for reporting, monitoring, or further automated analysis.
+`;
+    return yamlContent;
+  }, [task.type, task.scorecard, task.score]);
+
+  // Function to handle copying universal code to clipboard
+  const handleGetCode = useCallback(async () => {
+    try {
+      const universalCode = data.universalCode || generateUniversalCode(data);
+      await navigator.clipboard.writeText(universalCode);
+      toast({
+        description: "Copied Universal Code to clipboard",
+        duration: 2000,
+      });
+    } catch (error) {
+      console.error('Failed to copy universal code:', error);
+      toast({
+        variant: "destructive",
+        description: "Failed to copy code to clipboard",
+        duration: 2000,
+      });
+    }
+  }, [data, generateUniversalCode]);
+
   const metrics = useMemo(() => 
     variant === 'detail' ? 
       (data.metrics ?? []).map(metric => ({
@@ -913,6 +1035,20 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
   const headerContent = useMemo(() => (
     variant === 'detail' ? (
       <div className="flex items-center space-x-2">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <CardButton
+              icon={MoreHorizontal}
+              onClick={() => {}}
+            />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={handleGetCode}>
+              <MessageSquareCode className="mr-2 h-4 w-4" />
+              Get Code
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
         {typeof onToggleFullWidth === 'function' && (
           <CardButton
             icon={Square}
@@ -930,7 +1066,7 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
         )}
       </div>
     ) : null
-  ), [variant, onToggleFullWidth, onClose])
+  ), [variant, onToggleFullWidth, onClose, handleGetCode])
 
   const taskData = task.data?.task as TaskData | undefined;
 
@@ -1031,7 +1167,9 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
       errorMessage: data.task?.errorMessage || data.errorMessage || undefined,
       command: data.task?.command || data.command,
       statusMessage: data.task?.stages?.items?.find(s => s.status === 'RUNNING')?.statusMessage || undefined,
-      isSelected
+      isSelected,
+      elapsedSeconds: data.elapsedSeconds,
+      estimatedRemainingSeconds: data.estimatedRemainingSeconds
     } as const
 
     return <TaskStatus {...taskStatus} />

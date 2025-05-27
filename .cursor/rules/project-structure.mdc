@@ -44,3 +44,7 @@ The system uses multi-stage progress tracking for long-running tasks with key fi
 - Routes checked against `publicPaths` in `client-layout.tsx`
 - Protected routes redirect to landing
 - Data operations flow through `amplify-client.ts`
+
+## Policies
+- Do not run `npm run dev` yourself because the developer runs that.
+- Do not make changes using `git`.  You can check for changes but do not make commits or push.
