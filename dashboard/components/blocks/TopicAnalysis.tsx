@@ -306,27 +306,26 @@ const TopicAnalysisResults: React.FC<{
       
       <div className="space-y-4">
         {topics.map((topic) => (
-          <Card key={topic.id}>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base">Topic {topic.id}</CardTitle>
-                <span className="text-sm text-muted-foreground">{topic.count} items</span>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <h4 className="font-medium mb-2">{topic.name}</h4>
-              {topic.words && topic.words.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Key Terms</p>
+          <Card key={topic.id} className="shadow-none border">
+            <CardContent className="p-4">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-muted-foreground">#{topic.id + 1}</span>
+                    <h4 className="font-medium">{topic.name}</h4>
+                  </div>
+                  <span className="text-sm text-muted-foreground">{topic.count} items</span>
+                </div>
+                {topic.words && topic.words.length > 0 && (
                   <div className="flex flex-wrap gap-1">
                     {topic.words.slice(0, 6).map((word, i) => (
-                      <Badge key={i} variant="outline" className="text-xs font-mono">
+                      <Badge key={i} variant="outline" className="text-xs font-mono px-0 py-0">
                         {word.word}
                       </Badge>
                     ))}
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </CardContent>
           </Card>
         ))}

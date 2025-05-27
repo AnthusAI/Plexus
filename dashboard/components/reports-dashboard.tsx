@@ -556,6 +556,8 @@ export default function ReportsDashboard({
     position: number;
   }> | null>(null);
   const [subscriptions, setSubscriptions] = useState<{ unsubscribe: () => void }[]>([]);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
 
   // Fetch account ID
   useEffect(() => {
@@ -587,7 +589,11 @@ export default function ReportsDashboard({
 
   // Fetch Reports Data
   const fetchReports = useCallback(async (currentAccountId: string, currentNextToken: string | null, reportConfigId?: string | null) => {
-    setIsLoading(true);
+    if (currentNextToken) {
+      setIsLoadingMore(true);
+    } else {
+      setIsLoading(true);
+    }
     setError(null);
     try {
       let reportsResponse;
@@ -660,6 +666,7 @@ export default function ReportsDashboard({
       setNextToken(null);
     } finally {
       setIsLoading(false);
+      setIsLoadingMore(false);
     }
   }, [dataHasLoadedOnce]); // Dependency array includes dataHasLoadedOnce
 
@@ -946,6 +953,31 @@ export default function ReportsDashboard({
       });
     };
   }, [subscriptions]);
+
+  // Infinite scroll effect using Intersection Observer
+  useEffect(() => {
+    const currentRef = loadMoreRef.current;
+    if (!currentRef || !nextToken || isLoadingMore || !accountId) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const first = entries[0];
+        if (first.isIntersecting && !isLoadingMore) {
+          console.log('Loading more reports...');
+          fetchReports(accountId, nextToken, selectedReportConfiguration);
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    observer.observe(currentRef);
+
+    return () => {
+      if (currentRef) {
+        observer.unobserve(currentRef);
+      }
+    };
+  }, [nextToken, isLoadingMore, accountId, selectedReportConfiguration, fetchReports]);
 
   // Handle deep linking and browser navigation (similar to evaluations)
   useEffect(() => {
@@ -1395,10 +1427,17 @@ export default function ReportsDashboard({
                   </div>
                 );
               })}
-              {/* Placeholder for infinite scroll trigger */}
-              {nextToken && !isLoading && (
-                <div className="col-span-full flex justify-center p-4">
-                   <Button variant="outline" onClick={() => accountId && fetchReports(accountId, nextToken, selectedReportConfiguration)}>Load More</Button>
+              {/* Infinite scroll trigger and loading indicator */}
+              {nextToken && (
+                <div className="col-span-full">
+                  {/* Invisible trigger element for intersection observer */}
+                  <div ref={loadMoreRef} className="h-4" />
+                  {/* Loading indicator */}
+                  {isLoadingMore && (
+                    <div className="flex justify-center p-4">
+                      <div className="text-sm text-muted-foreground">Loading more reports...</div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

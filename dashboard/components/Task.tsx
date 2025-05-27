@@ -147,7 +147,7 @@ const Task = <TData extends BaseTaskData = BaseTaskData>({
     <div 
       className={`
         transition-colors duration-200 
-        flex flex-col h-full rounded-lg
+        flex flex-col h-full rounded-lg w-full max-w-full
         ${variant === 'grid' ? 'cursor-pointer hover:bg-accent/50' : ''}
         ${effectiveIsSelected ? 'bg-card-selected' : 'bg-card'}
       `}
@@ -163,7 +163,7 @@ const Task = <TData extends BaseTaskData = BaseTaskData>({
       aria-busy={isLoading}
       aria-disabled={isLoading}
     >
-      <div className="flex-none p-3">
+      <div className="flex-none p-3 w-full max-w-full overflow-hidden">
         {renderHeader(childProps)}
       </div>
       <div className="flex-1 min-h-0">
@@ -211,16 +211,18 @@ const TaskHeader = <TData extends BaseTaskData = BaseTaskData>({
 
   return (
     <CardHeader className={cn(
-      "space-y-1.5 p-0 flex flex-col items-start",
+      "space-y-1.5 p-0 flex flex-col items-start w-full max-w-full",
       variant === 'detail' && "px-1"
     )}>
-      <div className="flex justify-between items-start w-full gap-3">
-        <div className="flex flex-col pb-1 leading-none min-w-0 flex-shrink overflow-hidden">
+      <div className="flex justify-between items-start w-full max-w-full gap-3 overflow-hidden">
+        <div className="flex flex-col pb-1 leading-none min-w-0 flex-1 overflow-hidden">
           {task.name && (
             <div className="font-semibold text-sm truncate">{task.name}</div>
           )}
           {task.description && (
-            <div className="font-semibold text-sm truncate">{task.description}</div>
+            <div className={`text-sm text-muted-foreground ${variant === 'detail' ? '' : 'truncate'}`}>
+              {task.description}
+            </div>
           )}
           {task.scorecard && task.scorecard.trim() !== '' && (
             <div className="font-semibold text-sm truncate">{task.scorecard}</div>
@@ -233,7 +235,7 @@ const TaskHeader = <TData extends BaseTaskData = BaseTaskData>({
           )}
           <Timestamp time={task.time} variant="relative" />
         </div>
-        <div className="flex flex-col items-end">
+        <div className="flex flex-col items-end flex-shrink-0">
           {variant === 'grid' ? (
             <div className="flex items-start gap-2">
               <div className="text-sm text-muted-foreground text-right">
