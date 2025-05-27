@@ -11,6 +11,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { getValueFromLazyLoader } from '@/utils/data-operations'
+import { parseOutputString } from '@/lib/utils'
 import { GraphQLResult } from '@aws-amplify/api'
 import BlockRegistryInitializer from '@/components/blocks/BlockRegistryInitializer'
 import SquareLogo, { LogoVariant } from '@/components/logo-square';
@@ -456,12 +457,7 @@ export function PublicReport({
     
     // Parse report blocks
     const reportBlocks = report.reportBlocks?.items?.map((block: any) => {
-      let outputData;
-      try {
-        outputData = typeof block.output === 'string' ? JSON.parse(block.output) : block.output;
-      } catch (err) {
-        outputData = block.output || {}; // Fallback to an empty object or raw output
-      }
+      const outputData = parseOutputString(block.output);
 
       // Prioritize block.type from API, then outputData.class, then 'unknown'
       const blockType = block.type || outputData.class || 'unknown'; 
