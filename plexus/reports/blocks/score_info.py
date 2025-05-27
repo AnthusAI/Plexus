@@ -23,7 +23,6 @@ class ScoreInfo(BaseReportBlock):
         self # config/params/client accessed via self
     ) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         """Fetches (mock) Score data and returns it with logs."""
-        self.log_messages = [] # Reset logs for this run
         final_output_data = None # Default to None
 
         try:
@@ -77,7 +76,7 @@ class ScoreInfo(BaseReportBlock):
             # final_output_data remains None
 
         # --- Format and Return --- 
-        log_string = "\n".join(self.log_messages) if self.log_messages else None
+        log_string = self._get_log_string()
         # Return the data (or None if error) and the collected logs
         return final_output_data, log_string
 

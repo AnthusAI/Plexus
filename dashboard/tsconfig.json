@@ -4,12 +4,13 @@
     "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
     "skipLibCheck": true,
+    "skipDefaultLibCheck": true,
     "types": ["node", "react", "react-dom", "next"],
     "strict": true,
     "noEmit": true,
     "esModuleInterop": true,
     "module": "esnext",
-    "moduleResolution": "bundler",
+    "moduleResolution": "node",
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "preserve",
@@ -24,7 +25,10 @@
     "incremental": true,
     "tsBuildInfoFile": ".tsbuildinfo",
     "assumeChangesOnlyAffectDirectDependencies": true,
-    "disableSourceOfProjectReferenceRedirect": true
+    "disableSourceOfProjectReferenceRedirect": true,
+    "disableReferencedProjectLoad": true,
+    "composite": false,
+    "noErrorTruncation": false
   },
   "include": [
     "next-env.d.ts",
@@ -49,6 +53,18 @@
     "**/*.test.tsx",
     "**/__tests__/**",
     ".storybook",
-    "stories"
+    "stories",
+    "coverage",
+    "dist",
+    "build",
+    "public",
+    "**/*.config.js",
+    "**/*.config.ts",
+    "**/jest.config.*",
+    "**/webpack.config.*",
+    "tmp",
+    ".ropeproject",
+    ".pytest_cache",
+    "storybook-static"
   ]
 }
