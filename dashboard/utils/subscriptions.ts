@@ -968,9 +968,11 @@ export function observeTaskStageUpdates() {
 
 export function observeItemCreations() {
   const client = getClient();
+  console.log('🔧 Setting up observeItemCreations subscription...');
   
   return {
     subscribe(handler: SubscriptionHandler<any>) {
+      console.log('🔧 observeItemCreations.subscribe() called');
       const subscription = client.graphql({
         query: `
           subscription OnCreateItem {
@@ -988,22 +990,31 @@ export function observeItemCreations() {
         `
       }) as unknown as { subscribe: Function };
 
+      console.log('🔧 GraphQL subscription created, setting up handlers...');
       return subscription.subscribe({
         next: async ({ data }: { data?: { onCreateItem: Schema['Item']['type'] } }) => {
+          console.log('🎯 RAW ITEM CREATION EVENT RECEIVED:', { 
+            hasData: !!data, 
+            hasOnCreateItem: !!data?.onCreateItem,
+            fullData: data 
+          });
+          
           if (!data?.onCreateItem) {
+            console.log('⚠️ Skipping item creation - no data or onCreateItem');
             return; // Skip processing for null data
           }
           
+          console.log('🎯 PROCESSING ITEM CREATION:', data.onCreateItem);
           try {
             handler.next({ data: data.onCreateItem });
           } catch (error) {
-            console.error('Error processing item creation:', error);
+            console.error('❌ Error processing item creation:', error);
             handler.error(error as Error);
           }
         },
         error: (error: Error) => {
+          console.error('❌ ITEM CREATION SUBSCRIPTION ERROR:', error);
           handler.error(error);
-          console.error('Error in item creation subscription:', error);
         }
       });
     }
@@ -1012,9 +1023,11 @@ export function observeItemCreations() {
 
 export function observeItemUpdates() {
   const client = getClient();
+  console.log('🔧 Setting up observeItemUpdates subscription...');
   
   return {
     subscribe(handler: SubscriptionHandler<any>) {
+      console.log('🔧 observeItemUpdates.subscribe() called');
       const subscription = client.graphql({
         query: `
           subscription OnUpdateItem {
@@ -1032,22 +1045,31 @@ export function observeItemUpdates() {
         `
       }) as unknown as { subscribe: Function };
 
+      console.log('🔧 GraphQL subscription for updates created, setting up handlers...');
       return subscription.subscribe({
         next: async ({ data }: { data?: { onUpdateItem: Schema['Item']['type'] } }) => {
+          console.log('🎯 RAW ITEM UPDATE EVENT RECEIVED:', { 
+            hasData: !!data, 
+            hasOnUpdateItem: !!data?.onUpdateItem,
+            fullData: data 
+          });
+          
           if (!data?.onUpdateItem) {
+            console.log('⚠️ Skipping item update - no data or onUpdateItem');
             return; // Skip processing for null data
           }
           
+          console.log('🎯 PROCESSING ITEM UPDATE:', data.onUpdateItem);
           try {
             handler.next({ data: data.onUpdateItem });
           } catch (error) {
-            console.error('Error processing item update:', error);
+            console.error('❌ Error processing item update:', error);
             handler.error(error as Error);
           }
         },
         error: (error: Error) => {
+          console.error('❌ ITEM UPDATE SUBSCRIPTION ERROR:', error);
           handler.error(error);
-          console.error('Error in item update subscription:', error);
         }
       });
     }
