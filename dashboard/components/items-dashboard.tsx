@@ -391,6 +391,8 @@ function ItemsDashboardInner() {
   const [scoreResultCounts, setScoreResultCounts] = useState<Map<string, ScoreResultCount>>(new Map());
   const [specificItemLoading, setSpecificItemLoading] = useState(false);
   const [failedItemFetches, setFailedItemFetches] = useState<Set<string>>(new Set());
+  const refetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
   
   // Function to fetch a specific item by ID
   const fetchSpecificItem = useCallback(async (itemId: string) => {
@@ -480,6 +482,7 @@ function ItemsDashboardInner() {
   // Sync URL parameter with selected item and fetch if needed
   useEffect(() => {
     const itemId = params.id as string
+    
     if (itemId && itemId !== selectedItem) {
       setSelectedItem(itemId)
       
@@ -490,8 +493,11 @@ function ItemsDashboardInner() {
       if (!itemExists && !isLoading && selectedAccount) {
         fetchSpecificItem(itemId);
       }
+    } else if (!itemId && selectedItem) {
+      // Clear selected item if no item ID in URL
+      setSelectedItem(null)
     }
-  }, [params.id, selectedItem, items, isLoading, selectedAccount, fetchSpecificItem])
+  }, [params.id, items, isLoading, selectedAccount, fetchSpecificItem]) // Removed selectedItem from deps to prevent circular updates
   
   // Add a ref for the intersection observer
   const observerRef = useRef<IntersectionObserver | null>(null);
@@ -519,16 +525,9 @@ function ItemsDashboardInner() {
         const useScorecard = selectedScorecard !== null && selectedScorecard !== undefined;
         const useScore = selectedScore !== null && selectedScore !== undefined;
         
-        console.log('Filter settings for load more:', {
-          useScorecard,
-          useScore,
-          scorecardId: selectedScorecard,
-          scoreId: selectedScore
-        });
         
         if (useScore) {
           // If a score is selected, filter by scoreId
-          console.log('Attempting direct GraphQL query for more items with scoreId:', selectedScore);
           const directQuery = await graphqlRequest<{ listItemByScoreIdAndCreatedAt: { items: any[], nextToken: string | null } }>(`
             query ListItemsMoreDirect($scoreId: String!, $limit: Int!, $nextToken: String) {
               listItemByScoreIdAndCreatedAt(
@@ -556,19 +555,13 @@ function ItemsDashboardInner() {
             nextToken: nextToken
           });
           
-          console.log('Direct GraphQL query response for more items:', JSON.stringify(directQuery, null, 2));
-          
           if (directQuery.data?.listItemByScoreIdAndCreatedAt?.items) {
-            console.log(`Found ${directQuery.data.listItemByScoreIdAndCreatedAt.items.length} more items via direct GraphQL query`);
             // No need to sort as the GSI already returns items sorted by createdAt
             itemsFromDirectQuery = directQuery.data.listItemByScoreIdAndCreatedAt.items;
             nextTokenFromDirectQuery = directQuery.data.listItemByScoreIdAndCreatedAt.nextToken;
-          } else {
-            console.warn('No more items found in direct GraphQL query response');
           }
         } else if (useScorecard) {
           // If only a scorecard is selected, get items through ScorecardProcessedItem join table
-          console.log('Attempting direct GraphQL query for more items with scorecardId:', selectedScorecard);
           const directQuery = await graphqlRequest<{ 
             listScorecardProcessedItemByScorecardId: { 
               items: Array<{
@@ -617,10 +610,7 @@ function ItemsDashboardInner() {
             nextToken: nextToken
           });
           
-          console.log('Direct GraphQL query response for more items:', JSON.stringify(directQuery, null, 2));
-          
           if (directQuery.data?.listScorecardProcessedItemByScorecardId?.items) {
-            console.log(`Found ${directQuery.data.listScorecardProcessedItemByScorecardId.items.length} more items via direct GraphQL query`);
             // Extract items and sort by createdAt in descending order (most recent first)
             itemsFromDirectQuery = directQuery.data.listScorecardProcessedItemByScorecardId.items
               .map(association => association.item)
@@ -632,12 +622,9 @@ function ItemsDashboardInner() {
                 return dateB - dateA; // DESC order (newest first)
               });
             nextTokenFromDirectQuery = directQuery.data.listScorecardProcessedItemByScorecardId.nextToken;
-          } else {
-            console.warn('No more items found in direct GraphQL query response');
           }
         } else {
           // If neither scorecard nor score is selected, filter by accountId
-          console.log('Attempting direct GraphQL query for more items with accountId:', selectedAccount.id);
           const directQuery = await graphqlRequest<{ listItemByAccountIdAndCreatedAt: { items: any[], nextToken: string | null } }>(`
             query ListItemsMoreDirect($accountId: String!, $limit: Int!, $nextToken: String) {
               listItemByAccountIdAndCreatedAt(
@@ -665,29 +652,20 @@ function ItemsDashboardInner() {
             nextToken: nextToken
           });
           
-          console.log('Direct GraphQL query response for more items:', JSON.stringify(directQuery, null, 2));
-          
           if (directQuery.data?.listItemByAccountIdAndCreatedAt?.items) {
-            console.log(`Found ${directQuery.data.listItemByAccountIdAndCreatedAt.items.length} more items via direct GraphQL query`);
             // No need to sort as the GSI already returns items sorted by createdAt
             itemsFromDirectQuery = directQuery.data.listItemByAccountIdAndCreatedAt.items;
             nextTokenFromDirectQuery = directQuery.data.listItemByAccountIdAndCreatedAt.nextToken;
-          } else {
-            console.warn('No items found in direct GraphQL query response');
           }
         }
       } catch (error) {
-        console.error('Error in direct GraphQL query for more items:', error);
+        console.error('Error loading more items:', error);
       }
       
       // Use the items from the direct query
       const itemsToUse = itemsFromDirectQuery;
       const nextTokenToUse = nextTokenFromDirectQuery;
       
-      // If no items are found, we'll log this information
-      if (itemsToUse.length === 0) {
-        console.log('No items found for this account. You may need to create some items first.');
-      }
       
       // Transform the data to match the expected format
       const transformedItems = itemsToUse.map(item => {
@@ -776,16 +754,9 @@ function ItemsDashboardInner() {
         const useScorecard = selectedScorecard !== null && selectedScorecard !== undefined;
         const useScore = selectedScore !== null && selectedScore !== undefined;
         
-        console.log('Filter settings:', {
-          useScorecard,
-          useScore,
-          scorecardId: selectedScorecard,
-          scoreId: selectedScore
-        });
         
         if (useScore) {
           // If a score is selected, filter by scoreId
-          console.log('Attempting direct GraphQL query for items with scoreId:', selectedScore);
           const directQuery = await graphqlRequest<{ listItemByScoreIdAndCreatedAt: { items: any[], nextToken: string | null } }>(`
             query ListItemsDirect($scoreId: String!, $limit: Int!) {
               listItemByScoreIdAndCreatedAt(
@@ -811,18 +782,12 @@ function ItemsDashboardInner() {
             limit: 100
           });
           
-          console.log('Direct GraphQL query response for items:', JSON.stringify(directQuery, null, 2));
-          
           if (directQuery.data?.listItemByScoreIdAndCreatedAt?.items) {
-            console.log(`Found ${directQuery.data.listItemByScoreIdAndCreatedAt.items.length} items via direct GraphQL query`);
             itemsFromDirectQuery = directQuery.data.listItemByScoreIdAndCreatedAt.items;
             nextTokenFromDirectQuery = directQuery.data.listItemByScoreIdAndCreatedAt.nextToken;
-          } else {
-            console.warn('No items found in direct GraphQL query response');
           }
         } else if (useScorecard) {
           // If only a scorecard is selected, get items through ScorecardProcessedItem join table
-          console.log('Attempting direct GraphQL query for items with scorecardId:', selectedScorecard);
           const directQuery = await graphqlRequest<{ 
             listScorecardProcessedItemByScorecardId: { 
               items: Array<{
@@ -869,10 +834,7 @@ function ItemsDashboardInner() {
             limit: 100
           });
           
-          console.log('Direct GraphQL query response for items:', JSON.stringify(directQuery, null, 2));
-          
           if (directQuery.data?.listScorecardProcessedItemByScorecardId?.items) {
-            console.log(`Found ${directQuery.data.listScorecardProcessedItemByScorecardId.items.length} items via direct GraphQL query`);
             itemsFromDirectQuery = directQuery.data.listScorecardProcessedItemByScorecardId.items
               .map(association => association.item)
               .filter(item => item !== null)
@@ -882,12 +844,9 @@ function ItemsDashboardInner() {
                 return dateB - dateA; // DESC order (newest first)
               });
             nextTokenFromDirectQuery = directQuery.data.listScorecardProcessedItemByScorecardId.nextToken;
-          } else {
-            console.warn('No items found in direct GraphQL query response');
           }
         } else {
           // If neither scorecard nor score is selected, filter by accountId
-          console.log('Attempting direct GraphQL query for items with accountId:', accountId);
           const directQuery = await graphqlRequest<{ listItemByAccountIdAndCreatedAt: { items: any[], nextToken: string | null } }>(`
             query ListItemsDirect($accountId: String!, $limit: Int!) {
               listItemByAccountIdAndCreatedAt(
@@ -913,18 +872,13 @@ function ItemsDashboardInner() {
             limit: 100
           });
           
-          console.log('Direct GraphQL query response for items:', JSON.stringify(directQuery, null, 2));
-          
           if (directQuery.data?.listItemByAccountIdAndCreatedAt?.items) {
-            console.log(`Found ${directQuery.data.listItemByAccountIdAndCreatedAt.items.length} items via direct GraphQL query`);
             itemsFromDirectQuery = directQuery.data.listItemByAccountIdAndCreatedAt.items;
             nextTokenFromDirectQuery = directQuery.data.listItemByAccountIdAndCreatedAt.nextToken;
-          } else {
-            console.warn('No items found in direct GraphQL query response');
           }
         }
       } catch (error) {
-        console.error('Error in direct GraphQL query:', error);
+        console.error('Error fetching items:', error);
       }
       
       const itemsToUse = itemsFromDirectQuery;
@@ -979,6 +933,166 @@ function ItemsDashboardInner() {
     }
   }, [user, selectedAccount, setIsLoading, setItems, setNextToken, graphqlRequest, selectedScorecard, selectedScore]);
   
+  // Throttled refetch function for when we get empty update notifications
+  const throttledRefetch = useCallback(async () => {
+    // Clear any existing timeout
+    if (refetchTimeoutRef.current) {
+      clearTimeout(refetchTimeoutRef.current);
+    }
+    
+    // Set a new timeout to refetch after 2 seconds of no new notifications
+    refetchTimeoutRef.current = setTimeout(async () => {
+      if (!selectedAccount) return;
+      
+      try {
+        // Fetch fresh data without clearing the existing items
+        const accountId = selectedAccount.id;
+        let itemsFromDirectQuery: any[] = [];
+        
+        // Use the same query logic as fetchItems but without clearing state
+        const useScorecard = selectedScorecard !== null && selectedScorecard !== undefined;
+        const useScore = selectedScore !== null && selectedScore !== undefined;
+        
+        if (useScore) {
+          const directQuery = await graphqlRequest<{ listItemByScoreIdAndCreatedAt: { items: any[], nextToken: string | null } }>(`
+            query ListItemsDirect($scoreId: String!, $limit: Int!) {
+              listItemByScoreIdAndCreatedAt(
+                scoreId: $scoreId, 
+                sortDirection: DESC,
+                limit: $limit
+              ) {
+                items {
+                  id
+                  externalId
+                  description
+                  accountId
+                  evaluationId
+                  updatedAt
+                  createdAt
+                  isEvaluation
+                }
+                nextToken
+              }
+            }
+          `, {
+            scoreId: selectedScore,
+            limit: 100
+          });
+          itemsFromDirectQuery = directQuery.data?.listItemByScoreIdAndCreatedAt?.items || [];
+        } else if (useScorecard) {
+          const directQuery = await graphqlRequest<{ 
+            listScorecardProcessedItemByScorecardId: { 
+              items: Array<{
+                itemId: string;
+                processedAt?: string;
+                item: any;
+              }>;
+              nextToken: string | null;
+            }
+          }>(`
+            query ListItemsDirect($scorecardId: ID!, $limit: Int!) {
+              listScorecardProcessedItemByScorecardId(
+                scorecardId: $scorecardId,
+                limit: $limit
+              ) {
+                items {
+                  itemId
+                  processedAt
+                  item {
+                    id
+                    externalId
+                    description
+                    accountId
+                    evaluationId
+                    updatedAt
+                    createdAt
+                    isEvaluation
+                  }
+                }
+                nextToken
+              }
+            }
+          `, {
+            scorecardId: selectedScorecard,
+            limit: 100
+          });
+          itemsFromDirectQuery = directQuery.data?.listScorecardProcessedItemByScorecardId?.items
+            ?.map(association => association.item)
+            ?.filter(item => item !== null)
+            ?.sort((a, b) => {
+              const dateA = new Date(a.createdAt || '').getTime();
+              const dateB = new Date(b.createdAt || '').getTime();
+              return dateB - dateA;
+            }) || [];
+        } else {
+          const directQuery = await graphqlRequest<{ listItemByAccountIdAndCreatedAt: { items: any[], nextToken: string | null } }>(`
+            query ListItemsDirect($accountId: String!, $limit: Int!) {
+              listItemByAccountIdAndCreatedAt(
+                accountId: $accountId, 
+                sortDirection: DESC,
+                limit: $limit
+              ) {
+                items {
+                  id
+                  externalId
+                  description
+                  accountId
+                  evaluationId
+                  updatedAt
+                  createdAt
+                  isEvaluation
+                }
+                nextToken
+              }
+            }
+          `, {
+            accountId: accountId,
+            limit: 100
+          });
+          itemsFromDirectQuery = directQuery.data?.listItemByAccountIdAndCreatedAt?.items || [];
+        }
+        
+        // Transform and merge with existing items
+        const transformedItems = itemsFromDirectQuery.map(item => ({
+          id: item.id,
+          accountId: item.accountId,
+          externalId: item.externalId,
+          description: item.description,
+          evaluationId: item.evaluationId,
+          updatedAt: item.updatedAt,
+          createdAt: item.createdAt,
+          isEvaluation: item.isEvaluation,
+          scorecard: null,
+          score: null,
+          date: item.createdAt || item.updatedAt,
+          status: "Done",
+          results: 0,
+          inferences: 0,
+          cost: "$0.000",
+          isNew: false,
+          groupedScoreResults: {}
+        }));
+        
+        // Merge with existing items - update existing ones and add new ones
+        setItems(prevItems => {
+          const existingIds = new Set(prevItems.map(item => item.id));
+          const newItems = transformedItems.filter(item => !existingIds.has(item.id));
+          
+          // Update existing items and add new ones at the beginning
+          const updatedItems = prevItems.map(prevItem => {
+            const freshItem = transformedItems.find(item => item.id === prevItem.id);
+            return freshItem ? { ...prevItem, ...freshItem } : prevItem;
+          });
+          
+          return [...newItems, ...updatedItems];
+        });
+        
+      } catch (error) {
+        console.error('Error during throttled refetch:', error);
+      }
+    }, 2000); // 2 second debounce
+  }, [selectedAccount, selectedScorecard, selectedScore, graphqlRequest]);
+  
   // Fetch items when the selected account or other filters change
   useEffect(() => {
     if (!isLoadingAccounts && selectedAccount) {
@@ -1017,20 +1131,15 @@ function ItemsDashboardInner() {
   useEffect(() => {
     if (!selectedAccount || isLoadingAccounts) return; // Also wait for accounts to be loaded
     
-    console.log('🔧 Setting up real-time subscriptions for account:', selectedAccount.id);
     
     // Item creation subscription
     const createSubscription = observeItemCreations().subscribe({
       next: async ({ data: newItem }) => {
-        console.log('🎉 ITEM CREATED - Subscription triggered:', newItem ? 'with data' : 'null data');
         if (!newItem) {
-          console.log('❌ ITEM CREATED - No data received');
           return;
         }
         
-        console.log('🎉 ITEM CREATED - Full data:', newItem);
         if (newItem.accountId === selectedAccount.id) {
-          console.log('✅ ITEM CREATED - Account match! Adding to list. Item ID:', newItem.id);
           // Transform the new item to match our expected format
           const transformedNewItem = {
             id: newItem.id,
@@ -1070,28 +1179,28 @@ function ItemsDashboardInner() {
               )
             );
           }, 3000);
-        } else {
-          console.log('⚠️ ITEM CREATED - Account mismatch. Item account:', newItem.accountId, 'Selected account:', selectedAccount.id);
         }
       },
       error: (error) => {
-        console.error('❌ ITEM CREATION SUBSCRIPTION ERROR:', error);
+        console.error('Item creation subscription error:', error);
         toast.error("Error in item subscription.");
       }
     });
     
     // Item update subscription
     const updateSubscription = observeItemUpdates().subscribe({
-      next: async ({ data: updatedItem }) => {
-        console.log('🔄 ITEM UPDATED - Subscription triggered:', updatedItem ? 'with data' : 'null data');
-        if (!updatedItem) {
-          console.log('❌ ITEM UPDATED - No data received');
+      next: async ({ data: updatedItem, needsRefetch }) => {
+        // Handle empty notifications that require a refetch
+        if (needsRefetch && !updatedItem) {
+          throttledRefetch();
           return;
         }
         
-        console.log('🔄 ITEM UPDATED - Full data:', updatedItem);
+        if (!updatedItem) {
+          return;
+        }
+        
         if (updatedItem.accountId === selectedAccount.id) {
-          console.log('✅ ITEM UPDATED - Account match! Updating item in list. Item ID:', updatedItem.id);
           // Update the item in the list if it exists
           setItems(prevItems => 
             prevItems.map(item => 
@@ -1112,12 +1221,10 @@ function ItemsDashboardInner() {
             scoreCountManagerRef.current.clearCount(updatedItem.id);
             scoreCountManagerRef.current.loadCountForItem(updatedItem.id);
           }
-        } else {
-          console.log('⚠️ ITEM UPDATED - Account mismatch. Item account:', updatedItem.accountId, 'Selected account:', selectedAccount.id);
         }
       },
       error: (error) => {
-        console.error('❌ ITEM UPDATE SUBSCRIPTION ERROR:', error);
+        console.error('Item update subscription error:', error);
         toast.error("Error in item update subscription.");
       }
     });
@@ -1126,16 +1233,18 @@ function ItemsDashboardInner() {
     itemUpdateSubscriptionRef.current = updateSubscription;
     
     return () => {
-      console.log('🔧 Tearing down real-time subscriptions for account:', selectedAccount?.id);
       if (itemSubscriptionRef.current) {
         itemSubscriptionRef.current.unsubscribe();
         itemSubscriptionRef.current = null;
-        console.log('🔧 Item creation subscription unsubscribed');
       }
       if (itemUpdateSubscriptionRef.current) {
         itemUpdateSubscriptionRef.current.unsubscribe();
         itemUpdateSubscriptionRef.current = null;
-        console.log('🔧 Item update subscription unsubscribed');
+      }
+      // Clear any pending refetch timeout
+      if (refetchTimeoutRef.current) {
+        clearTimeout(refetchTimeoutRef.current);
+        refetchTimeoutRef.current = null;
       }
     };
   }, [selectedAccount, isLoadingAccounts, fetchItems]);
@@ -1328,9 +1437,12 @@ function ItemsDashboardInner() {
   }, []);
 
   const renderSelectedItem = () => {
-    if (!selectedItem) return null
+    if (!selectedItem) {
+      return null
+    }
 
     const selectedItemData = items.find(item => item.id === selectedItem)
+    
     const scoreCount = scoreResultCounts.get(selectedItem)
     const selectedItemWithCount = selectedItemData ? {
       ...selectedItemData,
@@ -1379,10 +1491,12 @@ function ItemsDashboardInner() {
       return null
     }
 
+    
     return (
       <div className="h-full flex flex-col">
         <div className="flex-1 overflow-auto">
           <ItemDetail
+            key={selectedItem} // Force re-render when selectedItem changes
             item={selectedItemWithCount as unknown as FeedbackItem}
             getBadgeVariant={getBadgeVariant}
             getRelativeTime={getRelativeTime}
@@ -1412,8 +1526,8 @@ function ItemsDashboardInner() {
             onClose={() => {
               setSelectedItem(null);
               setIsFullWidth(false);
-              // Navigate back to items list
-              router.push(`/lab/items`, { scroll: false })
+              // Update URL using browser History API to avoid Next.js navigation
+              window.history.replaceState(null, '', `/lab/items`)
             }}
           />
         </div>
@@ -1630,9 +1744,12 @@ function ItemsDashboardInner() {
   }
 
   const handleItemClick = (itemId: string) => {
+    // Always update state first
     setSelectedItem(itemId)
-    // Navigate to the specific item URL
-    router.push(`/lab/items/${itemId}`, { scroll: false })
+    
+    // Update URL using browser History API to avoid Next.js navigation
+    const newUrl = `/lab/items/${itemId}`
+    window.history.replaceState(null, '', newUrl)
     
     if (isNarrowViewport) {
       setIsFullWidth(true)

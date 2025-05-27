@@ -80,13 +80,7 @@ const GridContent = React.memo(({
   item: ItemData
   getBadgeVariant: (status: string) => string
   isSelected?: boolean
-}) => {
-  // Add debugging for the score property
-  React.useEffect(() => {
-    console.log(`ItemCard rendering with score: ${item.score}`, item);
-    console.log('GroupedScoreResults:', item.groupedScoreResults);
-  }, [item]);
-  
+}) => {  
   // Get scores to display 
   const getScoreDisplays = () => {
     // If we have groupedScoreResults, use those
@@ -137,12 +131,17 @@ const GridContent = React.memo(({
         {item.icon || <StickyNote className="h-[1.75rem] w-[1.75rem]" strokeWidth={1.25} />}
       </div>
       <div className="space-y-1">
-        {/* Header order: 1. Scorecard name */}
         <div className="text-xs text-muted-foreground" title={primaryScorecard}>
           <span className="font-semibold">{primaryScorecard}</span>
         </div>
-        
-        {/* Header order: 2. Timestamp */}
+
+        <IdentifierDisplay 
+          externalId={item.externalId}
+          identifiers={item.identifiers}
+          iconSize="sm"
+          textSize="xs"
+        />
+
         {item.date ? (
           <Timestamp 
             time={item.date} 
@@ -153,16 +152,7 @@ const GridContent = React.memo(({
         ) : (
           <div className="text-xs text-muted-foreground">No date</div>
         )}
-        
-        {/* Header order: 3. Identifiers */}
-        <IdentifierDisplay 
-          externalId={item.externalId}
-          identifiers={item.identifiers}
-          iconSize="sm"
-          textSize="xs"
-        />
-        
-        {/* Header order: 4. Score name or count */}
+
         {(hasMultipleScores || primaryScore) && (
           <div className="font-semibold text-sm truncate" title={hasMultipleScores ? `${totalScores} scores` : `Score: ${primaryScore}`}>
             {hasMultipleScores ? 
@@ -290,8 +280,14 @@ const DetailContent = React.memo(({
           <div className="text-xs text-muted-foreground">
             <span className="font-semibold truncate">{scoreInfo[0]?.scorecardName || 'Untitled Item'}</span>
           </div>
-          
-          {/* Header order: 2. Timestamp - reduced text size to match grid view */}
+
+          <IdentifierDisplay 
+            externalId={item.externalId}
+            identifiers={item.identifiers}
+            iconSize="sm"
+            textSize="xs"
+          />
+
           {item.date ? (
             <Timestamp 
               time={item.date} 
@@ -302,15 +298,6 @@ const DetailContent = React.memo(({
             <p className="text-xs text-muted-foreground">No date</p>
           )}
           
-          {/* Header order: 3. Identifiers */}
-          <IdentifierDisplay 
-            externalId={item.externalId}
-            identifiers={item.identifiers}
-            iconSize="sm"
-            textSize="xs"
-          />
-          
-          {/* Header order: 4. Score name or count - reduced text size to match grid view */}
           {(hasMultipleScores || primaryScore) && (
             <div className="text-sm font-semibold truncate" title={hasMultipleScores ? `${totalScores} scores` : `Score: ${primaryScore}`}>
               {hasMultipleScores ? 

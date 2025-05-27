@@ -198,6 +198,7 @@ export class ScoreResultCountManager {
         scorecardBreakdown
       });
     } catch (error) {
+      console.error('Error loading count for item:', itemId, error);
       this.countCache.set(itemId, {
         itemId,
         count: 0,

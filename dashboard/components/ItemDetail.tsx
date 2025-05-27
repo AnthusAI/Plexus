@@ -134,12 +134,6 @@ const ItemDetail: React.FC<ItemDetailProps> = ({
       <CardHeader className="flex-shrink-0 flex flex-row items-start justify-between py-4 px-4 sm:px-3 space-y-0">
         <div>
           <h2 className="text-xl font-semibold">Item Details</h2>
-          <p className="text-sm text-muted-foreground">
-            <Timestamp time={item.date} variant="relative" />
-          </p>
-          {(item as any).createdAt && (item as any).updatedAt && (
-            <Timestamp time={(item as any).createdAt} completionTime={(item as any).updatedAt} variant="elapsed" className="text-xs" />
-          )}
           <div className="mt-1">
             <IdentifierDisplay 
               externalId={(item as any).externalId}
@@ -148,6 +142,12 @@ const ItemDetail: React.FC<ItemDetailProps> = ({
               textSize="xs"
             />
           </div>
+          <p className="text-sm text-muted-foreground">
+            <Timestamp time={item.date} variant="relative" />
+          </p>
+          {(item as any).createdAt && (item as any).updatedAt && (
+            <Timestamp time={(item as any).createdAt} completionTime={(item as any).updatedAt} variant="elapsed" className="text-xs" />
+          )}
         </div>
         <div className="flex items-center space-x-2">
           {!isNarrowViewport && (
@@ -164,6 +164,16 @@ const ItemDetail: React.FC<ItemDetailProps> = ({
       </CardHeader>
       <CardContent className="flex-grow overflow-auto px-4 sm:px-3 pb-4">
         <div className="space-y-4">
+          {/* Text field display */}
+          {(item as any).text && (
+            <div>
+              <h3 className="text-sm font-medium text-foreground mb-2">Text</h3>
+              <div className="rounded-lg bg-background p-3 border">
+                <p className="text-sm whitespace-pre-wrap">{(item as any).text}</p>
+              </div>
+            </div>
+          )}
+          
           <ItemScoreResults
             groupedResults={groupedResults}
             isLoading={isLoading}
