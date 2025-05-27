@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Task, TaskHeader, TaskContent, BaseTaskProps } from '@/components/Task'
-import { FileBarChart, Clock } from 'lucide-react'
+import { FileBarChart, Clock, Square, Columns2, X } from 'lucide-react'
 import { format, formatDistanceToNow } from 'date-fns'
 import { Timestamp } from '@/components/ui/timestamp'
 import ReactMarkdown from 'react-markdown'
@@ -209,8 +209,34 @@ const ReportTask: React.FC<ReportTaskProps> = ({
   // Explicitly set the name and description in the correct order
   // name = Report name (from report.name)
   // description = Report configuration description
-  const reportName = task.data?.configName || task.data?.name || 'Report';
+  const reportName = task.data?.configName || task.data?.name || '';
   const reportDescription = getValueOrEmpty(task.data?.configDescription);
+
+  // Calculate processing duration if we have both timestamps
+  const processingDuration = (() => {
+    if (task.data?.createdAt && task.data?.updatedAt) {
+      try {
+        const createdTime = new Date(task.data.createdAt).getTime();
+        const updatedTime = new Date(task.data.updatedAt).getTime();
+        const durationMs = updatedTime - createdTime;
+        
+        if (durationMs > 0) {
+          // Convert to human readable format
+          const minutes = Math.floor(durationMs / 60000);
+          const seconds = Math.floor((durationMs % 60000) / 1000);
+          
+          if (minutes > 0) {
+            return `${minutes}m ${seconds}s`;
+          } else {
+            return `${seconds}s`;
+          }
+        }
+      } catch (err) {
+        console.error('Error calculating processing duration:', err);
+      }
+    }
+    return null;
+  })();
 
   // Create a properly typed data object
   const reportData: ReportTaskData = {
@@ -503,11 +529,85 @@ const ReportTask: React.FC<ReportTaskProps> = ({
       onClose={onClose}
       isSelected={isSelected}
       renderHeader={(props) => (
-        <TaskHeader {...props}>
-          <div className="flex justify-end w-full">
-            <FileBarChart className="h-6 w-6" />
+        <div className={`space-y-1.5 p-0 flex flex-col items-start w-full max-w-full ${variant === 'detail' ? 'px-1' : ''}`}>
+          <div className="flex justify-between items-start w-full max-w-full gap-3 overflow-hidden">
+            <div className="flex flex-col pb-1 leading-none min-w-0 flex-1 overflow-hidden">
+              {props.task.name && (
+                <div className="font-semibold text-sm truncate">{props.task.name}</div>
+              )}
+              {props.task.description && (
+                <div className={`text-sm text-muted-foreground ${variant === 'detail' ? '' : 'truncate'}`}>
+                  {props.task.description}
+                </div>
+              )}
+              {props.task.scorecard && props.task.scorecard.trim() !== '' && (
+                <div className="font-semibold text-sm truncate">{props.task.scorecard}</div>
+              )}
+              {props.task.score && props.task.score.trim() !== '' && (
+                <div className="font-semibold text-sm truncate">{props.task.score}</div>
+              )}
+              {variant !== 'grid' && (
+                <div className="text-sm text-muted-foreground">{props.task.type}</div>
+              )}
+              <Timestamp time={props.task.time} variant="relative" />
+              {processingDuration && variant === 'detail' && (
+                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <Clock className="h-3 w-3" />
+                  <span>Processing time: {processingDuration}</span>
+                </div>
+              )}
+            </div>
+            <div className="flex flex-col items-end flex-shrink-0">
+              {variant === 'grid' ? (
+                <div className="flex items-start gap-2">
+                  <div className="text-sm text-muted-foreground text-right">
+                    {(() => {
+                      const [firstWord, ...restWords] = props.task.type.split(/\s+/);
+                      return (
+                        <>
+                          {firstWord}<br />
+                          {restWords.join(' ')}
+                        </>
+                      );
+                    })()}
+                  </div>
+                  <div className="text-muted-foreground mt-[0.15rem]">
+                    <FileBarChart className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="flex gap-2">
+                    {props.controlButtons}
+                    {props.onToggleFullWidth && (
+                      <button
+                        className="h-8 w-8 rounded-md bg-border hover:bg-accent flex items-center justify-center"
+                        onClick={props.onToggleFullWidth}
+                        disabled={props.isLoading}
+                        aria-label={props.isFullWidth ? 'Exit full width' : 'Full width'}
+                      >
+                        {props.isFullWidth ? 
+                          <Columns2 className="h-4 w-4" /> : 
+                          <Square className="h-4 w-4" />
+                        }
+                      </button>
+                    )}
+                    {props.onClose && (
+                      <button
+                        className="h-8 w-8 rounded-md bg-border hover:bg-accent flex items-center justify-center"
+                        onClick={props.onClose}
+                        disabled={props.isLoading}
+                        aria-label="Close"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
-        </TaskHeader>
+        </div>
       )}
       renderContent={(props) => (
         <TaskContent {...props} hideTaskStatus={true}>
