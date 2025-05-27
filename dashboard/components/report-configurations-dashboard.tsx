@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Plus, Pencil, Trash2 } from "lucide-react"
+import { Plus, Pencil, Trash2, ChevronLeft, Copy } from "lucide-react"
 import { format, formatDistanceToNow } from "date-fns"
 import { useRouter } from 'next/navigation'
 import { getClient } from '@/utils/amplify-client'
@@ -44,6 +44,21 @@ const DELETE_REPORT_CONFIGURATION = `
   mutation DeleteReportConfiguration($input: DeleteReportConfigurationInput!) {
     deleteReportConfiguration(input: $input) {
       id
+    }
+  }
+`
+
+// GraphQL mutation to create a report configuration
+const CREATE_REPORT_CONFIGURATION = `
+  mutation CreateReportConfiguration($input: CreateReportConfigurationInput!) {
+    createReportConfiguration(input: $input) {
+      id
+      name
+      description
+      configuration
+      accountId
+      createdAt
+      updatedAt
     }
   }
 `
@@ -158,6 +173,35 @@ export function ReportConfigurationsDashboard() {
     }
   }
 
+  const handleDuplicate = async (config: ReportConfiguration) => {
+    if (!accountId) return
+
+    try {
+      const response = await getClient().graphql<GraphQLResult<{
+        createReportConfiguration: ReportConfiguration
+      }>>({
+        query: CREATE_REPORT_CONFIGURATION,
+        variables: {
+          input: {
+            name: `${config.name} copy`,
+            description: config.description,
+            configuration: config.configuration,
+            accountId: accountId
+          }
+        }
+      })
+
+      if ('data' in response && response.data?.createReportConfiguration) {
+        const newConfig = response.data.createReportConfiguration
+        setConfigurations(prev => [newConfig, ...prev])
+        toast.success('Report configuration duplicated')
+      }
+    } catch (err: any) {
+      console.error('Error duplicating report configuration:', err)
+      toast.error('Failed to duplicate report configuration')
+    }
+  }
+
   if (isLoading) {
     return <div>Loading...</div>
   }
@@ -177,9 +221,19 @@ export function ReportConfigurationsDashboard() {
       {/* Header Area */}
       <div className="flex-none p-1.5">
         <div className="flex justify-between items-start">
-          <div>
-            <h1 className="text-xl font-semibold">Report Configurations</h1>
-            {error && <p className="text-xs text-destructive">{error}</p>}
+          <div className="flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => router.push('/lab/reports')}
+              aria-label="Back to reports"
+            >
+              <ChevronLeft className="h-6 w-6" />
+            </Button>
+            <div>
+              <h1 className="text-xl font-semibold">Report Configurations</h1>
+              {error && <p className="text-xs text-destructive">{error}</p>}
+            </div>
           </div>
           <div className="flex gap-2">
             <Button onClick={handleCreate}>
@@ -197,9 +251,11 @@ export function ReportConfigurationsDashboard() {
               <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
                 <div className="space-y-1">
                   <h3 className="font-semibold">{config.name}</h3>
-                  <p className="text-sm text-muted-foreground">
-                    {config.description || 'No description'}
-                  </p>
+                  {config.description && (
+                    <p className="text-sm text-muted-foreground">
+                      {config.description}
+                    </p>
+                  )}
                 </div>
                 <div className="flex gap-2">
                   <Button
@@ -211,6 +267,16 @@ export function ReportConfigurationsDashboard() {
                     }}
                   >
                     <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleDuplicate(config)
+                    }}
+                  >
+                    <Copy className="h-4 w-4" />
                   </Button>
                   <Button
                     variant="ghost"
