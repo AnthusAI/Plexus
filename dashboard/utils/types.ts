@@ -19,6 +19,6 @@ export type AmplifyListResult<T> = {
 export type ConnectionState = 'connecting' | 'connected' | 'disconnected';
 
 export type SubscriptionHandler<T> = {
-  next: (response: { data: T }) => void;
+  next: (response: { data: T; needsRefetch?: boolean }) => void;
   error: (error: Error) => void;
 }; 
