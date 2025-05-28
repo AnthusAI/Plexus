@@ -178,16 +178,22 @@ export class ScoreResultCountManager {
    * Force load count for a specific item (used for updates)
    */
   async loadCountForItem(itemId: string) {
-    if (this.pendingCounts.has(itemId)) return;
+    // Allow multiple requests for the same item to ensure we get the latest data
+    // Remove the pending check to be more aggressive about refreshing
     
     console.log('📊 Loading count for item:', itemId);
     this.pendingCounts.add(itemId);
-    this.countCache.set(itemId, {
-      itemId,
-      count: 0,
-      isLoading: true
-    });
-    this.notifyCallbacks();
+    
+    // Only show loading state if we don't already have cached data
+    const existingCount = this.countCache.get(itemId);
+    if (!existingCount || existingCount.count === 0) {
+      this.countCache.set(itemId, {
+        itemId,
+        count: 0,
+        isLoading: true
+      });
+      this.notifyCallbacks();
+    }
     
     try {
       const { totalCount, scorecardBreakdown } = await countScoreResultsForItem(itemId);
@@ -200,7 +206,7 @@ export class ScoreResultCountManager {
         scorecardBreakdown
       });
     } catch (error) {
-      console.error('Error loading count for item:', itemId, error);
+      console.error('📊 Error loading count for item:', itemId, error);
       this.countCache.set(itemId, {
         itemId,
         count: 0,
@@ -240,6 +246,43 @@ export class ScoreResultCountManager {
     // Notify callbacks immediately so UI shows loading state
     this.notifyCallbacks();
   }
+
+  /**
+   * Force refresh count for an item if it exists in cache
+   */
+  refreshItemCount(itemId: string) {
+    console.log('📊 Refresh requested for item:', itemId);
+    if (this.countCache.has(itemId)) {
+      console.log('📊 Item in cache, clearing and reloading:', itemId);
+      this.clearCount(itemId);
+      this.loadCountForItem(itemId);
+    } else {
+      console.log('📊 Item not in cache, skipping refresh:', itemId);
+    }
+  }
+
+  private refreshTimeout: NodeJS.Timeout | null = null;
+
+  /**
+   * Refresh all cached item counts (throttled to prevent excessive API calls)
+   */
+  refreshAllCounts() {
+    // Clear any existing timeout
+    if (this.refreshTimeout) {
+      clearTimeout(this.refreshTimeout);
+    }
+    
+    // Throttle the refresh to avoid too many API calls
+    this.refreshTimeout = setTimeout(() => {
+      console.log('📊 Refreshing all cached counts:', this.countCache.size, 'items');
+      const itemIds = Array.from(this.countCache.keys());
+      itemIds.forEach(itemId => {
+        // Don't clear the cache - just reload in the background
+        this.loadCountForItem(itemId);
+      });
+      this.refreshTimeout = null;
+    }, 1000); // 1 second throttle
+  }
   
   /**
    * Subscribe to count changes
@@ -267,6 +310,10 @@ export class ScoreResultCountManager {
     if (this.observer) {
       this.observer.disconnect();
       this.observer = null;
+    }
+    if (this.refreshTimeout) {
+      clearTimeout(this.refreshTimeout);
+      this.refreshTimeout = null;
     }
     this.countCache.clear();
     this.pendingCounts.clear();

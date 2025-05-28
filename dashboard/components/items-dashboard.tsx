@@ -118,6 +118,55 @@ const ITEMS_TIME_RANGE_OPTIONS = [
   { value: "custom", label: "Custom" },
 ]
 
+// Memoized grid item component to prevent unnecessary re-renders
+const MemoizedGridItemCard = React.memo(({ 
+  item, 
+  scoreCount, 
+  selectedItem, 
+  handleItemClick, 
+  getBadgeVariant, 
+  scoreCountManagerRef 
+}: {
+  item: Item;
+  scoreCount: ScoreResultCount | undefined;
+  selectedItem: string | null;
+  handleItemClick: (itemId: string) => void;
+  getBadgeVariant: (status: string) => string;
+  scoreCountManagerRef: React.MutableRefObject<ScoreResultCountManager | null>;
+}) => {
+  const itemWithCount = useMemo(() => ({
+    ...item,
+    results: scoreCount?.count || item.results,
+    isLoadingResults: scoreCount?.isLoading || false,
+    scorecardBreakdown: scoreCount?.scorecardBreakdown || undefined
+  } as ItemData & { isLoadingResults: boolean }), [
+    item,
+    scoreCount?.count,
+    scoreCount?.isLoading,
+    scoreCount?.scorecardBreakdown
+  ]);
+  
+  const handleClick = useCallback(() => handleItemClick(item.id), [handleItemClick, item.id]);
+  
+  return (
+    <ItemCard
+      key={item.id}
+      variant="grid"
+      item={itemWithCount}
+      isSelected={selectedItem === item.id}
+      onClick={handleClick}
+      getBadgeVariant={getBadgeVariant}
+      ref={(el) => {
+        if (el && scoreCountManagerRef.current) {
+          scoreCountManagerRef.current.observeItem(el, item.id);
+        }
+      }}
+    />
+  );
+});
+
+MemoizedGridItemCard.displayName = 'MemoizedGridItemCard';
+
 // Add this to the existing items array or create a new constant
 const sampleScoreResults = [
   {
@@ -1128,10 +1177,32 @@ function ItemsDashboardInner() {
     if (!scoreCountManagerRef.current) {
       scoreCountManagerRef.current = new ScoreResultCountManager();
       
-      // Subscribe to count changes
+      // Subscribe to count changes with better state management
       const unsubscribe = scoreCountManagerRef.current.subscribe((counts) => {
         console.log('📊 Score count manager update:', counts);
-        setScoreResultCounts(counts);
+        
+        // Only update state if counts have actually changed
+        setScoreResultCounts(prevCounts => {
+          // Check if the new counts Map is actually different from the previous one
+          if (prevCounts.size !== counts.size) {
+            return counts;
+          }
+          
+          // Check if any individual counts have changed
+          let hasChanges = false;
+          for (const [itemId, newCount] of counts) {
+            const prevCount = prevCounts.get(itemId);
+            if (!prevCount || 
+                prevCount.count !== newCount.count || 
+                prevCount.isLoading !== newCount.isLoading ||
+                JSON.stringify(prevCount.scorecardBreakdown) !== JSON.stringify(newCount.scorecardBreakdown)) {
+              hasChanges = true;
+              break;
+            }
+          }
+          
+          return hasChanges ? counts : prevCounts;
+        });
       });
       
       return () => {
@@ -1249,29 +1320,24 @@ function ItemsDashboardInner() {
     
     // Score result subscription
     const scoreResultSubscription = observeScoreResultChanges().subscribe({
-      next: async ({ data: scoreResult }) => {
-        console.log('📊 Score result subscription received:', scoreResult);
+      next: async ({ data: changeEvent }) => {
+        console.log('📊 Score result subscription received:', changeEvent);
         
-        if (!scoreResult) {
+        if (!changeEvent) {
           console.log('📊 Empty score result notification');
           return;
         }
         
         try {
-          // Check if this score result belongs to the current account
-          if (scoreResult.accountId === selectedAccount.id) {
-            console.log('📊 Score result change for item:', scoreResult.itemId, 'action:', scoreResult.action);
-            
-            // Clear and reload the count for this item
-            if (scoreCountManagerRef.current) {
-              console.log('📊 Clearing and reloading count for item:', scoreResult.itemId);
-              scoreCountManagerRef.current.clearCount(scoreResult.itemId);
-              scoreCountManagerRef.current.loadCountForItem(scoreResult.itemId);
-            } else {
-              console.log('📊 ScoreCountManager not available');
-            }
+          console.log('📊 Score result change detected, action:', changeEvent.action);
+          
+          // Since we can't reliably parse the subscription data, refresh all cached counts
+          // This is more aggressive but ensures consistency
+          if (scoreCountManagerRef.current) {
+            console.log('📊 Refreshing all cached score counts due to score result change');
+            scoreCountManagerRef.current.refreshAllCounts();
           } else {
-            console.log('📊 Score result not for current account:', scoreResult.accountId, 'vs', selectedAccount.id);
+            console.log('📊 ScoreCountManager not available');
           }
         } catch (error) {
           console.error('📊 Error handling score result change:', error);
@@ -1941,35 +2007,15 @@ function ItemsDashboardInner() {
                       <div className="grid grid-cols-2 @[500px]:grid-cols-3 @[700px]:grid-cols-4 @[900px]:grid-cols-5 @[1100px]:grid-cols-6 gap-3">
                         {filteredItems.map((item) => {
                           const scoreCount = scoreResultCounts.get(item.id);
-                          const itemWithCount = {
-                            ...item,
-                            results: scoreCount?.count || item.results,
-                            isLoadingResults: scoreCount?.isLoading || false,
-                            scorecardBreakdown: scoreCount?.scorecardBreakdown || undefined
-                          } as ItemData & { isLoadingResults: boolean };
-                          
                           return (
-                            <ItemCard
+                            <MemoizedGridItemCard
                               key={item.id}
-                              variant="grid"
-                              item={itemWithCount}
-                              isSelected={selectedItem === item.id}
-                              onClick={() => handleItemClick(item.id)}
+                              item={item}
+                              scoreCount={scoreCount}
+                              selectedItem={selectedItem}
+                              handleItemClick={handleItemClick}
                               getBadgeVariant={getBadgeVariant}
-                              ref={(el) => {
-                                if (el && scoreCountManagerRef.current) {
-                                  scoreCountManagerRef.current.observeItem(el, item.id);
-                                  // Debug logging to track score count updates
-                                  console.log('📊 Grid ItemCard rendered with count:', {
-                                    itemId: item.id,
-                                    originalResults: item.results,
-                                    scoreCount: scoreCount?.count,
-                                    finalResults: itemWithCount.results,
-                                    isLoading: itemWithCount.isLoadingResults,
-                                    breakdown: itemWithCount.scorecardBreakdown
-                                  });
-                                }
-                              }}
+                              scoreCountManagerRef={scoreCountManagerRef}
                             />
                           );
                         })}
@@ -2032,35 +2078,15 @@ function ItemsDashboardInner() {
                       <div className="grid grid-cols-2 @[500px]:grid-cols-3 @[700px]:grid-cols-4 @[900px]:grid-cols-5 @[1100px]:grid-cols-6 gap-3">
                         {filteredItems.map((item) => {
                           const scoreCount = scoreResultCounts.get(item.id);
-                          const itemWithCount = {
-                            ...item,
-                            results: scoreCount?.count || item.results,
-                            isLoadingResults: scoreCount?.isLoading || false,
-                            scorecardBreakdown: scoreCount?.scorecardBreakdown || undefined
-                          } as ItemData & { isLoadingResults: boolean };
-                          
                           return (
-                            <ItemCard
+                            <MemoizedGridItemCard
                               key={item.id}
-                              variant="grid"
-                              item={itemWithCount}
-                              isSelected={selectedItem === item.id}
-                              onClick={() => handleItemClick(item.id)}
+                              item={item}
+                              scoreCount={scoreCount}
+                              selectedItem={selectedItem}
+                              handleItemClick={handleItemClick}
                               getBadgeVariant={getBadgeVariant}
-                              ref={(el) => {
-                                if (el && scoreCountManagerRef.current) {
-                                  scoreCountManagerRef.current.observeItem(el, item.id);
-                                  // Debug logging to track score count updates
-                                  console.log('📊 Grid ItemCard rendered with count:', {
-                                    itemId: item.id,
-                                    originalResults: item.results,
-                                    scoreCount: scoreCount?.count,
-                                    finalResults: itemWithCount.results,
-                                    isLoading: itemWithCount.isLoadingResults,
-                                    breakdown: itemWithCount.scorecardBreakdown
-                                  });
-                                }
-                              }}
+                              scoreCountManagerRef={scoreCountManagerRef}
                             />
                           );
                         })}
