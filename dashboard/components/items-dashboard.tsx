@@ -32,7 +32,7 @@ import ItemCard, { ItemData } from './items/ItemCard'
 import { amplifyClient, graphqlRequest } from '@/utils/amplify-client'
 import { useAuthenticator } from '@aws-amplify/ui-react'
 import { ScorecardContextProps } from "./ScorecardContext"
-import { observeItemCreations, observeItemUpdates } from '@/utils/subscriptions'
+import { observeItemCreations, observeItemUpdates, observeScoreResultChanges } from '@/utils/subscriptions'
 import { toast } from 'sonner'
 import { useAccount } from '@/app/contexts/AccountContext'
 import { ItemsDashboardSkeleton, ItemCardSkeleton } from './loading-skeleton'
@@ -343,6 +343,16 @@ function ItemsDashboardInner() {
   const searchParams = useSearchParams()
   const params = useParams()
   const [selectedItem, setSelectedItem] = useState<string | null>(null)
+  
+  // Debug wrapper for setSelectedItem to track changes
+  const debugSetSelectedItem = React.useCallback((itemId: string | null) => {
+    console.log('🎯 SELECTED ITEM CHANGE:', {
+      from: selectedItem,
+      to: itemId,
+      stack: new Error().stack?.split('\n').slice(1, 4).join('\n')
+    });
+    setSelectedItem(itemId);
+  }, []); // Empty deps to avoid circular updates
   const [isFullWidth, setIsFullWidth] = useState(false)
   const [selectedScorecard, setSelectedScorecard] = useState<string | null>(null)
   const [isNarrowViewport, setIsNarrowViewport] = useState(false)
@@ -387,6 +397,7 @@ function ItemsDashboardInner() {
   const { selectedAccount, isLoadingAccounts } = useAccount();
   const itemSubscriptionRef = useRef<{ unsubscribe: () => void } | null>(null);
   const itemUpdateSubscriptionRef = useRef<{ unsubscribe: () => void } | null>(null);
+  const scoreResultSubscriptionRef = useRef<{ unsubscribe: () => void } | null>(null);
   const scoreCountManagerRef = useRef<ScoreResultCountManager | null>(null);
   const [scoreResultCounts, setScoreResultCounts] = useState<Map<string, ScoreResultCount>>(new Map());
   const [specificItemLoading, setSpecificItemLoading] = useState(false);
@@ -484,7 +495,7 @@ function ItemsDashboardInner() {
     const itemId = params.id as string
     
     if (itemId && itemId !== selectedItem) {
-      setSelectedItem(itemId)
+      debugSetSelectedItem(itemId)
       
       // Check if the item exists in the current list
       const itemExists = items.some(item => item.id === itemId);
@@ -495,9 +506,9 @@ function ItemsDashboardInner() {
       }
     } else if (!itemId && selectedItem) {
       // Clear selected item if no item ID in URL
-      setSelectedItem(null)
+      debugSetSelectedItem(null)
     }
-  }, [params.id, items, isLoading, selectedAccount, fetchSpecificItem]) // Removed selectedItem from deps to prevent circular updates
+  }, [params.id, isLoading, selectedAccount, fetchSpecificItem]) // Removed items and selectedItem from deps to prevent issues when items change
   
   // Add a ref for the intersection observer
   const observerRef = useRef<IntersectionObserver | null>(null);
@@ -1119,6 +1130,7 @@ function ItemsDashboardInner() {
       
       // Subscribe to count changes
       const unsubscribe = scoreCountManagerRef.current.subscribe((counts) => {
+        console.log('📊 Score count manager update:', counts);
         setScoreResultCounts(counts);
       });
       
@@ -1223,6 +1235,7 @@ function ItemsDashboardInner() {
           
           // Trigger a re-count of score results for this item
           if (scoreCountManagerRef.current) {
+            console.log('📊 Clearing and reloading count for updated item:', updatedItem.id);
             scoreCountManagerRef.current.clearCount(updatedItem.id);
             scoreCountManagerRef.current.loadCountForItem(updatedItem.id);
           }
@@ -1234,8 +1247,45 @@ function ItemsDashboardInner() {
       }
     });
     
+    // Score result subscription
+    const scoreResultSubscription = observeScoreResultChanges().subscribe({
+      next: async ({ data: scoreResult }) => {
+        console.log('📊 Score result subscription received:', scoreResult);
+        
+        if (!scoreResult) {
+          console.log('📊 Empty score result notification');
+          return;
+        }
+        
+        try {
+          // Check if this score result belongs to the current account
+          if (scoreResult.accountId === selectedAccount.id) {
+            console.log('📊 Score result change for item:', scoreResult.itemId, 'action:', scoreResult.action);
+            
+            // Clear and reload the count for this item
+            if (scoreCountManagerRef.current) {
+              console.log('📊 Clearing and reloading count for item:', scoreResult.itemId);
+              scoreCountManagerRef.current.clearCount(scoreResult.itemId);
+              scoreCountManagerRef.current.loadCountForItem(scoreResult.itemId);
+            } else {
+              console.log('📊 ScoreCountManager not available');
+            }
+          } else {
+            console.log('📊 Score result not for current account:', scoreResult.accountId, 'vs', selectedAccount.id);
+          }
+        } catch (error) {
+          console.error('📊 Error handling score result change:', error);
+        }
+      },
+      error: (error) => {
+        console.error('📊 Score result subscription error:', error);
+        toast.error("Error in score result subscription.");
+      }
+    });
+    
     itemSubscriptionRef.current = createSubscription;
     itemUpdateSubscriptionRef.current = updateSubscription;
+    scoreResultSubscriptionRef.current = scoreResultSubscription;
     
     return () => {
       if (itemSubscriptionRef.current) {
@@ -1245,6 +1295,10 @@ function ItemsDashboardInner() {
       if (itemUpdateSubscriptionRef.current) {
         itemUpdateSubscriptionRef.current.unsubscribe();
         itemUpdateSubscriptionRef.current = null;
+      }
+      if (scoreResultSubscriptionRef.current) {
+        scoreResultSubscriptionRef.current.unsubscribe();
+        scoreResultSubscriptionRef.current = null;
       }
       // Clear any pending refetch timeout
       if (refetchTimeoutRef.current) {
@@ -1529,7 +1583,7 @@ function ItemsDashboardInner() {
             isFeedbackMode={false}
             onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
             onClose={() => {
-              setSelectedItem(null);
+              debugSetSelectedItem(null);
               setIsFullWidth(false);
               // Update URL using browser History API to avoid Next.js navigation
               window.history.replaceState(null, '', `/lab/items`)
@@ -1750,7 +1804,7 @@ function ItemsDashboardInner() {
 
   const handleItemClick = (itemId: string) => {
     // Always update state first
-    setSelectedItem(itemId)
+    debugSetSelectedItem(itemId)
     
     // Update URL using browser History API to avoid Next.js navigation
     const newUrl = `/lab/items/${itemId}`
@@ -1864,7 +1918,8 @@ function ItemsDashboardInner() {
           <div className="flex-grow overflow-hidden">
             {renderSelectedItem()}
           </div>
-        ) : (
+        ) : selectedItem ? (
+          // Show split view when item is selected but not narrow viewport or full width
           <div className={`flex ${isNarrowViewport ? 'flex-col' : ''} h-full`}>
             <div 
               className={`${isFullWidth ? 'hidden' : 'flex-1'} overflow-auto`}
@@ -1904,6 +1959,15 @@ function ItemsDashboardInner() {
                               ref={(el) => {
                                 if (el && scoreCountManagerRef.current) {
                                   scoreCountManagerRef.current.observeItem(el, item.id);
+                                  // Debug logging to track score count updates
+                                  console.log('📊 Grid ItemCard rendered with count:', {
+                                    itemId: item.id,
+                                    originalResults: item.results,
+                                    scoreCount: scoreCount?.count,
+                                    finalResults: itemWithCount.results,
+                                    isLoading: itemWithCount.isLoadingResults,
+                                    breakdown: itemWithCount.scorecardBreakdown
+                                  });
                                 }
                               }}
                             />
@@ -1949,6 +2013,78 @@ function ItemsDashboardInner() {
                 {renderSelectedItem()}
               </div>
             )}
+          </div>
+        ) : (
+          // Grid-only view when no item is selected
+          <div className="h-full">
+            <div className="overflow-auto h-full">
+              <div>
+                <div className="@container h-full">
+                  {filteredItems.length === 0 ? (
+                    // Show skeleton instead of "No items found" message
+                    <div className="grid grid-cols-2 @[500px]:grid-cols-3 @[700px]:grid-cols-4 @[900px]:grid-cols-5 @[1100px]:grid-cols-6 gap-3 animate-pulse">
+                      {[...Array(12)].map((_, i) => (
+                        <ItemCardSkeleton key={i} />
+                      ))}
+                    </div>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-2 @[500px]:grid-cols-3 @[700px]:grid-cols-4 @[900px]:grid-cols-5 @[1100px]:grid-cols-6 gap-3">
+                        {filteredItems.map((item) => {
+                          const scoreCount = scoreResultCounts.get(item.id);
+                          const itemWithCount = {
+                            ...item,
+                            results: scoreCount?.count || item.results,
+                            isLoadingResults: scoreCount?.isLoading || false,
+                            scorecardBreakdown: scoreCount?.scorecardBreakdown || undefined
+                          } as ItemData & { isLoadingResults: boolean };
+                          
+                          return (
+                            <ItemCard
+                              key={item.id}
+                              variant="grid"
+                              item={itemWithCount}
+                              isSelected={selectedItem === item.id}
+                              onClick={() => handleItemClick(item.id)}
+                              getBadgeVariant={getBadgeVariant}
+                              ref={(el) => {
+                                if (el && scoreCountManagerRef.current) {
+                                  scoreCountManagerRef.current.observeItem(el, item.id);
+                                  // Debug logging to track score count updates
+                                  console.log('📊 Grid ItemCard rendered with count:', {
+                                    itemId: item.id,
+                                    originalResults: item.results,
+                                    scoreCount: scoreCount?.count,
+                                    finalResults: itemWithCount.results,
+                                    isLoading: itemWithCount.isLoadingResults,
+                                    breakdown: itemWithCount.scorecardBreakdown
+                                  });
+                                }
+                              }}
+                            />
+                          );
+                        })}
+                      </div>
+                      
+                      {/* Replace the Load More button with an invisible loading indicator */}
+                      {nextToken && filteredItems.length > 0 && (
+                        <div 
+                          ref={loadMoreRef} 
+                          className="flex justify-center py-6"
+                        >
+                          {isLoadingMore && (
+                            <div className="flex items-center">
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              <span>Loading more items...</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>
