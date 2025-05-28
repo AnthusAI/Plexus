@@ -157,6 +157,20 @@
   }
 }
 
+.new-item-shadow {
+  box-shadow: 0 4px 12px hsl(var(--secondary) / 0.4);
+  animation: fadeInSmooth 2s ease-out;
+}
+
+@keyframes fadeInSmooth {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 @import "hsl-radix-colors/mauve.css";
 @import "hsl-radix-colors/blue.css";
 @import "hsl-radix-colors/pink.css";

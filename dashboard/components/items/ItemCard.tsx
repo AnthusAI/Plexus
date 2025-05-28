@@ -402,9 +402,48 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
   // Extract HTML props that might conflict with motion props
   const { onDrag, ...htmlProps } = props as any;
   
+  // Debug ref to inspect the actual DOM element
+  const debugRef = React.useCallback((node: HTMLDivElement | null) => {
+    if (node && item.isNew) {
+      console.log('🔍 DOM ELEMENT DEBUG:', {
+        id: item.id,
+        isNew: item.isNew,
+        element: node,
+        className: node.className,
+        computedStyle: window.getComputedStyle(node),
+        backgroundColor: window.getComputedStyle(node).backgroundColor,
+        border: window.getComputedStyle(node).border,
+        boxShadow: window.getComputedStyle(node).boxShadow,
+        transform: window.getComputedStyle(node).transform
+      });
+    }
+    if (ref) {
+      if (typeof ref === 'function') {
+        ref(node);
+      } else {
+        ref.current = node;
+      }
+    }
+  }, [item.isNew, item.id, ref]);
+
+  // Debug logging for new items
+  React.useEffect(() => {
+    if (item.isNew) {
+      console.log('🟣✨ NEW ITEM CARD WITH RED/YELLOW EFFECTS:', {
+        id: item.id,
+        externalId: item.externalId,
+        isNew: item.isNew,
+        variant: variant,
+        shouldHaveClass: 'new-item-shadow',
+        shouldHaveInlineStyles: 'red background, yellow border',
+        timestamp: new Date().toISOString()
+      });
+    }
+  }, [item.isNew, item.id, item.externalId, variant]);
+  
   return (
     <motion.div
-      ref={ref}
+      ref={debugRef}
       initial={{ opacity: 1 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.2 }}
@@ -414,6 +453,7 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
           isSelected ? "bg-card-selected" : "bg-card"
         ) : "bg-card-selected",
         variant === 'detail' && "h-full flex flex-col",
+        item.isNew && "new-item-shadow",
         className
       )}
       {...htmlProps}

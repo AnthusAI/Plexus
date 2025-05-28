@@ -690,7 +690,7 @@ function ItemsDashboardInner() {
           results: 0, // Will be populated via lazy loading from scoreResultCounts
           inferences: 0, // Will be populated via lazy loading
           cost: "$0.000", // Placeholder
-          isNew: true, 
+          isNew: false, // Items loaded via "load more" should NOT be new
           groupedScoreResults: groupedScoreResults
         } as Item;
         
@@ -708,18 +708,7 @@ function ItemsDashboardInner() {
       setItems(prevItems => [...prevItems, ...transformedItems]);
       setNextToken(nextTokenToUse);
       
-      // After a delay, remove the "isNew" flag with a staggered effect
-      transformedItems.forEach((item, index) => {
-        setTimeout(() => {
-          setItems(prevItems => 
-            prevItems.map(prevItem => 
-              prevItem.id === item.id 
-                ? { ...prevItem, isNew: false } 
-                : prevItem
-            )
-          );
-        }, 100 + (index * 100)); // Stagger the removal of the isNew flag
-      });
+      // Don't clear isNew for "load more" - items are already set to isNew: false
     } catch (error) {
       console.error("Error fetching more items:", error);
     } finally {
@@ -910,7 +899,7 @@ function ItemsDashboardInner() {
           results: 0, // Will be populated via lazy loading from scoreResultCounts
           inferences: 0, // Will be populated via lazy loading
           cost: "$0.000", // Placeholder
-          isNew: true,
+          isNew: false, // Items loaded on initial fetch should NOT be new
           groupedScoreResults: groupedScoreResults
         } as Item;
       });
@@ -918,13 +907,7 @@ function ItemsDashboardInner() {
       setItems(transformedItems);
       setNextToken(nextTokenToUse);
       
-      setTimeout(() => {
-        setItems(prevItems => 
-          prevItems.map(i => 
-            i.isNew ? { ...i, isNew: false } : i
-          )
-        );
-      }, 3000);
+      // Don't clear isNew for initial load - items are already set to isNew: false
       
       setIsLoading(false);
     } catch (error) {
@@ -1069,20 +1052,42 @@ function ItemsDashboardInner() {
           results: 0,
           inferences: 0,
           cost: "$0.000",
-          isNew: false,
+          isNew: false, // Will be changed to true for new items below
           groupedScoreResults: {}
         }));
         
         // Merge with existing items - update existing ones and add new ones
         setItems(prevItems => {
           const existingIds = new Set(prevItems.map(item => item.id));
-          const newItems = transformedItems.filter(item => !existingIds.has(item.id));
+          const newItems = transformedItems
+            .filter(item => !existingIds.has(item.id))
+            .map(newItem => {
+              console.log('🎯 NEW ITEM FOUND IN THROTTLED REFETCH:', {
+                id: newItem.id,
+                externalId: newItem.externalId,
+                source: 'throttledRefetch'
+              });
+              return { ...newItem, isNew: true }; // Mark new items as new!
+            });
           
           // Update existing items and add new ones at the beginning
           const updatedItems = prevItems.map(prevItem => {
             const freshItem = transformedItems.find(item => item.id === prevItem.id);
-            return freshItem ? { ...prevItem, ...freshItem } : prevItem;
+            return freshItem ? { ...prevItem, ...freshItem, isNew: prevItem.isNew } : prevItem; // Preserve isNew status for existing items
           });
+          
+          // Add timeout to clear isNew flag for the new items found in refetch
+          if (newItems.length > 0) {
+            setTimeout(() => {
+              setItems(currentItems => 
+                currentItems.map(item => 
+                  newItems.some(newItem => newItem.id === item.id) 
+                    ? { ...item, isNew: false }
+                    : item
+                )
+              );
+            }, 3000);
+          }
           
           return [...newItems, ...updatedItems];
         });
