@@ -161,8 +161,8 @@ const GridContent = React.memo(({
           </div>
         )}
         
-        {/* Score results count with loading state */}
-        <div className="flex flex-col gap-0.5 text-xs text-muted-foreground">
+        {/* Score results count with loading state - fixed height to prevent layout jiggling */}
+        <div className="flex flex-col gap-0.5 text-xs text-muted-foreground min-h-[2.5rem]">
           {item.isLoadingResults ? (
             <div className="flex items-center gap-1">
               <Loader2 className="h-3 w-3 animate-spin" />
@@ -178,7 +178,12 @@ const GridContent = React.memo(({
               </div>
             ))
           ) : (
-            <span>{item.results || 0} result{(item.results || 0) !== 1 ? 's' : ''}</span>
+            <div className="flex flex-col">
+              <div className="text-xs text-muted-foreground">
+                <span className="font-medium">&nbsp;</span>
+              </div>
+              <div>{item.results || 0} result{(item.results || 0) !== 1 ? 's' : ''}</div>
+            </div>
           )}
         </div>
       </div>
@@ -285,17 +290,17 @@ const DetailContent = React.memo(({
             externalId={item.externalId}
             identifiers={item.identifiers}
             iconSize="sm"
-            textSize="xs"
+            textSize="sm"
           />
 
           {item.date ? (
             <Timestamp 
               time={item.date} 
               variant="relative" 
-              className="text-xs"
+              className="text-sm"
             />
           ) : (
-            <p className="text-xs text-muted-foreground">No date</p>
+            <p className="text-sm text-muted-foreground">No date</p>
           )}
           
           {(hasMultipleScores || primaryScore) && (
@@ -306,8 +311,8 @@ const DetailContent = React.memo(({
             </div>
           )}
           
-          {/* Score results count with loading state */}
-          <div className="flex flex-col gap-0.5 text-xs text-muted-foreground">
+          {/* Score results count with loading state - fixed height to prevent layout jiggling */}
+          <div className="flex flex-col gap-0.5 text-xs text-muted-foreground min-h-[2.5rem]">
             {item.isLoadingResults ? (
               <div className="flex items-center gap-1">
                 <Loader2 className="h-3 w-3 animate-spin" />
@@ -323,7 +328,12 @@ const DetailContent = React.memo(({
                 </div>
               ))
             ) : (
-              <span>{item.results || 0} result{(item.results || 0) !== 1 ? 's' : ''}</span>
+              <div className="flex flex-col">
+                <div className="text-xs text-muted-foreground">
+                  <span className="font-medium">&nbsp;</span>
+                </div>
+                <div>{item.results || 0} result{(item.results || 0) !== 1 ? 's' : ''}</div>
+              </div>
             )}
           </div>
         </div>

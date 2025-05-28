@@ -78,7 +78,7 @@ const ScoreResultCard: React.FC<{ result: ScoreResultWithDetails }> = ({ result 
                 <IdentifierDisplay 
                   externalId={result.score.externalId}
                   iconSize="sm"
-                  textSize="xs"
+                  textSize="sm"
                 />
               </div>
             )}
@@ -184,7 +184,7 @@ const ItemScoreResults: React.FC<ItemScoreResultsProps> = ({
                         <IdentifierDisplay 
                           externalId={group.scorecardExternalId}
                           iconSize="sm"
-                          textSize="xs"
+                          textSize="sm"
                         />
                       </div>
                     )}

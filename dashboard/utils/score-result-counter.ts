@@ -180,6 +180,7 @@ export class ScoreResultCountManager {
   async loadCountForItem(itemId: string) {
     if (this.pendingCounts.has(itemId)) return;
     
+    console.log('📊 Loading count for item:', itemId);
     this.pendingCounts.add(itemId);
     this.countCache.set(itemId, {
       itemId,
@@ -191,6 +192,7 @@ export class ScoreResultCountManager {
     try {
       const { totalCount, scorecardBreakdown } = await countScoreResultsForItem(itemId);
       
+      console.log('📊 Count loaded for item:', itemId, { totalCount, scorecardBreakdown });
       this.countCache.set(itemId, {
         itemId,
         count: totalCount,
@@ -226,8 +228,17 @@ export class ScoreResultCountManager {
    * Clear count for an item (forces reload on next observation)
    */
   clearCount(itemId: string) {
+    console.log('📊 Clearing count cache for item:', itemId);
+    const wasInCache = this.countCache.has(itemId);
+    const wasInPending = this.pendingCounts.has(itemId);
+    
     this.countCache.delete(itemId);
     this.pendingCounts.delete(itemId);
+    
+    console.log('📊 Count cleared for item:', itemId, { wasInCache, wasInPending });
+    
+    // Notify callbacks immediately so UI shows loading state
+    this.notifyCallbacks();
   }
   
   /**
@@ -243,6 +254,7 @@ export class ScoreResultCountManager {
   }
   
   private notifyCallbacks() {
+    console.log('📊 Notifying callbacks with updated counts:', this.countCache.size, 'items');
     this.callbacks.forEach(callback => {
       callback(new Map(this.countCache));
     });

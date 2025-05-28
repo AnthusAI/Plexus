@@ -87,8 +87,8 @@ export const IdentifierDisplay: React.FC<IdentifierDisplayProps> = ({
   };
 
   const renderSimpleExternalId = () => (
-    <div className={cn("flex items-center gap-1 text-xs text-muted-foreground", className)}>
-      <IdCard className="h-4 w-4" />
+    <div className={cn("flex items-center gap-1 text-muted-foreground", textClasses, className)}>
+      <IdCard className={iconClasses} />
       <span>{externalId}</span>
     </div>
   );
@@ -102,12 +102,12 @@ export const IdentifierDisplay: React.FC<IdentifierDisplayProps> = ({
   return (
     <div className={className}>
       {/* First identifier with icon and optional expander */}
-      <div className="flex items-center gap-1 text-xs text-muted-foreground">
-        <IdCard className="h-4 w-4" />
-        <span className="font-medium">
+      <div className={cn("flex items-center gap-1 text-muted-foreground", textClasses)}>
+        <IdCard className={iconClasses} />
+        <span className={cn(textClasses, "font-medium")}>
           {firstIdentifier!.name}:
         </span>
-        <span>
+        <span className={textClasses}>
           {renderIdentifierValue(firstIdentifier!)}
         </span>
         {hasMultipleIdentifiers && (
