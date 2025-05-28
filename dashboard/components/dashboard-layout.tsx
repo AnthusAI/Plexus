@@ -184,6 +184,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                 className={`flex items-center w-full px-3 py-2 group !rounded-[4px] ${
                   (pathname === item.path ||
                   (item.name === "Feedback" && (pathname === "/feedback-queues" || pathname.startsWith("/feedback"))) ||
+                  (item.name === "Items" && pathname.startsWith(item.path)) ||
                   (item.name === "Scorecards" && pathname.startsWith(item.path)) ||
                   (item.name === "Reports" && pathname.startsWith(item.path)))
                     ? "bg-secondary text-secondary-foreground"
@@ -195,6 +196,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                 <item.icon className={`h-4 w-4 flex-shrink-0 ${
                   (pathname === item.path ||
                   (item.name === "Feedback" && (pathname === "/feedback-queues" || pathname.startsWith("/feedback"))) ||
+                  (item.name === "Items" && pathname.startsWith(item.path)) ||
                   (item.name === "Scorecards" && pathname.startsWith(item.path)) ||
                   (item.name === "Reports" && pathname.startsWith(item.path)))
                     ? "text-secondary-foreground"
