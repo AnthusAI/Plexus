@@ -9,6 +9,7 @@ import { Timestamp } from '@/components/ui/timestamp'
 import { motion } from 'framer-motion'
 import ItemScoreResultCard from './ItemScoreResultCard'
 import { IdentifierDisplay } from '@/components/ui/identifier-display'
+import NumberFlowWrapper from '@/components/ui/number-flow'
 
 // Interface for grouped score results
 interface GroupedScoreResults {
@@ -127,14 +128,13 @@ const GridContent = React.memo(({
 
   return (
     <div className="w-full">
-      <div className="float-right flex flex-col items-end space-y-1 ml-2 mt-0">
+      <div className="float-right flex flex-col items-center space-y-1 ml-2 mt-0">
         {item.icon || <StickyNote className="h-[1.75rem] w-[1.75rem]" strokeWidth={1.25} />}
-      </div>
-      <div className="space-y-1">
-        <div className="text-xs text-muted-foreground" title={primaryScorecard}>
+        <div className="text-xs text-muted-foreground text-center" title={primaryScorecard}>
           <span className="font-semibold">{primaryScorecard}</span>
         </div>
-
+      </div>
+      <div className="space-y-1 pr-20">
         <IdentifierDisplay 
           externalId={item.externalId}
           identifiers={item.identifiers}
@@ -174,7 +174,9 @@ const GridContent = React.memo(({
                 <div className="text-xs text-muted-foreground">
                   <span className="font-medium">{breakdown.scorecardName}</span>
                 </div>
-                <div>{breakdown.count} result{breakdown.count !== 1 ? 's' : ''}</div>
+                <div>
+                  <NumberFlowWrapper value={breakdown.count} /> result{breakdown.count !== 1 ? 's' : ''}
+                </div>
               </div>
             ))
           ) : (
@@ -182,7 +184,9 @@ const GridContent = React.memo(({
               <div className="text-xs text-muted-foreground">
                 <span className="font-medium">&nbsp;</span>
               </div>
-              <div>{item.results || 0} result{(item.results || 0) !== 1 ? 's' : ''}</div>
+              <div>
+                <NumberFlowWrapper value={item.results || 0} /> result{(item.results || 0) !== 1 ? 's' : ''}
+              </div>
             </div>
           )}
         </div>
@@ -324,7 +328,9 @@ const DetailContent = React.memo(({
                   <div className="text-xs text-muted-foreground">
                     <span className="font-medium">{breakdown.scorecardName}</span>
                   </div>
-                  <div>{breakdown.count} result{breakdown.count !== 1 ? 's' : ''}</div>
+                  <div>
+                    <NumberFlowWrapper value={breakdown.count} /> result{breakdown.count !== 1 ? 's' : ''}
+                  </div>
                 </div>
               ))
             ) : (
@@ -332,7 +338,9 @@ const DetailContent = React.memo(({
                 <div className="text-xs text-muted-foreground">
                   <span className="font-medium">&nbsp;</span>
                 </div>
-                <div>{item.results || 0} result{(item.results || 0) !== 1 ? 's' : ''}</div>
+                <div>
+                  <NumberFlowWrapper value={item.results || 0} /> result{(item.results || 0) !== 1 ? 's' : ''}
+                </div>
               </div>
             )}
           </div>

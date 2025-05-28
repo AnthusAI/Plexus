@@ -1061,19 +1061,13 @@ export function observeScoreResultChanges() {
   const subscriptions: { unsubscribe: () => void }[] = [];
   
   return {
-    subscribe(handler: SubscriptionHandler<{ itemId: string, accountId: string, action: 'create' | 'update' | 'delete' }>) {
+    subscribe(handler: SubscriptionHandler<{ action: 'create' | 'update' | 'delete', data?: any }>) {
       // Subscribe to create events
       const createSub = ((client.models.ScoreResult as any).onCreate() as AmplifySubscription).subscribe({
         next: (response: any) => {
           console.log('📊 ScoreResult onCreate triggered:', response);
-          // The actual data structure is nested inside the response
-          const scoreResult = response?.data?.onCreateScoreResult || response;
-          if (scoreResult?.itemId && scoreResult?.accountId) {
-            console.log('📊 Score result created for item:', scoreResult.itemId);
-            handler.next({ data: { itemId: scoreResult.itemId, accountId: scoreResult.accountId, action: 'create' } });
-          } else {
-            console.log('📊 ScoreResult onCreate: missing itemId or accountId in data:', scoreResult);
-          }
+          // Trigger a broad refresh instead of trying to parse specific data
+          handler.next({ data: { action: 'create', data: response } });
         },
         error: (error: Error) => {
           console.error('📊 ScoreResult onCreate error:', error);
@@ -1086,14 +1080,8 @@ export function observeScoreResultChanges() {
       const updateSub = ((client.models.ScoreResult as any).onUpdate() as AmplifySubscription).subscribe({
         next: (response: any) => {
           console.log('📊 ScoreResult onUpdate triggered:', response);
-          // The actual data structure is nested inside the response
-          const scoreResult = response?.data?.onUpdateScoreResult || response;
-          if (scoreResult?.itemId && scoreResult?.accountId) {
-            console.log('📊 Score result updated for item:', scoreResult.itemId);
-            handler.next({ data: { itemId: scoreResult.itemId, accountId: scoreResult.accountId, action: 'update' } });
-          } else {
-            console.log('📊 ScoreResult onUpdate: missing itemId or accountId in data:', scoreResult);
-          }
+          // Trigger a broad refresh instead of trying to parse specific data
+          handler.next({ data: { action: 'update', data: response } });
         },
         error: (error: Error) => {
           console.error('📊 ScoreResult onUpdate error:', error);
@@ -1106,14 +1094,8 @@ export function observeScoreResultChanges() {
       const deleteSub = ((client.models.ScoreResult as any).onDelete() as AmplifySubscription).subscribe({
         next: (response: any) => {
           console.log('📊 ScoreResult onDelete triggered:', response);
-          // The actual data structure is nested inside the response
-          const scoreResult = response?.data?.onDeleteScoreResult || response;
-          if (scoreResult?.itemId && scoreResult?.accountId) {
-            console.log('📊 Score result deleted for item:', scoreResult.itemId);
-            handler.next({ data: { itemId: scoreResult.itemId, accountId: scoreResult.accountId, action: 'delete' } });
-          } else {
-            console.log('📊 ScoreResult onDelete: missing itemId or accountId in data:', scoreResult);
-          }
+          // Trigger a broad refresh instead of trying to parse specific data
+          handler.next({ data: { action: 'delete', data: response } });
         },
         error: (error: Error) => {
           console.error('📊 ScoreResult onDelete error:', error);
