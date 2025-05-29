@@ -18,6 +18,7 @@ from plexus.analysis.topics.transformer import (
 from plexus.analysis.topics.analyzer import analyze_topics
 from plexus.dashboard.api.models.report_block import ReportBlock # For type hinting if needed
 from plexus.processors.ProcessorFactory import ProcessorFactory
+from plexus.reports.s3_utils import download_report_block_file
 
 from .base import BaseReportBlock
 
@@ -441,6 +442,28 @@ class TopicAnalysis(BaseReportBlock):
                 self._log("✅ BERTopic analysis completed successfully")
                 self._log("="*60)
                 
+                # Load "before" topics data if it exists (for fine-tuning comparison)
+                before_topics_data = None
+                if use_representation_model:
+                    try:
+                        import json
+                        
+                        # Look for the before fine-tuning file in the temp directory
+                        for root, dirs, files in os.walk(main_temp_dir):
+                            if "topics_before_fine_tuning.json" in files:
+                                before_topics_path = os.path.join(root, "topics_before_fine_tuning.json")
+                                with open(before_topics_path, 'r', encoding='utf-8') as f:
+                                    before_topics_data = json.load(f)
+                                
+                                self._log(f"✅ Loaded 'before' topics data from {before_topics_path}")
+                                self._log(f"🔍 Found {len(before_topics_data)} topics before fine-tuning")
+                                break
+                        
+                        if not before_topics_data:
+                            self._log("⚠️  No 'before' topics data found for fine-tuning comparison")
+                    except Exception as e:
+                        self._log(f"❌ Failed to load 'before' topics data: {e}", level="ERROR")
+                
                 # 3. BERTopic Analysis section
                 final_output_data["bertopic_analysis"] = {
                     "num_topics_requested": num_topics,
@@ -488,7 +511,8 @@ class TopicAnalysis(BaseReportBlock):
                                         "name": row.get('Name', f'Topic {topic_id}'),
                                         "count": int(row.get('Count', 0)),
                                         "representation": row.get('Representation', ''),
-                                        "words": topic_words
+                                        "words": topic_words,
+                                        "examples": []  # Will be populated later
                                     })
                                 else:
                                     noise_topic_count += 1
@@ -499,8 +523,88 @@ class TopicAnalysis(BaseReportBlock):
                             final_output_data["bertopic_debug"]["topics_list_length"] = len(topics_list)
                             
                             self._log(f"🔍 Topic processing: {valid_topic_count} valid topics, {noise_topic_count} noise topics")
+                            
+                            # --- Load Representative Documents ---
+                            # Try to load representative documents from the JSON file created by analyzer
+                            representative_docs_loaded = False
+                            try:
+                                import json
+                                
+                                # First, look for representative_documents.json in the temp directory structure
+                                # (this works for new reports currently being generated)
+                                for root, dirs, files in os.walk(main_temp_dir):
+                                    if "representative_documents.json" in files:
+                                        repr_docs_path = os.path.join(root, "representative_documents.json")
+                                        with open(repr_docs_path, 'r', encoding='utf-8') as f:
+                                            repr_docs_data = json.load(f)
+                                        
+                                        # Add representative documents to each topic
+                                        examples_added = 0
+                                        for topic in topics_list:
+                                            topic_id_str = str(topic["id"])
+                                            if topic_id_str in repr_docs_data:
+                                                topic["examples"] = repr_docs_data[topic_id_str][:20]  # Limit to 20 examples for UI
+                                                examples_added += 1
+                                                self._log(f"🔍 Added {len(topic['examples'])} examples to topic {topic_id_str}: {topic.get('name', 'Unnamed')}")
+                                        
+                                        self._log(f"✅ Added examples to {examples_added}/{len(topics_list)} topics from temp directory")
+                                        
+                                        representative_docs_loaded = True
+                                        self._log(f"✅ Loaded representative documents from {repr_docs_path}")
+                                        break
+                                
+                                # If not found in temp directory, try attached files (for older reports)
+                                if not representative_docs_loaded and hasattr(self, '_orm') and hasattr(self._orm, 'attached_files'):
+                                    attached_files = self._orm.get_attached_files()
+                                    self._log(f"🔍 Checking {len(attached_files)} attached files for representative_documents.json")
+                                    
+                                    for file_path in attached_files:
+                                        if file_path.endswith('representative_documents.json'):
+                                            self._log(f"🔍 Found representative_documents.json in attached files: {file_path}")
+                                            try:
+                                                # Download the file from S3
+                                                content, temp_path = download_report_block_file(file_path)
+                                                repr_docs_data = json.loads(content)
+                                                
+                                                # Add representative documents to each topic
+                                                examples_added = 0
+                                                for topic in topics_list:
+                                                    topic_id_str = str(topic["id"])
+                                                    if topic_id_str in repr_docs_data:
+                                                        topic["examples"] = repr_docs_data[topic_id_str][:20]  # Limit to 20 examples for UI
+                                                        examples_added += 1
+                                                        self._log(f"🔍 Added {len(topic['examples'])} examples to topic {topic_id_str}: {topic.get('name', 'Unnamed')}")
+                                                
+                                                self._log(f"✅ Added examples to {examples_added}/{len(topics_list)} topics from attached files")
+                                                
+                                                representative_docs_loaded = True
+                                                self._log(f"✅ Loaded representative documents from attached file: {file_path}")
+                                                
+                                                # Clean up temp file
+                                                try:
+                                                    if temp_path and os.path.exists(temp_path):
+                                                        os.remove(temp_path)
+                                                except Exception as cleanup_error:
+                                                    self._log(f"Warning: Failed to clean up temp file {temp_path}: {cleanup_error}", level="WARNING")
+                                                break
+                                            except Exception as download_error:
+                                                self._log(f"❌ Failed to download/parse representative documents from {file_path}: {download_error}", level="ERROR")
+                                                continue
+                                
+                                if not representative_docs_loaded:
+                                    self._log("⚠️  No representative_documents.json file found in temp directory or attached files")
+                                    
+                            except Exception as e:
+                                self._log(f"❌ Failed to load representative documents: {e}", level="ERROR")
+                                # Continue without representative documents
+                            
                             final_output_data["topics"] = topics_list
                             
+                            # Add before topics data to fine_tuning section if available
+                            if before_topics_data:
+                                final_output_data["fine_tuning"]["topics_before"] = list(before_topics_data.values())
+                                self._log(f"✅ Added 'before' topics data to fine_tuning section ({len(before_topics_data)} topics)")
+
                             # This is critical information - ensure it goes to both console AND attached log
                             self._log("🎯 TOPIC DISCOVERY RESULTS")
                             self._log("-" * 40)
@@ -675,10 +779,7 @@ class TopicAnalysis(BaseReportBlock):
             # Fallback to basic YAML without comments
             formatted_output = yaml.dump(final_output_data, indent=2, allow_unicode=True, sort_keys=False)
 
-        # Return both the structured data and the formatted YAML for universal code
-        return {
-            "rawOutput": formatted_output,
-            **final_output_data  # Include all the structured data for frontend parsing
-        }, self._get_log_string()
+        # Return the formatted YAML output (the frontend expects a YAML string)
+        return formatted_output, self._get_log_string()
 
     # Remove custom _log method - now inherited from BaseReportBlock with unified logging 

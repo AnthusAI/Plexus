@@ -307,6 +307,20 @@ def analyze_topics(
 
     # Initialize BERTopic model with n-gram range and other parameters
     logger.info(f"Initializing BERTopic model with n-gram range {n_gram_range} and custom UMAP model.")
+    
+    # First, create a model WITHOUT representation model to get the original topic names
+    initial_topic_model = BERTopic(
+        n_gram_range=n_gram_range,
+        min_topic_size=min_topic_size,
+        top_n_words=top_n_words,
+        umap_model=umap_model,
+        representation_model=None,  # No representation model for initial run
+        verbose=True
+    )
+    
+    # If we're using a representation model, we'll capture before/after states
+    capture_before_after = use_representation_model and representation_model is not None
+    
     topic_model = BERTopic(
         n_gram_range=n_gram_range,
         min_topic_size=min_topic_size,
@@ -322,7 +336,52 @@ def analyze_topics(
     start_time = time.time()
     
     try:
-        topics, probs = topic_model.fit_transform(docs)
+        if capture_before_after:
+            # First run without representation model to get original topic names
+            logger.info("Running initial topic modeling without representation model...")
+            topics, probs = initial_topic_model.fit_transform(docs)
+            
+            # Save the "before" topic information
+            logger.info("Capturing 'before' topic state...")
+            before_topic_info = initial_topic_model.get_topic_info()
+            before_topics_data = {}
+            
+            for _, row in before_topic_info.iterrows():
+                topic_id = row.get('Topic', -1)
+                if topic_id != -1:  # Skip outlier topic
+                    topic_words = []
+                    if hasattr(initial_topic_model, 'get_topic'):
+                        words_weights = initial_topic_model.get_topic(topic_id)
+                        topic_words = [{"word": word, "weight": weight} for word, weight in words_weights]
+                    
+                    before_topics_data[str(topic_id)] = {
+                        "id": int(topic_id),
+                        "name": row.get('Name', f'Topic {topic_id}'),
+                        "count": int(row.get('Count', 0)),
+                        "representation": row.get('Representation', ''),
+                        "words": topic_words
+                    }
+            
+            # Save before state to JSON file
+            import json
+            before_state_path = os.path.join(output_dir, "topics_before_fine_tuning.json")
+            with open(before_state_path, 'w', encoding='utf-8') as f:
+                json.dump(before_topics_data, f, indent=2, ensure_ascii=False)
+            logger.info(f"Saved 'before' topic state to {before_state_path}")
+            
+            # Now apply the representation model using update_topics
+            logger.info("Applying representation model for fine-tuning...")
+            topic_model = initial_topic_model  # Use the fitted model
+            
+            # Update topics with representation model
+            if representation_model:
+                topic_model.representation_model = representation_model
+                topic_model.update_topics(docs, representation_model=representation_model)
+                logger.info("Representation model applied successfully")
+        else:
+            # Regular single-stage processing
+            topics, probs = topic_model.fit_transform(docs)
+        
         logger.info(f"BERTopic fit_transform completed in {time.time() - start_time:.2f} seconds.")
         logger.info(f"Found {len(topic_model.get_topic_info())-1} topics initially (before any reduction).") # -1 for outlier topic
     except Exception as e:
@@ -433,6 +492,47 @@ def analyze_topics(
             logger.error("Failed to reduce topics", exc_info=True)
             # Do not re-raise here, allow to proceed with unreduced topics if reduction fails
             logger.warning("Proceeding with unreduced topics after reduction failure.")
+    
+    # --- Extract and Save Representative Documents ---
+    logger.info("Extracting representative documents for each topic...")
+    try:
+        # Get representative documents using BERTopic's method
+        # Note: BERTopic's get_representative_docs() method by default returns only 3 docs per topic
+        # We need to use a different approach to get more representative documents
+        representative_docs = {}
+        
+        # Get topic assignments and document info to find more representative docs per topic
+        topic_info = topic_model.get_topic_info()
+        for _, row in topic_info.iterrows():
+            topic_id = row.get('Topic', -1)
+            if topic_id != -1:  # Skip outlier topic
+                # Get all documents assigned to this topic
+                topic_docs = []
+                for i, doc_topic in enumerate(topics):
+                    if doc_topic == topic_id:
+                        topic_docs.append((i, docs[i]))
+                
+                # Just take the first 20 documents for this topic (simplified to avoid probability access issues)
+                representative_docs[topic_id] = [doc for _, doc in topic_docs[:20]]
+                
+                logger.info(f"Topic {topic_id}: Found {len(topic_docs)} total docs, selected {len(representative_docs[topic_id])} representative docs")
+        
+        # Save representative documents to a JSON file for later use
+        import json
+        repr_docs_data = {}
+        for topic_id, docs_list in representative_docs.items():
+            repr_docs_data[str(topic_id)] = docs_list
+        
+        repr_docs_path = os.path.join(output_dir, "representative_documents.json")
+        with open(repr_docs_path, 'w', encoding='utf-8') as f:
+            json.dump(repr_docs_data, f, indent=2, ensure_ascii=False)
+        
+        logger.info(f"Saved representative documents to {repr_docs_path}")
+        logger.info(f"Found representative documents for {len(repr_docs_data)} topics")
+        
+    except Exception as e:
+        logger.error(f"Failed to extract representative documents: {e}", exc_info=True)
+        # Continue without representative documents if extraction fails
     
     logger.info(f"Analysis complete. Results saved to {output_dir}")
     
