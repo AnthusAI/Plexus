@@ -318,7 +318,7 @@ class ScoreChatApp(App):
             
             # Create base LLM with streaming - exactly like in ScoreChatREPL
             self.repl.llm = ChatAnthropic(
-                model_name="claude-3-7-sonnet-20250219",
+                model_name="claude-sonnet-4-20250514",
                 temperature=0.7,
                 streaming=True,
                 anthropic_api_key=api_key,
@@ -328,7 +328,7 @@ class ScoreChatApp(App):
             
             # Create LLM with tools that also has streaming enabled - exactly like in ScoreChatREPL
             self.repl.llm_with_tools = ChatAnthropic(
-                model_name="claude-3-7-sonnet-20250219",
+                model_name="claude-sonnet-4-20250514",
                 temperature=0.7,
                 streaming=True,
                 anthropic_api_key=api_key,
