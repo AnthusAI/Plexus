@@ -4,15 +4,22 @@ import React, { useState, useMemo } from 'react';
 import { IdCard, ChevronDown, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-interface Identifier {
+export interface IdentifierItem {
+  name: string;      // Required: "Customer ID", "Order ID", etc.
+  value: string;     // Required: "CUST-123456", "ORD-789012", etc. (renamed from 'id')
+  url?: string;      // Optional: clickable link
+}
+
+// Legacy interface for backward compatibility
+interface LegacyIdentifier {
   name: string;
-  id: string;
+  id: string;    // Legacy: will be mapped to 'value'
   url?: string;
 }
 
 interface IdentifierDisplayProps {
   externalId?: string;
-  identifiers?: string; // JSON string
+  identifiers?: string | IdentifierItem[]; // Can be JSON string or array
   className?: string;
   iconSize?: 'sm' | 'md' | 'lg';
   textSize?: 'xs' | 'sm' | 'base';
@@ -28,14 +35,29 @@ export const IdentifierDisplay: React.FC<IdentifierDisplayProps> = ({
   const [isExpanded, setIsExpanded] = useState(false);
 
   const parsedIdentifiers = useMemo(() => {
-    if (identifiers) {
+    if (!identifiers) return [];
+    
+    // If it's already an array, use it directly
+    if (Array.isArray(identifiers)) {
+      return identifiers;
+    }
+    
+    // If it's a string, parse it as JSON
+    if (typeof identifiers === 'string') {
       try {
-        return JSON.parse(identifiers) as Identifier[];
+        const parsed = JSON.parse(identifiers) as LegacyIdentifier[];
+        // Map legacy 'id' field to 'value' field for consistency
+        return parsed.map(item => ({
+          name: item.name,
+          value: item.id, // Map legacy 'id' to 'value'
+          url: item.url
+        }));
       } catch (error) {
         console.error('Failed to parse identifiers JSON string:', error);
         return [];
       }
     }
+    
     return [];
   }, [identifiers]);
 
@@ -60,10 +82,10 @@ export const IdentifierDisplay: React.FC<IdentifierDisplayProps> = ({
     textSize === 'base' && 'text-base'
   );
 
-  const renderIdentifierValue = (identifier: Identifier) => {
-    const displayValue = identifier.id.length > 15 
-      ? `${identifier.id.substring(0, 15)}...` 
-      : identifier.id;
+  const renderIdentifierValue = (identifier: IdentifierItem) => {
+    const displayValue = identifier.value.length > 15 
+      ? `${identifier.value.substring(0, 15)}...` 
+      : identifier.value;
 
     if (identifier.url) {
       return (
@@ -72,7 +94,7 @@ export const IdentifierDisplay: React.FC<IdentifierDisplayProps> = ({
           target="_blank"
           rel="noopener noreferrer"
           className="text-primary hover:underline"
-          title={identifier.id}
+          title={identifier.value}
         >
           {displayValue}
         </a>
@@ -80,7 +102,7 @@ export const IdentifierDisplay: React.FC<IdentifierDisplayProps> = ({
     }
 
     return (
-      <span title={identifier.id}>
+      <span title={identifier.value}>
         {displayValue}
       </span>
     );
