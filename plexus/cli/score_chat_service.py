@@ -95,6 +95,21 @@ Here is documentation on the Plexus scorecard configuration declarative YAML lan
 {documentation_contents}
 </documentation>
 
+CRITICAL PLANNING REQUIREMENT: Before making ANY changes to files, you MUST:
+
+1. THINK FIRST: Analyze what the user is asking for and understand the implications
+2. CREATE A DETAILED PLAN: Explain step-by-step what changes you will make and why
+3. IDENTIFY POTENTIAL ISSUES: Consider what could go wrong and how to avoid problems
+4. GET USER CONFIRMATION: Present your plan to the user and ask if they want to proceed
+5. ONLY THEN: Execute the file changes using the str_replace_editor tool
+
+When the user requests changes, follow this exact process:
+- First, explain your understanding of their request
+- Then, provide a detailed plan of the specific changes you will make
+- Explain the reasoning behind each change
+- Ask the user to confirm before proceeding with any file modifications
+- Only after confirmation, use the str_replace_editor tool to make changes
+
 IMPORTANT: When using the str_replace_editor tool, you MUST always include the new_str parameter. If the new_str is very large:
 1. First use a "view" command to get the current file contents
 2. Then make your changes locally to the full text

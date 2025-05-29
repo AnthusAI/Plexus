@@ -1086,6 +1086,21 @@ Here is documentation on the Plexus scorecard configuration declarative YAML lan
 {documentation_contents}
 </documentation>
 
+CRITICAL PLANNING REQUIREMENT: Before making ANY changes to files, you MUST:
+
+1. THINK FIRST: Analyze what the user is asking for and understand the implications
+2. CREATE A DETAILED PLAN: Explain step-by-step what changes you will make and why
+3. IDENTIFY POTENTIAL ISSUES: Consider what could go wrong and how to avoid problems
+4. GET USER CONFIRMATION: Present your plan to the user and ask if they want to proceed
+5. ONLY THEN: Execute the file changes using the str_replace_editor tool
+
+When the user requests changes, follow this exact process:
+- First, explain your understanding of their request
+- Then, provide a detailed plan of the specific changes you will make
+- Explain the reasoning behind each change
+- Ask the user to confirm before proceeding with any file modifications
+- Only after confirmation, use the str_replace_editor tool to make changes
+
 IMPORTANT: When using the str_replace_editor tool, you MUST always include the new_str parameter. If the new_str is very large:
 1. First use a "view" command to get the current file contents
 2. Then make your changes locally to the full text
@@ -1497,7 +1512,8 @@ Then ask the user what they would like to change about the scorecard."""
                 self.console.print(f"[red]Score not found: {score}[/red]")
                 return
             
-            score_query = f"""
+            # Get score details
+            query = f"""
             query GetScore {{
                 getScore(id: "{score_id}") {{
                     id
@@ -1506,47 +1522,51 @@ Then ask the user what they would like to change about the scorecard."""
                 }}
             }}
             """
-            score_result = self.client.execute(score_query)
-            score_data = score_result.get('getScore')
-            if not score_data:
-                self.console.print(f"[red]Error retrieving score: {score}[/red]")
-                return
             
-            # Get the champion version ID
-            champion_version_id = score_data.get('championVersionId')
-            if not champion_version_id:
-                self.console.print(f"[red]No champion version found for score: {score}[/red]")
-                return
-            
-            # Get version content
-            version_query = f"""
-            query GetScoreVersion {{
-                getScoreVersion(id: "{champion_version_id}") {{
-                    id
-                    configuration
-                    createdAt
-                    updatedAt
-                    note
+            try:
+                result = self.client.execute(query)
+                score_data = result.get('getScore')
+                if not score_data:
+                    self.console.print(f"[red]Error retrieving score: {score}[/red]")
+                    return
+                
+                champion_version_id = score_data.get('championVersionId')
+                if not champion_version_id:
+                    self.console.print(f"[red]No champion version found for score: {score}[/red]")
+                    return
+                
+                # Get version content
+                version_query = f"""
+                query GetScoreVersion {{
+                    getScoreVersion(id: "{champion_version_id}") {{
+                        id
+                        configuration
+                        createdAt
+                        updatedAt
+                        note
+                    }}
                 }}
-            }}
-            """
-            
-            version_result = self.client.execute(version_query)
-            version_data = version_result.get('getScoreVersion')
-            
-            if not version_data or not version_data.get('configuration'):
-                self.console.print(f"[red]No configuration found for version: {champion_version_id}[/red]")
-                return
-            
-            # Get the YAML file path using the correct names
-            yaml_path = get_score_yaml_path(scorecard_name, score_data['name'])
-            
-            # Write to file
-            with open(yaml_path, 'w') as f:
-                f.write(version_data['configuration'])
-            
-            self.console.print(f"[green]Saved score configuration to: {yaml_path}[/green]")
-            
+                """
+                
+                version_result = self.client.execute(version_query)
+                version_data = version_result.get('getScoreVersion')
+                
+                if not version_data or not version_data.get('configuration'):
+                    self.console.print(f"[red]No configuration found for version: {champion_version_id}[/red]")
+                    return
+                
+                # Get the YAML file path using the correct names
+                yaml_path = get_score_yaml_path(scorecard_name, score_data['name'])
+                
+                # Write to file
+                with open(yaml_path, 'w') as f:
+                    f.write(version_data['configuration'])
+                
+                self.console.print(f"[green]Saved score configuration to: {yaml_path}[/green]")
+                
+            except Exception as e:
+                self.console.print(f"[red]Error pulling score: {str(e)}[/red]")
+
         except Exception as e:
             self.console.print(f"[red]Error loading score: {str(e)}[/red]")
 
