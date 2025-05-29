@@ -982,6 +982,11 @@ export default function ScorecardComponent({
         variant === 'detail' && "h-full flex flex-col",
         className
       )}
+      style={{
+        ...(isSelected && variant === 'grid' && {
+          boxShadow: 'inset 0 0 0 0.5rem var(--secondary)'
+        })
+      }}
       {...props}
     >
       <div className={cn(

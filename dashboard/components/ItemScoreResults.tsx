@@ -78,7 +78,7 @@ const ScoreResultCard: React.FC<{ result: ScoreResultWithDetails }> = ({ result 
                 <IdentifierDisplay 
                   externalId={result.score.externalId}
                   iconSize="sm"
-                  textSize="xs"
+                  textSize="sm"
                 />
               </div>
             )}
@@ -160,7 +160,7 @@ const ItemScoreResults: React.FC<ItemScoreResultsProps> = ({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-end justify-between">
         <h3 className="text-lg font-semibold">Score Results</h3>
         <span className="text-sm text-muted-foreground">
           {totalResults} result{totalResults !== 1 ? 's' : ''} across {scorecardIds.length} scorecard{scorecardIds.length !== 1 ? 's' : ''}
@@ -184,7 +184,7 @@ const ItemScoreResults: React.FC<ItemScoreResultsProps> = ({
                         <IdentifierDisplay 
                           externalId={group.scorecardExternalId}
                           iconSize="sm"
-                          textSize="xs"
+                          textSize="sm"
                         />
                       </div>
                     )}

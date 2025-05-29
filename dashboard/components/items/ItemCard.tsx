@@ -9,6 +9,7 @@ import { Timestamp } from '@/components/ui/timestamp'
 import { motion } from 'framer-motion'
 import ItemScoreResultCard from './ItemScoreResultCard'
 import { IdentifierDisplay } from '@/components/ui/identifier-display'
+import NumberFlowWrapper from '@/components/ui/number-flow'
 
 // Interface for grouped score results
 interface GroupedScoreResults {
@@ -127,14 +128,13 @@ const GridContent = React.memo(({
 
   return (
     <div className="w-full">
-      <div className="float-right flex flex-col items-end space-y-1 ml-2 mt-0">
+      <div className="float-right flex flex-col items-center space-y-1 ml-2 mt-0">
         {item.icon || <StickyNote className="h-[1.75rem] w-[1.75rem]" strokeWidth={1.25} />}
-      </div>
-      <div className="space-y-1">
-        <div className="text-xs text-muted-foreground" title={primaryScorecard}>
+        <div className="text-xs text-muted-foreground text-center" title={primaryScorecard}>
           <span className="font-semibold">{primaryScorecard}</span>
         </div>
-
+      </div>
+      <div className="space-y-1 pr-20">
         <IdentifierDisplay 
           externalId={item.externalId}
           identifiers={item.identifiers}
@@ -161,8 +161,8 @@ const GridContent = React.memo(({
           </div>
         )}
         
-        {/* Score results count with loading state */}
-        <div className="flex flex-col gap-0.5 text-xs text-muted-foreground">
+        {/* Score results count with loading state - fixed height to prevent layout jiggling */}
+        <div className="flex flex-col gap-0.5 text-xs text-muted-foreground min-h-[2.5rem]">
           {item.isLoadingResults ? (
             <div className="flex items-center gap-1">
               <Loader2 className="h-3 w-3 animate-spin" />
@@ -174,11 +174,20 @@ const GridContent = React.memo(({
                 <div className="text-xs text-muted-foreground">
                   <span className="font-medium">{breakdown.scorecardName}</span>
                 </div>
-                <div>{breakdown.count} result{breakdown.count !== 1 ? 's' : ''}</div>
+                <div>
+                  <NumberFlowWrapper value={breakdown.count} /> result{breakdown.count !== 1 ? 's' : ''}
+                </div>
               </div>
             ))
           ) : (
-            <span>{item.results || 0} result{(item.results || 0) !== 1 ? 's' : ''}</span>
+            <div className="flex flex-col">
+              <div className="text-xs text-muted-foreground">
+                <span className="font-medium">&nbsp;</span>
+              </div>
+              <div>
+                <NumberFlowWrapper value={item.results || 0} /> result{(item.results || 0) !== 1 ? 's' : ''}
+              </div>
+            </div>
           )}
         </div>
       </div>
@@ -285,17 +294,17 @@ const DetailContent = React.memo(({
             externalId={item.externalId}
             identifiers={item.identifiers}
             iconSize="sm"
-            textSize="xs"
+            textSize="sm"
           />
 
           {item.date ? (
             <Timestamp 
               time={item.date} 
               variant="relative" 
-              className="text-xs"
+              className="text-sm"
             />
           ) : (
-            <p className="text-xs text-muted-foreground">No date</p>
+            <p className="text-sm text-muted-foreground">No date</p>
           )}
           
           {(hasMultipleScores || primaryScore) && (
@@ -306,8 +315,8 @@ const DetailContent = React.memo(({
             </div>
           )}
           
-          {/* Score results count with loading state */}
-          <div className="flex flex-col gap-0.5 text-xs text-muted-foreground">
+          {/* Score results count with loading state - fixed height to prevent layout jiggling */}
+          <div className="flex flex-col gap-0.5 text-xs text-muted-foreground min-h-[2.5rem]">
             {item.isLoadingResults ? (
               <div className="flex items-center gap-1">
                 <Loader2 className="h-3 w-3 animate-spin" />
@@ -319,11 +328,20 @@ const DetailContent = React.memo(({
                   <div className="text-xs text-muted-foreground">
                     <span className="font-medium">{breakdown.scorecardName}</span>
                   </div>
-                  <div>{breakdown.count} result{breakdown.count !== 1 ? 's' : ''}</div>
+                  <div>
+                    <NumberFlowWrapper value={breakdown.count} /> result{breakdown.count !== 1 ? 's' : ''}
+                  </div>
                 </div>
               ))
             ) : (
-              <span>{item.results || 0} result{(item.results || 0) !== 1 ? 's' : ''}</span>
+              <div className="flex flex-col">
+                <div className="text-xs text-muted-foreground">
+                  <span className="font-medium">&nbsp;</span>
+                </div>
+                <div>
+                  <NumberFlowWrapper value={item.results || 0} /> result{(item.results || 0) !== 1 ? 's' : ''}
+                </div>
+              </div>
             )}
           </div>
         </div>
@@ -402,9 +420,48 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
   // Extract HTML props that might conflict with motion props
   const { onDrag, ...htmlProps } = props as any;
   
+  // Debug ref to inspect the actual DOM element
+  const debugRef = React.useCallback((node: HTMLDivElement | null) => {
+    if (node && item.isNew) {
+      console.log('🔍 DOM ELEMENT DEBUG:', {
+        id: item.id,
+        isNew: item.isNew,
+        element: node,
+        className: node.className,
+        computedStyle: window.getComputedStyle(node),
+        backgroundColor: window.getComputedStyle(node).backgroundColor,
+        border: window.getComputedStyle(node).border,
+        boxShadow: window.getComputedStyle(node).boxShadow,
+        transform: window.getComputedStyle(node).transform
+      });
+    }
+    if (ref) {
+      if (typeof ref === 'function') {
+        ref(node);
+      } else {
+        ref.current = node;
+      }
+    }
+  }, [item.isNew, item.id, ref]);
+
+  // Debug logging for new items
+  React.useEffect(() => {
+    if (item.isNew) {
+      console.log('🟣✨ NEW ITEM CARD WITH RED/YELLOW EFFECTS:', {
+        id: item.id,
+        externalId: item.externalId,
+        isNew: item.isNew,
+        variant: variant,
+        shouldHaveClass: 'new-item-shadow',
+        shouldHaveInlineStyles: 'red background, yellow border',
+        timestamp: new Date().toISOString()
+      });
+    }
+  }, [item.isNew, item.id, item.externalId, variant]);
+  
   return (
     <motion.div
-      ref={ref}
+      ref={debugRef}
       initial={{ opacity: 1 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.2 }}
@@ -414,8 +471,14 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
           isSelected ? "bg-card-selected" : "bg-card"
         ) : "bg-card-selected",
         variant === 'detail' && "h-full flex flex-col",
+        item.isNew && "new-item-shadow",
         className
       )}
+      style={{
+        ...(((variant === 'grid' && isSelected) || variant === 'detail') && {
+          boxShadow: 'inset 0 0 0 0.5rem var(--secondary)'
+        })
+      }}
       {...htmlProps}
     >
       <div className={cn(
