@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ChevronDown, ChevronRight, Eye, EyeOff, MessagesSquare } from 'lucide-react';
+import { ChevronDown, ChevronRight, Eye, EyeOff, MessagesSquare, Microscope, FileText } from 'lucide-react';
 import * as yaml from 'js-yaml';
 
 interface TopicAnalysisData {
@@ -46,6 +46,13 @@ interface TopicAnalysisData {
     use_representation_model?: boolean;
     representation_model_provider?: string;
     representation_model_name?: string;
+    topics_before?: Array<{
+      id: number;
+      name: string;
+      count: number;
+      representation: string;
+      words: Array<{ word: string; weight: number }>;
+    }>;
   };
   topics?: Array<{
     id: number;
@@ -53,6 +60,7 @@ interface TopicAnalysisData {
     count: number;
     representation: string;
     words: Array<{ word: string; weight: number }>;
+    examples?: string[];
   }>;
   visualization_notes?: {
     topics_visualization?: string;
@@ -131,6 +139,18 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
   const fineTuning = data.fine_tuning || {};
   const topics = data.topics || [];
   const errors = data.errors || [];
+  
+  // Debug logging for topics data
+  console.log('🔍 TopicAnalysis: Topics data received:', {
+    topicsCount: topics.length,
+    topicsWithExamples: topics.filter(t => t.examples && t.examples.length > 0).length,
+    sampleTopic: topics[0] ? {
+      id: topics[0].id,
+      name: topics[0].name,
+      hasExamples: !!(topics[0].examples && topics[0].examples.length > 0),
+      examplesCount: topics[0].examples?.length || 0
+    } : 'No topics'
+  });
 
 
 
@@ -152,100 +172,132 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
         {/* Main Topic Analysis Results */}
         <TopicAnalysisResults topics={topics} />
 
-        {/* Process Details Sections */}
-        <Accordion type="multiple" defaultValue={["llm-extraction"]} className="w-full">
-          {/* Pre-processing Section */}
-          <AccordionItem value="preprocessing">
-            <AccordionTrigger className="text-base font-medium">
-              Pre-processing
-              <div className="ml-2 px-2 py-1 text-xs bg-card rounded">
-                {preprocessing.method || 'itemize'}
+        {/* Analysis Details Section */}
+        <Accordion type="multiple" defaultValue={["analysis-details"]} className="w-full">
+          <AccordionItem value="analysis-details">
+            <AccordionTrigger className="text-lg font-medium">
+              <div className="flex items-center gap-2">
+                <Microscope className="h-5 w-5" />
+                Analysis Details
               </div>
             </AccordionTrigger>
             <AccordionContent>
-              <PreprocessingSection preprocessing={preprocessing} />
-            </AccordionContent>
-          </AccordionItem>
+              <div className="space-y-6 pt-6">
+                {/* Pre-processing Section */}
+                <Accordion type="multiple" defaultValue={[]} className="w-full">
+                  <AccordionItem value="preprocessing">
+                    <AccordionTrigger className="text-base font-medium">
+                      Pre-processing
+                      <div className="ml-2 px-2 py-1 text-xs bg-card rounded">
+                        {preprocessing.method || 'itemize'}
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent>
+                      <PreprocessingSection preprocessing={preprocessing} />
+                    </AccordionContent>
+                  </AccordionItem>
+                </Accordion>
 
-          {/* LLM Extraction Section */}
-          <AccordionItem value="llm-extraction">
-            <AccordionTrigger className="text-base font-medium">
-              LLM Extraction
-              {llmExtraction.examples && (
-                <div className="ml-2 px-2 py-1 text-xs bg-card rounded">
-                  {llmExtraction.examples.length} examples
-                </div>
-              )}
-            </AccordionTrigger>
-            <AccordionContent>
-              <LLMExtractionSection 
-                llmExtraction={llmExtraction}
-                promptExpanded={promptExpanded}
-                setPromptExpanded={setPromptExpanded}
-                examplesExpanded={examplesExpanded}
-                setExamplesExpanded={setExamplesExpanded}
-              />
-            </AccordionContent>
-          </AccordionItem>
+                {/* LLM Extraction Section */}
+                <Accordion type="multiple" defaultValue={[]} className="w-full">
+                  <AccordionItem value="llm-extraction">
+                    <AccordionTrigger className="text-base font-medium">
+                      LLM Extraction
+                      {llmExtraction.examples && (
+                        <div className="ml-2 px-2 py-1 text-xs bg-card rounded">
+                          {llmExtraction.examples.length} examples
+                        </div>
+                      )}
+                    </AccordionTrigger>
+                    <AccordionContent>
+                      <LLMExtractionSection 
+                        llmExtraction={llmExtraction}
+                        promptExpanded={promptExpanded}
+                        setPromptExpanded={setPromptExpanded}
+                        examplesExpanded={examplesExpanded}
+                        setExamplesExpanded={setExamplesExpanded}
+                      />
+                    </AccordionContent>
+                  </AccordionItem>
+                </Accordion>
 
-          {/* BERTopic Analysis Section */}
-          <AccordionItem value="bertopic">
-            <AccordionTrigger className="text-base font-medium">
-              BERTopic Analysis
-              {topics.length > 0 && (
-                <div className="ml-2 px-2 py-1 text-xs bg-card rounded">
-                  {topics.length} topics
-                </div>
-              )}
-            </AccordionTrigger>
-            <AccordionContent>
-              <BERTopicSection 
-                topics={topics}
-                bertopicAnalysis={bertopicAnalysis}
-                visualizationNotes={data.visualization_notes}
-                attachedFiles={props.attachedFiles || undefined}
-              />
-            </AccordionContent>
-          </AccordionItem>
+                {/* BERTopic Analysis Section */}
+                <Accordion type="multiple" defaultValue={[]} className="w-full">
+                  <AccordionItem value="bertopic">
+                    <AccordionTrigger className="text-base font-medium">
+                      BERTopic Analysis
+                      {topics.length > 0 && (
+                        <div className="ml-2 px-2 py-1 text-xs bg-card rounded">
+                          {topics.length} topics
+                        </div>
+                      )}
+                    </AccordionTrigger>
+                    <AccordionContent>
+                      <BERTopicSection 
+                        topics={topics}
+                        bertopicAnalysis={bertopicAnalysis}
+                        visualizationNotes={data.visualization_notes}
+                        attachedFiles={props.attachedFiles || undefined}
+                      />
+                    </AccordionContent>
+                  </AccordionItem>
+                </Accordion>
 
-          {/* Fine-tuning Section */}
-          <AccordionItem value="fine-tuning">
-            <AccordionTrigger className="text-base font-medium">
-              Fine-tuning
-              {fineTuning.representation_model_provider && (
-                <div className="ml-2 px-2 py-1 text-xs bg-card rounded">
-                  {fineTuning.representation_model_name || fineTuning.representation_model_provider}
-                </div>
-              )}
-            </AccordionTrigger>
-            <AccordionContent>
-              <FineTuningSection 
-                fineTuning={fineTuning}
-                topics={topics}
-              />
-            </AccordionContent>
-          </AccordionItem>
+                {/* Fine-tuning Section */}
+                <Accordion type="multiple" defaultValue={[]} className="w-full">
+                  <AccordionItem value="fine-tuning">
+                    <AccordionTrigger className="text-base font-medium">
+                      Fine-tuning
+                      {fineTuning.representation_model_provider && (
+                        <div className="ml-2 px-2 py-1 text-xs bg-card rounded">
+                          {fineTuning.representation_model_name || fineTuning.representation_model_provider}
+                        </div>
+                      )}
+                    </AccordionTrigger>
+                    <AccordionContent>
+                      <FineTuningSection 
+                        fineTuning={fineTuning}
+                        topics={topics}
+                      />
+                    </AccordionContent>
+                  </AccordionItem>
+                </Accordion>
 
-          {/* Debug Information Section */}
-          {data.debug_info && (
-            <AccordionItem value="debug-info">
-              <AccordionTrigger className="text-base font-medium">
-                Debug Information
-                {data.debug_info.repetition_detected && (
-                  <Badge variant="destructive" className="ml-2">
-                    Repetition Detected
-                  </Badge>
+                {/* Debug Information Section */}
+                {/* Temporarily disabled to prevent duplicate topic name display
+                {data.debug_info && (
+                  <Accordion type="multiple" defaultValue={[]} className="w-full">
+                    <AccordionItem value="debug-info">
+                      <AccordionTrigger className="text-base font-medium">
+                        Debug Information
+                        {data.debug_info.repetition_detected && (
+                          <Badge variant="destructive" className="ml-2">
+                            Repetition Detected
+                          </Badge>
+                        )}
+                      </AccordionTrigger>
+                      <AccordionContent>
+                        <DebugInfoSection debugInfo={data.debug_info} />
+                      </AccordionContent>
+                    </AccordionItem>
+                  </Accordion>
                 )}
-              </AccordionTrigger>
-              <AccordionContent>
-                <DebugInfoSection debugInfo={data.debug_info} />
-              </AccordionContent>
-            </AccordionItem>
-          )}
+                */}
+              </div>
+            </AccordionContent>
+          </AccordionItem>
         </Accordion>
       </div>
     </ReportBlock>
   );
+};
+
+/**
+ * Helper function to clean topic names by removing prefixes like "0_"
+ */
+const cleanTopicName = (name: string): string => {
+  // Remove prefixes like "0_", "1_", etc. from the beginning of topic names
+  return name.replace(/^\d+_/, '');
 };
 
 /**
@@ -259,6 +311,7 @@ const TopicAnalysisResults: React.FC<{
     count: number;
     representation: string;
     words: Array<{ word: string; weight: number }>;
+    examples?: string[];
   }>;
 }> = ({ topics }) => {
   if (topics.length === 0) {
@@ -312,17 +365,28 @@ const TopicAnalysisResults: React.FC<{
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium text-muted-foreground">#{topic.id + 1}</span>
-                    <h4 className="font-medium">{topic.name}</h4>
+                    <h4 className="font-medium">{cleanTopicName(topic.name)}</h4>
                   </div>
                   <span className="text-sm text-muted-foreground">{topic.count} items</span>
                 </div>
                 {topic.words && topic.words.length > 0 && (
                   <div className="flex flex-wrap gap-1">
-                    {topic.words.slice(0, 6).map((word, i) => (
-                      <Badge key={i} variant="outline" className="text-xs font-mono px-0 py-0">
-                        {word.word}
-                      </Badge>
-                    ))}
+                    {topic.words.slice(0, 6)
+                      .filter(word => word.word !== topic.name && word.word !== cleanTopicName(topic.name))
+                      .map((word, i) => (
+                        <Badge key={i} variant="outline" className="text-xs font-mono px-0 py-0">
+                          {word.word}
+                        </Badge>
+                      ))}
+                  </div>
+                )}
+                {topic.examples && topic.examples.length > 0 && (
+                  <TopicExamplesSection examples={topic.examples} topicId={topic.id} />
+                )}
+                {/* Debug: Show if examples are missing */}
+                {(!topic.examples || topic.examples.length === 0) && (
+                  <div className="text-xs text-muted-foreground italic">
+                    No examples available for this topic
                   </div>
                 )}
               </div>
@@ -330,6 +394,56 @@ const TopicAnalysisResults: React.FC<{
           </Card>
         ))}
       </div>
+    </div>
+  );
+};
+
+/**
+ * Topic Examples Section Component
+ * Shows representative example texts for a topic with collapsible display
+ */
+const TopicExamplesSection: React.FC<{
+  examples: string[];
+  topicId: number;
+}> = ({ examples, topicId }) => {
+  const [expanded, setExpanded] = useState(false);
+  
+  if (examples.length === 0) {
+    return null;
+  }
+  
+  return (
+    <div className="space-y-2">
+      <Collapsible open={expanded} onOpenChange={setExpanded}>
+        <CollapsibleTrigger asChild>
+          <Button 
+            variant="ghost" 
+            size="sm"
+            className="justify-start gap-2 p-0 h-auto font-normal"
+          >
+            {expanded ? (
+              <ChevronDown className="h-4 w-4" />
+            ) : (
+              <ChevronRight className="h-4 w-4" />
+            )}
+            <FileText className="h-4 w-4" />
+            <span className="text-sm text-muted-foreground">
+              {examples.length} example{examples.length === 1 ? '' : 's'}
+            </span>
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="mt-2 space-y-1">
+            {examples.map((example, index) => (
+              <div key={index} className="p-2 bg-muted/20 rounded-md border-l-2 border-primary/20">
+                <div className="text-sm text-foreground whitespace-pre-wrap break-words">
+                  {example.length > 200 ? `${example.slice(0, 200)}...` : example}
+                </div>
+              </div>
+            ))}
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
     </div>
   );
 };
@@ -438,7 +552,7 @@ const LLMExtractionSection: React.FC<{
   const [showAllExamples, setShowAllExamples] = useState(false);
   
   const examples = llmExtraction.examples || [];
-  const displayedExamples = showAllExamples ? examples : examples.slice(0, 5);
+  const displayedExamples = showAllExamples ? examples : examples.slice(0, 20);
   
   const toggleExampleSelection = (index: number) => {
     const newSelection = new Set(selectedExamples);
@@ -526,7 +640,7 @@ const LLMExtractionSection: React.FC<{
                   Clear ({selectedExamples.size})
                 </Button>
               )}
-              {examples.length > 5 && (
+              {examples.length > 20 && (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -541,7 +655,7 @@ const LLMExtractionSection: React.FC<{
           <div className="grid gap-2">
             {displayedExamples.map((example: string, index: number) => {
               const isSelected = selectedExamples.has(index);
-              const actualIndex = showAllExamples ? index : (index < 5 ? index : examples.indexOf(example));
+              const actualIndex = showAllExamples ? index : (index < 20 ? index : examples.indexOf(example));
               
               return (
                 <ExampleCard
@@ -555,9 +669,9 @@ const LLMExtractionSection: React.FC<{
             })}
           </div>
           
-          {!showAllExamples && examples.length > 5 && (
+          {!showAllExamples && examples.length > 20 && (
             <div className="text-center text-sm text-muted-foreground">
-              Showing 5 of {examples.length} examples
+              Showing 20 of {examples.length} examples
             </div>
           )}
         </div>
@@ -629,6 +743,7 @@ const BERTopicSection: React.FC<{
     count: number;
     representation: string;
     words: Array<{ word: string; weight: number }>;
+    examples?: string[];
   }>;
   bertopicAnalysis: any;
   visualizationNotes?: {
@@ -682,7 +797,6 @@ const BERTopicSection: React.FC<{
                   <h5 className="font-medium">Topic {topic.id}</h5>
                   <span className="text-sm text-muted-foreground">{topic.count} items</span>
                 </div>
-                <p className="text-sm mb-2">{topic.name}</p>
                 {topic.words && topic.words.length > 0 && (
                   <div className="flex flex-wrap gap-1">
                     {topic.words.slice(0, 8).map((word, i) => (
@@ -736,99 +850,6 @@ const BERTopicSection: React.FC<{
 };
 
 /**
- * Debug Information Section Component
- * Displays debugging information about the transformed text and processing
- */
-const DebugInfoSection: React.FC<{
-  debugInfo: {
-    transformed_text_lines_count?: number;
-    transformed_text_sample?: string[];
-    unique_lines_count?: number;
-    repetition_detected?: boolean;
-    most_common_lines?: Array<{
-      line: string;
-      count: number;
-    }>;
-    error_reading_transformed_file?: string;
-  };
-}> = ({ debugInfo }) => {
-  return (
-    <div className="space-y-4 pt-2">
-      <p className="text-sm text-muted-foreground">
-        Debugging information about the LLM-transformed text and processing pipeline.
-      </p>
-      
-      {debugInfo.error_reading_transformed_file && (
-        <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-md">
-          <p className="text-sm text-destructive">
-            Error reading transformed file: {debugInfo.error_reading_transformed_file}
-          </p>
-        </div>
-      )}
-      
-      <div className="grid gap-3">
-        {debugInfo.transformed_text_lines_count !== undefined && (
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium">Total Lines Generated:</span>
-            <div className="px-2 py-1 text-xs bg-card rounded">{debugInfo.transformed_text_lines_count.toLocaleString()}</div>
-          </div>
-        )}
-        
-        {debugInfo.unique_lines_count !== undefined && (
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium">Unique Lines:</span>
-            <div className="px-2 py-1 text-xs bg-card rounded">{debugInfo.unique_lines_count.toLocaleString()}</div>
-          </div>
-        )}
-        
-        {debugInfo.repetition_detected !== undefined && (
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium">Repetition Detected:</span>
-            <div className="px-2 py-1 text-xs bg-card rounded">
-              {debugInfo.repetition_detected ? "Yes" : "No"}
-            </div>
-          </div>
-        )}
-      </div>
-      
-      {debugInfo.transformed_text_sample && debugInfo.transformed_text_sample.length > 0 && (
-        <div className="space-y-2">
-          <h4 className="font-medium text-sm">Sample of Transformed Text</h4>
-          <div className="p-3 bg-muted/20 rounded-md border font-mono text-xs">
-            {debugInfo.transformed_text_sample.map((line, index) => (
-              <div key={index} className="py-1 border-b border-muted/30 last:border-b-0">
-                <span className="text-muted-foreground mr-2">{index + 1}:</span>
-                {line.trim()}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-      
-      {debugInfo.most_common_lines && debugInfo.most_common_lines.length > 0 && (
-        <div className="space-y-2">
-          <h4 className="font-medium text-sm">Most Repeated Lines</h4>
-          <div className="space-y-2">
-            {debugInfo.most_common_lines.map((item, index) => (
-              <div key={index} className="p-2 bg-muted/20 rounded border">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-medium text-muted-foreground">
-                    Repeated {item.count} times
-                  </span>
-                </div>
-                <div className="text-sm font-mono">
-                  {item.line}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
-/**
  * Fine-tuning Section Component  
  * Displays representation model configuration and topic refinement
  */
@@ -840,8 +861,12 @@ const FineTuningSection: React.FC<{
     count: number;
     representation: string;
     words: Array<{ word: string; weight: number }>;
+    examples?: string[];
   }>;
 }> = ({ fineTuning, topics }) => {
+  const topicsBefore = fineTuning.topics_before || [];
+  const hasBeforeAfterData = topicsBefore.length > 0 && topics.length > 0;
+
   return (
     <div className="space-y-4 pt-2">
       <p className="text-sm text-muted-foreground">
@@ -866,15 +891,91 @@ const FineTuningSection: React.FC<{
         </div>
       )}
       
-      {topics.length > 0 && fineTuning.use_representation_model && (
+      {hasBeforeAfterData && fineTuning.use_representation_model && (
+        <div className="space-y-3">
+          <h4 className="font-medium">Before & After Fine-tuning Comparison</h4>
+          <p className="text-sm text-muted-foreground">
+            See how the LLM transformed keyword-based topic names into human-readable labels.
+          </p>
+          <div className="grid gap-3">
+            {topics.map((afterTopic) => {
+              // Find the corresponding "before" topic by ID
+              const beforeTopic = topicsBefore.find((bt: any) => bt.id === afterTopic.id);
+              
+              if (!beforeTopic) return null;
+              
+              return (
+                <div key={afterTopic.id} className="border rounded-lg p-4 bg-card">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">Topic {afterTopic.id + 1}</span>
+                      <Badge variant="outline" className="text-xs">
+                        {afterTopic.count} items
+                      </Badge>
+                    </div>
+                  </div>
+                  
+                  <div className="grid md:grid-cols-2 gap-4">
+                    {/* Before (Original Keywords) */}
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-muted-foreground">Before</span>
+                      </div>
+                      <div className="space-y-2">
+                        <h5 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Original Keywords</h5>
+                        <div className="p-3 bg-muted/30 rounded border-l-2 border-primary/20">
+                          <div className="flex flex-wrap gap-1">
+                            {beforeTopic.words.slice(0, 6).map((word: any, i: number) => (
+                              <Badge key={i} variant="outline" className="text-xs">
+                                {word.word}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* After (LLM Refined) */}
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-muted-foreground">After</span>
+                      </div>
+                      <div className="space-y-2">
+                        <h5 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">LLM Refined</h5>
+                        <div className="p-3 bg-primary/5 rounded border-l-2 border-primary/20">
+                          <p className="text-sm font-medium mb-2">
+                            {cleanTopicName(afterTopic.name)}
+                          </p>
+                          <div className="flex flex-wrap gap-1">
+                            {afterTopic.words
+                              .filter((word: any) => !cleanTopicName(afterTopic.name).toLowerCase().includes(word.word.toLowerCase()))
+                              .slice(0, 6)
+                              .map((word: any, i: number) => (
+                                <Badge key={i} variant="outline" className="text-xs">
+                                  {word.word}
+                                </Badge>
+                              ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Fallback: Show only refined names if no before data */}
+      {!hasBeforeAfterData && topics.length > 0 && fineTuning.use_representation_model && (
         <div className="space-y-3">
           <h4 className="font-medium">Refined Topic Names</h4>
           <div className="grid gap-2">
             {topics.map((topic) => (
               <div key={topic.id} className="flex items-center justify-between p-2 bg-card rounded">
                 <div>
-                  <span className="font-medium">Topic {topic.id}:</span>
-                  <span className="ml-2">{topic.name}</span>
+                  <span className="font-medium">Topic {topic.id}</span>
                 </div>
                 <span className="text-sm text-muted-foreground">{topic.count}</span>
               </div>

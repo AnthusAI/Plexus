@@ -436,9 +436,9 @@ async def _transform_transcripts_llm_async(
                 # Fallback: Load processed data but clearly mark what it is
                 cached_df = pd.read_parquet(cached_parquet_path)
                 examples = []
-                for i in range(min(5, len(cached_df))):
+                for i in range(min(20, len(cached_df))):
                     cached_row = cached_df.iloc[i]
-                    example = f"[PROCESSED OUTPUT]: {cached_row[content_column][:200]}..."
+                    example = f"[PROCESSED OUTPUT]: {cached_row[content_column][:500]}..."
                     examples.append(example)
             
             # Always determine what template was used, even from cached data
@@ -636,6 +636,10 @@ class TranscriptItems(BaseModel):
     """Model for a list of items extracted from a transcript."""
     items: List[TranscriptItem] = Field(description="List of items extracted from the transcript")
 
+class SimpleTranscriptItems(BaseModel):
+    """Model for a simple list of strings extracted from a transcript."""
+    items: List[str] = Field(description="List of questions/items extracted from the transcript")
+
 async def transform_transcripts_itemize(
     input_file: str,
     content_column: str = 'content',
@@ -647,6 +651,7 @@ async def transform_transcripts_itemize(
     fresh: bool = False,
     inspect: bool = True,
     max_retries: int = 2,
+    simple_format: bool = False,
     retry_delay: float = 1.0,
     openai_api_key: str = None,
     sample_size: Optional[int] = None
@@ -685,13 +690,14 @@ async def transform_transcripts_itemize(
         fresh=fresh, 
         inspect=inspect,
         max_retries=max_retries, 
+        simple_format=simple_format,
         retry_delay=retry_delay, 
         openai_api_key=openai_api_key, 
         sample_size=sample_size
     )
 
 async def _process_itemize_transcript_async(
-    llm, prompt, formatted_prompt, text, parser, retry_parser, provider, i, total_count, max_retries, retry_delay
+    llm, prompt, formatted_prompt, text, parser, retry_parser, provider, i, total_count, max_retries, retry_delay, simple_format
 ):
     """
     Process a single transcript asynchronously for itemization.
@@ -727,10 +733,15 @@ async def _process_itemize_transcript_async(
                 
             logger.debug(f"Sending prompt to LLM for transcript {i+1}")
             
-            start_time = time.perf_counter()
-            raw_response = await llm.ainvoke(formatted_prompt)
-            end_time = time.perf_counter()
-            duration = end_time - start_time
+            try:
+                start_time = time.perf_counter()
+                raw_response = await llm.ainvoke(formatted_prompt)
+                end_time = time.perf_counter()
+                duration = end_time - start_time
+                logger.debug(f"LLM call completed successfully for transcript {i+1}")
+            except Exception as e:
+                logger.error(f"Error in LLM call for transcript {i+1}: {type(e).__name__}: {e}")
+                raise
             
             logger.debug(f"LLM response for transcript {i+1} (took {duration:.2f}s): {len(str(raw_response))} chars")
             if duration < 0.1 and duration > 0: # Heuristic for likely cache hit
@@ -748,9 +759,42 @@ async def _process_itemize_transcript_async(
                 try:
                     json_data = json.loads(response_text)
                     logger.debug(f"Parsed JSON directly with {len(json_data)} keys")
-                    parsed_items = TranscriptItems(**json_data)
-                    logger.debug(f"Successfully created Pydantic model")
-                    success = True
+                    logger.debug(f"simple_format flag: {simple_format}")
+                    logger.debug(f"First few items in response: {json_data.get('items', [])[:3] if 'items' in json_data else 'No items key'}")
+                    
+                    # Auto-detect format by checking the structure of the first item
+                    if 'items' in json_data and len(json_data['items']) > 0:
+                        first_item = json_data['items'][0]
+                        is_simple_format = isinstance(first_item, str)
+                        logger.debug(f"Auto-detected format: {'simple' if is_simple_format else 'complex'} (first item type: {type(first_item).__name__})")
+                        
+                        if is_simple_format:
+                            # Simple format: items are strings
+                            parsed_items = SimpleTranscriptItems(**json_data)
+                            logger.debug(f"Successfully created simple Pydantic model")
+                            success = True
+                        else:
+                            # Complex format: items are objects with category/question
+                            if simple_format:
+                                # User wanted simple but got complex - convert it
+                                complex_items = TranscriptItems(**json_data)
+                                simple_items = [item.question for item in complex_items.items]
+                                parsed_items = SimpleTranscriptItems(items=simple_items)
+                                logger.debug(f"Successfully converted complex to simple format")
+                                success = True
+                            else:
+                                # User wanted complex and got complex - use as is
+                                parsed_items = TranscriptItems(**json_data)
+                                logger.debug(f"Successfully created complex Pydantic model")
+                                success = True
+                    else:
+                        logger.debug("No items found in JSON data")
+                        # Try with the requested format
+                        if simple_format:
+                            parsed_items = SimpleTranscriptItems(**json_data)
+                        else:
+                            parsed_items = TranscriptItems(**json_data)
+                        success = True
                 except json.JSONDecodeError as json_err:
                     # If direct parsing fails, try extraction methods
                     logger.debug(f"Direct JSON parsing failed: {str(json_err)}")
@@ -772,7 +816,32 @@ async def _process_itemize_transcript_async(
                             try:
                                 json_data = json.loads(extracted)
                                 logger.debug(f"Parsed extracted JSON with {len(json_data)} keys")
-                                parsed_items = TranscriptItems(**json_data)
+                                
+                                # Auto-detect format by checking the structure of the first item
+                                if 'items' in json_data and len(json_data['items']) > 0:
+                                    first_item = json_data['items'][0]
+                                    is_simple_format = isinstance(first_item, str)
+                                    
+                                    if is_simple_format:
+                                        parsed_items = SimpleTranscriptItems(**json_data)
+                                        logger.debug(f"Successfully created simple Pydantic model from extracted JSON")
+                                    else:
+                                        if simple_format:
+                                            # Convert complex to simple
+                                            complex_items = TranscriptItems(**json_data)
+                                            simple_items = [item.question for item in complex_items.items]
+                                            parsed_items = SimpleTranscriptItems(items=simple_items)
+                                            logger.debug(f"Successfully converted complex to simple format from extracted JSON")
+                                        else:
+                                            parsed_items = TranscriptItems(**json_data)
+                                            logger.debug(f"Successfully created complex Pydantic model from extracted JSON")
+                                else:
+                                    # No items, try with requested format
+                                    if simple_format:
+                                        parsed_items = SimpleTranscriptItems(**json_data)
+                                    else:
+                                        parsed_items = TranscriptItems(**json_data)
+                                
                                 success = True
                                 json_extracted = True
                             except Exception as je:
@@ -785,7 +854,32 @@ async def _process_itemize_transcript_async(
                             try:
                                 json_data = json.loads(match.strip())
                                 logger.debug(f"Parsed JSON from generic code block with {len(json_data)} keys")
-                                parsed_items = TranscriptItems(**json_data)
+                                
+                                # Auto-detect format by checking the structure of the first item
+                                if 'items' in json_data and len(json_data['items']) > 0:
+                                    first_item = json_data['items'][0]
+                                    is_simple_format = isinstance(first_item, str)
+                                    
+                                    if is_simple_format:
+                                        parsed_items = SimpleTranscriptItems(**json_data)
+                                        logger.debug(f"Successfully created simple Pydantic model from generic code block")
+                                    else:
+                                        if simple_format:
+                                            # Convert complex to simple
+                                            complex_items = TranscriptItems(**json_data)
+                                            simple_items = [item.question for item in complex_items.items]
+                                            parsed_items = SimpleTranscriptItems(items=simple_items)
+                                            logger.debug(f"Successfully converted complex to simple format from generic code block")
+                                        else:
+                                            parsed_items = TranscriptItems(**json_data)
+                                            logger.debug(f"Successfully created complex Pydantic model from generic code block")
+                                else:
+                                    # No items, try with requested format
+                                    if simple_format:
+                                        parsed_items = SimpleTranscriptItems(**json_data)
+                                    else:
+                                        parsed_items = TranscriptItems(**json_data)
+                                
                                 success = True
                                 json_extracted = True
                                 break
@@ -801,7 +895,32 @@ async def _process_itemize_transcript_async(
                                 potential_json = match.group(1)
                                 json_data = json.loads(potential_json)
                                 logger.debug(f"Parsed JSON from curly braces with {len(json_data)} keys")
-                                parsed_items = TranscriptItems(**json_data)
+                                
+                                # Auto-detect format by checking the structure of the first item
+                                if 'items' in json_data and len(json_data['items']) > 0:
+                                    first_item = json_data['items'][0]
+                                    is_simple_format = isinstance(first_item, str)
+                                    
+                                    if is_simple_format:
+                                        parsed_items = SimpleTranscriptItems(**json_data)
+                                        logger.debug(f"Successfully created simple Pydantic model from curly braces")
+                                    else:
+                                        if simple_format:
+                                            # Convert complex to simple
+                                            complex_items = TranscriptItems(**json_data)
+                                            simple_items = [item.question for item in complex_items.items]
+                                            parsed_items = SimpleTranscriptItems(items=simple_items)
+                                            logger.debug(f"Successfully converted complex to simple format from curly braces")
+                                        else:
+                                            parsed_items = TranscriptItems(**json_data)
+                                            logger.debug(f"Successfully created complex Pydantic model from curly braces")
+                                else:
+                                    # No items, try with requested format
+                                    if simple_format:
+                                        parsed_items = SimpleTranscriptItems(**json_data)
+                                    else:
+                                        parsed_items = TranscriptItems(**json_data)
+                                
                                 success = True
                                 json_extracted = True
                         except Exception:
@@ -810,21 +929,23 @@ async def _process_itemize_transcript_async(
                     # Fall back to retry parser if all extraction attempts fail
                     if not json_extracted:
                         logger.debug("All JSON extraction attempts failed, attempting retry parser")
-                        parsed_items = await retry_parser.aparse_with_prompt(response_text, formatted_prompt)
+                        # Use the original prompt object for retry parser
+                        parsed_items = await retry_parser.aparse_with_prompt(response_text, prompt)
                         logger.debug("Retry parser succeeded")
                         success = True
                 
             except ValidationError as ve:
                 logger.debug(f"Validation error: {ve}")
                 logger.debug("Attempting retry parser")
-                parsed_items = await retry_parser.aparse_with_prompt(response_text, formatted_prompt)
+                # Use the original prompt object for retry parser
+                parsed_items = await retry_parser.aparse_with_prompt(response_text, prompt)
                 logger.debug("Retry parser succeeded")
                 success = True
             
         except Exception as e:
             logging.error(f"ERROR PROCESSING TRANSCRIPT {i+1} (attempt {retry_count+1}): {type(e).__name__}: {e}")
-            # import traceback # Keep for debugging if needed, but can be noisy
-            # logging.error(f"TRACEBACK:\\n{traceback.format_exc()}")
+            import traceback # Keep for debugging if needed, but can be noisy
+            logging.error(f"TRACEBACK:\n{traceback.format_exc()}")
             retry_count += 1
             if retry_count > max_retries:
                 logging.error(f"FAILED TO PROCESS AFTER {max_retries} RETRIES")
@@ -845,7 +966,7 @@ async def _process_itemize_transcript_async(
         return False, error_message
 
 async def _process_itemize_batch_async(
-    llm, prompt, rows, indices, parser, retry_parser, provider, total_count, max_retries, retry_delay, content_column
+    llm, prompt, rows, indices, parser, retry_parser, provider, total_count, max_retries, retry_delay, content_column, simple_format
 ):
     """
     Process a batch of transcripts asynchronously for itemization.
@@ -876,9 +997,16 @@ async def _process_itemize_batch_async(
         if len(text) < 50:
             logger.warning(f"Transcript {idx+1} is very short ({len(text)} chars)")
         
+        try:
+            format_instructions = parser.get_format_instructions()
+            logger.debug(f"Got format instructions: {len(format_instructions)} chars")
+        except Exception as e:
+            logger.error(f"Error getting format instructions: {type(e).__name__}: {e}")
+            raise
+            
         formatted_prompt = prompt.format(
             text=text, 
-            format_instructions=parser.get_format_instructions()
+            format_instructions=format_instructions
         )
         
         # Enhanced debugging: Log the formatted prompt to see if transcript is included
@@ -886,7 +1014,7 @@ async def _process_itemize_batch_async(
         
         task = _process_itemize_transcript_async(
             llm, prompt, formatted_prompt, text, parser, retry_parser, 
-            provider, idx, total_count, max_retries, retry_delay
+            provider, idx, total_count, max_retries, retry_delay, simple_format
         )
         tasks.append(task)
     
@@ -924,6 +1052,7 @@ async def _transform_transcripts_itemize_async(
     fresh: bool = False,
     inspect: bool = True,
     max_retries: int = 2,
+    simple_format: bool = False,
     retry_delay: float = 1.0,
     openai_api_key: str = None,
     sample_size: Optional[int] = None
@@ -965,9 +1094,9 @@ async def _transform_transcripts_itemize_async(
                 # Fallback: Load processed data but clearly mark what it is
                 cached_df = pd.read_parquet(cached_parquet_path)
                 examples = []
-                for i in range(min(5, len(cached_df))):
+                for i in range(min(20, len(cached_df))):
                     cached_row = cached_df.iloc[i]
-                    example = f"[PROCESSED OUTPUT]: {cached_row[content_column][:200]}..."
+                    example = f"[PROCESSED OUTPUT]: {cached_row[content_column][:500]}..."
                     examples.append(example)
             
             # Always determine what template was used, even from cached data
@@ -1031,7 +1160,14 @@ async def _transform_transcripts_itemize_async(
     if inspect:
         inspect_data(df, content_column)
 
-    parser = PydanticOutputParser(pydantic_object=TranscriptItems)
+    # Choose parser based on format preference
+    if simple_format:
+        parser = PydanticOutputParser(pydantic_object=SimpleTranscriptItems)
+        logging.info("Using simple format parser for string lists")
+    else:
+        parser = PydanticOutputParser(pydantic_object=TranscriptItems)
+        logging.info("Using complex format parser with categories")
+    
     logging.info(f"Parser format instructions:\n{parser.get_format_instructions()}")
 
     if provider.lower() == 'ollama':
@@ -1117,7 +1253,7 @@ async def _transform_transcripts_itemize_async(
         
         all_results = await _process_itemize_batch_async(
             llm, prompt, valid_rows, valid_indices, parser, retry_parser, 
-            provider, len(df), max_retries, retry_delay, content_column
+            provider, len(df), max_retries, retry_delay, content_column, simple_format
         )
         
         with open(text_file_path, 'w') as f:
@@ -1136,7 +1272,13 @@ async def _transform_transcripts_itemize_async(
                 if i < 20:
                     if success:
                         # For successful itemization, show the parsed items
-                        after_text = "\n".join([f"{item.category}: {item.question}" for item in data.items])
+                        # Detect the actual format of the parsed data
+                        if isinstance(data, SimpleTranscriptItems):
+                            # Simple format: just strings
+                            after_text = "\n".join(data.items)
+                        else:
+                            # Complex format: category and question
+                            after_text = "\n".join([f"{item.category}: {item.question}" for item in data.items])
                     else:
                         # For failed itemization, show the error
                         after_text = str(data)
@@ -1144,19 +1286,37 @@ async def _transform_transcripts_itemize_async(
                 
                 if success:
                     logging.info(f"SUCCESSFULLY PARSED {len(data.items)} ITEMS:")
-                    for idx, item in enumerate(data.items):
-                        logging.info(f"ITEM {idx+1}: {item.category}: {item.question}")
-                    for item in data.items:
-                        # Create new row with item data
-                        new_row = row.copy()
-                        new_row['category'] = item.category
-                        new_row['question'] = item.question
-                        combined_text = item.category + ": " + item.question
-                        new_row[content_column] = combined_text
-                        transformed_rows.append(new_row)
+                    
+                    # Detect the actual format of the parsed data
+                    if isinstance(data, SimpleTranscriptItems):
+                        # Simple format: just strings
+                        for idx, item_text in enumerate(data.items):
+                            logging.info(f"ITEM {idx+1}: {item_text}")
                         
-                        # Write to the text file
-                        f.write(f"{item.category}: {item.question}\n")
+                        for item_text in data.items:
+                            # Create new row with item data
+                            new_row = row.copy()
+                            new_row[content_column] = item_text
+                            transformed_rows.append(new_row)
+                            
+                            # Write to the text file
+                            f.write(f"{item_text}\n")
+                    else:
+                        # Complex format: category and question  
+                        for idx, item in enumerate(data.items):
+                            logging.info(f"ITEM {idx+1}: {item.category}: {item.question}")
+                        
+                        for item in data.items:
+                            # Create new row with item data
+                            new_row = row.copy()
+                            new_row['category'] = item.category
+                            new_row['question'] = item.question
+                            combined_text = item.category + ": " + item.question
+                            new_row[content_column] = combined_text
+                            transformed_rows.append(new_row)
+                            
+                            # Write to the text file
+                            f.write(f"{item.category}: {item.question}\n")
                 else:
                     new_row = row.copy()
                     new_row[content_column] = data
