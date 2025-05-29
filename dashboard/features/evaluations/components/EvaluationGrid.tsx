@@ -9,6 +9,7 @@ interface EvaluationGridProps {
   scoreNames: Record<string, string>
   onSelect: (evaluation: Schema['Evaluation']['type']) => void
   onDelete: (evaluationId: string) => Promise<boolean>
+  evaluationRefsMap?: React.MutableRefObject<Map<string, HTMLDivElement | null>>
 }
 
 export const EvaluationGrid = React.memo(({
@@ -17,7 +18,8 @@ export const EvaluationGrid = React.memo(({
   scorecardNames,
   scoreNames,
   onSelect,
-  onDelete
+  onDelete,
+  evaluationRefsMap
 }: EvaluationGridProps) => {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -30,6 +32,7 @@ export const EvaluationGrid = React.memo(({
           scoreNames={scoreNames}
           onSelect={onSelect}
           onDelete={onDelete}
+          evaluationRefsMap={evaluationRefsMap}
         />
       ))}
     </div>

@@ -185,6 +185,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                   (pathname === item.path ||
                   (item.name === "Feedback" && (pathname === "/feedback-queues" || pathname.startsWith("/feedback"))) ||
                   (item.name === "Items" && pathname.startsWith(item.path)) ||
+                  (item.name === "Evaluations" && pathname.startsWith(item.path)) ||
                   (item.name === "Scorecards" && pathname.startsWith(item.path)) ||
                   (item.name === "Reports" && pathname.startsWith(item.path)))
                     ? "bg-secondary text-secondary-foreground"
@@ -197,6 +198,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                   (pathname === item.path ||
                   (item.name === "Feedback" && (pathname === "/feedback-queues" || pathname.startsWith("/feedback"))) ||
                   (item.name === "Items" && pathname.startsWith(item.path)) ||
+                  (item.name === "Evaluations" && pathname.startsWith(item.path)) ||
                   (item.name === "Scorecards" && pathname.startsWith(item.path)) ||
                   (item.name === "Reports" && pathname.startsWith(item.path)))
                     ? "text-secondary-foreground"

@@ -100,6 +100,25 @@ export default function ScorecardsComponent({
   const [shouldExpandExamples, setShouldExpandExamples] = useState(false)
   const router = useRouter()
   const pathname = usePathname()
+  
+  // Ref map to track scorecard elements for scroll-to-view functionality
+  const scorecardRefsMap = React.useRef<Map<string, HTMLDivElement | null>>(new Map())
+  
+  // Function to scroll to a selected scorecard
+  const scrollToSelectedScorecard = React.useCallback((scorecardId: string) => {
+    // Use requestAnimationFrame to ensure the layout has updated after selection
+    requestAnimationFrame(() => {
+      const scorecardElement = scorecardRefsMap.current.get(scorecardId);
+      if (scorecardElement) {
+        scorecardElement.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start', // Align to the top of the container
+          inline: 'nearest'
+        });
+      }
+    });
+  }, []);
+  
   const params = useParams()
 
   // Handle deep linking - check if we're on a specific scorecard or score page
@@ -217,6 +236,13 @@ export default function ScorecardsComponent({
       // Update URL without triggering a navigation/re-render
       const newPathname = scorecard ? `/lab/scorecards/${scorecard.id}` : '/lab/scorecards';
       window.history.pushState(null, '', newPathname);
+      
+      // Scroll to the selected scorecard after a brief delay to allow layout updates
+      if (scorecard) {
+        setTimeout(() => {
+          scrollToSelectedScorecard(scorecard.id);
+        }, 100);
+      }
       
       if (scorecard && isNarrowViewport) {
         setIsFullWidth(true);
@@ -1047,14 +1073,20 @@ export default function ScorecardsComponent({
                     }
 
                     return (
-                      <ScorecardComponent
+                      <div
                         key={scorecard.id}
-                        variant="grid"
-                        score={scorecardData}
-                        isSelected={selectedScorecard?.id === scorecard.id}
-                        onClick={() => handleSelectScorecard(scorecard)}
-                        onEdit={() => handleEdit(scorecard)}
-                      />
+                        ref={(el) => {
+                          scorecardRefsMap.current.set(scorecard.id, el);
+                        }}
+                      >
+                        <ScorecardComponent
+                          variant="grid"
+                          score={scorecardData}
+                          isSelected={selectedScorecard?.id === scorecard.id}
+                          onClick={() => handleSelectScorecard(scorecard)}
+                          onEdit={() => handleEdit(scorecard)}
+                        />
+                      </div>
                     )
                   })}
               </div>

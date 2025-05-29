@@ -1396,6 +1396,11 @@ export function ScoreComponent({
         variant === 'detail' && "h-full flex flex-col overflow-hidden",
         className
       )}
+      style={{
+        ...(isSelected && variant === 'grid' && {
+          boxShadow: 'inset 0 0 0 0.5rem var(--secondary)'
+        })
+      }}
       {...props}
     >
       <div className={cn(
