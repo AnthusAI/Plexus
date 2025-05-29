@@ -159,6 +159,8 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
 
   const pathname = usePathname()
 
+  const isActivityRoute = pathname === "/lab/activity" || pathname.startsWith("/lab/tasks/");
+
   const LeftSidebar = () => {
     return (
       <div className={`flex flex-col h-full py-2 bg-frame ${isMobile ? 'pr-3' : 'pr-2'}`}>
@@ -187,7 +189,8 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                   (item.name === "Items" && pathname.startsWith(item.path)) ||
                   (item.name === "Evaluations" && pathname.startsWith(item.path)) ||
                   (item.name === "Scorecards" && pathname.startsWith(item.path)) ||
-                  (item.name === "Reports" && pathname.startsWith(item.path)))
+                  (item.name === "Reports" && pathname.startsWith(item.path)) ||
+                  (item.name === "Activity" && isActivityRoute))
                     ? "bg-secondary text-secondary-foreground"
                     : "hover:bg-accent hover:text-accent-foreground"
                 } ${isLeftSidebarOpen ? '' : 'px-2'} ${
@@ -200,7 +203,8 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                   (item.name === "Items" && pathname.startsWith(item.path)) ||
                   (item.name === "Evaluations" && pathname.startsWith(item.path)) ||
                   (item.name === "Scorecards" && pathname.startsWith(item.path)) ||
-                  (item.name === "Reports" && pathname.startsWith(item.path)))
+                  (item.name === "Reports" && pathname.startsWith(item.path)) ||
+                  (item.name === "Activity" && isActivityRoute))
                     ? "text-secondary-foreground"
                     : "text-navigation-icon"
                 }`} />
