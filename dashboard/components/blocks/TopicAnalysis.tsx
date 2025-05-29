@@ -244,8 +244,8 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
                 </Accordion>
 
                 {/* Fine-tuning Section */}
-                <Accordion type="multiple" defaultValue={[]} className="w-full">
-                  <AccordionItem value="fine-tuning">
+                <Accordion type="multiple" defaultValue={[]} className="w-full border-b-0">
+                  <AccordionItem value="fine-tuning" className="border-b-0">
                     <AccordionTrigger className="text-base font-medium">
                       Fine-tuning
                       {fineTuning.representation_model_provider && (
@@ -262,27 +262,6 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
                     </AccordionContent>
                   </AccordionItem>
                 </Accordion>
-
-                {/* Debug Information Section */}
-                {/* Temporarily disabled to prevent duplicate topic name display
-                {data.debug_info && (
-                  <Accordion type="multiple" defaultValue={[]} className="w-full">
-                    <AccordionItem value="debug-info">
-                      <AccordionTrigger className="text-base font-medium">
-                        Debug Information
-                        {data.debug_info.repetition_detected && (
-                          <Badge variant="destructive" className="ml-2">
-                            Repetition Detected
-                          </Badge>
-                        )}
-                      </AccordionTrigger>
-                      <AccordionContent>
-                        <DebugInfoSection debugInfo={data.debug_info} />
-                      </AccordionContent>
-                    </AccordionItem>
-                  </Accordion>
-                )}
-                */}
               </div>
             </AccordionContent>
           </AccordionItem>
