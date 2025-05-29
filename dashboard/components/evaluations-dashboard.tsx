@@ -421,6 +421,25 @@ export default function EvaluationsDashboard({
   const [selectedScoreResultId, setSelectedScoreResultId] = useState<string | null>(initialSelectedScoreResultId)
   const [isShareModalOpen, setIsShareModalOpen] = useState(false)
   const [shareUrl, setShareUrl] = useState<string | null>(null)
+  
+  // Ref map to track evaluation elements for scroll-to-view functionality
+  const evaluationRefsMap = useRef<Map<string, HTMLDivElement | null>>(new Map())
+  
+  // Function to scroll to a selected evaluation
+  const scrollToSelectedEvaluation = useCallback((evaluationId: string) => {
+    // Use requestAnimationFrame to ensure the layout has updated after selection
+    requestAnimationFrame(() => {
+      const evaluationElement = evaluationRefsMap.current.get(evaluationId);
+      if (evaluationElement) {
+        evaluationElement.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start', // Align to the top of the container
+          inline: 'nearest'
+        });
+      }
+    });
+  }, []);
+  
   // Use a ref to track if this is the initial render for URL updates
   const isInitialUrlUpdateRef = useRef(true);
 
@@ -828,12 +847,17 @@ export default function EvaluationsDashboard({
         const newPathname = `/lab/evaluations/${evaluationId}`;
         window.history.pushState(null, '', newPathname);
         
+        // Scroll to the selected evaluation after a brief delay to allow layout updates
+        setTimeout(() => {
+          scrollToSelectedEvaluation(evaluationId);
+        }, 100);
+        
         if (isNarrowViewport) {
           setIsFullWidth(true);
         }
       }
     };
-  }, [selectedEvaluationId, isNarrowViewport]);
+  }, [selectedEvaluationId, isNarrowViewport, scrollToSelectedEvaluation]);
 
   if (showLoading) {
     return (
@@ -895,6 +919,9 @@ export default function EvaluationsDashboard({
                   <div 
                     key={evaluation.id} 
                     onClick={clickHandler}
+                    ref={(el) => {
+                      evaluationRefsMap.current.set(evaluation.id, el);
+                    }}
                   >
                     <TaskDisplay
                       variant="grid"

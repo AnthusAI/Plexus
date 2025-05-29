@@ -151,6 +151,11 @@ const Task = <TData extends BaseTaskData = BaseTaskData>({
         ${variant === 'grid' ? 'cursor-pointer hover:bg-accent/50' : ''}
         ${effectiveIsSelected ? 'bg-card-selected' : 'bg-card'}
       `}
+      style={{
+        ...(effectiveIsSelected && variant === 'grid' && {
+          boxShadow: 'inset 0 0 0 0.5rem var(--secondary)'
+        })
+      }}
       onClick={variant === 'grid' && !isLoading ? onClick : undefined}
       role={variant === 'grid' ? 'button' : 'article'}
       tabIndex={variant === 'grid' ? 0 : undefined}

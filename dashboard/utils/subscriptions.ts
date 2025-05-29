@@ -1054,4 +1054,61 @@ export function observeItemUpdates() {
       });
     }
   };
+}
+
+export function observeScoreResultChanges() {
+  const client = getClient();
+  const subscriptions: { unsubscribe: () => void }[] = [];
+  
+  return {
+    subscribe(handler: SubscriptionHandler<{ action: 'create' | 'update' | 'delete', data?: any }>) {
+      // Subscribe to create events
+      const createSub = ((client.models.ScoreResult as any).onCreate() as AmplifySubscription).subscribe({
+        next: (response: any) => {
+          console.log('📊 ScoreResult onCreate triggered:', response);
+          // Trigger a broad refresh instead of trying to parse specific data
+          handler.next({ data: { action: 'create', data: response } });
+        },
+        error: (error: Error) => {
+          console.error('📊 ScoreResult onCreate error:', error);
+          handler.error(error);
+        }
+      });
+      subscriptions.push(createSub);
+
+      // Subscribe to update events
+      const updateSub = ((client.models.ScoreResult as any).onUpdate() as AmplifySubscription).subscribe({
+        next: (response: any) => {
+          console.log('📊 ScoreResult onUpdate triggered:', response);
+          // Trigger a broad refresh instead of trying to parse specific data
+          handler.next({ data: { action: 'update', data: response } });
+        },
+        error: (error: Error) => {
+          console.error('📊 ScoreResult onUpdate error:', error);
+          handler.error(error);
+        }
+      });
+      subscriptions.push(updateSub);
+
+      // Subscribe to delete events
+      const deleteSub = ((client.models.ScoreResult as any).onDelete() as AmplifySubscription).subscribe({
+        next: (response: any) => {
+          console.log('📊 ScoreResult onDelete triggered:', response);
+          // Trigger a broad refresh instead of trying to parse specific data
+          handler.next({ data: { action: 'delete', data: response } });
+        },
+        error: (error: Error) => {
+          console.error('📊 ScoreResult onDelete error:', error);
+          handler.error(error);
+        }
+      });
+      subscriptions.push(deleteSub);
+
+      return {
+        unsubscribe: () => {
+          subscriptions.forEach(sub => sub.unsubscribe());
+        }
+      };
+    }
+  };
 } 
