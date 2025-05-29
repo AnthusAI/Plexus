@@ -1903,6 +1903,95 @@ class AccuracyEvaluation(Evaluation):
         self.completed_scores = set()  # Track which scores have completed all their results
         self.override_data = {}  # Initialize empty override data dictionary
         self.logger = logging.getLogger('plexus/evaluation')  # Add dedicated logger
+        
+        # Load override data from CSV files
+        self._load_override_data_from_csv()
+
+    def _load_override_data_from_csv(self):
+        """Load override data from CSV files using the scorecard's configuration."""
+        try:
+            # Look for scores that have column mappings defined in their data configuration
+            for score_config in self.scorecard.scores:
+                score_name = score_config.get('name')
+                if not score_name:
+                    continue
+                
+                # Check if this score has data configuration with column mappings
+                data_config = score_config.get('data', {})
+                if not data_config:
+                    continue
+                
+                # Look for searches with column mappings
+                searches = data_config.get('searches', [])
+                for search in searches:
+                    item_list_filename = search.get('item_list_filename')
+                    column_mappings = search.get('column_mappings', [])
+                    
+                    if not item_list_filename or not column_mappings:
+                        continue
+                    
+                    try:
+                        # Load the CSV file
+                        df = pd.read_csv(item_list_filename)
+                        
+                        # Find form_id column
+                        form_id_col = None
+                        for col in df.columns:
+                            if col.lower() in ['form_id', 'f_id']:
+                                form_id_col = col
+                                break
+                        
+                        if form_id_col is None:
+                            self.logging.warning(f"No form_id column found in {item_list_filename}")
+                            continue
+                        
+                        # Process each column mapping
+                        for mapping in column_mappings:
+                            dataframe_column = mapping.get('dataframe_column')
+                            csv_column = mapping.get('csv_column')
+                            
+                            if not dataframe_column or not csv_column:
+                                continue
+                            
+                            # Check if the dataframe_column matches our score name
+                            if dataframe_column == score_name:
+                                # Find the CSV column (case-insensitive)
+                                actual_csv_col = None
+                                for col in df.columns:
+                                    if col.lower() == csv_column.lower():
+                                        actual_csv_col = col
+                                        break
+                                
+                                if actual_csv_col:
+                                    # Load the override data
+                                    for _, row in df.iterrows():
+                                        form_id = row[form_id_col]
+                                        if pd.isna(form_id):
+                                            continue
+                                        
+                                        form_id = int(form_id)
+                                        answer_value = row[actual_csv_col]
+                                        
+                                        if pd.notna(answer_value):
+                                            if form_id not in self.override_data:
+                                                self.override_data[form_id] = {}
+                                            self.override_data[form_id][score_name] = str(answer_value).strip().lower()
+                                    
+                                    self.logging.info(f"Loaded override data for score '{score_name}' from {item_list_filename}: {len([r for r in df.iterrows() if pd.notna(r[1][form_id_col])])} records")
+                                else:
+                                    self.logging.warning(f"CSV column '{csv_column}' not found in {item_list_filename}")
+                    
+                    except Exception as e:
+                        self.logging.warning(f"Failed to load override data from {item_list_filename}: {e}")
+            
+            if self.override_data:
+                total_overrides = sum(len(scores) for scores in self.override_data.values())
+                self.logging.info(f"Loaded {total_overrides} override entries for {len(self.override_data)} form IDs")
+            else:
+                self.logging.info("No override data loaded from CSV files")
+                
+        except Exception as e:
+            self.logging.warning(f"Failed to load override data: {e}")
 
     async def run(self, tracker, progress_callback=None):
         """Modified run method to accept tracker argument"""
