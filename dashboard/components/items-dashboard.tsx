@@ -125,7 +125,8 @@ const MemoizedGridItemCard = React.memo(({
   selectedItem, 
   handleItemClick, 
   getBadgeVariant, 
-  scoreCountManagerRef 
+  scoreCountManagerRef,
+  itemRefsMap
 }: {
   item: Item;
   scoreCount: ScoreResultCount | undefined;
@@ -133,6 +134,7 @@ const MemoizedGridItemCard = React.memo(({
   handleItemClick: (itemId: string) => void;
   getBadgeVariant: (status: string) => string;
   scoreCountManagerRef: React.MutableRefObject<ScoreResultCountManager | null>;
+  itemRefsMap: React.MutableRefObject<Map<string, HTMLDivElement | null>>;
 }) => {
   const itemWithCount = useMemo(() => ({
     ...item,
@@ -148,6 +150,17 @@ const MemoizedGridItemCard = React.memo(({
   
   const handleClick = useCallback(() => handleItemClick(item.id), [handleItemClick, item.id]);
   
+  // Combined ref callback to handle both score count observation and item ref tracking
+  const combinedRef = useCallback((el: HTMLDivElement | null) => {
+    // Store ref for scroll-to-view functionality
+    itemRefsMap.current.set(item.id, el);
+    
+    // Handle score count observation
+    if (el && scoreCountManagerRef.current) {
+      scoreCountManagerRef.current.observeItem(el, item.id);
+    }
+  }, [item.id, scoreCountManagerRef, itemRefsMap]);
+  
   return (
     <ItemCard
       key={item.id}
@@ -156,11 +169,7 @@ const MemoizedGridItemCard = React.memo(({
       isSelected={selectedItem === item.id}
       onClick={handleClick}
       getBadgeVariant={getBadgeVariant}
-      ref={(el) => {
-        if (el && scoreCountManagerRef.current) {
-          scoreCountManagerRef.current.observeItem(el, item.id);
-        }
-      }}
+      ref={combinedRef}
     />
   );
 });
@@ -453,6 +462,23 @@ function ItemsDashboardInner() {
   const [failedItemFetches, setFailedItemFetches] = useState<Set<string>>(new Set());
   const refetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
+  // Ref map to track item elements for scroll-to-view functionality
+  const itemRefsMap = useRef<Map<string, HTMLDivElement | null>>(new Map());
+  
+  // Function to scroll to a selected item
+  const scrollToSelectedItem = useCallback((itemId: string) => {
+    // Use requestAnimationFrame to ensure the layout has updated after selection
+    requestAnimationFrame(() => {
+      const itemElement = itemRefsMap.current.get(itemId);
+      if (itemElement) {
+        itemElement.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start', // Align to the top of the container
+          inline: 'nearest'
+        });
+      }
+    });
+  }, []);
   
   // Function to fetch a specific item by ID
   const fetchSpecificItem = useCallback(async (itemId: string) => {
@@ -1876,6 +1902,11 @@ function ItemsDashboardInner() {
     const newUrl = `/lab/items/${itemId}`
     window.history.replaceState(null, '', newUrl)
     
+    // Scroll to the selected item after a brief delay to allow layout updates
+    setTimeout(() => {
+      scrollToSelectedItem(itemId);
+    }, 100);
+    
     if (isNarrowViewport) {
       setIsFullWidth(true)
     }
@@ -2016,6 +2047,7 @@ function ItemsDashboardInner() {
                               handleItemClick={handleItemClick}
                               getBadgeVariant={getBadgeVariant}
                               scoreCountManagerRef={scoreCountManagerRef}
+                              itemRefsMap={itemRefsMap}
                             />
                           );
                         })}
@@ -2087,6 +2119,7 @@ function ItemsDashboardInner() {
                               handleItemClick={handleItemClick}
                               getBadgeVariant={getBadgeVariant}
                               scoreCountManagerRef={scoreCountManagerRef}
+                              itemRefsMap={itemRefsMap}
                             />
                           );
                         })}

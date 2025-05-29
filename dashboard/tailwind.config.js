@@ -11,7 +11,9 @@ module.exports = {
         { pattern: /^text-.*-foreground$/ },
         'grid',
         'bg-progress-background',
-        'bg-progress-background-selected'
+        'bg-progress-background-selected',
+        'border-3',
+        'border-secondary'
     ],
     theme: {
         extend: {
@@ -19,6 +21,9 @@ module.exports = {
                 lg: 'var(--radius)',
                 md: 'calc(var(--radius) - 2px)',
                 sm: 'calc(var(--radius) - 4px)'
+            },
+            borderWidth: {
+                '3': '0.75rem'
             },
             colors: {
                 background: 'var(--background)',

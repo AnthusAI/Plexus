@@ -474,6 +474,11 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
         item.isNew && "new-item-shadow",
         className
       )}
+      style={{
+        ...(((variant === 'grid' && isSelected) || variant === 'detail') && {
+          boxShadow: 'inset 0 0 0 0.5rem var(--secondary)'
+        })
+      }}
       {...htmlProps}
     >
       <div className={cn(

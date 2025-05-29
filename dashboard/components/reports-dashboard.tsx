@@ -558,6 +558,24 @@ export default function ReportsDashboard({
   const [subscriptions, setSubscriptions] = useState<{ unsubscribe: () => void }[]>([]);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const loadMoreRef = useRef<HTMLDivElement>(null);
+  
+  // Ref map to track report elements for scroll-to-view functionality
+  const reportRefsMap = useRef<Map<string, HTMLDivElement | null>>(new Map());
+  
+  // Function to scroll to a selected report
+  const scrollToSelectedReport = useCallback((reportId: string) => {
+    // Use requestAnimationFrame to ensure the layout has updated after selection
+    requestAnimationFrame(() => {
+      const reportElement = reportRefsMap.current.get(reportId);
+      if (reportElement) {
+        reportElement.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start', // Align to the top of the container
+          inline: 'nearest'
+        });
+      }
+    });
+  }, []);
 
   // Fetch account ID
   useEffect(() => {
@@ -1008,6 +1026,14 @@ export default function ReportsDashboard({
       setSelectedReportId(id);
       const newPathname = id ? `/lab/reports/${id}` : '/lab/reports';
       window.history.pushState(null, '', newPathname);
+      
+      // Scroll to the selected report after a brief delay to allow layout updates
+      if (id) {
+        setTimeout(() => {
+          scrollToSelectedReport(id);
+        }, 100);
+      }
+      
       if (isNarrowViewport && id) {
           setIsFullWidth(true);
       }
@@ -1386,7 +1412,14 @@ export default function ReportsDashboard({
                 };
                 
                 return (
-                  <div key={report.id} onClick={clickHandler} className="cursor-pointer">
+                  <div 
+                    key={report.id} 
+                    onClick={clickHandler} 
+                    className="cursor-pointer"
+                    ref={(el) => {
+                      reportRefsMap.current.set(report.id, el);
+                    }}
+                  >
                     <ReportTask
                       variant="grid"
                       task={taskData}
