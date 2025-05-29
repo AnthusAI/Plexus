@@ -145,185 +145,139 @@ Item: a
   })
 ```
 
-## Implementation Plan
+## Step-by-Step Implementation Plan
 
-### Project Structure Considerations
+### Step 1: Schema Migration (Deploy First - ~30 min deployment time) 🟡
 
-**Multi-Project Coordination Required:**
-This feature spans two separate repositories that must be updated in coordination:
-
-1. **Primary Project**: `Plexus` (current project)
-   - Contains the main Identifier model and search infrastructure
-   - Located at: `/Users/ryan.porter/Projects/Plexus` (example path)
-
-2. **External Project**: `Call-Criteria-Python` 
-   - Contains item creation code that sets identifiers
-   - Located at: `/Users/ryan.porter/Projects/Call-Criteria-Python` (adjacent folder)
-   - **Files requiring updates**:
-     - `api.py` - FastAPI application 
-     - `plexus_extensions/CallCriteriaDBCache.py` - Database cache processing
-     - Any utility functions for item creation
-
-**Development Notes:**
-- Both projects exist in the same parent directory but are separate repositories
-- The Call-Criteria-Python project imports and uses the Plexus dashboard client
-- Changes must be coordinated to avoid breaking existing functionality
-- Consider using feature flags during transition period
-
-### Phase 1: Schema Migration ⬜
+**Why First**: Schema changes take ~30 minutes to deploy, so we start this first and work on other tasks while it deploys.
 
 1. **Add Identifier Model**
-   - ⬜ Define `Identifier` model in `dashboard/amplify/data/resource.ts`
-   - ⬜ Add all required fields and relationships
-   - ⬜ Define GSIs optimized for exact-match searching
-   - ⬜ Deploy schema changes
+   - ✅ Define `Identifier` model in `dashboard/amplify/data/resource.ts`
+   - ✅ Add all required fields and relationships
+   - ✅ Define GSIs optimized for exact-match searching
+   - 🟡 Deploy schema changes (In Progress - User deploying)
 
 2. **Update Item Model**
-   - ⬜ Add `itemIdentifiers` relationship to existing `Item` model
-   - ⬜ Mark `identifiers` field as deprecated (comments only)
-   - ⬜ Deploy schema updates
+   - ✅ Add `itemIdentifiers` relationship to existing `Item` model
+   - ✅ Mark `identifiers` field as deprecated (comments only)
+   - 🟡 Deploy schema updates (In Progress - User deploying)
 
-3. **Create API Models**
+### Step 2: Create Reusable Identifier Component (While Schema Deploys) ✅
+
+**Why Second**: Can work on this while schema deploys. Creates the UI foundation we'll need.
+
+1. **Factor Out Existing Component**
+   - ✅ Locate current identifier display in feedback analysis report block
+   - ✅ Extract into reusable `IdentifierDisplay` component
+   - ✅ Make component data-agnostic (accepts array of identifier objects)
+
+2. **Component Interface Design**
+   ```typescript
+   interface IdentifierItem {
+     name: string;      // Required: "Customer ID", "Order ID", etc.
+     value: string;     // Required: "CUST-123456", "ORD-789012", etc.
+     url?: string;      // Optional: clickable link
+   }
+   
+   interface IdentifierListProps {
+     identifiers: IdentifierItem[];
+     className?: string;
+     // ... other styling props
+   }
+   ```
+
+3. **Implementation Tasks**
+   - ✅ Create `dashboard/components/ui/identifier-display.tsx` (Enhanced existing)
+   - ✅ Support both linked and non-linked identifiers
+   - ✅ Handle empty states gracefully
+   - ✅ Add proper TypeScript types
+
+4. **Storybook Story**
+   - ✅ Create `dashboard/stories/ui/IdentifierDisplay.stories.tsx` (Enhanced existing)
+   - ✅ Show various states: with URLs, without URLs, empty list
+   - ✅ Test different identifier types and lengths
+
+5. **Replace Existing Usage**
+   - ✅ Update feedback analysis report to use new component
+   - ✅ Ensure it works with existing JSON identifier data
+   - ✅ Verify no visual regressions
+
+### Step 3: Backend API Support ⬜
+
+**Why Third**: Schema should be deployed by now, can create backend utilities.
+
+1. **Create API Models**
    - ⬜ Create `plexus/dashboard/api/models/identifier.py`
    - ⬜ Add CRUD methods and exact-match search utilities
    - ⬜ Update `plexus/dashboard/api/models/__init__.py`
 
-### Phase 2: Data Migration ⬜
-
-1. **Migration Script**
-   - ⬜ Create CLI command `plexus identifiers migrate`
-   - ⬜ Read existing `Item` records with `identifiers` JSON
-   - ⬜ Parse JSON and create corresponding `Identifier` records
-   - ⬜ Handle duplicates and validation errors gracefully
-   - ⬜ Provide progress reporting and rollback capability
-
-2. **Validation Tools**
-   - ⬜ Create CLI command `plexus identifiers validate`
-   - ⬜ Compare JSON identifiers with Identifier table records
-   - ⬜ Report inconsistencies and missing data
-   - ⬜ Provide repair suggestions
-
-### Phase 3: Backend Implementation ⬜
-
-1. **Exact-Match Search Functions**
+2. **Exact-Match Search Functions**
    - ⬜ Create `plexus/utils/identifier_search.py`
    - ⬜ Implement `find_item_by_identifier(value, account_id)` - single exact match
    - ⬜ Implement `find_items_by_identifier_type(name, account_id)` - all identifiers of a type
    - ⬜ Add batch exact-match capabilities for multiple values
 
-2. **Item Management Updates**
-   - ⬜ Update item creation to automatically create `Identifier` records
-   - ⬜ Update item updates to sync identifier changes
-   - ⬜ Ensure atomic operations (item + identifiers)
+### Step 4: Update Call-Criteria-Python Project ⬜
 
-3. **API Enhancements**
-   - ⬜ Add exact-match search endpoints to GraphQL schema
-   - ⬜ Add identifier management mutations
-   - ⬜ Implement proper authorization and validation
+**Why Fourth**: Now we have the schema and tools to create both JSON and separate records.
 
-### Phase 4: External Code Dependencies ⬜
+1. **Identify Item Creation Code**
+   - ⬜ Locate item creation in `../Call-Criteria-Python/api.py`
+   - ⬜ Locate item creation in `../Call-Criteria-Python/plexus_extensions/CallCriteriaDBCache.py`
+   - ⬜ Document current identifier patterns (report_id, content_id, form_id)
 
-**CRITICAL**: Update Call-Criteria-Python project code to use the new Identifier model.
+2. **Create Dual-Write Utilities**
+   - ⬜ Create helper functions that write to both JSON field AND separate Identifier records
+   - ⬜ Ensure atomic operations (both succeed or both fail)
+   - ⬜ Handle errors gracefully
 
-1. **Identify and Update Item Creation Code**
-   - ⬜ **Locate item creation utilities**: Search for centralized functions that create items with identifiers in:
-     - `../Call-Criteria-Python/api.py`
-     - `../Call-Criteria-Python/plexus_extensions/CallCriteriaDBCache.py`
-     - Any utility modules that construct the identifiers JSON structure
-   - ⬜ **Analyze current implementation**: Document how identifiers are currently constructed (report_id, content_id, form_id patterns)
-   - ⬜ **Create transition utilities**: Build helper functions to create both JSON and separate Identifier records
+3. **Update Item Creation Logic**
+   - ⬜ Modify all item creation code to use dual-write utilities
+   - ⬜ Maintain backward compatibility with JSON field
+   - ⬜ Test in Call-Criteria development environment
 
-2. **Update Item Creation Logic**
-   - ⬜ **Modify existing item creation**: Update all locations where items are created to:
-     - Continue setting the `identifiers` JSON field (backward compatibility)
-     - Additionally call new identifier creation utilities
-     - Handle errors gracefully if identifier creation fails
-   - ⬜ **Create identifier management utilities**: Add functions like:
-     ```python
-     def create_item_with_identifiers(client, item_data, identifiers_list):
-         # Create item with JSON identifiers (existing)
-         item = create_item(client, item_data, identifiers=identifiers_list)
-         
-         # Create separate Identifier records (new)
-         for identifier in identifiers_list:
-             create_identifier_record(client, item.id, identifier)
-         
-         return item
-     ```
+### Step 5: Add Identifier Lookup to Frontend ⬜
 
-3. **Testing and Validation**
-   - ⬜ **Test in Call Criteria development environment**: Ensure updated code works with existing workflows
-   - ⬜ **Verify data consistency**: Confirm both JSON and Identifier records are created correctly
-   - ⬜ **Performance testing**: Ensure additional Identifier record creation doesn't impact performance
-   - ⬜ **Rollback plan**: Document how to revert changes if issues arise
+**Why Fifth**: Now we can start using the new search capabilities in the UI.
 
-4. **Deployment Coordination**
-   - ⬜ **Coordinate deployment**: Both Plexus and Call-Criteria-Python projects must be updated together
-   - ⬜ **Monitor transition**: Watch for any issues during the transition period
-   - ⬜ **Data validation**: Run validation tools to ensure consistency between JSON and Identifier table
+1. **Update IdentifierList Component**
+   - ⬜ Add support for loading identifiers from new Identifier records
+   - ⬜ Keep fallback to JSON field for backward compatibility
+   - ⬜ Add loading states
 
-### Phase 5: Frontend Updates ⬜
-
-1. **Display Components**
-   - ⬜ Update `IdentifierDisplay` component to use new model
-   - ⬜ Keep backward compatibility with JSON format
-   - ⬜ Add loading states for identifier fetching
-   - ⬜ Update `FeedbackItemView` and other components
-
-2. **Exact-Match Search Interface**
-   - ⬜ Create `IdentifierExactSearch` component for direct lookups
-   - ⬜ Add search input with exact-match feedback
+2. **Add Search Interface**
+   - ⬜ Create exact-match search component
    - ⬜ Integrate with existing search interfaces
-   - ⬜ Add filters by identifier type for scoped searches
+   - ⬜ Add "Find by Exact Identifier" functionality
 
-3. **Management Interface**
-   - ⬜ Add identifier management to item detail views
-   - ⬜ Allow adding/editing/removing identifiers
-   - ⬜ Provide bulk identifier operations
-   - ⬜ Add identifier analytics/reporting
+### Step 6: Data Migration ⬜
 
-### Phase 6: Search Integration ⬜
+**Why Sixth**: Once dual-write is working, migrate existing data.
 
-1. **Global Search**
-   - ⬜ Integrate exact-match identifier search into main search functionality
-   - ⬜ Add identifier results to search suggestions
-   - ⬜ Implement search result ranking for exact matches
+1. **Migration Script**
+   - ⬜ Create CLI command `plexus identifiers migrate`
+   - ⬜ Read existing `Item` records with `identifiers` JSON
+   - ⬜ Create corresponding `Identifier` records
+   - ⬜ Handle duplicates and validation errors
 
-2. **Dashboard Integration**
-   - ⬜ Add exact-match identifier search to items dashboard
-   - ⬜ Update filter interfaces to include identifier filters
-   - ⬜ Add "Find by Exact Identifier" quick actions
+2. **Validation Tools**
+   - ⬜ Create CLI command `plexus identifiers validate`
+   - ⬜ Compare JSON identifiers with Identifier table records
+   - ⬜ Report inconsistencies
 
-3. **API Search**
-   - ⬜ Add REST/GraphQL exact-match search endpoints
-   - ⬜ Support batch identifier lookups
-   - ⬜ Add search analytics and logging
+### Step 7: Optimize and Clean Up ⬜
 
-### Phase 7: Performance & Analytics ⬜
+**Why Last**: Once everything is working, optimize and clean up.
 
 1. **Performance Optimization**
-   - ⬜ Add caching for frequent exact-match identifier lookups
-   - ⬜ Optimize GSI query patterns for direct hits
-   - ⬜ Monitor and tune DynamoDB performance
-   - ⬜ Add performance metrics and alerting
+   - ⬜ Add caching for frequent lookups
+   - ⬜ Monitor GSI performance
+   - ⬜ Add performance metrics
 
-2. **Analytics Features**
-   - ⬜ Add identifier usage analytics
-   - ⬜ Detect duplicate identifiers (exact matches)
-   - ⬜ Provide identifier quality reports
-   - ⬜ Add identifier pattern recognition for data quality
-
-### Phase 8: Cleanup & Deprecation ⬜
-
-1. **Backward Compatibility**
-   - ⬜ Ensure all components work with both old and new systems
-   - ⬜ Add migration warnings for deprecated JSON usage
-   - ⬜ Provide clear upgrade paths
-
-2. **JSON Field Deprecation**
-   - ⬜ Mark `identifiers` JSON field as deprecated in schema
-   - ⬜ Remove write operations to JSON field
-   - ⬜ Plan eventual removal of JSON field (future major version)
+2. **Gradual Migration from JSON Field** (Low Priority)
+   - ⬜ Update components to prefer Identifier records over JSON
+   - ⬜ Add deprecation warnings for JSON field usage
+   - ⬜ Consider eventual removal of JSON field (future major version)
 
 ## Technical Considerations
 

@@ -1,5 +1,6 @@
+import React from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
-import { IdentifierDisplay } from '@/components/ui/identifier-display';
+import { IdentifierDisplay, type IdentifierItem } from '../../components/ui/identifier-display';
 
 const meta: Meta<typeof IdentifierDisplay> = {
   title: 'UI/IdentifierDisplay',
@@ -8,7 +9,7 @@ const meta: Meta<typeof IdentifierDisplay> = {
     layout: 'centered',
     docs: {
       description: {
-        component: 'A component that displays identifiers with support for expandable multiple identifiers and external links.',
+        component: 'A component that displays identifiers with support for expandable multiple identifiers and external links. Accepts either an array of identifier objects or a JSON string for backward compatibility.',
       },
     },
   },
@@ -18,8 +19,8 @@ const meta: Meta<typeof IdentifierDisplay> = {
       description: 'Simple external ID fallback when no complex identifiers are available',
     },
     identifiers: {
-      control: 'text',
-      description: 'JSON string containing array of identifier objects with name, id, and optional url',
+      control: 'object',
+      description: 'Array of identifier objects or JSON string containing array of identifiers',
     },
     iconSize: {
       control: 'select',
@@ -42,6 +43,24 @@ const meta: Meta<typeof IdentifierDisplay> = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+// Sample data for new array-based interface
+const sampleIdentifiers: IdentifierItem[] = [
+  {
+    name: 'Customer ID',
+    value: 'CUST-789012',
+    url: 'https://example.com/customers/789012',
+  },
+  {
+    name: 'Order ID',
+    value: 'ORD-345678',
+    url: 'https://example.com/orders/345678',
+  },
+  {
+    name: 'Transaction ID',
+    value: 'TXN-901234',
+  }
+];
+
 // Simple external ID only
 export const SimpleExternalId: Story = {
   args: {
@@ -51,102 +70,171 @@ export const SimpleExternalId: Story = {
   },
 };
 
-// Single complex identifier without URL
-export const SingleIdentifier: Story = {
+// NEW: Single identifier using array interface
+export const SingleIdentifierArray: Story = {
   args: {
-    identifiers: JSON.stringify([
+    identifiers: [
       {
         name: 'Customer ID',
-        id: 'CUST-789012',
+        value: 'CUST-789012',
       }
-    ]),
+    ],
     iconSize: 'sm',
     textSize: 'xs',
   },
 };
 
-// Single complex identifier with URL
-export const SingleIdentifierWithLink: Story = {
+// NEW: Multiple identifiers using array interface
+export const MultipleIdentifiersArray: Story = {
+  args: {
+    identifiers: sampleIdentifiers,
+    iconSize: 'sm',
+    textSize: 'xs',
+  },
+};
+
+// NEW: Array interface with mixed URLs
+export const MixedIdentifiersArray: Story = {
+  args: {
+    identifiers: [
+      {
+        name: 'Customer ID',
+        value: 'CUST-123456',
+        url: 'https://example.com/customers/123456',
+      },
+      {
+        name: 'Internal ID',
+        value: 'INT-789012',
+        // No URL
+      },
+      {
+        name: 'Reference',
+        value: 'REF-345678',
+        url: 'https://example.com/references/345678',
+      }
+    ],
+    iconSize: 'sm',
+    textSize: 'xs',
+  },
+};
+
+// LEGACY: Single complex identifier without URL (JSON string format)
+export const SingleIdentifierLegacyJSON: Story = {
+  args: {
+    identifiers: JSON.stringify([
+      {
+        name: 'Customer ID',
+        id: 'CUST-789012', // Note: uses 'id' field (legacy)
+      }
+    ]),
+    iconSize: 'sm',
+    textSize: 'xs',
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Legacy JSON string format with "id" field for backward compatibility.',
+      },
+    },
+  },
+};
+
+// LEGACY: Single complex identifier with URL (JSON string format)
+export const SingleIdentifierWithLinkLegacyJSON: Story = {
   args: {
     identifiers: JSON.stringify([
       {
         name: 'Ticket ID',
-        id: 'TICK-456789',
+        id: 'TICK-456789', // Note: uses 'id' field (legacy)
         url: 'https://example.com/tickets/456789',
       }
     ]),
     iconSize: 'sm',
     textSize: 'xs',
   },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Legacy JSON string format with URL support.',
+      },
+    },
+  },
 };
 
 // Long identifier that gets truncated
 export const LongIdentifier: Story = {
   args: {
-    identifiers: JSON.stringify([
+    identifiers: [
       {
         name: 'Long ID',
-        id: 'VERY-LONG-IDENTIFIER-THAT-EXCEEDS-FIFTEEN-CHARACTERS',
+        value: 'VERY-LONG-IDENTIFIER-THAT-EXCEEDS-FIFTEEN-CHARACTERS',
         url: 'https://example.com/items/VERY-LONG-IDENTIFIER-THAT-EXCEEDS-FIFTEEN-CHARACTERS',
       }
-    ]),
+    ],
     iconSize: 'sm',
     textSize: 'xs',
   },
 };
 
-// Multiple identifiers (expandable)
-export const MultipleIdentifiers: Story = {
+// LEGACY: Multiple identifiers (expandable) - JSON string format
+export const MultipleIdentifiersLegacyJSON: Story = {
   args: {
     identifiers: JSON.stringify([
       {
         name: 'Customer ID',
-        id: 'CUST-789012',
+        id: 'CUST-789012', // Note: uses 'id' field (legacy)
         url: 'https://example.com/customers/789012',
       },
       {
         name: 'Order ID',
-        id: 'ORD-345678',
+        id: 'ORD-345678', // Note: uses 'id' field (legacy)
         url: 'https://example.com/orders/345678',
       },
       {
         name: 'Transaction ID',
-        id: 'TXN-901234',
+        id: 'TXN-901234', // Note: uses 'id' field (legacy)
       }
     ]),
     iconSize: 'sm',
     textSize: 'xs',
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Legacy JSON string format with multiple identifiers.',
+      },
+    },
   },
 };
 
 // Many identifiers for stress testing
 export const ManyIdentifiers: Story = {
   args: {
-    identifiers: JSON.stringify([
+    identifiers: [
       {
         name: 'Customer ID',
-        id: 'CUST-789012',
+        value: 'CUST-789012',
         url: 'https://example.com/customers/789012',
       },
       {
         name: 'Order ID',
-        id: 'ORD-345678',
+        value: 'ORD-345678',
         url: 'https://example.com/orders/345678',
       },
       {
         name: 'Transaction ID',
-        id: 'TXN-901234',
+        value: 'TXN-901234',
       },
       {
         name: 'Session ID',
-        id: 'SESS-567890',
+        value: 'SESS-567890',
         url: 'https://example.com/sessions/567890',
       },
       {
         name: 'Request ID',
-        id: 'REQ-123456789',
+        value: 'REQ-123456789',
       }
-    ]),
+    ],
     iconSize: 'sm',
     textSize: 'xs',
   },
@@ -155,13 +243,13 @@ export const ManyIdentifiers: Story = {
 // Different icon sizes
 export const LargeIcon: Story = {
   args: {
-    identifiers: JSON.stringify([
+    identifiers: [
       {
         name: 'Item ID',
-        id: 'ITEM-123456',
+        value: 'ITEM-123456',
         url: 'https://example.com/items/123456',
       }
-    ]),
+    ],
     iconSize: 'lg',
     textSize: 'base',
   },
@@ -169,13 +257,13 @@ export const LargeIcon: Story = {
 
 export const MediumIcon: Story = {
   args: {
-    identifiers: JSON.stringify([
+    identifiers: [
       {
         name: 'Item ID',
-        id: 'ITEM-123456',
+        value: 'ITEM-123456',
         url: 'https://example.com/items/123456',
       }
-    ]),
+    ],
     iconSize: 'md',
     textSize: 'sm',
   },
@@ -185,13 +273,13 @@ export const MediumIcon: Story = {
 export const BothExternalIdAndIdentifiers: Story = {
   args: {
     externalId: 'EXT-FALLBACK',
-    identifiers: JSON.stringify([
+    identifiers: [
       {
         name: 'Primary ID',
-        id: 'PRIM-123456',
+        value: 'PRIM-123456',
         url: 'https://example.com/primary/123456',
       }
-    ]),
+    ],
     iconSize: 'sm',
     textSize: 'xs',
   },
@@ -211,7 +299,7 @@ export const InvalidJSON: Story = {
 export const EmptyIdentifiers: Story = {
   args: {
     externalId: 'EXT-FALLBACK',
-    identifiers: JSON.stringify([]),
+    identifiers: [],
     iconSize: 'sm',
     textSize: 'xs',
   },
@@ -228,17 +316,17 @@ export const NoIdentifiers: Story = {
 // Container with dark background to test contrast
 export const OnDarkBackground: Story = {
   args: {
-    identifiers: JSON.stringify([
+    identifiers: [
       {
         name: 'Customer ID',
-        id: 'CUST-789012',
+        value: 'CUST-789012',
         url: 'https://example.com/customers/789012',
       },
       {
         name: 'Order ID',
-        id: 'ORD-345678',
+        value: 'ORD-345678',
       }
-    ]),
+    ],
     iconSize: 'sm',
     textSize: 'xs',
   },
