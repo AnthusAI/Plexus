@@ -182,7 +182,7 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
               </div>
             </AccordionTrigger>
             <AccordionContent>
-              <div className="space-y-6 pt-6">
+              <div className="space-y-6 pt-6 [&>*:last-child]:border-b-0">
                 {/* Pre-processing Section */}
                 <Accordion type="multiple" defaultValue={[]} className="w-full">
                   <AccordionItem value="preprocessing">
@@ -244,8 +244,8 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
                 </Accordion>
 
                 {/* Fine-tuning Section */}
-                <Accordion type="multiple" defaultValue={[]} className="w-full border-b-0">
-                  <AccordionItem value="fine-tuning" className="border-b-0">
+                <Accordion type="multiple" defaultValue={[]} className="w-full">
+                  <AccordionItem value="fine-tuning">
                     <AccordionTrigger className="text-base font-medium">
                       Fine-tuning
                       {fineTuning.representation_model_provider && (
