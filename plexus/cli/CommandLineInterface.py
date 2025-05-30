@@ -7,7 +7,7 @@ import click
 import os
 import json
 
-from plexus.cli.TaskCommands import tasks
+from plexus.cli.TaskCommands import tasks, task
 from plexus.cli.CommandDispatch import command, create_cli
 from plexus.cli.BatchCommands import batch
 from plexus.cli.EvaluationCommands import evaluate, evaluations
