@@ -120,7 +120,8 @@ try:
         # Attempt to import Plexus modules for core functionality
         from plexus.dashboard.api.client import PlexusDashboardClient
         # Assign imported functions to pre-defined names
-        from plexus.cli.ScorecardCommands import create_client as _create_dashboard_client, resolve_account_identifier as _resolve_account_identifier
+        from plexus.cli.client_utils import create_client as _create_dashboard_client
+        from plexus.cli.ScorecardCommands import resolve_account_identifier as _resolve_account_identifier
         from plexus.cli.identifier_resolution import resolve_scorecard_identifier as _resolve_scorecard_identifier
         
         # Create a wrapper around create_dashboard_client to add better error logging
@@ -232,6 +233,11 @@ mcp = FastMCP(
     - get_plexus_scorecard_info: Get detailed information about a specific scorecard, including sections and scores
     - get_plexus_score_details: Get configuration and version details for a specific score within a scorecard
     
+    ## Score Configuration Management (NEW)
+    - find_plexus_score: Intelligent search to find a specific score within scorecards using flexible identifiers
+    - get_plexus_score_configuration: Get the YAML configuration for a specific score version
+    - update_plexus_score_configuration: Update a score's configuration by creating a new version (MUTATION)
+    
     ## Evaluation Tools
     - run_plexus_evaluation: Dispatches a scorecard evaluation to run in the background. 
       The server will confirm dispatch but will not track progress or results. 
@@ -243,8 +249,17 @@ mcp = FastMCP(
     - get_latest_plexus_report: Get the most recent report, optionally filtered by report configuration
     - list_plexus_report_configurations: List available report configurations
     
+    ## Item Tools
+    - get_latest_plexus_item: Get the most recent item for an account, with optional score results
+    - get_plexus_item_details: Get detailed information about a specific item by its ID, with optional score results
+    
+    ## Task Tools
+    - get_latest_plexus_task: Get the most recent task for an account, with optional filtering by task type
+    - get_plexus_task_details: Get detailed information about a specific task by its ID, including task stages
+    
     ## Utility Tools
     - think: REQUIRED tool to use before other tools to structure reasoning and plan approach
+    - get_score_yaml_documentation: Comprehensive documentation about score YAML configuration format
     """
 )
 
@@ -300,6 +315,17 @@ async def think(thought: str) -> str:
     - Then use get_plexus_report_details to get the details of the report.
     And I should always show the URL of the report in my response.
     </think_tool_example_4>
+    
+    <think_tool_example_5>
+    User asked to update the "Grammar Check" score on the "Quality Assurance" scorecard.
+    - Need to: 1) Find the scorecard and score using find_plexus_score
+                2) Get current configuration using get_plexus_score_configuration
+                3) If user wants to see YAML format info, use get_score_yaml_documentation
+                4) Discuss changes with user or apply requested modifications
+                5) Use update_plexus_score_configuration to create new version
+    - Should provide dashboard URL for easy access to the updated score.
+    - This is a mutation operation, so be careful and confirm changes.
+    </think_tool_example_5>
     """
     # Temporarily redirect stdout to capture any unexpected output
     old_stdout = sys.stdout
@@ -585,7 +611,7 @@ async def get_plexus_scorecard_info(scorecard_identifier: str) -> Union[str, Dic
         # Import plexus CLI inside function to keep startup fast
         try:
             # Fix the import to use the correct modules
-            from plexus.cli.ScorecardCommands import create_client as create_dashboard_client
+            from plexus.cli.client_utils import create_client as create_dashboard_client
             from plexus.cli.ScorecardCommands import resolve_scorecard_identifier
             from plexus.dashboard.api.client import PlexusDashboardClient
         except ImportError as e:
@@ -706,7 +732,7 @@ async def get_plexus_score_details(
         # Import plexus CLI inside function to keep startup fast
         try:
             # Fix the import to use the correct modules
-            from plexus.cli.ScorecardCommands import create_client as create_dashboard_client 
+            from plexus.cli.client_utils import create_client as create_dashboard_client 
             from plexus.cli.ScorecardCommands import resolve_scorecard_identifier
             from plexus.dashboard.api.client import PlexusDashboardClient
         except ImportError as e:
@@ -891,7 +917,7 @@ async def list_plexus_reports(
         # Import plexus CLI inside function to keep startup fast
         try:
             # Fix imports to use the correct modules
-            from plexus.cli.ScorecardCommands import create_client as create_dashboard_client
+            from plexus.cli.client_utils import create_client as create_dashboard_client
             from plexus.dashboard.api.client import PlexusDashboardClient
         except ImportError as e:
             logger.error(f"ImportError: {str(e)}", exc_info=True)
@@ -956,39 +982,66 @@ async def list_plexus_reports(
                 
             reports_data = response.get('listReportByReportConfigurationIdAndCreatedAt', {}).get('items', [])
         else:
-            # No specific report configuration - use standard filter with account ID and sort
-            filter_string = ", ".join(filter_conditions)
-            
-            query = f"""
-            query ListReports {{
-                listReports(
-                    filter: {{ {filter_string} }},
-                    limit: {limit_val},
-                    sortBy: "createdAt",
-                    sortDirection: DESC
-                ) {{
-                    items {{
-                        id
-                        name
-                        createdAt
-                        updatedAt
-                        reportConfigurationId
-                        accountId
-                        taskId
+            # No specific report configuration - use GSI by accountId and updatedAt for sorting
+            if default_account_id:
+                query = f"""
+                query ListReportsByAccountAndUpdatedAt {{
+                    listReportByAccountIdAndUpdatedAt(
+                        accountId: "{default_account_id}",
+                        sortDirection: DESC,
+                        limit: {limit_val}
+                    ) {{
+                        items {{
+                            id
+                            name
+                            createdAt
+                            updatedAt
+                            reportConfigurationId
+                            accountId
+                            taskId
+                        }}
                     }}
                 }}
-            }}
-            """
-            
-            logger.info(f"Executing listReports query with sort")
-            response = client.execute(query)
-            
-            if response.get('errors'):
-                error_details = json.dumps(response['errors'], indent=2)
-                logger.error(f"listReports query returned errors: {error_details}")
-                return f"Error from listReports query: {error_details}"
+                """
                 
-            reports_data = response.get('listReports', {}).get('items', [])
+                logger.info(f"Executing listReportByAccountIdAndUpdatedAt query")
+                response = client.execute(query)
+                
+                if response.get('errors'):
+                    error_details = json.dumps(response['errors'], indent=2)
+                    logger.error(f"listReportByAccountIdAndUpdatedAt query returned errors: {error_details}")
+                    return f"Error from listReportByAccountIdAndUpdatedAt query: {error_details}"
+                    
+                reports_data = response.get('listReportByAccountIdAndUpdatedAt', {}).get('items', [])
+            else:
+                # Fallback to basic listReports without sorting if no account ID
+                query = f"""
+                query ListReports {{
+                    listReports(
+                        limit: {limit_val}
+                    ) {{
+                        items {{
+                            id
+                            name
+                            createdAt
+                            updatedAt
+                            reportConfigurationId
+                            accountId
+                            taskId
+                        }}
+                    }}
+                }}
+                """
+                
+                logger.info(f"Executing basic listReports query (no account filter)")
+                response = client.execute(query)
+                
+                if response.get('errors'):
+                    error_details = json.dumps(response['errors'], indent=2)
+                    logger.error(f"listReports query returned errors: {error_details}")
+                    return f"Error from listReports query: {error_details}"
+                    
+                reports_data = response.get('listReports', {}).get('items', [])
         
         if not reports_data:
             if report_configuration_id:
@@ -1028,7 +1081,7 @@ async def get_plexus_report_details(report_id: str) -> Union[str, Dict[str, Any]
         # Import plexus CLI inside function to keep startup fast
         try:
             # Fix imports to use the correct modules
-            from plexus.cli.ScorecardCommands import create_client as create_dashboard_client
+            from plexus.cli.client_utils import create_client as create_dashboard_client
             from plexus.dashboard.api.client import PlexusDashboardClient
         except ImportError as e:
             logger.error(f"ImportError: {str(e)}", exc_info=True)
@@ -1189,7 +1242,7 @@ async def list_plexus_report_configurations() -> Union[str, List[Dict]]:
     try:
         # Import plexus CLI inside function to keep startup fast
         try:
-            from plexus.cli.ScorecardCommands import create_client as create_dashboard_client
+            from plexus.cli.client_utils import create_client as create_dashboard_client
             from plexus.dashboard.api.client import PlexusDashboardClient
         except ImportError as e:
             logger.error(f"ImportError: {str(e)}", exc_info=True)
@@ -1281,6 +1334,1400 @@ async def list_plexus_report_configurations() -> Union[str, List[Dict]]:
             logger.warning(f"Captured unexpected stdout during list_plexus_report_configurations: {captured_output}")
         # Restore original stdout
         sys.stdout = old_stdout
+
+@mcp.tool()
+async def get_latest_plexus_item(
+    include_score_results: bool = False
+) -> Union[str, Dict[str, Any]]:
+    """
+    Gets the most recent item for the default account, with optional score results.
+    
+    Parameters:
+    - include_score_results: Whether to include score results for the item (optional, default: False)
+    
+    Returns:
+    - Detailed information about the most recent item
+    """
+    # Temporarily redirect stdout to capture any unexpected output
+    old_stdout = sys.stdout
+    temp_stdout = StringIO()
+    sys.stdout = temp_stdout
+    
+    try:
+        # Import plexus modules inside function to keep startup fast
+        try:
+            from plexus.cli.client_utils import create_client as create_dashboard_client
+            from plexus.dashboard.api.models.item import Item
+            from plexus.dashboard.api.models.score_result import ScoreResult
+            from plexus.cli.reports.utils import resolve_account_id_for_command
+        except ImportError as e:
+            logger.error(f"ImportError: {str(e)}", exc_info=True)
+            return f"Error: Failed to import Plexus modules: {str(e)}"
+        
+        # Check if we have the necessary credentials
+        api_url = os.environ.get('PLEXUS_API_URL', '')
+        api_key = os.environ.get('PLEXUS_API_KEY', '')
+        
+        if not api_url or not api_key:
+            return "Error: Missing API credentials. API_URL or API_KEY not set in environment."
+        
+        # Create the client
+        client = create_dashboard_client()
+        if not client:
+            return "Error: Could not create dashboard client."
+
+        # Get the default account ID
+        account_id = resolve_account_id_for_command(client, None)
+        if not account_id:
+            return "Error: Could not determine default account ID. Please check that PLEXUS_ACCOUNT_KEY is set in environment."
+            
+        logger.info(f"Getting latest item for account: {account_id}")
+        
+        # Use the GSI for proper ordering to get the most recent item
+        query = f"""
+        query ListItemByAccountIdAndCreatedAt($accountId: String!) {{
+            listItemByAccountIdAndCreatedAt(accountId: $accountId, sortDirection: DESC, limit: 1) {{
+                items {{
+                    {Item.fields()}
+                }}
+            }}
+        }}
+        """
+        
+        response = client.execute(query, {'accountId': account_id})
+        
+        if 'errors' in response:
+            error_details = json.dumps(response['errors'], indent=2)
+            logger.error(f"Dashboard query returned errors: {error_details}")
+            return f"Error from Dashboard query: {error_details}"
+        
+        items = response.get('listItemByAccountIdAndCreatedAt', {}).get('items', [])
+        
+        if not items:
+            return "No items found for this account."
+            
+        # Get the most recent item
+        item_data = items[0]
+        item = Item.from_dict(item_data, client)
+        
+        # Convert item to dictionary format
+        item_dict = {
+            'id': item.id,
+            'accountId': item.accountId,
+            'evaluationId': item.evaluationId,
+            'scoreId': item.scoreId,
+            'description': item.description,
+            'externalId': item.externalId,
+            'isEvaluation': item.isEvaluation,
+            'metadata': item.metadata,
+            'identifiers': item.identifiers,
+            'attachedFiles': item.attachedFiles,
+            'createdAt': item.createdAt.isoformat() if item.createdAt else None,
+            'updatedAt': item.updatedAt.isoformat() if item.updatedAt else None,
+            'url': get_item_url(item.id)
+        }
+        
+        # Get score results if requested
+        if include_score_results:
+            score_results = await _get_score_results_for_item(item.id, client)
+            item_dict['scoreResults'] = score_results
+        
+        logger.info(f"Successfully retrieved latest item: {item.id}")
+        return item_dict
+        
+    except Exception as e:
+        logger.error(f"Error getting latest item: {str(e)}", exc_info=True)
+        return f"Error getting latest item: {str(e)}"
+    finally:
+        # Check if anything was written to stdout
+        captured_output = temp_stdout.getvalue()
+        if captured_output:
+            logger.warning(f"Captured unexpected stdout during get_latest_plexus_item: {captured_output}")
+        # Restore original stdout
+        sys.stdout = old_stdout
+
+@mcp.tool()
+async def get_plexus_item_details(
+    item_id: str,
+    include_score_results: bool = False
+) -> Union[str, Dict[str, Any]]:
+    """
+    Gets detailed information about a specific item by its ID, with optional score results.
+    
+    Parameters:
+    - item_id: The unique ID of the item
+    - include_score_results: Whether to include score results for the item (optional, default: False)
+    
+    Returns:
+    - Detailed information about the item
+    """
+    # Temporarily redirect stdout to capture any unexpected output
+    old_stdout = sys.stdout
+    temp_stdout = StringIO()
+    sys.stdout = temp_stdout
+    
+    try:
+        # Import plexus modules inside function to keep startup fast
+        try:
+            from plexus.cli.client_utils import create_client as create_dashboard_client
+            from plexus.dashboard.api.models.item import Item
+            from plexus.dashboard.api.models.score_result import ScoreResult
+        except ImportError as e:
+            logger.error(f"ImportError: {str(e)}", exc_info=True)
+            return f"Error: Failed to import Plexus modules: {str(e)}"
+        
+        # Check if we have the necessary credentials
+        api_url = os.environ.get('PLEXUS_API_URL', '')
+        api_key = os.environ.get('PLEXUS_API_KEY', '')
+        
+        if not api_url or not api_key:
+            return "Error: Missing API credentials. API_URL or API_KEY not set in environment."
+        
+        # Create the client
+        client = create_dashboard_client()
+        if not client:
+            return "Error: Could not create dashboard client."
+
+        logger.info(f"Getting item details for ID: {item_id}")
+        
+        try:
+            item = Item.get_by_id(item_id, client)
+            if not item:
+                return f"Item not found: {item_id}"
+            
+            # Convert item to dictionary format
+            item_dict = {
+                'id': item.id,
+                'accountId': item.accountId,
+                'evaluationId': item.evaluationId,
+                'scoreId': item.scoreId,
+                'description': item.description,
+                'externalId': item.externalId,
+                'isEvaluation': item.isEvaluation,
+                'metadata': item.metadata,
+                'identifiers': item.identifiers,
+                'attachedFiles': item.attachedFiles,
+                'createdAt': item.createdAt.isoformat() if item.createdAt else None,
+                'updatedAt': item.updatedAt.isoformat() if item.updatedAt else None,
+                'url': get_item_url(item.id)
+            }
+            
+            # Get score results if requested
+            if include_score_results:
+                score_results = await _get_score_results_for_item(item.id, client)
+                item_dict['scoreResults'] = score_results
+            
+            logger.info(f"Successfully retrieved item details: {item_id}")
+            return item_dict
+            
+        except Exception as e:
+            logger.error(f"Error retrieving item {item_id}: {str(e)}", exc_info=True)
+            return f"Error retrieving item {item_id}: {str(e)}"
+        
+    except Exception as e:
+        logger.error(f"Error getting item details for ID '{item_id}': {str(e)}", exc_info=True)
+        return f"Error getting item details: {str(e)}"
+    finally:
+        # Check if anything was written to stdout
+        captured_output = temp_stdout.getvalue()
+        if captured_output:
+            logger.warning(f"Captured unexpected stdout during get_plexus_item_details: {captured_output}")
+        # Restore original stdout
+        sys.stdout = old_stdout
+
+@mcp.tool()
+async def get_latest_plexus_task(
+    task_type: Optional[str] = None
+) -> Union[str, Dict[str, Any]]:
+    """
+    Gets the most recent task for an account, with optional filtering by task type.
+    
+    Parameters:
+    - task_type: Optional filter by task type (e.g., 'Evaluation', 'Report', etc.)
+    
+    Returns:
+    - Detailed information about the most recent task, including its stages
+    """
+    # Temporarily redirect stdout to capture any unexpected output
+    old_stdout = sys.stdout
+    temp_stdout = StringIO()
+    sys.stdout = temp_stdout
+    
+    try:
+        # Check if Plexus core modules are available
+        if not PLEXUS_CORE_AVAILABLE:
+            return "Error: Plexus Dashboard components are not available. Core modules failed to import."
+        
+        # Check if we have the necessary credentials
+        api_url = os.environ.get('PLEXUS_API_URL', '')
+        api_key = os.environ.get('PLEXUS_API_KEY', '')
+        
+        if not api_url or not api_key:
+            logger.warning("Missing API credentials. Ensure .env file is loaded.")
+            return "Error: Missing API credentials. Use --env-file to specify your .env file path."
+        
+        # Create the client
+        try:
+            client_stdout = StringIO()
+            saved_stdout = sys.stdout
+            sys.stdout = client_stdout
+            
+            try:
+                from plexus.dashboard.api.client import PlexusDashboardClient
+                client = PlexusDashboardClient(api_url=api_url, api_key=api_key)
+            finally:
+                client_output = client_stdout.getvalue()
+                if client_output:
+                    logger.warning(f"Captured unexpected stdout during client creation in get_latest_plexus_task: {client_output}")
+                sys.stdout = saved_stdout
+        except Exception as client_err:
+            logger.error(f"Error creating dashboard client: {str(client_err)}", exc_info=True)
+            return f"Error creating dashboard client: {str(client_err)}"
+            
+        if not client:
+            return "Error: Could not create dashboard client."
+
+        # Get default account ID
+        default_account_id = get_default_account_id()
+        if not default_account_id:
+            return "Error: No default account ID available."
+
+        # Query for the most recent task using the GSI
+        query = """
+        query ListTaskByAccountIdAndUpdatedAt($accountId: String!) {
+            listTaskByAccountIdAndUpdatedAt(accountId: $accountId, sortDirection: DESC, limit: 50) {
+                items {
+                    id
+                    accountId
+                    type
+                    status
+                    target
+                    command
+                    description
+                    metadata
+                    createdAt
+                    updatedAt
+                    startedAt
+                    completedAt
+                    estimatedCompletionAt
+                    errorMessage
+                    errorDetails
+                    stdout
+                    stderr
+                    currentStageId
+                    workerNodeId
+                    dispatchStatus
+                    scorecardId
+                    scoreId
+                }
+            }
+        }
+        """
+        
+        # Execute query
+        query_stdout = StringIO()
+        saved_stdout = sys.stdout
+        sys.stdout = query_stdout
+        
+        try:
+            result = client.execute(query, {'accountId': default_account_id})
+            
+            # Check for GraphQL errors
+            if 'errors' in result:
+                error_details = json.dumps(result['errors'], indent=2)
+                logger.error(f"Dashboard query returned errors: {error_details}")
+                return f"Error from Dashboard query: {error_details}"
+
+            tasks_data = result.get('listTaskByAccountIdAndUpdatedAt', {}).get('items', [])
+
+            if not tasks_data:
+                return "No tasks found for this account."
+
+            # Filter by task type if specified
+            if task_type:
+                tasks_data = [t for t in tasks_data if t.get('type', '').lower() == task_type.lower()]
+                if not tasks_data:
+                    return f"No tasks found of type '{task_type}' for this account."
+
+            # Get the most recent task
+            latest_task_data = tasks_data[0]
+            
+            # Get task stages
+            stages_query = """
+            query ListTaskStageByTaskId($taskId: String!) {
+                listTaskStageByTaskId(taskId: $taskId) {
+                    items {
+                        id
+                        taskId
+                        name
+                        order
+                        status
+                        statusMessage
+                        startedAt
+                        completedAt
+                        estimatedCompletionAt
+                        processedItems
+                        totalItems
+                    }
+                }
+            }
+            """
+            
+            stages_result = client.execute(stages_query, {'taskId': latest_task_data['id']})
+            stages_data = stages_result.get('listTaskStageByTaskId', {}).get('items', [])
+            
+            # Sort stages by order
+            stages_data.sort(key=lambda s: s.get('order', 0))
+            
+            # Include stages in the task data
+            latest_task_data['stages'] = stages_data
+            
+            # Add the task URL for convenience
+            latest_task_data['url'] = get_task_url(latest_task_data["id"])
+            
+            return latest_task_data
+            
+        finally:
+            query_output = query_stdout.getvalue()
+            if query_output:
+                logger.warning(f"Captured unexpected stdout during task query execution: {query_output}")
+            sys.stdout = saved_stdout
+            
+    except Exception as e:
+        logger.error(f"Error retrieving latest task: {str(e)}", exc_info=True)
+        return f"Error retrieving latest task: {str(e)}"
+    finally:
+        # Check if anything was written to stdout
+        captured_output = temp_stdout.getvalue()
+        if captured_output:
+            logger.warning(f"Captured unexpected stdout during get_latest_plexus_task: {captured_output}")
+        # Restore original stdout
+        sys.stdout = old_stdout
+
+@mcp.tool()
+async def get_plexus_task_details(task_id: str) -> Union[str, Dict[str, Any]]:
+    """
+    Gets detailed information about a specific task by its ID, including task stages.
+    
+    Parameters:
+    - task_id: The unique ID of the task
+    
+    Returns:
+    - Detailed information about the task, including its stages
+    """
+    # Temporarily redirect stdout to capture any unexpected output
+    old_stdout = sys.stdout
+    temp_stdout = StringIO()
+    sys.stdout = temp_stdout
+    
+    try:
+        # Check if Plexus core modules are available
+        if not PLEXUS_CORE_AVAILABLE:
+            return "Error: Plexus Dashboard components are not available. Core modules failed to import."
+        
+        # Check if we have the necessary credentials
+        api_url = os.environ.get('PLEXUS_API_URL', '')
+        api_key = os.environ.get('PLEXUS_API_KEY', '')
+        
+        if not api_url or not api_key:
+            logger.warning("Missing API credentials. Ensure .env file is loaded.")
+            return "Error: Missing API credentials. Use --env-file to specify your .env file path."
+        
+        # Create the client
+        try:
+            client_stdout = StringIO()
+            saved_stdout = sys.stdout
+            sys.stdout = client_stdout
+            
+            try:
+                from plexus.dashboard.api.client import PlexusDashboardClient
+                client = PlexusDashboardClient(api_url=api_url, api_key=api_key)
+            finally:
+                client_output = client_stdout.getvalue()
+                if client_output:
+                    logger.warning(f"Captured unexpected stdout during client creation in get_plexus_task_details: {client_output}")
+                sys.stdout = saved_stdout
+        except Exception as client_err:
+            logger.error(f"Error creating dashboard client: {str(client_err)}", exc_info=True)
+            return f"Error creating dashboard client: {str(client_err)}"
+            
+        if not client:
+            return "Error: Could not create dashboard client."
+
+        # Query for the specific task
+        task_query = """
+        query GetTask($id: ID!) {
+            getTask(id: $id) {
+                id
+                accountId
+                type
+                status
+                target
+                command
+                description
+                metadata
+                createdAt
+                updatedAt
+                startedAt
+                completedAt
+                estimatedCompletionAt
+                errorMessage
+                errorDetails
+                stdout
+                stderr
+                currentStageId
+                workerNodeId
+                dispatchStatus
+                scorecardId
+                scoreId
+            }
+        }
+        """
+        
+        # Execute task query
+        query_stdout = StringIO()
+        saved_stdout = sys.stdout
+        sys.stdout = query_stdout
+        
+        try:
+            task_result = client.execute(task_query, {'id': task_id})
+            
+            # Check for GraphQL errors
+            if 'errors' in task_result:
+                error_details = json.dumps(task_result['errors'], indent=2)
+                logger.error(f"Dashboard query returned errors: {error_details}")
+                return f"Error from Dashboard query: {error_details}"
+
+            task_data = task_result.get('getTask')
+            if not task_data:
+                return f"Task not found with ID: {task_id}"
+
+            # Get task stages
+            stages_query = """
+            query ListTaskStageByTaskId($taskId: String!) {
+                listTaskStageByTaskId(taskId: $taskId) {
+                    items {
+                        id
+                        taskId
+                        name
+                        order
+                        status
+                        statusMessage
+                        startedAt
+                        completedAt
+                        estimatedCompletionAt
+                        processedItems
+                        totalItems
+                    }
+                }
+            }
+            """
+            
+            stages_result = client.execute(stages_query, {'taskId': task_id})
+            stages_data = stages_result.get('listTaskStageByTaskId', {}).get('items', [])
+            
+            # Sort stages by order
+            stages_data.sort(key=lambda s: s.get('order', 0))
+            
+            # Include stages in the task data
+            task_data['stages'] = stages_data
+            
+            # Add the task URL for convenience
+            task_data['url'] = get_task_url(task_id)
+            
+            return task_data
+            
+        finally:
+            query_output = query_stdout.getvalue()
+            if query_output:
+                logger.warning(f"Captured unexpected stdout during task query execution: {query_output}")
+            sys.stdout = saved_stdout
+            
+    except Exception as e:
+        logger.error(f"Error retrieving task details: {str(e)}", exc_info=True)
+        return f"Error retrieving task details: {str(e)}"
+    finally:
+        # Check if anything was written to stdout
+        captured_output = temp_stdout.getvalue()
+        if captured_output:
+            logger.warning(f"Captured unexpected stdout during get_plexus_task_details: {captured_output}")
+        # Restore original stdout
+        sys.stdout = old_stdout
+
+@mcp.tool()
+async def find_plexus_score(
+    score_identifier: str,
+    scorecard_identifier: Optional[str] = None
+) -> Union[str, Dict[str, Any]]:
+    """
+    Intelligent search to find a specific score within a scorecard using flexible identifiers.
+    Supports complex queries like "X score on Y scorecard" by searching across scorecard names and score names.
+    
+    Parameters:
+    - score_identifier: Identifier for the score (ID, name, key, or external ID)
+    - scorecard_identifier: Optional identifier for the parent scorecard to narrow search. If omitted, searches across all scorecards.
+    
+    Returns:
+    - Information about the found score including its location, configuration summary, and dashboard URL
+    """
+    # Temporarily redirect stdout to capture any unexpected output
+    old_stdout = sys.stdout
+    temp_stdout = StringIO()
+    sys.stdout = temp_stdout
+    
+    try:
+        # Check if Plexus core modules are available
+        if not PLEXUS_CORE_AVAILABLE:
+            return "Error: Plexus Dashboard components are not available. Core modules failed to import."
+        
+        # Check if we have the necessary credentials
+        api_url = os.environ.get('PLEXUS_API_URL', '')
+        api_key = os.environ.get('PLEXUS_API_KEY', '')
+        
+        if not api_url or not api_key:
+            logger.warning("Missing API credentials. Ensure .env file is loaded.")
+            return "Error: Missing API credentials. Use --env-file to specify your .env file path."
+        
+        # Create the client
+        try:
+            client_stdout = StringIO()
+            saved_stdout = sys.stdout
+            sys.stdout = client_stdout
+            
+            try:
+                from plexus.dashboard.api.client import PlexusDashboardClient
+                from plexus.cli.client_utils import create_client as create_dashboard_client
+                from plexus.cli.ScorecardCommands import resolve_scorecard_identifier
+                client = create_dashboard_client()
+            finally:
+                client_output = client_stdout.getvalue()
+                if client_output:
+                    logger.warning(f"Captured unexpected stdout during client creation in find_plexus_score: {client_output}")
+                sys.stdout = saved_stdout
+        except Exception as client_err:
+            logger.error(f"Error creating dashboard client: {str(client_err)}", exc_info=True)
+            return f"Error creating dashboard client: {str(client_err)}"
+            
+        if not client:
+            return "Error: Could not create dashboard client."
+
+        # Build search strategy
+        found_scores = []
+        
+        if scorecard_identifier:
+            # Search within a specific scorecard
+            scorecard_id = resolve_scorecard_identifier(client, scorecard_identifier)
+            if not scorecard_id:
+                return f"Error: Scorecard '{scorecard_identifier}' not found."
+            
+            # Get scorecard with scores
+            scorecard_query = f"""
+            query GetScorecardWithScores {{
+                getScorecard(id: "{scorecard_id}") {{
+                    id
+                    name
+                    key
+                    sections {{
+                        items {{
+                            id
+                            name
+                            scores {{
+                                items {{
+                                    id
+                                    name
+                                    key
+                                    externalId
+                                    description
+                                    type
+                                    championVersionId
+                                }}
+                            }}
+                        }}
+                    }}
+                }}
+            }}
+            """
+            
+            result = client.execute(scorecard_query)
+            scorecard_data = result.get('getScorecard')
+            
+            if scorecard_data:
+                for section in scorecard_data.get('sections', {}).get('items', []):
+                    for score in section.get('scores', {}).get('items', []):
+                        # Check if this score matches the identifier
+                        if (score.get('id') == score_identifier or 
+                            score.get('name', '').lower() == score_identifier.lower() or 
+                            score.get('key') == score_identifier or 
+                            score.get('externalId') == score_identifier or
+                            score_identifier.lower() in score.get('name', '').lower()):
+                            
+                            found_scores.append({
+                                'score': score,
+                                'section': section,
+                                'scorecard': scorecard_data
+                            })
+        else:
+            # Search across all scorecards for the score
+            default_account_id = get_default_account_id()
+            if not default_account_id:
+                return "Error: No default account available for searching scorecards."
+            
+            # Get all scorecards for the account
+            scorecards_query = f"""
+            query ListScorecardsForSearch {{
+                listScorecards(filter: {{ accountId: {{ eq: "{default_account_id}" }} }}, limit: 100) {{
+                    items {{
+                        id
+                        name
+                        key
+                        sections {{
+                            items {{
+                                id
+                                name
+                                scores {{
+                                    items {{
+                                        id
+                                        name
+                                        key
+                                        externalId
+                                        description
+                                        type
+                                        championVersionId
+                                    }}
+                                }}
+                            }}
+                        }}
+                    }}
+                }}
+            }}
+            """
+            
+            result = client.execute(scorecards_query)
+            scorecards = result.get('listScorecards', {}).get('items', [])
+            
+            # Search through all scorecards
+            for scorecard in scorecards:
+                for section in scorecard.get('sections', {}).get('items', []):
+                    for score in section.get('scores', {}).get('items', []):
+                        # Check if this score matches the identifier  
+                        if (score.get('id') == score_identifier or 
+                            score.get('name', '').lower() == score_identifier.lower() or 
+                            score.get('key') == score_identifier or 
+                            score.get('externalId') == score_identifier or
+                            score_identifier.lower() in score.get('name', '').lower()):
+                            
+                            found_scores.append({
+                                'score': score,
+                                'section': section,
+                                'scorecard': scorecard
+                            })
+
+        if not found_scores:
+            search_scope = f" within scorecard '{scorecard_identifier}'" if scorecard_identifier else " across all scorecards"
+            return f"No scores found matching '{score_identifier}'{search_scope}."
+        
+        if len(found_scores) == 1:
+            # Single match - return detailed information
+            match = found_scores[0]
+            score = match['score']
+            section = match['section']
+            scorecard = match['scorecard']
+            
+            # Get configuration preview if champion version exists
+            config_preview = "No configuration available"
+            champion_version_id = score.get('championVersionId')
+            if champion_version_id:
+                try:
+                    version_query = f"""
+                    query GetScoreVersion {{
+                        getScoreVersion(id: "{champion_version_id}") {{
+                            configuration
+                        }}
+                    }}
+                    """
+                    version_result = client.execute(version_query)
+                    version_data = version_result.get('getScoreVersion')
+                    if version_data and version_data.get('configuration'):
+                        config = version_data['configuration']
+                        # Show first few lines as preview
+                        config_lines = config.split('\n')[:5]
+                        config_preview = '\n'.join(config_lines)
+                        if len(config.split('\n')) > 5:
+                            config_preview += '\n... (truncated)'
+                except Exception as e:
+                    config_preview = f"Error loading configuration: {str(e)}"
+            
+            return {
+                "found": True,
+                "scoreId": score['id'],
+                "scoreName": score['name'],
+                "scoreKey": score.get('key'),
+                "externalId": score.get('externalId'),
+                "description": score.get('description'),
+                "type": score.get('type'),
+                "championVersionId": champion_version_id,
+                "location": {
+                    "scorecardId": scorecard['id'],
+                    "scorecardName": scorecard['name'],
+                    "sectionId": section['id'],
+                    "sectionName": section['name']
+                },
+                "configurationPreview": config_preview,
+                "dashboardUrl": get_plexus_url(f"lab/scorecards/{scorecard['id']}/scores/{score['id']}")
+            }
+        else:
+            # Multiple matches - return summary list
+            matches = []
+            for match in found_scores:
+                score = match['score']
+                scorecard = match['scorecard']
+                section = match['section']
+                matches.append({
+                    "scoreId": score['id'],
+                    "scoreName": score['name'],
+                    "scorecardName": scorecard['name'],
+                    "sectionName": section['name'],
+                    "dashboardUrl": get_plexus_url(f"lab/scorecards/{scorecard['id']}/scores/{score['id']}")
+                })
+            
+            return {
+                "found": True,
+                "multiple": True,
+                "count": len(found_scores),
+                "matches": matches,
+                "message": f"Found {len(found_scores)} scores matching '{score_identifier}'. Use more specific identifiers to narrow down the search."
+            }
+        
+    except Exception as e:
+        logger.error(f"Error finding score '{score_identifier}': {str(e)}", exc_info=True)
+        return f"Error finding score: {str(e)}"
+    finally:
+        # Check if anything was written to stdout
+        captured_output = temp_stdout.getvalue()
+        if captured_output:
+            logger.warning(f"Captured unexpected stdout during find_plexus_score: {captured_output}")
+        # Restore original stdout
+        sys.stdout = old_stdout
+
+@mcp.tool()
+async def get_plexus_score_configuration(
+    scorecard_identifier: str,
+    score_identifier: str,
+    version_id: Optional[str] = None
+) -> Union[str, Dict[str, Any]]:
+    """
+    Gets the YAML configuration for a specific score version, with syntax highlighting and formatting.
+    
+    Parameters:
+    - scorecard_identifier: Identifier for the parent scorecard (ID, name, key, or external ID)
+    - score_identifier: Identifier for the score (ID, name, key, or external ID)
+    - version_id: Optional specific version ID of the score. If omitted, uses champion version.
+    
+    Returns:
+    - The YAML configuration content along with metadata about the version
+    """
+    # Temporarily redirect stdout to capture any unexpected output
+    old_stdout = sys.stdout
+    temp_stdout = StringIO()
+    sys.stdout = temp_stdout
+    
+    try:
+        # Check if Plexus core modules are available
+        if not PLEXUS_CORE_AVAILABLE:
+            return "Error: Plexus Dashboard components are not available. Core modules failed to import."
+        
+        # Check if we have the necessary credentials
+        api_url = os.environ.get('PLEXUS_API_URL', '')
+        api_key = os.environ.get('PLEXUS_API_KEY', '')
+        
+        if not api_url or not api_key:
+            logger.warning("Missing API credentials. Ensure .env file is loaded.")
+            return "Error: Missing API credentials. Use --env-file to specify your .env file path."
+        
+        # Create the client
+        try:
+            client_stdout = StringIO()
+            saved_stdout = sys.stdout
+            sys.stdout = client_stdout
+            
+            try:
+                from plexus.dashboard.api.client import PlexusDashboardClient
+                from plexus.cli.client_utils import create_client as create_dashboard_client
+                from plexus.cli.ScorecardCommands import resolve_scorecard_identifier
+                client = create_dashboard_client()
+            finally:
+                client_output = client_stdout.getvalue()
+                if client_output:
+                    logger.warning(f"Captured unexpected stdout during client creation in get_plexus_score_configuration: {client_output}")
+                sys.stdout = saved_stdout
+        except Exception as client_err:
+            logger.error(f"Error creating dashboard client: {str(client_err)}", exc_info=True)
+            return f"Error creating dashboard client: {str(client_err)}"
+            
+        if not client:
+            return "Error: Could not create dashboard client."
+
+        # Resolve scorecard identifier
+        scorecard_id = resolve_scorecard_identifier(client, scorecard_identifier)
+        if not scorecard_id:
+            return f"Error: Scorecard '{scorecard_identifier}' not found."
+
+        # Find the score within the scorecard
+        scorecard_query = f"""
+        query GetScorecardForScore {{
+            getScorecard(id: "{scorecard_id}") {{
+                id
+                name
+                sections {{
+                    items {{
+                        scores {{
+                            items {{
+                                id
+                                name
+                                key
+                                externalId
+                                championVersionId
+                            }}
+                        }}
+                    }}
+                }}
+            }}
+        }}
+        """
+        
+        result = client.execute(scorecard_query)
+        scorecard_data = result.get('getScorecard')
+        if not scorecard_data:
+            return f"Error: Could not retrieve scorecard data for '{scorecard_identifier}'."
+
+        # Find the specific score
+        found_score = None
+        for section in scorecard_data.get('sections', {}).get('items', []):
+            for score in section.get('scores', {}).get('items', []):
+                if (score.get('id') == score_identifier or 
+                    score.get('name') == score_identifier or 
+                    score.get('key') == score_identifier or 
+                    score.get('externalId') == score_identifier):
+                    found_score = score
+                    break
+            if found_score:
+                break
+
+        if not found_score:
+            return f"Error: Score '{score_identifier}' not found within scorecard '{scorecard_identifier}'."
+
+        # Determine which version to fetch
+        target_version_id = version_id or found_score.get('championVersionId')
+        if not target_version_id:
+            return f"Error: No version specified and no champion version found for score '{score_identifier}'."
+
+        # Get the version configuration
+        version_query = f"""
+        query GetScoreVersion {{
+            getScoreVersion(id: "{target_version_id}") {{
+                id
+                configuration
+                createdAt
+                updatedAt
+                note
+                isFeatured
+                parentVersionId
+            }}
+        }}
+        """
+        
+        version_result = client.execute(version_query)
+        version_data = version_result.get('getScoreVersion')
+        
+        if not version_data:
+            return f"Error: Version '{target_version_id}' not found."
+
+        configuration = version_data.get('configuration')
+        if not configuration:
+            return f"Error: No configuration found for version '{target_version_id}'."
+
+        return {
+            "scoreId": found_score['id'],
+            "scoreName": found_score['name'],
+            "scorecardName": scorecard_data['name'],
+            "versionId": version_data['id'],
+            "isChampionVersion": target_version_id == found_score.get('championVersionId'),
+            "configuration": configuration,
+            "versionMetadata": {
+                "createdAt": version_data.get('createdAt'),
+                "updatedAt": version_data.get('updatedAt'),
+                "note": version_data.get('note'),
+                "isFeatured": version_data.get('isFeatured'),
+                "parentVersionId": version_data.get('parentVersionId')
+            },
+            "dashboardUrl": get_plexus_url(f"lab/scorecards/{scorecard_id}/scores/{found_score['id']}")
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting score configuration: {str(e)}", exc_info=True)
+        return f"Error getting score configuration: {str(e)}"
+    finally:
+        # Check if anything was written to stdout
+        captured_output = temp_stdout.getvalue()
+        if captured_output:
+            logger.warning(f"Captured unexpected stdout during get_plexus_score_configuration: {captured_output}")
+        # Restore original stdout
+        sys.stdout = old_stdout
+
+@mcp.tool()
+async def update_plexus_score_configuration(
+    scorecard_identifier: str,
+    score_identifier: str,
+    yaml_configuration: str,
+    version_note: Optional[str] = None
+) -> Union[str, Dict[str, Any]]:
+    """
+    Updates a score's configuration by creating a new version with the provided YAML content.
+    This is the first mutation tool in the MCP server.
+    
+    Parameters:
+    - scorecard_identifier: Identifier for the parent scorecard (ID, name, key, or external ID)
+    - score_identifier: Identifier for the score (ID, name, key, or external ID)
+    - yaml_configuration: The new YAML configuration content for the score
+    - version_note: Optional note describing the changes made in this version
+    
+    Returns:
+    - Information about the created version and updated score, including dashboard URL
+    """
+    # Temporarily redirect stdout to capture any unexpected output
+    old_stdout = sys.stdout
+    temp_stdout = StringIO()
+    sys.stdout = temp_stdout
+    
+    try:
+        # Check if Plexus core modules are available
+        if not PLEXUS_CORE_AVAILABLE:
+            return "Error: Plexus Dashboard components are not available. Core modules failed to import."
+        
+        # Check if we have the necessary credentials
+        api_url = os.environ.get('PLEXUS_API_URL', '')
+        api_key = os.environ.get('PLEXUS_API_KEY', '')
+        
+        if not api_url or not api_key:
+            logger.warning("Missing API credentials. Ensure .env file is loaded.")
+            return "Error: Missing API credentials. Use --env-file to specify your .env file path."
+        
+        # Create the client
+        try:
+            client_stdout = StringIO()
+            saved_stdout = sys.stdout
+            sys.stdout = client_stdout
+            
+            try:
+                from plexus.dashboard.api.client import PlexusDashboardClient
+                from plexus.cli.client_utils import create_client as create_dashboard_client
+                from plexus.cli.ScorecardCommands import resolve_scorecard_identifier
+                client = create_dashboard_client()
+            finally:
+                client_output = client_stdout.getvalue()
+                if client_output:
+                    logger.warning(f"Captured unexpected stdout during client creation in update_plexus_score_configuration: {client_output}")
+                sys.stdout = saved_stdout
+        except Exception as client_err:
+            logger.error(f"Error creating dashboard client: {str(client_err)}", exc_info=True)
+            return f"Error creating dashboard client: {str(client_err)}"
+            
+        if not client:
+            return "Error: Could not create dashboard client."
+
+        # Validate YAML configuration
+        try:
+            import yaml
+            yaml.safe_load(yaml_configuration)
+        except yaml.YAMLError as e:
+            return f"Error: Invalid YAML configuration: {str(e)}"
+
+        # Resolve scorecard identifier
+        scorecard_id = resolve_scorecard_identifier(client, scorecard_identifier)
+        if not scorecard_id:
+            return f"Error: Scorecard '{scorecard_identifier}' not found."
+
+        # Find the score within the scorecard
+        scorecard_query = f"""
+        query GetScorecardForScore {{
+            getScorecard(id: "{scorecard_id}") {{
+                id
+                name
+                sections {{
+                    items {{
+                        scores {{
+                            items {{
+                                id
+                                name
+                                key
+                                externalId
+                                championVersionId
+                            }}
+                        }}
+                    }}
+                }}
+            }}
+        }}
+        """
+        
+        result = client.execute(scorecard_query)
+        scorecard_data = result.get('getScorecard')
+        if not scorecard_data:
+            return f"Error: Could not retrieve scorecard data for '{scorecard_identifier}'."
+
+        # Find the specific score
+        found_score = None
+        for section in scorecard_data.get('sections', {}).get('items', []):
+            for score in section.get('scores', {}).get('items', []):
+                if (score.get('id') == score_identifier or 
+                    score.get('name') == score_identifier or 
+                    score.get('key') == score_identifier or 
+                    score.get('externalId') == score_identifier):
+                    found_score = score
+                    break
+            if found_score:
+                break
+
+        if not found_score:
+            return f"Error: Score '{score_identifier}' not found within scorecard '{scorecard_identifier}'."
+
+        score_id = found_score['id']
+        current_champion_version_id = found_score.get('championVersionId')
+
+        # Create new score version
+        create_version_mutation = """
+        mutation CreateScoreVersion($input: CreateScoreVersionInput!) {
+            createScoreVersion(input: $input) {
+                id
+                scoreId
+                configuration
+                createdAt
+                updatedAt
+                note
+                isFeatured
+                parentVersionId
+            }
+        }
+        """
+        
+        version_input = {
+            'scoreId': score_id,
+            'configuration': yaml_configuration,
+            'isFeatured': True,  # Mark as featured to make it the new champion
+        }
+        
+        if current_champion_version_id:
+            version_input['parentVersionId'] = current_champion_version_id
+            
+        if version_note:
+            version_input['note'] = version_note
+        else:
+            version_input['note'] = 'Updated via MCP server'
+
+        version_result = client.execute(create_version_mutation, {'input': version_input})
+        
+        if 'errors' in version_result:
+            error_details = json.dumps(version_result['errors'], indent=2)
+            logger.error(f"Error creating score version: {error_details}")
+            return f"Error creating score version: {error_details}"
+
+        new_version = version_result.get('createScoreVersion')
+        if not new_version:
+            return "Error: Failed to create new score version."
+
+        new_version_id = new_version['id']
+
+        # Update the score to point to the new champion version
+        update_score_mutation = """
+        mutation UpdateScore($input: UpdateScoreInput!) {
+            updateScore(input: $input) {
+                id
+                name
+                championVersionId
+            }
+        }
+        """
+        
+        update_input = {
+            'id': score_id,
+            'championVersionId': new_version_id
+        }
+        
+        update_result = client.execute(update_score_mutation, {'input': update_input})
+        
+        if 'errors' in update_result:
+            error_details = json.dumps(update_result['errors'], indent=2)
+            logger.error(f"Error updating score champion version: {error_details}")
+            return f"Error updating score champion version: {error_details}"
+
+        updated_score = update_result.get('updateScore')
+        if not updated_score:
+            return "Warning: New version created but failed to update champion version."
+
+        return {
+            "success": True,
+            "scoreId": score_id,
+            "scoreName": found_score['name'],
+            "scorecardName": scorecard_data['name'],
+            "newVersionId": new_version_id,
+            "previousChampionVersionId": current_champion_version_id,
+            "versionNote": version_note or "Updated via MCP server",
+            "configurationLength": len(yaml_configuration),
+            "createdAt": new_version.get('createdAt'),
+            "dashboardUrl": get_plexus_url(f"lab/scorecards/{scorecard_id}/scores/{score_id}")
+        }
+        
+    except Exception as e:
+        logger.error(f"Error updating score configuration: {str(e)}", exc_info=True)
+        return f"Error updating score configuration: {str(e)}"
+    finally:
+        # Check if anything was written to stdout
+        captured_output = temp_stdout.getvalue()
+        if captured_output:
+            logger.warning(f"Captured unexpected stdout during update_plexus_score_configuration: {captured_output}")
+        # Restore original stdout
+        sys.stdout = old_stdout
+
+@mcp.tool()
+async def get_score_yaml_documentation() -> str:
+    """
+    Provides comprehensive documentation about the YAML configuration format for scores,
+    including examples and field descriptions. Use this tool when working with score configurations
+    to understand the expected format and available options.
+    
+    Returns:
+    - Detailed documentation about score YAML configuration format
+    """
+    return """# Score YAML Configuration Documentation
+
+## Overview
+Score configurations in Plexus use YAML format to define how scores are calculated, what prompts are used, and how results are interpreted.
+
+## Basic Structure
+```yaml
+name: "Score Name"
+key: "score-key"
+external_id: "score_123"  # or externalId (both formats supported)
+description: "Description of what this score measures"
+type: "LangGraphScore"
+section: "Section Name"
+
+# Core scoring configuration
+system_message: |
+  You are an expert evaluator. Please assess the following content
+  according to the specified criteria.
+
+user_message: |
+  Content to evaluate: {item_text}
+  
+  Please provide a score from 0-100 and explain your reasoning.
+
+# Model configuration  
+model_provider: "anthropic"  # or "openai", "azure", etc.
+model_name: "claude-3-sonnet-20240229"
+temperature: 0.1
+max_tokens: 1000
+
+# Scoring parameters
+min_score: 0
+max_score: 100
+threshold: 70
+weight: 1.0
+
+# Advanced options
+parameters:
+  check_grammar: true
+  check_style: true
+  min_word_count: 50
+  
+validation_rules:
+  - rule: "score >= 0 and score <= 100"
+    message: "Score must be between 0 and 100"
+```
+
+## Field Descriptions
+
+### Identity Fields
+- `name`: Human-readable name for the score
+- `key`: Unique identifier (alphanumeric with dashes/underscores)
+- `external_id` or `externalId`: External system identifier
+- `description`: Brief description of the score's purpose
+
+### Message Templates
+- `system_message`: System prompt sent to the AI model (supports multi-line with `|`)
+- `user_message`: User prompt template (can include variables like `{item_text}`)
+
+### Model Configuration
+- `model_provider`: AI provider ("anthropic", "openai", "azure", etc.)
+- `model_name`: Specific model to use
+- `temperature`: Randomness (0.0-1.0, lower = more consistent)
+- `max_tokens`: Maximum response length
+
+### Scoring Parameters
+- `min_score`/`max_score`: Score range bounds
+- `threshold`: Minimum passing score
+- `weight`: Relative importance in composite scores
+
+### Variable Substitution
+Use `{variable_name}` in messages to include dynamic content:
+- `{item_text}`: The content being evaluated
+- `{item_metadata}`: Additional item information
+- `{context}`: Additional evaluation context
+
+## Common Examples
+
+### Binary Classification Score
+```yaml
+name: "Content Safety"
+system_message: |
+  Determine if the content is safe for general audiences.
+  Respond with either "SAFE" or "UNSAFE" followed by reasoning.
+user_message: |
+  Content: {item_text}
+min_score: 0
+max_score: 1
+```
+
+### Quality Assessment Score
+```yaml
+name: "Writing Quality"
+system_message: |
+  Evaluate writing quality on grammar, clarity, and style.
+  Provide a score from 1-10 with detailed feedback.
+user_message: |
+  Text to evaluate: {item_text}
+  
+  Consider:
+  - Grammar and spelling
+  - Clarity of communication
+  - Writing style and flow
+min_score: 1
+max_score: 10
+threshold: 7
+```
+
+### Custom Parameters Score
+```yaml
+name: "Technical Accuracy"
+parameters:
+  domain: "software engineering"
+  check_citations: true
+  require_examples: true
+system_message: |
+  You are a technical expert in {domain}.
+  Evaluate the technical accuracy of the content.
+```
+
+## Best Practices
+
+1. **Use Clear Names**: Make score names descriptive and unique
+2. **Multi-line Strings**: Use `|` for multi-line system/user messages
+3. **Consistent Scoring**: Define clear min/max ranges and stick to them
+4. **Validation**: Include validation rules for complex scores
+5. **Documentation**: Add descriptions explaining the score's purpose
+6. **Testing**: Test scores with sample content before deployment
+
+## Common Issues
+
+### YAML Syntax Errors
+- Ensure proper indentation (2 spaces recommended)
+- Quote strings containing special characters
+- Use `|` for multi-line strings to preserve formatting
+
+### Field Format Issues
+- Use either `external_id` or `externalId` consistently
+- Ensure numeric fields (scores, weights) are not quoted
+- Boolean values should be `true`/`false` (lowercase)
+
+### Variable Substitution
+- Variables in messages must match exactly: `{item_text}` not `{item-text}`
+- Undefined variables will be left as-is in the final prompt
+
+## Migration Notes
+
+When updating existing scores:
+- New versions preserve the existing format preferences
+- Both `external_id` and `externalId` formats are supported
+- Changes create new versions; previous versions remain accessible
+- Champion version determines which configuration is used for evaluations
+
+For additional help or advanced use cases, consult the Plexus documentation or contact support."""
+
+async def _get_score_results_for_item(item_id: str, client) -> List[Dict[str, Any]]:
+    """
+    Helper function to get all score results for a specific item, sorted by updatedAt descending.
+    This mirrors the functionality from the CLI ItemCommands.get_score_results_for_item function.
+    """
+    try:
+        from plexus.dashboard.api.models.score_result import ScoreResult
+        from datetime import datetime
+        
+        query = f"""
+        query ListScoreResultByItemId($itemId: String!) {{
+            listScoreResultByItemId(itemId: $itemId) {{
+                items {{
+                    {ScoreResult.fields()}
+                    updatedAt
+                    createdAt
+                }}
+            }}
+        }}
+        """
+        
+        result = client.execute(query, {'itemId': item_id})
+        score_results_data = result.get('listScoreResultByItemId', {}).get('items', [])
+        
+        # Convert to ScoreResult objects and add timestamp fields manually
+        score_results = []
+        for sr_data in score_results_data:
+            score_result = ScoreResult.from_dict(sr_data, client)
+            
+            # Convert to dictionary format and include timestamps
+            sr_dict = {
+                'id': score_result.id,
+                'value': score_result.value,
+                'explanation': getattr(score_result, 'explanation', None),
+                'confidence': score_result.confidence,
+                'correct': score_result.correct,
+                'itemId': score_result.itemId,
+                'scoreId': getattr(score_result, 'scoreId', None),
+                'scoreName': score_result.scoreName,  # Include the score name
+                'scoreVersionId': getattr(score_result, 'scoreVersionId', None),
+                'scorecardId': score_result.scorecardId,
+                'evaluationId': score_result.evaluationId,
+                'scoringJobId': getattr(score_result, 'scoringJobId', None),
+                'metadata': score_result.metadata,
+                'trace': getattr(score_result, 'trace', None)
+            }
+            
+            # Add timestamp fields
+            if 'updatedAt' in sr_data:
+                if isinstance(sr_data['updatedAt'], str):
+                    updatedAt = datetime.fromisoformat(sr_data['updatedAt'].replace('Z', '+00:00'))
+                    sr_dict['updatedAt'] = updatedAt.isoformat()
+                else:
+                    sr_dict['updatedAt'] = sr_data['updatedAt']
+                    
+            if 'createdAt' in sr_data:
+                if isinstance(sr_data['createdAt'], str):
+                    createdAt = datetime.fromisoformat(sr_data['createdAt'].replace('Z', '+00:00'))
+                    sr_dict['createdAt'] = createdAt.isoformat()
+                else:
+                    sr_dict['createdAt'] = sr_data['createdAt']
+            
+            score_results.append(sr_dict)
+        
+        # Sort by updatedAt in Python since GraphQL doesn't support it
+        score_results.sort(
+            key=lambda sr: sr.get('updatedAt', '1970-01-01T00:00:00'),
+            reverse=True
+        )
+        
+        return score_results
+        
+    except Exception as e:
+        logger.error(f"Error getting score results for item {item_id}: {str(e)}", exc_info=True)
+        return []
 
 # Setup dotenv support for loading environment variables
 def load_env_file(env_dir=None):
@@ -1400,6 +2847,30 @@ def get_report_url(report_id: str) -> str:
     - Full URL to the report in the dashboard
     """
     return get_plexus_url(f"lab/reports/{report_id}")
+
+def get_item_url(item_id: str) -> str:
+    """
+    Generates a URL for viewing an item in the dashboard.
+    
+    Parameters:
+    - item_id: The ID of the item
+    
+    Returns:
+    - Full URL to the item in the dashboard
+    """
+    return get_plexus_url(f"lab/items/{item_id}")
+
+def get_task_url(task_id: str) -> str:
+    """
+    Generates a URL for viewing a task in the dashboard.
+    
+    Parameters:
+    - task_id: The ID of the task
+    
+    Returns:
+    - Full URL to the task in the dashboard
+    """
+    return get_plexus_url(f"lab/tasks/{task_id}")
 
 # Main function to run the server
 if __name__ == "__main__":

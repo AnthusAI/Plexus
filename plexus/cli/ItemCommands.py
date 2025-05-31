@@ -181,7 +181,7 @@ def format_score_results_content(score_results: List[ScoreResult]) -> Text:
     
     # Create a table for score results
     results_table = rich.table.Table(show_header=True, box=rich.table.box.ROUNDED)
-    results_table.add_column("Score ID", style="bold")
+    results_table.add_column("Score Name", style="bold")
     results_table.add_column("Value", justify="right")
     results_table.add_column("Confidence", justify="right")
     results_table.add_column("Correct", justify="center")
@@ -191,7 +191,14 @@ def format_score_results_content(score_results: List[ScoreResult]) -> Text:
     
     for sr in score_results:
         # Format value with appropriate precision
-        value_str = f"{sr.value:.3f}" if sr.value is not None else "N/A"
+        numeric_val = getattr(sr, 'numeric_value', None)
+        if numeric_val is None:
+            # Fallback: try to convert value directly if numeric_value property doesn't exist
+            try:
+                numeric_val = float(sr.value) if sr.value is not None else None
+            except (ValueError, TypeError):
+                numeric_val = None
+        value_str = f"{numeric_val:.3f}" if numeric_val is not None else "N/A"
         
         # Format confidence with appropriate precision
         confidence_str = f"{sr.confidence:.3f}" if sr.confidence is not None else "N/A"
@@ -211,7 +218,7 @@ def format_score_results_content(score_results: List[ScoreResult]) -> Text:
         updated_str = format_datetime(getattr(sr, 'updatedAt', None))
         
         results_table.add_row(
-            sr.scoreId if hasattr(sr, 'scoreId') and sr.scoreId else sr.id[:8] + "...",
+            sr.scoreName if sr.scoreName else (sr.scoreId[:8] + "..." if sr.scoreId else "N/A"),
             value_str,
             confidence_str,
             f"[{correct_style}]{correct_str}[/{correct_style}]" if correct_style else correct_str,
