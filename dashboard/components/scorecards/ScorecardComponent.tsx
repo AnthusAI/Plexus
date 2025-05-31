@@ -975,22 +975,18 @@ export default function ScorecardComponent({
   return (
     <div
       className={cn(
-        "w-full rounded-lg text-card-foreground hover:bg-accent/50 transition-colors",
+        "w-full rounded-lg text-card-foreground hover:bg-accent/50 transition-colors relative",
         variant === 'grid' ? (
           isSelected ? "bg-card-selected" : "bg-card"
         ) : "bg-card-selected",
         variant === 'detail' && "h-full flex flex-col",
+        (isSelected && variant === 'grid') && "selected-border-rounded",
         className
       )}
-      style={{
-        ...(isSelected && variant === 'grid' && {
-          boxShadow: 'inset 0 0 0 0.5rem var(--secondary)'
-        })
-      }}
       {...props}
     >
       <div className={cn(
-        "p-4 w-full",
+        "p-4 w-full relative z-10",
         variant === 'detail' && "flex-1 flex flex-col min-h-0"
       )}>
         <div 

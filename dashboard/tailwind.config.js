@@ -59,6 +59,12 @@ module.exports = {
                     selected: 'var(--secondary-selected)',
                     'selected-foreground': 'var(--secondary-selected-foreground)'
                 },
+                selected: {
+                    DEFAULT: 'var(--selected)',
+                    foreground: 'var(--selected-foreground)',
+                    selected: 'var(--selected-selected)',
+                    'selected-foreground': 'var(--selected-selected-foreground)'
+                },
                 muted: {
                     DEFAULT: 'var(--muted)',
                     foreground: 'var(--muted-foreground)'
