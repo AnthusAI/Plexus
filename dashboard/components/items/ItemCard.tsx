@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { Card } from '@/components/ui/card'
-import { MoreHorizontal, X, Square, Columns2, StickyNote, Info, ChevronDown, ChevronUp, Clock, Loader2 } from 'lucide-react'
+import { MoreHorizontal, X, Square, Columns2, StickyNote, Info, ChevronDown, ChevronUp, Loader2 } from 'lucide-react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { cn } from '@/lib/utils'
 import { CardButton } from '@/components/CardButton'
@@ -11,31 +11,35 @@ import ItemScoreResultCard from './ItemScoreResultCard'
 import { IdentifierDisplay } from '@/components/ui/identifier-display'
 import NumberFlowWrapper from '@/components/ui/number-flow'
 
-// Interface for grouped score results
-interface GroupedScoreResults {
-  [scorecardId: string]: {
-    scorecardName: string;
-    scores: {
-      scoreId: string;
-      scoreName: string;
-    }[];
-  }
+// Interface for scorecard results
+interface ScorecardResult {
+  scorecardId: string;
+  scorecardName: string;
+  resultCount: number;
 }
 
+// Clean interface for ItemCard parameters
 export interface ItemData {
+  // Core required parameters
   id: number | string
-  scorecard?: string
-  score?: string | number | null
+  timestamp: string // ISO string for when the item was created/updated
+  duration?: number // Duration in seconds (optional for elapsed time display)
+  scorecards: ScorecardResult[] // List of scorecards with result counts
+  
+  // Optional UI fields
+  icon?: React.ReactNode
+  externalId?: string
+  description?: string
+  identifiers?: string // JSON string
+  isNew?: boolean
+  isLoadingResults?: boolean
+  
+  // Legacy fields for backwards compatibility (will be phased out)
   date?: string
   status?: string
   results?: number
   inferences?: number
   cost?: string
-  icon?: React.ReactNode
-  
-  // New fields from the Amplify model
-  externalId?: string
-  description?: string
   accountId?: string
   scorecardId?: string
   scoreId?: string
@@ -43,16 +47,7 @@ export interface ItemData {
   updatedAt?: string
   createdAt?: string
   isEvaluation?: boolean
-  isNew?: boolean
-  identifiers?: string // JSON string
-  
-  // New field for grouped score results
-  groupedScoreResults?: GroupedScoreResults
-  
-  // Score result loading state
-  isLoadingResults?: boolean
-  
-  // Score result breakdown by scorecard
+  groupedScoreResults?: any
   scorecardBreakdown?: Array<{
     scorecardId: string;
     scorecardName: string;
@@ -82,116 +77,79 @@ const GridContent = React.memo(({
   getBadgeVariant: (status: string) => string
   isSelected?: boolean
 }) => {  
-  // Get scores to display 
-  const getScoreDisplays = () => {
-    // If we have groupedScoreResults, use those
-    if (item.groupedScoreResults && Object.keys(item.groupedScoreResults).length > 0) {
-      const displays: { scorecard: string, scores: string[] }[] = [];
-      
-      Object.values(item.groupedScoreResults).forEach(data => {
-        displays.push({
-          scorecard: data.scorecardName,
-          scores: data.scores.map(s => s.scoreName)
-        });
-      });
-      
-      return displays;
-    } else if (item.scorecard) {
-      // Fall back to old single score if available
-      return [{
-        scorecard: item.scorecard,
-        scores: item.score ? [item.score.toString()] : []
-      }];
-    } else if (item.isEvaluation) {
-      return [{
-        scorecard: 'Evaluation',
-        scores: ["Evaluation"]
-      }];
-    } else {
-      return [{
-        scorecard: 'Item',
-        scores: []
-      }];
-    }
-  };
-  
-  const scoreDisplays = getScoreDisplays();
-  const hasMultipleScores = scoreDisplays.reduce((total, display) => total + display.scores.length, 0) > 1;
-  const hasMultipleScorecards = scoreDisplays.length > 1;
-  
-  // Determine what to show when collapsed
-  const primaryScorecard = scoreDisplays[0]?.scorecard || 'Untitled Item';
-  const primaryScore = scoreDisplays[0]?.scores[0] || '';
-  
-  // Get total score count
-  const totalScores = scoreDisplays.reduce((total, display) => total + display.scores.length, 0);
+  const totalResults = item.scorecards.reduce((sum, sc) => sum + sc.resultCount, 0);
+  const hasMultipleScorecards = item.scorecards.length > 1;
 
   return (
-    <div className="w-full">
-      <div className="float-right flex flex-col items-center space-y-1 ml-2 mt-0">
+    <div className="w-full relative">
+      {/* Icon positioned absolutely in top-right */}
+      <div className="absolute top-0 right-0 flex flex-col items-center space-y-1 z-10">
         {item.icon || <StickyNote className="h-[1.75rem] w-[1.75rem]" strokeWidth={1.25} />}
-        <div className="text-xs text-muted-foreground text-center" title={primaryScorecard}>
-          <span className="font-semibold">{primaryScorecard}</span>
+        <div className="text-xs text-muted-foreground text-center" title="Item">
+          <span className="font-semibold">Item</span>
         </div>
       </div>
-      <div className="space-y-1 pr-20">
+      
+      {/* Invisible float element that creates space for icon/label but allows text to wrap under */}
+      <div className="float-right w-16 h-12"></div>
+      
+      {/* Content that flows around and under the icon */}
+      <div className="space-y-1">
         <IdentifierDisplay 
           externalId={item.externalId}
           identifiers={item.identifiers}
-          iconSize="sm"
+          iconSize="md"
           textSize="xs"
         />
 
-        {item.date ? (
+        <Timestamp 
+          time={item.timestamp} 
+          variant="relative" 
+          showIcon={true} 
+          className="text-xs"
+        />
+
+        {/* Elapsed time display between createdAt and updatedAt */}
+        {item.createdAt && item.updatedAt && (
           <Timestamp 
-            time={item.date} 
-            variant="relative" 
-            showIcon={true} 
+            time={item.createdAt}
+            completionTime={item.updatedAt}
+            variant="elapsed" 
+            showIcon={true}
             className="text-xs"
           />
-        ) : (
-          <div className="text-xs text-muted-foreground">No date</div>
         )}
 
-        {(hasMultipleScores || primaryScore) && (
-          <div className="font-semibold text-sm truncate" title={hasMultipleScores ? `${totalScores} scores` : `Score: ${primaryScore}`}>
-            {hasMultipleScores ? 
-              `${totalScores} ${totalScores === 1 ? 'score' : 'scores'}` : 
-              primaryScore}
+        {/* Scorecard summary */}
+        {item.scorecards.length > 0 && (
+          <div className="font-semibold text-sm mt-3">
+            {hasMultipleScorecards ? 
+              `${item.scorecards.length} scorecards` : 
+              item.scorecards[0]?.scorecardName || 'Scorecard'}
           </div>
         )}
         
-        {/* Score results count with loading state - fixed height to prevent layout jiggling */}
-        <div className="flex flex-col gap-0.5 text-xs text-muted-foreground min-h-[2.5rem]">
+        {/* Results count - fixed height to prevent layout jiggling */}
+        <div className="flex flex-col gap-0.5 text-xs">
           {item.isLoadingResults ? (
-            <div className="flex items-center gap-1">
-              <Loader2 className="h-3 w-3 animate-spin" />
+            <div className="flex items-center gap-1 text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
               <span>Loading results...</span>
             </div>
-          ) : item.scorecardBreakdown && item.scorecardBreakdown.length > 0 ? (
-            item.scorecardBreakdown.map((breakdown, index) => (
-              <div key={breakdown.scorecardId || index} className="flex flex-col">
-                <div className="text-xs text-muted-foreground">
-                  <span className="font-medium">{breakdown.scorecardName}</span>
-                </div>
-                <div>
-                  <NumberFlowWrapper value={breakdown.count} /> result{breakdown.count !== 1 ? 's' : ''}
-                </div>
-              </div>
-            ))
+          ) : item.scorecards.length > 0 ? (
+            <div>
+              <NumberFlowWrapper value={totalResults} /> result{totalResults !== 1 ? 's' : ''}
+            </div>
           ) : (
-            <div className="flex flex-col">
-              <div className="text-xs text-muted-foreground">
-                <span className="font-medium">&nbsp;</span>
-              </div>
-              <div>
-                <NumberFlowWrapper value={item.results || 0} /> result{(item.results || 0) !== 1 ? 's' : ''}
-              </div>
+            <div>
+              <NumberFlowWrapper value={0} /> results
             </div>
           )}
         </div>
+        
+        {/* Clear the float */}
+        <div className="clear-both"></div>
       </div>
-      <div className="clear-both"></div>
     </div>
   )
 })
@@ -215,135 +173,59 @@ const DetailContent = React.memo(({
   onEdit,
   onViewData,
 }: DetailContentProps) => {
-  // Function to get all scorecard and score information
-  const getScoreInfo = () => {
-    if (item.groupedScoreResults && Object.keys(item.groupedScoreResults).length > 0) {
-      return Object.values(item.groupedScoreResults).map(data => ({
-        scorecardName: data.scorecardName,
-        scores: data.scores.map(s => ({
-          scoreName: s.scoreName,
-          createdAt: item.createdAt
-        }))
-      }));
-    } else if (item.scorecard) {
-      return [{
-        scorecardName: item.scorecard,
-        scores: item.score ? [{
-          scoreName: item.score.toString(),
-          createdAt: item.createdAt
-        }] : []
-      }];
-    } else if (item.isEvaluation) {
-      return [{
-        scorecardName: 'Evaluation',
-        scores: [{
-          scoreName: "Evaluation",
-          createdAt: item.createdAt
-        }]
-      }];
-    } else {
-      return [{
-        scorecardName: 'Item',
-        scores: []
-      }];
-    }
-  };
-  
-  const scoreInfo = getScoreInfo();
-  
-  // Log the score info for debugging
-  React.useEffect(() => {
-    console.log('DetailContent scoreInfo:', scoreInfo);
-    console.log('GroupedScoreResults:', item.groupedScoreResults);
-  }, [item, scoreInfo]);
-
-  // Get a single display name for the primary score (for the basic info section)
-  const getPrimaryScoreDisplay = () => {
-    if (scoreInfo.length === 0) return "";
-    if (scoreInfo[0].scores.length === 0) return "";
-    
-    // If we have one scorecard with one score, just show that
-    if (scoreInfo.length === 1 && scoreInfo[0].scores.length === 1) {
-      return scoreInfo[0].scores[0].scoreName;
-    }
-    
-    // Otherwise, show count
-    const totalScores = scoreInfo.reduce((total, info) => total + info.scores.length, 0);
-    return `${totalScores} scores in ${scoreInfo.length} scorecard${scoreInfo.length > 1 ? 's' : ''}`;
-  };
-  
-  // Check if we have multiple scores
-  const hasMultipleScores = scoreInfo.reduce((total, info) => total + info.scores.length, 0) > 1;
-  
-  // Get total score count
-  const totalScores = scoreInfo.reduce((total, info) => total + info.scores.length, 0);
-  
-  // Get primary score
-  const primaryScore = scoreInfo[0]?.scores[0]?.scoreName || '';
+  const totalResults = item.scorecards.reduce((sum, sc) => sum + sc.resultCount, 0);
+  const hasMultipleScorecards = item.scorecards.length > 1;
 
   return (
     <div className="w-full flex flex-col min-h-0">
       <div className="flex justify-between items-start w-full">
         <div className="space-y-2 flex-1">
-          {/* Header order: 1. Scorecard name - reduced text size to match grid view */}
+          {/* Header with primary scorecard name */}
           <div className="text-xs text-muted-foreground">
-            <span className="font-semibold truncate">{scoreInfo[0]?.scorecardName || 'Untitled Item'}</span>
+            <span className="font-semibold">
+              {hasMultipleScorecards ? 
+                `${item.scorecards.length} Scorecards` : 
+                (item.scorecards[0]?.scorecardName || 'Untitled Item')}
+            </span>
           </div>
 
           <IdentifierDisplay 
             externalId={item.externalId}
             identifiers={item.identifiers}
-            iconSize="sm"
+            iconSize="md"
             textSize="sm"
           />
 
-          {item.date ? (
+          <Timestamp 
+            time={item.timestamp} 
+            variant="relative" 
+            showIcon={true}
+            className="text-xs"
+          />
+
+          {/* Elapsed time display between createdAt and updatedAt */}
+          {item.createdAt && item.updatedAt && (
             <Timestamp 
-              time={item.date} 
-              variant="relative" 
-              className="text-sm"
+              time={item.createdAt}
+              completionTime={item.updatedAt}
+              variant="elapsed" 
+              showIcon={true}
+              className="text-xs"
             />
-          ) : (
-            <p className="text-sm text-muted-foreground">No date</p>
           )}
           
-          {(hasMultipleScores || primaryScore) && (
-            <div className="text-sm font-semibold truncate" title={hasMultipleScores ? `${totalScores} scores` : `Score: ${primaryScore}`}>
-              {hasMultipleScores ? 
-                `${totalScores} ${totalScores === 1 ? 'score' : 'scores'}` : 
-                primaryScore}
+          {/* Results summary */}
+          <div className="text-sm font-semibold">
+            {totalResults} result{totalResults !== 1 ? 's' : ''}
+          </div>
+          
+          {/* Loading state */}
+          {item.isLoadingResults && (
+            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span>Loading results...</span>
             </div>
           )}
-          
-          {/* Score results count with loading state - fixed height to prevent layout jiggling */}
-          <div className="flex flex-col gap-0.5 text-xs text-muted-foreground min-h-[2.5rem]">
-            {item.isLoadingResults ? (
-              <div className="flex items-center gap-1">
-                <Loader2 className="h-3 w-3 animate-spin" />
-                <span>Loading results...</span>
-              </div>
-            ) : item.scorecardBreakdown && item.scorecardBreakdown.length > 0 ? (
-              item.scorecardBreakdown.map((breakdown, index) => (
-                <div key={breakdown.scorecardId || index} className="flex flex-col">
-                  <div className="text-xs text-muted-foreground">
-                    <span className="font-medium">{breakdown.scorecardName}</span>
-                  </div>
-                  <div>
-                    <NumberFlowWrapper value={breakdown.count} /> result{breakdown.count !== 1 ? 's' : ''}
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="flex flex-col">
-                <div className="text-xs text-muted-foreground">
-                  <span className="font-medium">&nbsp;</span>
-                </div>
-                <div>
-                  <NumberFlowWrapper value={item.results || 0} /> result{(item.results || 0) !== 1 ? 's' : ''}
-                </div>
-              </div>
-            )}
-          </div>
         </div>
         <div className="flex gap-2 ml-4">
           <DropdownMenu.Root>
@@ -385,15 +267,15 @@ const DetailContent = React.memo(({
         </div>
       </div>
       
-      {/* Score results section - "Score Results" header removed */}
-      {scoreInfo.length > 0 && (scoreInfo.length > 1 || scoreInfo[0].scores.length > 1) && (
+      {/* Scorecard details section - show when we have multiple scorecards */}
+      {hasMultipleScorecards && (
         <div className="mt-2 overflow-auto">
           <div className="space-y-4 pb-2">
-            {scoreInfo.map((info, i) => (
+            {item.scorecards.map((scorecard) => (
               <ItemScoreResultCard
-                key={i}
-                scorecardName={info.scorecardName}
-                scores={info.scores}
+                key={scorecard.scorecardId}
+                scorecardName={scorecard.scorecardName}
+                scores={[]} // This would need to be populated with actual score data when available
               />
             ))}
           </div>
@@ -472,18 +354,15 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
         ) : "bg-card-selected",
         variant === 'detail' && "h-full flex flex-col",
         item.isNew && "new-item-shadow",
+        ((variant === 'grid' && isSelected) || variant === 'detail') && "selected-border-rounded",
         className
       )}
-      style={{
-        ...(((variant === 'grid' && isSelected) || variant === 'detail') && {
-          boxShadow: 'inset 0 0 0 0.5rem var(--secondary)'
-        })
-      }}
       {...htmlProps}
     >
+
       <div className={cn(
         variant === 'grid' ? "p-3" : "p-4",
-        "w-full",
+        "w-full relative z-10",
         variant === 'detail' && "flex-1 flex flex-col min-h-0"
       )}>
         <div 

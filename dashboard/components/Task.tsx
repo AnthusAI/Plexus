@@ -145,17 +145,12 @@ const Task = <TData extends BaseTaskData = BaseTaskData>({
 
   return (
     <div 
-      className={`
-        transition-colors duration-200 
-        flex flex-col h-full rounded-lg w-full max-w-full
-        ${variant === 'grid' ? 'cursor-pointer hover:bg-accent/50' : ''}
-        ${effectiveIsSelected ? 'bg-card-selected' : 'bg-card'}
-      `}
-      style={{
-        ...(effectiveIsSelected && variant === 'grid' && {
-          boxShadow: 'inset 0 0 0 0.5rem var(--secondary)'
-        })
-      }}
+      className={cn(
+        "transition-colors duration-200 flex flex-col h-full rounded-lg w-full max-w-full relative",
+        variant === 'grid' ? 'cursor-pointer hover:bg-accent/50' : '',
+        effectiveIsSelected ? 'bg-card-selected' : 'bg-card',
+        (effectiveIsSelected && variant === 'grid') && "selected-border-rounded"
+      )}
       onClick={variant === 'grid' && !isLoading ? onClick : undefined}
       role={variant === 'grid' ? 'button' : 'article'}
       tabIndex={variant === 'grid' ? 0 : undefined}
@@ -168,10 +163,10 @@ const Task = <TData extends BaseTaskData = BaseTaskData>({
       aria-busy={isLoading}
       aria-disabled={isLoading}
     >
-      <div className="flex-none p-3 w-full max-w-full overflow-hidden">
+      <div className="flex-none p-3 w-full max-w-full overflow-hidden relative z-10">
         {renderHeader(childProps)}
       </div>
-      <div className="flex-1 min-h-0">
+      <div className="flex-1 min-h-0 relative z-10">
         {error ? (
           <div className="flex flex-col items-center justify-center h-full text-center p-4">
             <div className="text-destructive mb-2">{error}</div>

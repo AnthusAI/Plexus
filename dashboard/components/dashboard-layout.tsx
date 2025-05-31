@@ -191,7 +191,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                   (item.name === "Scorecards" && pathname.startsWith(item.path)) ||
                   (item.name === "Reports" && pathname.startsWith(item.path)) ||
                   (item.name === "Activity" && isActivityRoute))
-                    ? "bg-secondary text-secondary-foreground"
+                    ? "bg-selected text-selected-foreground"
                     : "hover:bg-accent hover:text-accent-foreground"
                 } ${isLeftSidebarOpen ? '' : 'px-2'} ${
                   isMobile ? 'py-3' : ''
@@ -205,7 +205,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                   (item.name === "Scorecards" && pathname.startsWith(item.path)) ||
                   (item.name === "Reports" && pathname.startsWith(item.path)) ||
                   (item.name === "Activity" && isActivityRoute))
-                    ? "text-secondary-foreground"
+                    ? "text-selected-foreground"
                     : "text-navigation-icon"
                 }`} />
                 {isLeftSidebarOpen && (

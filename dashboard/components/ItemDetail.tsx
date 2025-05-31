@@ -138,15 +138,15 @@ const ItemDetail: React.FC<ItemDetailProps> = ({
             <IdentifierDisplay 
               externalId={(item as any).externalId}
               identifiers={(item as any).identifiers}
-              iconSize="sm"
+              iconSize="md"
               textSize="sm"
             />
           </div>
           <p className="text-sm text-muted-foreground">
-            <Timestamp time={item.date} variant="relative" />
+            <Timestamp time={item.date} variant="relative" className="text-xs" />
           </p>
           {(item as any).createdAt && (item as any).updatedAt && (
-            <Timestamp time={(item as any).createdAt} completionTime={(item as any).updatedAt} variant="elapsed" className="text-sm" />
+            <Timestamp time={(item as any).createdAt} completionTime={(item as any).updatedAt} variant="elapsed" className="text-xs" />
           )}
         </div>
         <div className="flex items-center space-x-2">

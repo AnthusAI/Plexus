@@ -27,6 +27,10 @@
   --secondary-selected: hsl(var(--plum-7));
   --secondary-foreground: hsl(var(--mauve-11));
   --secondary-selected-foreground: hsl(var(--mauve-11));
+  --selected: hsl(var(--violet-6));
+  --selected-selected: hsl(var(--violet-7));
+  --selected-foreground: hsl(var(--mauve-11));
+  --selected-selected-foreground: hsl(var(--mauve-11));
   --accent: hsl(var(--violet-6));
   --accent-selected: hsl(var(--violet-7));
   --accent-foreground: hsl(var(--mauve-11));
@@ -102,6 +106,10 @@
   --secondary-selected: hsl(var(--plum-7));
   --secondary-foreground: hsl(var(--mauve-11));
   --secondary-selected-foreground: hsl(var(--mauve-11));
+  --selected: hsl(var(--violet-6));
+  --selected-selected: hsl(var(--violet-7));
+  --selected-foreground: hsl(var(--mauve-11));
+  --selected-selected-foreground: hsl(var(--mauve-11));
   --accent: hsl(var(--violet-6));
   --accent-selected: hsl(var(--violet-7));
   --accent-foreground: hsl(var(--mauve-11));
@@ -160,6 +168,32 @@
 .new-item-shadow {
   box-shadow: 0 4px 12px hsl(var(--secondary) / 0.4);
   animation: fadeInSmooth 2s ease-out;
+}
+
+.selected-border-rounded::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--selected);
+  border-radius: 0.5rem;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.selected-border-rounded::after {
+  content: '';
+  position: absolute;
+  top: 0.375rem;
+  left: 0.375rem;
+  right: 0.375rem;
+  bottom: 0.375rem;
+  background: var(--card-selected);
+  border-radius: 0.3rem;
+  pointer-events: none;
+  z-index: 0;
 }
 
 @keyframes fadeInSmooth {
