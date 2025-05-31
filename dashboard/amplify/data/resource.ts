@@ -41,7 +41,7 @@ type ReportBlockIndexFields = "reportId" | "name" | "position";
 type FeedbackItemIndexFields = "accountId" | "scorecardId" | "scoreId" | "cacheKey" | "updatedAt" | "itemId"; // UPDATED: Renamed externalId to cacheKey and added itemId
 type ScorecardExampleItemIndexFields = "scorecardId" | "itemId" | "addedAt";
 type ScorecardProcessedItemIndexFields = "scorecardId" | "itemId" | "processedAt";
-type IdentifierIndexFields = "accountId" | "value" | "name" | "itemId";
+type IdentifierIndexFields = "accountId" | "value" | "name" | "itemId" | "position";
 
 // New index types for Feedback Analysis
 // type FeedbackAnalysisIndexFields = "accountId" | "scorecardId" | "createdAt"; // REMOVED
@@ -318,6 +318,7 @@ const schema = a.schema({
             name: a.string().required(),      // e.g., "Customer ID", "Order ID"
             value: a.string().required(),     // e.g., "CUST-123456", "ORD-789012"
             url: a.string(),                  // Optional clickable link
+            position: a.integer().required(), // Sort order for display
             accountId: a.string().required(), // For data isolation
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
@@ -333,7 +334,7 @@ const schema = a.schema({
         .secondaryIndexes((idx: (field: IdentifierIndexFields) => any) => [
             idx("accountId").sortKeys(["value"]).name("byAccountAndValue"),  // PRIMARY: Direct-hit search by exact value
             idx("accountId").sortKeys(["name", "value"]).name("byAccountNameAndValue"), // Search within identifier type
-            idx("itemId"),  // Get all identifiers for an item
+            idx("itemId").sortKeys(["position"]).name("byItemAndPosition"),  // Get all identifiers for an item ordered by position
             idx("value").name("byValue"), // Global value lookup (if cross-account search needed)
         ]),
 
