@@ -1,0 +1,448 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.dashboard.api package &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.dashboard.api.models package" href="plexus.dashboard.api.models.html" />
+    <link rel="prev" title="plexus.dashboard package" href="plexus.dashboard.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.html">plexus.analysis package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.dashboard.html#subpackages">Subpackages</a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.dashboard.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.reports.html">plexus.reports package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.html">plexus.utils package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.dashboard.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3 current"><a class="current reference internal" href="#">plexus.dashboard.api package</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#subpackages">Subpackages</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.commands.html">plexus.dashboard.commands package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.dashboard.html#submodules">Submodules</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.dashboard.html">plexus.dashboard package</a></li>
+      <li class="breadcrumb-item active">plexus.dashboard.api package</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.dashboard.api.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.dashboard.api">
+<span id="plexus-dashboard-api-package"></span><h1>plexus.dashboard.api package<a class="headerlink" href="#module-plexus.dashboard.api" title="Link to this heading"></a></h1>
+<section id="subpackages">
+<h2>Subpackages<a class="headerlink" href="#subpackages" title="Link to this heading"></a></h2>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.api.models.html">plexus.dashboard.api.models package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Account"><code class="docutils literal notranslate"><span class="pre">Account</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Account.__init__"><code class="docutils literal notranslate"><span class="pre">Account.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Account.description"><code class="docutils literal notranslate"><span class="pre">Account.description</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Account.fields"><code class="docutils literal notranslate"><span class="pre">Account.fields()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Account.from_dict"><code class="docutils literal notranslate"><span class="pre">Account.from_dict()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Account.get_by_id"><code class="docutils literal notranslate"><span class="pre">Account.get_by_id()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Account.get_by_key"><code class="docutils literal notranslate"><span class="pre">Account.get_by_key()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Account.key"><code class="docutils literal notranslate"><span class="pre">Account.key</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Account.list_by_key"><code class="docutils literal notranslate"><span class="pre">Account.list_by_key()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Account.name"><code class="docutils literal notranslate"><span class="pre">Account.name</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Account.settings"><code class="docutils literal notranslate"><span class="pre">Account.settings</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Account.update"><code class="docutils literal notranslate"><span class="pre">Account.update()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Evaluation"><code class="docutils literal notranslate"><span class="pre">Evaluation</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Evaluation.__init__"><code class="docutils literal notranslate"><span class="pre">Evaluation.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Evaluation.accountId"><code class="docutils literal notranslate"><span class="pre">Evaluation.accountId</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Evaluation.accuracy"><code class="docutils literal notranslate"><span class="pre">Evaluation.accuracy</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Evaluation.confusionMatrix"><code class="docutils literal notranslate"><span class="pre">Evaluation.confusionMatrix</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Evaluation.cost"><code class="docutils literal notranslate"><span class="pre">Evaluation.cost</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Evaluation.create"><code class="docutils literal notranslate"><span class="pre">Evaluation.create()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Evaluation.createdAt"><code class="docutils literal notranslate"><span class="pre">Evaluation.createdAt</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Evaluation.datasetClassDistribution"><code class="docutils literal notranslate"><span class="pre">Evaluation.datasetClassDistribution</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Evaluation.elapsedSeconds"><code class="docutils literal notranslate"><span class="pre">Evaluation.elapsedSeconds</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Evaluation.errorDetails"><code class="docutils literal notranslate"><span class="pre">Evaluation.errorDetails</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Evaluation.errorMessage"><code class="docutils literal notranslate"><span class="pre">Evaluation.errorMessage</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Evaluation.estimatedRemainingSeconds"><code class="docutils literal notranslate"><span class="pre">Evaluation.estimatedRemainingSeconds</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Evaluation.fields"><code class="docutils literal notranslate"><span class="pre">Evaluation.fields()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Evaluation.from_dict"><code class="docutils literal notranslate"><span class="pre">Evaluation.from_dict()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Evaluation.get_by_id"><code class="docutils literal notranslate"><span class="pre">Evaluation.get_by_id()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Evaluation.inferences"><code class="docutils literal notranslate"><span class="pre">Evaluation.inferences</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Evaluation.isDatasetClassDistributionBalanced"><code class="docutils literal notranslate"><span class="pre">Evaluation.isDatasetClassDistributionBalanced</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Evaluation.isPredictedClassDistributionBalanced"><code class="docutils literal notranslate"><span class="pre">Evaluation.isPredictedClassDistributionBalanced</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Evaluation.metrics"><code class="docutils literal notranslate"><span class="pre">Evaluation.metrics</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Evaluation.parameters"><code class="docutils literal notranslate"><span class="pre">Evaluation.parameters</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Evaluation.predictedClassDistribution"><code class="docutils literal notranslate"><span class="pre">Evaluation.predictedClassDistribution</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Evaluation.processedItems"><code class="docutils literal notranslate"><span class="pre">Evaluation.processedItems</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Evaluation.scoreGoal"><code class="docutils literal notranslate"><span class="pre">Evaluation.scoreGoal</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Evaluation.scoreId"><code class="docutils literal notranslate"><span class="pre">Evaluation.scoreId</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Evaluation.scorecardId"><code class="docutils literal notranslate"><span class="pre">Evaluation.scorecardId</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Evaluation.startedAt"><code class="docutils literal notranslate"><span class="pre">Evaluation.startedAt</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Evaluation.status"><code class="docutils literal notranslate"><span class="pre">Evaluation.status</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Evaluation.taskId"><code class="docutils literal notranslate"><span class="pre">Evaluation.taskId</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Evaluation.totalItems"><code class="docutils literal notranslate"><span class="pre">Evaluation.totalItems</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Evaluation.type"><code class="docutils literal notranslate"><span class="pre">Evaluation.type</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Evaluation.update"><code class="docutils literal notranslate"><span class="pre">Evaluation.update()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Evaluation.updatedAt"><code class="docutils literal notranslate"><span class="pre">Evaluation.updatedAt</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackChangeDetail"><code class="docutils literal notranslate"><span class="pre">FeedbackChangeDetail</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackChangeDetail.GRAPHQL_BASE_FIELDS"><code class="docutils literal notranslate"><span class="pre">FeedbackChangeDetail.GRAPHQL_BASE_FIELDS</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackChangeDetail.__init__"><code class="docutils literal notranslate"><span class="pre">FeedbackChangeDetail.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackChangeDetail.changeType"><code class="docutils literal notranslate"><span class="pre">FeedbackChangeDetail.changeType</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackChangeDetail.changedAt"><code class="docutils literal notranslate"><span class="pre">FeedbackChangeDetail.changedAt</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackChangeDetail.changedBy"><code class="docutils literal notranslate"><span class="pre">FeedbackChangeDetail.changedBy</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackChangeDetail.count_by_account_id"><code class="docutils literal notranslate"><span class="pre">FeedbackChangeDetail.count_by_account_id()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackChangeDetail.create"><code class="docutils literal notranslate"><span class="pre">FeedbackChangeDetail.create()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackChangeDetail.createdAt"><code class="docutils literal notranslate"><span class="pre">FeedbackChangeDetail.createdAt</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackChangeDetail.delete_all_by_account_id"><code class="docutils literal notranslate"><span class="pre">FeedbackChangeDetail.delete_all_by_account_id()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackChangeDetail.editCommentValue"><code class="docutils literal notranslate"><span class="pre">FeedbackChangeDetail.editCommentValue</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackChangeDetail.externalId"><code class="docutils literal notranslate"><span class="pre">FeedbackChangeDetail.externalId</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackChangeDetail.feedbackItem"><code class="docutils literal notranslate"><span class="pre">FeedbackChangeDetail.feedbackItem</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackChangeDetail.feedbackItemId"><code class="docutils literal notranslate"><span class="pre">FeedbackChangeDetail.feedbackItemId</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackChangeDetail.finalAnswerValue"><code class="docutils literal notranslate"><span class="pre">FeedbackChangeDetail.finalAnswerValue</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackChangeDetail.finalCommentValue"><code class="docutils literal notranslate"><span class="pre">FeedbackChangeDetail.finalCommentValue</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackChangeDetail.from_dict"><code class="docutils literal notranslate"><span class="pre">FeedbackChangeDetail.from_dict()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackChangeDetail.get"><code class="docutils literal notranslate"><span class="pre">FeedbackChangeDetail.get()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackChangeDetail.id"><code class="docutils literal notranslate"><span class="pre">FeedbackChangeDetail.id</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackChangeDetail.initialAnswerValue"><code class="docutils literal notranslate"><span class="pre">FeedbackChangeDetail.initialAnswerValue</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackChangeDetail.initialCommentValue"><code class="docutils literal notranslate"><span class="pre">FeedbackChangeDetail.initialCommentValue</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackChangeDetail.list"><code class="docutils literal notranslate"><span class="pre">FeedbackChangeDetail.list()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackChangeDetail.updatedAt"><code class="docutils literal notranslate"><span class="pre">FeedbackChangeDetail.updatedAt</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackItem"><code class="docutils literal notranslate"><span class="pre">FeedbackItem</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackItem.GRAPHQL_BASE_FIELDS"><code class="docutils literal notranslate"><span class="pre">FeedbackItem.GRAPHQL_BASE_FIELDS</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackItem.GRAPHQL_RELATIONSHIP_FIELDS"><code class="docutils literal notranslate"><span class="pre">FeedbackItem.GRAPHQL_RELATIONSHIP_FIELDS</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackItem.__init__"><code class="docutils literal notranslate"><span class="pre">FeedbackItem.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackItem.account"><code class="docutils literal notranslate"><span class="pre">FeedbackItem.account</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackItem.accountId"><code class="docutils literal notranslate"><span class="pre">FeedbackItem.accountId</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackItem.cacheKey"><code class="docutils literal notranslate"><span class="pre">FeedbackItem.cacheKey</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackItem.count_by_account_id"><code class="docutils literal notranslate"><span class="pre">FeedbackItem.count_by_account_id()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackItem.create"><code class="docutils literal notranslate"><span class="pre">FeedbackItem.create()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackItem.createdAt"><code class="docutils literal notranslate"><span class="pre">FeedbackItem.createdAt</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackItem.delete_all_by_account_id"><code class="docutils literal notranslate"><span class="pre">FeedbackItem.delete_all_by_account_id()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackItem.editCommentValue"><code class="docutils literal notranslate"><span class="pre">FeedbackItem.editCommentValue</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackItem.editedAt"><code class="docutils literal notranslate"><span class="pre">FeedbackItem.editedAt</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackItem.editorName"><code class="docutils literal notranslate"><span class="pre">FeedbackItem.editorName</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackItem.finalAnswerValue"><code class="docutils literal notranslate"><span class="pre">FeedbackItem.finalAnswerValue</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackItem.finalCommentValue"><code class="docutils literal notranslate"><span class="pre">FeedbackItem.finalCommentValue</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackItem.from_dict"><code class="docutils literal notranslate"><span class="pre">FeedbackItem.from_dict()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackItem.generate_cache_key"><code class="docutils literal notranslate"><span class="pre">FeedbackItem.generate_cache_key()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackItem.get"><code class="docutils literal notranslate"><span class="pre">FeedbackItem.get()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackItem.get_by_composite_key"><code class="docutils literal notranslate"><span class="pre">FeedbackItem.get_by_composite_key()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackItem.id"><code class="docutils literal notranslate"><span class="pre">FeedbackItem.id</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackItem.initialAnswerValue"><code class="docutils literal notranslate"><span class="pre">FeedbackItem.initialAnswerValue</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackItem.initialCommentValue"><code class="docutils literal notranslate"><span class="pre">FeedbackItem.initialCommentValue</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackItem.isAgreement"><code class="docutils literal notranslate"><span class="pre">FeedbackItem.isAgreement</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackItem.item"><code class="docutils literal notranslate"><span class="pre">FeedbackItem.item</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackItem.itemId"><code class="docutils literal notranslate"><span class="pre">FeedbackItem.itemId</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackItem.list"><code class="docutils literal notranslate"><span class="pre">FeedbackItem.list()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackItem.load_change_details"><code class="docutils literal notranslate"><span class="pre">FeedbackItem.load_change_details()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackItem.score"><code class="docutils literal notranslate"><span class="pre">FeedbackItem.score</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackItem.scoreId"><code class="docutils literal notranslate"><span class="pre">FeedbackItem.scoreId</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackItem.scorecard"><code class="docutils literal notranslate"><span class="pre">FeedbackItem.scorecard</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackItem.scorecardId"><code class="docutils literal notranslate"><span class="pre">FeedbackItem.scorecardId</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.FeedbackItem.updatedAt"><code class="docutils literal notranslate"><span class="pre">FeedbackItem.updatedAt</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.ReportConfiguration"><code class="docutils literal notranslate"><span class="pre">ReportConfiguration</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.ReportConfiguration.__init__"><code class="docutils literal notranslate"><span class="pre">ReportConfiguration.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.ReportConfiguration.accountId"><code class="docutils literal notranslate"><span class="pre">ReportConfiguration.accountId</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.ReportConfiguration.configuration"><code class="docutils literal notranslate"><span class="pre">ReportConfiguration.configuration</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.ReportConfiguration.create"><code class="docutils literal notranslate"><span class="pre">ReportConfiguration.create()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.ReportConfiguration.createdAt"><code class="docutils literal notranslate"><span class="pre">ReportConfiguration.createdAt</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.ReportConfiguration.description"><code class="docutils literal notranslate"><span class="pre">ReportConfiguration.description</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.ReportConfiguration.fields"><code class="docutils literal notranslate"><span class="pre">ReportConfiguration.fields()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.ReportConfiguration.from_dict"><code class="docutils literal notranslate"><span class="pre">ReportConfiguration.from_dict()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.ReportConfiguration.get_by_name"><code class="docutils literal notranslate"><span class="pre">ReportConfiguration.get_by_name()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.ReportConfiguration.list_by_account_and_name"><code class="docutils literal notranslate"><span class="pre">ReportConfiguration.list_by_account_and_name()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.ReportConfiguration.list_by_account_id"><code class="docutils literal notranslate"><span class="pre">ReportConfiguration.list_by_account_id()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.ReportConfiguration.name"><code class="docutils literal notranslate"><span class="pre">ReportConfiguration.name</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.ReportConfiguration.update"><code class="docutils literal notranslate"><span class="pre">ReportConfiguration.update()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.ReportConfiguration.updatedAt"><code class="docutils literal notranslate"><span class="pre">ReportConfiguration.updatedAt</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Score"><code class="docutils literal notranslate"><span class="pre">Score</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Score.__init__"><code class="docutils literal notranslate"><span class="pre">Score.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Score.accuracy"><code class="docutils literal notranslate"><span class="pre">Score.accuracy</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Score.aiModel"><code class="docutils literal notranslate"><span class="pre">Score.aiModel</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Score.aiProvider"><code class="docutils literal notranslate"><span class="pre">Score.aiProvider</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Score.externalId"><code class="docutils literal notranslate"><span class="pre">Score.externalId</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Score.fields"><code class="docutils literal notranslate"><span class="pre">Score.fields()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Score.from_dict"><code class="docutils literal notranslate"><span class="pre">Score.from_dict()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Score.get_by_external_id"><code class="docutils literal notranslate"><span class="pre">Score.get_by_external_id()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Score.get_by_id"><code class="docutils literal notranslate"><span class="pre">Score.get_by_id()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Score.get_by_key"><code class="docutils literal notranslate"><span class="pre">Score.get_by_key()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Score.get_by_name"><code class="docutils literal notranslate"><span class="pre">Score.get_by_name()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Score.get_configuration"><code class="docutils literal notranslate"><span class="pre">Score.get_configuration()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Score.get_valid_classes"><code class="docutils literal notranslate"><span class="pre">Score.get_valid_classes()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Score.get_valid_classes_count"><code class="docutils literal notranslate"><span class="pre">Score.get_valid_classes_count()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Score.key"><code class="docutils literal notranslate"><span class="pre">Score.key</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Score.list_by_section_id"><code class="docutils literal notranslate"><span class="pre">Score.list_by_section_id()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Score.name"><code class="docutils literal notranslate"><span class="pre">Score.name</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Score.order"><code class="docutils literal notranslate"><span class="pre">Score.order</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Score.sectionId"><code class="docutils literal notranslate"><span class="pre">Score.sectionId</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Score.type"><code class="docutils literal notranslate"><span class="pre">Score.type</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Score.version"><code class="docutils literal notranslate"><span class="pre">Score.version</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Scorecard"><code class="docutils literal notranslate"><span class="pre">Scorecard</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Scorecard.__init__"><code class="docutils literal notranslate"><span class="pre">Scorecard.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Scorecard.accountId"><code class="docutils literal notranslate"><span class="pre">Scorecard.accountId</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Scorecard.create"><code class="docutils literal notranslate"><span class="pre">Scorecard.create()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Scorecard.description"><code class="docutils literal notranslate"><span class="pre">Scorecard.description</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Scorecard.externalId"><code class="docutils literal notranslate"><span class="pre">Scorecard.externalId</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Scorecard.fields"><code class="docutils literal notranslate"><span class="pre">Scorecard.fields()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Scorecard.from_dict"><code class="docutils literal notranslate"><span class="pre">Scorecard.from_dict()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Scorecard.get_by_external_id"><code class="docutils literal notranslate"><span class="pre">Scorecard.get_by_external_id()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Scorecard.get_by_id"><code class="docutils literal notranslate"><span class="pre">Scorecard.get_by_id()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Scorecard.get_by_key"><code class="docutils literal notranslate"><span class="pre">Scorecard.get_by_key()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Scorecard.get_by_name"><code class="docutils literal notranslate"><span class="pre">Scorecard.get_by_name()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Scorecard.key"><code class="docutils literal notranslate"><span class="pre">Scorecard.key</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.html#plexus.dashboard.api.models.Scorecard.name"><code class="docutils literal notranslate"><span class="pre">Scorecard.name</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.dashboard.api.models.html#submodules">Submodules</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.account.html">plexus.dashboard.api.models.account module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.dashboard.api.models.account.html#plexus.dashboard.api.models.account.Account"><code class="docutils literal notranslate"><span class="pre">Account</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.base.html">plexus.dashboard.api.models.base module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.dashboard.api.models.base.html#plexus.dashboard.api.models.base.BaseModel"><code class="docutils literal notranslate"><span class="pre">BaseModel</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.batch_job.html">plexus.dashboard.api.models.batch_job module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.dashboard.api.models.batch_job.html#plexus.dashboard.api.models.batch_job.BatchJob"><code class="docutils literal notranslate"><span class="pre">BatchJob</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.evaluation.html">plexus.dashboard.api.models.evaluation module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.dashboard.api.models.evaluation.html#plexus.dashboard.api.models.evaluation.Evaluation"><code class="docutils literal notranslate"><span class="pre">Evaluation</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.feedback_change_detail.html">plexus.dashboard.api.models.feedback_change_detail module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.dashboard.api.models.feedback_change_detail.html#plexus.dashboard.api.models.feedback_change_detail.FeedbackChangeDetail"><code class="docutils literal notranslate"><span class="pre">FeedbackChangeDetail</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.feedback_item.html">plexus.dashboard.api.models.feedback_item module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.dashboard.api.models.feedback_item.html#plexus.dashboard.api.models.feedback_item.FeedbackItem"><code class="docutils literal notranslate"><span class="pre">FeedbackItem</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.item.html">plexus.dashboard.api.models.item module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.dashboard.api.models.item.html#plexus.dashboard.api.models.item.Item"><code class="docutils literal notranslate"><span class="pre">Item</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.report.html">plexus.dashboard.api.models.report module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.dashboard.api.models.report.html#plexus.dashboard.api.models.report.Report"><code class="docutils literal notranslate"><span class="pre">Report</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.report_block.html">plexus.dashboard.api.models.report_block module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.dashboard.api.models.report_block.html#plexus.dashboard.api.models.report_block.ReportBlock"><code class="docutils literal notranslate"><span class="pre">ReportBlock</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.report_configuration.html">plexus.dashboard.api.models.report_configuration module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.dashboard.api.models.report_configuration.html#plexus.dashboard.api.models.report_configuration.ReportConfiguration"><code class="docutils literal notranslate"><span class="pre">ReportConfiguration</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.score.html">plexus.dashboard.api.models.score module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.dashboard.api.models.score.html#plexus.dashboard.api.models.score.Score"><code class="docutils literal notranslate"><span class="pre">Score</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.score_result.html">plexus.dashboard.api.models.score_result module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.dashboard.api.models.score_result.html#plexus.dashboard.api.models.score_result.Score"><code class="docutils literal notranslate"><span class="pre">Score</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.dashboard.api.models.score_result.html#plexus.dashboard.api.models.score_result.ScoreResult"><code class="docutils literal notranslate"><span class="pre">ScoreResult</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.scorecard.html">plexus.dashboard.api.models.scorecard module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.dashboard.api.models.scorecard.html#plexus.dashboard.api.models.scorecard.Scorecard"><code class="docutils literal notranslate"><span class="pre">Scorecard</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.scoring_job.html">plexus.dashboard.api.models.scoring_job module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.dashboard.api.models.scoring_job.html#plexus.dashboard.api.models.scoring_job.ScoringJob"><code class="docutils literal notranslate"><span class="pre">ScoringJob</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.task.html">plexus.dashboard.api.models.task module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.dashboard.api.models.task.html#plexus.dashboard.api.models.task.Task"><code class="docutils literal notranslate"><span class="pre">Task</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.models.task_stage.html">plexus.dashboard.api.models.task_stage module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="plexus.dashboard.api.models.task_stage.html#plexus.dashboard.api.models.task_stage.TaskStage"><code class="docutils literal notranslate"><span class="pre">TaskStage</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+</section>
+<section id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Link to this heading"></a></h2>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.api.client.html">plexus.dashboard.api.client module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.dashboard.api.client.html#plexus.dashboard.api.client.ClientContext"><code class="docutils literal notranslate"><span class="pre">ClientContext</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.client.html#plexus.dashboard.api.client.ClientContext.__init__"><code class="docutils literal notranslate"><span class="pre">ClientContext.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.client.html#plexus.dashboard.api.client.ClientContext.account_id"><code class="docutils literal notranslate"><span class="pre">ClientContext.account_id</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.client.html#plexus.dashboard.api.client.ClientContext.account_key"><code class="docutils literal notranslate"><span class="pre">ClientContext.account_key</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.client.html#plexus.dashboard.api.client.ClientContext.score_id"><code class="docutils literal notranslate"><span class="pre">ClientContext.score_id</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.client.html#plexus.dashboard.api.client.ClientContext.score_name"><code class="docutils literal notranslate"><span class="pre">ClientContext.score_name</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.client.html#plexus.dashboard.api.client.ClientContext.scorecard_id"><code class="docutils literal notranslate"><span class="pre">ClientContext.scorecard_id</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.client.html#plexus.dashboard.api.client.ClientContext.scorecard_key"><code class="docutils literal notranslate"><span class="pre">ClientContext.scorecard_key</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.dashboard.api.client.html#plexus.dashboard.api.client.PlexusDashboardClient"><code class="docutils literal notranslate"><span class="pre">PlexusDashboardClient</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.client.html#plexus.dashboard.api.client.PlexusDashboardClient.__init__"><code class="docutils literal notranslate"><span class="pre">PlexusDashboardClient.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.client.html#plexus.dashboard.api.client.PlexusDashboardClient.for_account"><code class="docutils literal notranslate"><span class="pre">PlexusDashboardClient.for_account()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.client.html#plexus.dashboard.api.client.PlexusDashboardClient.for_scorecard"><code class="docutils literal notranslate"><span class="pre">PlexusDashboardClient.for_scorecard()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.api.display_utils.html">plexus.dashboard.api.display_utils module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.dashboard.api.display_utils.html#plexus.dashboard.api.display_utils.dict_to_table"><code class="docutils literal notranslate"><span class="pre">dict_to_table()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.dashboard.api.display_utils.html#plexus.dashboard.api.display_utils.format_datetime"><code class="docutils literal notranslate"><span class="pre">format_datetime()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.dashboard.api.display_utils.html#plexus.dashboard.api.display_utils.model_to_panel"><code class="docutils literal notranslate"><span class="pre">model_to_panel()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.dashboard.api.display_utils.html#plexus.dashboard.api.display_utils.truncate_text"><code class="docutils literal notranslate"><span class="pre">truncate_text()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.api.namespaces.html">plexus.dashboard.api.namespaces module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.dashboard.api.namespaces.html#plexus.dashboard.api.namespaces.AccountNamespace"><code class="docutils literal notranslate"><span class="pre">AccountNamespace</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.namespaces.html#plexus.dashboard.api.namespaces.AccountNamespace.__init__"><code class="docutils literal notranslate"><span class="pre">AccountNamespace.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.namespaces.html#plexus.dashboard.api.namespaces.AccountNamespace.get_by_id"><code class="docutils literal notranslate"><span class="pre">AccountNamespace.get_by_id()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.namespaces.html#plexus.dashboard.api.namespaces.AccountNamespace.get_by_key"><code class="docutils literal notranslate"><span class="pre">AccountNamespace.get_by_key()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.dashboard.api.namespaces.html#plexus.dashboard.api.namespaces.ScoreResultNamespace"><code class="docutils literal notranslate"><span class="pre">ScoreResultNamespace</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.namespaces.html#plexus.dashboard.api.namespaces.ScoreResultNamespace.__init__"><code class="docutils literal notranslate"><span class="pre">ScoreResultNamespace.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.namespaces.html#plexus.dashboard.api.namespaces.ScoreResultNamespace.batch_create"><code class="docutils literal notranslate"><span class="pre">ScoreResultNamespace.batch_create()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.namespaces.html#plexus.dashboard.api.namespaces.ScoreResultNamespace.create"><code class="docutils literal notranslate"><span class="pre">ScoreResultNamespace.create()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.dashboard.api.namespaces.html#plexus.dashboard.api.namespaces.ScorecardNamespace"><code class="docutils literal notranslate"><span class="pre">ScorecardNamespace</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.namespaces.html#plexus.dashboard.api.namespaces.ScorecardNamespace.__init__"><code class="docutils literal notranslate"><span class="pre">ScorecardNamespace.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.namespaces.html#plexus.dashboard.api.namespaces.ScorecardNamespace.get_by_id"><code class="docutils literal notranslate"><span class="pre">ScorecardNamespace.get_by_id()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.api.namespaces.html#plexus.dashboard.api.namespaces.ScorecardNamespace.get_by_key"><code class="docutils literal notranslate"><span class="pre">ScorecardNamespace.get_by_key()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.api.scoring_client.html">plexus.dashboard.api.scoring_client module</a></li>
+</ul>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.dashboard.html" class="btn btn-neutral float-left" title="plexus.dashboard package" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.dashboard.api.models.html" class="btn btn-neutral float-right" title="plexus.dashboard.api.models package" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
