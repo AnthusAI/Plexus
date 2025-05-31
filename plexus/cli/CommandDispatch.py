@@ -760,7 +760,8 @@ def create_cli():
     from plexus.cli.EvaluationCommands import evaluate
     from plexus.cli.DataCommands import data
     from plexus.cli.BatchCommands import batch
-    from plexus.cli.TaskCommands import tasks
+    from plexus.cli.TaskCommands import tasks, task
+    from plexus.cli.ItemCommands import items, item
     from plexus.cli.ResultCommands import results
     from plexus.cli.AnalyzeCommands import analyze
     from plexus.cli.DataLakeCommands import lake_group as datalake
@@ -778,6 +779,9 @@ def create_cli():
     cli.add_command(data)
     cli.add_command(batch)
     cli.add_command(tasks)
+    cli.add_command(task)
+    cli.add_command(items)
+    cli.add_command(item)
     cli.add_command(results)
     cli.add_command(analyze)
     cli.add_command(datalake)

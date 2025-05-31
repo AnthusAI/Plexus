@@ -67,19 +67,19 @@ const ScoreResultCard: React.FC<{ result: ScoreResultWithDetails }> = ({ result 
             <h4 className="text-sm font-semibold">{result.score?.name || 'Unknown Score'}</h4>
           </div>
           <div className="text-xs text-muted-foreground mb-2">
-            <Timestamp time={result.updatedAt || result.createdAt || new Date().toISOString()} variant="relative" />
-            {result.createdAt && result.updatedAt && (
-              <div className="mt-0.5">
-                <Timestamp time={result.createdAt} completionTime={result.updatedAt} variant="elapsed" />
-              </div>
-            )}
             {result.score?.externalId && (
-              <div className="mt-1">
+              <div className="mb-1">
                 <IdentifierDisplay 
                   externalId={result.score.externalId}
-                  iconSize="sm"
-                  textSize="sm"
+                  iconSize="md"
+                  textSize="xs"
                 />
+              </div>
+            )}
+            <Timestamp time={result.updatedAt || result.createdAt || new Date().toISOString()} variant="relative" className="text-xs" />
+            {result.createdAt && result.updatedAt && (
+              <div className="mt-0.5">
+                <Timestamp time={result.createdAt} completionTime={result.updatedAt} variant="elapsed" className="text-xs" />
               </div>
             )}
           </div>
@@ -183,8 +183,8 @@ const ItemScoreResults: React.FC<ItemScoreResultsProps> = ({
                       <div>
                         <IdentifierDisplay 
                           externalId={group.scorecardExternalId}
-                          iconSize="sm"
-                          textSize="sm"
+                          iconSize="md"
+                          textSize="xs"
                         />
                       </div>
                     )}

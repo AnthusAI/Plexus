@@ -262,7 +262,7 @@ export function Timestamp({
   return (
     <div 
       className={cn(
-        "flex items-center gap-1 text-sm text-muted-foreground", 
+        "flex items-start gap-1 text-sm text-muted-foreground min-w-0", 
         variant === 'relative' && "cursor-pointer hover:text-foreground",
         className
       )}
@@ -278,11 +278,11 @@ export function Timestamp({
       title={variant === 'relative' ? (showAbsolute ? 'Click to show relative time' : 'Click to show exact time') : undefined}
     >
       {showIcon && (variant === 'elapsed' ? (
-        <Timer className="h-4 w-4" />
+        <Timer className="h-4 w-4 flex-shrink-0" />
       ) : (
-        <Clock className="h-4 w-4" />
+        <Clock className="h-4 w-4 flex-shrink-0" />
       ))}
-      <span>{displayContent}</span>
+      <span className="truncate">{displayContent}</span>
     </div>
   )
 } 

@@ -13,127 +13,137 @@ const relativeDate = (days: number, hours: number, minutes: number) => {
   return date.toISOString();
 };
 
-// Sample items for the stories
+// Sample items using the new interface structure
 const sampleItems: ItemData[] = [
   { 
-    id: 1, 
-    scorecard: "CS3 Services v2", 
-    score: "Email Compliance Assessment", 
-    date: relativeDate(0, 0, 5), 
-    status: "New", 
-    results: 0, 
-    inferences: 0, 
-    cost: "$0.000" 
+    id: "item-001", 
+    timestamp: relativeDate(0, 0, 5),
+    scorecards: [
+      { scorecardId: "sc-1", scorecardName: "Call Quality", resultCount: 12 }
+    ],
+    externalId: "CALL-20241201-001",
+    createdAt: relativeDate(0, 0, 8), // Started 8 minutes ago
+    updatedAt: relativeDate(0, 0, 5), // Finished 5 minutes ago (3 minute duration)
+    isNew: true
   },
   { 
-    id: 2, 
-    scorecard: "CS3 Audigy", 
-    score: "Phone Call Quality Review", 
-    date: relativeDate(0, 0, 15), 
-    status: "New", 
-    results: 0, 
-    inferences: 0, 
-    cost: "$0.000" 
+    id: "item-002", 
+    timestamp: relativeDate(0, 0, 15),
+    scorecards: [
+      { scorecardId: "sc-1", scorecardName: "Call Quality", resultCount: 8 },
+      { scorecardId: "sc-2", scorecardName: "Compliance", resultCount: 5 }
+    ],
+    externalId: "CALL-20241201-002",
+    createdAt: relativeDate(0, 0, 22), // Started 22 minutes ago
+    updatedAt: relativeDate(0, 0, 15), // Finished 15 minutes ago (7 minute duration)
   },
   { 
-    id: 3, 
-    scorecard: "AW IB Sales", 
-    score: "Web Chat Support Evaluation", 
-    date: relativeDate(0, 0, 30), 
-    status: "New", 
-    results: 0, 
-    inferences: 0, 
-    cost: "$0.000" 
+    id: "item-003", 
+    timestamp: relativeDate(0, 0, 30),
+    scorecards: [
+      { scorecardId: "sc-3", scorecardName: "Sales Effectiveness", resultCount: 15 }
+    ],
+    externalId: "CALL-20241201-003",
+    createdAt: relativeDate(0, 0, 32), // Started 32 minutes ago
+    updatedAt: relativeDate(0, 0, 30), // Finished 30 minutes ago (2 minute duration)
   },
   { 
-    id: 4, 
-    scorecard: "CS3 Nexstar v1", 
-    score: "Customer Satisfaction Analysis", 
-    date: relativeDate(0, 1, 0), 
-    status: "Error", 
-    results: 2, 
-    inferences: 4, 
-    cost: "$0.005" 
+    id: "item-004", 
+    timestamp: relativeDate(0, 1, 0),
+    scorecards: [
+      { scorecardId: "sc-1", scorecardName: "Call Quality", resultCount: 9 },
+      { scorecardId: "sc-2", scorecardName: "Compliance", resultCount: 7 },
+      { scorecardId: "sc-4", scorecardName: "Customer Satisfaction", resultCount: 4 }
+    ],
+    externalId: "CALL-20241201-004",
+    createdAt: relativeDate(0, 1, 11), // Started 1 hour 11 minutes ago
+    updatedAt: relativeDate(0, 1, 0), // Finished 1 hour ago (11 minute duration)
+    isLoadingResults: true
   },
   { 
-    id: 5, 
-    scorecard: "SelectQuote Term Life v1", 
-    score: "Email Security Compliance Check", 
-    date: relativeDate(0, 1, 30), 
-    status: "Scoring", 
-    results: 6, 
-    inferences: 24, 
-    cost: "$0.031" 
+    id: "item-005", 
+    timestamp: relativeDate(0, 1, 30),
+    scorecards: [
+      { scorecardId: "sc-2", scorecardName: "Compliance", resultCount: 11 },
+      { scorecardId: "sc-5", scorecardName: "Technical Support", resultCount: 13 }
+    ],
+    externalId: "CALL-20241201-005",
+    createdAt: relativeDate(0, 1, 34), // Started 1 hour 34 minutes ago
+    updatedAt: relativeDate(0, 1, 30), // Finished 1 hour 30 minutes ago (4 minute duration)
   },
   { 
-    id: 6, 
-    scorecard: "AW IB Sales", 
-    score: "Telephone Transcript Analysis", 
-    date: relativeDate(0, 2, 0), 
-    status: "Done", 
-    results: 19, 
-    inferences: 152, 
-    cost: "$0.199" 
+    id: "item-006", 
+    timestamp: relativeDate(0, 2, 0),
+    scorecards: [
+      { scorecardId: "sc-1", scorecardName: "Call Quality", resultCount: 19 }
+    ],
+    externalId: "CALL-20241201-006",
+    createdAt: relativeDate(0, 2, 9), // Started 2 hours 9 minutes ago
+    updatedAt: relativeDate(0, 2, 0), // Finished 2 hours ago (9 minute duration)
   },
   { 
-    id: 7, 
-    scorecard: "CS3 Services v2", 
-    score: "Live Chat Performance Review", 
-    date: relativeDate(0, 4, 0), 
-    status: "Done", 
-    results: 16, 
-    inferences: 32, 
-    cost: "$0.042" 
+    id: "item-007", 
+    timestamp: relativeDate(0, 4, 0),
+    scorecards: [
+      { scorecardId: "sc-6", scorecardName: "Emergency Response", resultCount: 16 }
+    ],
+    externalId: "EMRG-20241201-001",
+    createdAt: relativeDate(0, 4, 0), // Started and finished at same time (no processing duration)
+    updatedAt: relativeDate(0, 4, 0),
   },
   { 
-    id: 8, 
-    scorecard: "CS3 Nexstar v1", 
-    score: "Customer Experience Evaluation", 
-    date: relativeDate(0, 5, 0), 
-    status: "Done", 
-    results: 17, 
-    inferences: 68, 
-    cost: "$0.089" 
+    id: "item-008", 
+    timestamp: relativeDate(0, 5, 0),
+    scorecards: [
+      { scorecardId: "sc-7", scorecardName: "Product Demo", resultCount: 17 },
+      { scorecardId: "sc-8", scorecardName: "Lead Qualification", resultCount: 6 }
+    ],
+    externalId: "DEMO-20241201-001",
+    createdAt: relativeDate(0, 5, 2), // Started 5 hours 2 minutes ago
+    updatedAt: relativeDate(0, 5, 0), // Finished 5 hours ago (2 minute duration)
   },
   { 
-    id: 9, 
-    scorecard: "SelectQuote Term Life v1", 
-    score: "Communication Quality Assessment", 
-    date: relativeDate(0, 6, 0), 
-    status: "Done", 
-    results: 13, 
-    inferences: 52, 
-    cost: "$0.068" 
+    id: "item-009", 
+    timestamp: relativeDate(0, 6, 0),
+    scorecards: [
+      { scorecardId: "sc-1", scorecardName: "Call Quality", resultCount: 13 },
+      { scorecardId: "sc-9", scorecardName: "Escalation Handling", resultCount: 8 }
+    ],
+    externalId: "ESCL-20241201-001",
+    createdAt: relativeDate(0, 6, 13), // Started 6 hours 13 minutes ago
+    updatedAt: relativeDate(0, 6, 0), // Finished 6 hours ago (13 minute duration)
   },
   { 
-    id: 10, 
-    scorecard: "CS3 Services v2", 
-    score: "Digital Channel Compliance", 
-    date: relativeDate(1, 0, 0), 
-    status: "Done", 
-    results: 15, 
-    inferences: 30, 
-    cost: "$0.039" 
+    id: "item-010", 
+    timestamp: relativeDate(1, 0, 0),
+    scorecards: [
+      { scorecardId: "sc-10", scorecardName: "Quick Support", resultCount: 3 }
+    ],
+    externalId: "QUICK-20241130-001",
+    createdAt: relativeDate(1, 0, 1), // Started 1 day and 1 minute ago
+    updatedAt: relativeDate(1, 0, 0), // Finished 1 day ago (45 second duration)
   },
   { 
-    id: 11, 
-    scorecard: "AW IB Sales", 
-    score: "Voice Interaction Analysis", 
-    date: relativeDate(1, 2, 0), 
-    status: "Done", 
-    results: 18, 
-    inferences: 144, 
-    cost: "$0.188" 
+    id: "item-011", 
+    timestamp: relativeDate(1, 2, 0),
+    scorecards: [
+      { scorecardId: "sc-1", scorecardName: "Call Quality", resultCount: 18 },
+      { scorecardId: "sc-2", scorecardName: "Compliance", resultCount: 12 },
+      { scorecardId: "sc-11", scorecardName: "Training Session", resultCount: 22 }
+    ],
+    externalId: "TRAIN-20241130-001",
+    createdAt: relativeDate(1, 2, 20), // Started 1 day 2 hours 20 minutes ago
+    updatedAt: relativeDate(1, 2, 0), // Finished 1 day 2 hours ago (20 minute duration)
   },
   { 
-    id: 12, 
-    scorecard: "CS3 Audigy", 
-    score: "Multi Channel Support Review", 
-    date: relativeDate(1, 4, 0), 
-    status: "Done", 
-    results: 16, 
-    inferences: 64, 
-    cost: "$0.084" 
+    id: "item-012", 
+    timestamp: relativeDate(1, 4, 0),
+    scorecards: [
+      { scorecardId: "sc-12", scorecardName: "Billing Inquiry", resultCount: 16 }
+    ],
+    externalId: "BILL-20241130-001",
+    createdAt: relativeDate(1, 4, 5), // Started 1 day 4 hours 5 minutes ago
+    updatedAt: relativeDate(1, 4, 0), // Finished 1 day 4 hours ago (5 minute duration)
   },
 ];
 
@@ -195,8 +205,8 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-// Grid variant stories
-export const GridNew: Story = {
+// Grid variant stories showcasing different scenarios
+export const GridSingleScorecard: Story = {
   render: (args) => (
     <div className="w-full p-4">
       <div className="max-w-sm">
@@ -206,12 +216,19 @@ export const GridNew: Story = {
   ),
   args: {
     variant: 'grid',
-    item: sampleItems[0],
+    item: sampleItems[0], // Single scorecard with duration
     isSelected: false,
   },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Item card with a single scorecard, showing ID, timestamp, elapsed processing time, and result count.'
+      }
+    }
+  }
 };
 
-export const GridError: Story = {
+export const GridMultipleScorecards: Story = {
   render: (args) => (
     <div className="w-full p-4">
       <div className="max-w-sm">
@@ -221,12 +238,19 @@ export const GridError: Story = {
   ),
   args: {
     variant: 'grid',
-    item: sampleItems[3],
+    item: sampleItems[1], // Multiple scorecards
     isSelected: false,
   },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Item card with multiple scorecards, showing combined result count and elapsed processing time.'
+      }
+    }
+  }
 };
 
-export const GridDone: Story = {
+export const GridNoDuration: Story = {
   render: (args) => (
     <div className="w-full p-4">
       <div className="max-w-sm">
@@ -236,9 +260,38 @@ export const GridDone: Story = {
   ),
   args: {
     variant: 'grid',
-    item: sampleItems[5],
+    item: sampleItems[6], // No elapsed time (same createdAt and updatedAt)
     isSelected: false,
   },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Item card with no elapsed processing time - elapsed time display is hidden when timestamps are the same.'
+      }
+    }
+  }
+};
+
+export const GridLoadingResults: Story = {
+  render: (args) => (
+    <div className="w-full p-4">
+      <div className="max-w-sm">
+        <ItemCard {...args} />
+      </div>
+    </div>
+  ),
+  args: {
+    variant: 'grid',
+    item: sampleItems[3], // Loading state
+    isSelected: false,
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Item card showing loading state for results.'
+      }
+    }
+  }
 };
 
 export const GridSelected: Story = {
@@ -254,10 +307,17 @@ export const GridSelected: Story = {
     item: sampleItems[0],
     isSelected: true,
   },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Selected item card with visual selection state.'
+      }
+    }
+  }
 };
 
 // Detail variant stories
-export const DetailNew: Story = {
+export const DetailSingleScorecard: Story = {
   render: (args) => (
     <div className="w-full p-4">
       <ItemCardDetailWrapper {...args} />
@@ -265,12 +325,19 @@ export const DetailNew: Story = {
   ),
   args: {
     variant: 'detail',
-    item: sampleItems[0],
+    item: sampleItems[0], // Single scorecard
     onClose: () => console.log('Close clicked'),
   },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Detail view of an item with a single scorecard.'
+      }
+    }
+  }
 };
 
-export const DetailError: Story = {
+export const DetailMultipleScorecards: Story = {
   render: (args) => (
     <div className="w-full p-4">
       <ItemCardDetailWrapper {...args} />
@@ -278,12 +345,19 @@ export const DetailError: Story = {
   ),
   args: {
     variant: 'detail',
-    item: sampleItems[3],
+    item: sampleItems[10], // Multiple scorecards with long duration
     onClose: () => console.log('Close clicked'),
   },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Detail view of an item with multiple scorecards and extended breakdown.'
+      }
+    }
+  }
 };
 
-export const DetailDone: Story = {
+export const DetailLoadingResults: Story = {
   render: (args) => (
     <div className="w-full p-4">
       <ItemCardDetailWrapper {...args} />
@@ -291,17 +365,24 @@ export const DetailDone: Story = {
   ),
   args: {
     variant: 'detail',
-    item: sampleItems[5],
+    item: sampleItems[3], // Loading state
     onClose: () => console.log('Close clicked'),
   },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Detail view showing loading state for results.'
+      }
+    }
+  }
 };
 
-// Responsive grid layout story showing multiple cards
+// Responsive grid layout story showing multiple cards with different characteristics
 export const ResponsiveGrid: Story = {
   render: () => (
     <div className="w-full p-4">
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
-        {sampleItems.slice(0, 6).map((item) => (
+        {sampleItems.slice(0, 8).map((item) => (
           <ItemCard
             key={item.id}
             variant="grid"
@@ -316,13 +397,13 @@ export const ResponsiveGrid: Story = {
   ),
   args: {
     variant: 'grid',
-    item: sampleItems[0],
+    item: sampleItems[0], // Provide a default item (though not used in render)
     getBadgeVariant,
   },
   parameters: {
     docs: {
       description: {
-        story: 'Responsive grid layout that adapts to different screen sizes. Resize the viewport to see how the cards respond.'
+        story: 'Responsive grid layout showing various item cards with different scorecard configurations, elapsed processing times, and states. Demonstrates how the cards adapt to different screen sizes and show various data combinations.'
       }
     }
   }

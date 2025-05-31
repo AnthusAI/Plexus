@@ -7,15 +7,17 @@ import click
 import os
 import json
 
-from plexus.cli.TaskCommands import tasks
-from plexus.cli.CommandDispatch import command, create_cli
+from plexus.cli.TaskCommands import tasks, task
+from plexus.cli.ItemCommands import items, item
+from plexus.cli.ScoreCommands import score, scores
+from plexus.cli.CommandDispatch import command
 from plexus.cli.BatchCommands import batch
 from plexus.cli.EvaluationCommands import evaluate, evaluations
 from plexus.cli.PredictionCommands import predict
 from plexus.cli.AnalyzeCommands import analyze
 from plexus.cli.TuningCommands import tuning
 from plexus.cli.TrainingCommands import train
-from plexus.cli.ResultCommands import results
+from plexus.cli.ResultCommands import score_results, score_result, result, results
 from plexus.cli.ReportCommands import report
 from plexus.cli.DataCommands import data
 from plexus.cli.ScoreChatCommands import score_chat
@@ -23,9 +25,43 @@ from plexus.cli.DataLakeCommands import lake_group
 from plexus.cli.FeedbackCommands import feedback
 from plexus.cli.ScorecardCommands import scorecards, scorecard
 
-# Create the main CLI application object using the factory from CommandDispatch
-# This 'cli' variable can now be imported by other modules if needed.
-cli = create_cli()
+# Define OrderCommands class for command ordering
+class OrderCommands(click.Group):
+    def list_commands(self, ctx: click.Context) -> list[str]:
+        return list(self.commands)
+
+# Create the main CLI group
+@click.group(cls=OrderCommands)
+def cli():
+    """
+    Plexus CLI for managing scorecards, scores, and evaluations.
+    """
+    pass
+
+# Register all commands
+cli.add_command(score)
+cli.add_command(scores)
+cli.add_command(tasks)
+cli.add_command(task)
+cli.add_command(items)
+cli.add_command(item)
+cli.add_command(command)
+cli.add_command(batch)
+cli.add_command(evaluate)
+cli.add_command(predict)
+cli.add_command(analyze)
+cli.add_command(tuning)
+cli.add_command(train)
+cli.add_command(score_results)
+cli.add_command(score_result)
+cli.add_command(result)
+cli.add_command(results)
+cli.add_command(report)
+cli.add_command(data)
+cli.add_command(score_chat)
+cli.add_command(lake_group)
+cli.add_command(feedback)
+cli.add_command(scorecards)
 
 def main():
     """

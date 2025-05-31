@@ -968,90 +968,88 @@ export function observeTaskStageUpdates() {
 
 export function observeItemCreations() {
   const client = getClient();
+  const subscriptions: { unsubscribe: () => void }[] = [];
   
   return {
     subscribe(handler: SubscriptionHandler<any>) {
-      const subscription = client.graphql({
-        query: `
-          subscription OnCreateItem {
-            onCreateItem {
-              id
-              externalId
-              description
-              accountId
-              evaluationId
-              updatedAt
-              createdAt
-              isEvaluation
-            }
-          }
-        `
-      }) as unknown as { subscribe: Function };
-
-      return subscription.subscribe({
-        next: async ({ data }: { data?: { onCreateItem: Schema['Item']['type'] } }) => {
-          if (!data?.onCreateItem) {
-            return; // Skip processing for null data
-          }
+      console.log('🆕 Setting up Item creation subscription using client.models pattern...');
+      
+      // Subscribe to create events using the same pattern as ScoreResult
+      const createSub = ((client.models.Item as any).onCreate() as AmplifySubscription).subscribe({
+        next: (response: any) => {
+          console.log('🆕 Item onCreate triggered:', response);
           
-          try {
-            handler.next({ data: data.onCreateItem });
-          } catch (error) {
-            console.error('Error processing item creation:', error);
-            handler.error(error as Error);
-          }
+          // Like ScoreResults, we expect null data, so trigger a refresh instead
+          // of trying to parse specific data
+          console.log('🆕 Item creation detected, triggering refresh');
+          handler.next({ data: { action: 'create', needsRefetch: true } });
         },
         error: (error: Error) => {
-          console.error('Item creation subscription error:', error);
+          console.error('🆕 Item onCreate subscription error:', error);
           handler.error(error);
         }
       });
+      subscriptions.push(createSub);
+
+      return {
+        unsubscribe: () => {
+          console.log('🆕 Unsubscribing from Item creation subscription');
+          subscriptions.forEach(sub => sub.unsubscribe());
+        }
+      };
     }
   };
 }
 
 export function observeItemUpdates() {
   const client = getClient();
+  const subscriptions: { unsubscribe: () => void }[] = [];
   
   return {
     subscribe(handler: SubscriptionHandler<any>) {
-      const subscription = client.graphql({
-        query: `
-          subscription OnUpdateItem {
-            onUpdateItem {
-              id
-              externalId
-              description
-              accountId
-              evaluationId
-              updatedAt
-              createdAt
-              isEvaluation
-            }
-          }
-        `
-      }) as unknown as { subscribe: Function };
-
-      return subscription.subscribe({
-        next: async ({ data }: { data?: { onUpdateItem: Schema['Item']['type'] } }) => {
-          if (!data?.onUpdateItem) {
-            // Amplify Gen2 often sends empty notifications, so we treat this as a signal to refetch
-            handler.next({ data: null, needsRefetch: true });
-            return;
+      console.log('🔄 Setting up Item update subscription using client.models pattern...');
+      
+      // Subscribe to update events using the same pattern as ScoreResult
+      const updateSub = ((client.models.Item as any).onUpdate() as AmplifySubscription).subscribe({
+        next: (response: any) => {
+          console.log('🔄 Item onUpdate triggered:', response);
+          
+          // Try to extract the actual item data from the response
+          let itemData = null;
+          if (response?.data) {
+            itemData = response.data;
+          } else if (response) {
+            itemData = response;
           }
           
-          try {
-            handler.next({ data: data.onUpdateItem });
-          } catch (error) {
-            console.error('Error processing item update:', error);
-            handler.error(error as Error);
+          console.log('🔄 Extracted item data:', itemData);
+          
+          if (itemData) {
+            try {
+              handler.next({ data: itemData });
+            } catch (error) {
+              console.error('🔄 Error processing item update:', error);
+              handler.error(error as Error);
+            }
+          } else {
+            console.log('🔄 No item data found in onUpdate response');
+            // Amplify Gen2 often sends empty notifications, so we treat this as a signal to refetch
+            handler.next({ data: null, needsRefetch: true });
           }
         },
         error: (error: Error) => {
-          console.error('Item update subscription error:', error);
+          console.error('🔄 Item onUpdate subscription error:', error);
           handler.error(error);
         }
       });
+      subscriptions.push(updateSub);
+
+      return {
+        unsubscribe: () => {
+          console.log('🔄 Unsubscribing from Item update subscription');
+          subscriptions.forEach(sub => sub.unsubscribe());
+        }
+      };
     }
   };
 }
