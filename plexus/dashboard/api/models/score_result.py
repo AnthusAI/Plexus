@@ -1,8 +1,13 @@
 from typing import Optional, Dict, Any, List
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from .base import BaseModel
 from ..client import _BaseAPIClient
 import json
+
+# Forward declaration for Score to handle circular dependency if Score is in another file or defined later
+class Score: # Basic placeholder, ideally import the actual Score model
+    id: str
+    name: str
 
 @dataclass
 class ScoreResult(BaseModel):
@@ -59,12 +64,17 @@ class ScoreResult(BaseModel):
     - LangGraphScore for LLM-based classification
     """
 
-    value: float
+    value: str  # GraphQL schema defines this as string
     itemId: str
     accountId: str
     scorecardId: str
+    scoreId: Optional[str] = None
+    scoreVersionId: Optional[str] = None
+    score: Optional[Dict[str, Any]] = field(default_factory=dict)
+    explanation: Optional[str] = None
     confidence: Optional[float] = None
     metadata: Optional[Dict] = None
+    trace: Optional[Dict] = None
     scoringJobId: Optional[str] = None
     evaluationId: Optional[str] = None
     correct: Optional[bool] = None
@@ -72,12 +82,17 @@ class ScoreResult(BaseModel):
     def __init__(
         self,
         id: str,
-        value: float,
+        value: str,  # GraphQL schema defines this as string
         itemId: str,
         accountId: str,
         scorecardId: str,
+        scoreId: Optional[str] = None,
+        scoreVersionId: Optional[str] = None,
+        score: Optional[Dict[str, Any]] = None,
+        explanation: Optional[str] = None,
         confidence: Optional[float] = None,
         metadata: Optional[Dict] = None,
+        trace: Optional[Dict] = None,
         scoringJobId: Optional[str] = None,
         evaluationId: Optional[str] = None,
         correct: Optional[bool] = None,
@@ -88,22 +103,50 @@ class ScoreResult(BaseModel):
         self.itemId = itemId
         self.accountId = accountId
         self.scorecardId = scorecardId
+        self.scoreId = scoreId
+        self.scoreVersionId = scoreVersionId
+        self.score = score if score is not None else {}
+        self.explanation = explanation
         self.confidence = confidence
         self.metadata = metadata
+        self.trace = trace
         self.scoringJobId = scoringJobId
         self.evaluationId = evaluationId
         self.correct = correct
+    
+    @property
+    def scoreName(self) -> Optional[str]:
+        """Get the score name from the related score object."""
+        if self.score and isinstance(self.score, dict) and 'name' in self.score:
+            return self.score['name']
+        return None
+
+    @property
+    def numeric_value(self) -> Optional[float]:
+        """Get the numeric value as a float, or None if invalid."""
+        try:
+            return float(self.value) if self.value is not None else None
+        except (ValueError, TypeError):
+            return None
 
     @classmethod
     def fields(cls) -> str:
         return """
             id
             value
+            explanation
             itemId
             accountId
             scorecardId
+            scoreId
+            score {
+                id
+                name
+            }
+            scoreVersionId
             confidence
             metadata
+            trace
             scoringJobId
             evaluationId
             correct
@@ -119,6 +162,14 @@ class ScoreResult(BaseModel):
                 metadata = json.loads(metadata)
             except json.JSONDecodeError:
                 metadata = None
+        
+        # Parse trace JSON if it's a string
+        trace = data.get('trace')
+        if isinstance(trace, str):
+            try:
+                trace = json.loads(trace)
+            except json.JSONDecodeError:
+                trace = None
                 
         return cls(
             id=data['id'],
@@ -126,8 +177,13 @@ class ScoreResult(BaseModel):
             itemId=data['itemId'],
             accountId=data['accountId'],
             scorecardId=data['scorecardId'],
+            scoreId=data.get('scoreId'),
+            scoreVersionId=data.get('scoreVersionId'),
+            score=data.get('score'),
+            explanation=data.get('explanation'),
             confidence=data.get('confidence'),
             metadata=metadata,
+            trace=trace,
             scoringJobId=data.get('scoringJobId'),
             evaluationId=data.get('evaluationId'),
             correct=data.get('correct'),

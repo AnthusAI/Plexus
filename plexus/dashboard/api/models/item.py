@@ -63,7 +63,6 @@ class Item(BaseModel):
             createdAt
             isEvaluation
             identifiers
-            text
             metadata
             attachedFiles
         """
