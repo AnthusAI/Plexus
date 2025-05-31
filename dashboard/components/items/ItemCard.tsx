@@ -472,18 +472,15 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
         ) : "bg-card-selected",
         variant === 'detail' && "h-full flex flex-col",
         item.isNew && "new-item-shadow",
+        ((variant === 'grid' && isSelected) || variant === 'detail') && "selected-border-rounded",
         className
       )}
-      style={{
-        ...(((variant === 'grid' && isSelected) || variant === 'detail') && {
-          boxShadow: 'inset 0 0 0 0.5rem var(--secondary)'
-        })
-      }}
       {...htmlProps}
     >
+
       <div className={cn(
         variant === 'grid' ? "p-3" : "p-4",
-        "w-full",
+        "w-full relative z-10",
         variant === 'detail' && "flex-1 flex flex-col min-h-0"
       )}>
         <div 
