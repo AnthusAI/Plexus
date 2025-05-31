@@ -47,7 +47,7 @@ The Plexus MCP (Multi-Agent Cooperative Protocol) system enables AI agents and t
    - `get_plexus_task_details`: Gets detailed information about a specific task by its ID, including all task stages and progress information.
    
    **Utility Tools**:
-   - `think`: REQUIRED tool to use before other tools to structure reasoning and plan approach.
+   - `think`: Use as a scratchpad when working with Plexus tools to plan approach and verify parameters.
    - `get_score_yaml_documentation`: ✅ **AVAILABLE** Provides comprehensive documentation about the YAML configuration format for scores, including examples and field descriptions.
    - `debug_python_env`: Debug the Python environment, including available modules and paths.
 

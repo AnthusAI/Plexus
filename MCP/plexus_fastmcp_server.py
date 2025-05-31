@@ -271,22 +271,22 @@ mcp = FastMCP(
 @mcp.tool()
 async def think(thought: str) -> str:
     """
-    Before taking any action or responding to the user after receiving tool results, use the think tool as a scratchpad to:
-    - Plan your approach
-    - Verify parameters
-    - Diagnose issues
-    - Find specific information
-    - Plan a sequence of tool calls
+    Use this tool as a scratchpad when working with Plexus tools to:
+    - Plan your approach for Plexus operations
+    - Verify parameters for Plexus API calls
+    - Diagnose issues with Plexus tools
+    - Find specific information within Plexus data
+    - Plan a sequence of Plexus tool calls
     
-    When to use this tool:
-    - Before running evaluations to verify parameters
-    - After encountering an error and need to diagnose the issue
-    - When analyzing scorecard or report data to find specific information
-    - When planning a sequence of tool calls to accomplish a user request
-    - When determining what information is missing from a user request
-    - When deciding between multiple possible approaches
-    - When you plan on using multiple tools in a sequence
-    - ESPECIALLY when working with score configurations - always check if you need documentation first
+    When to use this tool (for Plexus operations only):
+    - Before running Plexus evaluations to verify parameters
+    - After encountering an error with Plexus tools and need to diagnose the issue
+    - When analyzing Plexus scorecard or report data to find specific information
+    - When planning a sequence of Plexus tool calls to accomplish a user request
+    - When determining what Plexus information is missing from a user request
+    - When deciding between multiple possible Plexus approaches
+    - When you plan on using multiple Plexus tools in a sequence
+    - ESPECIALLY when working with Plexus score configurations - always check if you need documentation first
     
     Here are some examples of what to iterate over inside the think tool:
 
