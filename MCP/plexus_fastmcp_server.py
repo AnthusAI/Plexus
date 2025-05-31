@@ -257,9 +257,12 @@ mcp = FastMCP(
     - get_latest_plexus_task: Get the most recent task for an account, with optional filtering by task type
     - get_plexus_task_details: Get detailed information about a specific task by its ID, including task stages
     
+    ## Documentation Tools
+    - get_plexus_documentation: Access specific documentation files by name (e.g., 'score-yaml-format' for Score YAML configuration guide)
+    
     ## Utility Tools
     - think: REQUIRED tool to use before other tools to structure reasoning and plan approach
-    - get_score_yaml_documentation: Comprehensive documentation about score YAML configuration format
+    - get_score_yaml_documentation: Comprehensive documentation about score YAML configuration format (legacy - use get_plexus_documentation instead)
     """
 )
 
@@ -283,6 +286,7 @@ async def think(thought: str) -> str:
     - When determining what information is missing from a user request
     - When deciding between multiple possible approaches
     - When you plan on using multiple tools in a sequence
+    - ESPECIALLY when working with score configurations - always check if you need documentation first
     
     Here are some examples of what to iterate over inside the think tool:
 
@@ -320,12 +324,27 @@ async def think(thought: str) -> str:
     User asked to update the "Grammar Check" score on the "Quality Assurance" scorecard.
     - Need to: 1) Find the scorecard and score using find_plexus_score
                 2) Get current configuration using get_plexus_score_configuration
-                3) If user wants to see YAML format info, use get_score_yaml_documentation
+                3) IMPORTANT: If user needs help with YAML format, use get_plexus_documentation(filename="score-yaml-format")
                 4) Discuss changes with user or apply requested modifications
                 5) Use update_plexus_score_configuration to create new version
     - Should provide dashboard URL for easy access to the updated score.
     - This is a mutation operation, so be careful and confirm changes.
     </think_tool_example_5>
+    
+    <think_tool_example_6>
+    User asked about score configuration format or needs help creating a new score.
+    - FIRST: Use get_plexus_documentation(filename="score-yaml-format") to get the complete guide
+    - This documentation includes:
+      * Core concepts (Score vs Scorecard)
+      * Implementation types (LangGraphScore, etc.)
+      * Dependencies between scores
+      * LangGraph configuration details
+      * Node types (Classifier, Extractor, BeforeAfterSlicer, etc.)
+      * Message templates and metadata
+      * Best practices and examples
+    - Then proceed with scorecard/score operations based on the user's specific needs
+    - Always reference the documentation when explaining YAML configuration
+    </think_tool_example_6>
     """
     # Temporarily redirect stdout to capture any unexpected output
     old_stdout = sys.stdout
@@ -2485,6 +2504,73 @@ async def update_plexus_score_configuration(
         captured_output = temp_stdout.getvalue()
         if captured_output:
             logger.warning(f"Captured unexpected stdout during update_plexus_score_configuration: {captured_output}")
+        # Restore original stdout
+        sys.stdout = old_stdout
+
+@mcp.tool()
+async def get_plexus_documentation(filename: str) -> str:
+    """
+    Get documentation content for specific Plexus topics.
+    
+    Valid filenames:
+    - score-yaml-format: Complete guide to Score YAML configuration format including LangGraph, node types, dependencies, and best practices
+    
+    Args:
+        filename (str): The documentation file to retrieve. Must be one of the valid filenames listed above.
+    
+    Returns:
+        str: The complete documentation content in markdown format.
+    """
+    # Temporarily redirect stdout to capture any unexpected output
+    old_stdout = sys.stdout
+    temp_stdout = StringIO()
+    sys.stdout = temp_stdout
+    
+    try:
+        import os
+        
+        # Define mapping of short names to actual filenames
+        valid_files = {
+            "score-yaml-format": "score-yaml-format.md"
+        }
+        
+        if filename not in valid_files:
+            available = ", ".join(valid_files.keys())
+            return f"Error: Invalid filename '{filename}'. Valid options are: {available}"
+        
+        try:
+            # Get the path to the plexus docs directory
+            # Navigate from MCP/ to plexus/docs/
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            plexus_dir = os.path.dirname(current_dir)
+            docs_dir = os.path.join(plexus_dir, "plexus", "docs")
+            file_path = os.path.join(docs_dir, valid_files[filename])
+            
+            logger.info(f"Reading documentation file: {file_path}")
+            
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+                
+            logger.info(f"Successfully read documentation file '{filename}' ({len(content)} characters)")
+            return content
+            
+        except FileNotFoundError:
+            error_msg = f"Documentation file '{filename}' not found at expected location: {file_path}"
+            logger.error(error_msg)
+            return f"Error: {error_msg}"
+        except Exception as e:
+            error_msg = f"Error reading documentation file '{filename}': {str(e)}"
+            logger.exception(error_msg)
+            return f"Error: {error_msg}"
+            
+    except Exception as e:
+        logger.error(f"Error in get_plexus_documentation: {str(e)}", exc_info=True)
+        return f"Error: {str(e)}"
+    finally:
+        # Check if anything was written to stdout
+        captured_output = temp_stdout.getvalue()
+        if captured_output:
+            logger.warning(f"Captured unexpected stdout during get_plexus_documentation: {captured_output}")
         # Restore original stdout
         sys.stdout = old_stdout
 
