@@ -1248,51 +1248,26 @@ function ItemsDashboardInner() {
     
     // Item creation subscription
     const createSubscription = observeItemCreations().subscribe({
-      next: async ({ data: newItem }) => {
-        if (!newItem) {
+      next: async ({ data: changeEvent }) => {
+        console.log('🆕 Item creation subscription received:', changeEvent);
+        
+        if (!changeEvent) {
+          console.log('🆕 Empty item creation notification');
           return;
         }
         
-        if (newItem.accountId === selectedAccount.id) {
-          // Transform the new item to match our expected format
-          const transformedNewItem = {
-            id: newItem.id,
-            accountId: newItem.accountId,
-            externalId: newItem.externalId,
-            description: newItem.description,
-            evaluationId: newItem.evaluationId,
-            updatedAt: newItem.updatedAt,
-            createdAt: newItem.createdAt,
-            isEvaluation: newItem.isEvaluation,
-            scorecard: null,
-            score: null,
-            date: newItem.createdAt || newItem.updatedAt,
-            status: "New",
-            results: 0,
-            inferences: 0,
-            cost: "$0.000",
-            isNew: true,
-            groupedScoreResults: {}
-          };
-
-          // Add the new item to the TOP of the list
-          setItems(prevItems => [transformedNewItem, ...prevItems]);
+        if (changeEvent.action === 'create' && changeEvent.needsRefetch) {
+          console.log('🆕 Item creation detected, refreshing items list');
           
-          // Show a toast notification
-          toast.success(`🎉 New item: ${newItem.externalId || newItem.id.substring(0,8)}`, {
-            duration: 4000,
+          // Show a toast notification that new items are being loaded
+          toast.success('🎉 New item detected! Refreshing...', {
+            duration: 3000,
           });
           
-          // After 3 seconds, remove the "New" status and make it look normal
-          setTimeout(() => {
-            setItems(prevItems => 
-              prevItems.map(item => 
-                item.id === newItem.id 
-                  ? { ...item, status: "Done", isNew: false }
-                  : item
-              )
-            );
-          }, 3000);
+          // Trigger a refresh of the items list
+          throttledRefetch();
+        } else {
+          console.log('🆕 Unhandled item creation event:', changeEvent);
         }
       },
       error: (error) => {
