@@ -52,6 +52,15 @@ const relativeDate = (days: number, hours: number, minutes: number) => {
 // First, let's define an interface for the item
 interface Item {
   id: string;
+  timestamp: string; // ISO string for when the item was created/updated
+  duration?: number; // Duration in seconds (optional for elapsed time display)
+  scorecards: Array<{
+    scorecardId: string;
+    scorecardName: string;
+    resultCount: number;
+  }>; // List of scorecards with result counts
+  
+  // Core fields
   externalId?: string;
   description?: string;
   accountId: string;
@@ -59,18 +68,15 @@ interface Item {
   updatedAt?: string;
   createdAt?: string;
   isEvaluation: boolean;
+  isNew?: boolean;
+  isLoadingResults?: boolean;
   
-  // Fields for UI compatibility with existing code
-  scorecard?: string | null;
-  score?: string | number | null;
+  // Legacy fields for backwards compatibility (will be phased out)
   date?: string;
   status?: string;
   results?: number;
   inferences?: number;
   cost?: string;
-  isNew?: boolean; // Add this field to track new items
-  
-  // New field to store scoreResults grouped by scorecard
   groupedScoreResults?: GroupedScoreResults;
 }
 
@@ -140,7 +146,15 @@ const MemoizedGridItemCard = React.memo(({
     ...item,
     results: scoreCount?.count || item.results,
     isLoadingResults: scoreCount?.isLoading || false,
-    scorecardBreakdown: scoreCount?.scorecardBreakdown || undefined
+    scorecardBreakdown: scoreCount?.scorecardBreakdown || undefined,
+    // Map scorecardBreakdown to the new scorecards field
+    scorecards: scoreCount?.scorecardBreakdown ? 
+      scoreCount.scorecardBreakdown.map(breakdown => ({
+        scorecardId: breakdown.scorecardId,
+        scorecardName: breakdown.scorecardName,
+        resultCount: breakdown.count
+      })) : 
+      item.scorecards || []
   } as ItemData & { isLoadingResults: boolean }), [
     item,
     scoreCount?.count,
@@ -521,7 +535,12 @@ function ItemsDashboardInner() {
         
         // Transform the item to match our expected format
         const transformedItem = {
+          // New required fields
           id: item.id,
+          timestamp: item.createdAt || item.updatedAt || new Date().toISOString(),
+          scorecards: [], // Will be populated with actual data later
+          
+          // Core fields
           accountId: item.accountId,
           externalId: item.externalId,
           description: item.description,
@@ -529,14 +548,15 @@ function ItemsDashboardInner() {
           updatedAt: item.updatedAt,
           createdAt: item.createdAt,
           isEvaluation: item.isEvaluation,
-          scorecard: null,
-          score: null,
+          isNew: false,
+          isLoadingResults: false,
+          
+          // Legacy fields for backwards compatibility
           date: item.createdAt || item.updatedAt,
           status: "Done",
           results: 0,
           inferences: 0,
           cost: "$0.000",
-          isNew: false,
           groupedScoreResults: {}
         } as Item;
         
@@ -761,7 +781,12 @@ function ItemsDashboardInner() {
         // For now, items will show as "Processing..." until we implement lazy loading
         
         const transformedItem = {
+          // New required fields
           id: item.id,
+          timestamp: item.createdAt || item.updatedAt || new Date().toISOString(),
+          scorecards: [], // Will be populated with actual data later
+          
+          // Core fields
           accountId: item.accountId,
           externalId: item.externalId,
           description: item.description,
@@ -769,21 +794,20 @@ function ItemsDashboardInner() {
           updatedAt: item.updatedAt,
           createdAt: item.createdAt,
           isEvaluation: item.isEvaluation,
-          scorecard: null, // Will be populated via lazy loading
-          score: null, // Will be populated via lazy loading
+          isNew: false, // Items loaded via "load more" should NOT be new
+          isLoadingResults: false,
+          
+          // Legacy fields for backwards compatibility
           date: item.createdAt || item.updatedAt,
           status: "Done", 
           results: 0, // Will be populated via lazy loading from scoreResultCounts
           inferences: 0, // Will be populated via lazy loading
           cost: "$0.000", // Placeholder
-          isNew: false, // Items loaded via "load more" should NOT be new
           groupedScoreResults: groupedScoreResults
         } as Item;
         
         // console.log('Final transformed item:', { // Keep for debugging if needed
         //   id: transformedItem.id,
-        //   primaryScorecard: transformedItem.scorecard,
-        //   primaryScore: transformedItem.score,
         //   groupedScoreResultsKeys: Object.keys(transformedItem.groupedScoreResults || {})
         // });
         
@@ -970,7 +994,12 @@ function ItemsDashboardInner() {
         // For now, items will show as "Processing..." until we implement lazy loading
         
         return {
+          // New required fields
           id: item.id,
+          timestamp: item.createdAt || item.updatedAt || new Date().toISOString(),
+          scorecards: [], // Will be populated with actual data later
+          
+          // Core fields
           accountId: item.accountId,
           externalId: item.externalId,
           description: item.description,
@@ -978,14 +1007,15 @@ function ItemsDashboardInner() {
           updatedAt: item.updatedAt,
           createdAt: item.createdAt,
           isEvaluation: item.isEvaluation,
-          scorecard: null, // Will be populated via lazy loading
-          score: null, // Will be populated via lazy loading
+          isNew: false, // Items loaded on initial fetch should NOT be new
+          isLoadingResults: false,
+          
+          // Legacy fields for backwards compatibility
           date: item.createdAt || item.updatedAt,
           status: "Done",
           results: 0, // Will be populated via lazy loading from scoreResultCounts
           inferences: 0, // Will be populated via lazy loading
           cost: "$0.000", // Placeholder
-          isNew: false, // Items loaded on initial fetch should NOT be new
           groupedScoreResults: groupedScoreResults
         } as Item;
       });
@@ -1123,7 +1153,12 @@ function ItemsDashboardInner() {
         
         // Transform and merge with existing items
         const transformedItems = itemsFromDirectQuery.map(item => ({
+          // New required fields
           id: item.id,
+          timestamp: item.createdAt || item.updatedAt || new Date().toISOString(),
+          scorecards: [], // Will be populated with actual data later
+          
+          // Core fields
           accountId: item.accountId,
           externalId: item.externalId,
           description: item.description,
@@ -1131,14 +1166,15 @@ function ItemsDashboardInner() {
           updatedAt: item.updatedAt,
           createdAt: item.createdAt,
           isEvaluation: item.isEvaluation,
-          scorecard: null,
-          score: null,
+          isNew: false, // Will be changed to true for new items below
+          isLoadingResults: false,
+          
+          // Legacy fields for backwards compatibility
           date: item.createdAt || item.updatedAt,
           status: "Done",
           results: 0,
           inferences: 0,
           cost: "$0.000",
-          isNew: false, // Will be changed to true for new items below
           groupedScoreResults: {}
         }));
         

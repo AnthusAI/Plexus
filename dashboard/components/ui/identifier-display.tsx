@@ -49,15 +49,16 @@ export const IdentifierDisplay: React.FC<IdentifierDisplayProps> = ({
   }
 
   const iconClasses = cn(
-    iconSize === 'sm' && 'h-4 w-4',
-    iconSize === 'md' && 'h-4 w-4', 
-    iconSize === 'lg' && 'h-5 w-5'
+    iconSize === 'sm' && 'h-3 w-3 flex-shrink-0',
+    iconSize === 'md' && 'h-4 w-4 flex-shrink-0', 
+    iconSize === 'lg' && 'h-5 w-5 flex-shrink-0'
   );
 
   const textClasses = cn(
     textSize === 'xs' && 'text-xs',
     textSize === 'sm' && 'text-sm',
-    textSize === 'base' && 'text-base'
+    textSize === 'base' && 'text-base',
+    'flex-shrink-0'
   );
 
   const renderIdentifierValue = (identifier: Identifier) => {
@@ -87,9 +88,9 @@ export const IdentifierDisplay: React.FC<IdentifierDisplayProps> = ({
   };
 
   const renderSimpleExternalId = () => (
-    <div className={cn("flex items-center gap-1 text-muted-foreground", textClasses, className)}>
+    <div className={cn("flex items-start gap-1 text-muted-foreground min-w-0", textClasses, className)}>
       <IdCard className={iconClasses} />
-      <span>{externalId}</span>
+      <span className="truncate">{externalId}</span>
     </div>
   );
 
@@ -102,18 +103,18 @@ export const IdentifierDisplay: React.FC<IdentifierDisplayProps> = ({
   return (
     <div className={className}>
       {/* First identifier with icon and optional expander */}
-      <div className={cn("flex items-center gap-1 text-muted-foreground", textClasses)}>
+      <div className={cn("flex items-start gap-1 text-muted-foreground min-w-0", textClasses)}>
         <IdCard className={iconClasses} />
-        <span className={cn(textClasses, "font-medium")}>
+        <span className={cn(textClasses, "font-medium flex-shrink-0")}>
           {firstIdentifier!.name}:
         </span>
-        <span className={textClasses}>
+        <span className={cn(textClasses, "truncate min-w-0 flex-1")}>
           {renderIdentifierValue(firstIdentifier!)}
         </span>
         {hasMultipleIdentifiers && (
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="ml-1 p-0.5 hover:bg-muted rounded"
+            className="ml-1 p-0.5 hover:bg-muted rounded flex-shrink-0"
             aria-label={isExpanded ? "Collapse identifiers" : "Expand identifiers"}
           >
             {isExpanded ? (
@@ -129,7 +130,7 @@ export const IdentifierDisplay: React.FC<IdentifierDisplayProps> = ({
       {isExpanded && hasMultipleIdentifiers && (
         <div className="mt-1 ml-5 space-y-1">
           {parsedIdentifiers.slice(1).map((identifier, index) => (
-            <div key={`${identifier.name}-${index + 1}`} className="flex items-center gap-1">
+            <div key={`${identifier.name}-${index + 1}`} className="flex items-start gap-1">
               <span className={cn(textClasses, "font-medium")}>
                 {identifier.name}:
               </span>
