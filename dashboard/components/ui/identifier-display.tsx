@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useState, useMemo } from 'react';
-import { IdCard, ChevronDown, ChevronRight } from 'lucide-react';
+import { IdCard, ChevronDown, ChevronRight, Copy } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 export interface IdentifierItem {
   name: string;      // Required: "Customer ID", "Order ID", etc.
@@ -24,6 +25,7 @@ interface IdentifierDisplayProps {
   iconSize?: 'sm' | 'md' | 'lg';
   textSize?: 'xs' | 'sm' | 'base';
   skeletonMode?: boolean;
+  displayMode?: 'full' | 'compact'; // New prop to control functionality
 }
 
 export const IdentifierDisplay: React.FC<IdentifierDisplayProps> = ({
@@ -32,9 +34,20 @@ export const IdentifierDisplay: React.FC<IdentifierDisplayProps> = ({
   className,
   iconSize = 'sm',
   textSize = 'xs',
-  skeletonMode = false
+  skeletonMode = false,
+  displayMode = 'full'
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
+
+  const copyToClipboard = async (value: string, label?: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success(`Copied ${label || 'identifier'} to clipboard`);
+    } catch (error) {
+      console.error('Failed to copy to clipboard:', error);
+      toast.error('Failed to copy to clipboard');
+    }
+  };
 
   const parsedIdentifiers = useMemo(() => {
     if (!identifiers) return [];
@@ -80,8 +93,7 @@ export const IdentifierDisplay: React.FC<IdentifierDisplayProps> = ({
 
   const baseTextSize = textSize === 'xs' ? 'text-xs' : textSize === 'sm' ? 'text-sm' : 'text-base';
   const textClasses = cn(baseTextSize, 'flex-shrink-0');
-  const labelTextClasses = cn('!text-xs', 'font-medium flex-shrink-0 text-muted-foreground');
-  const valueTextClasses = cn('!text-xs', 'truncate min-w-0 flex-1 text-muted-foreground');
+  const labelTextClasses = cn('!text-xs', 'font-medium flex-shrink-0 text-muted-foreground w-12');
 
   // Skeleton mode rendering
   if (skeletonMode) {
@@ -95,37 +107,70 @@ export const IdentifierDisplay: React.FC<IdentifierDisplayProps> = ({
   }
 
   const renderIdentifierValue = (identifier: IdentifierItem) => {
-    const displayValue = identifier.value.length > 15 
-      ? `${identifier.value.substring(0, 15)}...` 
+    const displayValue = identifier.value.length > 25 
+      ? `${identifier.value.substring(0, 25)}...` 
       : identifier.value;
 
-    if (identifier.url) {
-      return (
-        <a 
-          href={identifier.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-primary hover:underline !text-xs"
-          title={identifier.value}
-        >
-          {displayValue}
-        </a>
-      );
-    }
-
-    return (
+    const valueElement = identifier.url ? (
+      <a 
+        href={identifier.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-primary hover:underline !text-xs"
+        title={identifier.value}
+      >
+        {displayValue}
+      </a>
+    ) : (
       <span title={identifier.value} className="!text-xs text-muted-foreground">
         {displayValue}
       </span>
+    );
+
+    // Only show copy button in full mode
+    if (displayMode === 'compact') {
+      return valueElement;
+    }
+
+    return (
+      <div className="flex items-center gap-1">
+        {valueElement}
+        <button
+          onClick={() => copyToClipboard(identifier.value, identifier.name)}
+          className="p-0.5 hover:bg-muted rounded flex-shrink-0 opacity-60 hover:opacity-100"
+          title={`Copy ${identifier.name}`}
+        >
+          <Copy className="h-3 w-3" />
+        </button>
+      </div>
     );
   };
 
   const renderSimpleExternalId = () => {
     const finalTextClasses = cn(textClasses, className);
+    
+    // Compact mode - no copy button
+    if (displayMode === 'compact') {
+      return (
+        <div className={cn("flex items-start gap-1 text-muted-foreground", finalTextClasses)}>
+          <IdCard className={iconClasses} />
+          <span className="!text-xs text-muted-foreground">{externalId}</span>
+        </div>
+      );
+    }
+
+    // Full mode - with copy button
     return (
-      <div className={cn("flex items-start gap-1 text-muted-foreground min-w-0", finalTextClasses)}>
+      <div className={cn("flex items-start gap-1 text-muted-foreground", finalTextClasses)}>
         <IdCard className={iconClasses} />
-        <span className="truncate !text-xs text-muted-foreground">{externalId}</span>
+        <span className="!text-xs text-muted-foreground">{externalId}</span>
+        <button
+          onClick={() => copyToClipboard(externalId!, "External ID")}
+          className="p-0.5 hover:bg-muted rounded flex-shrink-0 opacity-60 hover:opacity-100"
+          title="Copy External ID"
+        >
+          <Copy className="h-3 w-3" />
+        </button>
       </div>
     );
   };
@@ -148,15 +193,16 @@ export const IdentifierDisplay: React.FC<IdentifierDisplayProps> = ({
   return (
     <div>
       {/* First identifier with icon and optional expander */}
-      <div className={cn("flex items-start gap-1 text-muted-foreground min-w-0", finalTextClasses)}>
+      <div className={cn("flex items-start gap-1 text-muted-foreground", finalTextClasses)}>
         <IdCard className={iconClasses} />
         <span className={labelTextClasses}>
           {firstIdentifier!.name}:
         </span>
-        <span className={valueTextClasses}>
+        <div className="flex-1 min-w-0">
           {renderIdentifierValue(firstIdentifier!)}
-        </span>
-        {hasMultipleIdentifiers && (
+        </div>
+        {/* Only show expand/collapse button in full mode and when there are multiple identifiers */}
+        {displayMode === 'full' && hasMultipleIdentifiers && (
           <button
             onClick={() => setIsExpanded(!isExpanded)}
             className="ml-1 p-0.5 hover:bg-muted rounded flex-shrink-0"
@@ -171,17 +217,17 @@ export const IdentifierDisplay: React.FC<IdentifierDisplayProps> = ({
         )}
       </div>
 
-      {/* Additional identifiers when expanded */}
-      {isExpanded && hasMultipleIdentifiers && (
+      {/* Additional identifiers when expanded - only in full mode */}
+      {displayMode === 'full' && isExpanded && hasMultipleIdentifiers && (
         <div className={expandedLeftMargin}>
           {parsedIdentifiers.slice(1).map((identifier, index) => (
             <div key={`${identifier.name}-${index + 1}`} className="flex items-start gap-1">
               <span className={labelTextClasses}>
                 {identifier.name}:
               </span>
-              <span className="!text-xs text-muted-foreground">
+              <div className="flex-1 min-w-0">
                 {renderIdentifierValue(identifier)}
-              </span>
+              </div>
             </div>
           ))}
         </div>

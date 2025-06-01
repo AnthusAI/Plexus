@@ -158,6 +158,7 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
         iconSize="md"
         textSize="xs"
         skeletonMode={skeletonMode}
+        displayMode="compact"
       />
 
       <Timestamp 
@@ -275,6 +276,7 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
               iconSize="md"
               textSize="sm"
               skeletonMode={skeletonMode}
+              displayMode="full"
             />
             <div className="text-sm text-muted-foreground">
               <Timestamp time={item.timestamp || item.date || ''} variant="relative" className="text-xs" skeletonMode={skeletonMode} />
