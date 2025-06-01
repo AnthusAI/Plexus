@@ -2500,7 +2500,7 @@ function ItemsDashboardInner() {
                   setSearchValue(e.target.value);
                   if (searchError) setSearchError(null); // Clear error when typing
                 }}
-                className="w-[200px] h-9 pl-10 pr-20 bg-card border-0 shadow-none focus:ring-0 focus:ring-offset-0 focus:outline-none focus:border-0 focus:shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none"
+                className={`w-[200px] h-9 pl-10 ${searchValue.trim() ? 'pr-20' : 'pr-3'} bg-card border-0 shadow-none focus:ring-0 focus:ring-offset-0 focus:outline-none focus:border-0 focus:shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none`}
                 disabled={isSearching}
               />
               {searchValue.trim() && (
