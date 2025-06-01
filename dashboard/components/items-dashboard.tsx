@@ -554,19 +554,34 @@ function ItemsDashboardInner() {
   const [searchError, setSearchError] = useState<string | null>(null);
   const searchErrorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
-  // Function to scroll to a selected item
-  const scrollToSelectedItem = useCallback((itemId: string) => {
-    // Use requestAnimationFrame to ensure the layout has updated after selection
-    requestAnimationFrame(() => {
+  // Enhanced scroll-to-item function for deep-linking with retry logic
+  const scrollToSelectedItem = useCallback((itemId: string, maxRetries = 10, retryDelay = 100) => {
+    let attempts = 0;
+    
+    const attemptScroll = () => {
+      attempts++;
       const itemElement = itemRefsMap.current.get(itemId);
+      
       if (itemElement) {
+        console.log(`📍 Scrolling to item ${itemId} (attempt ${attempts})`);
         itemElement.scrollIntoView({
           behavior: 'smooth',
           block: 'start', // Align to the top of the container
           inline: 'nearest'
         });
+        return true; // Success
+      } else if (attempts < maxRetries) {
+        console.log(`⏱️ Retry ${attempts}/${maxRetries} for item ${itemId}. Available refs:`, Array.from(itemRefsMap.current.keys()).slice(0, 5));
+        setTimeout(attemptScroll, retryDelay);
+        return false; // Retry needed
+      } else {
+        console.log(`❌ Failed to scroll to item ${itemId} after ${maxRetries} attempts. Available refs:`, Array.from(itemRefsMap.current.keys()));
+        return false; // Failed
       }
-    });
+    };
+    
+    // Start with immediate attempt, then use requestAnimationFrame for subsequent attempts
+    requestAnimationFrame(attemptScroll);
   }, []);
 
   // Search for item by identifier
@@ -761,11 +776,16 @@ function ItemsDashboardInner() {
   // Track the previous item ID to only scroll when it actually changes
   const prevItemIdRef = useRef<string | null>(null);
   
-  // Sync URL parameter with selected item and fetch if needed
+  // Enhanced deep-linking logic: Check if item is in first page vs needs separate fetch
+  const isItemInFirstPage = useCallback((itemId: string): boolean => {
+    return items.some(item => item.id === itemId);
+  }, [items]);
+  
+  // Sync URL parameter with selected item and implement deep-linking behavior
   useEffect(() => {
     const itemId = params.id as string
     
-    console.log('🔄 URL sync useEffect triggered:', { 
+    console.log('🔄 Deep-link sync useEffect triggered:', { 
       itemId, 
       selectedItem, 
       isLoading, 
@@ -784,60 +804,80 @@ function ItemsDashboardInner() {
         debugSetSelectedItem(itemId)
       }
       
-      // Don't proceed with fetching if accounts are still loading
+      // Don't proceed with view logic if accounts are still loading
       if (isLoadingAccounts) {
         console.log('⏳ Accounts still loading, waiting...');
         return;
       }
       
-      // Always check if the item exists in the current list and fetch if needed
-      const itemExists = items.some(item => item.id === itemId);
-      console.log('🔍 Item exists in current list:', itemExists);
+      // Check if the deep-linked item is in the first page of results
+      const itemInFirstPage = isItemInFirstPage(itemId);
+      console.log('🔍 Deep-link analysis:', { 
+        itemId, 
+        itemInFirstPage, 
+        itemsLength: items.length,
+        isNarrowViewport 
+      });
       
-      if (itemExists) {
-        console.log('✅ Item found in current list, using grid mode');
-        // Item exists in current list - always use grid mode (unless narrow viewport)
+      if (itemInFirstPage) {
+        console.log('✅ Item is in first page - showing grid and scrolling to item');
+        // Item is in the first page: show the grid and scroll to the item
         if (!isNarrowViewport) {
-          setIsFullWidth(false);
+          setIsFullWidth(false); // Ensure grid is visible
         }
-        // Only scroll if this is a new item selection (item ID changed)
+        
+        // Scroll to the item if this is a new selection
         if (prevItemIdRef.current !== itemId) {
-          console.log('🎯 Item ID changed, scrolling to new item');
-          // Use multiple timing attempts to ensure scrolling works
-          const scrollAttempts = [0, 50, 150, 300];
-          scrollAttempts.forEach(delay => {
-            setTimeout(() => {
-              scrollToSelectedItem(itemId);
-            }, delay);
-          });
+          console.log('🎯 Deep-link scrolling to item in grid');
+          // Use the enhanced scroll function with retry logic
+          scrollToSelectedItem(itemId);
           prevItemIdRef.current = itemId;
-        } else {
-          console.log('⚡ Same item selected, allowing normal scroll behavior');
         }
       } else if (selectedAccount) {
-        console.log('🚀 Item not found, will fetch specifically');
-        // Since we need to fetch the item specifically, it means it's not in the current page
-        // Switch to full-width mode to avoid showing a confusing grid
+        console.log('🚀 Item not in first page - fetching and showing full-width');
+        // Item is not in the first page: fetch it and show in full-width mode (hide grid)
         if (!isNarrowViewport) {
-          console.log('📐 Setting full width mode');
-          setIsFullWidth(true);
+          setIsFullWidth(true); // Hide grid, show full-width
         }
+        
+        // Fetch the specific item since it's not in the current page
         fetchSpecificItem(itemId);
-        // Update the ref even for items we need to fetch
         prevItemIdRef.current = itemId;
       } else {
-        console.log('⏭️ Not fetching because no selected account');
+        console.log('⏭️ Not proceeding because no selected account');
       }
     } else if (!itemId && selectedItem && !isLoadingAccounts) {
-      // Only clear selection if URL truly has no item ID AND accounts have finished loading
-      // This prevents clearing selection during initialization or real-time updates
-      console.log('🧹 Clearing selected item - URL has no item ID');
+      // Clear selection and reset to grid view when no item is selected
+      console.log('🧹 Clearing deep-link - returning to grid view');
       debugSetSelectedItem(null)
-      setIsFullWidth(false) // Reset full width when no item is selected
-      prevItemIdRef.current = null; // Clear the previous item ref
+      setIsFullWidth(false) // Always show grid when no item is selected
+      prevItemIdRef.current = null;
     }
-  }, [params.id, selectedAccount, isLoadingAccounts, isNarrowViewport, items.length]) // Include items.length so effect re-runs when items are loaded
-  
+  }, [params.id, selectedAccount, isLoadingAccounts, isNarrowViewport, items.length, isItemInFirstPage]) // Include items.length so effect re-runs when items are loaded
+
+  // Additional useEffect to ensure scrolling works when items are loaded and there's a selected item in the grid
+  useEffect(() => {
+    if (selectedItem && items.length > 0 && !isLoading && !isLoadingAccounts) {
+      const itemInFirstPage = isItemInFirstPage(selectedItem);
+      
+      console.log('🔄 Items loaded, checking for scroll opportunity:', {
+        selectedItem,
+        itemInFirstPage,
+        itemsCount: items.length,
+        isFullWidth,
+        isNarrowViewport
+      });
+      
+      // Only scroll if the item is in the first page and we're showing the grid
+      if (itemInFirstPage && !isFullWidth && !isNarrowViewport) {
+        console.log('🎯 Triggering scroll for loaded item in grid');
+        // Use a small delay to ensure the grid is fully rendered
+        setTimeout(() => {
+          scrollToSelectedItem(selectedItem);
+        }, 50);
+      }
+    }
+  }, [selectedItem, items.length, isLoading, isLoadingAccounts, isItemInFirstPage, isFullWidth, isNarrowViewport, scrollToSelectedItem]);
 
   
   // Add a ref for the intersection observer
@@ -2303,21 +2343,28 @@ function ItemsDashboardInner() {
   }
 
   const handleItemClick = (itemId: string) => {
-    // Always update state first
-    debugSetSelectedItem(itemId)
-    
     // Update URL using browser History API to avoid Next.js navigation
     const newUrl = `/lab/items/${itemId}`
     window.history.replaceState(null, '', newUrl)
     
-    // Scroll to the selected item with multiple timing attempts for reliability
-    const scrollAttempts = [0, 50, 150, 300];
-    scrollAttempts.forEach(delay => {
-      setTimeout(() => {
-        scrollToSelectedItem(itemId);
-      }, delay);
-    });
+    // Update state - the deep-linking useEffect will handle the rest
+    debugSetSelectedItem(itemId)
     
+    // For items in the grid (first page), ensure we can scroll to them
+    if (isItemInFirstPage(itemId)) {
+      // Item is in first page - ensure grid view and scroll to item
+      if (!isNarrowViewport) {
+        setIsFullWidth(false)
+      }
+      
+      // Scroll to the selected item with retry logic
+      scrollToSelectedItem(itemId);
+    } else {
+      // Item not in first page - will be handled by deep-linking useEffect
+      console.log('🔄 Item not in first page, deep-linking useEffect will handle');
+    }
+    
+    // Handle narrow viewport
     if (isNarrowViewport) {
       setIsFullWidth(true)
     }
@@ -2479,6 +2526,12 @@ function ItemsDashboardInner() {
       </div>
       
       <div className="flex-grow flex flex-col overflow-hidden">
+        {/* 
+          Deep-linking rendering logic:
+          1. Full-width mode: When item is NOT in first page (isFullWidth=true) or narrow viewport
+          2. Split view: When item IS in first page (isFullWidth=false) 
+          3. Grid-only: When no item is selected
+        */}
         {selectedItem && (isNarrowViewport || isFullWidth) ? (
           <div className="flex-grow overflow-hidden">
             {renderSelectedItem()}
