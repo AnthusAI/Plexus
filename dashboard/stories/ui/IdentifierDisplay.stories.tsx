@@ -36,6 +36,11 @@ const meta: Meta<typeof IdentifierDisplay> = {
       control: 'text',
       description: 'Additional CSS classes',
     },
+    displayMode: {
+      control: 'select',
+      options: ['full', 'compact'],
+      description: 'Display mode: full shows all features (expand, copy buttons), compact shows only first identifier without interaction',
+    },
   },
   tags: ['autodocs'],
 };
@@ -443,4 +448,76 @@ export const OnDarkBackground: Story = {
       </div>
     ),
   ],
+};
+
+// NEW: Compact mode stories demonstrating grid view behavior
+export const CompactModeSimple: Story = {
+  args: {
+    externalId: 'EXT-12345',
+    displayMode: 'compact',
+    iconSize: 'md',
+    textSize: 'xs',
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Compact mode with simple external ID - no copy button for grid view.',
+      },
+    },
+  },
+};
+
+export const CompactModeSingleIdentifier: Story = {
+  args: {
+    identifiers: [
+      {
+        name: 'form',
+        value: '453460',
+        url: 'https://example.com/forms/453460',
+      }
+    ],
+    displayMode: 'compact',
+    iconSize: 'md',
+    textSize: 'xs',
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Compact mode with single identifier - no copy button, links still work.',
+      },
+    },
+  },
+};
+
+export const CompactModeMultipleIdentifiers: Story = {
+  args: {
+    identifiers: sampleIdentifiers,
+    displayMode: 'compact',
+    iconSize: 'md',
+    textSize: 'xs',
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Compact mode with multiple identifiers - only shows first one, no expand caret or copy button.',
+      },
+    },
+  },
+};
+
+// Comparison: Full vs Compact modes side by side
+export const FullModeComparison: Story = {
+  args: {
+    identifiers: sampleIdentifiers,
+    displayMode: 'full',
+    iconSize: 'md',
+    textSize: 'xs',
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Full mode (default) - shows expand caret and copy buttons for detail view.',
+      },
+    },
+  },
 };

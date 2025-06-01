@@ -122,6 +122,7 @@ export const FeedbackItemView: React.FC<FeedbackItemViewProps> = ({
                 externalId={item.item?.externalId}
                 iconSize="sm"
                 textSize="xs"
+                displayMode="full"
               />
             </div>
           </div>

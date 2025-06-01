@@ -73,6 +73,7 @@ const ScoreResultCard: React.FC<{ result: ScoreResultWithDetails }> = ({ result 
                   externalId={result.score.externalId}
                   iconSize="md"
                   textSize="xs"
+                  displayMode="full"
                 />
               </div>
             )}
@@ -185,6 +186,7 @@ const ItemScoreResults: React.FC<ItemScoreResultsProps> = ({
                           externalId={group.scorecardExternalId}
                           iconSize="md"
                           textSize="xs"
+                          displayMode="full"
                         />
                       </div>
                     )}
