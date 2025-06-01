@@ -377,6 +377,179 @@ export const DetailLoadingResults: Story = {
   }
 };
 
+// Skeleton mode stories
+export const GridSkeleton: Story = {
+  render: (args) => (
+    <div className="w-full p-4">
+      <div className="max-w-sm">
+        <ItemCard {...args} />
+      </div>
+    </div>
+  ),
+  args: {
+    variant: 'grid',
+    item: sampleItems[0],
+    isSelected: false,
+    skeletonMode: true,
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Grid view in skeleton loading state, showing placeholder elements that match the layout of the loaded state.'
+      }
+    }
+  }
+};
+
+export const GridSelectedSkeleton: Story = {
+  render: (args) => (
+    <div className="w-full p-4">
+      <div className="max-w-sm">
+        <ItemCard {...args} />
+      </div>
+    </div>
+  ),
+  args: {
+    variant: 'grid',
+    item: sampleItems[0],
+    isSelected: true,
+    skeletonMode: true,
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Selected grid view in skeleton loading state.'
+      }
+    }
+  }
+};
+
+export const DetailSkeleton: Story = {
+  render: (args) => (
+    <div className="w-full p-4">
+      <div className="h-[400px] w-full">
+        <ItemCard
+          {...args}
+          getBadgeVariant={getBadgeVariant}
+        />
+      </div>
+    </div>
+  ),
+  args: {
+    variant: 'detail',
+    item: sampleItems[0],
+    skeletonMode: true,
+    onClose: () => console.log('Close clicked'),
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Detail view in skeleton loading state, showing placeholder elements for all components including action buttons.'
+      }
+    }
+  }
+};
+
+export const DetailMultipleScorecardsSkeleton: Story = {
+  render: (args) => (
+    <div className="w-full p-4">
+      <div className="h-[400px] w-full">
+        <ItemCard
+          {...args}
+          getBadgeVariant={getBadgeVariant}
+        />
+      </div>
+    </div>
+  ),
+  args: {
+    variant: 'detail',
+    item: sampleItems[10], // Multiple scorecards
+    skeletonMode: true,
+    onClose: () => console.log('Close clicked'),
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Detail view with multiple scorecards in skeleton loading state, showing placeholder elements for the expanded scorecard breakdown.'
+      }
+    }
+  }
+};
+
+export const SkeletonComparison: Story = {
+  render: () => (
+    <div className="w-full p-4 space-y-6">
+      <h3 className="text-lg font-semibold">Normal vs Skeleton Loading States</h3>
+      
+      {/* Grid comparison */}
+      <div className="space-y-2">
+        <h4 className="text-md font-medium">Grid View</h4>
+        <div className="flex gap-4">
+          <div className="max-w-sm">
+            <p className="text-sm text-muted-foreground mb-2">Normal</p>
+            <ItemCard
+              variant="grid"
+              item={sampleItems[1]}
+              isSelected={false}
+              getBadgeVariant={getBadgeVariant}
+              skeletonMode={false}
+            />
+          </div>
+          <div className="max-w-sm">
+            <p className="text-sm text-muted-foreground mb-2">Skeleton</p>
+            <ItemCard
+              variant="grid"
+              item={sampleItems[1]}
+              isSelected={false}
+              getBadgeVariant={getBadgeVariant}
+              skeletonMode={true}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Detail comparison */}
+      <div className="space-y-2">
+        <h4 className="text-md font-medium">Detail View</h4>
+        <div className="flex gap-4">
+          <div className="w-80 h-64">
+            <p className="text-sm text-muted-foreground mb-2">Normal</p>
+            <ItemCard
+              variant="detail"
+              item={sampleItems[1]}
+              getBadgeVariant={getBadgeVariant}
+              skeletonMode={false}
+              onClose={() => console.log('Close clicked')}
+            />
+          </div>
+          <div className="w-80 h-64">
+            <p className="text-sm text-muted-foreground mb-2">Skeleton</p>
+            <ItemCard
+              variant="detail"
+              item={sampleItems[1]}
+              getBadgeVariant={getBadgeVariant}
+              skeletonMode={true}
+              onClose={() => console.log('Close clicked')}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  ),
+  args: {
+    variant: 'grid',
+    item: sampleItems[0],
+    getBadgeVariant,
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Side-by-side comparison of normal and skeleton loading states for both grid and detail views, demonstrating how the skeleton maintains the same layout structure as the loaded content.'
+      }
+    }
+  }
+};
+
 // Responsive grid layout story showing multiple cards with different characteristics
 export const ResponsiveGrid: Story = {
   render: () => (

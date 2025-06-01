@@ -15,6 +15,7 @@ export interface ScorecardContextProps {
   availableFields?: Array<{ value: string; label: string }>;
   timeRangeOptions?: Array<{ value: string; label: string }>;
   useMockData?: boolean;
+  skeletonMode?: boolean;
 }
 
 async function listScorecards(): ModelListResult<Schema['Scorecard']['type']> {
@@ -42,7 +43,8 @@ const ScorecardContext: React.FC<ScorecardContextProps> = ({
   setSelectedScore,
   availableFields: mockFields,
   timeRangeOptions: mockScores,
-  useMockData = false
+  useMockData = false,
+  skeletonMode = false
 }) => {
   const [scorecards, setScorecards] = useState<Array<{ value: string; label: string }>>([])
   const [scores, setScores] = useState<Array<{ value: string; label: string }>>([])
@@ -134,39 +136,44 @@ const ScorecardContext: React.FC<ScorecardContextProps> = ({
   return (
     <div className="flex flex-wrap gap-2">
       <Select 
-        onValueChange={value => {
+        onValueChange={skeletonMode ? undefined : (value => {
           setSelectedScorecard(value === "all" ? null : value)
-        }}
-        value={selectedScorecard || "all"}
+        })}
+        value={skeletonMode ? undefined : (selectedScorecard || "all")}
+        disabled={skeletonMode}
       >
-        <SelectTrigger className="w-[200px] h-8 bg-card border-none">
+        <SelectTrigger className={`w-[200px] h-9 bg-card border-none ${skeletonMode ? 'animate-pulse' : ''}`}>
           <SelectValue placeholder="Scorecard" />
         </SelectTrigger>
-        <SelectContent className="bg-card border-none">
-          <SelectItem value="all">All Scorecards</SelectItem>
-          {scorecards?.sort((a, b) => a.label.localeCompare(b.label)).map(field => (
-            <SelectItem key={field.value} value={field.value}>
-              {field.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
+        {!skeletonMode && (
+          <SelectContent className="bg-card border-none">
+            <SelectItem value="all">All Scorecards</SelectItem>
+            {scorecards?.sort((a, b) => a.label.localeCompare(b.label)).map(field => (
+              <SelectItem key={field.value} value={field.value}>
+                {field.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        )}
       </Select>
       <Select 
-        onValueChange={handleScoreChange}
-        disabled={!selectedScorecard}
-        value={selectedScore || "all"}
+        onValueChange={skeletonMode ? undefined : handleScoreChange}
+        disabled={skeletonMode || !selectedScorecard}
+        value={skeletonMode ? undefined : (selectedScore || "all")}
       >
-        <SelectTrigger className="w-[200px] h-8 bg-card border-none">
+        <SelectTrigger className={`w-[200px] h-9 bg-card border-none ${skeletonMode ? 'opacity-50 animate-pulse' : ''}`}>
           <SelectValue placeholder="Score" />
         </SelectTrigger>
-        <SelectContent className="bg-card border-none">
-          <SelectItem value="all">All Scores</SelectItem>
-          {selectedScorecard && scores?.sort((a, b) => a.label.localeCompare(b.label)).map(option => (
-            <SelectItem key={option.value} value={option.value}>
-              {option.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
+        {!skeletonMode && (
+          <SelectContent className="bg-card border-none">
+            <SelectItem value="all">All Scores</SelectItem>
+            {selectedScorecard && scores?.sort((a, b) => a.label.localeCompare(b.label)).map(option => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        )}
       </Select>
     </div>
   )
