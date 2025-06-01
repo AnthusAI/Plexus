@@ -1,3 +1,5 @@
+import ScorecardContext from './ScorecardContext'
+
 export function EvaluationDashboardSkeleton() {
   return (
     <div className="flex flex-col h-full p-1.5 animate-pulse">
@@ -216,18 +218,18 @@ export function ScorecardDashboardSkeleton() {
 
 export function ItemsDashboardSkeleton() {
   return (
-    <div className="flex flex-col h-full p-1.5 animate-pulse">
-      {/* Header with Filter Controls Skeleton */}
+    <div className="flex flex-col h-full p-1.5">
+      {/* Header with Filter Controls */}
       <div className="flex items-center justify-between pb-3">
         <div className="flex items-center space-x-4 flex-1">
-          {/* ScorecardContext filter controls skeleton */}
-          <div className="flex items-center space-x-3">
-            {/* Scorecard filter */}
-            <div className="h-10 bg-muted rounded w-48" />
-            {/* Score filter */}
-            <div className="h-10 bg-muted rounded w-40" />
-            {/* Time range filter */}
-            <div className="h-10 bg-muted rounded w-36" />
+          <div className="flex-grow">
+            <ScorecardContext 
+              selectedScorecard={null}
+              setSelectedScorecard={() => {}}
+              selectedScore={null}
+              setSelectedScore={() => {}}
+              skeletonMode={true}
+            />
           </div>
         </div>
       </div>
@@ -237,7 +239,7 @@ export function ItemsDashboardSkeleton() {
         <div className="flex-1 overflow-auto">
           <div className="@container h-full">
             {/* Items Grid Skeleton */}
-            <div className="grid grid-cols-2 @[500px]:grid-cols-3 @[700px]:grid-cols-4 @[900px]:grid-cols-5 @[1100px]:grid-cols-6 gap-3">
+            <div className="grid grid-cols-2 @[500px]:grid-cols-3 @[700px]:grid-cols-4 @[900px]:grid-cols-5 @[1100px]:grid-cols-6 gap-3 animate-pulse">
               {[...Array(12)].map((_, i) => (
                 <ItemCardSkeleton key={i} />
               ))}

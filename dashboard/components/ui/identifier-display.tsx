@@ -23,6 +23,7 @@ interface IdentifierDisplayProps {
   className?: string;
   iconSize?: 'sm' | 'md' | 'lg';
   textSize?: 'xs' | 'sm' | 'base';
+  skeletonMode?: boolean;
 }
 
 export const IdentifierDisplay: React.FC<IdentifierDisplayProps> = ({
@@ -30,7 +31,8 @@ export const IdentifierDisplay: React.FC<IdentifierDisplayProps> = ({
   identifiers,
   className,
   iconSize = 'sm',
-  textSize = 'xs'
+  textSize = 'xs',
+  skeletonMode = false
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -80,6 +82,17 @@ export const IdentifierDisplay: React.FC<IdentifierDisplayProps> = ({
   const textClasses = cn(baseTextSize, 'flex-shrink-0');
   const labelTextClasses = cn('!text-xs', 'font-medium flex-shrink-0 text-muted-foreground');
   const valueTextClasses = cn('!text-xs', 'truncate min-w-0 flex-1 text-muted-foreground');
+
+  // Skeleton mode rendering
+  if (skeletonMode) {
+    const finalTextClasses = cn(textClasses, className);
+    return (
+      <div className={cn("flex items-start gap-1 text-muted-foreground min-w-0", finalTextClasses)}>
+        <div className={cn(iconClasses, "bg-muted rounded animate-pulse")} />
+        <div className="h-3 w-20 bg-muted rounded animate-pulse" />
+      </div>
+    );
+  }
 
   const renderIdentifierValue = (identifier: IdentifierItem) => {
     const displayValue = identifier.value.length > 15 

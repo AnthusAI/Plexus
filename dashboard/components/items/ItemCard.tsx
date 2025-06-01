@@ -74,19 +74,69 @@ interface ItemCardProps extends React.HTMLAttributes<HTMLDivElement> {
   onClose?: () => void
   variant?: 'grid' | 'detail'
   getBadgeVariant: (status: string) => string
+  skeletonMode?: boolean
 }
 
 const GridContent = React.memo(({ 
   item,
   getBadgeVariant,
-  isSelected 
+  isSelected,
+  skeletonMode = false
 }: { 
   item: ItemData
   getBadgeVariant: (status: string) => string
   isSelected?: boolean
+  skeletonMode?: boolean
 }) => {  
   const totalResults = item.scorecards.reduce((sum, sc) => sum + sc.resultCount, 0);
   const hasMultipleScorecards = item.scorecards.length > 1;
+
+  if (skeletonMode) {
+    return (
+      <div className="w-full relative">
+        {/* Show actual icon and label since these are always present */}
+        <div className="absolute top-0 right-0 flex flex-col items-center space-y-1 z-10">
+          {item.icon || <StickyNote className="h-[1.75rem] w-[1.75rem]" strokeWidth={1.25} />}
+          <div className="text-xs text-muted-foreground text-center" title="Item">
+            <span className="font-semibold">Item</span>
+          </div>
+        </div>
+        
+        {/* Invisible float element that creates space for icon/label but allows text to wrap under */}
+        <div className="float-right w-16 h-12"></div>
+        
+        {/* Skeleton content that flows around and under the icon */}
+        <div className="space-y-1">
+          {/* Skeleton identifier display */}
+          <div className="flex items-start gap-1">
+            <div className="h-4 w-4 bg-muted rounded animate-pulse flex-shrink-0" />
+            <div className="h-3 w-20 bg-muted rounded animate-pulse" />
+          </div>
+
+          {/* Skeleton timestamp */}
+          <div className="flex items-start gap-1">
+            <div className="h-4 w-4 bg-muted rounded animate-pulse flex-shrink-0" />
+            <div className="h-3 w-16 bg-muted rounded animate-pulse" />
+          </div>
+
+          {/* Skeleton elapsed time */}
+          <div className="flex items-start gap-1">
+            <div className="h-4 w-4 bg-muted rounded animate-pulse flex-shrink-0" />
+            <div className="h-3 w-12 bg-muted rounded animate-pulse" />
+          </div>
+
+          {/* Skeleton scorecard name */}
+          <div className="h-4 w-24 bg-muted rounded animate-pulse mt-3" />
+          
+          {/* Skeleton results count */}
+          <div className="h-3 w-16 bg-muted rounded animate-pulse" />
+          
+          {/* Clear the float */}
+          <div className="clear-both"></div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="w-full relative">
@@ -108,6 +158,7 @@ const GridContent = React.memo(({
           identifiers={item.identifiers}
           iconSize="md"
           textSize="xs"
+          skeletonMode={skeletonMode}
         />
 
         <Timestamp 
@@ -115,6 +166,7 @@ const GridContent = React.memo(({
           variant="relative" 
           showIcon={true} 
           className="text-xs"
+          skeletonMode={skeletonMode}
         />
 
         {/* Elapsed time display between createdAt and updatedAt */}
@@ -125,6 +177,7 @@ const GridContent = React.memo(({
             variant="elapsed" 
             showIcon={true}
             className="text-xs"
+            skeletonMode={skeletonMode}
           />
         )}
 
@@ -146,11 +199,11 @@ const GridContent = React.memo(({
             </div>
           ) : item.scorecards.length > 0 ? (
             <div>
-              <NumberFlowWrapper value={totalResults} /> result{totalResults !== 1 ? 's' : ''}
+              <NumberFlowWrapper value={totalResults} skeletonMode={skeletonMode} /> result{totalResults !== 1 ? 's' : ''}
             </div>
           ) : (
             <div>
-              <NumberFlowWrapper value={0} /> results
+              <NumberFlowWrapper value={0} skeletonMode={skeletonMode} /> results
             </div>
           )}
         </div>
@@ -170,6 +223,7 @@ interface DetailContentProps {
   onClose?: () => void
   onEdit?: () => void
   onViewData?: () => void
+  skeletonMode?: boolean
 }
 
 const DetailContent = React.memo(({ 
@@ -180,9 +234,63 @@ const DetailContent = React.memo(({
   onClose,
   onEdit,
   onViewData,
+  skeletonMode = false,
 }: DetailContentProps) => {
   const totalResults = item.scorecards.reduce((sum, sc) => sum + sc.resultCount, 0);
   const hasMultipleScorecards = item.scorecards.length > 1;
+
+  if (skeletonMode) {
+    return (
+      <div className="w-full flex flex-col min-h-0">
+        <div className="flex justify-between items-start w-full">
+          <div className="space-y-2 flex-1">
+            {/* Skeleton header with primary scorecard name */}
+            <div className="h-3 w-24 bg-muted rounded animate-pulse" />
+
+            {/* Skeleton identifier display */}
+            <div className="flex items-start gap-1">
+              <div className="h-4 w-4 bg-muted rounded animate-pulse flex-shrink-0" />
+              <div className="h-3 w-20 bg-muted rounded animate-pulse" />
+            </div>
+
+            {/* Skeleton timestamp */}
+            <div className="flex items-start gap-1">
+              <div className="h-4 w-4 bg-muted rounded animate-pulse flex-shrink-0" />
+              <div className="h-3 w-16 bg-muted rounded animate-pulse" />
+            </div>
+
+            {/* Skeleton elapsed time */}
+            <div className="flex items-start gap-1">
+              <div className="h-4 w-4 bg-muted rounded animate-pulse flex-shrink-0" />
+              <div className="h-3 w-12 bg-muted rounded animate-pulse" />
+            </div>
+            
+            {/* Skeleton results summary */}
+            <div className="h-4 w-16 bg-muted rounded animate-pulse" />
+          </div>
+          <div className="flex gap-2 ml-4">
+            {/* Skeleton action buttons */}
+            <div className="h-8 w-8 bg-muted rounded animate-pulse" />
+            <div className="h-8 w-8 bg-muted rounded animate-pulse" />
+            <div className="h-8 w-8 bg-muted rounded animate-pulse" />
+          </div>
+        </div>
+        
+        {/* Skeleton scorecard details section */}
+        <div className="mt-2 overflow-auto">
+          <div className="space-y-4 pb-2">
+            <div className="bg-background rounded-lg p-3">
+              <div className="h-4 w-32 bg-muted rounded animate-pulse mb-3" />
+              <div className="space-y-2">
+                <div className="h-12 w-full bg-muted rounded animate-pulse" />
+                <div className="h-12 w-full bg-muted rounded animate-pulse" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="w-full flex flex-col min-h-0">
@@ -202,6 +310,7 @@ const DetailContent = React.memo(({
             identifiers={item.identifiers}
             iconSize="md"
             textSize="xs"
+            skeletonMode={skeletonMode}
           />
 
           <Timestamp 
@@ -209,6 +318,7 @@ const DetailContent = React.memo(({
             variant="relative" 
             showIcon={true}
             className="text-xs"
+            skeletonMode={skeletonMode}
           />
 
           {/* Elapsed time display between createdAt and updatedAt */}
@@ -219,6 +329,7 @@ const DetailContent = React.memo(({
               variant="elapsed" 
               showIcon={true}
               className="text-xs"
+              skeletonMode={skeletonMode}
             />
           )}
           
@@ -242,6 +353,7 @@ const DetailContent = React.memo(({
                 icon={MoreHorizontal}
                 onClick={() => {}}
                 aria-label="More options"
+                skeletonMode={skeletonMode}
               />
             </DropdownMenu.Trigger>
             <DropdownMenu.Portal>
@@ -263,6 +375,7 @@ const DetailContent = React.memo(({
               icon={isFullWidth ? Columns2 : Square}
               onClick={onToggleFullWidth}
               aria-label={isFullWidth ? 'Exit full width' : 'Full width'}
+              skeletonMode={skeletonMode}
             />
           )}
           {onClose && (
@@ -270,6 +383,7 @@ const DetailContent = React.memo(({
               icon={X}
               onClick={onClose}
               aria-label="Close"
+              skeletonMode={skeletonMode}
             />
           )}
         </div>
@@ -284,6 +398,7 @@ const DetailContent = React.memo(({
                 key={scorecard.scorecardId}
                 scorecardName={scorecard.scorecardName}
                 scores={[]} // This would need to be populated with actual score data when available
+                skeletonMode={skeletonMode}
               />
             ))}
           </div>
@@ -304,6 +419,7 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
   onToggleFullWidth,
   onClose,
   getBadgeVariant,
+  skeletonMode = false,
   className, 
   ...props 
 }, ref) => {
@@ -390,7 +506,12 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
           } : undefined}
         >
           {variant === 'grid' ? (
-            <GridContent item={item} getBadgeVariant={getBadgeVariant} isSelected={isSelected} />
+            <GridContent 
+              item={item} 
+              getBadgeVariant={getBadgeVariant} 
+              isSelected={isSelected} 
+              skeletonMode={skeletonMode}
+            />
           ) : (
             <DetailContent 
               item={item}
@@ -400,6 +521,7 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
               onClose={onClose}
               onViewData={onViewData}
               onEdit={onEdit}
+              skeletonMode={skeletonMode}
             />
           )}
         </div>

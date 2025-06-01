@@ -2182,6 +2182,7 @@ function ItemsDashboardInner() {
               setSelectedScore={setSelectedScore}
               availableFields={availableFields}
               timeRangeOptions={scoreOptions}
+              skeletonMode={isLoading}
             />
           </div>
         </div>
