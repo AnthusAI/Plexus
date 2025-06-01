@@ -25,7 +25,6 @@ import Link from 'next/link'
 import { FilterControl, FilterConfig } from "@/components/filter-control"
 import ScorecardContext from "@/components/ScorecardContext"
 import ItemContext from "@/components/ItemContext"
-import ItemDetail from './ItemDetail'
 import { formatTimeAgo } from '@/utils/format-time'
 import type { FeedbackItem } from '@/types/feedback'
 import ItemCard, { ItemData } from './items/ItemCard'
@@ -1823,33 +1822,12 @@ function ItemsDashboardInner() {
     return (
       <div className="h-full flex flex-col">
         <div className="flex-1 overflow-auto">
-          <ItemDetail
+          <ItemCard
             key={selectedItem} // Force re-render when selectedItem changes
-            item={selectedItemWithCount as unknown as FeedbackItem}
+            variant="detail"
+            item={selectedItemWithCount as ItemData}
             getBadgeVariant={getBadgeVariant}
-            getRelativeTime={getRelativeTime}
-            isMetadataExpanded={isMetadataExpanded}
-            setIsMetadataExpanded={setIsMetadataExpanded}
-            isDataExpanded={isDataExpanded}
-            setIsDataExpanded={setIsDataExpanded}
-            isErrorExpanded={isErrorExpanded}
-            setIsErrorExpanded={setIsErrorExpanded}
-            sampleMetadata={sampleMetadata}
-            sampleTranscript={sampleTranscript}
-            sampleScoreResults={scoreResults}
-            handleThumbsUp={handleThumbsUp}
-            handleThumbsDown={handleThumbsDown}
-            handleNewAnnotationSubmit={handleNewAnnotationSubmit}
-            toggleAnnotations={toggleAnnotations}
-            showNewAnnotationForm={showNewAnnotationForm}
-            setShowNewAnnotationForm={setShowNewAnnotationForm}
-            newAnnotation={newAnnotation}
-            setNewAnnotation={setNewAnnotation}
-            expandedAnnotations={expandedAnnotations}
-            thumbedUpScores={thumbedUpScores}
-            setThumbedUpScores={setThumbedUpScores}
             isFullWidth={isFullWidth}
-            isFeedbackMode={false}
             onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
             onClose={() => {
               debugSetSelectedItem(null);
