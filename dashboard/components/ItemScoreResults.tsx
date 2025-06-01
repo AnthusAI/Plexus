@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, ExternalLink, ChevronDown, ChevronUp, ListTodo, IdCard } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+
 import { Timestamp } from '@/components/ui/timestamp';
 import Link from 'next/link';
 import { GroupedScoreResults, ScoreResultWithDetails } from '@/hooks/useItemScoreResults';
@@ -161,22 +161,22 @@ const ItemScoreResults: React.FC<ItemScoreResultsProps> = ({
   return (
     <div className="space-y-4">
       <div className="flex items-end justify-between">
-        <h3 className="text-lg font-semibold">Score Results</h3>
+        <h3 className="text-xl text-muted-foreground font-semibold">Score Results</h3>
         <span className="text-sm text-muted-foreground">
           {totalResults} result{totalResults !== 1 ? 's' : ''} across {scorecardIds.length} scorecard{scorecardIds.length !== 1 ? 's' : ''}
         </span>
       </div>
 
-      <Accordion type="multiple" defaultValue={scorecardIds} className="w-full">
+      <div className="w-full space-y-4">
         {scorecardIds.map((scorecardId) => {
           const group = groupedResults[scorecardId];
           return (
-            <AccordionItem key={scorecardId} value={scorecardId}>
-              <AccordionTrigger className="hover:no-underline">
-                <div className="flex items-center justify-between w-full pr-2">
+            <div key={scorecardId}>
+              <div className="mb-4">
+                <div className="flex items-end justify-between">
                   <div className="flex flex-col gap-1">
-                    <div className="flex items-center gap-2">
-                      <ListTodo className="h-4 w-4" />
+                    <div className="flex items-center gap-1">
+                      <ListTodo className="h-4 w-4 flex-shrink-0" />
                       <span className="font-medium">{group.scorecardName}</span>
                     </div>
                     {group.scorecardExternalId && (
@@ -190,23 +190,19 @@ const ItemScoreResults: React.FC<ItemScoreResultsProps> = ({
                     )}
                   </div>
                   <span className="text-sm text-muted-foreground">
-                    {group.scores.length} score{group.scores.length !== 1 ? 's' : ''}
+                    {group.scores.length} score result{group.scores.length !== 1 ? 's' : ''}
                   </span>
                 </div>
-              </AccordionTrigger>
-              <AccordionContent>
-                <div className="pt-2">
-                  <div className="space-y-3">
-                    {group.scores.map((result) => (
-                      <ScoreResultCard key={result.id} result={result} />
-                    ))}
-                  </div>
-                </div>
-              </AccordionContent>
-            </AccordionItem>
+              </div>
+              <div className="space-y-3">
+                {group.scores.map((result) => (
+                  <ScoreResultCard key={result.id} result={result} />
+                ))}
+              </div>
+            </div>
           );
         })}
-      </Accordion>
+      </div>
     </div>
   );
 };
