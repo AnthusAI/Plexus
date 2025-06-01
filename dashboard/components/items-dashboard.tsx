@@ -4,7 +4,7 @@ import { useRouter, useSearchParams, useParams } from 'next/navigation'
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import { Square, Columns2, X, ChevronDown, ChevronUp, Info, MessageCircleMore, Plus, ThumbsUp, ThumbsDown, Loader2 } from "lucide-react"
+import { Square, Columns2, X, ChevronDown, ChevronUp, Info, MessageCircleMore, Plus, ThumbsUp, ThumbsDown, Loader2, Search } from "lucide-react"
 import { format, formatDistanceToNow, parseISO } from "date-fns"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -547,6 +547,12 @@ function ItemsDashboardInner() {
   
   // Ref map to track item elements for scroll-to-view functionality
   const itemRefsMap = useRef<Map<string, HTMLDivElement | null>>(new Map());
+
+  // Search state
+  const [searchValue, setSearchValue] = useState<string>('');
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const searchErrorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // Function to scroll to a selected item
   const scrollToSelectedItem = useCallback((itemId: string) => {
@@ -562,6 +568,78 @@ function ItemsDashboardInner() {
       }
     });
   }, []);
+
+  // Search for item by identifier
+  const handleSearch = useCallback(async (identifier: string) => {
+    if (!identifier.trim()) return;
+    
+    setIsSearching(true);
+    setSearchError(null);
+    
+    try {
+      const response = await graphqlRequest<{
+        listIdentifierByValue: {
+          items: Array<{
+            id: string;
+            itemId?: string;
+          }>;
+        };
+      }>(`
+        query ListIdentifierByValue($value: String!) {
+          listIdentifierByValue(value: $value) {
+            items {
+              id
+              itemId
+            }
+          }
+        }
+      `, {
+        value: identifier.trim()
+      });
+      
+      const identifiers = response.data?.listIdentifierByValue?.items;
+      
+      if (identifiers && identifiers.length > 0) {
+        // Use the first item found
+        const identifier = identifiers[0];
+        const itemId = identifier.itemId || identifier.id; // Try itemId first, fallback to id
+        if (itemId) {
+          // Navigate to the item
+          router.push(`/lab/items/${itemId}`);
+          setSearchValue(''); // Clear search on success
+        } else {
+          setSearchError('Item not found for this identifier');
+        }
+      } else {
+        setSearchError('No item found with this identifier');
+        // Set timeout to clear error after 5 seconds
+        if (searchErrorTimeoutRef.current) {
+          clearTimeout(searchErrorTimeoutRef.current);
+        }
+        searchErrorTimeoutRef.current = setTimeout(() => {
+          setSearchError(null);
+        }, 5000);
+      }
+    } catch (error) {
+      console.error('Search error:', error);
+      setSearchError('Error searching for item');
+      // Set timeout to clear error after 5 seconds
+      if (searchErrorTimeoutRef.current) {
+        clearTimeout(searchErrorTimeoutRef.current);
+      }
+      searchErrorTimeoutRef.current = setTimeout(() => {
+        setSearchError(null);
+      }, 5000);
+    } finally {
+      setIsSearching(false);
+    }
+  }, [router]);
+
+  // Handle search form submission
+  const handleSearchSubmit = useCallback((e: React.FormEvent) => {
+    e.preventDefault();
+    handleSearch(searchValue);
+  }, [handleSearch, searchValue]);
   
   // Function to fetch a specific item by ID
   const fetchSpecificItem = useCallback(async (itemId: string) => {
@@ -2143,6 +2221,15 @@ function ItemsDashboardInner() {
     };
   }, [nextToken, isLoadingMore, handleLoadMore]); // Add handleLoadMore to dependencies
 
+  // Cleanup search error timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (searchErrorTimeoutRef.current) {
+        clearTimeout(searchErrorTimeoutRef.current);
+      }
+    };
+  }, []);
+
   // Show loading skeleton for initial load
   if (isLoading && items.length === 0) {
     return <ItemsDashboardSkeleton />
@@ -2163,6 +2250,45 @@ function ItemsDashboardInner() {
               skeletonMode={isLoading}
             />
           </div>
+        </div>
+        
+        {/* Search Component */}
+        <div className="flex items-center relative">
+          <form onSubmit={handleSearchSubmit} className="relative">
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Search className="h-4 w-4 text-muted-foreground" />
+              </div>
+              <Input
+                type="text"
+                placeholder="Search by identifier"
+                value={searchValue}
+                onChange={(e) => {
+                  setSearchValue(e.target.value);
+                  if (searchError) setSearchError(null); // Clear error when typing
+                }}
+                className="w-[200px] h-9 pl-10 pr-20 bg-card border-0 shadow-none focus:ring-0 focus:ring-offset-0 focus:outline-none focus:border-0 focus:shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none"
+                disabled={isSearching}
+              />
+              {searchValue.trim() && (
+                <Button 
+                  type="submit" 
+                  size="sm" 
+                  className="absolute inset-y-0 right-0 h-9 px-3 rounded-l-none shadow-none"
+                  disabled={isSearching}
+                >
+                  {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Search'}
+                </Button>
+              )}
+            </div>
+          </form>
+          
+          {/* Error message */}
+          {searchError && (
+            <div className="absolute top-full mt-2 right-0 z-50 bg-muted text-muted-foreground text-sm px-3 py-2 rounded-md shadow-sm min-w-[200px] border border-border">
+              {searchError}
+            </div>
+          )}
         </div>
       </div>
       
