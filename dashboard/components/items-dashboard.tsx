@@ -68,6 +68,12 @@ interface Item {
   updatedAt?: string;
   createdAt?: string;
   isEvaluation: boolean;
+  identifiers?: string | Array<{
+    name: string;
+    value: string;
+    url?: string;
+    position?: number;
+  }>; // Support both JSON string (legacy) and new array format
   isNew?: boolean;
   isLoadingResults?: boolean;
   
@@ -410,6 +416,70 @@ interface GroupedScoreResults {
   }
 }
 
+// Helper function to transform identifiers from GraphQL response
+const transformIdentifiers = (item: any) => {
+  // First try to get from new itemIdentifiers relationship
+  if (item.itemIdentifiers?.items?.length > 0) {
+    const transformedIdentifiers = item.itemIdentifiers.items
+      .map((identifier: any) => ({
+        name: identifier.name,
+        value: identifier.value,
+        url: identifier.url,
+        position: identifier.position
+      }))
+      .sort((a: any, b: any) => (a.position || 0) - (b.position || 0));
+    
+    console.log('🔍 IDENTIFIER TRANSFORM DEBUG:', {
+      itemId: item.id,
+      originalData: item.itemIdentifiers?.items,
+      transformedData: transformedIdentifiers,
+      fallbackData: item.identifiers
+    });
+    
+    return transformedIdentifiers;
+  }
+  
+  // Fall back to legacy identifiers field
+  console.log('🔍 IDENTIFIER FALLBACK DEBUG:', {
+    itemId: item.id,
+    hasItemIdentifiers: !!item.itemIdentifiers,
+    itemIdentifiersCount: item.itemIdentifiers?.items?.length || 0,
+    fallbackData: item.identifiers
+  });
+  
+  return item.identifiers;
+};
+
+// Helper function to transform item from GraphQL response to Item interface
+const transformItem = (item: any, options: { isNew?: boolean } = {}): Item => {
+  return {
+    // New required fields
+    id: item.id,
+    timestamp: item.createdAt || item.updatedAt || new Date().toISOString(),
+    scorecards: [], // Will be populated with actual data later
+    
+    // Core fields
+    accountId: item.accountId,
+    externalId: item.externalId,
+    description: item.description,
+    evaluationId: item.evaluationId,
+    updatedAt: item.updatedAt,
+    createdAt: item.createdAt,
+    isEvaluation: item.isEvaluation,
+    identifiers: transformIdentifiers(item),
+    isNew: options.isNew || false,
+    isLoadingResults: false,
+    
+    // Legacy fields for backwards compatibility
+    date: item.createdAt || item.updatedAt,
+    status: "Done",
+    results: 0,
+    inferences: 0,
+    cost: "$0.000",
+    groupedScoreResults: {}
+  };
+};
+
 function ItemsDashboardInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -523,6 +593,16 @@ function ItemsDashboardInner() {
             updatedAt
             createdAt
             isEvaluation
+            identifiers
+            itemIdentifiers {
+              items {
+                id
+                name
+                value
+                url
+                position
+              }
+            }
           }
         }
       `, {
@@ -534,31 +614,7 @@ function ItemsDashboardInner() {
         const item = response.data.getItem;
         
         // Transform the item to match our expected format
-        const transformedItem = {
-          // New required fields
-          id: item.id,
-          timestamp: item.createdAt || item.updatedAt || new Date().toISOString(),
-          scorecards: [], // Will be populated with actual data later
-          
-          // Core fields
-          accountId: item.accountId,
-          externalId: item.externalId,
-          description: item.description,
-          evaluationId: item.evaluationId,
-          updatedAt: item.updatedAt,
-          createdAt: item.createdAt,
-          isEvaluation: item.isEvaluation,
-          isNew: false,
-          isLoadingResults: false,
-          
-          // Legacy fields for backwards compatibility
-          date: item.createdAt || item.updatedAt,
-          status: "Done",
-          results: 0,
-          inferences: 0,
-          cost: "$0.000",
-          groupedScoreResults: {}
-        } as Item;
+        const transformedItem = transformItem(item, { isNew: false });
         
         // Add the item to the beginning of the list if it's not already there
         setItems(prevItems => {
@@ -651,6 +707,16 @@ function ItemsDashboardInner() {
                   updatedAt
                   createdAt
                   isEvaluation
+                  identifiers
+                  itemIdentifiers {
+                    items {
+                      id
+                      name
+                      value
+                      url
+                      position
+                    }
+                  }
                 }
                 nextToken
               }
@@ -705,6 +771,16 @@ function ItemsDashboardInner() {
                     updatedAt
                     createdAt
                     isEvaluation
+                    identifiers
+                    itemIdentifiers {
+                      items {
+                        id
+                        name
+                        value
+                        url
+                        position
+                      }
+                    }
                   }
                 }
                 nextToken
@@ -748,6 +824,16 @@ function ItemsDashboardInner() {
                   updatedAt
                   createdAt
                   isEvaluation
+                  identifiers
+                  itemIdentifiers {
+                    items {
+                      id
+                      name
+                      value
+                      url
+                      position
+                    }
+                  }
                 }
                 nextToken
               }
@@ -774,45 +860,7 @@ function ItemsDashboardInner() {
       
       
       // Transform the data to match the expected format
-      const transformedItems = itemsToUse.map(item => {
-        const groupedScoreResults: GroupedScoreResults = {};
-        
-        // ScoreResults will be loaded separately to avoid resolver limits
-        // For now, items will show as "Processing..." until we implement lazy loading
-        
-        const transformedItem = {
-          // New required fields
-          id: item.id,
-          timestamp: item.createdAt || item.updatedAt || new Date().toISOString(),
-          scorecards: [], // Will be populated with actual data later
-          
-          // Core fields
-          accountId: item.accountId,
-          externalId: item.externalId,
-          description: item.description,
-          evaluationId: item.evaluationId,
-          updatedAt: item.updatedAt,
-          createdAt: item.createdAt,
-          isEvaluation: item.isEvaluation,
-          isNew: false, // Items loaded via "load more" should NOT be new
-          isLoadingResults: false,
-          
-          // Legacy fields for backwards compatibility
-          date: item.createdAt || item.updatedAt,
-          status: "Done", 
-          results: 0, // Will be populated via lazy loading from scoreResultCounts
-          inferences: 0, // Will be populated via lazy loading
-          cost: "$0.000", // Placeholder
-          groupedScoreResults: groupedScoreResults
-        } as Item;
-        
-        // console.log('Final transformed item:', { // Keep for debugging if needed
-        //   id: transformedItem.id,
-        //   groupedScoreResultsKeys: Object.keys(transformedItem.groupedScoreResults || {})
-        // });
-        
-        return transformedItem;
-      });
+      const transformedItems = itemsToUse.map(item => transformItem(item, { isNew: false }));
       
       // Append the new items to the existing items
       setItems(prevItems => [...prevItems, ...transformedItems]);
@@ -828,13 +876,21 @@ function ItemsDashboardInner() {
 
   // Fetch items from the API
   const fetchItems = useCallback(async () => {
+    console.log('🔍 FETCHING ITEMS', {
+      timestamp: new Date().toISOString(),
+      hasUser: !!user,
+      selectedAccount: selectedAccount ? { id: selectedAccount.id, name: selectedAccount.name } : null,
+      selectedScorecard,
+      selectedScore
+    });
+    
     if (!user) {
-      console.log('User not authenticated, skipping item fetch');
+      console.log('❌ User not authenticated, skipping item fetch');
       return;
     }
     
     if (!selectedAccount) {
-      console.log('No account selected in context, skipping item fetch');
+      console.log('❌ No account selected in context, skipping item fetch');
       return;
     }
     
@@ -843,6 +899,7 @@ function ItemsDashboardInner() {
     try {
       // Use the account ID from the context
       const accountId = selectedAccount.id;
+      console.log('📋 Using account ID:', accountId);
       
       // Skip the amplifyClient.Item.list() call and only use the direct GraphQL query approach
       let itemsFromDirectQuery: any[] = [];
@@ -853,8 +910,10 @@ function ItemsDashboardInner() {
         const useScorecard = selectedScorecard !== null && selectedScorecard !== undefined;
         const useScore = selectedScore !== null && selectedScore !== undefined;
         
+        console.log('🔍 Query filters:', { useScorecard, useScore, selectedScorecard, selectedScore });
         
         if (useScore) {
+          console.log('📊 Fetching items by score ID:', selectedScore);
           // If a score is selected, filter by scoreId
           const directQuery = await graphqlRequest<{ listItemByScoreIdAndCreatedAt: { items: any[], nextToken: string | null } }>(`
             query ListItemsDirect($scoreId: String!, $limit: Int!) {
@@ -872,6 +931,16 @@ function ItemsDashboardInner() {
                   updatedAt
                   createdAt
                   isEvaluation
+                  identifiers
+                  itemIdentifiers {
+                    items {
+                      id
+                      name
+                      value
+                      url
+                      position
+                    }
+                  }
                 }
                 nextToken
               }
@@ -884,8 +953,13 @@ function ItemsDashboardInner() {
           if (directQuery.data?.listItemByScoreIdAndCreatedAt?.items) {
             itemsFromDirectQuery = directQuery.data.listItemByScoreIdAndCreatedAt.items;
             nextTokenFromDirectQuery = directQuery.data.listItemByScoreIdAndCreatedAt.nextToken;
+            console.log('✅ Fetched items by score:', {
+              count: itemsFromDirectQuery.length,
+              hasNextToken: !!nextTokenFromDirectQuery
+            });
           }
         } else if (useScorecard) {
+          console.log('📊 Fetching items by scorecard ID:', selectedScorecard);
           // If only a scorecard is selected, get items through ScorecardProcessedItem join table
           const directQuery = await graphqlRequest<{ 
             listScorecardProcessedItemByScorecardId: { 
@@ -923,6 +997,16 @@ function ItemsDashboardInner() {
                     updatedAt
                     createdAt
                     isEvaluation
+                    identifiers
+                    itemIdentifiers {
+                      items {
+                        id
+                        name
+                        value
+                        url
+                        position
+                      }
+                    }
                   }
                 }
                 nextToken
@@ -943,8 +1027,13 @@ function ItemsDashboardInner() {
                 return dateB - dateA; // DESC order (newest first)
               });
             nextTokenFromDirectQuery = directQuery.data.listScorecardProcessedItemByScorecardId.nextToken;
+            console.log('✅ Fetched items by scorecard:', {
+              count: itemsFromDirectQuery.length,
+              hasNextToken: !!nextTokenFromDirectQuery
+            });
           }
         } else {
+          console.log('📊 Fetching items by account ID:', accountId);
           // If neither scorecard nor score is selected, filter by accountId
           const directQuery = await graphqlRequest<{ listItemByAccountIdAndCreatedAt: { items: any[], nextToken: string | null } }>(`
             query ListItemsDirect($accountId: String!, $limit: Int!) {
@@ -962,6 +1051,16 @@ function ItemsDashboardInner() {
                   updatedAt
                   createdAt
                   isEvaluation
+                  identifiers
+                  itemIdentifiers {
+                    items {
+                      id
+                      name
+                      value
+                      url
+                      position
+                    }
+                  }
                 }
                 nextToken
               }
@@ -974,50 +1073,38 @@ function ItemsDashboardInner() {
           if (directQuery.data?.listItemByAccountIdAndCreatedAt?.items) {
             itemsFromDirectQuery = directQuery.data.listItemByAccountIdAndCreatedAt.items;
             nextTokenFromDirectQuery = directQuery.data.listItemByAccountIdAndCreatedAt.nextToken;
+            console.log('✅ Fetched items by account:', {
+              count: itemsFromDirectQuery.length,
+              hasNextToken: !!nextTokenFromDirectQuery,
+              firstItem: itemsFromDirectQuery[0] ? {
+                id: itemsFromDirectQuery[0].id,
+                externalId: itemsFromDirectQuery[0].externalId,
+                createdAt: itemsFromDirectQuery[0].createdAt
+              } : null
+            });
           }
         }
       } catch (error) {
-        console.error('Error fetching items:', error);
+        console.error('❌ Error in GraphQL query:', error);
       }
       
       const itemsToUse = itemsFromDirectQuery;
       const nextTokenToUse = nextTokenFromDirectQuery;
       
       if (itemsToUse.length === 0) {
-        console.log('No items found for this account. You may need to create some items first.');
+        console.log('⚠️ No items found for this account. You may need to create some items first.');
+      } else {
+        console.log('📊 Processing items:', {
+          totalCount: itemsToUse.length,
+          accountIds: [...new Set(itemsToUse.map(item => item.accountId))]
+        });
       }
       
-      const transformedItems = itemsToUse.map(item => {
-        const groupedScoreResults: GroupedScoreResults = {};
-        
-        // ScoreResults will be loaded separately to avoid resolver limits
-        // For now, items will show as "Processing..." until we implement lazy loading
-        
-        return {
-          // New required fields
-          id: item.id,
-          timestamp: item.createdAt || item.updatedAt || new Date().toISOString(),
-          scorecards: [], // Will be populated with actual data later
-          
-          // Core fields
-          accountId: item.accountId,
-          externalId: item.externalId,
-          description: item.description,
-          evaluationId: item.evaluationId,
-          updatedAt: item.updatedAt,
-          createdAt: item.createdAt,
-          isEvaluation: item.isEvaluation,
-          isNew: false, // Items loaded on initial fetch should NOT be new
-          isLoadingResults: false,
-          
-          // Legacy fields for backwards compatibility
-          date: item.createdAt || item.updatedAt,
-          status: "Done",
-          results: 0, // Will be populated via lazy loading from scoreResultCounts
-          inferences: 0, // Will be populated via lazy loading
-          cost: "$0.000", // Placeholder
-          groupedScoreResults: groupedScoreResults
-        } as Item;
+      const transformedItems = itemsToUse.map(item => transformItem(item, { isNew: false }));
+      
+      console.log('✅ Setting items state:', {
+        count: transformedItems.length,
+        nextToken: nextTokenToUse
       });
       
       setItems(transformedItems);
@@ -1026,8 +1113,9 @@ function ItemsDashboardInner() {
       // Don't clear isNew for initial load - items are already set to isNew: false
       
       setIsLoading(false);
+      console.log('✅ Item fetch complete');
     } catch (error) {
-      console.error('Error fetching items:', error);
+      console.error('❌ Error fetching items:', error);
       setIsLoading(false);
     }
   }, [user, selectedAccount, setIsLoading, setItems, setNextToken, graphqlRequest, selectedScorecard, selectedScore]);
@@ -1069,6 +1157,16 @@ function ItemsDashboardInner() {
                   updatedAt
                   createdAt
                   isEvaluation
+                  identifiers
+                  itemIdentifiers {
+                    items {
+                      id
+                      name
+                      value
+                      url
+                      position
+                    }
+                  }
                 }
                 nextToken
               }
@@ -1106,6 +1204,16 @@ function ItemsDashboardInner() {
                     updatedAt
                     createdAt
                     isEvaluation
+                    identifiers
+                    itemIdentifiers {
+                      items {
+                        id
+                        name
+                        value
+                        url
+                        position
+                      }
+                    }
                   }
                 }
                 nextToken
@@ -1140,6 +1248,16 @@ function ItemsDashboardInner() {
                   updatedAt
                   createdAt
                   isEvaluation
+                  identifiers
+                  itemIdentifiers {
+                    items {
+                      id
+                      name
+                      value
+                      url
+                      position
+                    }
+                  }
                 }
                 nextToken
               }
@@ -1152,31 +1270,7 @@ function ItemsDashboardInner() {
         }
         
         // Transform and merge with existing items
-        const transformedItems = itemsFromDirectQuery.map(item => ({
-          // New required fields
-          id: item.id,
-          timestamp: item.createdAt || item.updatedAt || new Date().toISOString(),
-          scorecards: [], // Will be populated with actual data later
-          
-          // Core fields
-          accountId: item.accountId,
-          externalId: item.externalId,
-          description: item.description,
-          evaluationId: item.evaluationId,
-          updatedAt: item.updatedAt,
-          createdAt: item.createdAt,
-          isEvaluation: item.isEvaluation,
-          isNew: false, // Will be changed to true for new items below
-          isLoadingResults: false,
-          
-          // Legacy fields for backwards compatibility
-          date: item.createdAt || item.updatedAt,
-          status: "Done",
-          results: 0,
-          inferences: 0,
-          cost: "$0.000",
-          groupedScoreResults: {}
-        }));
+        const transformedItems = itemsFromDirectQuery.map(item => transformItem(item, { isNew: false }));
         
         // Merge with existing items - update existing ones and add new ones
         setItems(prevItems => {
@@ -1279,56 +1373,96 @@ function ItemsDashboardInner() {
 
   // Set up subscriptions for item creations and updates
   useEffect(() => {
+    console.log('🔍 SUBSCRIPTION SETUP CHECK:', {
+      selectedAccount: selectedAccount ? { id: selectedAccount.id, name: selectedAccount.name } : null,
+      isLoadingAccounts,
+      willSetupSubscriptions: !(!selectedAccount || isLoadingAccounts)
+    });
+    
     if (!selectedAccount || isLoadingAccounts) return; // Also wait for accounts to be loaded
     
+    console.log('🔄 SETTING UP SUBSCRIPTIONS', {
+      accountId: selectedAccount.id,
+      accountName: selectedAccount.name,
+      timestamp: new Date().toISOString()
+    });
     
     // Item creation subscription
     const createSubscription = observeItemCreations().subscribe({
-      next: async ({ data: changeEvent }) => {
-        console.log('🆕 Item creation subscription received:', changeEvent);
-        
-        if (!changeEvent) {
-          console.log('🆕 Empty item creation notification');
+      next: async ({ data: newItem }) => {
+        if (!newItem) {
           return;
         }
         
-        if (changeEvent.action === 'create' && changeEvent.needsRefetch) {
-          console.log('🆕 Item creation detected, refreshing items list');
+        if (newItem.accountId === selectedAccount.id) {
+          // Transform the new item to match our expected format
+          const transformedNewItem = transformItem(newItem, { isNew: true });
+
+          // Add the new item to the TOP of the list
+          setItems(prevItems => [transformedNewItem, ...prevItems]);
           
           // Show a toast notification that new items are being loaded
           toast.success('🎉 New item detected! Refreshing...', {
             duration: 3000,
           });
           
-          // Trigger a refresh of the items list
-          throttledRefetch();
-        } else {
-          console.log('🆕 Unhandled item creation event:', changeEvent);
+          // After 3 seconds, remove the "New" status and make it look normal
+          setTimeout(() => {
+            setItems(prevItems => 
+              prevItems.map(item => 
+                item.id === newItem.id 
+                  ? { ...item, status: "Done", isNew: false }
+                  : item
+              )
+            );
+          }, 3000);
         }
       },
       error: (error) => {
-        console.error('Item creation subscription error:', error);
+        console.error('❌ Item creation subscription error:', {
+          error,
+          message: error?.message,
+          stack: error?.stack
+        });
         toast.error("Error in item subscription.");
       }
     });
     
+    console.log('✅ Item creation subscription set up');
+    
     // Item update subscription
     const updateSubscription = observeItemUpdates().subscribe({
       next: async ({ data: updatedItem, needsRefetch }) => {
+        console.log('📥 ITEM UPDATE EVENT RECEIVED', {
+          timestamp: new Date().toISOString(),
+          updatedItem,
+          needsRefetch,
+          hasData: !!updatedItem,
+          accountMatch: updatedItem?.accountId === selectedAccount.id
+        });
+        
         // Handle empty notifications that require a refetch
         if (needsRefetch && !updatedItem) {
+          console.log('🔄 Empty update notification - triggering refetch');
           throttledRefetch();
           return;
         }
         
         if (!updatedItem) {
+          console.warn('📥 Empty item update event received without refetch flag');
           return;
         }
         
         if (updatedItem.accountId === selectedAccount.id) {
+          console.log('✅ Processing updated item for current account', {
+            itemId: updatedItem.id,
+            externalId: updatedItem.externalId
+            // Removed currentItemCount and itemExists to avoid stale closure
+          });
+          
           // Update the item in the list if it exists
-          setItems(prevItems => 
-            prevItems.map(item => 
+          setItems(prevItems => {
+            const updatedItems = prevItems.map(item => 
               item.id === updatedItem.id 
                 ? {
                     ...item,
@@ -1338,8 +1472,16 @@ function ItemsDashboardInner() {
                     // Keep createdAt and date as they were (don't change sort order)
                   }
                 : item
-            )
-          );
+            );
+            
+            const wasUpdated = updatedItems !== prevItems;
+            console.log('📝 Updated items state', {
+              wasUpdated,
+              itemFound: wasUpdated
+            });
+            
+            return updatedItems;
+          });
           
           // Trigger a re-count of score results for this item
           if (scoreCountManagerRef.current) {
@@ -1347,18 +1489,33 @@ function ItemsDashboardInner() {
             scoreCountManagerRef.current.clearCount(updatedItem.id);
             scoreCountManagerRef.current.loadCountForItem(updatedItem.id);
           }
+        } else {
+          console.log('🚫 Updated item is for different account', {
+            itemAccountId: updatedItem.accountId,
+            currentAccountId: selectedAccount.id
+          });
         }
       },
       error: (error) => {
-        console.error('Item update subscription error:', error);
+        console.error('❌ Item update subscription error:', {
+          error,
+          message: error?.message,
+          stack: error?.stack
+        });
         toast.error("Error in item update subscription.");
       }
     });
     
+    console.log('✅ Item update subscription set up');
+    
     // Score result subscription
     const scoreResultSubscription = observeScoreResultChanges().subscribe({
       next: async ({ data: changeEvent }) => {
-        console.log('📊 Score result subscription received:', changeEvent);
+        console.log('📊 Score result subscription received:', {
+          timestamp: new Date().toISOString(),
+          changeEvent,
+          hasData: !!changeEvent
+        });
         
         if (!changeEvent) {
           console.log('📊 Empty score result notification');
@@ -1381,16 +1538,25 @@ function ItemsDashboardInner() {
         }
       },
       error: (error) => {
-        console.error('📊 Score result subscription error:', error);
+        console.error('❌ Score result subscription error:', {
+          error,
+          message: error?.message,
+          stack: error?.stack
+        });
         toast.error("Error in score result subscription.");
       }
     });
+    
+    console.log('✅ Score result subscription set up');
     
     itemSubscriptionRef.current = createSubscription;
     itemUpdateSubscriptionRef.current = updateSubscription;
     scoreResultSubscriptionRef.current = scoreResultSubscription;
     
+    console.log('✅ ALL SUBSCRIPTIONS SET UP SUCCESSFULLY');
+    
     return () => {
+      console.log('🧹 CLEANING UP SUBSCRIPTIONS');
       if (itemSubscriptionRef.current) {
         itemSubscriptionRef.current.unsubscribe();
         itemSubscriptionRef.current = null;
@@ -1409,7 +1575,7 @@ function ItemsDashboardInner() {
         refetchTimeoutRef.current = null;
       }
     };
-  }, [selectedAccount, isLoadingAccounts, fetchItems]);
+  }, [selectedAccount, isLoadingAccounts, throttledRefetch]); // Removed fetchItems, added throttledRefetch which is actually used
 
   useEffect(() => {
     const checkViewportWidth = () => {
