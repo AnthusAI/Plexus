@@ -970,6 +970,8 @@ export function observeItemCreations() {
   const client = getClient();
   const subscriptions: { unsubscribe: () => void }[] = [];
   
+  console.log('🔧 Creating Item creation subscription observer');
+  
   return {
     subscribe(handler: SubscriptionHandler<any>) {
       console.log('🆕 Setting up Item creation subscription using client.models pattern...');
@@ -1004,6 +1006,8 @@ export function observeItemCreations() {
 export function observeItemUpdates() {
   const client = getClient();
   const subscriptions: { unsubscribe: () => void }[] = [];
+  
+  console.log('🔧 Creating Item update subscription observer');
   
   return {
     subscribe(handler: SubscriptionHandler<any>) {

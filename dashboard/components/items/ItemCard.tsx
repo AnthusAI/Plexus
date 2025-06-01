@@ -18,6 +18,14 @@ interface ScorecardResult {
   resultCount: number;
 }
 
+// Interface for the new Identifier model structure
+export interface IdentifierItem {
+  name: string;
+  value: string;
+  url?: string;
+  position?: number;
+}
+
 // Clean interface for ItemCard parameters
 export interface ItemData {
   // Core required parameters
@@ -30,7 +38,7 @@ export interface ItemData {
   icon?: React.ReactNode
   externalId?: string
   description?: string
-  identifiers?: string // JSON string
+  identifiers?: string | IdentifierItem[] // Support both JSON string (legacy) and new array format
   isNew?: boolean
   isLoadingResults?: boolean
   
@@ -193,7 +201,7 @@ const DetailContent = React.memo(({
             externalId={item.externalId}
             identifiers={item.identifiers}
             iconSize="md"
-            textSize="sm"
+            textSize="xs"
           />
 
           <Timestamp 

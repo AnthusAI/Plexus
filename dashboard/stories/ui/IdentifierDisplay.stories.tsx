@@ -43,21 +43,23 @@ const meta: Meta<typeof IdentifierDisplay> = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-// Sample data for new array-based interface
+// Sample data using the standard pattern: form, report, session, ID
 const sampleIdentifiers: IdentifierItem[] = [
   {
-    name: 'Customer ID',
-    value: 'CUST-789012',
-    url: 'https://example.com/customers/789012',
+    name: 'form',
+    value: '453460',
   },
   {
-    name: 'Order ID',
-    value: 'ORD-345678',
-    url: 'https://example.com/orders/345678',
+    name: 'report',
+    value: '2090346',
   },
   {
-    name: 'Transaction ID',
-    value: 'TXN-901234',
+    name: 'session',
+    value: 'XCC18834SCRUFF',
+  },
+  {
+    name: 'ID',
+    value: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
   }
 ];
 
@@ -75,8 +77,8 @@ export const SingleIdentifierArray: Story = {
   args: {
     identifiers: [
       {
-        name: 'Customer ID',
-        value: 'CUST-789012',
+        name: 'form',
+        value: '453460',
       }
     ],
     iconSize: 'sm',
@@ -98,19 +100,19 @@ export const MixedIdentifiersArray: Story = {
   args: {
     identifiers: [
       {
-        name: 'Customer ID',
-        value: 'CUST-123456',
-        url: 'https://example.com/customers/123456',
+        name: 'form',
+        value: '453460',
+        url: 'https://example.com/forms/453460',
       },
       {
-        name: 'Internal ID',
-        value: 'INT-789012',
+        name: 'report',
+        value: '2090346',
         // No URL
       },
       {
-        name: 'Reference',
-        value: 'REF-345678',
-        url: 'https://example.com/references/345678',
+        name: 'session',
+        value: 'XCC18834SCRUFF',
+        url: 'https://example.com/sessions/XCC18834SCRUFF',
       }
     ],
     iconSize: 'sm',
@@ -123,8 +125,8 @@ export const SingleIdentifierLegacyJSON: Story = {
   args: {
     identifiers: JSON.stringify([
       {
-        name: 'Customer ID',
-        id: 'CUST-789012', // Note: uses 'id' field (legacy)
+        name: 'form',
+        id: '453460', // Note: uses 'id' field (legacy)
       }
     ]),
     iconSize: 'sm',
@@ -144,9 +146,9 @@ export const SingleIdentifierWithLinkLegacyJSON: Story = {
   args: {
     identifiers: JSON.stringify([
       {
-        name: 'Ticket ID',
-        id: 'TICK-456789', // Note: uses 'id' field (legacy)
-        url: 'https://example.com/tickets/456789',
+        name: 'report',
+        id: '2090346', // Note: uses 'id' field (legacy)
+        url: 'https://example.com/reports/2090346',
       }
     ]),
     iconSize: 'sm',
@@ -166,9 +168,9 @@ export const LongIdentifier: Story = {
   args: {
     identifiers: [
       {
-        name: 'Long ID',
-        value: 'VERY-LONG-IDENTIFIER-THAT-EXCEEDS-FIFTEEN-CHARACTERS',
-        url: 'https://example.com/items/VERY-LONG-IDENTIFIER-THAT-EXCEEDS-FIFTEEN-CHARACTERS',
+        name: 'ID',
+        value: 'f47ac10b-58cc-4372-a567-0e02b2c3d479-extra-long-suffix',
+        url: 'https://example.com/items/f47ac10b-58cc-4372-a567-0e02b2c3d479-extra-long-suffix',
       }
     ],
     iconSize: 'sm',
@@ -181,18 +183,22 @@ export const MultipleIdentifiersLegacyJSON: Story = {
   args: {
     identifiers: JSON.stringify([
       {
-        name: 'Customer ID',
-        id: 'CUST-789012', // Note: uses 'id' field (legacy)
-        url: 'https://example.com/customers/789012',
+        name: 'form',
+        id: '453460', // Note: uses 'id' field (legacy)
+        url: 'https://example.com/forms/453460',
       },
       {
-        name: 'Order ID',
-        id: 'ORD-345678', // Note: uses 'id' field (legacy)
-        url: 'https://example.com/orders/345678',
+        name: 'report',
+        id: '2090346', // Note: uses 'id' field (legacy)
+        url: 'https://example.com/reports/2090346',
       },
       {
-        name: 'Transaction ID',
-        id: 'TXN-901234', // Note: uses 'id' field (legacy)
+        name: 'session',
+        id: 'XCC18834SCRUFF', // Note: uses 'id' field (legacy)
+      },
+      {
+        name: 'ID',
+        id: 'f47ac10b-58cc-4372-a567-0e02b2c3d479', // Note: uses 'id' field (legacy)
       }
     ]),
     iconSize: 'sm',
@@ -212,27 +218,31 @@ export const ManyIdentifiers: Story = {
   args: {
     identifiers: [
       {
-        name: 'Customer ID',
-        value: 'CUST-789012',
-        url: 'https://example.com/customers/789012',
+        name: 'form',
+        value: '453460',
+        url: 'https://example.com/forms/453460',
       },
       {
-        name: 'Order ID',
-        value: 'ORD-345678',
-        url: 'https://example.com/orders/345678',
+        name: 'report',
+        value: '2090346',
+        url: 'https://example.com/reports/2090346',
       },
       {
-        name: 'Transaction ID',
-        value: 'TXN-901234',
+        name: 'session',
+        value: 'XCC18834SCRUFF',
       },
       {
-        name: 'Session ID',
-        value: 'SESS-567890',
-        url: 'https://example.com/sessions/567890',
+        name: 'ID',
+        value: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+        url: 'https://example.com/items/f47ac10b-58cc-4372-a567-0e02b2c3d479',
       },
       {
-        name: 'Request ID',
-        value: 'REQ-123456789',
+        name: 'batch',
+        value: 'BATCH-78901234',
+      },
+      {
+        name: 'request',
+        value: 'REQ-456789012',
       }
     ],
     iconSize: 'sm',
@@ -245,9 +255,9 @@ export const LargeIcon: Story = {
   args: {
     identifiers: [
       {
-        name: 'Item ID',
-        value: 'ITEM-123456',
-        url: 'https://example.com/items/123456',
+        name: 'form',
+        value: '453460',
+        url: 'https://example.com/forms/453460',
       }
     ],
     iconSize: 'lg',
@@ -259,9 +269,9 @@ export const MediumIcon: Story = {
   args: {
     identifiers: [
       {
-        name: 'Item ID',
-        value: 'ITEM-123456',
-        url: 'https://example.com/items/123456',
+        name: 'session',
+        value: 'XCC18834SCRUFF',
+        url: 'https://example.com/sessions/XCC18834SCRUFF',
       }
     ],
     iconSize: 'md',
@@ -275,9 +285,9 @@ export const BothExternalIdAndIdentifiers: Story = {
     externalId: 'EXT-FALLBACK',
     identifiers: [
       {
-        name: 'Primary ID',
-        value: 'PRIM-123456',
-        url: 'https://example.com/primary/123456',
+        name: 'form',
+        value: '453460',
+        url: 'https://example.com/forms/453460',
       }
     ],
     iconSize: 'sm',
@@ -313,18 +323,114 @@ export const NoIdentifiers: Story = {
   },
 };
 
+// Test data exactly as specified by user
+export const SpecificTestData: Story = {
+  args: {
+    identifiers: [
+      {
+        name: 'form',
+        value: '453460',
+      },
+      {
+        name: 'report',
+        value: '2090346',
+      },
+      {
+        name: 'session',
+        value: 'XCC18834SCRUFF',
+      },
+      {
+        name: 'ID',
+        value: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+      }
+    ],
+    iconSize: 'sm',
+    textSize: 'xs',
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Test data with specific values including a long UUID to test truncation behavior.',
+      },
+    },
+  },
+};
+
+// Test with extremely long UUID to stress test truncation
+export const LongUUIDTest: Story = {
+  args: {
+    identifiers: [
+      {
+        name: 'form',
+        value: '453460',
+      },
+      {
+        name: 'report',
+        value: '2090346',
+      },
+      {
+        name: 'session',
+        value: 'XCC18834SCRUFF',
+      },
+      {
+        name: 'ID',
+        value: 'f47ac10b-58cc-4372-a567-0e02b2c3d479-extra-long-suffix',
+      },
+      {
+        name: 'Very Long UUID',
+        value: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee-with-additional-very-long-text',
+        url: 'https://example.com/uuid/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee-with-additional-very-long-text',
+      }
+    ],
+    iconSize: 'sm',
+    textSize: 'xs',
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Testing with very long UUIDs and identifiers to verify truncation and tooltip behavior.',
+      },
+    },
+  },
+};
+
+// Test with just the UUID examples in different sizes
+export const UUIDSizes: Story = {
+  args: {
+    identifiers: [
+      {
+        name: 'Standard UUID',
+        value: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+      },
+      {
+        name: 'Long UUID',
+        value: 'f47ac10b-58cc-4372-a567-0e02b2c3d479-extended-identifier',
+      }
+    ],
+    iconSize: 'md',
+    textSize: 'sm',
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Focus on UUID examples with medium sizing to better see the truncation behavior.',
+      },
+    },
+  },
+};
+
 // Container with dark background to test contrast
 export const OnDarkBackground: Story = {
   args: {
     identifiers: [
       {
-        name: 'Customer ID',
-        value: 'CUST-789012',
-        url: 'https://example.com/customers/789012',
+        name: 'form',
+        value: '453460',
+        url: 'https://example.com/forms/453460',
       },
       {
-        name: 'Order ID',
-        value: 'ORD-345678',
+        name: 'session',
+        value: 'XCC18834SCRUFF',
       }
     ],
     iconSize: 'sm',

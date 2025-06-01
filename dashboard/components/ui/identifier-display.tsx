@@ -76,12 +76,10 @@ export const IdentifierDisplay: React.FC<IdentifierDisplayProps> = ({
     iconSize === 'lg' && 'h-5 w-5 flex-shrink-0'
   );
 
-  const textClasses = cn(
-    textSize === 'xs' && 'text-xs',
-    textSize === 'sm' && 'text-sm',
-    textSize === 'base' && 'text-base',
-    'flex-shrink-0'
-  );
+  const baseTextSize = textSize === 'xs' ? 'text-xs' : textSize === 'sm' ? 'text-sm' : 'text-base';
+  const textClasses = cn(baseTextSize, 'flex-shrink-0');
+  const labelTextClasses = cn('!text-xs', 'font-medium flex-shrink-0 text-muted-foreground');
+  const valueTextClasses = cn('!text-xs', 'truncate min-w-0 flex-1 text-muted-foreground');
 
   const renderIdentifierValue = (identifier: IdentifierItem) => {
     const displayValue = identifier.value.length > 15 
@@ -94,7 +92,7 @@ export const IdentifierDisplay: React.FC<IdentifierDisplayProps> = ({
           href={identifier.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-primary hover:underline"
+          className="text-primary hover:underline !text-xs"
           title={identifier.value}
         >
           {displayValue}
@@ -103,18 +101,21 @@ export const IdentifierDisplay: React.FC<IdentifierDisplayProps> = ({
     }
 
     return (
-      <span title={identifier.value}>
+      <span title={identifier.value} className="!text-xs text-muted-foreground">
         {displayValue}
       </span>
     );
   };
 
-  const renderSimpleExternalId = () => (
-    <div className={cn("flex items-start gap-1 text-muted-foreground min-w-0", textClasses, className)}>
-      <IdCard className={iconClasses} />
-      <span className="truncate">{externalId}</span>
-    </div>
-  );
+  const renderSimpleExternalId = () => {
+    const finalTextClasses = cn(textClasses, className);
+    return (
+      <div className={cn("flex items-start gap-1 text-muted-foreground min-w-0", finalTextClasses)}>
+        <IdCard className={iconClasses} />
+        <span className="truncate !text-xs text-muted-foreground">{externalId}</span>
+      </div>
+    );
+  };
 
   if (!hasComplexIdentifiers) {
     return renderSimpleExternalId();
@@ -122,15 +123,24 @@ export const IdentifierDisplay: React.FC<IdentifierDisplayProps> = ({
 
   const hasMultipleIdentifiers = parsedIdentifiers.length > 1;
 
+  const finalTextClasses = cn(textClasses, className);
+
+  // Calculate the left margin to align with the text (icon width + gap)
+  const expandedLeftMargin = cn(
+    iconSize === 'sm' && 'ml-4', // 12px icon + 4px gap = 16px = ml-4
+    iconSize === 'md' && 'ml-5', // 16px icon + 4px gap = 20px = ml-5
+    iconSize === 'lg' && 'ml-6'  // 20px icon + 4px gap = 24px = ml-6
+  );
+
   return (
-    <div className={className}>
+    <div>
       {/* First identifier with icon and optional expander */}
-      <div className={cn("flex items-start gap-1 text-muted-foreground min-w-0", textClasses)}>
+      <div className={cn("flex items-start gap-1 text-muted-foreground min-w-0", finalTextClasses)}>
         <IdCard className={iconClasses} />
-        <span className={cn(textClasses, "font-medium flex-shrink-0")}>
+        <span className={labelTextClasses}>
           {firstIdentifier!.name}:
         </span>
-        <span className={cn(textClasses, "truncate min-w-0 flex-1")}>
+        <span className={valueTextClasses}>
           {renderIdentifierValue(firstIdentifier!)}
         </span>
         {hasMultipleIdentifiers && (
@@ -150,13 +160,13 @@ export const IdentifierDisplay: React.FC<IdentifierDisplayProps> = ({
 
       {/* Additional identifiers when expanded */}
       {isExpanded && hasMultipleIdentifiers && (
-        <div className="mt-1 ml-5 space-y-1">
+        <div className={expandedLeftMargin}>
           {parsedIdentifiers.slice(1).map((identifier, index) => (
             <div key={`${identifier.name}-${index + 1}`} className="flex items-start gap-1">
-              <span className={cn(textClasses, "font-medium")}>
+              <span className={labelTextClasses}>
                 {identifier.name}:
               </span>
-              <span className={textClasses}>
+              <span className="!text-xs text-muted-foreground">
                 {renderIdentifierValue(identifier)}
               </span>
             </div>
