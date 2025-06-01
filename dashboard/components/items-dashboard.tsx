@@ -643,11 +643,35 @@ function ItemsDashboardInner() {
   
   // Function to fetch a specific item by ID
   const fetchSpecificItem = useCallback(async (itemId: string) => {
-    if (!selectedAccount) return null;
+    console.log('🔍 fetchSpecificItem called:', { 
+      itemId, 
+      hasSelectedAccount: !!selectedAccount,
+      timestamp: new Date().toISOString(),
+      alreadyFailed: failedItemFetches.has(itemId)
+    });
     
+    if (!selectedAccount) {
+      console.log('❌ No selected account, returning null');
+      return null;
+    }
+    
+    // Check if we've already failed to fetch this item, but allow retries on account change
+    if (failedItemFetches.has(itemId)) {
+      console.log('⏭️ Previously failed to fetch this item, but will retry');
+    }
+    
+    console.log('⏳ Setting specificItemLoading to true');
     setSpecificItemLoading(true);
     
+    // Add a timeout to prevent hanging forever
+    const timeoutId = setTimeout(() => {
+      console.log('⏰ fetchSpecificItem timeout for item:', itemId);
+      setSpecificItemLoading(false);
+      setFailedItemFetches(prev => new Set(prev).add(itemId));
+    }, 30000); // 30 second timeout
+    
     try {
+      console.log('🚀 Making GraphQL request for item:', itemId);
       const response = await graphqlRequest<{
         getItem: {
           id: string;
@@ -686,57 +710,135 @@ function ItemsDashboardInner() {
         id: itemId
       });
       
+      console.log('📡 GraphQL response received:', response);
       
       if (response.data?.getItem) {
         const item = response.data.getItem;
+        console.log('✅ Item found, transforming:', item);
         
         // Transform the item to match our expected format
         const transformedItem = transformItem(item, { isNew: false });
+        console.log('🔄 Transformed item:', transformedItem);
         
         // Add the item to the beginning of the list if it's not already there
         setItems(prevItems => {
           const exists = prevItems.some(existingItem => existingItem.id === item.id);
           if (!exists) {
+            console.log('➕ Adding fetched item to list');
             return [transformedItem, ...prevItems];
           }
+          console.log('⚠️ Item already exists in list');
           return prevItems;
         });
         
         return transformedItem;
       }
       
+      console.log('❌ Item not found in response, marking as failed');
       // Item not found, mark as failed
       setFailedItemFetches(prev => new Set(prev).add(itemId));
       return null;
     } catch (error) {
-      console.error('Error fetching specific item:', error);
+      console.error('💥 Error fetching specific item:', error);
       // Mark as failed on error too
       setFailedItemFetches(prev => new Set(prev).add(itemId));
       return null;
     } finally {
+      clearTimeout(timeoutId);
+      console.log('🏁 Setting specificItemLoading to false');
       setSpecificItemLoading(false);
     }
-  }, [selectedAccount]);
+  }, [selectedAccount]); // Removed state dependencies to avoid circular updates
+  
+  // Clear failed fetches when account changes
+  useEffect(() => {
+    if (selectedAccount) {
+      console.log('🧹 Clearing failed fetches due to account change');
+      setFailedItemFetches(new Set());
+    }
+  }, [selectedAccount?.id]);
+  
+  // Track the previous item ID to only scroll when it actually changes
+  const prevItemIdRef = useRef<string | null>(null);
   
   // Sync URL parameter with selected item and fetch if needed
   useEffect(() => {
     const itemId = params.id as string
     
-    if (itemId && itemId !== selectedItem) {
-      debugSetSelectedItem(itemId)
-      
-      // Check if the item exists in the current list
-      const itemExists = items.some(item => item.id === itemId);
-      
-      // If item doesn't exist and we're not loading, fetch it specifically
-      if (!itemExists && !isLoading && selectedAccount) {
-        fetchSpecificItem(itemId);
+    console.log('🔄 URL sync useEffect triggered:', { 
+      itemId, 
+      selectedItem, 
+      isLoading, 
+      hasSelectedAccount: !!selectedAccount,
+      isLoadingAccounts,
+      isNarrowViewport,
+      itemsCount: items.length,
+      paramsObject: params,
+      failedItemFetches: Array.from(failedItemFetches)
+    });
+    
+    if (itemId) {
+      // Always set the selected item if it's different
+      if (itemId !== selectedItem) {
+        console.log('📝 Setting selected item:', itemId);
+        debugSetSelectedItem(itemId)
       }
-    } else if (!itemId && selectedItem) {
-      // Clear selected item if no item ID in URL
+      
+      // Don't proceed with fetching if accounts are still loading
+      if (isLoadingAccounts) {
+        console.log('⏳ Accounts still loading, waiting...');
+        return;
+      }
+      
+      // Always check if the item exists in the current list and fetch if needed
+      const itemExists = items.some(item => item.id === itemId);
+      console.log('🔍 Item exists in current list:', itemExists);
+      
+      if (itemExists) {
+        console.log('✅ Item found in current list, using grid mode');
+        // Item exists in current list - always use grid mode (unless narrow viewport)
+        if (!isNarrowViewport) {
+          setIsFullWidth(false);
+        }
+        // Only scroll if this is a new item selection (item ID changed)
+        if (prevItemIdRef.current !== itemId) {
+          console.log('🎯 Item ID changed, scrolling to new item');
+          // Use multiple timing attempts to ensure scrolling works
+          const scrollAttempts = [0, 50, 150, 300];
+          scrollAttempts.forEach(delay => {
+            setTimeout(() => {
+              scrollToSelectedItem(itemId);
+            }, delay);
+          });
+          prevItemIdRef.current = itemId;
+        } else {
+          console.log('⚡ Same item selected, allowing normal scroll behavior');
+        }
+      } else if (selectedAccount) {
+        console.log('🚀 Item not found, will fetch specifically');
+        // Since we need to fetch the item specifically, it means it's not in the current page
+        // Switch to full-width mode to avoid showing a confusing grid
+        if (!isNarrowViewport) {
+          console.log('📐 Setting full width mode');
+          setIsFullWidth(true);
+        }
+        fetchSpecificItem(itemId);
+        // Update the ref even for items we need to fetch
+        prevItemIdRef.current = itemId;
+      } else {
+        console.log('⏭️ Not fetching because no selected account');
+      }
+    } else if (!itemId && selectedItem && !isLoadingAccounts) {
+      // Only clear selection if URL truly has no item ID AND accounts have finished loading
+      // This prevents clearing selection during initialization or real-time updates
+      console.log('🧹 Clearing selected item - URL has no item ID');
       debugSetSelectedItem(null)
+      setIsFullWidth(false) // Reset full width when no item is selected
+      prevItemIdRef.current = null; // Clear the previous item ref
     }
-  }, [params.id, isLoading, selectedAccount, fetchSpecificItem]) // Removed items and selectedItem from deps to prevent issues when items change
+  }, [params.id, selectedAccount, isLoadingAccounts, isNarrowViewport, items.length]) // Include items.length so effect re-runs when items are loaded
+  
+
   
   // Add a ref for the intersection observer
   const observerRef = useRef<IntersectionObserver | null>(null);
@@ -949,7 +1051,7 @@ function ItemsDashboardInner() {
     } finally {
       setIsLoadingMore(false);
     }
-  }, [isLoadingMore, nextToken, selectedAccount, selectedScorecard, selectedScore, setItems, setNextToken, setIsLoadingMore, graphqlRequest]);
+  }, [isLoadingMore, nextToken, selectedAccount, selectedScorecard, selectedScore, setItems, setNextToken, setIsLoadingMore]);
 
   // Fetch items from the API
   const fetchItems = useCallback(async () => {
@@ -1195,7 +1297,7 @@ function ItemsDashboardInner() {
       console.error('❌ Error fetching items:', error);
       setIsLoading(false);
     }
-  }, [user, selectedAccount, setIsLoading, setItems, setNextToken, graphqlRequest, selectedScorecard, selectedScore]);
+  }, [user, selectedAccount, setIsLoading, setItems, setNextToken, selectedScorecard, selectedScore]);
   
   // Throttled refetch function for when we get empty update notifications
   const throttledRefetch = useCallback(async () => {
@@ -1389,13 +1491,35 @@ function ItemsDashboardInner() {
         console.error('Error during throttled refetch:', error);
       }
     }, 2000); // 2 second debounce
-  }, [selectedAccount, selectedScorecard, selectedScore, graphqlRequest]);
+  }, [selectedAccount, selectedScorecard, selectedScore]);
+  
+  // Ref to track when we need to refetch items
+  const shouldRefetchRef = useRef(false);
+  
+  // Mark when we need to refetch due to filter changes
+  useEffect(() => {
+    if (!isLoadingAccounts && selectedAccount) {
+      shouldRefetchRef.current = true;
+    }
+  }, [selectedAccount, isLoadingAccounts, selectedScorecard, selectedScore]);
   
   // Fetch items when the selected account or other filters change
   useEffect(() => {
-    if (!isLoadingAccounts && selectedAccount) {
-      // Reset items and nextToken when filters change
-      setItems([]);
+    if (!isLoadingAccounts && selectedAccount && shouldRefetchRef.current) {
+      shouldRefetchRef.current = false; // Reset the flag
+      
+      // Reset items and nextToken when filters change, but preserve specifically fetched items
+      setItems(prevItems => {
+        // Keep any items that were specifically fetched (not from the main list)
+        const specificItem = params.id ? prevItems.find(item => item.id === params.id) : null;
+        console.log('🔄 Main fetch useEffect - preserving specific item:', {
+          paramsId: params.id,
+          foundSpecificItem: !!specificItem,
+          prevItemsCount: prevItems.length,
+          specificItemId: specificItem?.id
+        });
+        return specificItem ? [specificItem] : [];
+      });
       setNextToken(null);
       fetchItems();
     } else if (!isLoadingAccounts && !selectedAccount) {
@@ -1403,7 +1527,7 @@ function ItemsDashboardInner() {
       setNextToken(null);
       setIsLoading(false); // Stop loading indicator
     }
-  }, [fetchItems, selectedAccount, isLoadingAccounts, selectedScorecard, selectedScore, setItems, setNextToken]);
+  }, [fetchItems, selectedAccount, isLoadingAccounts, params.id, setItems, setNextToken]);
 
   // Initialize score count manager
   useEffect(() => {
@@ -1842,11 +1966,37 @@ function ItemsDashboardInner() {
   }, []);
 
   const renderSelectedItem = () => {
+    console.log('🎨 renderSelectedItem called:', { 
+      selectedItem, 
+      itemsCount: items.length,
+      isLoading,
+      specificItemLoading,
+      hasSelectedAccount: !!selectedAccount,
+      isLoadingAccounts
+    });
+    
     if (!selectedItem) {
+      console.log('❌ No selected item, returning null');
       return null
     }
 
+    // If accounts are still loading, show loading state
+    if (isLoadingAccounts) {
+      console.log('⏳ Accounts still loading, showing loading state');
+      return (
+        <div className="h-full flex flex-col">
+          <div className="flex-1 flex items-center justify-center">
+            <div className="flex items-center space-x-2">
+              <Loader2 className="h-6 w-6 animate-spin" />
+              <span>Loading item details...</span>
+            </div>
+          </div>
+        </div>
+      )
+    }
+
     const selectedItemData = items.find(item => item.id === selectedItem)
+    console.log('🔍 selectedItemData found:', !!selectedItemData);
     
     const scoreCount = scoreResultCounts.get(selectedItem)
     const selectedItemWithCount = selectedItemData ? {
@@ -1856,10 +2006,16 @@ function ItemsDashboardInner() {
       scorecardBreakdown: scoreCount?.scorecardBreakdown || undefined
     } : null
     
+    console.log('📊 selectedItemWithCount created:', !!selectedItemWithCount);
+    
     // If item is not found, check if we should attempt to fetch it or if we're already loading
     if (!selectedItemWithCount) {
-      // If we're in any loading state, show loading spinner
+      console.log('❗ selectedItemWithCount is null, checking loading states');
+      
+      // ALWAYS check loading states first - this takes precedence over failed fetches
+      // because fetchSpecificItem may be retrying a previously failed item
       if (isLoading || specificItemLoading) {
+        console.log('⏳ Showing loading (isLoading:', isLoading, 'specificItemLoading:', specificItemLoading, ')');
         return (
           <div className="h-full flex flex-col">
             <div className="flex-1 flex items-center justify-center">
@@ -1872,29 +2028,48 @@ function ItemsDashboardInner() {
         )
       }
       
-      // If we have a selected account but item still not found, 
-      // it might be because we need to fetch it or it truly doesn't exist
-      // Let's be more conservative and only show error after we've attempted fetch
+      // Only check failed fetches if we're not currently loading
+      if (failedItemFetches.has(selectedItem)) {
+        console.log('❌ Item fetch already failed, showing error');
+        return (
+          <div className="h-full flex flex-col">
+            <div className="flex-1 flex items-center justify-center">
+              <div className="text-center">
+                <p className="text-muted-foreground mb-2">Item not found</p>
+                <p className="text-sm text-muted-foreground">
+                  The item with ID {selectedItem} could not be found.
+                </p>
+              </div>
+            </div>
+          </div>
+        )
+      }
+      
+      // If we have a selected account and the item truly doesn't exist,
+      // show an appropriate error message
       if (selectedAccount) {
-        // Check if we've already attempted to fetch this item
-        // If not, we should trigger the fetch (handled by useEffect)
-        // For now, show loading state while the useEffect handles the fetch
+        console.log('🚫 Item not found with selected account, showing error');
         return (
           <div className="h-full flex flex-col">
             <div className="flex-1 flex items-center justify-center">
-              <div className="flex items-center space-x-2">
-                <Loader2 className="h-6 w-6 animate-spin" />
-                <span>Loading item details...</span>
+              <div className="text-center">
+                <p className="text-muted-foreground mb-2">Item not found</p>
+                <p className="text-sm text-muted-foreground">
+                  The item with ID {selectedItem} could not be found.
+                </p>
               </div>
             </div>
           </div>
         )
       }
       
+      console.log('🚫 No selected account, returning null');
       // Only show not found if we have no account (shouldn't happen) 
       // or we've definitively determined the item doesn't exist
       return null
     }
+
+    console.log('✅ Rendering ItemCard for selected item');
 
     
     return (
@@ -2135,10 +2310,13 @@ function ItemsDashboardInner() {
     const newUrl = `/lab/items/${itemId}`
     window.history.replaceState(null, '', newUrl)
     
-    // Scroll to the selected item after a brief delay to allow layout updates
-    setTimeout(() => {
-      scrollToSelectedItem(itemId);
-    }, 100);
+    // Scroll to the selected item with multiple timing attempts for reliability
+    const scrollAttempts = [0, 50, 150, 300];
+    scrollAttempts.forEach(delay => {
+      setTimeout(() => {
+        scrollToSelectedItem(itemId);
+      }, delay);
+    });
     
     if (isNarrowViewport) {
       setIsFullWidth(true)
@@ -2191,6 +2369,11 @@ function ItemsDashboardInner() {
 
   // Add a useEffect for the intersection observer
   useEffect(() => {
+    // Don't set up observer if we don't have items or a next token
+    if (!nextToken || filteredItems.length === 0) {
+      return;
+    }
+
     // Create the intersection observer
     const options = {
       root: null, // Use the viewport as the root
@@ -2208,18 +2391,21 @@ function ItemsDashboardInner() {
     // Initialize the observer
     observerRef.current = new IntersectionObserver(handleObserver, options);
     
-    // Observe the load more element if it exists
-    if (loadMoreRef.current) {
-      observerRef.current.observe(loadMoreRef.current);
-    }
+    // Use a timeout to ensure the DOM has updated before observing
+    const timeoutId = setTimeout(() => {
+      if (loadMoreRef.current && observerRef.current) {
+        observerRef.current.observe(loadMoreRef.current);
+      }
+    }, 0);
 
     // Cleanup
     return () => {
+      clearTimeout(timeoutId);
       if (observerRef.current) {
         observerRef.current.disconnect();
       }
     };
-  }, [nextToken, isLoadingMore, handleLoadMore]); // Add handleLoadMore to dependencies
+  }, [nextToken, isLoadingMore, handleLoadMore, filteredItems.length]); // Add filteredItems.length to ensure observer resets when items change
 
   // Cleanup search error timeout on unmount
   useEffect(() => {
