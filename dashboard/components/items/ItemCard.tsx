@@ -214,6 +214,7 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
     return (
       <motion.div
         ref={ref}
+        id={`item-${item.id}`}
         initial={{ opacity: 1 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.2 }}
