@@ -100,6 +100,56 @@ export const MultipleIdentifiersArray: Story = {
   },
 };
 
+// NEW: Compact mode - shows only icon and value (no labels)
+export const CompactMode: Story = {
+  args: {
+    identifiers: sampleIdentifiers,
+    iconSize: 'md',
+    textSize: 'xs',
+    displayMode: 'compact',
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Compact mode displays only the icon and value without labels, used in grid view cards.',
+      },
+    },
+  },
+};
+
+// NEW: Comparison - Full vs Compact side by side
+export const FullVsCompact: Story = {
+  render: () => (
+    <div className="space-y-4">
+      <div>
+        <h3 className="text-sm font-medium mb-2">Full Mode (Detail View)</h3>
+        <IdentifierDisplay 
+          identifiers={sampleIdentifiers}
+          iconSize="md"
+          textSize="xs"
+          displayMode="full"
+        />
+      </div>
+      <div>
+        <h3 className="text-sm font-medium mb-2">Compact Mode (Grid View)</h3>
+        <IdentifierDisplay 
+          identifiers={sampleIdentifiers}
+          iconSize="md"
+          textSize="xs"
+          displayMode="compact"
+        />
+      </div>
+    </div>
+  ),
+  parameters: {
+    docs: {
+      description: {
+        story: 'Side-by-side comparison of full mode (shows labels, expand/copy buttons) vs compact mode (icon + value only).',
+      },
+    },
+  },
+};
+
 // NEW: Array interface with mixed URLs
 export const MixedIdentifiersArray: Story = {
   args: {
