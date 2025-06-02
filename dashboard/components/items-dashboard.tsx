@@ -597,16 +597,16 @@ function ItemsDashboardInner() {
       const response = await graphqlRequest<{
         listIdentifierByValue: {
           items: Array<{
-            id: string;
-            itemId?: string;
+            itemId: string;
+            name: string;
           }>;
         };
       }>(`
         query ListIdentifierByValue($value: String!) {
           listIdentifierByValue(value: $value) {
             items {
-              id
               itemId
+              name
             }
           }
         }
@@ -619,7 +619,7 @@ function ItemsDashboardInner() {
       if (identifiers && identifiers.length > 0) {
         // Use the first item found
         const identifier = identifiers[0];
-        const itemId = identifier.itemId || identifier.id; // Try itemId first, fallback to id
+        const itemId = identifier.itemId;
         if (itemId) {
           // Navigate to the item
           router.push(`/lab/items/${itemId}`);
@@ -714,7 +714,7 @@ function ItemsDashboardInner() {
             identifiers
             itemIdentifiers {
               items {
-                id
+                itemId
                 name
                 value
                 url
@@ -928,7 +928,7 @@ function ItemsDashboardInner() {
                   identifiers
                   itemIdentifiers {
                     items {
-                      id
+                      itemId
                       name
                       value
                       url
@@ -992,7 +992,7 @@ function ItemsDashboardInner() {
                     identifiers
                     itemIdentifiers {
                       items {
-                        id
+                        itemId
                         name
                         value
                         url
@@ -1045,7 +1045,7 @@ function ItemsDashboardInner() {
                   identifiers
                   itemIdentifiers {
                     items {
-                      id
+                      itemId
                       name
                       value
                       url
@@ -1152,7 +1152,7 @@ function ItemsDashboardInner() {
                   identifiers
                   itemIdentifiers {
                     items {
-                      id
+                      itemId
                       name
                       value
                       url
@@ -1425,7 +1425,7 @@ function ItemsDashboardInner() {
                     identifiers
                     itemIdentifiers {
                       items {
-                        id
+                        itemId
                         name
                         value
                         url
@@ -1469,7 +1469,7 @@ function ItemsDashboardInner() {
                   identifiers
                   itemIdentifiers {
                     items {
-                      id
+                      itemId
                       name
                       value
                       url
