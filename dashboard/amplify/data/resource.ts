@@ -327,6 +327,7 @@ const schema = a.schema({
             item: a.belongsTo('Item', 'itemId'),
             account: a.belongsTo('Account', 'accountId'),
         })
+        .identifier(['itemId', 'name', 'value'])  // Composite primary key prevents duplicates
         .authorization((allow) => [
             allow.publicApiKey(),
             allow.authenticated()

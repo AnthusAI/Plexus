@@ -320,22 +320,32 @@ class Identifier(BaseModel):
             identifiers_data: List of identifier data dicts with 'name', 'value', and optional 'url'
             
         Returns:
-            List of created Identifier objects
+            List of created Identifier objects (may be fewer than input if some failed)
         """
         if not identifiers_data:
             return []
             
         created_identifiers = []
         for identifier_data in identifiers_data:
-            identifier = cls.create(
-                client=client,
-                itemId=item_id,
-                accountId=account_id,
-                name=identifier_data['name'],
-                value=identifier_data['value'],
-                url=identifier_data.get('url')
-            )
-            created_identifiers.append(identifier)
+            try:
+                identifier = cls.create(
+                    client=client,
+                    itemId=item_id,
+                    accountId=account_id,
+                    name=identifier_data['name'],
+                    value=identifier_data['value'],
+                    url=identifier_data.get('url')
+                )
+                created_identifiers.append(identifier)
+            except Exception as e:
+                # Log the error but continue with other identifiers
+                import logging
+                logging.error(f"Failed to create identifier {identifier_data['name']}={identifier_data['value']} for item {item_id}: {e}")
+                logging.error(f"Exception type: {type(e)}")
+                import traceback
+                logging.error(f"Stack trace: {traceback.format_exc()}")
+                # Continue processing other identifiers
+                continue
             
         return created_identifiers
 

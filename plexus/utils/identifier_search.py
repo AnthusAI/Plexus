@@ -309,7 +309,7 @@ def create_identifiers_for_item(
         client: API client
         
     Returns:
-        List of created Identifier objects
+        List of created Identifier objects (may be empty if all fail)
         
     Example:
         # Convert from JSON format to Identifier records
@@ -325,20 +325,30 @@ def create_identifiers_for_item(
     if not identifiers_data:
         return []
     
-    # Convert from JSON format (with 'id' field) to Identifier format (with 'value' field)
-    normalized_data = []
-    for identifier_data in identifiers_data:
-        normalized = {
-            'name': identifier_data['name'],
-            'value': identifier_data.get('id', identifier_data.get('value', ''))
-        }
-        if 'url' in identifier_data:
-            normalized['url'] = identifier_data['url']
-        normalized_data.append(normalized)
-    
-    return Identifier.batch_create_for_item(
-        client=client,
-        item_id=item_id,
-        account_id=account_id,
-        identifiers_data=normalized_data
-    ) 
+    try:
+        # Convert from JSON format (with 'id' field) to Identifier format (with 'value' field)
+        normalized_data = []
+        for identifier_data in identifiers_data:
+            normalized = {
+                'name': identifier_data['name'],
+                'value': identifier_data.get('id', identifier_data.get('value', ''))
+            }
+            if 'url' in identifier_data:
+                normalized['url'] = identifier_data['url']
+            normalized_data.append(normalized)
+        
+        return Identifier.batch_create_for_item(
+            client=client,
+            item_id=item_id,
+            account_id=account_id,
+            identifiers_data=normalized_data
+        )
+    except Exception as e:
+        # Log error but don't propagate to avoid breaking main workflow
+        import logging
+        logging.error(f"Failed to create identifiers for item {item_id}: {e}")
+        logging.error(f"Exception type: {type(e)}")
+        import traceback
+        logging.error(f"Stack trace: {traceback.format_exc()}")
+        logging.error(f"Identifier data that failed: {identifiers_data}")
+        return [] 
