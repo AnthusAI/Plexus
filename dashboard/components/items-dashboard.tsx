@@ -77,6 +77,10 @@ interface Item {
   isNew?: boolean;
   isLoadingResults?: boolean;
   
+  // UI fields for ItemCard
+  metadata?: Record<string, string>;
+  attachedFiles?: string[];
+  
   // Legacy fields for backwards compatibility (will be phased out)
   date?: string;
   status?: string;
@@ -189,6 +193,7 @@ const MemoizedGridItemCard = React.memo(({
       isSelected={selectedItem === item.id}
       onClick={handleClick}
       getBadgeVariant={getBadgeVariant}
+      readOnly={true}
       ref={combinedRef}
     />
   );
@@ -456,6 +461,10 @@ const transformItem = (item: any, options: { isNew?: boolean } = {}): Item => {
     isNew: options.isNew || false,
     isLoadingResults: false,
     
+    // Metadata and file attachments (parse from item if available)
+    metadata: item.metadata ? (typeof item.metadata === 'string' ? JSON.parse(item.metadata) : item.metadata) : {},
+    attachedFiles: item.attachedFiles || [],
+    
     // Legacy fields for backwards compatibility
     date: item.createdAt || item.updatedAt,
     status: "Done",
@@ -660,6 +669,8 @@ function ItemsDashboardInner() {
           updatedAt?: string;
           createdAt?: string;
           isEvaluation: boolean;
+          metadata?: string;
+          attachedFiles?: string[];
         }
       }>(`
         query GetItem($id: ID!) {
@@ -673,6 +684,8 @@ function ItemsDashboardInner() {
             createdAt
             isEvaluation
             identifiers
+            metadata
+            attachedFiles
             itemIdentifiers {
               items {
                 itemId
@@ -843,6 +856,8 @@ function ItemsDashboardInner() {
                   createdAt
                   isEvaluation
                   identifiers
+                  metadata
+                  attachedFiles
                   itemIdentifiers {
                     items {
                       itemId
@@ -1053,6 +1068,8 @@ function ItemsDashboardInner() {
                   createdAt
                   isEvaluation
                   identifiers
+                  metadata
+                  attachedFiles
                   itemIdentifiers {
                     items {
                       itemId
@@ -1114,6 +1131,8 @@ function ItemsDashboardInner() {
                     createdAt
                     isEvaluation
                     identifiers
+                    metadata
+                    attachedFiles
                     itemIdentifiers {
                       items {
                         itemId
@@ -1163,6 +1182,8 @@ function ItemsDashboardInner() {
                   createdAt
                   isEvaluation
                   identifiers
+                  metadata
+                  attachedFiles
                   itemIdentifiers {
                     items {
                       itemId
@@ -1243,6 +1264,8 @@ function ItemsDashboardInner() {
                   createdAt
                   isEvaluation
                   identifiers
+                  metadata
+                  attachedFiles
                   itemIdentifiers {
                     items {
                       itemId
@@ -1290,6 +1313,8 @@ function ItemsDashboardInner() {
                     createdAt
                     isEvaluation
                     identifiers
+                    metadata
+                    attachedFiles
                     itemIdentifiers {
                       items {
                         itemId
@@ -1334,6 +1359,8 @@ function ItemsDashboardInner() {
                   createdAt
                   isEvaluation
                   identifiers
+                  metadata
+                  attachedFiles
                   itemIdentifiers {
                     items {
                       itemId
@@ -1369,7 +1396,24 @@ function ItemsDashboardInner() {
           // Update existing items and add new ones at the beginning
           const updatedItems = prevItems.map(prevItem => {
             const freshItem = transformedItems.find(item => item.id === prevItem.id);
-            return freshItem ? { ...prevItem, ...freshItem, isNew: prevItem.isNew } : prevItem; // Preserve isNew status for existing items
+            if (freshItem) {
+              return {
+                // Start with existing item to preserve metadata and other fields
+                ...prevItem,
+                // Only update fields that are present in the fresh data
+                ...(freshItem.externalId !== undefined && { externalId: freshItem.externalId }),
+                ...(freshItem.description !== undefined && { description: freshItem.description }),
+                ...(freshItem.updatedAt !== undefined && { updatedAt: freshItem.updatedAt }),
+                ...(freshItem.identifiers !== undefined && { identifiers: freshItem.identifiers }),
+                // Only update metadata if it's actually present in the fresh data
+                ...(freshItem.metadata !== undefined && { metadata: freshItem.metadata }),
+                // Only update attachedFiles if it's actually present in the fresh data
+                ...(freshItem.attachedFiles !== undefined && { attachedFiles: freshItem.attachedFiles }),
+                // Preserve isNew status
+                isNew: prevItem.isNew,
+              };
+            }
+            return prevItem;
           });
           
           // Add timeout to clear isNew flag for the new items found in refetch
@@ -1525,11 +1569,19 @@ function ItemsDashboardInner() {
             const updatedItems = prevItems.map(item => 
               item.id === updatedItem.id 
                 ? {
+                    // Start with the existing item to preserve all existing data
                     ...item,
-                    externalId: updatedItem.externalId,
-                    description: updatedItem.description,
-                    updatedAt: updatedItem.updatedAt,
-                    // Keep createdAt and date as they were (don't change sort order)
+                    // Only update fields that are actually present in the subscription data
+                    ...(updatedItem.externalId !== undefined && { externalId: updatedItem.externalId }),
+                    ...(updatedItem.description !== undefined && { description: updatedItem.description }),
+                    ...(updatedItem.updatedAt !== undefined && { updatedAt: updatedItem.updatedAt }),
+                    ...(updatedItem.identifiers !== undefined && { identifiers: transformIdentifiers(updatedItem) }),
+                    // Only update metadata if it's actually present in the update
+                    ...(updatedItem.metadata !== undefined && { 
+                      metadata: typeof updatedItem.metadata === 'string' ? JSON.parse(updatedItem.metadata) : updatedItem.metadata 
+                    }),
+                    // Only update attachedFiles if it's actually present in the update  
+                    ...(updatedItem.attachedFiles !== undefined && { attachedFiles: updatedItem.attachedFiles }),
                   }
                 : item
             );
@@ -1884,6 +1936,7 @@ function ItemsDashboardInner() {
               // Update URL using browser History API to avoid Next.js navigation
               window.history.replaceState(null, '', `/lab/items`)
             }}
+            readOnly={true}
           />
         </div>
       </div>

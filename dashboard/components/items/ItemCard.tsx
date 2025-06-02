@@ -12,6 +12,8 @@ import { IdentifierDisplay } from '@/components/ui/identifier-display'
 import NumberFlowWrapper from '@/components/ui/number-flow'
 import ItemScoreResults from '../ItemScoreResults'
 import { useItemScoreResults } from '@/hooks/useItemScoreResults'
+import { MetadataEditor } from '@/components/ui/metadata-editor'
+import { FileAttachments } from './FileAttachments'
 
 // Interface for scorecard results
 interface ScorecardResult {
@@ -43,6 +45,8 @@ export interface ItemData {
   identifiers?: string | IdentifierItem[] // Support both JSON string (legacy) and new array format
   isNew?: boolean
   isLoadingResults?: boolean
+  metadata?: Record<string, string> // Metadata object
+  attachedFiles?: string[] // Array of file paths/URLs
   
   // Legacy fields for backwards compatibility (will be phased out)
   date?: string
@@ -78,6 +82,8 @@ interface ItemCardProps extends React.HTMLAttributes<HTMLDivElement> {
   variant?: 'grid' | 'detail'
   getBadgeVariant: (status: string) => string
   skeletonMode?: boolean
+  readOnly?: boolean // Add readOnly prop
+  onSave?: (item: ItemData) => Promise<void> // Add onSave prop
 }
 
 const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({ 
@@ -92,6 +98,8 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
   onClose,
   getBadgeVariant,
   skeletonMode = false,
+  readOnly = false,
+  onSave,
   className, 
   ...props 
 }, ref) => {
@@ -330,15 +338,56 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
       </CardHeader>
       <CardContent className="flex-grow overflow-auto px-4 sm:px-3 pb-4">
         <div className="space-y-4">
+          {/* Description field display */}
+          {item.description && 
+           item.description.trim() && 
+           !item.description.match(/^API Call - Report \d+$/) && 
+           !item.description.match(/^(Call|Report|Session|Item) - .+$/) && (
+            <div>
+              <h3 className="text-sm font-medium text-foreground mb-2">Description</h3>
+              <div className="p-3">
+                <p className="text-sm text-muted-foreground">{item.description}</p>
+              </div>
+            </div>
+          )}
+          
           {/* Text field display */}
           {item.text && (
             <div>
               <h3 className="text-sm font-medium text-foreground mb-2">Text</h3>
-              <div className="rounded-lg bg-background p-3 border">
+              <div className="p-3">
                 <p className="text-sm whitespace-pre-wrap">{item.text}</p>
               </div>
             </div>
           )}
+          
+          {/* Metadata editor */}
+          <MetadataEditor
+            value={item.metadata || {}}
+            onChange={(newMetadata) => {
+              // Update metadata in parent component if onChange is provided
+              if (onSave) {
+                onSave({ ...item, metadata: newMetadata });
+              }
+            }}
+            disabled={readOnly}
+          />
+          
+          {/* File attachments */}
+          <FileAttachments
+            attachedFiles={item.attachedFiles || []}
+            readOnly={readOnly}
+            onChange={(newFiles) => {
+              // Update attached files in parent component if onChange is provided
+              if (onSave) {
+                onSave({ ...item, attachedFiles: newFiles });
+              }
+            }}
+            onUpload={async (file) => {
+              // Mock upload implementation - return a path
+              return Promise.resolve(`/uploads/${file.name}`);
+            }}
+          />
           
           <ItemScoreResults
             groupedResults={groupedResults}
