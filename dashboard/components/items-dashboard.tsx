@@ -430,23 +430,8 @@ const transformIdentifiers = (item: any) => {
       }))
       .sort((a: any, b: any) => (a.position || 0) - (b.position || 0));
     
-    console.log('🔍 IDENTIFIER TRANSFORM DEBUG:', {
-      itemId: item.id,
-      originalData: item.itemIdentifiers?.items,
-      transformedData: transformedIdentifiers,
-      fallbackData: item.identifiers
-    });
-    
-    return transformedIdentifiers;
-  }
-  
-  // Fall back to legacy identifiers field
-  console.log('🔍 IDENTIFIER FALLBACK DEBUG:', {
-    itemId: item.id,
-    hasItemIdentifiers: !!item.itemIdentifiers,
-    itemIdentifiersCount: item.itemIdentifiers?.items?.length || 0,
-    fallbackData: item.identifiers
-  });
+      return transformedIdentifiers;
+}
   
   return item.identifiers;
 };
@@ -487,13 +472,8 @@ function ItemsDashboardInner() {
   const params = useParams()
   const [selectedItem, setSelectedItem] = useState<string | null>(null)
   
-  // Debug wrapper for setSelectedItem to track changes
+  // Wrapper for setSelectedItem
   const debugSetSelectedItem = React.useCallback((itemId: string | null) => {
-    console.log('🎯 SELECTED ITEM CHANGE:', {
-      from: selectedItem,
-      to: itemId,
-      stack: new Error().stack?.split('\n').slice(1, 4).join('\n')
-    });
     setSelectedItem(itemId);
   }, []); // Empty deps to avoid circular updates
   const [isFullWidth, setIsFullWidth] = useState(false)
@@ -565,7 +545,6 @@ function ItemsDashboardInner() {
       const itemElement = itemRefsMap.current.get(itemId);
       
       if (itemElement) {
-        console.log(`📍 Scrolling to item ${itemId} (attempt ${attempts})`);
         itemElement.scrollIntoView({
           behavior: 'smooth',
           block: 'start', // Align to the top of the container
@@ -573,11 +552,9 @@ function ItemsDashboardInner() {
         });
         return true; // Success
       } else if (attempts < maxRetries) {
-        console.log(`⏱️ Retry ${attempts}/${maxRetries} for item ${itemId}. Available refs:`, Array.from(itemRefsMap.current.keys()).slice(0, 5));
         setTimeout(attemptScroll, retryDelay);
         return false; // Retry needed
       } else {
-        console.log(`❌ Failed to scroll to item ${itemId} after ${maxRetries} attempts. Available refs:`, Array.from(itemRefsMap.current.keys()));
         return false; // Failed
       }
     };
@@ -660,35 +637,19 @@ function ItemsDashboardInner() {
   
   // Function to fetch a specific item by ID
   const fetchSpecificItem = useCallback(async (itemId: string) => {
-    console.log('🔍 fetchSpecificItem called:', { 
-      itemId, 
-      hasSelectedAccount: !!selectedAccount,
-      timestamp: new Date().toISOString(),
-      alreadyFailed: failedItemFetches.has(itemId)
-    });
-    
     if (!selectedAccount) {
-      console.log('❌ No selected account, returning null');
       return null;
     }
     
-    // Check if we've already failed to fetch this item, but allow retries on account change
-    if (failedItemFetches.has(itemId)) {
-      console.log('⏭️ Previously failed to fetch this item, but will retry');
-    }
-    
-    console.log('⏳ Setting specificItemLoading to true');
     setSpecificItemLoading(true);
     
     // Add a timeout to prevent hanging forever
     const timeoutId = setTimeout(() => {
-      console.log('⏰ fetchSpecificItem timeout for item:', itemId);
       setSpecificItemLoading(false);
       setFailedItemFetches(prev => new Set(prev).add(itemId));
     }, 30000); // 30 second timeout
     
     try {
-      console.log('🚀 Making GraphQL request for item:', itemId);
       const response = await graphqlRequest<{
         getItem: {
           id: string;
@@ -727,42 +688,34 @@ function ItemsDashboardInner() {
         id: itemId
       });
       
-      console.log('📡 GraphQL response received:', response);
-      
       if (response.data?.getItem) {
         const item = response.data.getItem;
-        console.log('✅ Item found, transforming:', item);
         
         // Transform the item to match our expected format
         const transformedItem = transformItem(item, { isNew: false });
-        console.log('🔄 Transformed item:', transformedItem);
         
         // Add the item to the beginning of the list if it's not already there
         setItems(prevItems => {
           const exists = prevItems.some(existingItem => existingItem.id === item.id);
           if (!exists) {
-            console.log('➕ Adding fetched item to list');
             return [transformedItem, ...prevItems];
           }
-          console.log('⚠️ Item already exists in list');
           return prevItems;
         });
         
         return transformedItem;
       }
       
-      console.log('❌ Item not found in response, marking as failed');
       // Item not found, mark as failed
       setFailedItemFetches(prev => new Set(prev).add(itemId));
       return null;
     } catch (error) {
-      console.error('💥 Error fetching specific item:', error);
+      console.error('Error fetching specific item:', error);
       // Mark as failed on error too
       setFailedItemFetches(prev => new Set(prev).add(itemId));
       return null;
     } finally {
       clearTimeout(timeoutId);
-      console.log('🏁 Setting specificItemLoading to false');
       setSpecificItemLoading(false);
     }
   }, [selectedAccount]); // Removed state dependencies to avoid circular updates
@@ -770,7 +723,6 @@ function ItemsDashboardInner() {
   // Clear failed fetches when account changes
   useEffect(() => {
     if (selectedAccount) {
-      console.log('🧹 Clearing failed fetches due to account change');
       setFailedItemFetches(new Set());
     }
   }, [selectedAccount?.id]);
@@ -784,42 +736,21 @@ function ItemsDashboardInner() {
   useEffect(() => {
     const itemId = params.id as string
     
-    console.log('🔄 Deep-link sync useEffect triggered:', { 
-      itemId, 
-      selectedItem, 
-      isLoading, 
-      hasSelectedAccount: !!selectedAccount,
-      isLoadingAccounts,
-      isNarrowViewport,
-      itemsCount: items.length,
-      paramsObject: params,
-      failedItemFetches: Array.from(failedItemFetches)
-    });
-    
     if (itemId) {
       // Always set the selected item if it's different
       if (itemId !== selectedItem) {
-        console.log('📝 Setting selected item:', itemId);
         debugSetSelectedItem(itemId)
       }
       
       // Don't proceed with view logic if accounts are still loading
       if (isLoadingAccounts) {
-        console.log('⏳ Accounts still loading, waiting...');
         return;
       }
       
       // Check if the deep-linked item is in the first page of results (inline check to avoid dependency)
       const itemInFirstPage = items.some(item => item.id === itemId);
-      console.log('🔍 Deep-link analysis:', { 
-        itemId, 
-        itemInFirstPage, 
-        itemsLength: items.length,
-        isNarrowViewport 
-      });
       
       if (itemInFirstPage) {
-        console.log('✅ Item is in first page - showing grid and scrolling to item');
         // Item is in the first page: show the grid and scroll to the item
         if (!isNarrowViewport) {
           setIsFullWidth(false); // Ensure grid is visible
@@ -827,13 +758,11 @@ function ItemsDashboardInner() {
         
         // Scroll to the item if this is a new selection
         if (prevItemIdRef.current !== itemId) {
-          console.log('🎯 Deep-link scrolling to item in grid');
           // Use the enhanced scroll function with retry logic
           scrollToSelectedItem(itemId);
           prevItemIdRef.current = itemId;
         }
       } else if (selectedAccount) {
-        console.log('🚀 Item not in first page - fetching and showing full-width');
         // Item is not in the first page: fetch it and show in full-width mode (hide grid)
         if (!isNarrowViewport) {
           setIsFullWidth(true); // Hide grid, show full-width
@@ -842,12 +771,9 @@ function ItemsDashboardInner() {
         // Fetch the specific item since it's not in the current page
         fetchSpecificItem(itemId);
         prevItemIdRef.current = itemId;
-      } else {
-        console.log('⏭️ Not proceeding because no selected account');
       }
     } else if (!itemId && selectedItem && !isLoadingAccounts) {
       // Clear selection and reset to grid view when no item is selected
-      console.log('🧹 Clearing deep-link - returning to grid view');
       debugSetSelectedItem(null)
       setIsFullWidth(false) // Always show grid when no item is selected
       prevItemIdRef.current = null;
@@ -859,17 +785,8 @@ function ItemsDashboardInner() {
     if (selectedItem && items.length > 0 && !isLoading && !isLoadingAccounts) {
       const itemInFirstPage = items.some(item => item.id === selectedItem);
       
-      console.log('🔄 Items loaded, checking for scroll opportunity:', {
-        selectedItem,
-        itemInFirstPage,
-        itemsCount: items.length,
-        isFullWidth,
-        isNarrowViewport
-      });
-      
       // Only scroll if the item is in the first page and we're showing the grid
       if (itemInFirstPage && !isFullWidth && !isNarrowViewport) {
-        console.log('🎯 Triggering scroll for loaded item in grid');
         // Use a small delay to ensure the grid is fully rendered
         setTimeout(() => {
           scrollToSelectedItem(selectedItem);
@@ -1094,21 +1011,11 @@ function ItemsDashboardInner() {
 
   // Fetch items from the API
   const fetchItems = useCallback(async () => {
-    console.log('🔍 FETCHING ITEMS', {
-      timestamp: new Date().toISOString(),
-      hasUser: !!user,
-      selectedAccount: selectedAccount ? { id: selectedAccount.id, name: selectedAccount.name } : null,
-      selectedScorecard,
-      selectedScore
-    });
-    
     if (!user) {
-      console.log('❌ User not authenticated, skipping item fetch');
       return;
     }
     
     if (!selectedAccount) {
-      console.log('❌ No account selected in context, skipping item fetch');
       return;
     }
     
@@ -1117,7 +1024,6 @@ function ItemsDashboardInner() {
     try {
       // Use the account ID from the context
       const accountId = selectedAccount.id;
-      console.log('📋 Using account ID:', accountId);
       
       // Skip the amplifyClient.Item.list() call and only use the direct GraphQL query approach
       let itemsFromDirectQuery: any[] = [];
@@ -1128,10 +1034,7 @@ function ItemsDashboardInner() {
         const useScorecard = selectedScorecard !== null && selectedScorecard !== undefined;
         const useScore = selectedScore !== null && selectedScore !== undefined;
         
-        console.log('🔍 Query filters:', { useScorecard, useScore, selectedScorecard, selectedScore });
-        
         if (useScore) {
-          console.log('📊 Fetching items by score ID:', selectedScore);
           // If a score is selected, filter by scoreId
           const directQuery = await graphqlRequest<{ listItemByScoreIdAndCreatedAt: { items: any[], nextToken: string | null } }>(`
             query ListItemsDirect($scoreId: String!, $limit: Int!) {
@@ -1171,13 +1074,8 @@ function ItemsDashboardInner() {
           if (directQuery.data?.listItemByScoreIdAndCreatedAt?.items) {
             itemsFromDirectQuery = directQuery.data.listItemByScoreIdAndCreatedAt.items;
             nextTokenFromDirectQuery = directQuery.data.listItemByScoreIdAndCreatedAt.nextToken;
-            console.log('✅ Fetched items by score:', {
-              count: itemsFromDirectQuery.length,
-              hasNextToken: !!nextTokenFromDirectQuery
-            });
           }
         } else if (useScorecard) {
-          console.log('📊 Fetching items by scorecard ID:', selectedScorecard);
           // If only a scorecard is selected, get items through ScorecardProcessedItem join table
           const directQuery = await graphqlRequest<{ 
             listScorecardProcessedItemByScorecardId: { 
@@ -1245,13 +1143,8 @@ function ItemsDashboardInner() {
                 return dateB - dateA; // DESC order (newest first)
               });
             nextTokenFromDirectQuery = directQuery.data.listScorecardProcessedItemByScorecardId.nextToken;
-            console.log('✅ Fetched items by scorecard:', {
-              count: itemsFromDirectQuery.length,
-              hasNextToken: !!nextTokenFromDirectQuery
-            });
           }
         } else {
-          console.log('📊 Fetching items by account ID:', accountId);
           // If neither scorecard nor score is selected, filter by accountId
           const directQuery = await graphqlRequest<{ listItemByAccountIdAndCreatedAt: { items: any[], nextToken: string | null } }>(`
             query ListItemsDirect($accountId: String!, $limit: Int!) {
@@ -1291,49 +1184,23 @@ function ItemsDashboardInner() {
           if (directQuery.data?.listItemByAccountIdAndCreatedAt?.items) {
             itemsFromDirectQuery = directQuery.data.listItemByAccountIdAndCreatedAt.items;
             nextTokenFromDirectQuery = directQuery.data.listItemByAccountIdAndCreatedAt.nextToken;
-            console.log('✅ Fetched items by account:', {
-              count: itemsFromDirectQuery.length,
-              hasNextToken: !!nextTokenFromDirectQuery,
-              firstItem: itemsFromDirectQuery[0] ? {
-                id: itemsFromDirectQuery[0].id,
-                externalId: itemsFromDirectQuery[0].externalId,
-                createdAt: itemsFromDirectQuery[0].createdAt
-              } : null
-            });
           }
         }
       } catch (error) {
-        console.error('❌ Error in GraphQL query:', error);
+        console.error('Error in GraphQL query:', error);
       }
       
       const itemsToUse = itemsFromDirectQuery;
       const nextTokenToUse = nextTokenFromDirectQuery;
       
-      if (itemsToUse.length === 0) {
-        console.log('⚠️ No items found for this account. You may need to create some items first.');
-      } else {
-        console.log('📊 Processing items:', {
-          totalCount: itemsToUse.length,
-          accountIds: [...new Set(itemsToUse.map(item => item.accountId))]
-        });
-      }
-      
       const transformedItems = itemsToUse.map(item => transformItem(item, { isNew: false }));
-      
-      console.log('✅ Setting items state:', {
-        count: transformedItems.length,
-        nextToken: nextTokenToUse
-      });
       
       setItems(transformedItems);
       setNextToken(nextTokenToUse);
       
-      // Don't clear isNew for initial load - items are already set to isNew: false
-      
       setIsLoading(false);
-      console.log('✅ Item fetch complete');
     } catch (error) {
-      console.error('❌ Error fetching items:', error);
+      console.error('Error fetching items:', error);
       setIsLoading(false);
     }
   }, [user, selectedAccount, setIsLoading, setItems, setNextToken, selectedScorecard, selectedScore]);
@@ -1496,11 +1363,6 @@ function ItemsDashboardInner() {
           const newItems = transformedItems
             .filter(item => !existingIds.has(item.id))
             .map(newItem => {
-              console.log('🎯 NEW ITEM FOUND IN THROTTLED REFETCH:', {
-                id: newItem.id,
-                externalId: newItem.externalId,
-                source: 'throttledRefetch'
-              });
               return { ...newItem, isNew: true }; // Mark new items as new!
             });
           
@@ -1551,12 +1413,6 @@ function ItemsDashboardInner() {
       setItems(prevItems => {
         // Keep any items that were specifically fetched (not from the main list)
         const specificItem = params.id ? prevItems.find(item => item.id === params.id) : null;
-        console.log('🔄 Main fetch useEffect - preserving specific item:', {
-          paramsId: params.id,
-          foundSpecificItem: !!specificItem,
-          prevItemsCount: prevItems.length,
-          specificItemId: specificItem?.id
-        });
         return specificItem ? [specificItem] : [];
       });
       setNextToken(null);
@@ -1575,8 +1431,6 @@ function ItemsDashboardInner() {
       
       // Subscribe to count changes with better state management
       const unsubscribe = scoreCountManagerRef.current.subscribe((counts) => {
-        console.log('📊 Score count manager update:', counts);
-        
         // Only update state if counts have actually changed
         setScoreResultCounts(prevCounts => {
           // Check if the new counts Map is actually different from the previous one
@@ -1613,19 +1467,7 @@ function ItemsDashboardInner() {
 
   // Set up subscriptions for item creations and updates
   useEffect(() => {
-    console.log('🔍 SUBSCRIPTION SETUP CHECK:', {
-      selectedAccount: selectedAccount ? { id: selectedAccount.id, name: selectedAccount.name } : null,
-      isLoadingAccounts,
-      willSetupSubscriptions: !(!selectedAccount || isLoadingAccounts)
-    });
-    
     if (!selectedAccount || isLoadingAccounts) return; // Also wait for accounts to be loaded
-    
-    console.log('🔄 SETTING UP SUBSCRIPTIONS', {
-      accountId: selectedAccount.id,
-      accountName: selectedAccount.name,
-      timestamp: new Date().toISOString()
-    });
     
     // Item creation subscription
     const createSubscription = observeItemCreations().subscribe({
@@ -1659,47 +1501,25 @@ function ItemsDashboardInner() {
         }
       },
       error: (error) => {
-        console.error('❌ Item creation subscription error:', {
-          error,
-          message: error?.message,
-          stack: error?.stack
-        });
+        console.error('Item creation subscription error:', error);
         toast.error("Error in item subscription.");
       }
     });
     
-    console.log('✅ Item creation subscription set up');
-    
     // Item update subscription
     const updateSubscription = observeItemUpdates().subscribe({
       next: async ({ data: updatedItem, needsRefetch }) => {
-        console.log('📥 ITEM UPDATE EVENT RECEIVED', {
-          timestamp: new Date().toISOString(),
-          updatedItem,
-          needsRefetch,
-          hasData: !!updatedItem,
-          accountMatch: updatedItem?.accountId === selectedAccount.id
-        });
-        
         // Handle empty notifications that require a refetch
         if (needsRefetch && !updatedItem) {
-          console.log('🔄 Empty update notification - triggering refetch');
           throttledRefetch();
           return;
         }
         
         if (!updatedItem) {
-          console.warn('📥 Empty item update event received without refetch flag');
           return;
         }
         
         if (updatedItem.accountId === selectedAccount.id) {
-          console.log('✅ Processing updated item for current account', {
-            itemId: updatedItem.id,
-            externalId: updatedItem.externalId
-            // Removed currentItemCount and itemExists to avoid stale closure
-          });
-          
           // Update the item in the list if it exists
           setItems(prevItems => {
             const updatedItems = prevItems.map(item => 
@@ -1714,89 +1534,50 @@ function ItemsDashboardInner() {
                 : item
             );
             
-            const wasUpdated = updatedItems !== prevItems;
-            console.log('📝 Updated items state', {
-              wasUpdated,
-              itemFound: wasUpdated
-            });
-            
             return updatedItems;
           });
           
           // Trigger a re-count of score results for this item
           if (scoreCountManagerRef.current) {
-            console.log('📊 Clearing and reloading count for updated item:', updatedItem.id);
             scoreCountManagerRef.current.clearCount(updatedItem.id);
             scoreCountManagerRef.current.loadCountForItem(updatedItem.id);
           }
-        } else {
-          console.log('🚫 Updated item is for different account', {
-            itemAccountId: updatedItem.accountId,
-            currentAccountId: selectedAccount.id
-          });
         }
       },
       error: (error) => {
-        console.error('❌ Item update subscription error:', {
-          error,
-          message: error?.message,
-          stack: error?.stack
-        });
+        console.error('Item update subscription error:', error);
         toast.error("Error in item update subscription.");
       }
     });
     
-    console.log('✅ Item update subscription set up');
-    
     // Score result subscription
     const scoreResultSubscription = observeScoreResultChanges().subscribe({
       next: async ({ data: changeEvent }) => {
-        console.log('📊 Score result subscription received:', {
-          timestamp: new Date().toISOString(),
-          changeEvent,
-          hasData: !!changeEvent
-        });
-        
         if (!changeEvent) {
-          console.log('📊 Empty score result notification');
           return;
         }
         
         try {
-          console.log('📊 Score result change detected, action:', changeEvent.action);
-          
           // Since we can't reliably parse the subscription data, refresh all cached counts
           // This is more aggressive but ensures consistency
           if (scoreCountManagerRef.current) {
-            console.log('📊 Refreshing all cached score counts due to score result change');
             scoreCountManagerRef.current.refreshAllCounts();
-          } else {
-            console.log('📊 ScoreCountManager not available');
           }
         } catch (error) {
-          console.error('📊 Error handling score result change:', error);
+          console.error('Error handling score result change:', error);
         }
       },
       error: (error) => {
-        console.error('❌ Score result subscription error:', {
-          error,
-          message: error?.message,
-          stack: error?.stack
-        });
+        console.error('Score result subscription error:', error);
         toast.error("Error in score result subscription.");
       }
     });
-    
-    console.log('✅ Score result subscription set up');
     
     itemSubscriptionRef.current = createSubscription;
     itemUpdateSubscriptionRef.current = updateSubscription;
     scoreResultSubscriptionRef.current = scoreResultSubscription;
     
-    console.log('✅ ALL SUBSCRIPTIONS SET UP SUCCESSFULLY');
-    
     return () => {
-      console.log('🧹 CLEANING UP SUBSCRIPTIONS');
       if (itemSubscriptionRef.current) {
         itemSubscriptionRef.current.unsubscribe();
         itemSubscriptionRef.current = null;
@@ -1933,12 +1714,10 @@ function ItemsDashboardInner() {
   const handleSampleChange = (method: string, count: number) => {
     setSampleMethod(method)
     setSampleCount(count)
-    console.log(`Sampling method: ${method}, Count: ${count}`)
     // Implement the logic for applying the sampling here
   }
 
   const handleTimeRangeChange = (range: string, customRange?: { from: Date | undefined; to: Date | undefined }) => {
-    console.log("Time range changed:", range, customRange)
     // Implement the logic for handling all default time ranges and custom date ranges
     if (range === "recent") {
       // Fetch or filter items for the recent time period
@@ -2005,23 +1784,12 @@ function ItemsDashboardInner() {
   }, []);
 
   const renderSelectedItem = () => {
-    console.log('🎨 renderSelectedItem called:', { 
-      selectedItem, 
-      itemsCount: items.length,
-      isLoading,
-      specificItemLoading,
-      hasSelectedAccount: !!selectedAccount,
-      isLoadingAccounts
-    });
-    
     if (!selectedItem) {
-      console.log('❌ No selected item, returning null');
       return null
     }
 
     // If accounts are still loading, show loading state
     if (isLoadingAccounts) {
-      console.log('⏳ Accounts still loading, showing loading state');
       return (
         <div className="h-full flex flex-col">
           <div className="flex-1 flex items-center justify-center">
@@ -2035,7 +1803,6 @@ function ItemsDashboardInner() {
     }
 
     const selectedItemData = items.find(item => item.id === selectedItem)
-    console.log('🔍 selectedItemData found:', !!selectedItemData);
     
     const scoreCount = scoreResultCounts.get(selectedItem)
     const selectedItemWithCount = selectedItemData ? {
@@ -2045,16 +1812,11 @@ function ItemsDashboardInner() {
       scorecardBreakdown: scoreCount?.scorecardBreakdown || undefined
     } : null
     
-    console.log('📊 selectedItemWithCount created:', !!selectedItemWithCount);
-    
     // If item is not found, check if we should attempt to fetch it or if we're already loading
     if (!selectedItemWithCount) {
-      console.log('❗ selectedItemWithCount is null, checking loading states');
-      
       // ALWAYS check loading states first - this takes precedence over failed fetches
       // because fetchSpecificItem may be retrying a previously failed item
       if (isLoading || specificItemLoading) {
-        console.log('⏳ Showing loading (isLoading:', isLoading, 'specificItemLoading:', specificItemLoading, ')');
         return (
           <div className="h-full flex flex-col">
             <div className="flex-1 flex items-center justify-center">
@@ -2069,7 +1831,6 @@ function ItemsDashboardInner() {
       
       // Only check failed fetches if we're not currently loading
       if (failedItemFetches.has(selectedItem)) {
-        console.log('❌ Item fetch already failed, showing error');
         return (
           <div className="h-full flex flex-col">
             <div className="flex-1 flex items-center justify-center">
@@ -2087,7 +1848,6 @@ function ItemsDashboardInner() {
       // If we have a selected account and the item truly doesn't exist,
       // show an appropriate error message
       if (selectedAccount) {
-        console.log('🚫 Item not found with selected account, showing error');
         return (
           <div className="h-full flex flex-col">
             <div className="flex-1 flex items-center justify-center">
@@ -2102,13 +1862,10 @@ function ItemsDashboardInner() {
         )
       }
       
-      console.log('🚫 No selected account, returning null');
       // Only show not found if we have no account (shouldn't happen) 
       // or we've definitively determined the item doesn't exist
       return null
     }
-
-    console.log('✅ Rendering ItemCard for selected item');
 
     
     return (
@@ -2169,7 +1926,6 @@ function ItemsDashboardInner() {
       if (foundScore) {
         initializeNewAnnotation(foundScore);
       } else {
-        console.warn(`No score found with name: ${scoreName}`);
         setNewAnnotation({ value: "", explanation: "", annotation: "", allowFeedback: false });
       }
     }
@@ -2371,9 +2127,6 @@ function ItemsDashboardInner() {
       
       // Scroll to the selected item with retry logic
       scrollToSelectedItem(itemId);
-    } else {
-      // Item not in first page - will be handled by deep-linking useEffect
-      console.log('🔄 Item not in first page, deep-linking useEffect will handle');
     }
     
     // Handle narrow viewport
