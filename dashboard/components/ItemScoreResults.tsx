@@ -98,8 +98,7 @@ const ScoreResultCard: React.FC<{ result: ScoreResultWithDetails }> = ({ result 
       </div>
       {result.explanation && (
         <div className="mt-3 text-sm text-muted-foreground">
-          <strong>Explanation:</strong>
-          <p className="mt-1">{displayExplanation}</p>
+          <p>{displayExplanation}</p>
           {needsExpansion && (
             <div className="flex justify-center">
               <Button

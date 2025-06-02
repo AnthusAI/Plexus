@@ -4,7 +4,7 @@ import React from 'react'
 import { ItemComponent, type ItemData } from '../../components/ui/item-component'
 
 const meta: Meta<typeof ItemComponent> = {
-  title: 'Scorecards/ItemComponent',
+  title: 'Content/ItemComponent',
   component: ItemComponent,
   parameters: {
     layout: 'fullscreen',
