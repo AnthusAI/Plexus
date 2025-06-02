@@ -1218,7 +1218,7 @@ function ItemsDashboardInner() {
                     identifiers
                     itemIdentifiers {
                       items {
-                        id
+                        itemId
                         name
                         value
                         url
@@ -1272,7 +1272,7 @@ function ItemsDashboardInner() {
                   identifiers
                   itemIdentifiers {
                     items {
-                      id
+                      itemId
                       name
                       value
                       url
@@ -1378,7 +1378,7 @@ function ItemsDashboardInner() {
                   identifiers
                   itemIdentifiers {
                     items {
-                      id
+                      itemId
                       name
                       value
                       url
