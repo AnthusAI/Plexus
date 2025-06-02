@@ -179,7 +179,7 @@ const ItemCardDetailWrapper = (args: any) => {
 };
 
 const meta = {
-  title: 'Scorecards/ItemCard',
+  title: 'Content/ItemCard',
   component: ItemCard,
   parameters: {
     layout: 'fullscreen',

@@ -18,6 +18,7 @@ import {
 import { TimeRangeSelector } from "@/components/time-range-selector"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import ReactMarkdown from 'react-markdown'
+import remarkBreaks from 'remark-breaks'
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -350,6 +351,7 @@ interface Score {
 const renderRichText = (text: string) => {
   return (
     <ReactMarkdown
+      remarkPlugins={[remarkBreaks]}
       components={{
         p: ({node, ...props}) => <p className="mb-2" {...props} />,
         strong: ({node, ...props}) => <strong className="font-semibold" {...props} />,
@@ -776,10 +778,7 @@ function ItemsDashboardInner() {
   // Track the previous item ID to only scroll when it actually changes
   const prevItemIdRef = useRef<string | null>(null);
   
-  // Enhanced deep-linking logic: Check if item is in first page vs needs separate fetch
-  const isItemInFirstPage = useCallback((itemId: string): boolean => {
-    return items.some(item => item.id === itemId);
-  }, [items]);
+
   
   // Sync URL parameter with selected item and implement deep-linking behavior
   useEffect(() => {
@@ -810,8 +809,8 @@ function ItemsDashboardInner() {
         return;
       }
       
-      // Check if the deep-linked item is in the first page of results
-      const itemInFirstPage = isItemInFirstPage(itemId);
+      // Check if the deep-linked item is in the first page of results (inline check to avoid dependency)
+      const itemInFirstPage = items.some(item => item.id === itemId);
       console.log('🔍 Deep-link analysis:', { 
         itemId, 
         itemInFirstPage, 
@@ -853,12 +852,12 @@ function ItemsDashboardInner() {
       setIsFullWidth(false) // Always show grid when no item is selected
       prevItemIdRef.current = null;
     }
-  }, [params.id, selectedAccount, isLoadingAccounts, isNarrowViewport, items.length, isItemInFirstPage]) // Include items.length so effect re-runs when items are loaded
+  }, [params.id, selectedAccount, isLoadingAccounts, isNarrowViewport]) // Removed items.length and isItemInFirstPage to prevent re-running on real-time updates
 
   // Additional useEffect to ensure scrolling works when items are loaded and there's a selected item in the grid
   useEffect(() => {
     if (selectedItem && items.length > 0 && !isLoading && !isLoadingAccounts) {
-      const itemInFirstPage = isItemInFirstPage(selectedItem);
+      const itemInFirstPage = items.some(item => item.id === selectedItem);
       
       console.log('🔄 Items loaded, checking for scroll opportunity:', {
         selectedItem,
@@ -877,7 +876,7 @@ function ItemsDashboardInner() {
         }, 50);
       }
     }
-  }, [selectedItem, items.length, isLoading, isLoadingAccounts, isItemInFirstPage, isFullWidth, isNarrowViewport, scrollToSelectedItem]);
+  }, [selectedItem, items.length, isLoading, isLoadingAccounts, isFullWidth, isNarrowViewport, scrollToSelectedItem]);
 
   
   // Add a ref for the intersection observer
@@ -2264,15 +2263,7 @@ function ItemsDashboardInner() {
                     textRef.current[score.name] = el;
                   }
                 }}
-                className="text-sm text-muted-foreground overflow-hidden cursor-pointer"
-                style={{ 
-                  display: '-webkit-box',
-                  WebkitLineClamp: '2',
-                  WebkitBoxOrient: 'vertical',
-                  overflow: 'hidden',
-                  ...(expandedExplanations.includes(score.name) ? 
-                      { WebkitLineClamp: 'unset', display: 'block' } : {})
-                }}
+                className={`text-sm text-muted-foreground overflow-hidden cursor-pointer ${expandedExplanations.includes(score.name) ? '' : ''}`}
                 onClick={() => toggleExplanation(score.name)}
               >
                 {renderRichText(score.explanation)}
@@ -2282,12 +2273,13 @@ function ItemsDashboardInner() {
                   variant="link" 
                   size="sm" 
                   onClick={() => toggleExplanation(score.name)}
-                  className="absolute bottom-0 right-0 px-0 py-1 h-auto bg-white dark:bg-gray-800"
+                  className="px-0 py-1 h-auto text-xs mt-1"
                 >
-                  {expandedExplanations.includes(score.name) 
-                    ? <ChevronUp className="h-3 w-3 inline ml-1" />
-                    : <ChevronDown className="h-3 w-3 inline ml-1" />
-                  }
+                  {expandedExplanations.includes(score.name) ? (
+                    <>Show less <ChevronUp className="h-3 w-3 inline ml-1" /></>
+                  ) : (
+                    <>Show more <ChevronDown className="h-3 w-3 inline ml-1" /></>
+                  )}
                 </Button>
               )}
             </div>
@@ -2336,6 +2328,26 @@ function ItemsDashboardInner() {
                 <Badge className={getValueBadgeClass(score.value)}>{score.value}</Badge>
               </div>
             </div>
+            <div 
+              className={`text-sm text-muted-foreground overflow-hidden cursor-pointer ${expandedExplanations.includes(score.name) ? '' : ''}`}
+              onClick={() => toggleExplanation(score.name)}
+            >
+              {renderRichText(score.explanation)}
+            </div>
+            {showExpandButton[score.name] && (
+              <Button 
+                variant="link" 
+                size="sm" 
+                onClick={() => toggleExplanation(score.name)}
+                className="px-0 py-1 h-auto text-xs mt-1"
+              >
+                {expandedExplanations.includes(score.name) ? (
+                  <>Show less <ChevronUp className="h-3 w-3 inline ml-1" /></>
+                ) : (
+                  <>Show more <ChevronDown className="h-3 w-3 inline ml-1" /></>
+                )}
+              </Button>
+            )}
           </>
         )}
       </div>
@@ -2351,7 +2363,7 @@ function ItemsDashboardInner() {
     debugSetSelectedItem(itemId)
     
     // For items in the grid (first page), ensure we can scroll to them
-    if (isItemInFirstPage(itemId)) {
+    if (items.some(item => item.id === itemId)) {
       // Item is in first page - ensure grid view and scroll to item
       if (!isNarrowViewport) {
         setIsFullWidth(false)

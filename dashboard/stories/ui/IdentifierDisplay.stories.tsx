@@ -3,7 +3,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { IdentifierDisplay, type IdentifierItem } from '../../components/ui/identifier-display';
 
 const meta: Meta<typeof IdentifierDisplay> = {
-  title: 'UI/IdentifierDisplay',
+  title: 'Content/IdentifierDisplay',
   component: IdentifierDisplay,
   parameters: {
     layout: 'centered',

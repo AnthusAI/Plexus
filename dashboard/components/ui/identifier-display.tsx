@@ -93,7 +93,7 @@ export const IdentifierDisplay: React.FC<IdentifierDisplayProps> = ({
 
   const baseTextSize = textSize === 'xs' ? 'text-xs' : textSize === 'sm' ? 'text-sm' : 'text-base';
   const textClasses = cn(baseTextSize, 'flex-shrink-0');
-  const labelTextClasses = cn('!text-xs', 'font-medium flex-shrink-0 text-muted-foreground w-12');
+  const labelTextClasses = cn('!text-xs', 'font-medium text-muted-foreground');
 
   // Skeleton mode rendering
   if (skeletonMode) {
@@ -183,58 +183,62 @@ export const IdentifierDisplay: React.FC<IdentifierDisplayProps> = ({
 
   const finalTextClasses = cn(textClasses, className);
 
-  // Calculate the left margin to align with the text (icon width + gap)
-  const expandedLeftMargin = cn(
-    iconSize === 'sm' && 'ml-4', // 12px icon + 4px gap = 16px = ml-4
-    iconSize === 'md' && 'ml-5', // 16px icon + 4px gap = 20px = ml-5
-    iconSize === 'lg' && 'ml-6'  // 20px icon + 4px gap = 24px = ml-6
-  );
-
-  return (
-    <div>
-      {/* First identifier with icon and optional expander */}
-      <div className={cn("flex items-start gap-1 text-muted-foreground", finalTextClasses)}>
-        <IdCard className={iconClasses} />
-        {/* Only show label in full mode */}
-        {displayMode === 'full' && (
-          <span className={labelTextClasses}>
-            {firstIdentifier!.name}:
-          </span>
-        )}
-        <div className="flex-1 min-w-0">
-          {renderIdentifierValue(firstIdentifier!)}
+  // For detail mode, use CSS Grid layout with dynamic column sizing
+  if (displayMode === 'full') {
+    return (
+      <div className={cn("grid grid-cols-[auto_auto_1fr] gap-x-1 gap-y-0 items-start text-muted-foreground", finalTextClasses)}>
+        {/* First row: Icon + First identifier label + First identifier value + Expand button */}
+        <div className="flex items-center">
+          <IdCard className={iconClasses} />
         </div>
-        {/* Only show expand/collapse button in full mode and when there are multiple identifiers */}
-        {displayMode === 'full' && hasMultipleIdentifiers && (
-          <button
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="ml-1 p-0.5 hover:bg-muted rounded flex-shrink-0"
-            aria-label={isExpanded ? "Collapse identifiers" : "Expand identifiers"}
-          >
-            {isExpanded ? (
-              <ChevronDown className="h-3 w-3" />
-            ) : (
-              <ChevronRight className="h-3 w-3" />
-            )}
-          </button>
+        <div className={labelTextClasses}>
+          {firstIdentifier!.name}:
+        </div>
+        <div className="flex items-center gap-1">
+          {renderIdentifierValue(firstIdentifier!)}
+          {hasMultipleIdentifiers && (
+            <button
+              onClick={() => setIsExpanded(!isExpanded)}
+              className="p-0.5 hover:bg-muted rounded flex-shrink-0"
+              aria-label={isExpanded ? "Collapse identifiers" : "Expand identifiers"}
+            >
+              {isExpanded ? (
+                <ChevronDown className="h-3 w-3" />
+              ) : (
+                <ChevronRight className="h-3 w-3" />
+              )}
+            </button>
+          )}
+        </div>
+
+        {/* Additional rows when expanded */}
+        {isExpanded && hasMultipleIdentifiers && (
+          <>
+            {parsedIdentifiers.slice(1).map((identifier, index) => (
+              <React.Fragment key={`${identifier.name}-${index + 1}`}>
+                {/* Empty first column to maintain grid alignment */}
+                <div></div>
+                <div className={labelTextClasses}>
+                  {identifier.name}:
+                </div>
+                <div>
+                  {renderIdentifierValue(identifier)}
+                </div>
+              </React.Fragment>
+            ))}
+          </>
         )}
       </div>
+    );
+  }
 
-      {/* Additional identifiers when expanded - only in full mode */}
-      {displayMode === 'full' && isExpanded && hasMultipleIdentifiers && (
-        <div className={expandedLeftMargin}>
-          {parsedIdentifiers.slice(1).map((identifier, index) => (
-            <div key={`${identifier.name}-${index + 1}`} className="flex items-start gap-1">
-              <span className={labelTextClasses}>
-                {identifier.name}:
-              </span>
-              <div className="flex-1 min-w-0">
-                {renderIdentifierValue(identifier)}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+  // Compact mode - keep existing flex layout
+  return (
+    <div className={cn("flex items-start gap-1 text-muted-foreground", finalTextClasses)}>
+      <IdCard className={iconClasses} />
+      <div className="flex-1 min-w-0">
+        {renderIdentifierValue(firstIdentifier!)}
+      </div>
     </div>
   );
 };
