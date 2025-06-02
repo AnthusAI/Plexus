@@ -200,20 +200,9 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
       
       {/* Results count - fixed height to prevent layout jiggling */}
       <div className="flex flex-col gap-0.5 text-xs">
-        {item.isLoadingResults ? (
-          <div className="flex items-center gap-1 text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            <span>Loading results...</span>
-          </div>
-        ) : item.scorecards.length > 0 ? (
-          <div>
-            <NumberFlowWrapper value={totalResults} skeletonMode={skeletonMode} /> result{totalResults !== 1 ? 's' : ''}
-          </div>
-        ) : (
-          <div>
-            <NumberFlowWrapper value={0} skeletonMode={skeletonMode} /> results
-          </div>
-        )}
+        <div>
+          <NumberFlowWrapper value={totalResults} skeletonMode={skeletonMode} /> result{totalResults !== 1 ? 's' : ''}
+        </div>
       </div>
     </div>
   )
