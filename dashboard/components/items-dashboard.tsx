@@ -481,10 +481,7 @@ function ItemsDashboardInner() {
   const params = useParams()
   const [selectedItem, setSelectedItem] = useState<string | null>(null)
   
-  // Wrapper for setSelectedItem
-  const debugSetSelectedItem = React.useCallback((itemId: string | null) => {
-    setSelectedItem(itemId);
-  }, []); // Empty deps to avoid circular updates
+
   const [isFullWidth, setIsFullWidth] = useState(false)
   const [selectedScorecard, setSelectedScorecard] = useState<string | null>(null)
   const [isNarrowViewport, setIsNarrowViewport] = useState(false)
@@ -535,9 +532,12 @@ function ItemsDashboardInner() {
   const [specificItemLoading, setSpecificItemLoading] = useState(false);
   const [failedItemFetches, setFailedItemFetches] = useState<Set<string>>(new Set());
   const refetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [specificallyFetchedItems, setSpecificallyFetchedItems] = useState<Set<string>>(new Set());
   
   // Ref map to track item elements for scroll-to-view functionality
   const itemRefsMap = useRef<Map<string, HTMLDivElement | null>>(new Map());
+
+
 
   // Search state
   const [searchValue, setSearchValue] = useState<string>('');
@@ -716,6 +716,9 @@ function ItemsDashboardInner() {
           return prevItems;
         });
         
+        // Track that this item was specifically fetched (not naturally in first page)
+        setSpecificallyFetchedItems(prev => new Set(prev).add(item.id));
+        
         return transformedItem;
       }
       
@@ -733,10 +736,11 @@ function ItemsDashboardInner() {
     }
   }, [selectedAccount]); // Removed state dependencies to avoid circular updates
   
-  // Clear failed fetches when account changes
+  // Clear failed fetches and specifically fetched items when account changes
   useEffect(() => {
     if (selectedAccount) {
       setFailedItemFetches(new Set());
+      setSpecificallyFetchedItems(new Set());
     }
   }, [selectedAccount?.id]);
   
@@ -745,68 +749,67 @@ function ItemsDashboardInner() {
   
 
   
-  // Sync URL parameter with selected item and implement deep-linking behavior
+  // Sync URL parameter with selected item (simplified - view logic handled in second useEffect)
   useEffect(() => {
     const itemId = params.id as string
     
     if (itemId) {
       // Always set the selected item if it's different
       if (itemId !== selectedItem) {
-        debugSetSelectedItem(itemId)
-      }
-      
-      // Don't proceed with view logic if accounts are still loading
-      if (isLoadingAccounts) {
-        return;
-      }
-      
-      // Check if the deep-linked item is in the first page of results (inline check to avoid dependency)
-      const itemInFirstPage = items.some(item => item.id === itemId);
-      
-      if (itemInFirstPage) {
-        // Item is in the first page: show the grid and scroll to the item
-        if (!isNarrowViewport) {
-          setIsFullWidth(false); // Ensure grid is visible
-        }
-        
-        // Scroll to the item if this is a new selection
-        if (prevItemIdRef.current !== itemId) {
-          // Use the enhanced scroll function with retry logic
-          scrollToSelectedItem(itemId);
-          prevItemIdRef.current = itemId;
-        }
-      } else if (selectedAccount) {
-        // Item is not in the first page: fetch it and show in full-width mode (hide grid)
-        if (!isNarrowViewport) {
-          setIsFullWidth(true); // Hide grid, show full-width
-        }
-        
-        // Fetch the specific item since it's not in the current page
-        fetchSpecificItem(itemId);
-        prevItemIdRef.current = itemId;
+        setSelectedItem(itemId)
       }
     } else if (!itemId && selectedItem && !isLoadingAccounts) {
       // Clear selection and reset to grid view when no item is selected
-      debugSetSelectedItem(null)
+      setSelectedItem(null)
       setIsFullWidth(false) // Always show grid when no item is selected
       prevItemIdRef.current = null;
     }
-  }, [params.id, selectedAccount, isLoadingAccounts, isNarrowViewport]) // Removed items.length and isItemInFirstPage to prevent re-running on real-time updates
+  }, [params.id, selectedItem, isLoadingAccounts]) // Simplified dependencies
 
-  // Additional useEffect to ensure scrolling works when items are loaded and there's a selected item in the grid
+  // Handle deep-linking view logic after items are loaded (primarily for URL navigation)
   useEffect(() => {
-    if (selectedItem && items.length > 0 && !isLoading && !isLoadingAccounts) {
-      const itemInFirstPage = items.some(item => item.id === selectedItem);
+    if (selectedItem && !isLoadingAccounts && selectedAccount) {
+      // Wait for initial items to be loaded before making decisions
+      if (items.length === 0 && isLoading) {
+        return;
+      }
       
-      // Only scroll if the item is in the first page and we're showing the grid
-      if (itemInFirstPage && !isFullWidth && !isNarrowViewport) {
-        // Use a small delay to ensure the grid is fully rendered
-        setTimeout(() => {
-          scrollToSelectedItem(selectedItem);
-        }, 50);
+      const itemInFirstPage = items.some(item => item.id === selectedItem);
+      const wasSpecificallyFetched = specificallyFetchedItems.has(selectedItem);
+      
+      if (itemInFirstPage) {
+        // Item is in the loaded items
+        if (!wasSpecificallyFetched) {
+          // Item is naturally in first page
+          // Only set view mode if it hasn't been set by handleItemClick
+          // (Check if prevItemIdRef is already set, which indicates handleItemClick handled it)
+          if (prevItemIdRef.current !== selectedItem) {
+            if (!isNarrowViewport) {
+              setIsFullWidth(false);
+            }
+            
+            // Scroll to the item
+            prevItemIdRef.current = selectedItem;
+            setTimeout(() => {
+              scrollToSelectedItem(selectedItem);
+            }, 50);
+          }
+        }
+        // If it was specifically fetched, keep the current view mode (likely full-width)
+      } else if (items.length > 0 && !isLoading) {
+        // Item is not in first page and first page has been loaded - fetch it specifically
+        if (!isNarrowViewport) {
+          setIsFullWidth(true); // Show full-width for specifically fetched items
+        }
+        
+        // Only fetch if we haven't already tried
+        if (!wasSpecificallyFetched && !failedItemFetches.has(selectedItem)) {
+          fetchSpecificItem(selectedItem);
+          prevItemIdRef.current = selectedItem;
+        }
       }
     }
-  }, [selectedItem, items.length, isLoading, isLoadingAccounts, isFullWidth, isNarrowViewport, scrollToSelectedItem]);
+  }, [selectedItem, items.length, isLoading, isLoadingAccounts, selectedAccount, isNarrowViewport, scrollToSelectedItem, specificallyFetchedItems, failedItemFetches, fetchSpecificItem]);
 
   
   // Add a ref for the intersection observer
@@ -1460,6 +1463,8 @@ function ItemsDashboardInner() {
         return specificItem ? [specificItem] : [];
       });
       setNextToken(null);
+      // Clear specifically fetched items since filter change redefines what "first page" means
+      setSpecificallyFetchedItems(new Set());
       fetchItems();
     } else if (!isLoadingAccounts && !selectedAccount) {
       setItems([]); // Ensure items are cleared
@@ -1931,10 +1936,9 @@ function ItemsDashboardInner() {
             isFullWidth={isFullWidth}
             onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
             onClose={() => {
-              debugSetSelectedItem(null);
               setIsFullWidth(false);
-              // Update URL using browser History API to avoid Next.js navigation
-              window.history.replaceState(null, '', `/lab/items`)
+              // Use Next.js router to navigate back to grid view
+              router.replace(`/lab/items`)
             }}
             readOnly={true}
           />
@@ -2164,27 +2168,27 @@ function ItemsDashboardInner() {
   }
 
   const handleItemClick = (itemId: string) => {
-    // Update URL using browser History API to avoid Next.js navigation
-    const newUrl = `/lab/items/${itemId}`
-    window.history.replaceState(null, '', newUrl)
+    // Use Next.js router to update the URL - this will trigger the useEffect that syncs params.id with selectedItem
+    router.replace(`/lab/items/${itemId}`)
     
-    // Update state - the deep-linking useEffect will handle the rest
-    debugSetSelectedItem(itemId)
-    
-    // For items in the grid (first page), ensure we can scroll to them
+    // Handle view mode for grid items (items in the first page)
     if (items.some(item => item.id === itemId)) {
-      // Item is in first page - ensure grid view and scroll to item
-      if (!isNarrowViewport) {
+      // Item is in first page - set up split view or full-width based on viewport
+      if (isNarrowViewport) {
+        setIsFullWidth(true)
+      } else {
         setIsFullWidth(false)
+        // Scroll to the selected item with retry logic - use a timeout to allow state to update first
+        setTimeout(() => {
+          scrollToSelectedItem(itemId);
+          prevItemIdRef.current = itemId;
+        }, 0);
       }
-      
-      // Scroll to the selected item with retry logic
-      scrollToSelectedItem(itemId);
-    }
-    
-    // Handle narrow viewport
-    if (isNarrowViewport) {
-      setIsFullWidth(true)
+    } else {
+      // Item is not in first page - let the useEffect handle fetching and view setup
+      if (isNarrowViewport) {
+        setIsFullWidth(true)
+      }
     }
   }
 
@@ -2350,6 +2354,7 @@ function ItemsDashboardInner() {
           2. Split view: When item IS in first page (isFullWidth=false) 
           3. Grid-only: When no item is selected
         */}
+
         {selectedItem && (isNarrowViewport || isFullWidth) ? (
           <div className="flex-grow overflow-hidden">
             {renderSelectedItem()}
