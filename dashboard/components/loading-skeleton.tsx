@@ -279,7 +279,7 @@ export function ItemCardSkeleton() {
           </div>
           
           {/* Bottom metrics area */}
-          <div className="pt-1 border-t border-border/50">
+          <div className="pt-1">
             <div className="flex justify-between items-center">
               <div className="flex space-x-2">
                 <div className="h-3 bg-muted rounded w-8" />

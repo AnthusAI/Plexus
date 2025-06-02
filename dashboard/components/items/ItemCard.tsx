@@ -241,9 +241,9 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
           <div className="w-full relative">
             {/* Top-right icon */}
             <div className="absolute top-0 right-0 z-10">
-              <div className="flex flex-col items-center space-y-1">
+              <div className="flex flex-col items-center text-muted-foreground space-y-1">
                 {item.icon || <StickyNote className="h-[1.75rem] w-[1.75rem]" strokeWidth={1.25} />}
-                <div className="text-xs text-muted-foreground text-center" title="Item">
+                <div className="text-xs text-center" title="Item">
                   <span className="font-semibold">Item</span>
                 </div>
               </div>
