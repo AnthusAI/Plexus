@@ -195,9 +195,12 @@ export const IdentifierDisplay: React.FC<IdentifierDisplayProps> = ({
       {/* First identifier with icon and optional expander */}
       <div className={cn("flex items-start gap-1 text-muted-foreground", finalTextClasses)}>
         <IdCard className={iconClasses} />
-        <span className={labelTextClasses}>
-          {firstIdentifier!.name}:
-        </span>
+        {/* Only show label in full mode */}
+        {displayMode === 'full' && (
+          <span className={labelTextClasses}>
+            {firstIdentifier!.name}:
+          </span>
+        )}
         <div className="flex-1 min-w-0">
           {renderIdentifierValue(firstIdentifier!)}
         </div>
