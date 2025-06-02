@@ -23,6 +23,7 @@ export interface ScoreResultWithDetails {
     name: string;
     externalId?: string;
   };
+  isNew?: boolean; // Flag for animation purposes
 }
 
 // Group score results by scorecard for better organization
@@ -41,12 +42,14 @@ export function useItemScoreResults(itemId: string | null) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchScoreResults = useCallback(async (id: string) => {
+  const fetchScoreResults = useCallback(async (id: string, silent: boolean = false) => {
     if (!id) {
       return;
     }
     
-    setIsLoading(true);
+    if (!silent) {
+      setIsLoading(true);
+    }
     setError(null);
     
     try {
@@ -102,30 +105,91 @@ export function useItemScoreResults(itemId: string | null) {
           return dateB - dateA; // DESC order (newest first)
         });
 
-        // Group results by scorecard using embedded data
-        const grouped: GroupedScoreResults = {};
-        
-        for (const result of sortedResults) {
-          const scorecardId = result.scorecardId;
+        // If this is a silent refetch, identify new results for animation
+        if (silent) {
+          // Use functional update to access current state without dependency
+          setScoreResults(prevResults => {
+            const existingIds = new Set(prevResults.map(result => result.id));
+            const finalResults = sortedResults.map(result => ({
+              ...result,
+              isNew: !existingIds.has(result.id)
+            }));
+            
+            // After a delay, remove the "isNew" flag to stop the animation
+            setTimeout(() => {
+              setScoreResults(currentResults => 
+                currentResults.map(result => ({ ...result, isNew: false }))
+              );
+              setGroupedResults(currentGrouped => {
+                const newGrouped = { ...currentGrouped };
+                Object.keys(newGrouped).forEach(scorecardId => {
+                  newGrouped[scorecardId] = {
+                    ...newGrouped[scorecardId],
+                    scores: newGrouped[scorecardId].scores.map(score => ({ ...score, isNew: false }))
+                  };
+                });
+                return newGrouped;
+              });
+            }, 3000); // Remove animation after 3 seconds
+            
+            return finalResults;
+          });
           
-          // Add to grouped results
-          if (!grouped[scorecardId]) {
-            grouped[scorecardId] = {
-              scorecardId,
-              scorecardName: result.scorecard?.name || 'Unknown Scorecard',
-              scorecardExternalId: result.scorecard?.externalId,
-              scores: []
-            };
+          // Group results by scorecard using embedded data (with isNew flags)
+          setGroupedResults(prevGrouped => {
+            const grouped: GroupedScoreResults = {};
+            const existingIds = new Set(Object.values(prevGrouped).flatMap(g => g.scores.map(s => s.id)));
+            
+            for (const result of sortedResults) {
+              const scorecardId = result.scorecardId;
+              const resultWithNew = {
+                ...result,
+                isNew: !existingIds.has(result.id)
+              };
+              
+              // Add to grouped results
+              if (!grouped[scorecardId]) {
+                grouped[scorecardId] = {
+                  scorecardId,
+                  scorecardName: result.scorecard?.name || 'Unknown Scorecard',
+                  scorecardExternalId: result.scorecard?.externalId,
+                  scores: []
+                };
+              }
+              
+              // The result already has scorecard and score data from the query
+              grouped[scorecardId].scores.push(resultWithNew);
+            }
+            
+            return grouped;
+          });
+        } else {
+          // Regular fetch - no animation needed
+          const finalResults = sortedResults;
+          
+          // Group results by scorecard using embedded data
+          const grouped: GroupedScoreResults = {};
+          
+          for (const result of finalResults) {
+            const scorecardId = result.scorecardId;
+            
+            // Add to grouped results
+            if (!grouped[scorecardId]) {
+              grouped[scorecardId] = {
+                scorecardId,
+                scorecardName: result.scorecard?.name || 'Unknown Scorecard',
+                scorecardExternalId: result.scorecard?.externalId,
+                scores: []
+              };
+            }
+            
+            // The result already has scorecard and score data from the query
+            grouped[scorecardId].scores.push(result);
           }
           
-          // The result already has scorecard and score data from the query
-          grouped[scorecardId].scores.push(result);
+          setScoreResults(finalResults);
+          setGroupedResults(grouped);
         }
-
-        const finalResults = sortedResults;
-        
-        setScoreResults(finalResults);
-        setGroupedResults(grouped);
       } else {
         setScoreResults([]);
         setGroupedResults({});
@@ -136,9 +200,11 @@ export function useItemScoreResults(itemId: string | null) {
       setScoreResults([]);
       setGroupedResults({});
     } finally {
-      setIsLoading(false);
-    }
-  }, []);
+      if (!silent) {
+        setIsLoading(false);
+      }
+          }
+    }, []); // Don't include scoreResults to avoid infinite loop
 
   useEffect(() => {
     if (itemId) {
@@ -156,6 +222,7 @@ export function useItemScoreResults(itemId: string | null) {
     groupedResults,
     isLoading,
     error,
-    refetch: () => itemId ? fetchScoreResults(itemId) : undefined
+    refetch: () => itemId ? fetchScoreResults(itemId) : undefined,
+    silentRefetch: () => itemId ? fetchScoreResults(itemId, true) : undefined
   };
 }

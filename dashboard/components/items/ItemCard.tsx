@@ -84,6 +84,7 @@ interface ItemCardProps extends React.HTMLAttributes<HTMLDivElement> {
   skeletonMode?: boolean
   readOnly?: boolean // Add readOnly prop
   onSave?: (item: ItemData) => Promise<void> // Add onSave prop
+  onScoreResultsRefetchReady?: (refetchFn: (() => void) | null) => void // Add callback for score results refetch
 }
 
 const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({ 
@@ -100,13 +101,14 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
   skeletonMode = false,
   readOnly = false,
   onSave,
+  onScoreResultsRefetchReady,
   className, 
   ...props 
 }, ref) => {
   const [isNarrowViewport, setIsNarrowViewport] = React.useState(false)
   
   // Use the score results hook for detail view
-  const { groupedResults, isLoading, error } = useItemScoreResults(
+  const { groupedResults, isLoading, error, refetch, silentRefetch } = useItemScoreResults(
     variant === 'detail' ? String(item.id) : null
   )
 
@@ -127,6 +129,18 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
       return () => window.removeEventListener('resize', checkViewportWidth)
     }
   }, [variant])
+
+  // Pass the silent refetch function to the parent when it's available for detail view
+  React.useEffect(() => {
+    if (variant === 'detail' && onScoreResultsRefetchReady) {
+      onScoreResultsRefetchReady(silentRefetch);
+      
+      // Clean up by passing null when component unmounts or variant changes
+      return () => {
+        onScoreResultsRefetchReady(null);
+      };
+    }
+  }, [variant, silentRefetch, onScoreResultsRefetchReady])
 
   // Grid mode skeleton content
   const renderGridSkeleton = () => (

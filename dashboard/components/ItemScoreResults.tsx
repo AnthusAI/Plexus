@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, ExternalLink, ChevronDown, ChevronUp, ListTodo, IdCard } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { motion } from 'framer-motion';
 
 import { Timestamp } from '@/components/ui/timestamp';
 import Link from 'next/link';
@@ -59,8 +60,16 @@ const ScoreResultCard: React.FC<{ result: ScoreResultWithDetails }> = ({ result 
   const displayExplanation = needsExpansion && !isExpanded 
     ? result.explanation!.substring(0, 200) + '...' 
     : result.explanation;
+  
   return (
-    <div className="mb-3 bg-background rounded-lg p-4 relative overflow-visible">
+    <motion.div
+      initial={{ opacity: result.isNew ? 0 : 1 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.5, ease: "easeOut" }}
+      className={`mb-3 bg-background rounded-lg p-4 relative overflow-visible ${
+        result.isNew ? 'new-item-shadow' : ''
+      }`}
+    >
       <div className="flex items-start justify-between">
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-1">
@@ -117,7 +126,7 @@ const ScoreResultCard: React.FC<{ result: ScoreResultWithDetails }> = ({ result 
           )}
         </div>
       )}
-    </div>
+    </motion.div>
   );
 };
 
