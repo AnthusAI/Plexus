@@ -327,7 +327,7 @@ const schema = a.schema({
             item: a.belongsTo('Item', 'itemId'),
             account: a.belongsTo('Account', 'accountId'),
         })
-        .identifier(['itemId', 'name', 'value'])  // Composite primary key prevents duplicates
+        .identifier(['itemId', 'name'])  // Composite primary key prevents duplicates
         .authorization((allow) => [
             allow.publicApiKey(),
             allow.authenticated()
@@ -336,6 +336,7 @@ const schema = a.schema({
             idx("accountId").sortKeys(["value"]).name("byAccountAndValue"),  // PRIMARY: Direct-hit search by exact value
             idx("accountId").sortKeys(["name", "value"]).name("byAccountNameAndValue"), // Search within identifier type
             idx("itemId").sortKeys(["position"]).name("byItemAndPosition"),  // Get all identifiers for an item ordered by position
+            idx("itemId").sortKeys(["name"]).name("byItemAndName"), // Check for duplicates by item + name
             idx("value").name("byValue"), // Global value lookup (if cross-account search needed)
         ]),
 
