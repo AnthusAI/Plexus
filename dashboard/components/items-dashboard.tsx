@@ -536,6 +536,9 @@ function ItemsDashboardInner() {
   
   // Ref map to track item elements for scroll-to-view functionality
   const itemRefsMap = useRef<Map<string, HTMLDivElement | null>>(new Map());
+  
+  // Ref to hold the refetch function for the currently selected item's score results
+  const scoreResultsRefetchRef = useRef<(() => void) | null>(null);
 
 
 
@@ -741,8 +744,17 @@ function ItemsDashboardInner() {
     if (selectedAccount) {
       setFailedItemFetches(new Set());
       setSpecificallyFetchedItems(new Set());
+      // Clear score results refetch ref when account changes
+      scoreResultsRefetchRef.current = null;
     }
   }, [selectedAccount?.id]);
+  
+  // Clear score results refetch ref when selected item changes
+  useEffect(() => {
+    return () => {
+      scoreResultsRefetchRef.current = null;
+    };
+  }, [selectedItem]);
   
   // Track the previous item ID to only scroll when it actually changes
   const prevItemIdRef = useRef<string | null>(null);
@@ -1620,6 +1632,11 @@ function ItemsDashboardInner() {
           if (scoreCountManagerRef.current) {
             scoreCountManagerRef.current.refreshAllCounts();
           }
+          
+          // Also refresh the detail view score results if there's a selected item
+          if (scoreResultsRefetchRef.current) {
+            scoreResultsRefetchRef.current();
+          }
         } catch (error) {
           console.error('Error handling score result change:', error);
         }
@@ -1939,6 +1956,9 @@ function ItemsDashboardInner() {
               setIsFullWidth(false);
               // Use Next.js router to navigate back to grid view
               router.replace(`/lab/items`)
+            }}
+            onScoreResultsRefetchReady={(refetchFn) => {
+              scoreResultsRefetchRef.current = refetchFn;
             }}
             readOnly={true}
           />
