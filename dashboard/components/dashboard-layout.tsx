@@ -547,17 +547,17 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
   }, [])
 
   return (
-    <div className="flex flex-col h-screen bg-frame">
+    <div className="flex flex-col min-h-screen bg-frame">
       <MobileHeader 
         toggleLeftSidebar={toggleLeftSidebar}
         toggleRightSidebar={toggleRightSidebar}
         rightSidebarState={rightSidebarState}
       />
       
-      <div className="flex flex-1 overflow-hidden bg-frame">
+      <div className="flex flex-1 bg-frame">
         <aside
           className={`
-            ${isMobile ? 'fixed top-[40px] bottom-0 left-0 z-50 bg-background/80 backdrop-blur-sm' : 
+            ${isMobile ? 'fixed top-0 bottom-0 left-0 z-50 bg-background/80 backdrop-blur-sm' : 
               'fixed top-0 bottom-0 left-0 h-full'}
             ${isLeftSidebarOpen ? 'w-40' : 'w-14'}
             transition-all duration-300 ease-in-out overflow-hidden
@@ -582,9 +582,9 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
             ${isMobile ? '' : 'py-2'}
           `}
         >
-          <div className="flex-1 flex flex-col bg-background rounded-lg overflow-hidden">
-            <div className="flex-1 overflow-y-auto">
-              <div className={`h-full pr-2 pb-2 pl-2 ${isMobile ? '' : 'pt-2'}`}>
+          <div className="flex-1 flex flex-col bg-background rounded-lg">
+            <div className="flex-1">
+              <div className={`pr-2 pb-2 pl-2 ${isMobile ? '' : 'pt-2'}`}>
                 {children}
               </div>
             </div>
@@ -593,7 +593,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
 
         <aside
           className={`
-            ${isMobile ? 'fixed top-[40px] bottom-0 right-0 z-50 bg-background/80 backdrop-blur-sm' : 
+            ${isMobile ? 'fixed top-0 bottom-0 right-0 z-50 bg-background/80 backdrop-blur-sm' : 
               'fixed top-0 bottom-0 right-0 h-full'}
             ${rightSidebarState === 'collapsed' ? (isMobile ? 'w-0' : 'w-14') :
               rightSidebarState === 'normal' ? 'w-80' :
