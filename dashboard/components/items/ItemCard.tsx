@@ -88,6 +88,7 @@ interface ItemCardProps extends React.HTMLAttributes<HTMLDivElement> {
   readOnly?: boolean // Add readOnly prop
   onSave?: (item: ItemData) => Promise<void> // Add onSave prop
   onScoreResultsRefetchReady?: (refetchFn: (() => void) | null) => void // Add callback for score results refetch
+  naturalHeight?: boolean // Add naturalHeight prop for document flow vs height-filling behavior
 }
 
 const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({ 
@@ -105,6 +106,7 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
   readOnly = false,
   onSave,
   onScoreResultsRefetchReady,
+  naturalHeight = false,
   className, 
   ...props 
 }, ref) => {
@@ -283,7 +285,7 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
 
   // Detail mode layout - simplified to fit within existing container
   return (
-    <Card className="rounded-none sm:rounded-lg h-full flex flex-col bg-card border-none">
+    <Card className={`rounded-none sm:rounded-lg ${naturalHeight ? 'min-h-screen' : 'h-full'} flex flex-col bg-card border-none`}>
       <CardHeader className="flex-shrink-0 flex flex-row items-start justify-between py-4 px-4 sm:px-3 space-y-0">
         <div>
           <h2 className="text-xl text-muted-foreground font-semibold">Item Details</h2>
@@ -352,7 +354,7 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
           )}
         </div>
       </CardHeader>
-      <CardContent className="flex-grow overflow-auto px-4 sm:px-3 pb-4">
+      <CardContent className={`flex-grow px-4 sm:px-3 pb-4 ${naturalHeight ? '' : 'overflow-auto'}`}>
         <div className="space-y-4">
           {/* Description field display */}
           {item.description && 
