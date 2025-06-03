@@ -208,8 +208,8 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
 
       {/* Scorecard summary */}
       {item.scorecards.length > 0 && (
-        <div className="flex items-start gap-1 font-semibold text-sm mt-3">
-          <ListTodo className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+        <div className="flex items-baseline gap-1 font-semibold text-sm mt-3">
+          <ListTodo className="h-4 w-4 flex-shrink-0 text-muted-foreground translate-y-0.5" />
           <span className="text-foreground">
             {hasMultipleScorecards ? 
               `${item.scorecards.length} scorecards` : 
@@ -219,8 +219,8 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
       )}
       
       {/* Results count - fixed height to prevent layout jiggling */}
-      <div className="flex items-start gap-1 text-sm text-muted-foreground">
-        <Box className="h-4 w-4 flex-shrink-0" />
+      <div className="flex items-baseline gap-1 text-sm text-muted-foreground">
+        <Box className="h-4 w-4 flex-shrink-0 translate-y-0.5" />
         <span>
           <span className="text-foreground"><NumberFlowWrapper value={totalResults} skeletonMode={skeletonMode} /></span> score result{totalResults !== 1 ? 's' : ''}
         </span>
