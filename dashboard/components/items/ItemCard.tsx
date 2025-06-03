@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
-import { MoreHorizontal, X, Square, Columns2, StickyNote, Info, ChevronDown, ChevronUp, Loader2, Box, ListTodo } from 'lucide-react'
+import { MoreHorizontal, X, Square, Columns2, StickyNote, Info, ChevronDown, ChevronUp, Loader2, Box, ListChecks } from 'lucide-react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { cn } from '@/lib/utils'
 import { CardButton } from '@/components/CardButton'
@@ -89,6 +89,8 @@ interface ItemCardProps extends React.HTMLAttributes<HTMLDivElement> {
   onSave?: (item: ItemData) => Promise<void> // Add onSave prop
   onScoreResultsRefetchReady?: (refetchFn: (() => void) | null) => void // Add callback for score results refetch
   naturalHeight?: boolean // Add naturalHeight prop for document flow vs height-filling behavior
+  onScoreResultSelect?: (scoreResult: any) => void // Add score result selection callback
+  selectedScoreResultId?: string // Add selected score result ID
 }
 
 const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({ 
@@ -107,6 +109,8 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
   onSave,
   onScoreResultsRefetchReady,
   naturalHeight = false,
+  onScoreResultSelect,
+  selectedScoreResultId,
   className, 
   ...props 
 }, ref) => {
@@ -181,27 +185,28 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
         />
       )}
 
-      {/* Scorecard summary - always render to maintain consistent height */}
-      <div className="flex items-baseline gap-1 font-semibold text-sm mt-3">
-        <ListTodo className="h-4 w-4 flex-shrink-0 text-muted-foreground translate-y-0.5" />
-        <span className="text-foreground">
-          {item.scorecards.length > 0 ? (
-            hasMultipleScorecards ? 
+      {/* Scorecard summary - only show if there are actually scorecards */}
+      {item.scorecards.length > 0 && (
+        <div className="flex items-baseline gap-1 font-semibold text-sm mt-3">
+          <ListChecks className="h-4 w-4 flex-shrink-0 text-muted-foreground translate-y-0.5" />
+          <span className="text-foreground">
+            {hasMultipleScorecards ? 
               `${item.scorecards.length} scorecards` : 
               item.scorecards[0]?.scorecardName || 'Scorecard'
-          ) : (
-            item.isLoadingResults ? '\u00A0' : 'No scorecards available'
-          )}
-        </span>
-      </div>
+            }
+          </span>
+        </div>
+      )}
       
-      {/* Results count - always render to prevent layout jiggling */}
-      <div className="flex items-baseline gap-1 text-sm text-muted-foreground">
-        <Box className="h-4 w-4 flex-shrink-0 translate-y-0.5" />
-        <span>
-          <span className="text-foreground"><NumberFlowWrapper value={totalResults} skeletonMode={skeletonMode || item.isLoadingResults} /></span> score result{totalResults !== 1 ? 's' : ''}
-        </span>
-      </div>
+      {/* Results count - only show if there are actually scorecards */}
+      {item.scorecards.length > 0 && (
+        <div className="flex items-baseline gap-1 text-sm text-muted-foreground">
+          <Box className="h-4 w-4 flex-shrink-0 translate-y-0.5" />
+          <span>
+            <span className="text-foreground"><NumberFlowWrapper value={totalResults} skeletonMode={skeletonMode || item.isLoadingResults} /></span> score result{totalResults !== 1 ? 's' : ''}
+          </span>
+        </div>
+      )}
     </div>
   )
 
@@ -411,6 +416,8 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
             isLoading={isLoading}
             error={error}
             itemId={String(item.id)}
+            onScoreResultSelect={onScoreResultSelect}
+            selectedScoreResultId={selectedScoreResultId}
           />
         </div>
       </CardContent>

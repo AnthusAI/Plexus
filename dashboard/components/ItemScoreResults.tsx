@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, ExternalLink, ChevronDown, ChevronUp, ListTodo, IdCard, Box } from 'lucide-react';
+import { Loader2, ExternalLink, ChevronDown, ChevronUp, ListChecks, IdCard, Box } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { motion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
@@ -19,6 +19,8 @@ interface ItemScoreResultsProps {
   isLoading: boolean;
   error: string | null;
   itemId: string;
+  onScoreResultSelect?: (scoreResult: ScoreResultWithDetails) => void;
+  selectedScoreResultId?: string;
 }
 
 // Skeleton components for loading state
@@ -56,7 +58,11 @@ const ScoreResultsSkeletonLoader = () => (
   </div>
 );
 
-const ScoreResultCard: React.FC<{ result: ScoreResultWithDetails }> = ({ result }) => {
+const ScoreResultCard: React.FC<{ 
+  result: ScoreResultWithDetails;
+  onClick?: () => void;
+  isSelected?: boolean;
+}> = ({ result, onClick, isSelected }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   
   // Check if explanation is long enough to need expansion
@@ -70,11 +76,22 @@ const ScoreResultCard: React.FC<{ result: ScoreResultWithDetails }> = ({ result 
       initial={{ opacity: result.isNew ? 0 : 1 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.5, ease: "easeOut" }}
-      className={`mb-3 bg-background rounded-lg p-4 relative overflow-visible ${
+      className={`mb-3 bg-background rounded-lg p-4 relative overflow-visible cursor-pointer hover:bg-accent/50 transition-colors ${
         result.isNew ? 'new-item-shadow' : ''
+      } ${
+        isSelected ? 'bg-card-selected selected-border-rounded' : ''
       }`}
+      onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onClick?.()
+        }
+      }}
     >
-      <div className="flex items-start justify-between">
+      <div className="flex items-start justify-between relative z-10">
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-1">
             <h4 className="text-sm font-semibold">{result.score?.name || 'Unknown Score'}</h4>
@@ -110,7 +127,7 @@ const ScoreResultCard: React.FC<{ result: ScoreResultWithDetails }> = ({ result 
         </div>
       </div>
       {result.explanation && (
-        <div className="mt-3 text-sm text-muted-foreground">
+        <div className="mt-3 text-sm text-muted-foreground relative z-10">
           <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-muted-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:bg-muted prose-pre:text-foreground">
             <ReactMarkdown
               remarkPlugins={[remarkGfm, remarkBreaks]}
@@ -158,7 +175,9 @@ const ItemScoreResults: React.FC<ItemScoreResultsProps> = ({
   groupedResults,
   isLoading,
   error,
-  itemId
+  itemId,
+  onScoreResultSelect,
+  selectedScoreResultId
 }) => {
   if (isLoading) {
     return <ScoreResultsSkeletonLoader />;
@@ -217,7 +236,7 @@ const ItemScoreResults: React.FC<ItemScoreResultsProps> = ({
                 <div className="flex items-end justify-between">
                   <div className="flex flex-col gap-1">
                     <div className="flex items-center gap-1">
-                      <ListTodo className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                      <ListChecks className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
                       <span className="font-medium text-foreground">{group.scorecardName}</span>
                     </div>
                     {group.scorecardExternalId && (
@@ -241,7 +260,12 @@ const ItemScoreResults: React.FC<ItemScoreResultsProps> = ({
               </div>
               <div className="space-y-3">
                 {group.scores.map((result) => (
-                  <ScoreResultCard key={result.id} result={result} />
+                  <ScoreResultCard 
+                    key={result.id} 
+                    result={result}
+                    onClick={() => onScoreResultSelect?.(result)}
+                    isSelected={selectedScoreResultId === result.id}
+                  />
                 ))}
               </div>
             </div>

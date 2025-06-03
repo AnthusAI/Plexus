@@ -29,6 +29,7 @@ import ItemContext from "@/components/ItemContext"
 import { formatTimeAgo } from '@/utils/format-time'
 import type { FeedbackItem } from '@/types/feedback'
 import ItemCard, { ItemData } from './items/ItemCard'
+import ScoreResultCard, { ScoreResultData } from './items/ScoreResultCard'
 import { amplifyClient, graphqlRequest } from '@/utils/amplify-client'
 import { useAuthenticator } from '@aws-amplify/ui-react'
 import { ScorecardContextProps } from "./ScorecardContext"
@@ -648,6 +649,19 @@ function ItemsDashboardInner() {
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const searchErrorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Score result selection state
+  const [selectedScoreResult, setSelectedScoreResult] = useState<ScoreResultData | null>(null);
+  
+  // Handler for score result selection
+  const handleScoreResultSelect = useCallback((scoreResult: any) => {
+    setSelectedScoreResult(scoreResult);
+  }, []);
+  
+  // Clear selected score result when item changes
+  useEffect(() => {
+    setSelectedScoreResult(null);
+  }, [selectedItem]);
   
   // Enhanced scroll-to-item function for deep-linking with retry logic
   const scrollToSelectedItem = useCallback((itemId: string, maxRetries = 10, retryDelay = 100) => {
@@ -2477,6 +2491,8 @@ function ItemsDashboardInner() {
         onScoreResultsRefetchReady={(refetchFn) => {
           scoreResultsRefetchRef.current = refetchFn;
         }}
+        onScoreResultSelect={handleScoreResultSelect}
+        selectedScoreResultId={selectedScoreResult?.id}
         readOnly={true}
         naturalHeight={naturalHeight}
       />
@@ -2956,12 +2972,28 @@ function ItemsDashboardInner() {
                   </div>
                 </div>
                 <div>
-                  {renderSelectedItem(true)}
+                  {selectedScoreResult ? (
+                    <ScoreResultCard
+                      scoreResult={selectedScoreResult}
+                      onClose={() => setSelectedScoreResult(null)}
+                      naturalHeight={true}
+                    />
+                  ) : (
+                    renderSelectedItem(true)
+                  )}
                 </div>
               </div>
             ) : (
-              // In wide mode, just render the item (header is fixed above)
-              renderSelectedItem()
+              // In wide mode, show either the score result or the item (header is fixed above)
+              selectedScoreResult ? (
+                <ScoreResultCard
+                  scoreResult={selectedScoreResult}
+                  onClose={() => setSelectedScoreResult(null)}
+                  naturalHeight={false}
+                />
+              ) : (
+                renderSelectedItem()
+              )
             )}
           </div>
         ) : selectedItem ? (
@@ -3013,12 +3045,38 @@ function ItemsDashboardInner() {
             )}
 
             {selectedItem && !isNarrowViewport && !isFullWidth && (
-              <div 
-                className="h-full overflow-hidden"
-                style={{ width: `${100 - leftPanelWidth}%` }}
-              >
-                {renderSelectedItem()}
-              </div>
+              <>
+                <div 
+                  className="h-full overflow-hidden"
+                  style={{ 
+                    width: selectedScoreResult ? `${(100 - leftPanelWidth) * 0.5}%` : `${100 - leftPanelWidth}%` 
+                  }}
+                >
+                  {renderSelectedItem()}
+                </div>
+                
+                {selectedScoreResult && (
+                  <>
+                    <div
+                      className="w-[12px] relative cursor-col-resize flex-shrink-0 group"
+                    >
+                      <div className="absolute inset-0 rounded-full transition-colors duration-150 
+                        group-hover:bg-accent" />
+                    </div>
+                    
+                    <div 
+                      className="h-full overflow-hidden"
+                      style={{ width: `${(100 - leftPanelWidth) * 0.5}%` }}
+                    >
+                      <ScoreResultCard
+                        scoreResult={selectedScoreResult}
+                        onClose={() => setSelectedScoreResult(null)}
+                        naturalHeight={false}
+                      />
+                    </div>
+                  </>
+                )}
+              </>
             )}
           </div>
         ) : (
