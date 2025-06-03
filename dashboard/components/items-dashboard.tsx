@@ -2415,25 +2415,23 @@ function ItemsDashboardInner() {
   }
 
   return (
-    <div className="flex flex-col h-full p-1.5">
-      <div className="flex items-center justify-between pb-3">
-        <div className="flex items-center space-x-4">
-          <div className="flex-grow">
-            <ScorecardContext 
-              selectedScorecard={selectedScorecard}
-              setSelectedScorecard={setSelectedScorecard}
-              selectedScore={selectedScore}
-              setSelectedScore={setSelectedScore}
-              availableFields={availableFields}
-              timeRangeOptions={scoreOptions}
-              skeletonMode={isLoading}
-            />
-          </div>
+    <div className="@container flex flex-col h-full p-1.5">
+      <div className="flex @[600px]:flex-row flex-col @[600px]:items-center @[600px]:justify-between items-stretch gap-3 pb-3">
+        <div className="@[600px]:flex-grow w-full">
+          <ScorecardContext 
+            selectedScorecard={selectedScorecard}
+            setSelectedScorecard={setSelectedScorecard}
+            selectedScore={selectedScore}
+            setSelectedScore={setSelectedScore}
+            availableFields={availableFields}
+            timeRangeOptions={scoreOptions}
+            skeletonMode={isLoading}
+          />
         </div>
         
         {/* Search Component */}
-        <div className="flex items-center relative">
-          <form onSubmit={handleSearchSubmit} className="relative">
+        <div className="flex items-center relative @[600px]:w-auto w-full">
+          <form onSubmit={handleSearchSubmit} className="relative @[600px]:w-auto w-full">
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <Search className="h-4 w-4 text-muted-foreground" />
@@ -2446,7 +2444,7 @@ function ItemsDashboardInner() {
                   setSearchValue(e.target.value);
                   if (searchError) setSearchError(null); // Clear error when typing
                 }}
-                className={`w-[200px] h-9 pl-10 ${searchValue.trim() ? 'pr-20' : 'pr-3'} bg-card border-0 shadow-none focus:ring-0 focus:ring-offset-0 focus:outline-none focus:border-0 focus:shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none`}
+                className={`@[600px]:w-[200px] w-full h-9 pl-10 ${searchValue.trim() ? 'pr-20' : 'pr-3'} bg-card border-0 shadow-none focus:ring-0 focus:ring-offset-0 focus:outline-none focus:border-0 focus:shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none`}
                 disabled={isSearching}
               />
               {searchValue.trim() && (
