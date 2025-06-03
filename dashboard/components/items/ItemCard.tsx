@@ -288,7 +288,10 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
     <Card className={`rounded-none sm:rounded-lg ${naturalHeight ? 'min-h-screen' : 'h-full'} flex flex-col bg-card border-none`}>
       <CardHeader className="flex-shrink-0 flex flex-row items-start justify-between py-4 px-4 sm:px-3 space-y-0">
         <div>
-          <h2 className="text-xl text-muted-foreground font-semibold">Item Details</h2>
+          <div className="flex items-center gap-1">
+            <StickyNote className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+            <h2 className="text-xl text-muted-foreground font-semibold">Item Details</h2>
+          </div>
           <div className="mt-1 space-y-1">
             <IdentifierDisplay 
               externalId={item.externalId}
