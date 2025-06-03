@@ -145,7 +145,9 @@ const GridContent = React.memo(({
   scoreResultCounts,
   nextToken,
   isLoadingMore,
-  loadMoreRef
+  loadMoreRef,
+  isLoading,
+  hasInitiallyLoaded
 }: {
   filteredItems: Item[];
   selectedItem: string | null;
@@ -157,8 +159,11 @@ const GridContent = React.memo(({
   nextToken: string | null;
   isLoadingMore: boolean;
   loadMoreRef: React.MutableRefObject<HTMLDivElement | null>;
+  isLoading: boolean;
+  hasInitiallyLoaded: boolean;
 }) => {
-  if (filteredItems.length === 0) {
+  // Only show "No items found" if we're not loading and have actually finished the initial load
+  if (filteredItems.length === 0 && !isLoading && hasInitiallyLoaded) {
     return (
       <div className="flex items-center justify-center h-full text-muted-foreground">
         No items found
@@ -208,7 +213,9 @@ const GridContent = React.memo(({
     prevProps.nextToken === nextProps.nextToken &&
     prevProps.isLoadingMore === nextProps.isLoadingMore &&
     prevProps.scoreResultCounts === nextProps.scoreResultCounts &&
-    prevProps.selectedItem === nextProps.selectedItem // Include selectedItem in comparison
+    prevProps.selectedItem === nextProps.selectedItem &&
+    prevProps.isLoading === nextProps.isLoading &&
+    prevProps.hasInitiallyLoaded === nextProps.hasInitiallyLoaded
   );
 });
 
@@ -640,11 +647,16 @@ function ItemsDashboardInner() {
       const itemElement = itemRefsMap.current.get(itemId);
       
       if (itemElement) {
-        itemElement.scrollIntoView({
-          behavior: 'smooth',
-          block: 'start', // Align to the top of the container
-          inline: 'nearest'
+        // Calculate the position with 12px padding (Tailwind 3)
+        const elementRect = itemElement.getBoundingClientRect();
+        const currentScrollTop = window.pageYOffset || document.documentElement.scrollTop;
+        const targetScrollTop = currentScrollTop + elementRect.top - 12; // 12px padding
+        
+        window.scrollTo({
+          top: targetScrollTop,
+          behavior: 'smooth'
         });
+        
         return true; // Success
       } else if (attempts < maxRetries) {
         setTimeout(attemptScroll, retryDelay);
@@ -2335,7 +2347,7 @@ function ItemsDashboardInner() {
     }
   }, []);
 
-  const renderSelectedItem = () => {
+  const renderSelectedItem = (naturalHeight = false) => {
     if (!selectedItem) {
       return null
     }
@@ -2343,28 +2355,25 @@ function ItemsDashboardInner() {
     // If accounts are still loading, show skeleton
     if (isLoadingAccounts) {
       return (
-        <div className="flex flex-col">
-          <div>
-            <ItemCard
-              variant="detail"
-              item={{
-                id: selectedItem,
-                timestamp: new Date().toISOString(),
-                scorecards: []
-              } as ItemData}
-              getBadgeVariant={getBadgeVariant}
-              isFullWidth={isFullWidth}
-              onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
-              onClose={() => {
-                setIsFullWidth(false);
-                window.history.pushState({}, '', `/lab/items`)
-                setSelectedItem(null)
-              }}
-              skeletonMode={true}
-              readOnly={true}
-            />
-          </div>
-        </div>
+        <ItemCard
+          variant="detail"
+          item={{
+            id: selectedItem,
+            timestamp: new Date().toISOString(),
+            scorecards: []
+          } as ItemData}
+          getBadgeVariant={getBadgeVariant}
+          isFullWidth={isFullWidth}
+          onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
+          onClose={() => {
+            setIsFullWidth(false);
+            window.history.pushState({}, '', `/lab/items`)
+            setSelectedItem(null)
+          }}
+          skeletonMode={true}
+          readOnly={true}
+          naturalHeight={naturalHeight}
+        />
       )
     }
 
@@ -2383,42 +2392,37 @@ function ItemsDashboardInner() {
       // Only show skeleton if we're specifically loading this item or during initial load
       if (specificItemLoading || (!hasInitiallyLoaded && isLoading)) {
         return (
-          <div className="flex flex-col">
-            <div>
-              <ItemCard
-                variant="detail"
-                item={{
-                  id: selectedItem,
-                  timestamp: new Date().toISOString(),
-                  scorecards: []
-                } as ItemData}
-                getBadgeVariant={getBadgeVariant}
-                isFullWidth={isFullWidth}
-                onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
-                onClose={() => {
-                  setIsFullWidth(false);
-                  window.history.pushState({}, '', `/lab/items`)
-                  setSelectedItem(null)
-                }}
-                skeletonMode={true}
-                readOnly={true}
-              />
-            </div>
-          </div>
+          <ItemCard
+            variant="detail"
+            item={{
+              id: selectedItem,
+              timestamp: new Date().toISOString(),
+              scorecards: []
+            } as ItemData}
+            getBadgeVariant={getBadgeVariant}
+            isFullWidth={isFullWidth}
+            onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
+            onClose={() => {
+              setIsFullWidth(false);
+              window.history.pushState({}, '', `/lab/items`)
+              setSelectedItem(null)
+            }}
+            skeletonMode={true}
+            readOnly={true}
+            naturalHeight={naturalHeight}
+          />
         )
       }
       
       // Only check failed fetches if we're not currently loading
       if (failedItemFetches.has(selectedItem)) {
         return (
-          <div className="flex flex-col">
-            <div className="flex items-center justify-center min-h-[400px]">
-              <div className="text-center">
-                <p className="text-muted-foreground mb-2">Item not found</p>
-                <p className="text-sm text-muted-foreground">
-                  The item with ID {selectedItem} could not be found.
-                </p>
-              </div>
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center">
+              <p className="text-muted-foreground mb-2">Item not found</p>
+              <p className="text-sm text-muted-foreground">
+                The item with ID {selectedItem} could not be found.
+              </p>
             </div>
           </div>
         )
@@ -2428,14 +2432,12 @@ function ItemsDashboardInner() {
       // show an appropriate error message
       if (selectedAccount) {
         return (
-          <div className="flex flex-col">
-            <div className="flex items-center justify-center min-h-[400px]">
-              <div className="text-center">
-                <p className="text-muted-foreground mb-2">Item not found</p>
-                <p className="text-sm text-muted-foreground">
-                  The item with ID {selectedItem} could not be found.
-                </p>
-              </div>
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center">
+              <p className="text-muted-foreground mb-2">Item not found</p>
+              <p className="text-sm text-muted-foreground">
+                The item with ID {selectedItem} could not be found.
+              </p>
             </div>
           </div>
         )
@@ -2448,28 +2450,25 @@ function ItemsDashboardInner() {
 
     
     return (
-      <div className="flex flex-col">
-        <div>
-          <ItemCard
-            key={selectedItem} // Force re-render when selectedItem changes
-            variant="detail"
-            item={selectedItemWithCount as ItemData}
-            getBadgeVariant={getBadgeVariant}
-            isFullWidth={isFullWidth}
-            onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
-            onClose={() => {
-              setIsFullWidth(false);
-              // Use window.history to navigate back to grid view without remount
-              window.history.pushState({}, '', `/lab/items`)
-              setSelectedItem(null)
-            }}
-            onScoreResultsRefetchReady={(refetchFn) => {
-              scoreResultsRefetchRef.current = refetchFn;
-            }}
-            readOnly={true}
-          />
-        </div>
-      </div>
+      <ItemCard
+        key={selectedItem} // Force re-render when selectedItem changes
+        variant="detail"
+        item={selectedItemWithCount as ItemData}
+        getBadgeVariant={getBadgeVariant}
+        isFullWidth={isFullWidth}
+        onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
+        onClose={() => {
+          setIsFullWidth(false);
+          // Use window.history to navigate back to grid view without remount
+          window.history.pushState({}, '', `/lab/items`)
+          setSelectedItem(null)
+        }}
+        onScoreResultsRefetchReady={(refetchFn) => {
+          scoreResultsRefetchRef.current = refetchFn;
+        }}
+        readOnly={true}
+        naturalHeight={naturalHeight}
+      />
     )
   }
 
@@ -2822,61 +2821,64 @@ function ItemsDashboardInner() {
   }
 
   return (
-    <div className="@container flex flex-col min-h-full p-1.5">
-      <div className="flex @[600px]:flex-row flex-col @[600px]:items-center @[600px]:justify-between items-stretch gap-3 pb-3">
-        <div className="@[600px]:flex-grow w-full">
-          <ScorecardContext 
-            selectedScorecard={selectedScorecard}
-            setSelectedScorecard={setSelectedScorecard}
-            selectedScore={selectedScore}
-            setSelectedScore={setSelectedScore}
-            availableFields={availableFields}
-            timeRangeOptions={scoreOptions}
-            skeletonMode={isLoading}
-          />
-        </div>
-        
-        {/* Search Component */}
-        <div className="flex items-center relative @[600px]:w-auto w-full">
-          <form onSubmit={handleSearchSubmit} className="relative @[600px]:w-auto w-full">
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Search className="h-4 w-4 text-muted-foreground" />
-              </div>
-              <Input
-                type="text"
-                placeholder="Search by identifier"
-                value={searchValue}
-                onChange={(e) => {
-                  setSearchValue(e.target.value);
-                  if (searchError) setSearchError(null); // Clear error when typing
-                }}
-                className={`@[600px]:w-[200px] w-full h-9 pl-10 ${searchValue.trim() ? 'pr-20' : 'pr-3'} bg-card border-0 shadow-none focus:ring-0 focus:ring-offset-0 focus:outline-none focus:border-0 focus:shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none`}
-                disabled={isSearching}
-              />
-              {searchValue.trim() && (
-                <Button 
-                  type="submit" 
-                  size="sm" 
-                  className="absolute inset-y-0 right-0 h-9 px-3 rounded-l-none shadow-none"
-                  disabled={isSearching}
-                >
-                  {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Search'}
-                </Button>
-              )}
-            </div>
-          </form>
+    <div className="@container flex flex-col h-screen p-1.5">
+      {/* Fixed header for wider viewports only */}
+      {!isNarrowViewport && (
+        <div className="flex @[600px]:flex-row flex-col @[600px]:items-center @[600px]:justify-between items-stretch gap-3 pb-3 flex-shrink-0">
+          <div className="@[600px]:flex-grow w-full">
+            <ScorecardContext 
+              selectedScorecard={selectedScorecard}
+              setSelectedScorecard={setSelectedScorecard}
+              selectedScore={selectedScore}
+              setSelectedScore={setSelectedScore}
+              availableFields={availableFields}
+              timeRangeOptions={scoreOptions}
+              skeletonMode={isLoading}
+            />
+          </div>
           
-          {/* Error message */}
-          {searchError && (
-            <div className="absolute top-full mt-2 right-0 z-50 bg-muted text-muted-foreground text-sm px-3 py-2 rounded-md shadow-sm min-w-[200px] border border-border">
-              {searchError}
-            </div>
-          )}
+          {/* Search Component */}
+          <div className="flex items-center relative @[600px]:w-auto w-full">
+            <form onSubmit={handleSearchSubmit} className="relative @[600px]:w-auto w-full">
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Search className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <Input
+                  type="text"
+                  placeholder="Search by identifier"
+                  value={searchValue}
+                  onChange={(e) => {
+                    setSearchValue(e.target.value);
+                    if (searchError) setSearchError(null); // Clear error when typing
+                  }}
+                  className={`@[600px]:w-[200px] w-full h-9 pl-10 ${searchValue.trim() ? 'pr-20' : 'pr-3'} bg-card border-0 shadow-none focus:ring-0 focus:ring-offset-0 focus:outline-none focus:border-0 focus:shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none`}
+                  disabled={isSearching}
+                />
+                {searchValue.trim() && (
+                  <Button 
+                    type="submit" 
+                    size="sm" 
+                    className="absolute inset-y-0 right-0 h-9 px-3 rounded-l-none shadow-none"
+                    disabled={isSearching}
+                  >
+                    {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Search'}
+                  </Button>
+                )}
+              </div>
+            </form>
+            
+            {/* Error message */}
+            {searchError && (
+              <div className="absolute top-full mt-2 right-0 z-50 bg-muted text-muted-foreground text-sm px-3 py-2 rounded-md shadow-sm min-w-[200px] border border-border">
+                {searchError}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
       
-      <div className="flex flex-col">
+      <div className={`flex flex-col flex-1 min-h-0 ${isNarrowViewport ? 'overflow-auto' : ''}`}>
         {/* 
           Deep-linking rendering logic:
           1. Full-width mode: When item is NOT in first page (isFullWidth=true) or narrow viewport
@@ -2885,19 +2887,82 @@ function ItemsDashboardInner() {
         */}
 
         {selectedItem && (isNarrowViewport || isFullWidth) ? (
-          <div>
-            {renderSelectedItem()}
+          <div className="h-full">
+            {isNarrowViewport ? (
+              // In narrow mode, put everything in one scrollable container
+              <div className="h-full overflow-auto">
+                                 {/* Header at top of scrollable content */}
+                 <div className="flex @[600px]:flex-row flex-col @[600px]:items-center @[600px]:justify-between items-stretch gap-2 pb-2">
+                  <div className="@[600px]:flex-grow w-full">
+                    <ScorecardContext 
+                      selectedScorecard={selectedScorecard}
+                      setSelectedScorecard={setSelectedScorecard}
+                      selectedScore={selectedScore}
+                      setSelectedScore={setSelectedScore}
+                      availableFields={availableFields}
+                      timeRangeOptions={scoreOptions}
+                      skeletonMode={isLoading}
+                    />
+                  </div>
+                  
+                  {/* Search Component */}
+                  <div className="flex items-center relative @[600px]:w-auto w-full">
+                    <form onSubmit={handleSearchSubmit} className="relative @[600px]:w-auto w-full">
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                          <Search className="h-4 w-4 text-muted-foreground" />
+                        </div>
+                        <Input
+                          type="text"
+                          placeholder="Search by identifier"
+                          value={searchValue}
+                          onChange={(e) => {
+                            setSearchValue(e.target.value);
+                            if (searchError) setSearchError(null); // Clear error when typing
+                          }}
+                          className={`@[600px]:w-[200px] w-full h-9 pl-10 ${searchValue.trim() ? 'pr-20' : 'pr-3'} bg-card border-0 shadow-none focus:ring-0 focus:ring-offset-0 focus:outline-none focus:border-0 focus:shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none`}
+                          disabled={isSearching}
+                        />
+                        {searchValue.trim() && (
+                          <Button 
+                            type="submit" 
+                            size="sm" 
+                            className="absolute inset-y-0 right-0 h-9 px-3 rounded-l-none shadow-none"
+                            disabled={isSearching}
+                          >
+                            {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Search'}
+                          </Button>
+                        )}
+                      </div>
+                    </form>
+                    
+                    {/* Error message */}
+                    {searchError && (
+                      <div className="absolute top-full mt-2 right-0 z-50 bg-muted text-muted-foreground text-sm px-3 py-2 rounded-md shadow-sm min-w-[200px] border border-border">
+                        {searchError}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  {renderSelectedItem(true)}
+                </div>
+              </div>
+            ) : (
+              // In wide mode, just render the item (header is fixed above)
+              renderSelectedItem()
+            )}
           </div>
         ) : selectedItem ? (
           // Show split view when item is selected but not narrow viewport or full width
-          <div className={`flex ${isNarrowViewport ? 'flex-col' : ''}`}>
+          <div className={`flex h-full ${isNarrowViewport ? 'flex-col' : ''}`}>
             <div 
-              className={`${isFullWidth ? 'hidden' : 'flex-1'}`}
+              className={`${isFullWidth ? 'hidden' : 'flex-1'} h-full overflow-auto`}
               style={selectedItem && !isNarrowViewport && !isFullWidth ? {
                 width: `${leftPanelWidth}%`
               } : undefined}
             >
-              <div>
+              <div className="h-full">
                 <div className="@container">
                   {!hasInitiallyLoaded && isLoading ? (
                     // Show skeleton only on very first load
@@ -2918,6 +2983,8 @@ function ItemsDashboardInner() {
                       nextToken={nextToken}
                       isLoadingMore={isLoadingMore}
                       loadMoreRef={loadMoreRef}
+                      isLoading={isLoading}
+                      hasInitiallyLoaded={hasInitiallyLoaded}
                     />
                   )}
                 </div>
@@ -2936,6 +3003,7 @@ function ItemsDashboardInner() {
 
             {selectedItem && !isNarrowViewport && !isFullWidth && (
               <div 
+                className="h-full overflow-hidden"
                 style={{ width: `${100 - leftPanelWidth}%` }}
               >
                 {renderSelectedItem()}
@@ -2944,8 +3012,63 @@ function ItemsDashboardInner() {
           </div>
         ) : (
           // Grid-only view when no item is selected
-          <div>
-            <div>
+          <div className="h-full overflow-auto">
+            <div className="h-full">
+                             {/* Scrollable header for narrow viewports */}
+               {isNarrowViewport && (
+                 <div className="flex @[600px]:flex-row flex-col @[600px]:items-center @[600px]:justify-between items-stretch gap-2 pb-2">
+                  <div className="@[600px]:flex-grow w-full">
+                    <ScorecardContext 
+                      selectedScorecard={selectedScorecard}
+                      setSelectedScorecard={setSelectedScorecard}
+                      selectedScore={selectedScore}
+                      setSelectedScore={setSelectedScore}
+                      availableFields={availableFields}
+                      timeRangeOptions={scoreOptions}
+                      skeletonMode={isLoading}
+                    />
+                  </div>
+                  
+                  {/* Search Component */}
+                  <div className="flex items-center relative @[600px]:w-auto w-full">
+                    <form onSubmit={handleSearchSubmit} className="relative @[600px]:w-auto w-full">
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                          <Search className="h-4 w-4 text-muted-foreground" />
+                        </div>
+                        <Input
+                          type="text"
+                          placeholder="Search by identifier"
+                          value={searchValue}
+                          onChange={(e) => {
+                            setSearchValue(e.target.value);
+                            if (searchError) setSearchError(null); // Clear error when typing
+                          }}
+                          className={`@[600px]:w-[200px] w-full h-9 pl-10 ${searchValue.trim() ? 'pr-20' : 'pr-3'} bg-card border-0 shadow-none focus:ring-0 focus:ring-offset-0 focus:outline-none focus:border-0 focus:shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none`}
+                          disabled={isSearching}
+                        />
+                        {searchValue.trim() && (
+                          <Button 
+                            type="submit" 
+                            size="sm" 
+                            className="absolute inset-y-0 right-0 h-9 px-3 rounded-l-none shadow-none"
+                            disabled={isSearching}
+                          >
+                            {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Search'}
+                          </Button>
+                        )}
+                      </div>
+                    </form>
+                    
+                    {/* Error message */}
+                    {searchError && (
+                      <div className="absolute top-full mt-2 right-0 z-50 bg-muted text-muted-foreground text-sm px-3 py-2 rounded-md shadow-sm min-w-[200px] border border-border">
+                        {searchError}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
               <div>
                 <div className="@container">
                   {!hasInitiallyLoaded && isLoading ? (
@@ -2967,6 +3090,8 @@ function ItemsDashboardInner() {
                       nextToken={nextToken}
                       isLoadingMore={isLoadingMore}
                       loadMoreRef={loadMoreRef}
+                      isLoading={isLoading}
+                      hasInitiallyLoaded={hasInitiallyLoaded}
                     />
                   )}
                 </div>
