@@ -2343,8 +2343,8 @@ function ItemsDashboardInner() {
     // If accounts are still loading, show skeleton
     if (isLoadingAccounts) {
       return (
-        <div className="h-full flex flex-col">
-          <div className="flex-1 overflow-auto">
+        <div className="flex flex-col">
+          <div>
             <ItemCard
               variant="detail"
               item={{
@@ -2383,8 +2383,8 @@ function ItemsDashboardInner() {
       // Only show skeleton if we're specifically loading this item or during initial load
       if (specificItemLoading || (!hasInitiallyLoaded && isLoading)) {
         return (
-          <div className="h-full flex flex-col">
-            <div className="flex-1 overflow-auto">
+          <div className="flex flex-col">
+            <div>
               <ItemCard
                 variant="detail"
                 item={{
@@ -2411,8 +2411,8 @@ function ItemsDashboardInner() {
       // Only check failed fetches if we're not currently loading
       if (failedItemFetches.has(selectedItem)) {
         return (
-          <div className="h-full flex flex-col">
-            <div className="flex-1 flex items-center justify-center">
+          <div className="flex flex-col">
+            <div className="flex items-center justify-center min-h-[400px]">
               <div className="text-center">
                 <p className="text-muted-foreground mb-2">Item not found</p>
                 <p className="text-sm text-muted-foreground">
@@ -2428,8 +2428,8 @@ function ItemsDashboardInner() {
       // show an appropriate error message
       if (selectedAccount) {
         return (
-          <div className="h-full flex flex-col">
-            <div className="flex-1 flex items-center justify-center">
+          <div className="flex flex-col">
+            <div className="flex items-center justify-center min-h-[400px]">
               <div className="text-center">
                 <p className="text-muted-foreground mb-2">Item not found</p>
                 <p className="text-sm text-muted-foreground">
@@ -2448,8 +2448,8 @@ function ItemsDashboardInner() {
 
     
     return (
-      <div className="h-full flex flex-col">
-        <div className="flex-1 overflow-auto">
+      <div className="flex flex-col">
+        <div>
           <ItemCard
             key={selectedItem} // Force re-render when selectedItem changes
             variant="detail"
@@ -2822,7 +2822,7 @@ function ItemsDashboardInner() {
   }
 
   return (
-    <div className="@container flex flex-col h-full p-1.5">
+    <div className="@container flex flex-col min-h-full p-1.5">
       <div className="flex @[600px]:flex-row flex-col @[600px]:items-center @[600px]:justify-between items-stretch gap-3 pb-3">
         <div className="@[600px]:flex-grow w-full">
           <ScorecardContext 
@@ -2876,7 +2876,7 @@ function ItemsDashboardInner() {
         </div>
       </div>
       
-      <div className="flex-grow flex flex-col overflow-hidden">
+      <div className="flex flex-col">
         {/* 
           Deep-linking rendering logic:
           1. Full-width mode: When item is NOT in first page (isFullWidth=true) or narrow viewport
@@ -2885,20 +2885,20 @@ function ItemsDashboardInner() {
         */}
 
         {selectedItem && (isNarrowViewport || isFullWidth) ? (
-          <div className="flex-grow overflow-hidden">
+          <div>
             {renderSelectedItem()}
           </div>
         ) : selectedItem ? (
           // Show split view when item is selected but not narrow viewport or full width
-          <div className={`flex ${isNarrowViewport ? 'flex-col' : ''} h-full`}>
+          <div className={`flex ${isNarrowViewport ? 'flex-col' : ''}`}>
             <div 
-              className={`${isFullWidth ? 'hidden' : 'flex-1'} overflow-auto`}
+              className={`${isFullWidth ? 'hidden' : 'flex-1'}`}
               style={selectedItem && !isNarrowViewport && !isFullWidth ? {
                 width: `${leftPanelWidth}%`
               } : undefined}
             >
               <div>
-                <div className="@container h-full">
+                <div className="@container">
                   {!hasInitiallyLoaded && isLoading ? (
                     // Show skeleton only on very first load
                     <div className="grid grid-cols-2 @[500px]:grid-cols-3 @[700px]:grid-cols-4 @[900px]:grid-cols-5 @[1100px]:grid-cols-6 gap-3 animate-pulse">
@@ -2936,7 +2936,6 @@ function ItemsDashboardInner() {
 
             {selectedItem && !isNarrowViewport && !isFullWidth && (
               <div 
-                className="overflow-hidden"
                 style={{ width: `${100 - leftPanelWidth}%` }}
               >
                 {renderSelectedItem()}
@@ -2945,10 +2944,10 @@ function ItemsDashboardInner() {
           </div>
         ) : (
           // Grid-only view when no item is selected
-          <div className="h-full">
-            <div className="overflow-auto h-full">
+          <div>
+            <div>
               <div>
-                <div className="@container h-full">
+                <div className="@container">
                   {!hasInitiallyLoaded && isLoading ? (
                     // Show skeleton only on very first load
                     <div className="grid grid-cols-2 @[500px]:grid-cols-3 @[700px]:grid-cols-4 @[900px]:grid-cols-5 @[1100px]:grid-cols-6 gap-3 animate-pulse">
