@@ -4,6 +4,9 @@ import { Badge } from '@/components/ui/badge';
 import { Loader2, ExternalLink, ChevronDown, ChevronUp, ListTodo, IdCard } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { motion } from 'framer-motion';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkBreaks from 'remark-breaks';
 
 import { Timestamp } from '@/components/ui/timestamp';
 import Link from 'next/link';
@@ -108,7 +111,27 @@ const ScoreResultCard: React.FC<{ result: ScoreResultWithDetails }> = ({ result 
       </div>
       {result.explanation && (
         <div className="mt-3 text-sm text-muted-foreground">
-          <p>{displayExplanation}</p>
+          <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-muted-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:bg-muted prose-pre:text-foreground">
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm, remarkBreaks]}
+              components={{
+                // Customize components for better styling
+                p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                ul: ({ children }) => <ul className="mb-2 ml-4 list-disc">{children}</ul>,
+                ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal">{children}</ol>,
+                li: ({ children }) => <li className="mb-1">{children}</li>,
+                strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+                em: ({ children }) => <em className="italic">{children}</em>,
+                code: ({ children }) => <code className="bg-muted px-1 py-0.5 rounded text-xs font-mono">{children}</code>,
+                pre: ({ children }) => <pre className="bg-muted p-2 rounded overflow-x-auto text-xs">{children}</pre>,
+                h1: ({ children }) => <h1 className="text-base font-semibold mb-2 text-foreground">{children}</h1>,
+                h2: ({ children }) => <h2 className="text-sm font-semibold mb-2 text-foreground">{children}</h2>,
+                h3: ({ children }) => <h3 className="text-sm font-medium mb-1 text-foreground">{children}</h3>,
+              }}
+            >
+              {displayExplanation}
+            </ReactMarkdown>
+          </div>
           {needsExpansion && (
             <div className="flex justify-center">
               <Button

@@ -7,6 +7,9 @@ import { CardButton } from '@/components/CardButton'
 import { Badge } from '@/components/ui/badge'
 import { Timestamp } from '@/components/ui/timestamp'
 import { motion } from 'framer-motion'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import remarkBreaks from 'remark-breaks'
 import ItemScoreResultCard from './ItemScoreResultCard'
 import { IdentifierDisplay } from '@/components/ui/identifier-display'
 import NumberFlowWrapper from '@/components/ui/number-flow'
@@ -365,7 +368,28 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
             <div>
               <h3 className="text-sm font-medium text-foreground mb-2">Text</h3>
               <div className="p-3">
-                <p className="text-sm whitespace-pre-wrap">{item.text}</p>
+                <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:bg-muted prose-pre:text-foreground">
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm, remarkBreaks]}
+                    components={{
+                      // Customize components for better styling
+                      p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
+                      ul: ({ children }) => <ul className="mb-3 ml-4 list-disc">{children}</ul>,
+                      ol: ({ children }) => <ol className="mb-3 ml-4 list-decimal">{children}</ol>,
+                      li: ({ children }) => <li className="mb-1">{children}</li>,
+                      strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+                      em: ({ children }) => <em className="italic">{children}</em>,
+                      code: ({ children }) => <code className="bg-muted px-1 py-0.5 rounded text-xs font-mono">{children}</code>,
+                      pre: ({ children }) => <pre className="bg-muted p-3 rounded overflow-x-auto text-sm">{children}</pre>,
+                      h1: ({ children }) => <h1 className="text-lg font-semibold mb-3 text-foreground">{children}</h1>,
+                      h2: ({ children }) => <h2 className="text-base font-semibold mb-2 text-foreground">{children}</h2>,
+                      h3: ({ children }) => <h3 className="text-sm font-medium mb-2 text-foreground">{children}</h3>,
+                      blockquote: ({ children }) => <blockquote className="border-l-4 border-muted-foreground/20 pl-4 italic text-muted-foreground">{children}</blockquote>,
+                    }}
+                  >
+                    {item.text}
+                  </ReactMarkdown>
+                </div>
               </div>
             </div>
           )}
