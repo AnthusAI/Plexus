@@ -192,7 +192,7 @@ const ItemScoreResults: React.FC<ItemScoreResultsProps> = ({
   const totalResults = scorecardIds.reduce((sum, id) => sum + groupedResults[id].scores.length, 0);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-2">
       <div className="flex items-end justify-between">
         <h3 className="text-xl text-muted-foreground font-semibold">Score Results</h3>
         <span className="text-sm">
@@ -205,7 +205,7 @@ const ItemScoreResults: React.FC<ItemScoreResultsProps> = ({
           const group = groupedResults[scorecardId];
           return (
             <div key={scorecardId}>
-              <div className="mb-4">
+              <div className="mb-2">
                 <div className="flex items-end justify-between">
                   <div className="flex flex-col gap-1">
                     <div className="flex items-center gap-1">
