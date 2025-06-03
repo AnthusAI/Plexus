@@ -181,7 +181,7 @@ export const MetadataEditor = React.forwardRef<HTMLDivElement, MetadataEditorPro
     const canAddMore = !disabled && (!maxEntries || entries.length < maxEntries)
 
     return (
-      <div ref={ref} className={cn("space-y-4", className)} {...props}>
+      <div ref={ref} className={cn("space-y-2", className)} {...props}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Tag className="h-3 w-3 text-muted-foreground" />
@@ -199,18 +199,18 @@ export const MetadataEditor = React.forwardRef<HTMLDivElement, MetadataEditorPro
         </div>
         
         {entries.length > 0 ? (
-          <div className={cn("space-y-2", disabled && "grid gap-2 grid-cols-[auto_1fr]")}>
+          <div className={cn("space-y-2", disabled && "grid gap-1 grid-cols-[auto_1fr]")}>
             {entries.map((entry) => (
               <div key={entry.id} className={cn(disabled ? "contents" : "flex items-center space-x-2")}>
                 {disabled ? (
                   // Read-only mode: render in rounded rectangles with grid layout
                   <>
-                    <div className="bg-background rounded px-2 py-1.5">
-                      <span className="text-sm text-foreground font-medium">
+                    <div className="bg-background rounded px-2 py-1">
+                      <span className="text-sm text-foreground font-medium font-mono">
                         {String(entry.key || '')}
                       </span>
                     </div>
-                    <div className="bg-background rounded px-2 py-1.5">
+                    <div className="bg-background rounded px-2 py-1">
                       <span className="text-sm text-foreground">
                         {String(entry.value || '')}
                       </span>
