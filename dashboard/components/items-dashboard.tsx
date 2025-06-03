@@ -1,6 +1,6 @@
 "use client"
 import React, { useContext, useEffect, useMemo, useRef, useState, useCallback, Suspense } from "react"
-import { useRouter, useSearchParams, useParams } from 'next/navigation'
+import { useSearchParams, useParams } from 'next/navigation'
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
@@ -133,6 +133,86 @@ const ITEMS_TIME_RANGE_OPTIONS = [
   { value: "review", label: "With Feedback" },
   { value: "custom", label: "Custom" },
 ]
+
+// Memoized grid component to prevent re-renders when just selection changes
+const GridContent = React.memo(({ 
+  filteredItems,
+  selectedItem,
+  handleItemClick,
+  getBadgeVariant,
+  scoreCountManagerRef,
+  itemRefsMap,
+  scoreResultCounts,
+  nextToken,
+  isLoadingMore,
+  loadMoreRef
+}: {
+  filteredItems: Item[];
+  selectedItem: string | null;
+  handleItemClick: (itemId: string) => void;
+  getBadgeVariant: (status: string) => string;
+  scoreCountManagerRef: React.MutableRefObject<ScoreResultCountManager | null>;
+  itemRefsMap: React.MutableRefObject<Map<string, HTMLDivElement | null>>;
+  scoreResultCounts: Map<string, ScoreResultCount>;
+  nextToken: string | null;
+  isLoadingMore: boolean;
+  loadMoreRef: React.MutableRefObject<HTMLDivElement | null>;
+}) => {
+  if (filteredItems.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-full text-muted-foreground">
+        No items found
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="grid grid-cols-2 @[500px]:grid-cols-3 @[700px]:grid-cols-4 @[900px]:grid-cols-5 @[1100px]:grid-cols-6 gap-3">
+        {filteredItems.map((item) => {
+          const scoreCount = scoreResultCounts.get(item.id);
+          return (
+            <MemoizedGridItemCard
+              key={item.id}
+              item={item}
+              scoreCount={scoreCount}
+              selectedItem={selectedItem}
+              handleItemClick={handleItemClick}
+              getBadgeVariant={getBadgeVariant}
+              scoreCountManagerRef={scoreCountManagerRef}
+              itemRefsMap={itemRefsMap}
+            />
+          );
+        })}
+      </div>
+      
+      {nextToken && filteredItems.length > 0 && (
+        <div 
+          ref={loadMoreRef} 
+          className="flex justify-center py-6"
+        >
+          {isLoadingMore && (
+            <div className="flex items-center">
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              <span>Loading more items...</span>
+            </div>
+          )}
+        </div>
+      )}
+    </>
+  );
+}, (prevProps, nextProps) => {
+  // Custom comparison - re-render if items, loading states, or selection changes
+  return (
+    prevProps.filteredItems === nextProps.filteredItems &&
+    prevProps.nextToken === nextProps.nextToken &&
+    prevProps.isLoadingMore === nextProps.isLoadingMore &&
+    prevProps.scoreResultCounts === nextProps.scoreResultCounts &&
+    prevProps.selectedItem === nextProps.selectedItem // Include selectedItem in comparison
+  );
+});
+
+GridContent.displayName = 'GridContent';
 
 // Memoized grid item component to prevent unnecessary re-renders
 const MemoizedGridItemCard = React.memo(({ 
@@ -476,7 +556,6 @@ const transformItem = (item: any, options: { isNew?: boolean } = {}): Item => {
 };
 
 function ItemsDashboardInner() {
-  const router = useRouter()
   const searchParams = useSearchParams()
   const params = useParams()
   const [selectedItem, setSelectedItem] = useState<string | null>(null)
@@ -521,6 +600,7 @@ function ItemsDashboardInner() {
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [nextToken, setNextToken] = useState<string | null>(null);
+  const [hasInitiallyLoaded, setHasInitiallyLoaded] = useState(false);
   const { user } = useAuthenticator();
   // Use the account context instead of local state
   const { selectedAccount, isLoadingAccounts } = useAccount();
@@ -610,8 +690,9 @@ function ItemsDashboardInner() {
         const identifier = identifiers[0];
         const itemId = identifier.itemId;
         if (itemId) {
-          // Navigate to the item
-          router.push(`/lab/items/${itemId}`);
+          // Navigate to the item without remount
+          window.history.pushState({}, '', `/lab/items/${itemId}`)
+          setSelectedItem(itemId)
           setSearchValue(''); // Clear search on success
         } else {
           setSearchError('Item not found for this identifier');
@@ -639,7 +720,7 @@ function ItemsDashboardInner() {
     } finally {
       setIsSearching(false);
     }
-  }, [router]);
+  }, []);
 
   // Handle search form submission
   const handleSearchSubmit = useCallback((e: React.FormEvent) => {
@@ -651,6 +732,11 @@ function ItemsDashboardInner() {
   const fetchSpecificItem = useCallback(async (itemId: string) => {
     if (!selectedAccount) {
       return null;
+    }
+    
+    // Check one more time if the item is now available before fetching
+    if (items.some(item => item.id === itemId)) {
+      return items.find(item => item.id === itemId) || null;
     }
     
     setSpecificItemLoading(true);
@@ -737,7 +823,7 @@ function ItemsDashboardInner() {
       clearTimeout(timeoutId);
       setSpecificItemLoading(false);
     }
-  }, [selectedAccount]); // Removed state dependencies to avoid circular updates
+  }, [selectedAccount, items]); // Include items to check if item is now available
   
   // Clear failed fetches and specifically fetched items when account changes
   useEffect(() => {
@@ -746,6 +832,8 @@ function ItemsDashboardInner() {
       setSpecificallyFetchedItems(new Set());
       // Clear score results refetch ref when account changes
       scoreResultsRefetchRef.current = null;
+      // Reset hasInitiallyLoaded when account changes
+      setHasInitiallyLoaded(false);
     }
   }, [selectedAccount?.id]);
   
@@ -759,24 +847,38 @@ function ItemsDashboardInner() {
   // Track the previous item ID to only scroll when it actually changes
   const prevItemIdRef = useRef<string | null>(null);
   
-
-  
-  // Sync URL parameter with selected item (simplified - view logic handled in second useEffect)
+  // Handle browser back/forward navigation
   useEffect(() => {
+    const handlePopState = () => {
+      const pathMatch = window.location.pathname.match(/\/lab\/items\/(.+)/)
+      const itemIdFromUrl = pathMatch ? pathMatch[1] : null
+      
+      if (itemIdFromUrl !== selectedItem) {
+        setSelectedItem(itemIdFromUrl)
+        if (!itemIdFromUrl) {
+          setIsFullWidth(false)
+          prevItemIdRef.current = null
+        }
+      }
+    }
+    
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [selectedItem])
+  
+  // Initial sync from URL params (only on mount or when navigating to this page)
+  useEffect(() => {
+    // Handle both route structures: /lab/items and /lab/items/[id]
     const itemId = params.id as string
     
-    if (itemId) {
-      // Always set the selected item if it's different
-      if (itemId !== selectedItem) {
-        setSelectedItem(itemId)
-      }
-    } else if (!itemId && selectedItem && !isLoadingAccounts) {
-      // Clear selection and reset to grid view when no item is selected
+    if (itemId && itemId !== selectedItem) {
+      setSelectedItem(itemId)
+    } else if (!itemId && selectedItem) {
+      // If we're on /lab/items but still have a selectedItem, clear it
       setSelectedItem(null)
-      setIsFullWidth(false) // Always show grid when no item is selected
-      prevItemIdRef.current = null;
+      setIsFullWidth(false)
     }
-  }, [params.id, selectedItem, isLoadingAccounts]) // Simplified dependencies
+  }, [params.id]) // Only depend on params.id, not selectedItem
 
   // Handle deep-linking view logic after items are loaded (primarily for URL navigation)
   useEffect(() => {
@@ -808,20 +910,21 @@ function ItemsDashboardInner() {
           }
         }
         // If it was specifically fetched, keep the current view mode (likely full-width)
-      } else if (items.length > 0 && !isLoading) {
+      } else if (items.length > 0 && !isLoading && !specificItemLoading) {
         // Item is not in first page and first page has been loaded - fetch it specifically
+        // Added check for specificItemLoading to prevent multiple concurrent fetches
         if (!isNarrowViewport) {
           setIsFullWidth(true); // Show full-width for specifically fetched items
         }
         
-        // Only fetch if we haven't already tried
+        // Only fetch if we haven't already tried and we're not currently loading
         if (!wasSpecificallyFetched && !failedItemFetches.has(selectedItem)) {
           fetchSpecificItem(selectedItem);
           prevItemIdRef.current = selectedItem;
         }
       }
     }
-  }, [selectedItem, items.length, isLoading, isLoadingAccounts, selectedAccount, isNarrowViewport, scrollToSelectedItem, specificallyFetchedItems, failedItemFetches, fetchSpecificItem]);
+  }, [selectedItem, items.length, isLoading, isLoadingAccounts, selectedAccount, isNarrowViewport, scrollToSelectedItem, specificallyFetchedItems, failedItemFetches, fetchSpecificItem, specificItemLoading]);
 
   
   // Add a ref for the intersection observer
@@ -1233,6 +1336,7 @@ function ItemsDashboardInner() {
       
       setItems(transformedItems);
       setNextToken(nextTokenToUse);
+      setHasInitiallyLoaded(true);
       
       setIsLoading(false);
     } catch (error) {
@@ -1461,19 +1565,15 @@ function ItemsDashboardInner() {
     if (!isLoadingAccounts && selectedAccount) {
       shouldRefetchRef.current = true;
     }
-  }, [selectedAccount, isLoadingAccounts, selectedScorecard, selectedScore]);
+  }, [selectedAccount?.id, isLoadingAccounts, selectedScorecard, selectedScore]);
   
   // Fetch items when the selected account or other filters change
   useEffect(() => {
     if (!isLoadingAccounts && selectedAccount && shouldRefetchRef.current) {
       shouldRefetchRef.current = false; // Reset the flag
       
-      // Reset items and nextToken when filters change, but preserve specifically fetched items
-      setItems(prevItems => {
-        // Keep any items that were specifically fetched (not from the main list)
-        const specificItem = params.id ? prevItems.find(item => item.id === params.id) : null;
-        return specificItem ? [specificItem] : [];
-      });
+      // Reset items and nextToken when filters change
+      setItems([]);
       setNextToken(null);
       // Clear specifically fetched items since filter change redefines what "first page" means
       setSpecificallyFetchedItems(new Set());
@@ -1483,7 +1583,7 @@ function ItemsDashboardInner() {
       setNextToken(null);
       setIsLoading(false); // Stop loading indicator
     }
-  }, [fetchItems, selectedAccount, isLoadingAccounts, params.id, setItems, setNextToken]);
+  }, [fetchItems, selectedAccount?.id, isLoadingAccounts]);
 
   // Initialize score count manager
   useEffect(() => {
@@ -1730,7 +1830,6 @@ function ItemsDashboardInner() {
   }, [])
 
   const filteredItems = useMemo(() => {
-    
     return items.filter(item => {
       if (!selectedScorecard && !selectedScore && filterConfig.length === 0) return true
       
@@ -1888,9 +1987,8 @@ function ItemsDashboardInner() {
     
     // If item is not found, check if we should attempt to fetch it or if we're already loading
     if (!selectedItemWithCount) {
-      // ALWAYS check loading states first - this takes precedence over failed fetches
-      // because fetchSpecificItem may be retrying a previously failed item
-      if (isLoading || specificItemLoading) {
+      // Only show loading spinner if we're specifically loading this item or during initial load
+      if (specificItemLoading || (!hasInitiallyLoaded && isLoading)) {
         return (
           <div className="h-full flex flex-col">
             <div className="flex-1 flex items-center justify-center">
@@ -1954,8 +2052,9 @@ function ItemsDashboardInner() {
             onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
             onClose={() => {
               setIsFullWidth(false);
-              // Use Next.js router to navigate back to grid view
-              router.replace(`/lab/items`)
+              // Use window.history to navigate back to grid view without remount
+              window.history.pushState({}, '', `/lab/items`)
+              setSelectedItem(null)
             }}
             onScoreResultsRefetchReady={(refetchFn) => {
               scoreResultsRefetchRef.current = refetchFn;
@@ -2188,8 +2287,10 @@ function ItemsDashboardInner() {
   }
 
   const handleItemClick = (itemId: string) => {
-    // Use Next.js router to update the URL - this will trigger the useEffect that syncs params.id with selectedItem
-    router.replace(`/lab/items/${itemId}`)
+    // Use window.history.pushState for truly shallow navigation that won't cause remount
+    window.history.pushState({}, '', `/lab/items/${itemId}`)
+    // Manually update the selected item state
+    setSelectedItem(itemId)
     
     // Handle view mode for grid items (items in the first page)
     if (items.some(item => item.id === itemId)) {
@@ -2207,6 +2308,9 @@ function ItemsDashboardInner() {
     } else {
       // Item is not in first page - let the useEffect handle fetching and view setup
       if (isNarrowViewport) {
+        setIsFullWidth(true)
+      } else {
+        // For desktop, also set full-width for items not in first page
         setIsFullWidth(true)
       }
     }
@@ -2305,8 +2409,8 @@ function ItemsDashboardInner() {
     };
   }, []);
 
-  // Show loading skeleton for initial load
-  if (isLoading && items.length === 0) {
+  // Show loading skeleton only for true initial load
+  if (!hasInitiallyLoaded && isLoading) {
     return <ItemsDashboardSkeleton />
   }
 
@@ -2390,48 +2494,26 @@ function ItemsDashboardInner() {
             >
               <div>
                 <div className="@container h-full">
-                  {filteredItems.length === 0 ? (
-                    // Show skeleton instead of "No items found" message
+                  {!hasInitiallyLoaded && isLoading ? (
+                    // Show skeleton only on very first load
                     <div className="grid grid-cols-2 @[500px]:grid-cols-3 @[700px]:grid-cols-4 @[900px]:grid-cols-5 @[1100px]:grid-cols-6 gap-3 animate-pulse">
                       {[...Array(12)].map((_, i) => (
                         <ItemCardSkeleton key={i} />
                       ))}
                     </div>
                   ) : (
-                    <>
-                      <div className="grid grid-cols-2 @[500px]:grid-cols-3 @[700px]:grid-cols-4 @[900px]:grid-cols-5 @[1100px]:grid-cols-6 gap-3">
-                        {filteredItems.map((item) => {
-                          const scoreCount = scoreResultCounts.get(item.id);
-                          return (
-                            <MemoizedGridItemCard
-                              key={item.id}
-                              item={item}
-                              scoreCount={scoreCount}
-                              selectedItem={selectedItem}
-                              handleItemClick={handleItemClick}
-                              getBadgeVariant={getBadgeVariant}
-                              scoreCountManagerRef={scoreCountManagerRef}
-                              itemRefsMap={itemRefsMap}
-                            />
-                          );
-                        })}
-                      </div>
-                      
-                      {/* Replace the Load More button with an invisible loading indicator */}
-                      {nextToken && filteredItems.length > 0 && (
-                        <div 
-                          ref={loadMoreRef} 
-                          className="flex justify-center py-6"
-                        >
-                          {isLoadingMore && (
-                            <div className="flex items-center">
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                              <span>Loading more items...</span>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </>
+                    <GridContent
+                      filteredItems={filteredItems}
+                      selectedItem={selectedItem}
+                      handleItemClick={handleItemClick}
+                      getBadgeVariant={getBadgeVariant}
+                      scoreCountManagerRef={scoreCountManagerRef}
+                      itemRefsMap={itemRefsMap}
+                      scoreResultCounts={scoreResultCounts}
+                      nextToken={nextToken}
+                      isLoadingMore={isLoadingMore}
+                      loadMoreRef={loadMoreRef}
+                    />
                   )}
                 </div>
               </div>
@@ -2462,48 +2544,26 @@ function ItemsDashboardInner() {
             <div className="overflow-auto h-full">
               <div>
                 <div className="@container h-full">
-                  {filteredItems.length === 0 ? (
-                    // Show skeleton instead of "No items found" message
+                  {!hasInitiallyLoaded && isLoading ? (
+                    // Show skeleton only on very first load
                     <div className="grid grid-cols-2 @[500px]:grid-cols-3 @[700px]:grid-cols-4 @[900px]:grid-cols-5 @[1100px]:grid-cols-6 gap-3 animate-pulse">
                       {[...Array(12)].map((_, i) => (
                         <ItemCardSkeleton key={i} />
                       ))}
                     </div>
                   ) : (
-                    <>
-                      <div className="grid grid-cols-2 @[500px]:grid-cols-3 @[700px]:grid-cols-4 @[900px]:grid-cols-5 @[1100px]:grid-cols-6 gap-3">
-                        {filteredItems.map((item) => {
-                          const scoreCount = scoreResultCounts.get(item.id);
-                          return (
-                            <MemoizedGridItemCard
-                              key={item.id}
-                              item={item}
-                              scoreCount={scoreCount}
-                              selectedItem={selectedItem}
-                              handleItemClick={handleItemClick}
-                              getBadgeVariant={getBadgeVariant}
-                              scoreCountManagerRef={scoreCountManagerRef}
-                              itemRefsMap={itemRefsMap}
-                            />
-                          );
-                        })}
-                      </div>
-                      
-                      {/* Replace the Load More button with an invisible loading indicator */}
-                      {nextToken && filteredItems.length > 0 && (
-                        <div 
-                          ref={loadMoreRef} 
-                          className="flex justify-center py-6"
-                        >
-                          {isLoadingMore && (
-                            <div className="flex items-center">
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                              <span>Loading more items...</span>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </>
+                    <GridContent
+                      filteredItems={filteredItems}
+                      selectedItem={selectedItem}
+                      handleItemClick={handleItemClick}
+                      getBadgeVariant={getBadgeVariant}
+                      scoreCountManagerRef={scoreCountManagerRef}
+                      itemRefsMap={itemRefsMap}
+                      scoreResultCounts={scoreResultCounts}
+                      nextToken={nextToken}
+                      isLoadingMore={isLoadingMore}
+                      loadMoreRef={loadMoreRef}
+                    />
                   )}
                 </div>
               </div>
