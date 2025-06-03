@@ -63,7 +63,7 @@ const MobileHeader = ({
   toggleRightSidebar: () => void;
   rightSidebarState: 'collapsed' | 'normal' | 'expanded';
 }) => (
-  <div className="hidden max-lg:flex items-center justify-between p-1 px-2 bg-background">
+  <div className="hidden max-lg:flex items-center justify-between p-1 px-4 bg-background">
     <DashboardButton
       variant="ghost"
       size="icon"
