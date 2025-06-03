@@ -620,7 +620,10 @@ function ItemsDashboardInner() {
   // Ref to hold the refetch function for the currently selected item's score results
   const scoreResultsRefetchRef = useRef<(() => void) | null>(null);
 
-
+  // Wake-from-sleep detection state
+  const pageHiddenTimeRef = useRef<number | null>(null);
+  const isPageVisibleRef = useRef<boolean>(!document.hidden);
+  const WAKE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
 
   // Search state
   const [searchValue, setSearchValue] = useState<string>('');
@@ -843,6 +846,382 @@ function ItemsDashboardInner() {
       scoreResultsRefetchRef.current = null;
     };
   }, [selectedItem]);
+
+  // Silent refresh function for wake-from-sleep scenarios
+  const silentRefresh = useCallback(async () => {
+    if (!selectedAccount) return;
+    
+    try {
+      // Use the same logic as throttledRefetch but ensure it's truly silent
+      const accountId = selectedAccount.id;
+      let itemsFromDirectQuery: any[] = [];
+      
+      const useScorecard = selectedScorecard !== null && selectedScorecard !== undefined;
+      const useScore = selectedScore !== null && selectedScore !== undefined;
+      
+      if (useScore) {
+        const directQuery = await graphqlRequest<{ listItemByScoreIdAndCreatedAt: { items: any[], nextToken: string | null } }>(`
+          query ListItemsDirect($scoreId: String!, $limit: Int!) {
+            listItemByScoreIdAndCreatedAt(
+              scoreId: $scoreId, 
+              sortDirection: DESC,
+              limit: $limit
+            ) {
+              items {
+                id
+                externalId
+                description
+                accountId
+                evaluationId
+                updatedAt
+                createdAt
+                isEvaluation
+                identifiers
+                metadata
+                attachedFiles
+                itemIdentifiers {
+                  items {
+                    itemId
+                    name
+                    value
+                    url
+                    position
+                  }
+                }
+              }
+              nextToken
+            }
+          }
+        `, {
+          scoreId: selectedScore,
+          limit: 100
+        });
+        itemsFromDirectQuery = directQuery.data?.listItemByScoreIdAndCreatedAt?.items || [];
+      } else if (useScorecard) {
+        const directQuery = await graphqlRequest<{ 
+          listScorecardProcessedItemByScorecardId: { 
+            items: Array<{
+              itemId: string;
+              processedAt?: string;
+              item: any;
+            }>;
+            nextToken: string | null;
+          }
+        }>(`
+          query ListItemsDirect($scorecardId: ID!, $limit: Int!) {
+            listScorecardProcessedItemByScorecardId(
+              scorecardId: $scorecardId,
+              limit: $limit
+            ) {
+              items {
+                itemId
+                processedAt
+                item {
+                  id
+                  externalId
+                  description
+                  accountId
+                  evaluationId
+                  updatedAt
+                  createdAt
+                  isEvaluation
+                  identifiers
+                  metadata
+                  attachedFiles
+                  itemIdentifiers {
+                    items {
+                      itemId
+                      name
+                      value
+                      url
+                      position
+                    }
+                  }
+                }
+              }
+              nextToken
+            }
+          }
+        `, {
+          scorecardId: selectedScorecard,
+          limit: 100
+        });
+        itemsFromDirectQuery = directQuery.data?.listScorecardProcessedItemByScorecardId?.items
+          ?.map(association => association.item)
+          ?.filter(item => item !== null)
+          ?.sort((a, b) => {
+            const dateA = new Date(a.createdAt || '').getTime();
+            const dateB = new Date(b.createdAt || '').getTime();
+            return dateB - dateA;
+          }) || [];
+      } else {
+        const directQuery = await graphqlRequest<{ listItemByAccountIdAndCreatedAt: { items: any[], nextToken: string | null } }>(`
+          query ListItemsDirect($accountId: String!, $limit: Int!) {
+            listItemByAccountIdAndCreatedAt(
+              accountId: $accountId, 
+              sortDirection: DESC,
+              limit: $limit
+            ) {
+              items {
+                id
+                externalId
+                description
+                accountId
+                evaluationId
+                updatedAt
+                createdAt
+                isEvaluation
+                identifiers
+                metadata
+                attachedFiles
+                itemIdentifiers {
+                  items {
+                    itemId
+                    name
+                    value
+                    url
+                    position
+                  }
+                }
+              }
+              nextToken
+            }
+          }
+        `, {
+          accountId: accountId,
+          limit: 100
+        });
+        itemsFromDirectQuery = directQuery.data?.listItemByAccountIdAndCreatedAt?.items || [];
+      }
+      
+      // Transform and merge with existing items
+      const transformedItems = itemsFromDirectQuery.map(item => transformItem(item, { isNew: false }));
+      
+      // Merge with existing items - update existing ones and add new ones
+      setItems(prevItems => {
+        const existingIds = new Set(prevItems.map(item => item.id));
+        const newItems = transformedItems
+          .filter(item => !existingIds.has(item.id))
+          .map(newItem => {
+            return { ...newItem, isNew: true }; // Mark new items as new!
+          });
+        
+        // Update existing items and add new ones at the beginning
+        const updatedItems = prevItems.map(prevItem => {
+          const freshItem = transformedItems.find(item => item.id === prevItem.id);
+          if (freshItem) {
+            return {
+              // Start with existing item to preserve metadata and other fields
+              ...prevItem,
+              // Only update fields that are present in the fresh data
+              ...(freshItem.externalId !== undefined && { externalId: freshItem.externalId }),
+              ...(freshItem.description !== undefined && { description: freshItem.description }),
+              ...(freshItem.updatedAt !== undefined && { updatedAt: freshItem.updatedAt }),
+              ...(freshItem.identifiers !== undefined && { identifiers: freshItem.identifiers }),
+              ...(freshItem.metadata !== undefined && { metadata: freshItem.metadata }),
+              ...(freshItem.attachedFiles !== undefined && { attachedFiles: freshItem.attachedFiles }),
+              // Preserve isNew status
+              isNew: prevItem.isNew,
+            };
+          }
+          return prevItem;
+        });
+        
+        // Add timeout to clear isNew flag for the new items found in silent refresh
+        if (newItems.length > 0) {
+          setTimeout(() => {
+            setItems(currentItems => 
+              currentItems.map(item => 
+                newItems.some(newItem => newItem.id === item.id) 
+                  ? { ...item, isNew: false }
+                  : item
+              )
+            );
+          }, 3000);
+        }
+        
+        return [...newItems, ...updatedItems];
+      });
+      
+      // Also refresh score result counts silently
+      if (scoreCountManagerRef.current) {
+        scoreCountManagerRef.current.refreshAllCounts();
+      }
+      
+      // Refresh score results for selected item if applicable
+      if (scoreResultsRefetchRef.current) {
+        scoreResultsRefetchRef.current();
+      }
+      
+    } catch (error) {
+      console.error('Error during silent refresh:', error);
+    }
+  }, [selectedAccount, selectedScorecard, selectedScore]);
+
+  // Restart subscriptions function
+  const restartSubscriptions = useCallback(() => {
+    if (!selectedAccount || isLoadingAccounts) return;
+    
+    // Clean up existing subscriptions
+    if (itemSubscriptionRef.current) {
+      itemSubscriptionRef.current.unsubscribe();
+      itemSubscriptionRef.current = null;
+    }
+    if (itemUpdateSubscriptionRef.current) {
+      itemUpdateSubscriptionRef.current.unsubscribe();
+      itemUpdateSubscriptionRef.current = null;
+    }
+    if (scoreResultSubscriptionRef.current) {
+      scoreResultSubscriptionRef.current.unsubscribe();
+      scoreResultSubscriptionRef.current = null;
+    }
+    
+    // Restart subscriptions with a small delay to ensure cleanup completed
+    setTimeout(() => {
+      // Item creation subscription
+      const createSubscription = observeItemCreations().subscribe({
+        next: async ({ data: newItem }) => {
+          if (!newItem) {
+            return;
+          }
+          
+          if (newItem.accountId === selectedAccount.id) {
+            const transformedNewItem = transformItem(newItem, { isNew: true });
+            setItems(prevItems => [transformedNewItem, ...prevItems]);
+            
+            toast.success('🎉 New item detected! Refreshing...', {
+              duration: 3000,
+            });
+            
+            setTimeout(() => {
+              setItems(prevItems => 
+                prevItems.map(item => 
+                  item.id === newItem.id 
+                    ? { ...item, status: "Done", isNew: false }
+                    : item
+                )
+              );
+            }, 3000);
+          }
+        },
+        error: (error) => {
+          console.error('Item creation subscription error:', error);
+          toast.error("Error in item subscription.");
+        }
+      });
+      
+      // Item update subscription
+             const updateSubscription = observeItemUpdates().subscribe({
+         next: async ({ data: updatedItem, needsRefetch }) => {
+           if (needsRefetch && !updatedItem) {
+             silentRefresh();
+             return;
+           }
+          
+          if (!updatedItem) {
+            return;
+          }
+          
+          if (updatedItem.accountId === selectedAccount.id) {
+            setItems(prevItems => {
+              const updatedItems = prevItems.map(item => 
+                item.id === updatedItem.id 
+                  ? {
+                      ...item,
+                      ...(updatedItem.externalId !== undefined && { externalId: updatedItem.externalId }),
+                      ...(updatedItem.description !== undefined && { description: updatedItem.description }),
+                      ...(updatedItem.updatedAt !== undefined && { updatedAt: updatedItem.updatedAt }),
+                      ...(updatedItem.identifiers !== undefined && { identifiers: transformIdentifiers(updatedItem) }),
+                      ...(updatedItem.metadata !== undefined && { 
+                        metadata: typeof updatedItem.metadata === 'string' ? JSON.parse(updatedItem.metadata) : updatedItem.metadata 
+                      }),
+                      ...(updatedItem.attachedFiles !== undefined && { attachedFiles: updatedItem.attachedFiles }),
+                    }
+                  : item
+              );
+              
+              return updatedItems;
+            });
+            
+            if (scoreCountManagerRef.current) {
+              scoreCountManagerRef.current.clearCount(updatedItem.id);
+              scoreCountManagerRef.current.loadCountForItem(updatedItem.id);
+            }
+          }
+        },
+        error: (error) => {
+          console.error('Item update subscription error:', error);
+          toast.error("Error in item update subscription.");
+        }
+      });
+      
+      // Score result subscription
+      const scoreResultSubscription = observeScoreResultChanges().subscribe({
+        next: async ({ data: changeEvent }) => {
+          if (!changeEvent) {
+            return;
+          }
+          
+          try {
+            if (scoreCountManagerRef.current) {
+              scoreCountManagerRef.current.refreshAllCounts();
+            }
+            
+            if (scoreResultsRefetchRef.current) {
+              scoreResultsRefetchRef.current();
+            }
+          } catch (error) {
+            console.error('Error handling score result change:', error);
+          }
+        },
+        error: (error) => {
+          console.error('Score result subscription error:', error);
+          toast.error("Error in score result subscription.");
+        }
+      });
+      
+      itemSubscriptionRef.current = createSubscription;
+      itemUpdateSubscriptionRef.current = updateSubscription;
+      scoreResultSubscriptionRef.current = scoreResultSubscription;
+    }, 100);
+  }, [selectedAccount, isLoadingAccounts, silentRefresh]);
+
+  // Page Visibility API - detect wake from sleep
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      const isVisible = !document.hidden;
+      const now = Date.now();
+      
+      if (isVisible && !isPageVisibleRef.current) {
+        // Page became visible
+        isPageVisibleRef.current = true;
+        
+        if (pageHiddenTimeRef.current && (now - pageHiddenTimeRef.current) > WAKE_THRESHOLD_MS) {
+          // Page was hidden for more than the threshold - likely wake from sleep
+          console.log('Wake from sleep detected, performing silent refresh...');
+          
+          // Perform silent refresh and restart subscriptions
+          silentRefresh();
+          restartSubscriptions();
+        }
+        
+        pageHiddenTimeRef.current = null;
+      } else if (!isVisible && isPageVisibleRef.current) {
+        // Page became hidden
+        isPageVisibleRef.current = false;
+        pageHiddenTimeRef.current = now;
+      }
+    };
+    
+    // Set initial state
+    isPageVisibleRef.current = !document.hidden;
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [silentRefresh, restartSubscriptions]);
   
   // Track the previous item ID to only scroll when it actually changes
   const prevItemIdRef = useRef<string | null>(null);
@@ -1672,7 +2051,7 @@ function ItemsDashboardInner() {
       next: async ({ data: updatedItem, needsRefetch }) => {
         // Handle empty notifications that require a refetch
         if (needsRefetch && !updatedItem) {
-          throttledRefetch();
+          silentRefresh();
           return;
         }
         
@@ -1770,7 +2149,7 @@ function ItemsDashboardInner() {
         refetchTimeoutRef.current = null;
       }
     };
-  }, [selectedAccount, isLoadingAccounts, throttledRefetch]); // Removed fetchItems, added throttledRefetch which is actually used
+  }, [selectedAccount, isLoadingAccounts, silentRefresh]); // Removed fetchItems, added silentRefresh which is actually used
 
   useEffect(() => {
     const checkViewportWidth = () => {

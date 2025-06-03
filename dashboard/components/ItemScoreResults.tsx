@@ -195,8 +195,8 @@ const ItemScoreResults: React.FC<ItemScoreResultsProps> = ({
     <div className="space-y-4">
       <div className="flex items-end justify-between">
         <h3 className="text-xl text-muted-foreground font-semibold">Score Results</h3>
-        <span className="text-sm text-muted-foreground">
-          <NumberFlowWrapper value={totalResults} /> result{totalResults !== 1 ? 's' : ''} across <NumberFlowWrapper value={scorecardIds.length} /> scorecard{scorecardIds.length !== 1 ? 's' : ''}
+        <span className="text-sm">
+          <span className="text-foreground font-medium"><NumberFlowWrapper value={totalResults} /></span> <span className="text-muted-foreground">score result{totalResults !== 1 ? 's' : ''} across</span> <span className="text-foreground font-medium"><NumberFlowWrapper value={scorecardIds.length} /></span> <span className="text-muted-foreground">scorecard{scorecardIds.length !== 1 ? 's' : ''}</span>
         </span>
       </div>
 
@@ -209,8 +209,8 @@ const ItemScoreResults: React.FC<ItemScoreResultsProps> = ({
                 <div className="flex items-end justify-between">
                   <div className="flex flex-col gap-1">
                     <div className="flex items-center gap-1">
-                      <ListTodo className="h-4 w-4 flex-shrink-0" />
-                      <span className="font-medium">{group.scorecardName}</span>
+                      <ListTodo className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                      <span className="font-medium text-foreground">{group.scorecardName}</span>
                     </div>
                     {group.scorecardExternalId && (
                       <div>
@@ -223,8 +223,8 @@ const ItemScoreResults: React.FC<ItemScoreResultsProps> = ({
                       </div>
                     )}
                   </div>
-                  <span className="text-sm text-muted-foreground">
-                    <NumberFlowWrapper value={group.scores.length} /> score result{group.scores.length !== 1 ? 's' : ''}
+                  <span className="text-sm">
+                    <span className="text-foreground font-medium"><NumberFlowWrapper value={group.scores.length} /></span> <span className="text-muted-foreground">score result{group.scores.length !== 1 ? 's' : ''}</span>
                   </span>
                 </div>
               </div>

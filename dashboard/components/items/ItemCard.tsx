@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
-import { MoreHorizontal, X, Square, Columns2, StickyNote, Info, ChevronDown, ChevronUp, Loader2 } from 'lucide-react'
+import { MoreHorizontal, X, Square, Columns2, StickyNote, Info, ChevronDown, ChevronUp, Loader2, Box, ListTodo } from 'lucide-react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { cn } from '@/lib/utils'
 import { CardButton } from '@/components/CardButton'
@@ -208,18 +208,22 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
 
       {/* Scorecard summary */}
       {item.scorecards.length > 0 && (
-        <div className="font-semibold text-sm mt-3">
-          {hasMultipleScorecards ? 
-            `${item.scorecards.length} scorecards` : 
-            item.scorecards[0]?.scorecardName || 'Scorecard'}
+        <div className="flex items-start gap-1 font-semibold text-sm mt-3">
+          <ListTodo className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+          <span className="text-foreground">
+            {hasMultipleScorecards ? 
+              `${item.scorecards.length} scorecards` : 
+              item.scorecards[0]?.scorecardName || 'Scorecard'}
+          </span>
         </div>
       )}
       
       {/* Results count - fixed height to prevent layout jiggling */}
-      <div className="flex flex-col gap-0.5 text-xs">
-        <div>
-          <NumberFlowWrapper value={totalResults} skeletonMode={skeletonMode} /> result{totalResults !== 1 ? 's' : ''}
-        </div>
+      <div className="flex items-start gap-1 text-sm text-muted-foreground">
+        <Box className="h-4 w-4 flex-shrink-0" />
+        <span>
+          <span className="text-foreground"><NumberFlowWrapper value={totalResults} skeletonMode={skeletonMode} /></span> score result{totalResults !== 1 ? 's' : ''}
+        </span>
       </div>
     </div>
   )
@@ -300,8 +304,8 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
             )}
             {/* Total results summary */}
             {totalResults > 0 && (
-              <div className="text-sm text-muted-foreground mt-2">
-                <NumberFlowWrapper value={totalResults} skeletonMode={skeletonMode} /> result{totalResults !== 1 ? 's' : ''} across <NumberFlowWrapper value={item.scorecards.length} skeletonMode={skeletonMode} /> scorecard{item.scorecards.length !== 1 ? 's' : ''}
+              <div className="text-sm mt-2">
+                <span className="text-foreground font-medium"><NumberFlowWrapper value={totalResults} skeletonMode={skeletonMode} /></span> <span className="text-muted-foreground">score result{totalResults !== 1 ? 's' : ''} across</span> <span className="text-foreground font-medium"><NumberFlowWrapper value={item.scorecards.length} skeletonMode={skeletonMode} /></span> <span className="text-muted-foreground">scorecard{item.scorecards.length !== 1 ? 's' : ''}</span>
               </div>
             )}
           </div>
