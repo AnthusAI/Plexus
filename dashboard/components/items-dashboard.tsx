@@ -2340,15 +2340,29 @@ function ItemsDashboardInner() {
       return null
     }
 
-    // If accounts are still loading, show loading state
+    // If accounts are still loading, show skeleton
     if (isLoadingAccounts) {
       return (
         <div className="h-full flex flex-col">
-          <div className="flex-1 flex items-center justify-center">
-            <div className="flex items-center space-x-2">
-              <Loader2 className="h-6 w-6 animate-spin" />
-              <span>Loading item details...</span>
-            </div>
+          <div className="flex-1 overflow-auto">
+            <ItemCard
+              variant="detail"
+              item={{
+                id: selectedItem,
+                timestamp: new Date().toISOString(),
+                scorecards: []
+              } as ItemData}
+              getBadgeVariant={getBadgeVariant}
+              isFullWidth={isFullWidth}
+              onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
+              onClose={() => {
+                setIsFullWidth(false);
+                window.history.pushState({}, '', `/lab/items`)
+                setSelectedItem(null)
+              }}
+              skeletonMode={true}
+              readOnly={true}
+            />
           </div>
         </div>
       )
@@ -2366,15 +2380,29 @@ function ItemsDashboardInner() {
     
     // If item is not found, check if we should attempt to fetch it or if we're already loading
     if (!selectedItemWithCount) {
-      // Only show loading spinner if we're specifically loading this item or during initial load
+      // Only show skeleton if we're specifically loading this item or during initial load
       if (specificItemLoading || (!hasInitiallyLoaded && isLoading)) {
         return (
           <div className="h-full flex flex-col">
-            <div className="flex-1 flex items-center justify-center">
-              <div className="flex items-center space-x-2">
-                <Loader2 className="h-6 w-6 animate-spin" />
-                <span>Loading item details...</span>
-              </div>
+            <div className="flex-1 overflow-auto">
+              <ItemCard
+                variant="detail"
+                item={{
+                  id: selectedItem,
+                  timestamp: new Date().toISOString(),
+                  scorecards: []
+                } as ItemData}
+                getBadgeVariant={getBadgeVariant}
+                isFullWidth={isFullWidth}
+                onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
+                onClose={() => {
+                  setIsFullWidth(false);
+                  window.history.pushState({}, '', `/lab/items`)
+                  setSelectedItem(null)
+                }}
+                skeletonMode={true}
+                readOnly={true}
+              />
             </div>
           </div>
         )
