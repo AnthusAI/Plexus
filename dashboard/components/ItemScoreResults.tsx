@@ -9,6 +9,7 @@ import { Timestamp } from '@/components/ui/timestamp';
 import Link from 'next/link';
 import { GroupedScoreResults, ScoreResultWithDetails } from '@/hooks/useItemScoreResults';
 import { IdentifierDisplay } from '@/components/ui/identifier-display';
+import NumberFlowWrapper from '@/components/ui/number-flow';
 
 interface ItemScoreResultsProps {
   groupedResults: GroupedScoreResults;
@@ -172,7 +173,7 @@ const ItemScoreResults: React.FC<ItemScoreResultsProps> = ({
       <div className="flex items-end justify-between">
         <h3 className="text-xl text-muted-foreground font-semibold">Score Results</h3>
         <span className="text-sm text-muted-foreground">
-          {totalResults} result{totalResults !== 1 ? 's' : ''} across {scorecardIds.length} scorecard{scorecardIds.length !== 1 ? 's' : ''}
+          <NumberFlowWrapper value={totalResults} /> result{totalResults !== 1 ? 's' : ''} across <NumberFlowWrapper value={scorecardIds.length} /> scorecard{scorecardIds.length !== 1 ? 's' : ''}
         </span>
       </div>
 
@@ -200,7 +201,7 @@ const ItemScoreResults: React.FC<ItemScoreResultsProps> = ({
                     )}
                   </div>
                   <span className="text-sm text-muted-foreground">
-                    {group.scores.length} score result{group.scores.length !== 1 ? 's' : ''}
+                    <NumberFlowWrapper value={group.scores.length} /> score result{group.scores.length !== 1 ? 's' : ''}
                   </span>
                 </div>
               </div>

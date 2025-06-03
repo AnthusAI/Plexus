@@ -295,6 +295,12 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
             {item.createdAt && item.updatedAt && (
               <Timestamp time={item.createdAt} completionTime={item.updatedAt} variant="elapsed" className="text-xs" skeletonMode={skeletonMode} />
             )}
+            {/* Total results summary */}
+            {totalResults > 0 && (
+              <div className="text-sm text-muted-foreground mt-2">
+                <NumberFlowWrapper value={totalResults} skeletonMode={skeletonMode} /> result{totalResults !== 1 ? 's' : ''} across <NumberFlowWrapper value={item.scorecards.length} skeletonMode={skeletonMode} /> scorecard{item.scorecards.length !== 1 ? 's' : ''}
+              </div>
+            )}
           </div>
         </div>
         <div className="flex items-center space-x-2">
