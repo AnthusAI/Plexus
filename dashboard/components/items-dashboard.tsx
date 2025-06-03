@@ -37,6 +37,7 @@ import { toast } from 'sonner'
 import { useAccount } from '@/app/contexts/AccountContext'
 import { ItemsDashboardSkeleton, ItemCardSkeleton } from './loading-skeleton'
 import { ScoreResultCountManager, type ScoreResultCount } from '@/utils/score-result-counter'
+import { motion, AnimatePresence } from 'framer-motion'
 
 // Get the current date and time
 const now = new Date();
@@ -135,7 +136,7 @@ const ITEMS_TIME_RANGE_OPTIONS = [
 ]
 
 // Memoized grid component to prevent re-renders when just selection changes
-const GridContent = React.memo(({ 
+const GridContent = ({ 
   filteredItems,
   selectedItem,
   handleItemClick,
@@ -173,23 +174,28 @@ const GridContent = React.memo(({
 
   return (
     <>
-      <div className="grid grid-cols-2 @[500px]:grid-cols-3 @[700px]:grid-cols-4 @[900px]:grid-cols-5 @[1100px]:grid-cols-6 gap-3">
-        {filteredItems.map((item) => {
-          const scoreCount = scoreResultCounts.get(item.id);
-          return (
-            <MemoizedGridItemCard
-              key={item.id}
-              item={item}
-              scoreCount={scoreCount}
-              selectedItem={selectedItem}
-              handleItemClick={handleItemClick}
-              getBadgeVariant={getBadgeVariant}
-              scoreCountManagerRef={scoreCountManagerRef}
-              itemRefsMap={itemRefsMap}
-            />
-          );
-        })}
-      </div>
+      <motion.div 
+        className="grid grid-cols-2 @[500px]:grid-cols-3 @[700px]:grid-cols-4 @[900px]:grid-cols-5 @[1100px]:grid-cols-6 gap-3"
+        layout
+      >
+        <AnimatePresence mode="popLayout">
+          {filteredItems.map((item) => {
+            const scoreCount = scoreResultCounts.get(item.id);
+            return (
+              <GridItemCard
+                key={item.id}
+                item={item}
+                scoreCount={scoreCount}
+                selectedItem={selectedItem}
+                handleItemClick={handleItemClick}
+                getBadgeVariant={getBadgeVariant}
+                scoreCountManagerRef={scoreCountManagerRef}
+                itemRefsMap={itemRefsMap}
+              />
+            );
+          })}
+        </AnimatePresence>
+      </motion.div>
       
       {nextToken && filteredItems.length > 0 && (
         <div 
@@ -206,23 +212,10 @@ const GridContent = React.memo(({
       )}
     </>
   );
-}, (prevProps, nextProps) => {
-  // Custom comparison - re-render if items, loading states, or selection changes
-  return (
-    prevProps.filteredItems === nextProps.filteredItems &&
-    prevProps.nextToken === nextProps.nextToken &&
-    prevProps.isLoadingMore === nextProps.isLoadingMore &&
-    prevProps.scoreResultCounts === nextProps.scoreResultCounts &&
-    prevProps.selectedItem === nextProps.selectedItem &&
-    prevProps.isLoading === nextProps.isLoading &&
-    prevProps.hasInitiallyLoaded === nextProps.hasInitiallyLoaded
-  );
-});
+};
 
-GridContent.displayName = 'GridContent';
-
-// Memoized grid item component to prevent unnecessary re-renders
-const MemoizedGridItemCard = React.memo(({ 
+// Grid item component
+const GridItemCard = ({ 
   item, 
   scoreCount, 
   selectedItem, 
@@ -242,7 +235,7 @@ const MemoizedGridItemCard = React.memo(({
   const itemWithCount = useMemo(() => ({
     ...item,
     results: scoreCount?.count || item.results,
-    isLoadingResults: scoreCount?.isLoading || false,
+    isLoadingResults: scoreCount?.isLoading ?? item.isLoadingResults,
     scorecardBreakdown: scoreCount?.scorecardBreakdown || undefined,
     // Map scorecardBreakdown to the new scorecards field
     scorecards: scoreCount?.scorecardBreakdown ? 
@@ -273,20 +266,38 @@ const MemoizedGridItemCard = React.memo(({
   }, [item.id, scoreCountManagerRef, itemRefsMap]);
   
   return (
-    <ItemCard
-      key={item.id}
-      variant="grid"
-      item={itemWithCount}
-      isSelected={selectedItem === item.id}
-      onClick={handleClick}
-      getBadgeVariant={getBadgeVariant}
-      readOnly={true}
-      ref={combinedRef}
-    />
-  );
-});
+    <motion.div
+      layoutId={`item-${item.id}`}
+      layout
+      initial={{ opacity: 0 }}
+      animate={{ 
+        opacity: 1
+      }}
+      exit={{ 
+        opacity: 0,
+        transition: { duration: 0.2 }
+      }}
+      transition={{
+        layout: {
+          duration: 0.2,
+          ease: "easeInOut"
+        },
+        opacity: { duration: 0.4 }
+      }}
 
-MemoizedGridItemCard.displayName = 'MemoizedGridItemCard';
+    >
+      <ItemCard
+        variant="grid"
+        item={itemWithCount}
+        isSelected={selectedItem === item.id}
+        onClick={handleClick}
+        getBadgeVariant={getBadgeVariant}
+        readOnly={true}
+        ref={combinedRef}
+      />
+    </motion.div>
+  );
+};
 
 // Add this to the existing items array or create a new constant
 const sampleScoreResults = [
@@ -546,7 +557,7 @@ const transformItem = (item: any, options: { isNew?: boolean } = {}): Item => {
     isEvaluation: item.isEvaluation,
     identifiers: transformIdentifiers(item),
     isNew: options.isNew || false,
-    isLoadingResults: false,
+    isLoadingResults: true, // Set to true initially since score results load separately
     
     // Metadata and file attachments (parse from item if available)
     metadata: item.metadata ? (typeof item.metadata === 'string' ? JSON.parse(item.metadata) : item.metadata) : {},

@@ -147,34 +147,7 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
     }
   }, [variant, silentRefetch, onScoreResultsRefetchReady])
 
-  // Grid mode skeleton content
-  const renderGridSkeleton = () => (
-    <div className="space-y-1">
-      {/* Skeleton identifier display */}
-      <div className="flex items-start gap-1">
-        <div className="h-4 w-4 bg-muted rounded animate-pulse flex-shrink-0" />
-        <div className="h-3 w-20 bg-muted rounded animate-pulse" />
-      </div>
 
-      {/* Skeleton timestamp */}
-      <div className="flex items-start gap-1">
-        <div className="h-4 w-4 bg-muted rounded animate-pulse flex-shrink-0" />
-        <div className="h-3 w-16 bg-muted rounded animate-pulse" />
-      </div>
-
-      {/* Skeleton elapsed time */}
-      <div className="flex items-start gap-1">
-        <div className="h-4 w-4 bg-muted rounded animate-pulse flex-shrink-0" />
-        <div className="h-3 w-12 bg-muted rounded animate-pulse" />
-      </div>
-
-      {/* Skeleton scorecard name */}
-      <div className="h-4 w-24 bg-muted rounded animate-pulse mt-3" />
-      
-      {/* Skeleton results count */}
-      <div className="h-3 w-16 bg-muted rounded animate-pulse" />
-    </div>
-  )
 
   // Grid mode content
   const renderGridContent = () => (
@@ -208,23 +181,25 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
         />
       )}
 
-      {/* Scorecard summary */}
-      {item.scorecards.length > 0 && (
-        <div className="flex items-baseline gap-1 font-semibold text-sm mt-3">
-          <ListTodo className="h-4 w-4 flex-shrink-0 text-muted-foreground translate-y-0.5" />
-          <span className="text-foreground">
-            {hasMultipleScorecards ? 
+      {/* Scorecard summary - always render to maintain consistent height */}
+      <div className="flex items-baseline gap-1 font-semibold text-sm mt-3">
+        <ListTodo className="h-4 w-4 flex-shrink-0 text-muted-foreground translate-y-0.5" />
+        <span className="text-foreground">
+          {item.scorecards.length > 0 ? (
+            hasMultipleScorecards ? 
               `${item.scorecards.length} scorecards` : 
-              item.scorecards[0]?.scorecardName || 'Scorecard'}
-          </span>
-        </div>
-      )}
+              item.scorecards[0]?.scorecardName || 'Scorecard'
+          ) : (
+            item.isLoadingResults ? '\u00A0' : 'No scorecards available'
+          )}
+        </span>
+      </div>
       
-      {/* Results count - fixed height to prevent layout jiggling */}
+      {/* Results count - always render to prevent layout jiggling */}
       <div className="flex items-baseline gap-1 text-sm text-muted-foreground">
         <Box className="h-4 w-4 flex-shrink-0 translate-y-0.5" />
         <span>
-          <span className="text-foreground"><NumberFlowWrapper value={totalResults} skeletonMode={skeletonMode} /></span> score result{totalResults !== 1 ? 's' : ''}
+          <span className="text-foreground"><NumberFlowWrapper value={totalResults} skeletonMode={skeletonMode || item.isLoadingResults} /></span> score result{totalResults !== 1 ? 's' : ''}
         </span>
       </div>
     </div>
@@ -273,7 +248,7 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
             <div className="float-right w-16 h-12"></div>
             
             {/* Content */}
-            {skeletonMode ? renderGridSkeleton() : renderGridContent()}
+            {renderGridContent()}
             
             {/* Clear the float */}
             <div className="clear-both"></div>
