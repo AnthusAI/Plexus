@@ -10,12 +10,13 @@ import { CardButton } from '@/components/CardButton'
 export interface MetadataEntry {
   key: string
   value: string
+  originalValue?: any // Store original value for complex objects
   id: string
 }
 
 export interface MetadataEditorProps {
   /** Initial metadata entries */
-  value?: Record<string, string> | MetadataEntry[]
+  value?: Record<string, any> | MetadataEntry[] // Changed to allow any value type
   /** Callback when metadata changes */
   onChange?: (metadata: Record<string, string>) => void
   /** Custom className for the container */
@@ -38,6 +39,37 @@ export interface MetadataEditorProps {
 
 const generateId = () => Math.random().toString(36).substr(2, 9)
 
+// Helper function to format values for display
+const formatValueForDisplay = (value: any): string => {
+  if (value === null || value === undefined) {
+    return ''
+  }
+  
+  if (typeof value === 'string') {
+    return value
+  }
+  
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value)
+  }
+  
+  // For objects and arrays, format as JSON
+  try {
+    return JSON.stringify(value, null, 2)
+  } catch (error) {
+    return String(value)
+  }
+}
+
+// Helper function to check if a value is complex (not a simple string/number/boolean)
+const isComplexValue = (value: any): boolean => {
+  return value !== null && 
+         value !== undefined && 
+         typeof value !== 'string' && 
+         typeof value !== 'number' && 
+         typeof value !== 'boolean'
+}
+
 export const MetadataEditor = React.forwardRef<HTMLDivElement, MetadataEditorProps>(
   ({
     value = {},
@@ -53,18 +85,20 @@ export const MetadataEditor = React.forwardRef<HTMLDivElement, MetadataEditorPro
     ...props
   }, ref) => {
     // Convert value to internal format
-    const convertToEntries = useCallback((val: Record<string, string> | MetadataEntry[]): MetadataEntry[] => {
+    const convertToEntries = useCallback((val: Record<string, any> | MetadataEntry[]): MetadataEntry[] => {
       if (Array.isArray(val)) {
         return val.map(entry => ({ 
           ...entry, 
           key: String(entry.key || ''),
           value: String(entry.value || ''),
+          originalValue: entry.originalValue,
           id: entry.id || generateId() 
         }))
       }
-      return Object.entries(val).map(([key, value]) => ({
+      return Object.entries(val).map(([key, originalValue]) => ({
         key: String(key || ''),
-        value: String(value || ''),
+        value: String(originalValue || ''),
+        originalValue: originalValue,
         id: generateId()
       }))
     }, [])
@@ -200,57 +234,72 @@ export const MetadataEditor = React.forwardRef<HTMLDivElement, MetadataEditorPro
         
         {entries.length > 0 ? (
           <div className={cn("space-y-2", disabled && "grid gap-1 grid-cols-[auto_1fr]")}>
-            {entries.map((entry) => (
-              <div key={entry.id} className={cn(disabled ? "contents" : "flex items-center space-x-2")}>
-                {disabled ? (
-                  // Read-only mode: render in rounded rectangles with grid layout
-                  <>
-                    <div className="bg-background rounded px-2 py-1">
-                      <span className="text-sm text-foreground font-medium font-mono">
-                        {String(entry.key || '')}
-                      </span>
-                    </div>
-                    <div className="bg-background rounded px-2 py-1">
-                      <span className="text-sm text-foreground">
-                        {String(entry.value || '')}
-                      </span>
-                    </div>
-                  </>
-                ) : (
-                  // Edit mode: render as inputs
-                  <>
-                    <Input
-                      value={String(entry.key || '')}
-                      onChange={(e) => updateEntry(entry.id, 'key', e.target.value)}
-                      placeholder={keyPlaceholder}
-                      disabled={disabled}
-                      className={cn(
-                        "bg-background border-0 focus-visible:ring-1 focus-visible:ring-ring flex-1 text-foreground",
-                        errors[entry.id]?.key && "bg-destructive/10 focus-visible:ring-destructive"
-                      )}
-                    />
-                    <Input
-                      value={String(entry.value || '')}
-                      onChange={(e) => updateEntry(entry.id, 'value', e.target.value)}
-                      placeholder={valuePlaceholder}
-                      disabled={disabled}
-                      className={cn(
-                        "bg-background border-0 focus-visible:ring-1 focus-visible:ring-ring flex-1 text-foreground",
-                        errors[entry.id]?.value && "bg-destructive/10 focus-visible:ring-destructive"
-                      )}
-                    />
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => removeEntry(entry.id)}
-                      className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </>
-                )}
-              </div>
-            ))}
+            {entries.map((entry) => {
+              // Use original value for display if available, otherwise use the string value
+              const displayValue = entry.originalValue !== undefined ? entry.originalValue : entry.value
+              const formattedValue = formatValueForDisplay(displayValue)
+              const isComplex = isComplexValue(displayValue)
+              
+              return (
+                <div key={entry.id} className={cn(disabled ? "contents" : "flex items-center space-x-2")}>
+                  {disabled ? (
+                    // Read-only mode: render in rounded rectangles with grid layout
+                    <>
+                      <div className="bg-background rounded px-2 py-1">
+                        <span className="text-sm text-foreground font-medium font-mono">
+                          {String(entry.key || '')}
+                        </span>
+                      </div>
+                      <div className="bg-background rounded px-2 py-1">
+                        {isComplex ? (
+                          // For complex values, show formatted JSON in a code block
+                          <pre className="text-xs text-foreground font-mono whitespace-pre-wrap break-words max-w-full overflow-hidden">
+                            {formattedValue}
+                          </pre>
+                        ) : (
+                          // For simple values, show as regular text
+                          <span className="text-sm text-foreground">
+                            {formattedValue}
+                          </span>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    // Edit mode: render as inputs
+                    <>
+                      <Input
+                        value={String(entry.key || '')}
+                        onChange={(e) => updateEntry(entry.id, 'key', e.target.value)}
+                        placeholder={keyPlaceholder}
+                        disabled={disabled}
+                        className={cn(
+                          "bg-background border-0 focus-visible:ring-1 focus-visible:ring-ring flex-1 text-foreground",
+                          errors[entry.id]?.key && "bg-destructive/10 focus-visible:ring-destructive"
+                        )}
+                      />
+                      <Input
+                        value={String(entry.value || '')}
+                        onChange={(e) => updateEntry(entry.id, 'value', e.target.value)}
+                        placeholder={valuePlaceholder}
+                        disabled={disabled}
+                        className={cn(
+                          "bg-background border-0 focus-visible:ring-1 focus-visible:ring-ring flex-1 text-foreground",
+                          errors[entry.id]?.value && "bg-destructive/10 focus-visible:ring-destructive"
+                        )}
+                      />
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeEntry(entry.id)}
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </>
+                  )}
+                </div>
+              )
+            })}
             {/* Show validation errors below the rows */}
             {entries.map((entry) => {
               const hasErrors = errors[entry.id]?.key || errors[entry.id]?.value;
