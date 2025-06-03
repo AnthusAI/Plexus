@@ -22,4 +22,15 @@ export const attachments = defineStorage({
       allow.authenticated.to(['read', 'write', 'delete'])
     ]
   })
+});
+
+// Define a storage bucket for score result attachments
+export const scoreResultAttachments = defineStorage({
+  name: 'scoreResultAttachments',
+  access: (allow) => ({
+    'scoreresults/*': [
+      allow.guest.to(['read']),
+      allow.authenticated.to(['read', 'write', 'delete'])
+    ]
+  })
 }); 
