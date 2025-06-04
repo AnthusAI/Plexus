@@ -180,8 +180,6 @@ export class ScoreResultCountManager {
   async loadCountForItem(itemId: string) {
     // Allow multiple requests for the same item to ensure we get the latest data
     // Remove the pending check to be more aggressive about refreshing
-    
-    console.log('📊 Loading count for item:', itemId);
     this.pendingCounts.add(itemId);
     
     // Only show loading state if we don't already have cached data

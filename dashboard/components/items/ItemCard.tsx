@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
-import { MoreHorizontal, X, Square, Columns2, StickyNote, Info, ChevronDown, ChevronUp, Loader2, Box, ListChecks } from 'lucide-react'
+import { MoreHorizontal, X, Square, Columns2, StickyNote, Info, ChevronDown, ChevronUp, Loader2, Box, ListChecks, FileText, Tag } from 'lucide-react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { cn } from '@/lib/utils'
 import { CardButton } from '@/components/CardButton'
@@ -17,6 +17,12 @@ import ItemScoreResults from '../ItemScoreResults'
 import { useItemScoreResults } from '@/hooks/useItemScoreResults'
 import { MetadataEditor } from '@/components/ui/metadata-editor'
 import { FileAttachments } from './FileAttachments'
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
 
 // Interface for scorecard results
 interface ScorecardResult {
@@ -352,64 +358,100 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
             </div>
           )}
           
-          {/* Text field display */}
-          {item.text && (
-            <div>
-              <h3 className="text-sm font-medium text-foreground mb-2">Text</h3>
-              <div className="p-3">
-                <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:bg-muted prose-pre:text-foreground">
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm, remarkBreaks]}
-                    components={{
-                      // Customize components for better styling
-                      p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
-                      ul: ({ children }) => <ul className="mb-3 ml-4 list-disc">{children}</ul>,
-                      ol: ({ children }) => <ol className="mb-3 ml-4 list-decimal">{children}</ol>,
-                      li: ({ children }) => <li className="mb-1">{children}</li>,
-                      strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
-                      em: ({ children }) => <em className="italic">{children}</em>,
-                      code: ({ children }) => <code className="bg-muted px-1 py-0.5 rounded text-xs font-mono">{children}</code>,
-                      pre: ({ children }) => <pre className="bg-muted p-3 rounded overflow-x-auto text-sm">{children}</pre>,
-                      h1: ({ children }) => <h1 className="text-lg font-semibold mb-3 text-foreground">{children}</h1>,
-                      h2: ({ children }) => <h2 className="text-base font-semibold mb-2 text-foreground">{children}</h2>,
-                      h3: ({ children }) => <h3 className="text-sm font-medium mb-2 text-foreground">{children}</h3>,
-                      blockquote: ({ children }) => <blockquote className="border-l-4 border-muted-foreground/20 pl-4 italic text-muted-foreground">{children}</blockquote>,
+          {/* Collapsible sections for text, metadata, and file attachments */}
+          <Accordion type="multiple" className="w-full space-y-4">
+            {/* Text field display */}
+            {item.text && (
+              <AccordionItem value="text" className="border-b-0">
+                <AccordionTrigger className="hover:no-underline py-2 px-0">
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-3 w-3 text-muted-foreground" />
+                    <span className="text-sm font-medium leading-none text-muted-foreground">Text</span>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent className="pt-0 pb-4">
+                  <div className="p-3 bg-background rounded">
+                    <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:bg-muted prose-pre:text-foreground">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm, remarkBreaks]}
+                        components={{
+                          // Customize components for better styling
+                          p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
+                          ul: ({ children }) => <ul className="mb-3 ml-4 list-disc">{children}</ul>,
+                          ol: ({ children }) => <ol className="mb-3 ml-4 list-decimal">{children}</ol>,
+                          li: ({ children }) => <li className="mb-1">{children}</li>,
+                          strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+                          em: ({ children }) => <em className="italic">{children}</em>,
+                          code: ({ children }) => <code className="bg-muted px-1 py-0.5 rounded text-xs font-mono">{children}</code>,
+                          pre: ({ children }) => <pre className="bg-muted p-3 rounded overflow-x-auto text-sm">{children}</pre>,
+                          h1: ({ children }) => <h1 className="text-lg font-semibold mb-3 text-foreground">{children}</h1>,
+                          h2: ({ children }) => <h2 className="text-base font-semibold mb-2 text-foreground">{children}</h2>,
+                          h3: ({ children }) => <h3 className="text-sm font-medium mb-2 text-foreground">{children}</h3>,
+                          blockquote: ({ children }) => <blockquote className="border-l-4 border-muted-foreground/20 pl-4 italic text-muted-foreground">{children}</blockquote>,
+                        }}
+                      >
+                        {item.text}
+                      </ReactMarkdown>
+                    </div>
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            )}
+            
+            {/* Metadata section */}
+            {(item.metadata && Object.keys(item.metadata).length > 0) && (
+              <AccordionItem value="metadata" className="border-b-0">
+                <AccordionTrigger className="hover:no-underline py-2 px-0">
+                  <div className="flex items-center gap-2">
+                    <Tag className="h-3 w-3 text-muted-foreground" />
+                    <span className="text-sm font-medium leading-none text-muted-foreground">Metadata</span>
+                    {!readOnly && <span className="text-[10px] text-muted-foreground">optional</span>}
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent className="pt-0 pb-4">
+                  <MetadataEditor
+                    value={item.metadata || {}}
+                    onChange={(newMetadata) => {
+                      // Update metadata in parent component if onChange is provided
+                      if (onSave) {
+                        onSave({ ...item, metadata: newMetadata });
+                      }
                     }}
-                  >
-                    {item.text}
-                  </ReactMarkdown>
-                </div>
-              </div>
-            </div>
-          )}
-          
-          {/* Metadata editor */}
-          <MetadataEditor
-            value={item.metadata || {}}
-            onChange={(newMetadata) => {
-              // Update metadata in parent component if onChange is provided
-              if (onSave) {
-                onSave({ ...item, metadata: newMetadata });
-              }
-            }}
-            disabled={readOnly}
-          />
-          
-          {/* File attachments */}
-          <FileAttachments
-            attachedFiles={item.attachedFiles || []}
-            readOnly={readOnly}
-            onChange={(newFiles) => {
-              // Update attached files in parent component if onChange is provided
-              if (onSave) {
-                onSave({ ...item, attachedFiles: newFiles });
-              }
-            }}
-            onUpload={async (file) => {
-              // Mock upload implementation - return a path
-              return Promise.resolve(`/uploads/${file.name}`);
-            }}
-          />
+                    disabled={readOnly}
+                    suppressHeader={true}
+                  />
+                </AccordionContent>
+              </AccordionItem>
+            )}
+            
+            {/* File attachments section */}
+            {(item.attachedFiles && item.attachedFiles.length > 0) && (
+              <AccordionItem value="attachments" className="border-b-0">
+                <AccordionTrigger className="hover:no-underline py-2 px-0">
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-3 w-3 text-muted-foreground" />
+                    <span className="text-sm font-medium leading-none text-muted-foreground">Attached Files</span>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent className="pt-0 pb-4">
+                  <FileAttachments
+                    attachedFiles={item.attachedFiles || []}
+                    readOnly={readOnly}
+                    onChange={(newFiles) => {
+                      // Update attached files in parent component if onChange is provided
+                      if (onSave) {
+                        onSave({ ...item, attachedFiles: newFiles });
+                      }
+                    }}
+                    onUpload={async (file) => {
+                      // Mock upload implementation - return a path
+                      return Promise.resolve(`/uploads/${file.name}`);
+                    }}
+                  />
+                </AccordionContent>
+              </AccordionItem>
+            )}
+          </Accordion>
           
           <ItemScoreResults
             groupedResults={groupedResults}

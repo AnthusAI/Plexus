@@ -419,7 +419,8 @@ const schema = a.schema({
             idx("scoreVersionId"),
             idx("scoreId"),
             // Composite GSI for efficient cache lookups by scorecard + score + item
-            idx("scorecardId").sortKeys(["scoreId", "itemId"]).name("byScorecardScoreItem")
+            idx("scorecardId").sortKeys(["scoreId", "itemId"]).name("byScorecardScoreItem"),
+            idx("itemId").sortKeys(["scorecardId", "scoreId"]).name("byItemScorecardScore")
         ]),
 
     BatchJobScoringJob: a
