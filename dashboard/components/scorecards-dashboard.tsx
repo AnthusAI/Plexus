@@ -216,7 +216,6 @@ export default function ScorecardsComponent({
   // Custom setter for selectedScorecard that handles both state and URL
   const handleSelectScorecard = async (scorecard: Schema['Scorecard']['type'] | null) => {
     console.log('🔵 handleSelectScorecard called:', {
-      newScorecardId: scorecard?.id,
       newScorecardName: scorecard?.name,
       currentScorecardId: selectedScorecard?.id,
       willUpdate: scorecard?.id !== selectedScorecard?.id
@@ -227,15 +226,27 @@ export default function ScorecardsComponent({
       console.log('🔵 Scorecard selection changed, updating state...');
       
       setSelectedScorecard(scorecard);
-      setSelectedScore(null); // Reset selected score when changing scorecard
+      // Conditionally reset selected score:
+      // If we are changing to a different scorecard OR if no initialSelectedScoreId is actively being processed
+      // (This check might need refinement based on when initialSelectedScoreId is cleared or considered 'processed')
+      if (selectedScorecard?.id !== scorecard?.id || !initialSelectedScoreId) {
+          setSelectedScore(null);
+      }
       
       // Reset scorecard examples for the new scorecard
       setScorecardExamples([]);
       setShouldExpandExamples(false); // Reset expand flag
       
-      // Update URL without triggering a navigation/re-render
-      const newPathname = scorecard ? `/lab/scorecards/${scorecard.id}` : '/lab/scorecards';
-      window.history.pushState(null, '', newPathname);
+      // Conditionally update URL:
+      // If we are selecting a scorecard AND there isn't an initialSelectedScoreId that matches the current scorecard context,
+      // then update the URL to the scorecard. Otherwise, let the score selection logic handle the final URL.
+      // This logic assumes initialSelectedScoreId is available in this component's scope.
+      if (scorecard && (!initialSelectedScoreId || initialSelectedScorecardId !== scorecard.id)) {
+        const newPathname = `/lab/scorecards/${scorecard.id}`;
+        window.history.pushState(null, '', newPathname);
+      } else if (!scorecard) { // Clearing scorecard selection
+        window.history.pushState(null, '', '/lab/scorecards');
+      }
       
       // Scroll to the selected scorecard after a brief delay to allow layout updates
       if (scorecard) {

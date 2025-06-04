@@ -1,4 +1,5 @@
 import * as React from 'react'
+import Link from 'next/link';
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { MoreHorizontal, X, Square, Columns2, Box, ListChecks, ListCheck, FileText } from 'lucide-react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
@@ -12,6 +13,7 @@ import remarkBreaks from 'remark-breaks'
 import { IdentifierDisplay } from '@/components/ui/identifier-display'
 import { ScoreResultTrace } from '@/components/ui/score-result-trace'
 import FileContentViewer from '@/components/ui/FileContentViewer'
+import { getDashboardUrl } from '@/utils/plexus-links';
 import {
   Accordion,
   AccordionContent,
@@ -126,37 +128,21 @@ const ScoreResultCard = React.forwardRef<HTMLDivElement, ScoreResultCardProps>((
               <div className="mt-3">
                 <div className="flex items-baseline gap-1 font-semibold text-sm">
                   <ListChecks className="h-4 w-4 flex-shrink-0 text-muted-foreground translate-y-0.5" />
-                  <span className="text-foreground">{scoreResult.scorecard.name}</span>
-                </div>
-                <div className="ml-5 min-w-0">
-                  <IdentifierDisplay 
-                    externalId={scoreResult.scorecardId}
-                    iconSize="sm"
-                    textSize="xs"
-                    skeletonMode={skeletonMode}
-                    displayMode="full"
-                    className="truncate"
-                  />
+                  <Link href={getDashboardUrl({ recordType: 'scorecard', id: scoreResult.scorecard.id })} passHref legacyBehavior>
+                    <a className="text-foreground hover:underline">{scoreResult.scorecard.name}</a>
+                  </Link>
                 </div>
               </div>
             )}
             
             {/* Score summary */}
-            {scoreResult.score && (
+            {scoreResult.score && scoreResult.scorecard && (
               <div className="mt-2">
                 <div className="flex items-baseline gap-1 text-sm text-muted-foreground">
                   <ListCheck className="h-4 w-4 flex-shrink-0 translate-y-0.5" />
-                  <span className="text-foreground">{scoreResult.score.name}</span>
-                </div>
-                <div className="ml-5 min-w-0">
-                  <IdentifierDisplay 
-                    externalId={scoreResult.scoreId}
-                    iconSize="sm"
-                    textSize="xs"
-                    skeletonMode={skeletonMode}
-                    displayMode="full"
-                    className="truncate"
-                  />
+                  <Link href={getDashboardUrl({ recordType: 'score', id: scoreResult.score.id, parentId: scoreResult.scorecard.id })} passHref legacyBehavior>
+                     <a className="text-foreground hover:underline">{scoreResult.score.name}</a>
+                  </Link>
                 </div>
               </div>
             )}
