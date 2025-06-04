@@ -14,7 +14,7 @@ type ScorecardIndexFields = "name" | "key" | "description" | "accountId" |
     "externalId";
 type ScorecardSectionIndexFields = "name" | "scorecardId" | "order";
 type ScoreIndexFields = "name" | "order" | "sectionId" | "type" | "accuracy" | 
-    "version" | "aiProvider" | "aiModel" | "externalId" | "key";
+    "version" | "aiProvider" | "aiModel" | "externalId" | "key" | "scorecardId";
 type EvaluationIndexFields = "accountId" | "scorecardId" | "type" | "accuracy" | 
     "scoreId" | "status" | "updatedAt" | "createdAt" | "startedAt" | "elapsedSeconds" | 
     "estimatedRemainingSeconds" | "totalItems" | "processedItems" | "errorMessage" | 
@@ -86,6 +86,7 @@ const schema = a.schema({
             accountId: a.string().required(),
             account: a.belongsTo('Account', 'accountId'),
             sections: a.hasMany('ScorecardSection', 'scorecardId'),
+            scores: a.hasMany('Score', 'scorecardId'),
             evaluations: a.hasMany('Evaluation', 'scorecardId'),
             batchJobs: a.hasMany('BatchJob', 'scorecardId'),
             scoringJobs: a.hasMany('ScoringJob', 'scorecardId'),
@@ -105,7 +106,8 @@ const schema = a.schema({
             idx("accountId"),
             idx("key"),
             idx("externalId"),
-            idx("name")
+            idx("name"),
+            idx("accountId").sortKeys(["externalId"]).name("byAccountIdAndExternalId")
         ]),
 
     ScorecardSection: a
@@ -138,6 +140,8 @@ const schema = a.schema({
             aiModel: a.string(),
             sectionId: a.string().required(),
             section: a.belongsTo('ScorecardSection', 'sectionId'),
+            scorecardId: a.string().required(),
+            scorecard: a.belongsTo('Scorecard', 'scorecardId'),
             evaluations: a.hasMany('Evaluation', 'scoreId'),
             batchJobs: a.hasMany('BatchJob', 'scoreId'),
             scoringJobs: a.hasMany('ScoringJob', 'scoreId'),
@@ -159,7 +163,8 @@ const schema = a.schema({
             idx("sectionId"),
             idx("externalId"),
             idx("key"),
-            idx("name")
+            idx("name"),
+            idx("scorecardId").sortKeys(["externalId"]).name("byScorecardIdAndExternalId")
         ]),
 
     ScoreVersion: a
