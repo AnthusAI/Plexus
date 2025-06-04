@@ -25,6 +25,10 @@ export interface TimestampProps {
    * Additional CSS classes
    */
   className?: string
+  /**
+   * Whether to render in skeleton mode
+   */
+  skeletonMode?: boolean
 }
 
 const formatElapsedTime = (start: Date, end: Date): { type: 'string', value: string } | { type: 'component', value: React.ReactNode } => {
@@ -206,11 +210,25 @@ export function Timestamp({
   completionTime, 
   variant = 'relative',
   showIcon = true,
-  className 
+  className,
+  skeletonMode = false
 }: TimestampProps) {
   const [displayContent, setDisplayContent] = useState<React.ReactNode>('')
   const [showAbsolute, setShowAbsolute] = useState(false)
   const timeDate = typeof time === 'string' ? new Date(time) : time
+
+  // Skeleton mode rendering
+  if (skeletonMode) {
+    return (
+      <div className={cn(
+        "flex items-start gap-1 text-sm text-muted-foreground min-w-0", 
+        className
+      )}>
+        {showIcon && <div className="h-4 w-4 bg-muted rounded animate-pulse flex-shrink-0" />}
+        <div className="h-3 w-16 bg-muted rounded animate-pulse" />
+      </div>
+    )
+  }
 
   useEffect(() => {
     const updateTime = () => {

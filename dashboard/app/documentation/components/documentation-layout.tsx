@@ -42,7 +42,7 @@ const MobileHeader = ({
   toggleLeftSidebar: () => void;
   toggleRightSidebar: () => void;
 }) => (
-  <div className="hidden max-lg:flex items-center justify-between p-1 px-2 bg-background">
+  <div className="hidden max-lg:flex items-center justify-between p-1 px-4 bg-background">
     <DocButton
       variant="ghost"
       size="icon"

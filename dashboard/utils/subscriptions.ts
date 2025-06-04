@@ -970,6 +970,8 @@ export function observeItemCreations() {
   const client = getClient();
   const subscriptions: { unsubscribe: () => void }[] = [];
   
+  console.log('🔧 Creating Item creation subscription observer');
+  
   return {
     subscribe(handler: SubscriptionHandler<any>) {
       console.log('🆕 Setting up Item creation subscription using client.models pattern...');
@@ -1007,12 +1009,10 @@ export function observeItemUpdates() {
   
   return {
     subscribe(handler: SubscriptionHandler<any>) {
-      console.log('🔄 Setting up Item update subscription using client.models pattern...');
       
       // Subscribe to update events using the same pattern as ScoreResult
       const updateSub = ((client.models.Item as any).onUpdate() as AmplifySubscription).subscribe({
         next: (response: any) => {
-          console.log('🔄 Item onUpdate triggered:', response);
           
           // Try to extract the actual item data from the response
           let itemData = null;
@@ -1022,23 +1022,18 @@ export function observeItemUpdates() {
             itemData = response;
           }
           
-          console.log('🔄 Extracted item data:', itemData);
-          
           if (itemData) {
             try {
               handler.next({ data: itemData });
             } catch (error) {
-              console.error('🔄 Error processing item update:', error);
               handler.error(error as Error);
             }
           } else {
-            console.log('🔄 No item data found in onUpdate response');
             // Amplify Gen2 often sends empty notifications, so we treat this as a signal to refetch
             handler.next({ data: null, needsRefetch: true });
           }
         },
         error: (error: Error) => {
-          console.error('🔄 Item onUpdate subscription error:', error);
           handler.error(error);
         }
       });
@@ -1046,7 +1041,6 @@ export function observeItemUpdates() {
 
       return {
         unsubscribe: () => {
-          console.log('🔄 Unsubscribing from Item update subscription');
           subscriptions.forEach(sub => sub.unsubscribe());
         }
       };
@@ -1063,12 +1057,10 @@ export function observeScoreResultChanges() {
       // Subscribe to create events
       const createSub = ((client.models.ScoreResult as any).onCreate() as AmplifySubscription).subscribe({
         next: (response: any) => {
-          console.log('📊 ScoreResult onCreate triggered:', response);
           // Trigger a broad refresh instead of trying to parse specific data
           handler.next({ data: { action: 'create', data: response } });
         },
         error: (error: Error) => {
-          console.error('📊 ScoreResult onCreate error:', error);
           handler.error(error);
         }
       });
@@ -1077,12 +1069,10 @@ export function observeScoreResultChanges() {
       // Subscribe to update events
       const updateSub = ((client.models.ScoreResult as any).onUpdate() as AmplifySubscription).subscribe({
         next: (response: any) => {
-          console.log('📊 ScoreResult onUpdate triggered:', response);
           // Trigger a broad refresh instead of trying to parse specific data
           handler.next({ data: { action: 'update', data: response } });
         },
         error: (error: Error) => {
-          console.error('📊 ScoreResult onUpdate error:', error);
           handler.error(error);
         }
       });
@@ -1091,12 +1081,10 @@ export function observeScoreResultChanges() {
       // Subscribe to delete events
       const deleteSub = ((client.models.ScoreResult as any).onDelete() as AmplifySubscription).subscribe({
         next: (response: any) => {
-          console.log('📊 ScoreResult onDelete triggered:', response);
           // Trigger a broad refresh instead of trying to parse specific data
           handler.next({ data: { action: 'delete', data: response } });
         },
         error: (error: Error) => {
-          console.error('📊 ScoreResult onDelete error:', error);
           handler.error(error);
         }
       });

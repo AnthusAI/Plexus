@@ -3,19 +3,20 @@
 import React, { useState, useCallback } from 'react'
 import { Button } from './button'
 import { Input } from './input'
-import { Plus, Trash2 } from 'lucide-react'
+import { Plus, Trash2, Tag } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { CardButton } from '@/components/CardButton'
 
 export interface MetadataEntry {
   key: string
   value: string
+  originalValue?: any // Store original value for complex objects
   id: string
 }
 
 export interface MetadataEditorProps {
   /** Initial metadata entries */
-  value?: Record<string, string> | MetadataEntry[]
+  value?: Record<string, any> | MetadataEntry[] // Changed to allow any value type
   /** Callback when metadata changes */
   onChange?: (metadata: Record<string, string>) => void
   /** Custom className for the container */
@@ -34,9 +35,42 @@ export interface MetadataEditorProps {
   validateKey?: (key: string) => string | null
   /** Custom validation for values */
   validateValue?: (value: string) => string | null
+  /** Whether to suppress the header (useful when used inside accordion) */
+  suppressHeader?: boolean
 }
 
 const generateId = () => Math.random().toString(36).substr(2, 9)
+
+// Helper function to format values for display
+const formatValueForDisplay = (value: any): string => {
+  if (value === null || value === undefined) {
+    return ''
+  }
+  
+  if (typeof value === 'string') {
+    return value
+  }
+  
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value)
+  }
+  
+  // For objects and arrays, format as JSON
+  try {
+    return JSON.stringify(value, null, 2)
+  } catch (error) {
+    return String(value)
+  }
+}
+
+// Helper function to check if a value is complex (not a simple string/number/boolean)
+const isComplexValue = (value: any): boolean => {
+  return value !== null && 
+         value !== undefined && 
+         typeof value !== 'string' && 
+         typeof value !== 'number' && 
+         typeof value !== 'boolean'
+}
 
 export const MetadataEditor = React.forwardRef<HTMLDivElement, MetadataEditorProps>(
   ({
@@ -50,16 +84,24 @@ export const MetadataEditor = React.forwardRef<HTMLDivElement, MetadataEditorPro
     maxEntries,
     validateKey,
     validateValue,
+    suppressHeader = false,
     ...props
   }, ref) => {
     // Convert value to internal format
-    const convertToEntries = useCallback((val: Record<string, string> | MetadataEntry[]): MetadataEntry[] => {
+    const convertToEntries = useCallback((val: Record<string, any> | MetadataEntry[]): MetadataEntry[] => {
       if (Array.isArray(val)) {
-        return val.map(entry => ({ ...entry, id: entry.id || generateId() }))
+        return val.map(entry => ({ 
+          ...entry, 
+          key: String(entry.key || ''),
+          value: String(entry.value || ''),
+          originalValue: entry.originalValue,
+          id: entry.id || generateId() 
+        }))
       }
-      return Object.entries(val).map(([key, value]) => ({
-        key,
-        value,
+      return Object.entries(val).map(([key, originalValue]) => ({
+        key: String(key || ''),
+        value: String(originalValue || ''),
+        originalValue: originalValue,
         id: generateId()
       }))
     }, [])
@@ -87,24 +129,27 @@ export const MetadataEditor = React.forwardRef<HTMLDivElement, MetadataEditorPro
 
     const validateEntry = useCallback((key: string, value: string, id: string, allEntries: MetadataEntry[]) => {
       const entryErrors: { key?: string; value?: string } = {}
+      
+      const keyStr = String(key || '')
+      const valueStr = String(value || '')
 
       // Check for duplicate keys
-      const duplicateKey = allEntries.some(entry => entry.id !== id && entry.key === key && key.trim() !== '')
+      const duplicateKey = allEntries.some(entry => entry.id !== id && String(entry.key || '') === keyStr && keyStr.trim() !== '')
       if (duplicateKey) {
         entryErrors.key = 'Duplicate key'
       }
 
       // Custom key validation
-      if (validateKey && key.trim()) {
-        const keyError = validateKey(key)
+      if (validateKey && keyStr.trim()) {
+        const keyError = validateKey(keyStr)
         if (keyError) {
           entryErrors.key = keyError
         }
       }
 
       // Custom value validation
-      if (validateValue && value.trim()) {
-        const valueError = validateValue(value)
+      if (validateValue && valueStr.trim()) {
+        const valueError = validateValue(valueStr)
         if (valueError) {
           entryErrors.value = valueError
         }
@@ -116,9 +161,9 @@ export const MetadataEditor = React.forwardRef<HTMLDivElement, MetadataEditorPro
     const emitChange = useCallback((newEntries: MetadataEntry[]) => {
       if (onChange) {
         const metadata = newEntries
-          .filter(entry => entry.key.trim() && entry.value.trim())
+          .filter(entry => String(entry.key || '').trim() && String(entry.value || '').trim())
           .reduce((acc, entry) => {
-            acc[entry.key] = entry.value
+            acc[String(entry.key || '').trim()] = String(entry.value || '').trim()
             return acc
           }, {} as Record<string, string>)
         onChange(metadata)
@@ -127,14 +172,14 @@ export const MetadataEditor = React.forwardRef<HTMLDivElement, MetadataEditorPro
 
     const updateEntry = useCallback((id: string, field: 'key' | 'value', newValue: string) => {
       const newEntries = entries.map(entry =>
-        entry.id === id ? { ...entry, [field]: newValue } : entry
+        entry.id === id ? { ...entry, [field]: String(newValue || '') } : entry
       )
       setEntries(newEntries)
 
       // Validate all entries
       const newErrors: Record<string, { key?: string; value?: string }> = {}
       newEntries.forEach(entry => {
-        const entryErrors = validateEntry(entry.key, entry.value, entry.id, newEntries)
+        const entryErrors = validateEntry(String(entry.key || ''), String(entry.value || ''), entry.id, newEntries)
         if (Object.keys(entryErrors).length > 0) {
           newErrors[entry.id] = entryErrors
         }
@@ -169,61 +214,109 @@ export const MetadataEditor = React.forwardRef<HTMLDivElement, MetadataEditorPro
       emitChange(newEntries)
     }, [entries, errors, emitChange])
 
-    const hasValidEntries = entries.some(entry => entry.key.trim() && entry.value.trim())
-    const canAddMore = !maxEntries || entries.length < maxEntries
+    const hasValidEntries = entries.some(entry => String(entry.key || '').trim() && String(entry.value || '').trim())
+    const canAddMore = !disabled && (!maxEntries || entries.length < maxEntries)
 
     return (
-      <div ref={ref} className={cn("space-y-4", className)} {...props}>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium leading-none text-muted-foreground peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Metadata</span>
-            <span className="text-[10px] text-muted-foreground/60">optional</span>
+      <div ref={ref} className={cn("space-y-2", className)} {...props}>
+        {!suppressHeader && (
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Tag className="h-3 w-3 text-muted-foreground" />
+              <span className="text-sm font-medium leading-none text-muted-foreground peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Metadata</span>
+              {!disabled && <span className="text-[10px] text-muted-foreground">optional</span>}
+            </div>
+            {showAddButton && canAddMore && (
+              <CardButton
+                label="Add Entry"
+                onClick={addEntry}
+                disabled={disabled}
+                aria-label="Add metadata entry"
+              />
+            )}
           </div>
-          {showAddButton && canAddMore && (
+        )}
+        
+        {/* Show add button when header is suppressed but add button should be shown */}
+        {suppressHeader && showAddButton && canAddMore && (
+          <div className="flex justify-end">
             <CardButton
               label="Add Entry"
               onClick={addEntry}
               disabled={disabled}
               aria-label="Add metadata entry"
             />
-          )}
-        </div>
+          </div>
+        )}
         
         {entries.length > 0 ? (
-          <div className="space-y-2">
-            {entries.map((entry) => (
-              <div key={entry.id} className="flex items-center space-x-2">
-                <Input
-                  value={entry.key}
-                  onChange={(e) => updateEntry(entry.id, 'key', e.target.value)}
-                  placeholder={keyPlaceholder}
-                  disabled={disabled}
-                  className={cn(
-                    "bg-background border-0 focus-visible:ring-1 focus-visible:ring-ring flex-1",
-                    errors[entry.id]?.key && "bg-destructive/10 focus-visible:ring-destructive"
+          <div className={cn("space-y-2", disabled && "grid gap-1 grid-cols-[auto_1fr]")}>
+            {entries.map((entry) => {
+              // Use original value for display if available, otherwise use the string value
+              const displayValue = entry.originalValue !== undefined ? entry.originalValue : entry.value
+              const formattedValue = formatValueForDisplay(displayValue)
+              const isComplex = isComplexValue(displayValue)
+              
+              return (
+                <div key={entry.id} className={cn(disabled ? "contents" : "flex items-center space-x-2")}>
+                  {disabled ? (
+                    // Read-only mode: render in rounded rectangles with grid layout
+                    <>
+                      <div className="bg-background rounded px-2 py-1">
+                        <span className="text-sm text-foreground font-medium font-mono">
+                          {String(entry.key || '')}
+                        </span>
+                      </div>
+                      <div className="bg-background rounded px-2 py-1">
+                        {isComplex ? (
+                          // For complex values, show formatted JSON in a code block
+                          <pre className="text-xs text-foreground font-mono whitespace-pre-wrap break-words max-w-full overflow-hidden">
+                            {formattedValue}
+                          </pre>
+                        ) : (
+                          // For simple values, show as regular text
+                          <span className="text-sm text-foreground">
+                            {formattedValue}
+                          </span>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    // Edit mode: render as inputs
+                    <>
+                      <Input
+                        value={String(entry.key || '')}
+                        onChange={(e) => updateEntry(entry.id, 'key', e.target.value)}
+                        placeholder={keyPlaceholder}
+                        disabled={disabled}
+                        className={cn(
+                          "bg-background border-0 focus-visible:ring-1 focus-visible:ring-ring flex-1 text-foreground",
+                          errors[entry.id]?.key && "bg-destructive/10 focus-visible:ring-destructive"
+                        )}
+                      />
+                      <Input
+                        value={String(entry.value || '')}
+                        onChange={(e) => updateEntry(entry.id, 'value', e.target.value)}
+                        placeholder={valuePlaceholder}
+                        disabled={disabled}
+                        className={cn(
+                          "bg-background border-0 focus-visible:ring-1 focus-visible:ring-ring flex-1 text-foreground",
+                          errors[entry.id]?.value && "bg-destructive/10 focus-visible:ring-destructive"
+                        )}
+                      />
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeEntry(entry.id)}
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </>
                   )}
-                />
-                <Input
-                  value={entry.value}
-                  onChange={(e) => updateEntry(entry.id, 'value', e.target.value)}
-                  placeholder={valuePlaceholder}
-                  disabled={disabled}
-                  className={cn(
-                    "bg-background border-0 focus-visible:ring-1 focus-visible:ring-ring flex-1",
-                    errors[entry.id]?.value && "bg-destructive/10 focus-visible:ring-destructive"
-                  )}
-                />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => removeEntry(entry.id)}
-                  disabled={disabled}
-                  className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            ))}
+                </div>
+              )
+            })}
             {/* Show validation errors below the rows */}
             {entries.map((entry) => {
               const hasErrors = errors[entry.id]?.key || errors[entry.id]?.value;
