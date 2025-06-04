@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
-import { MoreHorizontal, X, Square, Columns2, Box, ListChecks, ListCheck, IdCard } from 'lucide-react'
+import { MoreHorizontal, X, Square, Columns2, Box, ListChecks, ListCheck, FileText } from 'lucide-react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { cn } from '@/lib/utils'
 import { CardButton } from '@/components/CardButton'
@@ -11,6 +11,13 @@ import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
 import { IdentifierDisplay } from '@/components/ui/identifier-display'
 import { ScoreResultTrace } from '@/components/ui/score-result-trace'
+import FileContentViewer from '@/components/ui/FileContentViewer'
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
 
 // Interface for score result data
 export interface ScoreResultData {
@@ -23,6 +30,7 @@ export interface ScoreResultData {
   scorecardId: string
   scoreId: string
   trace?: any | null
+  attachments?: string[] | null
   scorecard?: {
     id: string
     name: string
@@ -56,6 +64,13 @@ const ScoreResultCard = React.forwardRef<HTMLDivElement, ScoreResultCardProps>((
   className, 
   ...props 
 }, ref) => {
+  React.useEffect(() => {
+    console.log('[ScoreResultCard] Received scoreResult:', scoreResult);
+    if (scoreResult) {
+      console.log('[ScoreResultCard] scoreResult.attachments:', scoreResult.attachments);
+    }
+  }, [scoreResult]);
+
   const [isNarrowViewport, setIsNarrowViewport] = React.useState(false)
 
   React.useEffect(() => {
@@ -67,6 +82,10 @@ const ScoreResultCard = React.forwardRef<HTMLDivElement, ScoreResultCardProps>((
     window.addEventListener('resize', checkViewportWidth)
     return () => window.removeEventListener('resize', checkViewportWidth)
   }, [])
+
+  const getFileName = (filePath: string) => {
+    return filePath.split('/').pop() || filePath;
+  }
 
   return (
     <Card className={`rounded-none sm:rounded-lg ${naturalHeight ? 'min-h-screen' : 'h-full'} flex flex-col bg-card border-none`} ref={ref} {...props}>
@@ -185,7 +204,6 @@ const ScoreResultCard = React.forwardRef<HTMLDivElement, ScoreResultCardProps>((
       <CardContent className={`flex-grow px-4 sm:px-3 pb-4 ${naturalHeight ? '' : 'overflow-auto'}`}>
         <div className="space-y-4">
 
-
           {/* Value */}
           <div>
             <h3 className="text-sm font-medium text-muted-foreground mb-2">Value</h3>
@@ -229,6 +247,32 @@ const ScoreResultCard = React.forwardRef<HTMLDivElement, ScoreResultCardProps>((
           
           {/* Trace */}
           <ScoreResultTrace trace={scoreResult.trace} />
+
+          {/* Attachments */}
+          {scoreResult.attachments && scoreResult.attachments.length > 0 && (
+            <div>
+              <h3 className="text-sm font-medium text-muted-foreground mb-2 mt-4">Attachments</h3>
+              <Accordion type="multiple" className="w-full">
+                {scoreResult.attachments.map((attachmentPath, index) => (
+                  <AccordionItem 
+                    value={`attachment-${index}`} 
+                    key={attachmentPath + index}
+                    className="border-b-0 mb-2"
+                  >
+                    <AccordionTrigger>
+                        <div className="flex items-center gap-2">
+                            <FileText className="h-4 w-4" />
+                            {getFileName(attachmentPath)}
+                        </div>
+                    </AccordionTrigger>
+                    <AccordionContent>
+                      <FileContentViewer filePath={attachmentPath} />
+                    </AccordionContent>
+                  </AccordionItem>
+                ))}
+              </Accordion>
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>

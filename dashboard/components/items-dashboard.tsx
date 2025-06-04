@@ -82,6 +82,7 @@ interface Item {
   // UI fields for ItemCard
   metadata?: Record<string, string>;
   attachedFiles?: string[];
+  text?: string;
   
   // Legacy fields for backwards compatibility (will be phased out)
   date?: string;
@@ -563,6 +564,7 @@ const transformItem = (item: any, options: { isNew?: boolean } = {}): Item => {
     // Metadata and file attachments (parse from item if available)
     metadata: item.metadata ? (typeof item.metadata === 'string' ? JSON.parse(item.metadata) : item.metadata) : {},
     attachedFiles: item.attachedFiles || [],
+    text: item.text,
     
     // Legacy fields for backwards compatibility
     date: item.createdAt || item.updatedAt,
@@ -800,6 +802,7 @@ function ItemsDashboardInner() {
           isEvaluation: boolean;
           metadata?: string;
           attachedFiles?: string[];
+          text?: string;
         }
       }>(`
         query GetItem($id: ID!) {
@@ -815,6 +818,7 @@ function ItemsDashboardInner() {
             identifiers
             metadata
             attachedFiles
+            text
             itemIdentifiers {
               items {
                 itemId
@@ -916,6 +920,7 @@ function ItemsDashboardInner() {
                 identifiers
                 metadata
                 attachedFiles
+                text
                 itemIdentifiers {
                   items {
                     itemId
@@ -965,6 +970,7 @@ function ItemsDashboardInner() {
                   identifiers
                   metadata
                   attachedFiles
+                  text
                   itemIdentifiers {
                     items {
                       itemId
@@ -1011,6 +1017,7 @@ function ItemsDashboardInner() {
                 identifiers
                 metadata
                 attachedFiles
+                text
                 itemIdentifiers {
                   items {
                     itemId
@@ -1057,6 +1064,7 @@ function ItemsDashboardInner() {
               ...(freshItem.identifiers !== undefined && { identifiers: freshItem.identifiers }),
               ...(freshItem.metadata !== undefined && { metadata: freshItem.metadata }),
               ...(freshItem.attachedFiles !== undefined && { attachedFiles: freshItem.attachedFiles }),
+              ...(freshItem.text !== undefined && { text: freshItem.text }),
               // Preserve isNew status
               isNew: prevItem.isNew,
             };
@@ -1173,6 +1181,7 @@ function ItemsDashboardInner() {
                         metadata: typeof updatedItem.metadata === 'string' ? JSON.parse(updatedItem.metadata) : updatedItem.metadata 
                       }),
                       ...(updatedItem.attachedFiles !== undefined && { attachedFiles: updatedItem.attachedFiles }),
+                      ...(updatedItem.text !== undefined && { text: updatedItem.text }),
                     }
                   : item
               );
@@ -1392,6 +1401,7 @@ function ItemsDashboardInner() {
                   identifiers
                   metadata
                   attachedFiles
+                  text
                   itemIdentifiers {
                     items {
                       itemId
@@ -1456,6 +1466,9 @@ function ItemsDashboardInner() {
                     createdAt
                     isEvaluation
                     identifiers
+                    metadata
+                    attachedFiles
+                    text
                     itemIdentifiers {
                       items {
                         itemId
@@ -1509,6 +1522,9 @@ function ItemsDashboardInner() {
                   createdAt
                   isEvaluation
                   identifiers
+                  metadata
+                  attachedFiles
+                  text
                   itemIdentifiers {
                     items {
                       itemId
@@ -1604,6 +1620,7 @@ function ItemsDashboardInner() {
                   identifiers
                   metadata
                   attachedFiles
+                  text
                   itemIdentifiers {
                     items {
                       itemId
@@ -1667,6 +1684,7 @@ function ItemsDashboardInner() {
                     identifiers
                     metadata
                     attachedFiles
+                    text
                     itemIdentifiers {
                       items {
                         itemId
@@ -1718,6 +1736,7 @@ function ItemsDashboardInner() {
                   identifiers
                   metadata
                   attachedFiles
+                  text
                   itemIdentifiers {
                     items {
                       itemId
@@ -1801,6 +1820,7 @@ function ItemsDashboardInner() {
                   identifiers
                   metadata
                   attachedFiles
+                  text
                   itemIdentifiers {
                     items {
                       itemId
@@ -1850,6 +1870,7 @@ function ItemsDashboardInner() {
                     identifiers
                     metadata
                     attachedFiles
+                    text
                     itemIdentifiers {
                       items {
                         itemId
@@ -1896,6 +1917,7 @@ function ItemsDashboardInner() {
                   identifiers
                   metadata
                   attachedFiles
+                  text
                   itemIdentifiers {
                     items {
                       itemId
@@ -1944,6 +1966,8 @@ function ItemsDashboardInner() {
                 ...(freshItem.metadata !== undefined && { metadata: freshItem.metadata }),
                 // Only update attachedFiles if it's actually present in the fresh data
                 ...(freshItem.attachedFiles !== undefined && { attachedFiles: freshItem.attachedFiles }),
+                // Only update text if it's actually present in the fresh data
+                ...(freshItem.text !== undefined && { text: freshItem.text }),
                 // Preserve isNew status
                 isNew: prevItem.isNew,
               };
@@ -2113,8 +2137,10 @@ function ItemsDashboardInner() {
                     ...(updatedItem.metadata !== undefined && { 
                       metadata: typeof updatedItem.metadata === 'string' ? JSON.parse(updatedItem.metadata) : updatedItem.metadata 
                     }),
-                    // Only update attachedFiles if it's actually present in the update  
-                    ...(updatedItem.attachedFiles !== undefined && { attachedFiles: updatedItem.attachedFiles }),
+                                          // Only update attachedFiles if it's actually present in the update  
+                      ...(updatedItem.attachedFiles !== undefined && { attachedFiles: updatedItem.attachedFiles }),
+                      // Only update text if it's actually present in the update
+                      ...(updatedItem.text !== undefined && { text: updatedItem.text }),
                   }
                 : item
             );
@@ -2848,8 +2874,8 @@ function ItemsDashboardInner() {
   }
 
   return (
-    <div className="@container flex flex-col h-screen p-1.5">
-      {/* Fixed header for wider viewports only */}
+    <div className="@container flex flex-col h-screen p-1.5 overflow-hidden">
+      {/* Fixed header - always show for wider viewports */}
       {!isNarrowViewport && (
         <div className="flex @[600px]:flex-row flex-col @[600px]:items-center @[600px]:justify-between items-stretch gap-3 pb-3 flex-shrink-0">
           <div className="@[600px]:flex-grow w-full">
@@ -2905,73 +2931,81 @@ function ItemsDashboardInner() {
         </div>
       )}
       
-      <div className={`flex flex-col flex-1 min-h-0 ${isNarrowViewport ? 'overflow-auto' : ''}`}>
+      <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
         {/* 
-          Deep-linking rendering logic:
-          1. Full-width mode: When item is NOT in first page (isFullWidth=true) or narrow viewport
-          2. Split view: When item IS in first page (isFullWidth=false) 
-          3. Grid-only: When no item is selected
+          Deep-linking rendering logic - all modes use consistent container structure
         */}
 
-        {selectedItem && (isNarrowViewport || isFullWidth) ? (
-          <div className="h-full">
-            {isNarrowViewport ? (
-              // In narrow mode, put everything in one scrollable container
-              <div className="h-full overflow-auto">
-                                 {/* Header at top of scrollable content */}
-                 <div className="flex @[600px]:flex-row flex-col @[600px]:items-center @[600px]:justify-between items-stretch gap-2 pb-2">
-                  <div className="@[600px]:flex-grow w-full">
-                    <ScorecardContext 
-                      selectedScorecard={selectedScorecard}
-                      setSelectedScorecard={setSelectedScorecard}
-                      selectedScore={selectedScore}
-                      setSelectedScore={setSelectedScore}
-                      availableFields={availableFields}
-                      timeRangeOptions={scoreOptions}
-                      skeletonMode={isLoading}
-                    />
-                  </div>
-                  
-                  {/* Search Component */}
-                  <div className="flex items-center relative @[600px]:w-auto w-full">
-                    <form onSubmit={handleSearchSubmit} className="relative @[600px]:w-auto w-full">
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <Search className="h-4 w-4 text-muted-foreground" />
-                        </div>
-                        <Input
-                          type="text"
-                          placeholder="Search by identifier"
-                          value={searchValue}
-                          onChange={(e) => {
-                            setSearchValue(e.target.value);
-                            if (searchError) setSearchError(null); // Clear error when typing
-                          }}
-                          className={`@[600px]:w-[200px] w-full h-9 pl-10 ${searchValue.trim() ? 'pr-20' : 'pr-3'} bg-card border-0 shadow-none focus:ring-0 focus:ring-offset-0 focus:outline-none focus:border-0 focus:shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none`}
-                          disabled={isSearching}
-                        />
-                        {searchValue.trim() && (
-                          <Button 
-                            type="submit" 
-                            size="sm" 
-                            className="absolute inset-y-0 right-0 h-9 px-3 rounded-l-none shadow-none"
-                            disabled={isSearching}
-                          >
-                            {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Search'}
-                          </Button>
-                        )}
-                      </div>
-                    </form>
-                    
-                    {/* Error message */}
-                    {searchError && (
-                      <div className="absolute top-full mt-2 right-0 z-50 bg-muted text-muted-foreground text-sm px-3 py-2 rounded-md shadow-sm min-w-[200px] border border-border">
-                        {searchError}
-                      </div>
-                    )}
-                  </div>
+        {/* Content area - always uses the same base structure */}
+        <div className="flex flex-1 min-h-0">
+          {/* Left panel - grid content */}
+          <div 
+            className={`${selectedItem && !isNarrowViewport && isFullWidth ? 'hidden' : 'flex-1'} h-full overflow-auto`}
+            style={selectedItem && !isNarrowViewport && !isFullWidth ? {
+              width: `${leftPanelWidth}%`
+            } : undefined}
+          >
+            {/* Header for narrow viewports only */}
+            {isNarrowViewport && (
+              <div className="flex @[600px]:flex-row flex-col @[600px]:items-center @[600px]:justify-between items-stretch gap-3 pb-3 flex-shrink-0">
+                <div className="@[600px]:flex-grow w-full">
+                  <ScorecardContext 
+                    selectedScorecard={selectedScorecard}
+                    setSelectedScorecard={setSelectedScorecard}
+                    selectedScore={selectedScore}
+                    setSelectedScore={setSelectedScore}
+                    availableFields={availableFields}
+                    timeRangeOptions={scoreOptions}
+                    skeletonMode={isLoading}
+                  />
                 </div>
-                <div>
+                
+                {/* Search Component */}
+                <div className="flex items-center relative @[600px]:w-auto w-full">
+                  <form onSubmit={handleSearchSubmit} className="relative @[600px]:w-auto w-full">
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <Search className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                      <Input
+                        type="text"
+                        placeholder="Search by identifier"
+                        value={searchValue}
+                        onChange={(e) => {
+                          setSearchValue(e.target.value);
+                          if (searchError) setSearchError(null); // Clear error when typing
+                        }}
+                        className={`@[600px]:w-[200px] w-full h-9 pl-10 ${searchValue.trim() ? 'pr-20' : 'pr-3'} bg-card border-0 shadow-none focus:ring-0 focus:ring-offset-0 focus:outline-none focus:border-0 focus:shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none`}
+                        disabled={isSearching}
+                      />
+                      {searchValue.trim() && (
+                        <Button 
+                          type="submit" 
+                          size="sm" 
+                          className="absolute inset-y-0 right-0 h-9 px-3 rounded-l-none shadow-none"
+                          disabled={isSearching}
+                        >
+                          {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Search'}
+                        </Button>
+                      )}
+                    </div>
+                  </form>
+                  
+                  {/* Error message */}
+                  {searchError && (
+                    <div className="absolute top-full mt-2 right-0 z-50 bg-muted text-muted-foreground text-sm px-3 py-2 rounded-md shadow-sm min-w-[200px] border border-border">
+                      {searchError}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Grid content or item content for mobile */}
+            <div className="@container">
+              {isNarrowViewport && selectedItem ? (
+                // Mobile full-screen item view
+                <div className="h-full">
                   {selectedScoreResult ? (
                     <ScoreResultCard
                       scoreResult={selectedScoreResult}
@@ -2982,192 +3016,87 @@ function ItemsDashboardInner() {
                     renderSelectedItem(true)
                   )}
                 </div>
-              </div>
-            ) : (
-              // In wide mode, show either the score result or the item (header is fixed above)
-              selectedScoreResult ? (
-                <ScoreResultCard
-                  scoreResult={selectedScoreResult}
-                  onClose={() => setSelectedScoreResult(null)}
-                  naturalHeight={false}
-                />
               ) : (
-                renderSelectedItem()
-              )
-            )}
-          </div>
-        ) : selectedItem ? (
-          // Show split view when item is selected but not narrow viewport or full width
-          <div className={`flex h-full ${isNarrowViewport ? 'flex-col' : ''}`}>
-            <div 
-              className={`${isFullWidth ? 'hidden' : 'flex-1'} h-full overflow-auto`}
-              style={selectedItem && !isNarrowViewport && !isFullWidth ? {
-                width: `${leftPanelWidth}%`
-              } : undefined}
-            >
-              <div className="h-full">
-                <div className="@container">
-                  {!hasInitiallyLoaded && isLoading ? (
-                    // Show skeleton only on very first load
-                    <div className="grid grid-cols-2 @[500px]:grid-cols-3 @[700px]:grid-cols-4 @[900px]:grid-cols-5 @[1100px]:grid-cols-6 gap-3 animate-pulse">
-                      {[...Array(12)].map((_, i) => (
-                        <ItemCardSkeleton key={i} />
-                      ))}
-                    </div>
-                  ) : (
-                    <GridContent
-                      filteredItems={filteredItems}
-                      selectedItem={selectedItem}
-                      handleItemClick={handleItemClick}
-                      getBadgeVariant={getBadgeVariant}
-                      scoreCountManagerRef={scoreCountManagerRef}
-                      itemRefsMap={itemRefsMap}
-                      scoreResultCounts={scoreResultCounts}
-                      nextToken={nextToken}
-                      isLoadingMore={isLoadingMore}
-                      loadMoreRef={loadMoreRef}
-                      isLoading={isLoading}
-                      hasInitiallyLoaded={hasInitiallyLoaded}
-                    />
-                  )}
-                </div>
-              </div>
+                // Grid view
+                !hasInitiallyLoaded && isLoading ? (
+                  <div className="grid grid-cols-2 @[500px]:grid-cols-3 @[700px]:grid-cols-4 @[900px]:grid-cols-5 @[1100px]:grid-cols-6 gap-3 animate-pulse">
+                    {[...Array(12)].map((_, i) => (
+                      <ItemCardSkeleton key={i} />
+                    ))}
+                  </div>
+                ) : (
+                  <GridContent
+                    filteredItems={filteredItems}
+                    selectedItem={selectedItem}
+                    handleItemClick={handleItemClick}
+                    getBadgeVariant={getBadgeVariant}
+                    scoreCountManagerRef={scoreCountManagerRef}
+                    itemRefsMap={itemRefsMap}
+                    scoreResultCounts={scoreResultCounts}
+                    nextToken={nextToken}
+                    isLoadingMore={isLoadingMore}
+                    loadMoreRef={loadMoreRef}
+                    isLoading={isLoading}
+                    hasInitiallyLoaded={hasInitiallyLoaded}
+                  />
+                )
+              )}
             </div>
-
-            {selectedItem && !isNarrowViewport && !isFullWidth && (
-              <div
-                className="w-[12px] relative cursor-col-resize flex-shrink-0 group"
-                onMouseDown={handleDragStart}
-              >
-                <div className="absolute inset-0 rounded-full transition-colors duration-150 
-                  group-hover:bg-accent" />
-              </div>
-            )}
-
-            {selectedItem && !isNarrowViewport && !isFullWidth && (
-              <>
-                <div 
-                  className="h-full overflow-hidden"
-                  style={{ 
-                    width: selectedScoreResult ? `${(100 - leftPanelWidth) * 0.5}%` : `${100 - leftPanelWidth}%` 
-                  }}
-                >
-                  {renderSelectedItem()}
-                </div>
-                
-                {selectedScoreResult && (
-                  <>
-                    <div
-                      className="w-[12px] relative cursor-col-resize flex-shrink-0 group"
-                    >
-                      <div className="absolute inset-0 rounded-full transition-colors duration-150 
-                        group-hover:bg-accent" />
-                    </div>
-                    
-                    <div 
-                      className="h-full overflow-hidden"
-                      style={{ width: `${(100 - leftPanelWidth) * 0.5}%` }}
-                    >
-                      <ScoreResultCard
-                        scoreResult={selectedScoreResult}
-                        onClose={() => setSelectedScoreResult(null)}
-                        naturalHeight={false}
-                      />
-                    </div>
-                  </>
-                )}
-              </>
-            )}
           </div>
-        ) : (
-          // Grid-only view when no item is selected
-          <div className="h-full overflow-auto">
-            <div className="h-full">
-                             {/* Scrollable header for narrow viewports */}
-               {isNarrowViewport && (
-                 <div className="flex @[600px]:flex-row flex-col @[600px]:items-center @[600px]:justify-between items-stretch gap-2 pb-2">
-                  <div className="@[600px]:flex-grow w-full">
-                    <ScorecardContext 
-                      selectedScorecard={selectedScorecard}
-                      setSelectedScorecard={setSelectedScorecard}
-                      selectedScore={selectedScore}
-                      setSelectedScore={setSelectedScore}
-                      availableFields={availableFields}
-                      timeRangeOptions={scoreOptions}
-                      skeletonMode={isLoading}
-                    />
-                  </div>
-                  
-                  {/* Search Component */}
-                  <div className="flex items-center relative @[600px]:w-auto w-full">
-                    <form onSubmit={handleSearchSubmit} className="relative @[600px]:w-auto w-full">
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <Search className="h-4 w-4 text-muted-foreground" />
-                        </div>
-                        <Input
-                          type="text"
-                          placeholder="Search by identifier"
-                          value={searchValue}
-                          onChange={(e) => {
-                            setSearchValue(e.target.value);
-                            if (searchError) setSearchError(null); // Clear error when typing
-                          }}
-                          className={`@[600px]:w-[200px] w-full h-9 pl-10 ${searchValue.trim() ? 'pr-20' : 'pr-3'} bg-card border-0 shadow-none focus:ring-0 focus:ring-offset-0 focus:outline-none focus:border-0 focus:shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none`}
-                          disabled={isSearching}
-                        />
-                        {searchValue.trim() && (
-                          <Button 
-                            type="submit" 
-                            size="sm" 
-                            className="absolute inset-y-0 right-0 h-9 px-3 rounded-l-none shadow-none"
-                            disabled={isSearching}
-                          >
-                            {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Search'}
-                          </Button>
-                        )}
-                      </div>
-                    </form>
-                    
-                    {/* Error message */}
-                    {searchError && (
-                      <div className="absolute top-full mt-2 right-0 z-50 bg-muted text-muted-foreground text-sm px-3 py-2 rounded-md shadow-sm min-w-[200px] border border-border">
-                        {searchError}
-                      </div>
-                    )}
-                  </div>
+
+          {/* Divider for split view */}
+          {selectedItem && !isNarrowViewport && !isFullWidth && (
+            <div
+              className="w-[12px] relative cursor-col-resize flex-shrink-0 group"
+              onMouseDown={handleDragStart}
+            >
+              <div className="absolute inset-0 rounded-full transition-colors duration-150 
+                group-hover:bg-accent" />
+            </div>
+          )}
+
+          {/* Right panel - item detail view */}
+          {selectedItem && !isNarrowViewport && (
+            <>
+              <div 
+                className="h-full overflow-hidden"
+                style={{ 
+                  width: isFullWidth 
+                    ? '100%' 
+                    : selectedScoreResult 
+                      ? `${(100 - leftPanelWidth) * 0.5}%` 
+                      : `${100 - leftPanelWidth}%` 
+                }}
+              >
+                {renderSelectedItem()}
+              </div>
+              
+              {/* Second divider for score result panel */}
+              {selectedScoreResult && !isFullWidth && (
+                <div
+                  className="w-[12px] relative cursor-col-resize flex-shrink-0 group"
+                >
+                  <div className="absolute inset-0 rounded-full transition-colors duration-150 
+                    group-hover:bg-accent" />
                 </div>
               )}
-              <div>
-                <div className="@container">
-                  {!hasInitiallyLoaded && isLoading ? (
-                    // Show skeleton only on very first load
-                    <div className="grid grid-cols-2 @[500px]:grid-cols-3 @[700px]:grid-cols-4 @[900px]:grid-cols-5 @[1100px]:grid-cols-6 gap-3 animate-pulse">
-                      {[...Array(12)].map((_, i) => (
-                        <ItemCardSkeleton key={i} />
-                      ))}
-                    </div>
-                  ) : (
-                    <GridContent
-                      filteredItems={filteredItems}
-                      selectedItem={selectedItem}
-                      handleItemClick={handleItemClick}
-                      getBadgeVariant={getBadgeVariant}
-                      scoreCountManagerRef={scoreCountManagerRef}
-                      itemRefsMap={itemRefsMap}
-                      scoreResultCounts={scoreResultCounts}
-                      nextToken={nextToken}
-                      isLoadingMore={isLoadingMore}
-                      loadMoreRef={loadMoreRef}
-                      isLoading={isLoading}
-                      hasInitiallyLoaded={hasInitiallyLoaded}
-                    />
-                  )}
+
+              {/* Score result panel */}
+              {selectedScoreResult && !isFullWidth && (
+                <div 
+                  className="h-full overflow-hidden"
+                  style={{ width: `${(100 - leftPanelWidth) * 0.5}%` }}
+                >
+                  <ScoreResultCard
+                    scoreResult={selectedScoreResult}
+                    onClose={() => setSelectedScoreResult(null)}
+                    naturalHeight={false}
+                  />
                 </div>
-              </div>
-            </div>
-          </div>
-        )}
+              )}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
