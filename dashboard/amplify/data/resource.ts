@@ -41,7 +41,7 @@ type ReportBlockIndexFields = "reportId" | "name" | "position";
 type FeedbackItemIndexFields = "accountId" | "scorecardId" | "scoreId" | "cacheKey" | "updatedAt" | "itemId"; // UPDATED: Renamed externalId to cacheKey and added itemId
 type ScorecardExampleItemIndexFields = "scorecardId" | "itemId" | "addedAt";
 type ScorecardProcessedItemIndexFields = "scorecardId" | "itemId" | "processedAt";
-type IdentifierIndexFields = "accountId" | "value" | "name" | "itemId";
+type IdentifierIndexFields = "accountId" | "value" | "name" | "itemId" | "position";
 
 // New index types for Feedback Analysis
 // type FeedbackAnalysisIndexFields = "accountId" | "scorecardId" | "createdAt"; // REMOVED
@@ -318,6 +318,7 @@ const schema = a.schema({
             name: a.string().required(),      // e.g., "Customer ID", "Order ID"
             value: a.string().required(),     // e.g., "CUST-123456", "ORD-789012"
             url: a.string(),                  // Optional clickable link
+            position: a.integer().required(), // Sort order for display
             accountId: a.string().required(), // For data isolation
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
@@ -326,6 +327,7 @@ const schema = a.schema({
             item: a.belongsTo('Item', 'itemId'),
             account: a.belongsTo('Account', 'accountId'),
         })
+        .identifier(['itemId', 'name'])  // Composite primary key prevents duplicates
         .authorization((allow) => [
             allow.publicApiKey(),
             allow.authenticated()
@@ -333,7 +335,8 @@ const schema = a.schema({
         .secondaryIndexes((idx: (field: IdentifierIndexFields) => any) => [
             idx("accountId").sortKeys(["value"]).name("byAccountAndValue"),  // PRIMARY: Direct-hit search by exact value
             idx("accountId").sortKeys(["name", "value"]).name("byAccountNameAndValue"), // Search within identifier type
-            idx("itemId"),  // Get all identifiers for an item
+            idx("itemId").sortKeys(["position"]).name("byItemAndPosition"),  // Get all identifiers for an item ordered by position
+            idx("itemId").sortKeys(["name"]).name("byItemAndName"), // Check for duplicates by item + name
             idx("value").name("byValue"), // Global value lookup (if cross-account search needed)
         ]),
 
@@ -380,6 +383,7 @@ const schema = a.schema({
             metadata: a.json(),
             trace: a.json(),
             correct: a.boolean(),
+            attachments: a.string().array(), // Array of file paths for trace and log files
             itemId: a.string().required(),
             item: a.belongsTo('Item', 'itemId'),
             accountId: a.string().required(),
@@ -410,7 +414,8 @@ const schema = a.schema({
             idx("scoreVersionId"),
             idx("scoreId"),
             // Composite GSI for efficient cache lookups by scorecard + score + item
-            idx("scorecardId").sortKeys(["scoreId", "itemId"]).name("byScorecardScoreItem")
+            idx("scorecardId").sortKeys(["scoreId", "itemId"]).name("byScorecardScoreItem"),
+            idx("itemId").sortKeys(["scorecardId", "scoreId"]).name("byItemScorecardScore")
         ]),
 
     BatchJobScoringJob: a

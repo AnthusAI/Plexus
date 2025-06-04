@@ -1,21 +1,42 @@
 import * as React from 'react'
-import { Card } from '@/components/ui/card'
-import { MoreHorizontal, X, Square, Columns2, StickyNote, Info, ChevronDown, ChevronUp, Loader2 } from 'lucide-react'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import { MoreHorizontal, X, Square, Columns2, StickyNote, Info, ChevronDown, ChevronUp, Loader2, Box, ListChecks, FileText, Tag } from 'lucide-react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { cn } from '@/lib/utils'
 import { CardButton } from '@/components/CardButton'
 import { Badge } from '@/components/ui/badge'
 import { Timestamp } from '@/components/ui/timestamp'
 import { motion } from 'framer-motion'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import remarkBreaks from 'remark-breaks'
 import ItemScoreResultCard from './ItemScoreResultCard'
 import { IdentifierDisplay } from '@/components/ui/identifier-display'
 import NumberFlowWrapper from '@/components/ui/number-flow'
+import ItemScoreResults from '../ItemScoreResults'
+import { useItemScoreResults } from '@/hooks/useItemScoreResults'
+import { MetadataEditor } from '@/components/ui/metadata-editor'
+import { FileAttachments } from './FileAttachments'
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
 
 // Interface for scorecard results
 interface ScorecardResult {
   scorecardId: string;
   scorecardName: string;
   resultCount: number;
+}
+
+// Interface for the new Identifier model structure
+export interface IdentifierItem {
+  name: string;
+  value: string;
+  url?: string;
+  position?: number;
 }
 
 // Clean interface for ItemCard parameters
@@ -30,9 +51,11 @@ export interface ItemData {
   icon?: React.ReactNode
   externalId?: string
   description?: string
-  identifiers?: string // JSON string
+  identifiers?: string | IdentifierItem[] // Support both JSON string (legacy) and new array format
   isNew?: boolean
   isLoadingResults?: boolean
+  metadata?: Record<string, string> // Metadata object
+  attachedFiles?: string[] // Array of file paths/URLs
   
   // Legacy fields for backwards compatibility (will be phased out)
   date?: string
@@ -53,6 +76,7 @@ export interface ItemData {
     scorecardName: string;
     count: number;
   }>
+  text?: string // For detail view text display
 }
 
 interface ItemCardProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -66,174 +90,225 @@ interface ItemCardProps extends React.HTMLAttributes<HTMLDivElement> {
   onClose?: () => void
   variant?: 'grid' | 'detail'
   getBadgeVariant: (status: string) => string
+  skeletonMode?: boolean
+  readOnly?: boolean // Add readOnly prop
+  onSave?: (item: ItemData) => Promise<void> // Add onSave prop
+  onScoreResultsRefetchReady?: (refetchFn: (() => void) | null) => void // Add callback for score results refetch
+  naturalHeight?: boolean // Add naturalHeight prop for document flow vs height-filling behavior
+  onScoreResultSelect?: (scoreResult: any) => void // Add score result selection callback
+  selectedScoreResultId?: string // Add selected score result ID
 }
 
-const GridContent = React.memo(({ 
-  item,
-  getBadgeVariant,
-  isSelected 
-}: { 
-  item: ItemData
-  getBadgeVariant: (status: string) => string
-  isSelected?: boolean
-}) => {  
-  const totalResults = item.scorecards.reduce((sum, sc) => sum + sc.resultCount, 0);
-  const hasMultipleScorecards = item.scorecards.length > 1;
-
-  return (
-    <div className="w-full relative">
-      {/* Icon positioned absolutely in top-right */}
-      <div className="absolute top-0 right-0 flex flex-col items-center space-y-1 z-10">
-        {item.icon || <StickyNote className="h-[1.75rem] w-[1.75rem]" strokeWidth={1.25} />}
-        <div className="text-xs text-muted-foreground text-center" title="Item">
-          <span className="font-semibold">Item</span>
-        </div>
-      </div>
-      
-      {/* Invisible float element that creates space for icon/label but allows text to wrap under */}
-      <div className="float-right w-16 h-12"></div>
-      
-      {/* Content that flows around and under the icon */}
-      <div className="space-y-1">
-        <IdentifierDisplay 
-          externalId={item.externalId}
-          identifiers={item.identifiers}
-          iconSize="md"
-          textSize="xs"
-        />
-
-        <Timestamp 
-          time={item.timestamp} 
-          variant="relative" 
-          showIcon={true} 
-          className="text-xs"
-        />
-
-        {/* Elapsed time display between createdAt and updatedAt */}
-        {item.createdAt && item.updatedAt && (
-          <Timestamp 
-            time={item.createdAt}
-            completionTime={item.updatedAt}
-            variant="elapsed" 
-            showIcon={true}
-            className="text-xs"
-          />
-        )}
-
-        {/* Scorecard summary */}
-        {item.scorecards.length > 0 && (
-          <div className="font-semibold text-sm mt-3">
-            {hasMultipleScorecards ? 
-              `${item.scorecards.length} scorecards` : 
-              item.scorecards[0]?.scorecardName || 'Scorecard'}
-          </div>
-        )}
-        
-        {/* Results count - fixed height to prevent layout jiggling */}
-        <div className="flex flex-col gap-0.5 text-xs">
-          {item.isLoadingResults ? (
-            <div className="flex items-center gap-1 text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              <span>Loading results...</span>
-            </div>
-          ) : item.scorecards.length > 0 ? (
-            <div>
-              <NumberFlowWrapper value={totalResults} /> result{totalResults !== 1 ? 's' : ''}
-            </div>
-          ) : (
-            <div>
-              <NumberFlowWrapper value={0} /> results
-            </div>
-          )}
-        </div>
-        
-        {/* Clear the float */}
-        <div className="clear-both"></div>
-      </div>
-    </div>
-  )
-})
-
-interface DetailContentProps {
-  item: ItemData
-  getBadgeVariant: (status: string) => string
-  isFullWidth: boolean
-  onToggleFullWidth?: () => void
-  onClose?: () => void
-  onEdit?: () => void
-  onViewData?: () => void
-}
-
-const DetailContent = React.memo(({ 
-  item,
-  getBadgeVariant,
-  isFullWidth,
+const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({ 
+  item, 
+  onEdit, 
+  onViewData, 
+  variant = 'grid', 
+  isSelected,
+  onClick,
+  isFullWidth = false,
   onToggleFullWidth,
   onClose,
-  onEdit,
-  onViewData,
-}: DetailContentProps) => {
+  getBadgeVariant,
+  skeletonMode = false,
+  readOnly = false,
+  onSave,
+  onScoreResultsRefetchReady,
+  naturalHeight = false,
+  onScoreResultSelect,
+  selectedScoreResultId,
+  className, 
+  ...props 
+}, ref) => {
+  const [isNarrowViewport, setIsNarrowViewport] = React.useState(false)
+  
+  // Use the score results hook for detail view
+  const { groupedResults, isLoading, error, refetch, silentRefetch } = useItemScoreResults(
+    variant === 'detail' ? String(item.id) : null
+  )
+
+  // Extract HTML props that might conflict with motion props
+  const { onDrag, ...htmlProps } = props as any;
+  
   const totalResults = item.scorecards.reduce((sum, sc) => sum + sc.resultCount, 0);
   const hasMultipleScorecards = item.scorecards.length > 1;
 
-  return (
-    <div className="w-full flex flex-col min-h-0">
-      <div className="flex justify-between items-start w-full">
-        <div className="space-y-2 flex-1">
-          {/* Header with primary scorecard name */}
-          <div className="text-xs text-muted-foreground">
-            <span className="font-semibold">
-              {hasMultipleScorecards ? 
-                `${item.scorecards.length} Scorecards` : 
-                (item.scorecards[0]?.scorecardName || 'Untitled Item')}
-            </span>
-          </div>
+  React.useEffect(() => {
+    if (variant === 'detail') {
+      const checkViewportWidth = () => {
+        setIsNarrowViewport(window.innerWidth < 640)
+      }
 
-          <IdentifierDisplay 
-            externalId={item.externalId}
-            identifiers={item.identifiers}
-            iconSize="md"
-            textSize="sm"
-          />
+      checkViewportWidth()
+      window.addEventListener('resize', checkViewportWidth)
+      return () => window.removeEventListener('resize', checkViewportWidth)
+    }
+  }, [variant])
 
-          <Timestamp 
-            time={item.timestamp} 
-            variant="relative" 
-            showIcon={true}
-            className="text-xs"
-          />
+  // Pass the silent refetch function to the parent when it's available for detail view
+  React.useEffect(() => {
+    if (variant === 'detail' && onScoreResultsRefetchReady) {
+      onScoreResultsRefetchReady(silentRefetch);
+      
+      // Clean up by passing null when component unmounts or variant changes
+      return () => {
+        onScoreResultsRefetchReady(null);
+      };
+    }
+  }, [variant, silentRefetch, onScoreResultsRefetchReady])
 
-          {/* Elapsed time display between createdAt and updatedAt */}
-          {item.createdAt && item.updatedAt && (
-            <Timestamp 
-              time={item.createdAt}
-              completionTime={item.updatedAt}
-              variant="elapsed" 
-              showIcon={true}
-              className="text-xs"
-            />
-          )}
-          
-          {/* Results summary */}
-          <div className="text-sm font-semibold">
-            {totalResults} result{totalResults !== 1 ? 's' : ''}
-          </div>
-          
-          {/* Loading state */}
-          {item.isLoadingResults && (
-            <div className="flex items-center gap-1 text-xs text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              <span>Loading results...</span>
-            </div>
-          )}
+
+
+  // Grid mode content
+  const renderGridContent = () => (
+    <div className="space-y-1">
+      <IdentifierDisplay 
+        externalId={item.externalId}
+        identifiers={item.identifiers}
+        iconSize="md"
+        textSize="xs"
+        skeletonMode={skeletonMode}
+        displayMode="compact"
+      />
+
+      <Timestamp 
+        time={item.timestamp} 
+        variant="relative" 
+        showIcon={true} 
+        className="text-xs"
+        skeletonMode={skeletonMode}
+      />
+
+      {/* Elapsed time display between createdAt and updatedAt */}
+      {item.createdAt && item.updatedAt && (
+        <Timestamp 
+          time={item.createdAt}
+          completionTime={item.updatedAt}
+          variant="elapsed" 
+          showIcon={true}
+          className="text-xs"
+          skeletonMode={skeletonMode}
+        />
+      )}
+
+      {/* Scorecard summary - only show if there are actually scorecards */}
+      {item.scorecards.length > 0 && (
+        <div className="flex items-baseline gap-1 font-semibold text-sm mt-3">
+          <ListChecks className="h-4 w-4 flex-shrink-0 text-muted-foreground translate-y-0.5" />
+          <span className="text-foreground">
+            {hasMultipleScorecards ? 
+              `${item.scorecards.length} scorecards` : 
+              item.scorecards[0]?.scorecardName || 'Scorecard'
+            }
+          </span>
         </div>
-        <div className="flex gap-2 ml-4">
+      )}
+      
+      {/* Results count - only show if there are actually scorecards */}
+      {item.scorecards.length > 0 && (
+        <div className="flex items-baseline gap-1 text-sm text-muted-foreground">
+          <Box className="h-4 w-4 flex-shrink-0 translate-y-0.5" />
+          <span>
+            <span className="text-foreground"><NumberFlowWrapper value={totalResults} skeletonMode={skeletonMode || item.isLoadingResults} /></span> score result{totalResults !== 1 ? 's' : ''}
+          </span>
+        </div>
+      )}
+    </div>
+  )
+
+  // Grid mode layout
+  if (variant === 'grid') {
+    return (
+      <motion.div
+        ref={ref}
+        id={`item-${item.id}`}
+        initial={{ opacity: 1 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.2 }}
+        className={cn(
+          "w-full rounded-lg text-card-foreground hover:bg-accent/50 relative cursor-pointer",
+          isSelected ? "bg-card-selected" : "bg-card",
+          item.isNew && "new-item-shadow",
+          isSelected && "selected-border-rounded",
+          className
+        )}
+        onClick={onClick}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            onClick?.()
+          }
+        }}
+        {...htmlProps}
+      >
+        <div className="p-3 w-full relative z-10">
+          <div className="w-full relative">
+            {/* Top-right icon */}
+            <div className="absolute top-0 right-0 z-10">
+              <div className="flex flex-col items-center text-muted-foreground space-y-1">
+                {item.icon || <StickyNote className="h-[1.75rem] w-[1.75rem]" strokeWidth={1.25} />}
+                <div className="text-xs text-center" title="Item">
+                  <span className="font-semibold">Item</span>
+                </div>
+              </div>
+            </div>
+            
+            {/* Float spacer for icon */}
+            <div className="float-right w-16 h-12"></div>
+            
+            {/* Content */}
+            {renderGridContent()}
+            
+            {/* Clear the float */}
+            <div className="clear-both"></div>
+          </div>
+        </div>
+      </motion.div>
+    )
+  }
+
+  // Detail mode layout - simplified to fit within existing container
+  return (
+    <Card className={`rounded-none sm:rounded-lg ${naturalHeight ? 'min-h-screen' : 'h-full'} flex flex-col bg-card border-none`}>
+      <CardHeader className="flex-shrink-0 flex flex-row items-start justify-between py-4 px-4 sm:px-3 space-y-0">
+        <div>
+          <div className="flex items-center gap-1">
+            <StickyNote className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+            <h2 className="text-xl text-muted-foreground font-semibold">Item Details</h2>
+          </div>
+          <div className="mt-1 space-y-1">
+            <IdentifierDisplay 
+              externalId={item.externalId}
+              identifiers={item.identifiers}
+              iconSize="md"
+              textSize="sm"
+              skeletonMode={skeletonMode}
+              displayMode="full"
+            />
+            <div className="text-sm text-muted-foreground">
+              <Timestamp time={item.timestamp || item.date || ''} variant="relative" className="text-xs" skeletonMode={skeletonMode} />
+            </div>
+            {item.createdAt && item.updatedAt && (
+              <Timestamp time={item.createdAt} completionTime={item.updatedAt} variant="elapsed" className="text-xs" skeletonMode={skeletonMode} />
+            )}
+            {/* Total results summary */}
+            {totalResults > 0 && (
+              <div className="text-sm mt-2">
+                <span className="text-foreground font-medium"><NumberFlowWrapper value={totalResults} skeletonMode={skeletonMode} /></span> <span className="text-muted-foreground">score result{totalResults !== 1 ? 's' : ''} across</span> <span className="text-foreground font-medium"><NumberFlowWrapper value={item.scorecards.length} skeletonMode={skeletonMode} /></span> <span className="text-muted-foreground">scorecard{item.scorecards.length !== 1 ? 's' : ''}</span>
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center space-x-2">
           <DropdownMenu.Root>
             <DropdownMenu.Trigger asChild>
               <CardButton
                 icon={MoreHorizontal}
                 onClick={() => {}}
                 aria-label="More options"
+                skeletonMode={skeletonMode}
               />
             </DropdownMenu.Trigger>
             <DropdownMenu.Portal>
@@ -250,11 +325,12 @@ const DetailContent = React.memo(({
               </DropdownMenu.Content>
             </DropdownMenu.Portal>
           </DropdownMenu.Root>
-          {onToggleFullWidth && (
+          {!isNarrowViewport && onToggleFullWidth && (
             <CardButton
               icon={isFullWidth ? Columns2 : Square}
               onClick={onToggleFullWidth}
               aria-label={isFullWidth ? 'Exit full width' : 'Full width'}
+              skeletonMode={skeletonMode}
             />
           )}
           {onClose && (
@@ -262,141 +338,132 @@ const DetailContent = React.memo(({
               icon={X}
               onClick={onClose}
               aria-label="Close"
+              skeletonMode={skeletonMode}
             />
           )}
         </div>
-      </div>
-      
-      {/* Scorecard details section - show when we have multiple scorecards */}
-      {hasMultipleScorecards && (
-        <div className="mt-2 overflow-auto">
-          <div className="space-y-4 pb-2">
-            {item.scorecards.map((scorecard) => (
-              <ItemScoreResultCard
-                key={scorecard.scorecardId}
-                scorecardName={scorecard.scorecardName}
-                scores={[]} // This would need to be populated with actual score data when available
-              />
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  )
-})
-
-const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({ 
-  item, 
-  onEdit, 
-  onViewData, 
-  variant = 'grid', 
-  isSelected,
-  onClick,
-  isFullWidth = false,
-  onToggleFullWidth,
-  onClose,
-  getBadgeVariant,
-  className, 
-  ...props 
-}, ref) => {
-  // Extract HTML props that might conflict with motion props
-  const { onDrag, ...htmlProps } = props as any;
-  
-  // Debug ref to inspect the actual DOM element
-  const debugRef = React.useCallback((node: HTMLDivElement | null) => {
-    if (node && item.isNew) {
-      console.log('🔍 DOM ELEMENT DEBUG:', {
-        id: item.id,
-        isNew: item.isNew,
-        element: node,
-        className: node.className,
-        computedStyle: window.getComputedStyle(node),
-        backgroundColor: window.getComputedStyle(node).backgroundColor,
-        border: window.getComputedStyle(node).border,
-        boxShadow: window.getComputedStyle(node).boxShadow,
-        transform: window.getComputedStyle(node).transform
-      });
-    }
-    if (ref) {
-      if (typeof ref === 'function') {
-        ref(node);
-      } else {
-        ref.current = node;
-      }
-    }
-  }, [item.isNew, item.id, ref]);
-
-  // Debug logging for new items
-  React.useEffect(() => {
-    if (item.isNew) {
-      console.log('🟣✨ NEW ITEM CARD WITH RED/YELLOW EFFECTS:', {
-        id: item.id,
-        externalId: item.externalId,
-        isNew: item.isNew,
-        variant: variant,
-        shouldHaveClass: 'new-item-shadow',
-        shouldHaveInlineStyles: 'red background, yellow border',
-        timestamp: new Date().toISOString()
-      });
-    }
-  }, [item.isNew, item.id, item.externalId, variant]);
-  
-  return (
-    <motion.div
-      ref={debugRef}
-      initial={{ opacity: 1 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.2 }}
-      className={cn(
-        "w-full rounded-lg text-card-foreground hover:bg-accent/50 relative",
-        variant === 'grid' ? (
-          isSelected ? "bg-card-selected" : "bg-card"
-        ) : "bg-card-selected",
-        variant === 'detail' && "h-full flex flex-col",
-        item.isNew && "new-item-shadow",
-        ((variant === 'grid' && isSelected) || variant === 'detail') && "selected-border-rounded",
-        className
-      )}
-      {...htmlProps}
-    >
-
-      <div className={cn(
-        variant === 'grid' ? "p-3" : "p-4",
-        "w-full relative z-10",
-        variant === 'detail' && "flex-1 flex flex-col min-h-0"
-      )}>
-        <div 
-          className={cn(
-            "w-full",
-            variant === 'grid' && "cursor-pointer",
-            variant === 'detail' && "h-full flex flex-col min-h-0"
+      </CardHeader>
+      <CardContent className={`flex-grow px-4 sm:px-3 pb-4 ${naturalHeight ? '' : 'overflow-auto'}`}>
+        <div className="space-y-4">
+          {/* Description field display */}
+          {item.description && 
+           item.description.trim() && 
+           !item.description.match(/^API Call - Report \d+$/) && 
+           !item.description.match(/^(Call|Report|Session|Item) - .+$/) && (
+            <div>
+              <h3 className="text-sm font-medium text-foreground mb-2">Description</h3>
+              <div className="p-3">
+                <p className="text-sm text-muted-foreground">{item.description}</p>
+              </div>
+            </div>
           )}
-          onClick={() => variant === 'grid' && onClick?.()}
-          role={variant === 'grid' ? "button" : undefined}
-          tabIndex={variant === 'grid' ? 0 : undefined}
-          onKeyDown={variant === 'grid' ? (e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault()
-              onClick?.()
-            }
-          } : undefined}
-        >
-          {variant === 'grid' ? (
-            <GridContent item={item} getBadgeVariant={getBadgeVariant} isSelected={isSelected} />
-          ) : (
-            <DetailContent 
-              item={item}
-              getBadgeVariant={getBadgeVariant}
-              isFullWidth={isFullWidth}
-              onToggleFullWidth={onToggleFullWidth}
-              onClose={onClose}
-              onViewData={onViewData}
-              onEdit={onEdit}
-            />
-          )}
+          
+          {/* Collapsible sections for text, metadata, and file attachments */}
+          <Accordion type="multiple" className="w-full space-y-4">
+            {/* Text field display */}
+            {item.text && (
+              <AccordionItem value="text" className="border-b-0">
+                <AccordionTrigger className="hover:no-underline py-2 px-0">
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-3 w-3 text-muted-foreground" />
+                    <span className="text-sm font-medium leading-none text-muted-foreground">Text</span>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent className="pt-0 pb-4">
+                  <div className="p-3 bg-background rounded">
+                    <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:bg-muted prose-pre:text-foreground">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm, remarkBreaks]}
+                        components={{
+                          // Customize components for better styling
+                          p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
+                          ul: ({ children }) => <ul className="mb-3 ml-4 list-disc">{children}</ul>,
+                          ol: ({ children }) => <ol className="mb-3 ml-4 list-decimal">{children}</ol>,
+                          li: ({ children }) => <li className="mb-1">{children}</li>,
+                          strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+                          em: ({ children }) => <em className="italic">{children}</em>,
+                          code: ({ children }) => <code className="bg-muted px-1 py-0.5 rounded text-xs font-mono">{children}</code>,
+                          pre: ({ children }) => <pre className="bg-muted p-3 rounded overflow-x-auto text-sm">{children}</pre>,
+                          h1: ({ children }) => <h1 className="text-lg font-semibold mb-3 text-foreground">{children}</h1>,
+                          h2: ({ children }) => <h2 className="text-base font-semibold mb-2 text-foreground">{children}</h2>,
+                          h3: ({ children }) => <h3 className="text-sm font-medium mb-2 text-foreground">{children}</h3>,
+                          blockquote: ({ children }) => <blockquote className="border-l-4 border-muted-foreground/20 pl-4 italic text-muted-foreground">{children}</blockquote>,
+                        }}
+                      >
+                        {item.text}
+                      </ReactMarkdown>
+                    </div>
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            )}
+            
+            {/* Metadata section */}
+            {(item.metadata && Object.keys(item.metadata).length > 0) && (
+              <AccordionItem value="metadata" className="border-b-0">
+                <AccordionTrigger className="hover:no-underline py-2 px-0">
+                  <div className="flex items-center gap-2">
+                    <Tag className="h-3 w-3 text-muted-foreground" />
+                    <span className="text-sm font-medium leading-none text-muted-foreground">Metadata</span>
+                    {!readOnly && <span className="text-[10px] text-muted-foreground">optional</span>}
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent className="pt-0 pb-4">
+                  <MetadataEditor
+                    value={item.metadata || {}}
+                    onChange={(newMetadata) => {
+                      // Update metadata in parent component if onChange is provided
+                      if (onSave) {
+                        onSave({ ...item, metadata: newMetadata });
+                      }
+                    }}
+                    disabled={readOnly}
+                    suppressHeader={true}
+                  />
+                </AccordionContent>
+              </AccordionItem>
+            )}
+            
+            {/* File attachments section */}
+            {(item.attachedFiles && item.attachedFiles.length > 0) && (
+              <AccordionItem value="attachments" className="border-b-0">
+                <AccordionTrigger className="hover:no-underline py-2 px-0">
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-3 w-3 text-muted-foreground" />
+                    <span className="text-sm font-medium leading-none text-muted-foreground">Attached Files</span>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent className="pt-0 pb-4">
+                  <FileAttachments
+                    attachedFiles={item.attachedFiles || []}
+                    readOnly={readOnly}
+                    onChange={(newFiles) => {
+                      // Update attached files in parent component if onChange is provided
+                      if (onSave) {
+                        onSave({ ...item, attachedFiles: newFiles });
+                      }
+                    }}
+                    onUpload={async (file) => {
+                      // Mock upload implementation - return a path
+                      return Promise.resolve(`/uploads/${file.name}`);
+                    }}
+                  />
+                </AccordionContent>
+              </AccordionItem>
+            )}
+          </Accordion>
+          
+          <ItemScoreResults
+            groupedResults={groupedResults}
+            isLoading={isLoading}
+            error={error}
+            itemId={String(item.id)}
+            onScoreResultSelect={onScoreResultSelect}
+            selectedScoreResultId={selectedScoreResultId}
+          />
         </div>
-      </div>
-    </motion.div>
+      </CardContent>
+    </Card>
   )
 });
 

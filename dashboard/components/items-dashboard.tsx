@@ -1,10 +1,10 @@
 "use client"
 import React, { useContext, useEffect, useMemo, useRef, useState, useCallback, Suspense } from "react"
-import { useRouter, useSearchParams, useParams } from 'next/navigation'
+import { useSearchParams, useParams } from 'next/navigation'
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import { Square, Columns2, X, ChevronDown, ChevronUp, Info, MessageCircleMore, Plus, ThumbsUp, ThumbsDown, Loader2 } from "lucide-react"
+import { Square, Columns2, X, ChevronDown, ChevronUp, Info, MessageCircleMore, Plus, ThumbsUp, ThumbsDown, Loader2, Search } from "lucide-react"
 import { format, formatDistanceToNow, parseISO } from "date-fns"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -18,6 +18,7 @@ import {
 import { TimeRangeSelector } from "@/components/time-range-selector"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import ReactMarkdown from 'react-markdown'
+import remarkBreaks from 'remark-breaks'
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -25,10 +26,10 @@ import Link from 'next/link'
 import { FilterControl, FilterConfig } from "@/components/filter-control"
 import ScorecardContext from "@/components/ScorecardContext"
 import ItemContext from "@/components/ItemContext"
-import ItemDetail from './ItemDetail'
 import { formatTimeAgo } from '@/utils/format-time'
 import type { FeedbackItem } from '@/types/feedback'
 import ItemCard, { ItemData } from './items/ItemCard'
+import ScoreResultCard, { ScoreResultData } from './items/ScoreResultCard'
 import { amplifyClient, graphqlRequest } from '@/utils/amplify-client'
 import { useAuthenticator } from '@aws-amplify/ui-react'
 import { ScorecardContextProps } from "./ScorecardContext"
@@ -37,6 +38,7 @@ import { toast } from 'sonner'
 import { useAccount } from '@/app/contexts/AccountContext'
 import { ItemsDashboardSkeleton, ItemCardSkeleton } from './loading-skeleton'
 import { ScoreResultCountManager, type ScoreResultCount } from '@/utils/score-result-counter'
+import { motion, AnimatePresence } from 'framer-motion'
 
 // Get the current date and time
 const now = new Date();
@@ -68,8 +70,19 @@ interface Item {
   updatedAt?: string;
   createdAt?: string;
   isEvaluation: boolean;
+  identifiers?: string | Array<{
+    name: string;
+    value: string;
+    url?: string;
+    position?: number;
+  }>; // Support both JSON string (legacy) and new array format
   isNew?: boolean;
   isLoadingResults?: boolean;
+  
+  // UI fields for ItemCard
+  metadata?: Record<string, string>;
+  attachedFiles?: string[];
+  text?: string;
   
   // Legacy fields for backwards compatibility (will be phased out)
   date?: string;
@@ -124,8 +137,87 @@ const ITEMS_TIME_RANGE_OPTIONS = [
   { value: "custom", label: "Custom" },
 ]
 
-// Memoized grid item component to prevent unnecessary re-renders
-const MemoizedGridItemCard = React.memo(({ 
+// Memoized grid component to prevent re-renders when just selection changes
+const GridContent = ({ 
+  filteredItems,
+  selectedItem,
+  handleItemClick,
+  getBadgeVariant,
+  scoreCountManagerRef,
+  itemRefsMap,
+  scoreResultCounts,
+  nextToken,
+  isLoadingMore,
+  loadMoreRef,
+  isLoading,
+  hasInitiallyLoaded
+}: {
+  filteredItems: Item[];
+  selectedItem: string | null;
+  handleItemClick: (itemId: string) => void;
+  getBadgeVariant: (status: string) => string;
+  scoreCountManagerRef: React.MutableRefObject<ScoreResultCountManager | null>;
+  itemRefsMap: React.MutableRefObject<Map<string, HTMLDivElement | null>>;
+  scoreResultCounts: Map<string, ScoreResultCount>;
+  nextToken: string | null;
+  isLoadingMore: boolean;
+  loadMoreRef: React.MutableRefObject<HTMLDivElement | null>;
+  isLoading: boolean;
+  hasInitiallyLoaded: boolean;
+}) => {
+  // Only show "No items found" if we're not loading and have actually finished the initial load
+  if (filteredItems.length === 0 && !isLoading && hasInitiallyLoaded) {
+    return (
+      <div className="flex items-center justify-center h-full text-muted-foreground">
+        No items found
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <motion.div 
+        className="grid grid-cols-2 @[500px]:grid-cols-3 @[700px]:grid-cols-4 @[900px]:grid-cols-5 @[1100px]:grid-cols-6 gap-3"
+        layout
+      >
+        <AnimatePresence mode="popLayout">
+          {filteredItems.map((item) => {
+            const scoreCount = scoreResultCounts.get(item.id);
+            return (
+              <GridItemCard
+                key={item.id}
+                item={item}
+                scoreCount={scoreCount}
+                selectedItem={selectedItem}
+                handleItemClick={handleItemClick}
+                getBadgeVariant={getBadgeVariant}
+                scoreCountManagerRef={scoreCountManagerRef}
+                itemRefsMap={itemRefsMap}
+              />
+            );
+          })}
+        </AnimatePresence>
+      </motion.div>
+      
+      {nextToken && filteredItems.length > 0 && (
+        <div 
+          ref={loadMoreRef} 
+          className="flex justify-center py-6"
+        >
+          {isLoadingMore && (
+            <div className="flex items-center">
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              <span>Loading more items...</span>
+            </div>
+          )}
+        </div>
+      )}
+    </>
+  );
+};
+
+// Grid item component
+const GridItemCard = ({ 
   item, 
   scoreCount, 
   selectedItem, 
@@ -145,7 +237,7 @@ const MemoizedGridItemCard = React.memo(({
   const itemWithCount = useMemo(() => ({
     ...item,
     results: scoreCount?.count || item.results,
-    isLoadingResults: scoreCount?.isLoading || false,
+    isLoadingResults: scoreCount?.isLoading ?? item.isLoadingResults,
     scorecardBreakdown: scoreCount?.scorecardBreakdown || undefined,
     // Map scorecardBreakdown to the new scorecards field
     scorecards: scoreCount?.scorecardBreakdown ? 
@@ -176,19 +268,38 @@ const MemoizedGridItemCard = React.memo(({
   }, [item.id, scoreCountManagerRef, itemRefsMap]);
   
   return (
-    <ItemCard
-      key={item.id}
-      variant="grid"
-      item={itemWithCount}
-      isSelected={selectedItem === item.id}
-      onClick={handleClick}
-      getBadgeVariant={getBadgeVariant}
-      ref={combinedRef}
-    />
-  );
-});
+    <motion.div
+      layoutId={`item-${item.id}`}
+      layout
+      initial={{ opacity: 0 }}
+      animate={{ 
+        opacity: 1
+      }}
+      exit={{ 
+        opacity: 0,
+        transition: { duration: 0.2 }
+      }}
+      transition={{
+        layout: {
+          duration: 0.2,
+          ease: "easeInOut"
+        },
+        opacity: { duration: 0.4 }
+      }}
 
-MemoizedGridItemCard.displayName = 'MemoizedGridItemCard';
+    >
+      <ItemCard
+        variant="grid"
+        item={itemWithCount}
+        isSelected={selectedItem === item.id}
+        onClick={handleClick}
+        getBadgeVariant={getBadgeVariant}
+        readOnly={true}
+        ref={combinedRef}
+      />
+    </motion.div>
+  );
+};
 
 // Add this to the existing items array or create a new constant
 const sampleScoreResults = [
@@ -345,6 +456,7 @@ interface Score {
 const renderRichText = (text: string) => {
   return (
     <ReactMarkdown
+      remarkPlugins={[remarkBreaks]}
       components={{
         p: ({node, ...props}) => <p className="mb-2" {...props} />,
         strong: ({node, ...props}) => <strong className="font-semibold" {...props} />,
@@ -410,21 +522,66 @@ interface GroupedScoreResults {
   }
 }
 
+// Helper function to transform identifiers from GraphQL response
+const transformIdentifiers = (item: any) => {
+  // First try to get from new itemIdentifiers relationship
+  if (item.itemIdentifiers?.items?.length > 0) {
+    const transformedIdentifiers = item.itemIdentifiers.items
+      .map((identifier: any) => ({
+        name: identifier.name,
+        value: identifier.value,
+        url: identifier.url,
+        position: identifier.position
+      }))
+      .sort((a: any, b: any) => (a.position || 0) - (b.position || 0));
+    
+      return transformedIdentifiers;
+}
+  
+  return item.identifiers;
+};
+
+// Helper function to transform item from GraphQL response to Item interface
+const transformItem = (item: any, options: { isNew?: boolean } = {}): Item => {
+  return {
+    // New required fields
+    id: item.id,
+    timestamp: item.createdAt || item.updatedAt || new Date().toISOString(),
+    scorecards: [], // Will be populated with actual data later
+    
+    // Core fields
+    accountId: item.accountId,
+    externalId: item.externalId,
+    description: item.description,
+    evaluationId: item.evaluationId,
+    updatedAt: item.updatedAt,
+    createdAt: item.createdAt,
+    isEvaluation: item.isEvaluation,
+    identifiers: transformIdentifiers(item),
+    isNew: options.isNew || false,
+    isLoadingResults: true, // Set to true initially since score results load separately
+    
+    // Metadata and file attachments (parse from item if available)
+    metadata: item.metadata ? (typeof item.metadata === 'string' ? JSON.parse(item.metadata) : item.metadata) : {},
+    attachedFiles: item.attachedFiles || [],
+    text: item.text,
+    
+    // Legacy fields for backwards compatibility
+    date: item.createdAt || item.updatedAt,
+    status: "Done",
+    results: 0,
+    inferences: 0,
+    cost: "$0.000",
+    groupedScoreResults: {}
+  };
+};
+
 function ItemsDashboardInner() {
-  const router = useRouter()
   const searchParams = useSearchParams()
   const params = useParams()
   const [selectedItem, setSelectedItem] = useState<string | null>(null)
   
-  // Debug wrapper for setSelectedItem to track changes
-  const debugSetSelectedItem = React.useCallback((itemId: string | null) => {
-    console.log('🎯 SELECTED ITEM CHANGE:', {
-      from: selectedItem,
-      to: itemId,
-      stack: new Error().stack?.split('\n').slice(1, 4).join('\n')
-    });
-    setSelectedItem(itemId);
-  }, []); // Empty deps to avoid circular updates
+
   const [isFullWidth, setIsFullWidth] = useState(false)
   const [selectedScorecard, setSelectedScorecard] = useState<string | null>(null)
   const [isNarrowViewport, setIsNarrowViewport] = useState(false)
@@ -464,6 +621,7 @@ function ItemsDashboardInner() {
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [nextToken, setNextToken] = useState<string | null>(null);
+  const [hasInitiallyLoaded, setHasInitiallyLoaded] = useState(false);
   const { user } = useAuthenticator();
   // Use the account context instead of local state
   const { selectedAccount, isLoadingAccounts } = useAccount();
@@ -475,30 +633,161 @@ function ItemsDashboardInner() {
   const [specificItemLoading, setSpecificItemLoading] = useState(false);
   const [failedItemFetches, setFailedItemFetches] = useState<Set<string>>(new Set());
   const refetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [specificallyFetchedItems, setSpecificallyFetchedItems] = useState<Set<string>>(new Set());
   
   // Ref map to track item elements for scroll-to-view functionality
   const itemRefsMap = useRef<Map<string, HTMLDivElement | null>>(new Map());
   
-  // Function to scroll to a selected item
-  const scrollToSelectedItem = useCallback((itemId: string) => {
-    // Use requestAnimationFrame to ensure the layout has updated after selection
-    requestAnimationFrame(() => {
-      const itemElement = itemRefsMap.current.get(itemId);
-      if (itemElement) {
-        itemElement.scrollIntoView({
-          behavior: 'smooth',
-          block: 'start', // Align to the top of the container
-          inline: 'nearest'
-        });
-      }
-    });
+  // Ref to hold the refetch function for the currently selected item's score results
+  const scoreResultsRefetchRef = useRef<(() => void) | null>(null);
+
+  // Wake-from-sleep detection state
+  const pageHiddenTimeRef = useRef<number | null>(null);
+  const isPageVisibleRef = useRef<boolean>(!document.hidden);
+  const WAKE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+
+  // Search state
+  const [searchValue, setSearchValue] = useState<string>('');
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const searchErrorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Score result selection state
+  const [selectedScoreResult, setSelectedScoreResult] = useState<ScoreResultData | null>(null);
+  
+  // Handler for score result selection
+  const handleScoreResultSelect = useCallback((scoreResult: any) => {
+    setSelectedScoreResult(scoreResult);
   }, []);
+  
+  // Clear selected score result when item changes
+  useEffect(() => {
+    setSelectedScoreResult(null);
+  }, [selectedItem]);
+  
+  // Enhanced scroll-to-item function for deep-linking with retry logic
+  const scrollToSelectedItem = useCallback((itemId: string, maxRetries = 10, retryDelay = 100) => {
+    let attempts = 0;
+    
+    const attemptScroll = () => {
+      attempts++;
+      const itemElement = itemRefsMap.current.get(itemId);
+      
+      if (itemElement) {
+        // Calculate the position with 12px padding (Tailwind 3)
+        const elementRect = itemElement.getBoundingClientRect();
+        const currentScrollTop = window.pageYOffset || document.documentElement.scrollTop;
+        const targetScrollTop = currentScrollTop + elementRect.top - 12; // 12px padding
+        
+        window.scrollTo({
+          top: targetScrollTop,
+          behavior: 'smooth'
+        });
+        
+        return true; // Success
+      } else if (attempts < maxRetries) {
+        setTimeout(attemptScroll, retryDelay);
+        return false; // Retry needed
+      } else {
+        return false; // Failed
+      }
+    };
+    
+    // Start with immediate attempt, then use requestAnimationFrame for subsequent attempts
+    requestAnimationFrame(attemptScroll);
+  }, []);
+
+  // Search for item by identifier
+  const handleSearch = useCallback(async (identifier: string) => {
+    if (!identifier.trim()) return;
+    
+    setIsSearching(true);
+    setSearchError(null);
+    
+    try {
+      const response = await graphqlRequest<{
+        listIdentifierByValue: {
+          items: Array<{
+            itemId: string;
+            name: string;
+          }>;
+        };
+      }>(`
+        query ListIdentifierByValue($value: String!) {
+          listIdentifierByValue(value: $value) {
+            items {
+              itemId
+              name
+            }
+          }
+        }
+      `, {
+        value: identifier.trim()
+      });
+      
+      const identifiers = response.data?.listIdentifierByValue?.items;
+      
+      if (identifiers && identifiers.length > 0) {
+        // Use the first item found
+        const identifier = identifiers[0];
+        const itemId = identifier.itemId;
+        if (itemId) {
+          // Navigate to the item without remount
+          window.history.pushState({}, '', `/lab/items/${itemId}`)
+          setSelectedItem(itemId)
+          setSearchValue(''); // Clear search on success
+        } else {
+          setSearchError('Item not found for this identifier');
+        }
+      } else {
+        setSearchError('No item found with this identifier');
+        // Set timeout to clear error after 5 seconds
+        if (searchErrorTimeoutRef.current) {
+          clearTimeout(searchErrorTimeoutRef.current);
+        }
+        searchErrorTimeoutRef.current = setTimeout(() => {
+          setSearchError(null);
+        }, 5000);
+      }
+    } catch (error) {
+      console.error('Search error:', error);
+      setSearchError('Error searching for item');
+      // Set timeout to clear error after 5 seconds
+      if (searchErrorTimeoutRef.current) {
+        clearTimeout(searchErrorTimeoutRef.current);
+      }
+      searchErrorTimeoutRef.current = setTimeout(() => {
+        setSearchError(null);
+      }, 5000);
+    } finally {
+      setIsSearching(false);
+    }
+  }, []);
+
+  // Handle search form submission
+  const handleSearchSubmit = useCallback((e: React.FormEvent) => {
+    e.preventDefault();
+    handleSearch(searchValue);
+  }, [handleSearch, searchValue]);
   
   // Function to fetch a specific item by ID
   const fetchSpecificItem = useCallback(async (itemId: string) => {
-    if (!selectedAccount) return null;
+    if (!selectedAccount) {
+      return null;
+    }
+    
+    // Check one more time if the item is now available before fetching
+    if (items.some(item => item.id === itemId)) {
+      return items.find(item => item.id === itemId) || null;
+    }
     
     setSpecificItemLoading(true);
+    
+    // Add a timeout to prevent hanging forever
+    const timeoutId = setTimeout(() => {
+      setSpecificItemLoading(false);
+      setFailedItemFetches(prev => new Set(prev).add(itemId));
+    }, 30000); // 30 second timeout
     
     try {
       const response = await graphqlRequest<{
@@ -511,6 +800,9 @@ function ItemsDashboardInner() {
           updatedAt?: string;
           createdAt?: string;
           isEvaluation: boolean;
+          metadata?: string;
+          attachedFiles?: string[];
+          text?: string;
         }
       }>(`
         query GetItem($id: ID!) {
@@ -523,42 +815,30 @@ function ItemsDashboardInner() {
             updatedAt
             createdAt
             isEvaluation
+            identifiers
+            metadata
+            attachedFiles
+            text
+            itemIdentifiers {
+              items {
+                itemId
+                name
+                value
+                url
+                position
+              }
+            }
           }
         }
       `, {
         id: itemId
       });
       
-      
       if (response.data?.getItem) {
         const item = response.data.getItem;
         
         // Transform the item to match our expected format
-        const transformedItem = {
-          // New required fields
-          id: item.id,
-          timestamp: item.createdAt || item.updatedAt || new Date().toISOString(),
-          scorecards: [], // Will be populated with actual data later
-          
-          // Core fields
-          accountId: item.accountId,
-          externalId: item.externalId,
-          description: item.description,
-          evaluationId: item.evaluationId,
-          updatedAt: item.updatedAt,
-          createdAt: item.createdAt,
-          isEvaluation: item.isEvaluation,
-          isNew: false,
-          isLoadingResults: false,
-          
-          // Legacy fields for backwards compatibility
-          date: item.createdAt || item.updatedAt,
-          status: "Done",
-          results: 0,
-          inferences: 0,
-          cost: "$0.000",
-          groupedScoreResults: {}
-        } as Item;
+        const transformedItem = transformItem(item, { isNew: false });
         
         // Add the item to the beginning of the list if it's not already there
         setItems(prevItems => {
@@ -568,6 +848,9 @@ function ItemsDashboardInner() {
           }
           return prevItems;
         });
+        
+        // Track that this item was specifically fetched (not naturally in first page)
+        setSpecificallyFetchedItems(prev => new Set(prev).add(item.id));
         
         return transformedItem;
       }
@@ -581,29 +864,493 @@ function ItemsDashboardInner() {
       setFailedItemFetches(prev => new Set(prev).add(itemId));
       return null;
     } finally {
+      clearTimeout(timeoutId);
       setSpecificItemLoading(false);
     }
-  }, [selectedAccount]);
+  }, [selectedAccount, items]); // Include items to check if item is now available
   
-  // Sync URL parameter with selected item and fetch if needed
+  // Clear failed fetches and specifically fetched items when account changes
   useEffect(() => {
+    if (selectedAccount) {
+      setFailedItemFetches(new Set());
+      setSpecificallyFetchedItems(new Set());
+      // Clear score results refetch ref when account changes
+      scoreResultsRefetchRef.current = null;
+      // Reset hasInitiallyLoaded when account changes
+      setHasInitiallyLoaded(false);
+    }
+  }, [selectedAccount?.id]);
+  
+  // Clear score results refetch ref when selected item changes
+  useEffect(() => {
+    return () => {
+      scoreResultsRefetchRef.current = null;
+    };
+  }, [selectedItem]);
+
+  // Silent refresh function for wake-from-sleep scenarios
+  const silentRefresh = useCallback(async () => {
+    if (!selectedAccount) return;
+    
+    try {
+      // Use the same logic as throttledRefetch but ensure it's truly silent
+      const accountId = selectedAccount.id;
+      let itemsFromDirectQuery: any[] = [];
+      
+      const useScorecard = selectedScorecard !== null && selectedScorecard !== undefined;
+      const useScore = selectedScore !== null && selectedScore !== undefined;
+      
+      if (useScore) {
+        const directQuery = await graphqlRequest<{ listItemByScoreIdAndCreatedAt: { items: any[], nextToken: string | null } }>(`
+          query ListItemsDirect($scoreId: String!, $limit: Int!) {
+            listItemByScoreIdAndCreatedAt(
+              scoreId: $scoreId, 
+              sortDirection: DESC,
+              limit: $limit
+            ) {
+              items {
+                id
+                externalId
+                description
+                accountId
+                evaluationId
+                updatedAt
+                createdAt
+                isEvaluation
+                identifiers
+                metadata
+                attachedFiles
+                text
+                itemIdentifiers {
+                  items {
+                    itemId
+                    name
+                    value
+                    url
+                    position
+                  }
+                }
+              }
+              nextToken
+            }
+          }
+        `, {
+          scoreId: selectedScore,
+          limit: 100
+        });
+        itemsFromDirectQuery = directQuery.data?.listItemByScoreIdAndCreatedAt?.items || [];
+      } else if (useScorecard) {
+        const directQuery = await graphqlRequest<{ 
+          listScorecardProcessedItemByScorecardId: { 
+            items: Array<{
+              itemId: string;
+              processedAt?: string;
+              item: any;
+            }>;
+            nextToken: string | null;
+          }
+        }>(`
+          query ListItemsDirect($scorecardId: ID!, $limit: Int!) {
+            listScorecardProcessedItemByScorecardId(
+              scorecardId: $scorecardId,
+              limit: $limit
+            ) {
+              items {
+                itemId
+                processedAt
+                item {
+                  id
+                  externalId
+                  description
+                  accountId
+                  evaluationId
+                  updatedAt
+                  createdAt
+                  isEvaluation
+                  identifiers
+                  metadata
+                  attachedFiles
+                  text
+                  itemIdentifiers {
+                    items {
+                      itemId
+                      name
+                      value
+                      url
+                      position
+                    }
+                  }
+                }
+              }
+              nextToken
+            }
+          }
+        `, {
+          scorecardId: selectedScorecard,
+          limit: 100
+        });
+        itemsFromDirectQuery = directQuery.data?.listScorecardProcessedItemByScorecardId?.items
+          ?.map(association => association.item)
+          ?.filter(item => item !== null)
+          ?.sort((a, b) => {
+            const dateA = new Date(a.createdAt || '').getTime();
+            const dateB = new Date(b.createdAt || '').getTime();
+            return dateB - dateA;
+          }) || [];
+      } else {
+        const directQuery = await graphqlRequest<{ listItemByAccountIdAndCreatedAt: { items: any[], nextToken: string | null } }>(`
+          query ListItemsDirect($accountId: String!, $limit: Int!) {
+            listItemByAccountIdAndCreatedAt(
+              accountId: $accountId, 
+              sortDirection: DESC,
+              limit: $limit
+            ) {
+              items {
+                id
+                externalId
+                description
+                accountId
+                evaluationId
+                updatedAt
+                createdAt
+                isEvaluation
+                identifiers
+                metadata
+                attachedFiles
+                text
+                itemIdentifiers {
+                  items {
+                    itemId
+                    name
+                    value
+                    url
+                    position
+                  }
+                }
+              }
+              nextToken
+            }
+          }
+        `, {
+          accountId: accountId,
+          limit: 100
+        });
+        itemsFromDirectQuery = directQuery.data?.listItemByAccountIdAndCreatedAt?.items || [];
+      }
+      
+      // Transform and merge with existing items
+      const transformedItems = itemsFromDirectQuery.map(item => transformItem(item, { isNew: false }));
+      
+      // Merge with existing items - update existing ones and add new ones
+      setItems(prevItems => {
+        const existingIds = new Set(prevItems.map(item => item.id));
+        const newItems = transformedItems
+          .filter(item => !existingIds.has(item.id))
+          .map(newItem => {
+            return { ...newItem, isNew: true }; // Mark new items as new!
+          });
+        
+        // Update existing items and add new ones at the beginning
+        const updatedItems = prevItems.map(prevItem => {
+          const freshItem = transformedItems.find(item => item.id === prevItem.id);
+          if (freshItem) {
+            return {
+              // Start with existing item to preserve metadata and other fields
+              ...prevItem,
+              // Only update fields that are present in the fresh data
+              ...(freshItem.externalId !== undefined && { externalId: freshItem.externalId }),
+              ...(freshItem.description !== undefined && { description: freshItem.description }),
+              ...(freshItem.updatedAt !== undefined && { updatedAt: freshItem.updatedAt }),
+              ...(freshItem.identifiers !== undefined && { identifiers: freshItem.identifiers }),
+              ...(freshItem.metadata !== undefined && { metadata: freshItem.metadata }),
+              ...(freshItem.attachedFiles !== undefined && { attachedFiles: freshItem.attachedFiles }),
+              ...(freshItem.text !== undefined && { text: freshItem.text }),
+              // Preserve isNew status
+              isNew: prevItem.isNew,
+            };
+          }
+          return prevItem;
+        });
+        
+        // Add timeout to clear isNew flag for the new items found in silent refresh
+        if (newItems.length > 0) {
+          setTimeout(() => {
+            setItems(currentItems => 
+              currentItems.map(item => 
+                newItems.some(newItem => newItem.id === item.id) 
+                  ? { ...item, isNew: false }
+                  : item
+              )
+            );
+          }, 3000);
+        }
+        
+        return [...newItems, ...updatedItems];
+      });
+      
+      // Also refresh score result counts silently
+      if (scoreCountManagerRef.current) {
+        scoreCountManagerRef.current.refreshAllCounts();
+      }
+      
+      // Refresh score results for selected item if applicable
+      if (scoreResultsRefetchRef.current) {
+        scoreResultsRefetchRef.current();
+      }
+      
+    } catch (error) {
+      console.error('Error during silent refresh:', error);
+    }
+  }, [selectedAccount, selectedScorecard, selectedScore]);
+
+  // Restart subscriptions function
+  const restartSubscriptions = useCallback(() => {
+    if (!selectedAccount || isLoadingAccounts) return;
+    
+    // Clean up existing subscriptions
+    if (itemSubscriptionRef.current) {
+      itemSubscriptionRef.current.unsubscribe();
+      itemSubscriptionRef.current = null;
+    }
+    if (itemUpdateSubscriptionRef.current) {
+      itemUpdateSubscriptionRef.current.unsubscribe();
+      itemUpdateSubscriptionRef.current = null;
+    }
+    if (scoreResultSubscriptionRef.current) {
+      scoreResultSubscriptionRef.current.unsubscribe();
+      scoreResultSubscriptionRef.current = null;
+    }
+    
+    // Restart subscriptions with a small delay to ensure cleanup completed
+    setTimeout(() => {
+      // Item creation subscription
+      const createSubscription = observeItemCreations().subscribe({
+        next: async ({ data: newItem }) => {
+          if (!newItem) {
+            return;
+          }
+          
+          if (newItem.accountId === selectedAccount.id) {
+            const transformedNewItem = transformItem(newItem, { isNew: true });
+            setItems(prevItems => [transformedNewItem, ...prevItems]);
+            
+            toast.success('🎉 New item detected! Refreshing...', {
+              duration: 3000,
+            });
+            
+            setTimeout(() => {
+              setItems(prevItems => 
+                prevItems.map(item => 
+                  item.id === newItem.id 
+                    ? { ...item, status: "Done", isNew: false }
+                    : item
+                )
+              );
+            }, 3000);
+          }
+        },
+        error: (error) => {
+          console.error('Item creation subscription error:', error);
+          toast.error("Error in item subscription.");
+        }
+      });
+      
+      // Item update subscription
+             const updateSubscription = observeItemUpdates().subscribe({
+         next: async ({ data: updatedItem, needsRefetch }) => {
+           if (needsRefetch && !updatedItem) {
+             silentRefresh();
+             return;
+           }
+          
+          if (!updatedItem) {
+            return;
+          }
+          
+          if (updatedItem.accountId === selectedAccount.id) {
+            setItems(prevItems => {
+              const updatedItems = prevItems.map(item => 
+                item.id === updatedItem.id 
+                  ? {
+                      ...item,
+                      ...(updatedItem.externalId !== undefined && { externalId: updatedItem.externalId }),
+                      ...(updatedItem.description !== undefined && { description: updatedItem.description }),
+                      ...(updatedItem.updatedAt !== undefined && { updatedAt: updatedItem.updatedAt }),
+                      ...(updatedItem.identifiers !== undefined && { identifiers: transformIdentifiers(updatedItem) }),
+                      ...(updatedItem.metadata !== undefined && { 
+                        metadata: typeof updatedItem.metadata === 'string' ? JSON.parse(updatedItem.metadata) : updatedItem.metadata 
+                      }),
+                      ...(updatedItem.attachedFiles !== undefined && { attachedFiles: updatedItem.attachedFiles }),
+                      ...(updatedItem.text !== undefined && { text: updatedItem.text }),
+                    }
+                  : item
+              );
+              
+              return updatedItems;
+            });
+            
+            if (scoreCountManagerRef.current) {
+              scoreCountManagerRef.current.clearCount(updatedItem.id);
+              scoreCountManagerRef.current.loadCountForItem(updatedItem.id);
+            }
+          }
+        },
+        error: (error) => {
+          console.error('Item update subscription error:', error);
+          toast.error("Error in item update subscription.");
+        }
+      });
+      
+      // Score result subscription
+      const scoreResultSubscription = observeScoreResultChanges().subscribe({
+        next: async ({ data: changeEvent }) => {
+          if (!changeEvent) {
+            return;
+          }
+          
+          try {
+            if (scoreCountManagerRef.current) {
+              scoreCountManagerRef.current.refreshAllCounts();
+            }
+            
+            if (scoreResultsRefetchRef.current) {
+              scoreResultsRefetchRef.current();
+            }
+          } catch (error) {
+            console.error('Error handling score result change:', error);
+          }
+        },
+        error: (error) => {
+          console.error('Score result subscription error:', error);
+          toast.error("Error in score result subscription.");
+        }
+      });
+      
+      itemSubscriptionRef.current = createSubscription;
+      itemUpdateSubscriptionRef.current = updateSubscription;
+      scoreResultSubscriptionRef.current = scoreResultSubscription;
+    }, 100);
+  }, [selectedAccount, isLoadingAccounts, silentRefresh]);
+
+  // Page Visibility API - detect wake from sleep
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      const isVisible = !document.hidden;
+      const now = Date.now();
+      
+      if (isVisible && !isPageVisibleRef.current) {
+        // Page became visible
+        isPageVisibleRef.current = true;
+        
+        if (pageHiddenTimeRef.current && (now - pageHiddenTimeRef.current) > WAKE_THRESHOLD_MS) {
+          // Page was hidden for more than the threshold - likely wake from sleep
+          console.log('Wake from sleep detected, performing silent refresh...');
+          
+          // Perform silent refresh and restart subscriptions
+          silentRefresh();
+          restartSubscriptions();
+        }
+        
+        pageHiddenTimeRef.current = null;
+      } else if (!isVisible && isPageVisibleRef.current) {
+        // Page became hidden
+        isPageVisibleRef.current = false;
+        pageHiddenTimeRef.current = now;
+      }
+    };
+    
+    // Set initial state
+    isPageVisibleRef.current = !document.hidden;
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [silentRefresh, restartSubscriptions]);
+  
+  // Track the previous item ID to only scroll when it actually changes
+  const prevItemIdRef = useRef<string | null>(null);
+  
+  // Handle browser back/forward navigation
+  useEffect(() => {
+    const handlePopState = () => {
+      const pathMatch = window.location.pathname.match(/\/lab\/items\/(.+)/)
+      const itemIdFromUrl = pathMatch ? pathMatch[1] : null
+      
+      if (itemIdFromUrl !== selectedItem) {
+        setSelectedItem(itemIdFromUrl)
+        if (!itemIdFromUrl) {
+          setIsFullWidth(false)
+          prevItemIdRef.current = null
+        }
+      }
+    }
+    
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [selectedItem])
+  
+  // Initial sync from URL params (only on mount or when navigating to this page)
+  useEffect(() => {
+    // Handle both route structures: /lab/items and /lab/items/[id]
     const itemId = params.id as string
     
     if (itemId && itemId !== selectedItem) {
-      debugSetSelectedItem(itemId)
-      
-      // Check if the item exists in the current list
-      const itemExists = items.some(item => item.id === itemId);
-      
-      // If item doesn't exist and we're not loading, fetch it specifically
-      if (!itemExists && !isLoading && selectedAccount) {
-        fetchSpecificItem(itemId);
-      }
+      setSelectedItem(itemId)
     } else if (!itemId && selectedItem) {
-      // Clear selected item if no item ID in URL
-      debugSetSelectedItem(null)
+      // If we're on /lab/items but still have a selectedItem, clear it
+      setSelectedItem(null)
+      setIsFullWidth(false)
     }
-  }, [params.id, isLoading, selectedAccount, fetchSpecificItem]) // Removed items and selectedItem from deps to prevent issues when items change
+  }, [params.id]) // Only depend on params.id, not selectedItem
+
+  // Handle deep-linking view logic after items are loaded (primarily for URL navigation)
+  useEffect(() => {
+    if (selectedItem && !isLoadingAccounts && selectedAccount) {
+      // Wait for initial items to be loaded before making decisions
+      if (items.length === 0 && isLoading) {
+        return;
+      }
+      
+      const itemInFirstPage = items.some(item => item.id === selectedItem);
+      const wasSpecificallyFetched = specificallyFetchedItems.has(selectedItem);
+      
+      if (itemInFirstPage) {
+        // Item is in the loaded items
+        if (!wasSpecificallyFetched) {
+          // Item is naturally in first page
+          // Only set view mode if it hasn't been set by handleItemClick
+          // (Check if prevItemIdRef is already set, which indicates handleItemClick handled it)
+          if (prevItemIdRef.current !== selectedItem) {
+            if (!isNarrowViewport) {
+              setIsFullWidth(false);
+            }
+            
+            // Scroll to the item
+            prevItemIdRef.current = selectedItem;
+            setTimeout(() => {
+              scrollToSelectedItem(selectedItem);
+            }, 50);
+          }
+        }
+        // If it was specifically fetched, keep the current view mode (likely full-width)
+      } else if (items.length > 0 && !isLoading && !specificItemLoading) {
+        // Item is not in first page and first page has been loaded - fetch it specifically
+        // Added check for specificItemLoading to prevent multiple concurrent fetches
+        if (!isNarrowViewport) {
+          setIsFullWidth(true); // Show full-width for specifically fetched items
+        }
+        
+        // Only fetch if we haven't already tried and we're not currently loading
+        if (!wasSpecificallyFetched && !failedItemFetches.has(selectedItem)) {
+          fetchSpecificItem(selectedItem);
+          prevItemIdRef.current = selectedItem;
+        }
+      }
+    }
+  }, [selectedItem, items.length, isLoading, isLoadingAccounts, selectedAccount, isNarrowViewport, scrollToSelectedItem, specificallyFetchedItems, failedItemFetches, fetchSpecificItem, specificItemLoading]);
+
   
   // Add a ref for the intersection observer
   const observerRef = useRef<IntersectionObserver | null>(null);
@@ -651,6 +1398,19 @@ function ItemsDashboardInner() {
                   updatedAt
                   createdAt
                   isEvaluation
+                  identifiers
+                  metadata
+                  attachedFiles
+                  text
+                  itemIdentifiers {
+                    items {
+                      itemId
+                      name
+                      value
+                      url
+                      position
+                    }
+                  }
                 }
                 nextToken
               }
@@ -705,6 +1465,19 @@ function ItemsDashboardInner() {
                     updatedAt
                     createdAt
                     isEvaluation
+                    identifiers
+                    metadata
+                    attachedFiles
+                    text
+                    itemIdentifiers {
+                      items {
+                        itemId
+                        name
+                        value
+                        url
+                        position
+                      }
+                    }
                   }
                 }
                 nextToken
@@ -748,6 +1521,19 @@ function ItemsDashboardInner() {
                   updatedAt
                   createdAt
                   isEvaluation
+                  identifiers
+                  metadata
+                  attachedFiles
+                  text
+                  itemIdentifiers {
+                    items {
+                      itemId
+                      name
+                      value
+                      url
+                      position
+                    }
+                  }
                 }
                 nextToken
               }
@@ -774,45 +1560,7 @@ function ItemsDashboardInner() {
       
       
       // Transform the data to match the expected format
-      const transformedItems = itemsToUse.map(item => {
-        const groupedScoreResults: GroupedScoreResults = {};
-        
-        // ScoreResults will be loaded separately to avoid resolver limits
-        // For now, items will show as "Processing..." until we implement lazy loading
-        
-        const transformedItem = {
-          // New required fields
-          id: item.id,
-          timestamp: item.createdAt || item.updatedAt || new Date().toISOString(),
-          scorecards: [], // Will be populated with actual data later
-          
-          // Core fields
-          accountId: item.accountId,
-          externalId: item.externalId,
-          description: item.description,
-          evaluationId: item.evaluationId,
-          updatedAt: item.updatedAt,
-          createdAt: item.createdAt,
-          isEvaluation: item.isEvaluation,
-          isNew: false, // Items loaded via "load more" should NOT be new
-          isLoadingResults: false,
-          
-          // Legacy fields for backwards compatibility
-          date: item.createdAt || item.updatedAt,
-          status: "Done", 
-          results: 0, // Will be populated via lazy loading from scoreResultCounts
-          inferences: 0, // Will be populated via lazy loading
-          cost: "$0.000", // Placeholder
-          groupedScoreResults: groupedScoreResults
-        } as Item;
-        
-        // console.log('Final transformed item:', { // Keep for debugging if needed
-        //   id: transformedItem.id,
-        //   groupedScoreResultsKeys: Object.keys(transformedItem.groupedScoreResults || {})
-        // });
-        
-        return transformedItem;
-      });
+      const transformedItems = itemsToUse.map(item => transformItem(item, { isNew: false }));
       
       // Append the new items to the existing items
       setItems(prevItems => [...prevItems, ...transformedItems]);
@@ -824,17 +1572,15 @@ function ItemsDashboardInner() {
     } finally {
       setIsLoadingMore(false);
     }
-  }, [isLoadingMore, nextToken, selectedAccount, selectedScorecard, selectedScore, setItems, setNextToken, setIsLoadingMore, graphqlRequest]);
+  }, [isLoadingMore, nextToken, selectedAccount, selectedScorecard, selectedScore, setItems, setNextToken, setIsLoadingMore]);
 
   // Fetch items from the API
   const fetchItems = useCallback(async () => {
     if (!user) {
-      console.log('User not authenticated, skipping item fetch');
       return;
     }
     
     if (!selectedAccount) {
-      console.log('No account selected in context, skipping item fetch');
       return;
     }
     
@@ -852,7 +1598,6 @@ function ItemsDashboardInner() {
         // Determine if we should filter by scorecard, score, or account
         const useScorecard = selectedScorecard !== null && selectedScorecard !== undefined;
         const useScore = selectedScore !== null && selectedScore !== undefined;
-        
         
         if (useScore) {
           // If a score is selected, filter by scoreId
@@ -872,6 +1617,19 @@ function ItemsDashboardInner() {
                   updatedAt
                   createdAt
                   isEvaluation
+                  identifiers
+                  metadata
+                  attachedFiles
+                  text
+                  itemIdentifiers {
+                    items {
+                      itemId
+                      name
+                      value
+                      url
+                      position
+                    }
+                  }
                 }
                 nextToken
               }
@@ -923,6 +1681,19 @@ function ItemsDashboardInner() {
                     updatedAt
                     createdAt
                     isEvaluation
+                    identifiers
+                    metadata
+                    attachedFiles
+                    text
+                    itemIdentifiers {
+                      items {
+                        itemId
+                        name
+                        value
+                        url
+                        position
+                      }
+                    }
                   }
                 }
                 nextToken
@@ -962,6 +1733,19 @@ function ItemsDashboardInner() {
                   updatedAt
                   createdAt
                   isEvaluation
+                  identifiers
+                  metadata
+                  attachedFiles
+                  text
+                  itemIdentifiers {
+                    items {
+                      itemId
+                      name
+                      value
+                      url
+                      position
+                    }
+                  }
                 }
                 nextToken
               }
@@ -977,60 +1761,24 @@ function ItemsDashboardInner() {
           }
         }
       } catch (error) {
-        console.error('Error fetching items:', error);
+        console.error('Error in GraphQL query:', error);
       }
       
       const itemsToUse = itemsFromDirectQuery;
       const nextTokenToUse = nextTokenFromDirectQuery;
       
-      if (itemsToUse.length === 0) {
-        console.log('No items found for this account. You may need to create some items first.');
-      }
-      
-      const transformedItems = itemsToUse.map(item => {
-        const groupedScoreResults: GroupedScoreResults = {};
-        
-        // ScoreResults will be loaded separately to avoid resolver limits
-        // For now, items will show as "Processing..." until we implement lazy loading
-        
-        return {
-          // New required fields
-          id: item.id,
-          timestamp: item.createdAt || item.updatedAt || new Date().toISOString(),
-          scorecards: [], // Will be populated with actual data later
-          
-          // Core fields
-          accountId: item.accountId,
-          externalId: item.externalId,
-          description: item.description,
-          evaluationId: item.evaluationId,
-          updatedAt: item.updatedAt,
-          createdAt: item.createdAt,
-          isEvaluation: item.isEvaluation,
-          isNew: false, // Items loaded on initial fetch should NOT be new
-          isLoadingResults: false,
-          
-          // Legacy fields for backwards compatibility
-          date: item.createdAt || item.updatedAt,
-          status: "Done",
-          results: 0, // Will be populated via lazy loading from scoreResultCounts
-          inferences: 0, // Will be populated via lazy loading
-          cost: "$0.000", // Placeholder
-          groupedScoreResults: groupedScoreResults
-        } as Item;
-      });
+      const transformedItems = itemsToUse.map(item => transformItem(item, { isNew: false }));
       
       setItems(transformedItems);
       setNextToken(nextTokenToUse);
-      
-      // Don't clear isNew for initial load - items are already set to isNew: false
+      setHasInitiallyLoaded(true);
       
       setIsLoading(false);
     } catch (error) {
       console.error('Error fetching items:', error);
       setIsLoading(false);
     }
-  }, [user, selectedAccount, setIsLoading, setItems, setNextToken, graphqlRequest, selectedScorecard, selectedScore]);
+  }, [user, selectedAccount, setIsLoading, setItems, setNextToken, selectedScorecard, selectedScore]);
   
   // Throttled refetch function for when we get empty update notifications
   const throttledRefetch = useCallback(async () => {
@@ -1069,6 +1817,19 @@ function ItemsDashboardInner() {
                   updatedAt
                   createdAt
                   isEvaluation
+                  identifiers
+                  metadata
+                  attachedFiles
+                  text
+                  itemIdentifiers {
+                    items {
+                      itemId
+                      name
+                      value
+                      url
+                      position
+                    }
+                  }
                 }
                 nextToken
               }
@@ -1106,6 +1867,19 @@ function ItemsDashboardInner() {
                     updatedAt
                     createdAt
                     isEvaluation
+                    identifiers
+                    metadata
+                    attachedFiles
+                    text
+                    itemIdentifiers {
+                      items {
+                        itemId
+                        name
+                        value
+                        url
+                        position
+                      }
+                    }
                   }
                 }
                 nextToken
@@ -1140,6 +1914,19 @@ function ItemsDashboardInner() {
                   updatedAt
                   createdAt
                   isEvaluation
+                  identifiers
+                  metadata
+                  attachedFiles
+                  text
+                  itemIdentifiers {
+                    items {
+                      itemId
+                      name
+                      value
+                      url
+                      position
+                    }
+                  }
                 }
                 nextToken
               }
@@ -1152,31 +1939,7 @@ function ItemsDashboardInner() {
         }
         
         // Transform and merge with existing items
-        const transformedItems = itemsFromDirectQuery.map(item => ({
-          // New required fields
-          id: item.id,
-          timestamp: item.createdAt || item.updatedAt || new Date().toISOString(),
-          scorecards: [], // Will be populated with actual data later
-          
-          // Core fields
-          accountId: item.accountId,
-          externalId: item.externalId,
-          description: item.description,
-          evaluationId: item.evaluationId,
-          updatedAt: item.updatedAt,
-          createdAt: item.createdAt,
-          isEvaluation: item.isEvaluation,
-          isNew: false, // Will be changed to true for new items below
-          isLoadingResults: false,
-          
-          // Legacy fields for backwards compatibility
-          date: item.createdAt || item.updatedAt,
-          status: "Done",
-          results: 0,
-          inferences: 0,
-          cost: "$0.000",
-          groupedScoreResults: {}
-        }));
+        const transformedItems = itemsFromDirectQuery.map(item => transformItem(item, { isNew: false }));
         
         // Merge with existing items - update existing ones and add new ones
         setItems(prevItems => {
@@ -1184,18 +1947,32 @@ function ItemsDashboardInner() {
           const newItems = transformedItems
             .filter(item => !existingIds.has(item.id))
             .map(newItem => {
-              console.log('🎯 NEW ITEM FOUND IN THROTTLED REFETCH:', {
-                id: newItem.id,
-                externalId: newItem.externalId,
-                source: 'throttledRefetch'
-              });
               return { ...newItem, isNew: true }; // Mark new items as new!
             });
           
           // Update existing items and add new ones at the beginning
           const updatedItems = prevItems.map(prevItem => {
             const freshItem = transformedItems.find(item => item.id === prevItem.id);
-            return freshItem ? { ...prevItem, ...freshItem, isNew: prevItem.isNew } : prevItem; // Preserve isNew status for existing items
+            if (freshItem) {
+              return {
+                // Start with existing item to preserve metadata and other fields
+                ...prevItem,
+                // Only update fields that are present in the fresh data
+                ...(freshItem.externalId !== undefined && { externalId: freshItem.externalId }),
+                ...(freshItem.description !== undefined && { description: freshItem.description }),
+                ...(freshItem.updatedAt !== undefined && { updatedAt: freshItem.updatedAt }),
+                ...(freshItem.identifiers !== undefined && { identifiers: freshItem.identifiers }),
+                // Only update metadata if it's actually present in the fresh data
+                ...(freshItem.metadata !== undefined && { metadata: freshItem.metadata }),
+                // Only update attachedFiles if it's actually present in the fresh data
+                ...(freshItem.attachedFiles !== undefined && { attachedFiles: freshItem.attachedFiles }),
+                // Only update text if it's actually present in the fresh data
+                ...(freshItem.text !== undefined && { text: freshItem.text }),
+                // Preserve isNew status
+                isNew: prevItem.isNew,
+              };
+            }
+            return prevItem;
           });
           
           // Add timeout to clear isNew flag for the new items found in refetch
@@ -1218,21 +1995,35 @@ function ItemsDashboardInner() {
         console.error('Error during throttled refetch:', error);
       }
     }, 2000); // 2 second debounce
-  }, [selectedAccount, selectedScorecard, selectedScore, graphqlRequest]);
+  }, [selectedAccount, selectedScorecard, selectedScore]);
+  
+  // Ref to track when we need to refetch items
+  const shouldRefetchRef = useRef(false);
+  
+  // Mark when we need to refetch due to filter changes
+  useEffect(() => {
+    if (!isLoadingAccounts && selectedAccount) {
+      shouldRefetchRef.current = true;
+    }
+  }, [selectedAccount?.id, isLoadingAccounts, selectedScorecard, selectedScore]);
   
   // Fetch items when the selected account or other filters change
   useEffect(() => {
-    if (!isLoadingAccounts && selectedAccount) {
+    if (!isLoadingAccounts && selectedAccount && shouldRefetchRef.current) {
+      shouldRefetchRef.current = false; // Reset the flag
+      
       // Reset items and nextToken when filters change
       setItems([]);
       setNextToken(null);
+      // Clear specifically fetched items since filter change redefines what "first page" means
+      setSpecificallyFetchedItems(new Set());
       fetchItems();
     } else if (!isLoadingAccounts && !selectedAccount) {
       setItems([]); // Ensure items are cleared
       setNextToken(null);
       setIsLoading(false); // Stop loading indicator
     }
-  }, [fetchItems, selectedAccount, isLoadingAccounts, selectedScorecard, selectedScore, setItems, setNextToken]);
+  }, [fetchItems, selectedAccount?.id, isLoadingAccounts]);
 
   // Initialize score count manager
   useEffect(() => {
@@ -1241,8 +2032,6 @@ function ItemsDashboardInner() {
       
       // Subscribe to count changes with better state management
       const unsubscribe = scoreCountManagerRef.current.subscribe((counts) => {
-        console.log('📊 Score count manager update:', counts);
-        
         // Only update state if counts have actually changed
         setScoreResultCounts(prevCounts => {
           // Check if the new counts Map is actually different from the previous one
@@ -1281,29 +2070,35 @@ function ItemsDashboardInner() {
   useEffect(() => {
     if (!selectedAccount || isLoadingAccounts) return; // Also wait for accounts to be loaded
     
-    
     // Item creation subscription
     const createSubscription = observeItemCreations().subscribe({
-      next: async ({ data: changeEvent }) => {
-        console.log('🆕 Item creation subscription received:', changeEvent);
-        
-        if (!changeEvent) {
-          console.log('🆕 Empty item creation notification');
+      next: async ({ data: newItem }) => {
+        if (!newItem) {
           return;
         }
         
-        if (changeEvent.action === 'create' && changeEvent.needsRefetch) {
-          console.log('🆕 Item creation detected, refreshing items list');
+        if (newItem.accountId === selectedAccount.id) {
+          // Transform the new item to match our expected format
+          const transformedNewItem = transformItem(newItem, { isNew: true });
+
+          // Add the new item to the TOP of the list
+          setItems(prevItems => [transformedNewItem, ...prevItems]);
           
           // Show a toast notification that new items are being loaded
           toast.success('🎉 New item detected! Refreshing...', {
             duration: 3000,
           });
           
-          // Trigger a refresh of the items list
-          throttledRefetch();
-        } else {
-          console.log('🆕 Unhandled item creation event:', changeEvent);
+          // After 3 seconds, remove the "New" status and make it look normal
+          setTimeout(() => {
+            setItems(prevItems => 
+              prevItems.map(item => 
+                item.id === newItem.id 
+                  ? { ...item, status: "Done", isNew: false }
+                  : item
+              )
+            );
+          }, 3000);
         }
       },
       error: (error) => {
@@ -1317,7 +2112,7 @@ function ItemsDashboardInner() {
       next: async ({ data: updatedItem, needsRefetch }) => {
         // Handle empty notifications that require a refetch
         if (needsRefetch && !updatedItem) {
-          throttledRefetch();
+          silentRefresh();
           return;
         }
         
@@ -1327,23 +2122,34 @@ function ItemsDashboardInner() {
         
         if (updatedItem.accountId === selectedAccount.id) {
           // Update the item in the list if it exists
-          setItems(prevItems => 
-            prevItems.map(item => 
+          setItems(prevItems => {
+            const updatedItems = prevItems.map(item => 
               item.id === updatedItem.id 
                 ? {
+                    // Start with the existing item to preserve all existing data
                     ...item,
-                    externalId: updatedItem.externalId,
-                    description: updatedItem.description,
-                    updatedAt: updatedItem.updatedAt,
-                    // Keep createdAt and date as they were (don't change sort order)
+                    // Only update fields that are actually present in the subscription data
+                    ...(updatedItem.externalId !== undefined && { externalId: updatedItem.externalId }),
+                    ...(updatedItem.description !== undefined && { description: updatedItem.description }),
+                    ...(updatedItem.updatedAt !== undefined && { updatedAt: updatedItem.updatedAt }),
+                    ...(updatedItem.identifiers !== undefined && { identifiers: transformIdentifiers(updatedItem) }),
+                    // Only update metadata if it's actually present in the update
+                    ...(updatedItem.metadata !== undefined && { 
+                      metadata: typeof updatedItem.metadata === 'string' ? JSON.parse(updatedItem.metadata) : updatedItem.metadata 
+                    }),
+                                          // Only update attachedFiles if it's actually present in the update  
+                      ...(updatedItem.attachedFiles !== undefined && { attachedFiles: updatedItem.attachedFiles }),
+                      // Only update text if it's actually present in the update
+                      ...(updatedItem.text !== undefined && { text: updatedItem.text }),
                   }
                 : item
-            )
-          );
+            );
+            
+            return updatedItems;
+          });
           
           // Trigger a re-count of score results for this item
           if (scoreCountManagerRef.current) {
-            console.log('📊 Clearing and reloading count for updated item:', updatedItem.id);
             scoreCountManagerRef.current.clearCount(updatedItem.id);
             scoreCountManagerRef.current.loadCountForItem(updatedItem.id);
           }
@@ -1358,30 +2164,27 @@ function ItemsDashboardInner() {
     // Score result subscription
     const scoreResultSubscription = observeScoreResultChanges().subscribe({
       next: async ({ data: changeEvent }) => {
-        console.log('📊 Score result subscription received:', changeEvent);
-        
         if (!changeEvent) {
-          console.log('📊 Empty score result notification');
           return;
         }
         
         try {
-          console.log('📊 Score result change detected, action:', changeEvent.action);
-          
           // Since we can't reliably parse the subscription data, refresh all cached counts
           // This is more aggressive but ensures consistency
           if (scoreCountManagerRef.current) {
-            console.log('📊 Refreshing all cached score counts due to score result change');
             scoreCountManagerRef.current.refreshAllCounts();
-          } else {
-            console.log('📊 ScoreCountManager not available');
+          }
+          
+          // Also refresh the detail view score results if there's a selected item
+          if (scoreResultsRefetchRef.current) {
+            scoreResultsRefetchRef.current();
           }
         } catch (error) {
-          console.error('📊 Error handling score result change:', error);
+          console.error('Error handling score result change:', error);
         }
       },
       error: (error) => {
-        console.error('📊 Score result subscription error:', error);
+        console.error('Score result subscription error:', error);
         toast.error("Error in score result subscription.");
       }
     });
@@ -1409,7 +2212,7 @@ function ItemsDashboardInner() {
         refetchTimeoutRef.current = null;
       }
     };
-  }, [selectedAccount, isLoadingAccounts, fetchItems]);
+  }, [selectedAccount, isLoadingAccounts, silentRefresh]); // Removed fetchItems, added silentRefresh which is actually used
 
   useEffect(() => {
     const checkViewportWidth = () => {
@@ -1469,7 +2272,6 @@ function ItemsDashboardInner() {
   }, [])
 
   const filteredItems = useMemo(() => {
-    
     return items.filter(item => {
       if (!selectedScorecard && !selectedScore && filterConfig.length === 0) return true
       
@@ -1527,12 +2329,10 @@ function ItemsDashboardInner() {
   const handleSampleChange = (method: string, count: number) => {
     setSampleMethod(method)
     setSampleCount(count)
-    console.log(`Sampling method: ${method}, Count: ${count}`)
     // Implement the logic for applying the sampling here
   }
 
   const handleTimeRangeChange = (range: string, customRange?: { from: Date | undefined; to: Date | undefined }) => {
-    console.log("Time range changed:", range, customRange)
     // Implement the logic for handling all default time ranges and custom date ranges
     if (range === "recent") {
       // Fetch or filter items for the recent time period
@@ -1598,9 +2398,34 @@ function ItemsDashboardInner() {
     }
   }, []);
 
-  const renderSelectedItem = () => {
+  const renderSelectedItem = (naturalHeight = false) => {
     if (!selectedItem) {
       return null
+    }
+
+    // If accounts are still loading, show skeleton
+    if (isLoadingAccounts) {
+      return (
+        <ItemCard
+          variant="detail"
+          item={{
+            id: selectedItem,
+            timestamp: new Date().toISOString(),
+            scorecards: []
+          } as ItemData}
+          getBadgeVariant={getBadgeVariant}
+          isFullWidth={isFullWidth}
+          onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
+          onClose={() => {
+            setIsFullWidth(false);
+            window.history.pushState({}, '', `/lab/items`)
+            setSelectedItem(null)
+          }}
+          skeletonMode={true}
+          readOnly={true}
+          naturalHeight={naturalHeight}
+        />
+      )
     }
 
     const selectedItemData = items.find(item => item.id === selectedItem)
@@ -1615,34 +2440,55 @@ function ItemsDashboardInner() {
     
     // If item is not found, check if we should attempt to fetch it or if we're already loading
     if (!selectedItemWithCount) {
-      // If we're in any loading state, show loading spinner
-      if (isLoading || specificItemLoading) {
+      // Only show skeleton if we're specifically loading this item or during initial load
+      if (specificItemLoading || (!hasInitiallyLoaded && isLoading)) {
         return (
-          <div className="h-full flex flex-col">
-            <div className="flex-1 flex items-center justify-center">
-              <div className="flex items-center space-x-2">
-                <Loader2 className="h-6 w-6 animate-spin" />
-                <span>Loading item details...</span>
-              </div>
+          <ItemCard
+            variant="detail"
+            item={{
+              id: selectedItem,
+              timestamp: new Date().toISOString(),
+              scorecards: []
+            } as ItemData}
+            getBadgeVariant={getBadgeVariant}
+            isFullWidth={isFullWidth}
+            onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
+            onClose={() => {
+              setIsFullWidth(false);
+              window.history.pushState({}, '', `/lab/items`)
+              setSelectedItem(null)
+            }}
+            skeletonMode={true}
+            readOnly={true}
+            naturalHeight={naturalHeight}
+          />
+        )
+      }
+      
+      // Only check failed fetches if we're not currently loading
+      if (failedItemFetches.has(selectedItem)) {
+        return (
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center">
+              <p className="text-muted-foreground mb-2">Item not found</p>
+              <p className="text-sm text-muted-foreground">
+                The item with ID {selectedItem} could not be found.
+              </p>
             </div>
           </div>
         )
       }
       
-      // If we have a selected account but item still not found, 
-      // it might be because we need to fetch it or it truly doesn't exist
-      // Let's be more conservative and only show error after we've attempted fetch
+      // If we have a selected account and the item truly doesn't exist,
+      // show an appropriate error message
       if (selectedAccount) {
-        // Check if we've already attempted to fetch this item
-        // If not, we should trigger the fetch (handled by useEffect)
-        // For now, show loading state while the useEffect handles the fetch
         return (
-          <div className="h-full flex flex-col">
-            <div className="flex-1 flex items-center justify-center">
-              <div className="flex items-center space-x-2">
-                <Loader2 className="h-6 w-6 animate-spin" />
-                <span>Loading item details...</span>
-              </div>
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center">
+              <p className="text-muted-foreground mb-2">Item not found</p>
+              <p className="text-sm text-muted-foreground">
+                The item with ID {selectedItem} could not be found.
+              </p>
             </div>
           </div>
         )
@@ -1655,45 +2501,27 @@ function ItemsDashboardInner() {
 
     
     return (
-      <div className="h-full flex flex-col">
-        <div className="flex-1 overflow-auto">
-          <ItemDetail
-            key={selectedItem} // Force re-render when selectedItem changes
-            item={selectedItemWithCount as unknown as FeedbackItem}
-            getBadgeVariant={getBadgeVariant}
-            getRelativeTime={getRelativeTime}
-            isMetadataExpanded={isMetadataExpanded}
-            setIsMetadataExpanded={setIsMetadataExpanded}
-            isDataExpanded={isDataExpanded}
-            setIsDataExpanded={setIsDataExpanded}
-            isErrorExpanded={isErrorExpanded}
-            setIsErrorExpanded={setIsErrorExpanded}
-            sampleMetadata={sampleMetadata}
-            sampleTranscript={sampleTranscript}
-            sampleScoreResults={scoreResults}
-            handleThumbsUp={handleThumbsUp}
-            handleThumbsDown={handleThumbsDown}
-            handleNewAnnotationSubmit={handleNewAnnotationSubmit}
-            toggleAnnotations={toggleAnnotations}
-            showNewAnnotationForm={showNewAnnotationForm}
-            setShowNewAnnotationForm={setShowNewAnnotationForm}
-            newAnnotation={newAnnotation}
-            setNewAnnotation={setNewAnnotation}
-            expandedAnnotations={expandedAnnotations}
-            thumbedUpScores={thumbedUpScores}
-            setThumbedUpScores={setThumbedUpScores}
-            isFullWidth={isFullWidth}
-            isFeedbackMode={false}
-            onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
-            onClose={() => {
-              debugSetSelectedItem(null);
-              setIsFullWidth(false);
-              // Update URL using browser History API to avoid Next.js navigation
-              window.history.replaceState(null, '', `/lab/items`)
-            }}
-          />
-        </div>
-      </div>
+      <ItemCard
+        key={selectedItem} // Force re-render when selectedItem changes
+        variant="detail"
+        item={selectedItemWithCount as ItemData}
+        getBadgeVariant={getBadgeVariant}
+        isFullWidth={isFullWidth}
+        onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
+        onClose={() => {
+          setIsFullWidth(false);
+          // Use window.history to navigate back to grid view without remount
+          window.history.pushState({}, '', `/lab/items`)
+          setSelectedItem(null)
+        }}
+        onScoreResultsRefetchReady={(refetchFn) => {
+          scoreResultsRefetchRef.current = refetchFn;
+        }}
+        onScoreResultSelect={handleScoreResultSelect}
+        selectedScoreResultId={selectedScoreResult?.id}
+        readOnly={true}
+        naturalHeight={naturalHeight}
+      />
     )
   }
 
@@ -1733,7 +2561,6 @@ function ItemsDashboardInner() {
       if (foundScore) {
         initializeNewAnnotation(foundScore);
       } else {
-        console.warn(`No score found with name: ${scoreName}`);
         setNewAnnotation({ value: "", explanation: "", annotation: "", allowFeedback: false });
       }
     }
@@ -1827,15 +2654,7 @@ function ItemsDashboardInner() {
                     textRef.current[score.name] = el;
                   }
                 }}
-                className="text-sm text-muted-foreground overflow-hidden cursor-pointer"
-                style={{ 
-                  display: '-webkit-box',
-                  WebkitLineClamp: '2',
-                  WebkitBoxOrient: 'vertical',
-                  overflow: 'hidden',
-                  ...(expandedExplanations.includes(score.name) ? 
-                      { WebkitLineClamp: 'unset', display: 'block' } : {})
-                }}
+                className={`text-sm text-muted-foreground overflow-hidden cursor-pointer ${expandedExplanations.includes(score.name) ? '' : ''}`}
                 onClick={() => toggleExplanation(score.name)}
               >
                 {renderRichText(score.explanation)}
@@ -1845,12 +2664,13 @@ function ItemsDashboardInner() {
                   variant="link" 
                   size="sm" 
                   onClick={() => toggleExplanation(score.name)}
-                  className="absolute bottom-0 right-0 px-0 py-1 h-auto bg-white dark:bg-gray-800"
+                  className="px-0 py-1 h-auto text-xs mt-1"
                 >
-                  {expandedExplanations.includes(score.name) 
-                    ? <ChevronUp className="h-3 w-3 inline ml-1" />
-                    : <ChevronDown className="h-3 w-3 inline ml-1" />
-                  }
+                  {expandedExplanations.includes(score.name) ? (
+                    <>Show less <ChevronUp className="h-3 w-3 inline ml-1" /></>
+                  ) : (
+                    <>Show more <ChevronDown className="h-3 w-3 inline ml-1" /></>
+                  )}
                 </Button>
               )}
             </div>
@@ -1899,6 +2719,26 @@ function ItemsDashboardInner() {
                 <Badge className={getValueBadgeClass(score.value)}>{score.value}</Badge>
               </div>
             </div>
+            <div 
+              className={`text-sm text-muted-foreground overflow-hidden cursor-pointer ${expandedExplanations.includes(score.name) ? '' : ''}`}
+              onClick={() => toggleExplanation(score.name)}
+            >
+              {renderRichText(score.explanation)}
+            </div>
+            {showExpandButton[score.name] && (
+              <Button 
+                variant="link" 
+                size="sm" 
+                onClick={() => toggleExplanation(score.name)}
+                className="px-0 py-1 h-auto text-xs mt-1"
+              >
+                {expandedExplanations.includes(score.name) ? (
+                  <>Show less <ChevronUp className="h-3 w-3 inline ml-1" /></>
+                ) : (
+                  <>Show more <ChevronDown className="h-3 w-3 inline ml-1" /></>
+                )}
+              </Button>
+            )}
           </>
         )}
       </div>
@@ -1906,20 +2746,32 @@ function ItemsDashboardInner() {
   }
 
   const handleItemClick = (itemId: string) => {
-    // Always update state first
-    debugSetSelectedItem(itemId)
+    // Use window.history.pushState for truly shallow navigation that won't cause remount
+    window.history.pushState({}, '', `/lab/items/${itemId}`)
+    // Manually update the selected item state
+    setSelectedItem(itemId)
     
-    // Update URL using browser History API to avoid Next.js navigation
-    const newUrl = `/lab/items/${itemId}`
-    window.history.replaceState(null, '', newUrl)
-    
-    // Scroll to the selected item after a brief delay to allow layout updates
-    setTimeout(() => {
-      scrollToSelectedItem(itemId);
-    }, 100);
-    
-    if (isNarrowViewport) {
-      setIsFullWidth(true)
+    // Handle view mode for grid items (items in the first page)
+    if (items.some(item => item.id === itemId)) {
+      // Item is in first page - set up split view or full-width based on viewport
+      if (isNarrowViewport) {
+        setIsFullWidth(true)
+      } else {
+        setIsFullWidth(false)
+        // Scroll to the selected item with retry logic - use a timeout to allow state to update first
+        setTimeout(() => {
+          scrollToSelectedItem(itemId);
+          prevItemIdRef.current = itemId;
+        }, 0);
+      }
+    } else {
+      // Item is not in first page - let the useEffect handle fetching and view setup
+      if (isNarrowViewport) {
+        setIsFullWidth(true)
+      } else {
+        // For desktop, also set full-width for items not in first page
+        setIsFullWidth(true)
+      }
     }
   }
 
@@ -1969,6 +2821,11 @@ function ItemsDashboardInner() {
 
   // Add a useEffect for the intersection observer
   useEffect(() => {
+    // Don't set up observer if we don't have items or a next token
+    if (!nextToken || filteredItems.length === 0) {
+      return;
+    }
+
     // Create the intersection observer
     const options = {
       root: null, // Use the viewport as the root
@@ -1986,29 +2843,42 @@ function ItemsDashboardInner() {
     // Initialize the observer
     observerRef.current = new IntersectionObserver(handleObserver, options);
     
-    // Observe the load more element if it exists
-    if (loadMoreRef.current) {
-      observerRef.current.observe(loadMoreRef.current);
-    }
+    // Use a timeout to ensure the DOM has updated before observing
+    const timeoutId = setTimeout(() => {
+      if (loadMoreRef.current && observerRef.current) {
+        observerRef.current.observe(loadMoreRef.current);
+      }
+    }, 0);
 
     // Cleanup
     return () => {
+      clearTimeout(timeoutId);
       if (observerRef.current) {
         observerRef.current.disconnect();
       }
     };
-  }, [nextToken, isLoadingMore, handleLoadMore]); // Add handleLoadMore to dependencies
+  }, [nextToken, isLoadingMore, handleLoadMore, filteredItems.length]); // Add filteredItems.length to ensure observer resets when items change
 
-  // Show loading skeleton for initial load
-  if (isLoading && items.length === 0) {
+  // Cleanup search error timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (searchErrorTimeoutRef.current) {
+        clearTimeout(searchErrorTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Show loading skeleton only for true initial load
+  if (!hasInitiallyLoaded && isLoading) {
     return <ItemsDashboardSkeleton />
   }
 
   return (
-    <div className="flex flex-col h-full p-1.5">
-      <div className="flex items-center justify-between pb-3">
-        <div className="flex items-center space-x-4">
-          <div className="flex-grow">
+    <div className="@container flex flex-col h-full p-2 overflow-hidden">
+      {/* Fixed header - always show for wider viewports */}
+      {!isNarrowViewport && (
+        <div className="flex @[600px]:flex-row flex-col @[600px]:items-center @[600px]:justify-between items-stretch gap-3 pb-3 flex-shrink-0">
+          <div className="@[600px]:flex-grow w-full">
             <ScorecardContext 
               selectedScorecard={selectedScorecard}
               setSelectedScorecard={setSelectedScorecard}
@@ -2016,147 +2886,217 @@ function ItemsDashboardInner() {
               setSelectedScore={setSelectedScore}
               availableFields={availableFields}
               timeRangeOptions={scoreOptions}
+              skeletonMode={isLoading}
             />
           </div>
-        </div>
-      </div>
-      
-      <div className="flex-grow flex flex-col overflow-hidden">
-        {selectedItem && (isNarrowViewport || isFullWidth) ? (
-          <div className="flex-grow overflow-hidden">
-            {renderSelectedItem()}
+          
+          {/* Search Component */}
+          <div className="flex items-center relative @[600px]:w-auto w-full">
+            <form onSubmit={handleSearchSubmit} className="relative @[600px]:w-auto w-full">
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Search className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <Input
+                  type="text"
+                  placeholder="Search by identifier"
+                  value={searchValue}
+                  onChange={(e) => {
+                    setSearchValue(e.target.value);
+                    if (searchError) setSearchError(null); // Clear error when typing
+                  }}
+                  className={`@[600px]:w-[200px] w-full h-9 pl-10 ${searchValue.trim() ? 'pr-20' : 'pr-3'} bg-card border-0 shadow-none focus:ring-0 focus:ring-offset-0 focus:outline-none focus:border-0 focus:shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none`}
+                  disabled={isSearching}
+                />
+                {searchValue.trim() && (
+                  <Button 
+                    type="submit" 
+                    size="sm" 
+                    className="absolute inset-y-0 right-0 h-9 px-3 rounded-l-none shadow-none"
+                    disabled={isSearching}
+                  >
+                    {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Search'}
+                  </Button>
+                )}
+              </div>
+            </form>
+            
+            {/* Error message */}
+            {searchError && (
+              <div className="absolute top-full mt-2 right-0 z-50 bg-muted text-muted-foreground text-sm px-3 py-2 rounded-md shadow-sm min-w-[200px] border border-border">
+                {searchError}
+              </div>
+            )}
           </div>
-        ) : selectedItem ? (
-          // Show split view when item is selected but not narrow viewport or full width
-          <div className={`flex ${isNarrowViewport ? 'flex-col' : ''} h-full`}>
-            <div 
-              className={`${isFullWidth ? 'hidden' : 'flex-1'} overflow-auto`}
-              style={selectedItem && !isNarrowViewport && !isFullWidth ? {
-                width: `${leftPanelWidth}%`
-              } : undefined}
-            >
-              <div>
-                <div className="@container h-full">
-                  {filteredItems.length === 0 ? (
-                    // Show skeleton instead of "No items found" message
-                    <div className="grid grid-cols-2 @[500px]:grid-cols-3 @[700px]:grid-cols-4 @[900px]:grid-cols-5 @[1100px]:grid-cols-6 gap-3 animate-pulse">
-                      {[...Array(12)].map((_, i) => (
-                        <ItemCardSkeleton key={i} />
-                      ))}
-                    </div>
-                  ) : (
-                    <>
-                      <div className="grid grid-cols-2 @[500px]:grid-cols-3 @[700px]:grid-cols-4 @[900px]:grid-cols-5 @[1100px]:grid-cols-6 gap-3">
-                        {filteredItems.map((item) => {
-                          const scoreCount = scoreResultCounts.get(item.id);
-                          return (
-                            <MemoizedGridItemCard
-                              key={item.id}
-                              item={item}
-                              scoreCount={scoreCount}
-                              selectedItem={selectedItem}
-                              handleItemClick={handleItemClick}
-                              getBadgeVariant={getBadgeVariant}
-                              scoreCountManagerRef={scoreCountManagerRef}
-                              itemRefsMap={itemRefsMap}
-                            />
-                          );
-                        })}
+        </div>
+      )}
+      
+      <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+        {/* 
+          Deep-linking rendering logic - all modes use consistent container structure
+        */}
+
+        {/* Content area - always uses the same base structure */}
+        <div className="flex flex-1 min-h-0">
+          {/* Left panel - grid content */}
+          <div 
+            className={`${selectedItem && !isNarrowViewport && isFullWidth ? 'hidden' : 'flex-1'} h-full overflow-auto`}
+            style={selectedItem && !isNarrowViewport && !isFullWidth ? {
+              width: `${leftPanelWidth}%`
+            } : undefined}
+          >
+            {/* Header for narrow viewports only */}
+            {isNarrowViewport && (
+              <div className="flex @[600px]:flex-row flex-col @[600px]:items-center @[600px]:justify-between items-stretch gap-3 pb-3 flex-shrink-0">
+                <div className="@[600px]:flex-grow w-full">
+                  <ScorecardContext 
+                    selectedScorecard={selectedScorecard}
+                    setSelectedScorecard={setSelectedScorecard}
+                    selectedScore={selectedScore}
+                    setSelectedScore={setSelectedScore}
+                    availableFields={availableFields}
+                    timeRangeOptions={scoreOptions}
+                    skeletonMode={isLoading}
+                  />
+                </div>
+                
+                {/* Search Component */}
+                <div className="flex items-center relative @[600px]:w-auto w-full">
+                  <form onSubmit={handleSearchSubmit} className="relative @[600px]:w-auto w-full">
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <Search className="h-4 w-4 text-muted-foreground" />
                       </div>
-                      
-                      {/* Replace the Load More button with an invisible loading indicator */}
-                      {nextToken && filteredItems.length > 0 && (
-                        <div 
-                          ref={loadMoreRef} 
-                          className="flex justify-center py-6"
+                      <Input
+                        type="text"
+                        placeholder="Search by identifier"
+                        value={searchValue}
+                        onChange={(e) => {
+                          setSearchValue(e.target.value);
+                          if (searchError) setSearchError(null); // Clear error when typing
+                        }}
+                        className={`@[600px]:w-[200px] w-full h-9 pl-10 ${searchValue.trim() ? 'pr-20' : 'pr-3'} bg-card border-0 shadow-none focus:ring-0 focus:ring-offset-0 focus:outline-none focus:border-0 focus:shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none`}
+                        disabled={isSearching}
+                      />
+                      {searchValue.trim() && (
+                        <Button 
+                          type="submit" 
+                          size="sm" 
+                          className="absolute inset-y-0 right-0 h-9 px-3 rounded-l-none shadow-none"
+                          disabled={isSearching}
                         >
-                          {isLoadingMore && (
-                            <div className="flex items-center">
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                              <span>Loading more items...</span>
-                            </div>
-                          )}
-                        </div>
+                          {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Search'}
+                        </Button>
                       )}
-                    </>
+                    </div>
+                  </form>
+                  
+                  {/* Error message */}
+                  {searchError && (
+                    <div className="absolute top-full mt-2 right-0 z-50 bg-muted text-muted-foreground text-sm px-3 py-2 rounded-md shadow-sm min-w-[200px] border border-border">
+                      {searchError}
+                    </div>
                   )}
                 </div>
               </div>
-            </div>
-
-            {selectedItem && !isNarrowViewport && !isFullWidth && (
-              <div
-                className="w-[12px] relative cursor-col-resize flex-shrink-0 group"
-                onMouseDown={handleDragStart}
-              >
-                <div className="absolute inset-0 rounded-full transition-colors duration-150 
-                  group-hover:bg-accent" />
-              </div>
             )}
 
-            {selectedItem && !isNarrowViewport && !isFullWidth && (
+            {/* Grid content or item content for mobile */}
+            <div className="@container">
+              {isNarrowViewport && selectedItem ? (
+                // Mobile full-screen item view
+                <div className="h-full">
+                  {selectedScoreResult ? (
+                    <ScoreResultCard
+                      scoreResult={selectedScoreResult}
+                      onClose={() => setSelectedScoreResult(null)}
+                      naturalHeight={true}
+                    />
+                  ) : (
+                    renderSelectedItem(true)
+                  )}
+                </div>
+              ) : (
+                // Grid view
+                !hasInitiallyLoaded && isLoading ? (
+                  <div className="grid grid-cols-2 @[500px]:grid-cols-3 @[700px]:grid-cols-4 @[900px]:grid-cols-5 @[1100px]:grid-cols-6 gap-3 animate-pulse">
+                    {[...Array(12)].map((_, i) => (
+                      <ItemCardSkeleton key={i} />
+                    ))}
+                  </div>
+                ) : (
+                  <GridContent
+                    filteredItems={filteredItems}
+                    selectedItem={selectedItem}
+                    handleItemClick={handleItemClick}
+                    getBadgeVariant={getBadgeVariant}
+                    scoreCountManagerRef={scoreCountManagerRef}
+                    itemRefsMap={itemRefsMap}
+                    scoreResultCounts={scoreResultCounts}
+                    nextToken={nextToken}
+                    isLoadingMore={isLoadingMore}
+                    loadMoreRef={loadMoreRef}
+                    isLoading={isLoading}
+                    hasInitiallyLoaded={hasInitiallyLoaded}
+                  />
+                )
+              )}
+            </div>
+          </div>
+
+          {/* Divider for split view */}
+          {selectedItem && !isNarrowViewport && !isFullWidth && (
+            <div
+              className="w-[12px] relative cursor-col-resize flex-shrink-0 group"
+              onMouseDown={handleDragStart}
+            >
+              <div className="absolute inset-0 rounded-full transition-colors duration-150 
+                group-hover:bg-accent" />
+            </div>
+          )}
+
+          {/* Right panel - item detail view */}
+          {selectedItem && !isNarrowViewport && (
+            <>
               <div 
-                className="overflow-hidden"
-                style={{ width: `${100 - leftPanelWidth}%` }}
+                className="h-full overflow-hidden"
+                style={{ 
+                  width: isFullWidth 
+                    ? '100%' 
+                    : selectedScoreResult 
+                      ? `${(100 - leftPanelWidth) * 0.5}%` 
+                      : `${100 - leftPanelWidth}%` 
+                }}
               >
                 {renderSelectedItem()}
               </div>
-            )}
-          </div>
-        ) : (
-          // Grid-only view when no item is selected
-          <div className="h-full">
-            <div className="overflow-auto h-full">
-              <div>
-                <div className="@container h-full">
-                  {filteredItems.length === 0 ? (
-                    // Show skeleton instead of "No items found" message
-                    <div className="grid grid-cols-2 @[500px]:grid-cols-3 @[700px]:grid-cols-4 @[900px]:grid-cols-5 @[1100px]:grid-cols-6 gap-3 animate-pulse">
-                      {[...Array(12)].map((_, i) => (
-                        <ItemCardSkeleton key={i} />
-                      ))}
-                    </div>
-                  ) : (
-                    <>
-                      <div className="grid grid-cols-2 @[500px]:grid-cols-3 @[700px]:grid-cols-4 @[900px]:grid-cols-5 @[1100px]:grid-cols-6 gap-3">
-                        {filteredItems.map((item) => {
-                          const scoreCount = scoreResultCounts.get(item.id);
-                          return (
-                            <MemoizedGridItemCard
-                              key={item.id}
-                              item={item}
-                              scoreCount={scoreCount}
-                              selectedItem={selectedItem}
-                              handleItemClick={handleItemClick}
-                              getBadgeVariant={getBadgeVariant}
-                              scoreCountManagerRef={scoreCountManagerRef}
-                              itemRefsMap={itemRefsMap}
-                            />
-                          );
-                        })}
-                      </div>
-                      
-                      {/* Replace the Load More button with an invisible loading indicator */}
-                      {nextToken && filteredItems.length > 0 && (
-                        <div 
-                          ref={loadMoreRef} 
-                          className="flex justify-center py-6"
-                        >
-                          {isLoadingMore && (
-                            <div className="flex items-center">
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                              <span>Loading more items...</span>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </>
-                  )}
+              
+              {/* Second divider for score result panel */}
+              {selectedScoreResult && !isFullWidth && (
+                <div
+                  className="w-[12px] relative cursor-col-resize flex-shrink-0 group"
+                >
+                  <div className="absolute inset-0 rounded-full transition-colors duration-150 
+                    group-hover:bg-accent" />
                 </div>
-              </div>
-            </div>
-          </div>
-        )}
+              )}
+
+              {/* Score result panel */}
+              {selectedScoreResult && !isFullWidth && (
+                <div 
+                  className="h-full overflow-hidden"
+                  style={{ width: `${(100 - leftPanelWidth) * 0.5}%` }}
+                >
+                  <ScoreResultCard
+                    scoreResult={selectedScoreResult}
+                    onClose={() => setSelectedScoreResult(null)}
+                    naturalHeight={false}
+                  />
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -4,6 +4,7 @@ Plexus Dashboard API Models
 from .account import Account
 from .batch_job import BatchJob
 from .evaluation import Evaluation
+from .identifier import Identifier
 from .item import Item
 from .report_configuration import ReportConfiguration
 from .scorecard import Scorecard
@@ -16,6 +17,7 @@ from .feedback_change_detail import FeedbackChangeDetail
 __all__ = [
     'Account',
     'Evaluation',
+    'Identifier',
     'Scorecard',
     'Score',
     'ReportConfiguration',

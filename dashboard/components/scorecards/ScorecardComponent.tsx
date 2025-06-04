@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { Card } from '@/components/ui/card'
-import { MoreHorizontal, Pencil, Database, ListTodo, X, Square, Columns2, Plus, ChevronUp, ChevronDown, CheckSquare, ChevronRight, FileText, Key, StickyNote, Edit, IdCard, TestTube } from 'lucide-react'
+import { MoreHorizontal, Pencil, Database, ListChecks, X, Square, Columns2, Plus, ChevronUp, ChevronDown, ListCheck, ChevronRight, FileText, Key, StickyNote, Edit, IdCard, TestTube } from 'lucide-react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { cn } from '@/lib/utils'
 import { CardButton } from '@/components/CardButton'
@@ -96,7 +96,7 @@ const GridContent = React.memo(({
         <div className="text-sm text-muted-foreground">{scoreCount} {scoreText}</div>
       </div>
       <div className="text-muted-foreground">
-        {score.icon || <ListTodo className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />}
+        {score.icon || <ListChecks className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />}
       </div>
     </div>
   )
@@ -731,7 +731,7 @@ export const DetailContent = React.memo(function DetailContent({
               type: score.type,
               order: score.order,
               key: score.key || '',
-              icon: <CheckSquare className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
+              icon: <ListCheck className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
             })) || [];
             
             return (

@@ -180,8 +180,6 @@ export class ScoreResultCountManager {
   async loadCountForItem(itemId: string) {
     // Allow multiple requests for the same item to ensure we get the latest data
     // Remove the pending check to be more aggressive about refreshing
-    
-    console.log('📊 Loading count for item:', itemId);
     this.pendingCounts.add(itemId);
     
     // Only show loading state if we don't already have cached data
@@ -198,7 +196,6 @@ export class ScoreResultCountManager {
     try {
       const { totalCount, scorecardBreakdown } = await countScoreResultsForItem(itemId);
       
-      console.log('📊 Count loaded for item:', itemId, { totalCount, scorecardBreakdown });
       this.countCache.set(itemId, {
         itemId,
         count: totalCount,
@@ -206,7 +203,6 @@ export class ScoreResultCountManager {
         scorecardBreakdown
       });
     } catch (error) {
-      console.error('📊 Error loading count for item:', itemId, error);
       this.countCache.set(itemId, {
         itemId,
         count: 0,
@@ -274,7 +270,6 @@ export class ScoreResultCountManager {
     
     // Throttle the refresh to avoid too many API calls
     this.refreshTimeout = setTimeout(() => {
-      console.log('📊 Refreshing all cached counts:', this.countCache.size, 'items');
       const itemIds = Array.from(this.countCache.keys());
       itemIds.forEach(itemId => {
         // Don't clear the cache - just reload in the background
@@ -297,7 +292,6 @@ export class ScoreResultCountManager {
   }
   
   private notifyCallbacks() {
-    console.log('📊 Notifying callbacks with updated counts:', this.countCache.size, 'items');
     this.callbacks.forEach(callback => {
       callback(new Map(this.countCache));
     });

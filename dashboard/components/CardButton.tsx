@@ -12,6 +12,7 @@ export interface CardButtonProps {
   label?: string
   className?: string
   variant?: 'default' | 'primary' | 'secondary' | 'destructive'
+  skeletonMode?: boolean
 }
 
 export function CardButton({
@@ -22,8 +23,22 @@ export function CardButton({
   active = false,
   label,
   className,
-  variant = 'default'
+  variant = 'default',
+  skeletonMode = false
 }: CardButtonProps) {
+  // Skeleton mode rendering
+  if (skeletonMode) {
+    return (
+      <div 
+        className={cn(
+          label ? "h-10 w-20" : "h-8 w-8",
+          "bg-muted rounded animate-pulse",
+          className
+        )}
+      />
+    );
+  }
+
   const getVariantClasses = () => {
     switch (variant) {
       case 'primary':

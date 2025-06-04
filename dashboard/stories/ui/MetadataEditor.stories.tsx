@@ -11,7 +11,7 @@ const meta = {
     layout: 'padded',
     docs: {
       description: {
-        component: 'A reusable component for editing key-value metadata pairs with validation support.'
+        component: 'A reusable component for editing key-value metadata pairs with validation support. Supports complex values like objects and arrays in read-only mode.'
       }
     }
   },
@@ -61,7 +61,7 @@ type Story = StoryObj<typeof MetadataEditor>
 
 // Interactive wrapper component for stories that need state management
 interface InteractiveWrapperProps extends Omit<MetadataEditorProps, 'value' | 'onChange'> {
-  initialValue?: Record<string, string>
+  initialValue?: Record<string, any>
   title?: string
 }
 
@@ -108,6 +108,66 @@ export const WithInitialData: Story = {
       'department': 'engineering'
     }}
   />
+}
+
+export const WithComplexValues: Story = {
+  decorators: [
+    (Story) => (
+      <div className="w-full max-w-4xl">
+        <div className="bg-card rounded-xl p-6">
+          <Story />
+        </div>
+      </div>
+    ),
+  ],
+  render: () => (
+    <div className="space-y-4">
+      <h3 className="text-lg font-semibold text-card-foreground">Complex Values (Read-Only)</h3>
+      <MetadataEditor
+        value={{
+          'simple_string': 'Hello world',
+          'number_value': 42,
+          'boolean_value': true,
+          'object_config': {
+            host: 'localhost',
+            port: 3000,
+            ssl: true,
+            options: {
+              timeout: 5000,
+              retries: 3
+            }
+          },
+          'array_data': ['item1', 'item2', 'item3'],
+          'complex_array': [
+            { id: 1, name: 'First item', active: true },
+            { id: 2, name: 'Second item', active: false }
+          ],
+          'nested_object': {
+            user: {
+              id: 123,
+              profile: {
+                name: 'John Doe',
+                email: 'john@example.com',
+                preferences: {
+                  theme: 'dark',
+                  notifications: true
+                }
+              }
+            }
+          }
+        }}
+        disabled={true}
+        onChange={action('onChange')}
+      />
+    </div>
+  ),
+  parameters: {
+    docs: {
+      description: {
+        story: 'Demonstrates how the component handles complex values like objects and arrays in read-only mode. Complex values are formatted as readable JSON.'
+      }
+    }
+  }
 }
 
 export const WithValidation: Story = {
@@ -204,6 +264,60 @@ export const Empty: Story = {
   />
 }
 
+// Mixed data types in read-only mode
+export const MixedDataTypes: Story = {
+  decorators: [
+    (Story) => (
+      <div className="w-full max-w-3xl">
+        <div className="bg-card rounded-xl p-6">
+          <Story />
+        </div>
+      </div>
+    ),
+  ],
+  render: () => (
+    <div className="space-y-4">
+      <h3 className="text-lg font-semibold text-card-foreground">Mixed Data Types (Read-Only)</h3>
+      <MetadataEditor
+        value={{
+          'id': 12345,
+          'active': true,
+          'name': 'Sample Item',
+          'tags': ['urgent', 'customer-facing', 'production'],
+          'configuration': {
+            'api_endpoint': 'https://api.example.com/v1',
+            'timeout_ms': 5000,
+            'retry_attempts': 3,
+            'features': {
+              'caching': true,
+              'compression': false,
+              'encryption': 'AES256'
+            }
+          },
+          'metrics': {
+            'requests_per_second': 150.75,
+            'error_rate': 0.025,
+            'uptime_percentage': 99.9
+          },
+          'null_value': null,
+          'empty_string': '',
+          'zero_value': 0,
+          'false_value': false
+        }}
+        disabled={true}
+        onChange={action('onChange')}
+      />
+    </div>
+  ),
+  parameters: {
+    docs: {
+      description: {
+        story: 'Shows how various data types are handled: strings, numbers, booleans, objects, arrays, null values, etc.'
+      }
+    }
+  }
+}
+
 // Showcase all states in one story
 export const AllStates: Story = {
   decorators: [
@@ -241,17 +355,16 @@ export const AllStates: Story = {
       
       <Card className="bg-card border-0 shadow-none">
         <CardHeader>
-          <CardTitle>With Validation Errors</CardTitle>
+          <CardTitle>Complex Values</CardTitle>
         </CardHeader>
         <CardContent>
           <MetadataEditor 
             value={{
-              'invalid key': 'value with space in key',
-              'valid-key': 'x'.repeat(150) // Too long
+              'config': { host: 'localhost', port: 3000 },
+              'tags': ['web', 'api']
             }}
-            validateKey={(key) => key.includes(' ') ? 'Keys cannot contain spaces' : null}
-            validateValue={(value) => value.length > 100 ? 'Values must be 100 characters or less' : null}
-            onChange={action('onChange-validation')} 
+            disabled={true}
+            onChange={action('onChange-complex')} 
           />
         </CardContent>
       </Card>
@@ -269,21 +382,6 @@ export const AllStates: Story = {
             }}
             maxEntries={3}
             onChange={action('onChange-max')} 
-          />
-        </CardContent>
-      </Card>
-      
-      <Card className="bg-card border-0 shadow-none">
-        <CardHeader>
-          <CardTitle>Disabled</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <MetadataEditor 
-            value={{
-              'readonly': 'cannot edit'
-            }}
-            disabled={true}
-            onChange={action('onChange-disabled')} 
           />
         </CardContent>
       </Card>
@@ -332,4 +430,56 @@ export const ItemMetadata: Story = {
       return null
     }}
   />
+}
+
+// Real-world example with complex API response metadata
+export const APIResponseMetadata: Story = {
+  decorators: [
+    (Story) => (
+      <div className="w-full max-w-4xl">
+        <div className="bg-card rounded-xl p-6">
+          <Story />
+        </div>
+      </div>
+    ),
+  ],
+  render: () => (
+    <div className="space-y-4">
+      <h3 className="text-lg font-semibold text-card-foreground">API Response Metadata (Read-Only)</h3>
+      <MetadataEditor
+        value={{
+          'request_id': 'req_abc123',
+          'timestamp': '2024-01-15T10:30:00Z',
+          'response_time_ms': 245,
+          'status_code': 200,
+          'headers': {
+            'content-type': 'application/json',
+            'cache-control': 'no-cache',
+            'x-ratelimit-remaining': 99
+          },
+          'pagination': {
+            'page': 1,
+            'per_page': 20,
+            'total': 150,
+            'total_pages': 8
+          },
+          'filters_applied': ['status:active', 'created_after:2024-01-01'],
+          'user_context': {
+            'user_id': 'user_456',
+            'permissions': ['read', 'write'],
+            'organization': 'acme-corp'
+          }
+        }}
+        disabled={true}
+        onChange={action('onChange')}
+      />
+    </div>
+  ),
+  parameters: {
+    docs: {
+      description: {
+        story: 'Example of how the component displays complex API response metadata with nested objects and arrays.'
+      }
+    }
+  }
 } 
