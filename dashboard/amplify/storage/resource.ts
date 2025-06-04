@@ -9,6 +9,11 @@ export const reportBlockDetails = defineStorage({
     'reportblocks/*': [
       allow.guest.to(['read']),
       allow.authenticated.to(['read', 'write', 'delete'])
+    ],
+    // Add access for scoreresults path within this bucket as well, if files are here
+    'scoreresults/*': [
+      allow.guest.to(['read']), // Assuming guests might also need read if they can see the card
+      allow.authenticated.to(['read']) // Authenticated users need to read
     ]
   })
 });
@@ -26,6 +31,8 @@ export const attachments = defineStorage({
 });
 
 // Define a storage bucket for score result attachments
+// This definition might be for a separate bucket. If the scoreresults files are in reportBlockDetailsBucket,
+// then the rules above are more relevant for the read operation.
 export const scoreResultAttachments = defineStorage({
   name: 'scoreResultAttachments',
   access: (allow) => ({

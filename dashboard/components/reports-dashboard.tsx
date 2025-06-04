@@ -1307,10 +1307,10 @@ export default function ReportsDashboard({
   }
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Header Area - Report Configuration Filtering */}
-      <div className="flex-none p-1.5">
-        <div className="flex justify-between items-start">
+    <div className="@container flex flex-col h-full p-2 overflow-hidden">
+      {/* Fixed header */}
+      <div className="flex @[600px]:flex-row flex-col @[600px]:items-center @[600px]:justify-between items-stretch gap-3 pb-3 flex-shrink-0">
+        <div className="@[600px]:flex-grow w-full">
           <div className="flex flex-col gap-2">
             <ReportConfigurationSelector
               selectedReportConfiguration={selectedReportConfiguration}
@@ -1318,200 +1318,202 @@ export default function ReportsDashboard({
             />
             {error && <p className="text-xs text-destructive">{error}</p>}
           </div>
-          <div className="flex gap-2">
-            <Button 
-              onClick={() => router.push('/lab/reports/edit')}
-              variant="ghost"
-              className="bg-card hover:bg-accent text-muted-foreground"
-            >
-              <Pencil className="mr-2 h-4 w-4"/> Edit Configurations
-            </Button>
-            <RunReportButton />
-          </div>
+        </div>
+        
+        {/* Buttons on top right */}
+        <div className="flex-shrink-0 flex gap-2">
+          <Button 
+            onClick={() => router.push('/lab/reports/edit')}
+            variant="ghost"
+            className="bg-card hover:bg-accent text-muted-foreground"
+          >
+            <Pencil className="mr-2 h-4 w-4"/> Edit Configurations
+          </Button>
+          <RunReportButton />
         </div>
       </div>
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex min-h-0 p-1.5">
-        {/* Report List Panel */}
-        <div
-          className={`
-            ${selectedReportId && !isNarrowViewport && !isFullWidth ? '' : 'w-full'}
-            ${selectedReportId && !isNarrowViewport && isFullWidth ? 'hidden' : ''}
-            h-full overflow-y-auto overflow-x-hidden @container
-          `}
-          style={selectedReportId && !isNarrowViewport && !isFullWidth ? {
-            width: `${leftPanelWidth}%`
-          } : undefined}
-        >
-          {!isLoading && reports.length === 0 && !error && (
-            <div className="text-sm text-muted-foreground p-4 text-center">No reports found for this account.</div>
-          )}
-          {reports.length > 0 && (
-            <div className={`
-              grid gap-3
-              ${selectedReportId && !isNarrowViewport && !isFullWidth ? 'grid-cols-1' : 'grid-cols-1 @[640px]:grid-cols-2'}
-            `}>
-              {reports.map((report) => {
-                const clickHandler = getReportClickHandler(report.id);
-                
-                // Safely extract stages (reuse the same approach as above)
-                const stages = [];
-                if (report.task && 'stages' in report.task && report.task.stages) {
-                  const stagesData = getValueFromLazyLoader(report.task.stages);
-                  if (stagesData && 'items' in stagesData && Array.isArray(stagesData.items)) {
-                    stages.push(...stagesData.items.map((stage: any) => ({
-                      key: stage.id || `stage-${Math.random()}`,
-                      label: stage.name || '',
-                      color: 'bg-primary',
-                      name: stage.name || '',
-                      order: typeof stage.order === 'number' ? stage.order : 0,
-                      status: stage.status || 'PENDING',
-                      processedItems: typeof stage.processedItems === 'number' ? stage.processedItems : 0,
-                      totalItems: typeof stage.totalItems === 'number' ? stage.totalItems : 0,
-                      statusMessage: stage.statusMessage || ''
-                    })));
-                  }
-                }
-
-                // Find current stage name safely
-                let currentStageName = '';
-                if (report.task && report.task.currentStageId) {
-                  const currentStage = stages.find(s => s.key === report.task?.currentStageId);
-                  if (currentStage) {
-                    currentStageName = currentStage.name;
-                  }
-                }
-                
-                // Ensure we have a valid display name for the report - USE FORCED STRING TYPE
-                const displayName = String(report.name || 'Report');
-                                
-                // The ReportTask component uses configName as the primary display name
-                // We need to pass the report name both as title and as configName to ensure it displays correctly
-                const taskData = {
-                  id: report.id,
-                  type: 'Report',
-                  name: '',  // This isn't used directly by ReportTask
-                  description: '',
-                  scorecard: '',
-                  score: '',
-                  time: report.updatedAt || report.createdAt || '',
-                  data: {
-                    id: report.id,
-                    title: displayName,  // Used for TaskHeader
-                    name: displayName,   // Backup
-                    // CRITICAL FIX: ReportTask uses configName as primary display field
-                    configName: displayName,  // This is what ReportTask actually displays
-                    configDescription: report.reportConfiguration?.description,
-                    createdAt: report.createdAt,
-                    updatedAt: report.updatedAt
-                  },
-                  stages: stages,
-                  status: report.task?.status as any || 'PENDING',
-                  currentStageName: currentStageName
-                };
-                
-                return (
-                  <div 
-                    key={report.id} 
-                    onClick={clickHandler} 
-                    className="cursor-pointer"
-                    ref={(el) => {
-                      reportRefsMap.current.set(report.id, el);
-                    }}
-                  >
-                    <ReportTask
-                      variant="grid"
-                      task={taskData}
-                      isSelected={report.id === selectedReportId}
-                      onClick={clickHandler}
-                      controlButtons={
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                             <Button 
-                               variant="ghost" 
-                               size="icon" 
-                               className="h-8 w-8 rounded-md bg-border hover:bg-accent"
-                               aria-label="More options"
-                               onClick={(e) => e.stopPropagation()} // Prevent card click when clicking dropdown
-                             >
-                               <MoreHorizontal className="h-4 w-4" />
-                             </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                             <DropdownMenuItem onClick={(e) => { e.stopPropagation(); copyLinkToClipboard(report.id); }}>
-                              <Share className="mr-2 h-4 w-4" />
-                              <span>Share</span>
-                            </DropdownMenuItem>
-                            {report.reportConfiguration?.id && (
-                              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); router.push(`/lab/reports/edit/${report.reportConfiguration!.id}`); }}>
-                                <Settings className="mr-2 h-4 w-4" />
-                                <span>Edit Configuration</span>
-                              </DropdownMenuItem>
-                            )}
-                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleDelete(report.id); }}>
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              <span>Delete</span>
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+      <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+        <div className="flex flex-1 min-h-0">
+          {/* Left panel - report list */}
+          <div
+            className={`${selectedReportId && !isNarrowViewport && isFullWidth ? 'hidden' : 'flex-1'} h-full overflow-auto`}
+            style={selectedReportId && !isNarrowViewport && !isFullWidth ? {
+              width: `${leftPanelWidth}%`
+            } : undefined}
+          >
+            <div className="@container">
+              {!isLoading && reports.length === 0 && !error && (
+                <div className="text-sm text-muted-foreground p-4 text-center">No reports found for this account.</div>
+              )}
+              {reports.length > 0 && (
+                <div className={`
+                  grid gap-3
+                  ${selectedReportId && !isNarrowViewport && !isFullWidth ? 'grid-cols-1' : 'grid-cols-1 @[640px]:grid-cols-2'}
+                `}>
+                  {reports.map((report) => {
+                    const clickHandler = getReportClickHandler(report.id);
+                    
+                    // Safely extract stages (reuse the same approach as above)
+                    const stages = [];
+                    if (report.task && 'stages' in report.task && report.task.stages) {
+                      const stagesData = getValueFromLazyLoader(report.task.stages);
+                      if (stagesData && 'items' in stagesData && Array.isArray(stagesData.items)) {
+                        stages.push(...stagesData.items.map((stage: any) => ({
+                          key: stage.id || `stage-${Math.random()}`,
+                          label: stage.name || '',
+                          color: 'bg-primary',
+                          name: stage.name || '',
+                          order: typeof stage.order === 'number' ? stage.order : 0,
+                          status: stage.status || 'PENDING',
+                          processedItems: typeof stage.processedItems === 'number' ? stage.processedItems : 0,
+                          totalItems: typeof stage.totalItems === 'number' ? stage.totalItems : 0,
+                          statusMessage: stage.statusMessage || ''
+                        })));
                       }
-                    />
-                  </div>
-                );
-              })}
-              {/* Infinite scroll trigger and loading indicator */}
-              {nextToken && (
-                <div className="col-span-full">
-                  {/* Invisible trigger element for intersection observer */}
-                  <div ref={loadMoreRef} className="h-4" />
-                  {/* Loading indicator */}
-                  {isLoadingMore && (
-                    <div className="flex justify-center p-4">
-                      <div className="text-sm text-muted-foreground">Loading more reports...</div>
+                    }
+
+                    // Find current stage name safely
+                    let currentStageName = '';
+                    if (report.task && report.task.currentStageId) {
+                      const currentStage = stages.find(s => s.key === report.task?.currentStageId);
+                      if (currentStage) {
+                        currentStageName = currentStage.name;
+                      }
+                    }
+                    
+                    // Ensure we have a valid display name for the report - USE FORCED STRING TYPE
+                    const displayName = String(report.name || 'Report');
+                                    
+                    // The ReportTask component uses configName as the primary display name
+                    // We need to pass the report name both as title and as configName to ensure it displays correctly
+                    const taskData = {
+                      id: report.id,
+                      type: 'Report',
+                      name: '',  // This isn't used directly by ReportTask
+                      description: '',
+                      scorecard: '',
+                      score: '',
+                      time: report.updatedAt || report.createdAt || '',
+                      data: {
+                        id: report.id,
+                        title: displayName,  // Used for TaskHeader
+                        name: displayName,   // Backup
+                        // CRITICAL FIX: ReportTask uses configName as primary display field
+                        configName: displayName,  // This is what ReportTask actually displays
+                        configDescription: report.reportConfiguration?.description,
+                        createdAt: report.createdAt,
+                        updatedAt: report.updatedAt
+                      },
+                      stages: stages,
+                      status: report.task?.status as any || 'PENDING',
+                      currentStageName: currentStageName
+                    };
+                    
+                    return (
+                      <div 
+                        key={report.id} 
+                        onClick={clickHandler} 
+                        className="cursor-pointer"
+                        ref={(el) => {
+                          reportRefsMap.current.set(report.id, el);
+                        }}
+                      >
+                        <ReportTask
+                          variant="grid"
+                          task={taskData}
+                          isSelected={report.id === selectedReportId}
+                          onClick={clickHandler}
+                          controlButtons={
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                 <Button 
+                                   variant="ghost" 
+                                   size="icon" 
+                                   className="h-8 w-8 rounded-md bg-border hover:bg-accent"
+                                   aria-label="More options"
+                                   onClick={(e) => e.stopPropagation()} // Prevent card click when clicking dropdown
+                                 >
+                                   <MoreHorizontal className="h-4 w-4" />
+                                 </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                 <DropdownMenuItem onClick={(e) => { e.stopPropagation(); copyLinkToClipboard(report.id); }}>
+                                  <Share className="mr-2 h-4 w-4" />
+                                  <span>Share</span>
+                                </DropdownMenuItem>
+                                {report.reportConfiguration?.id && (
+                                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); router.push(`/lab/reports/edit/${report.reportConfiguration!.id}`); }}>
+                                    <Settings className="mr-2 h-4 w-4" />
+                                    <span>Edit Configuration</span>
+                                  </DropdownMenuItem>
+                                )}
+                                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleDelete(report.id); }}>
+                                  <Trash2 className="mr-2 h-4 w-4" />
+                                  <span>Delete</span>
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          }
+                        />
+                      </div>
+                    );
+                  })}
+                  {/* Infinite scroll trigger and loading indicator */}
+                  {nextToken && (
+                    <div className="col-span-full">
+                      {/* Invisible trigger element for intersection observer */}
+                      <div ref={loadMoreRef} className="h-4" />
+                      {/* Loading indicator */}
+                      {isLoadingMore && (
+                        <div className="flex justify-center p-4">
+                          <div className="text-sm text-muted-foreground">Loading more reports...</div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
               )}
             </div>
+          </div>
+
+          {/* Divider for split view */}
+          {selectedReportId && !isNarrowViewport && !isFullWidth && (
+            <div
+              className="w-[12px] relative cursor-col-resize flex-shrink-0 group"
+              onMouseDown={handleDragStart}
+            >
+              <div className="absolute inset-0 rounded-full transition-colors duration-150 group-hover:bg-accent" />
+            </div>
+          )}
+
+          {/* Right panel - report detail view */}
+          {selectedReportId && !isNarrowViewport && !isFullWidth && (
+            <div
+              className="h-full overflow-auto flex-shrink-0"
+              style={{ width: `${100 - leftPanelWidth}%` }}
+            >
+              {renderSelectedReport}
+            </div>
+          )}
+
+          {/* Full-screen view for mobile or full-width mode */}
+          {selectedReportId && (isNarrowViewport || isFullWidth) && (
+            <div className="fixed inset-0 z-50 bg-background overflow-y-auto">
+              {renderSelectedReport}
+            </div>
           )}
         </div>
-
-        {/* Resizer */}
-        {selectedReportId && !isNarrowViewport && !isFullWidth && (
-          <div
-            className="w-[12px] relative cursor-col-resize flex-shrink-0 group"
-            onMouseDown={handleDragStart}
-          >
-            <div className="absolute inset-0 rounded-full transition-colors duration-150 group-hover:bg-accent" />
-          </div>
-        )}
-
-        {/* Detail Panel (Right side or Fullscreen) */}
-        {selectedReportId && !isNarrowViewport && !isFullWidth && (
-          <div
-            className="h-full overflow-hidden flex-shrink-0"
-            style={{ width: `${100 - leftPanelWidth}%` }}
-          >
-            {renderSelectedReport}
-          </div>
-        )}
-
-        {selectedReportId && (isNarrowViewport || isFullWidth) && (
-          <div className="fixed inset-0 z-50 bg-background overflow-y-auto">
-            {renderSelectedReport}
-          </div>
-        )}
       </div>
 
-       {/* Share Modal */}
-       <ShareResourceModal
-          isOpen={isShareModalOpen}
-          onClose={handleCloseShareModal}
-          onShare={handleCreateShareLink}
-          resourceType="Report" // Specify resource type
-          shareUrl={shareUrl}
-       />
+      {/* Share Modal */}
+      <ShareResourceModal
+        isOpen={isShareModalOpen}
+        onClose={handleCloseShareModal}
+        onShare={handleCreateShareLink}
+        resourceType="Report"
+        shareUrl={shareUrl}
+      />
     </div>
   )
 }

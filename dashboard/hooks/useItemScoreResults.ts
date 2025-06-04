@@ -13,6 +13,7 @@ export interface ScoreResultWithDetails {
   scoreId: string;
   updatedAt?: string;
   createdAt?: string;
+  attachments?: string[] | null;
   scorecard?: {
     id: string;
     name: string;
@@ -77,6 +78,7 @@ export function useItemScoreResults(itemId: string | null) {
                 scoreId
                 updatedAt
                 createdAt
+                attachments
                 scorecard {
                   id
                   name

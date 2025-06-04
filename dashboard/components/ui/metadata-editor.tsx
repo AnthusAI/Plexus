@@ -35,6 +35,8 @@ export interface MetadataEditorProps {
   validateKey?: (key: string) => string | null
   /** Custom validation for values */
   validateValue?: (value: string) => string | null
+  /** Whether to suppress the header (useful when used inside accordion) */
+  suppressHeader?: boolean
 }
 
 const generateId = () => Math.random().toString(36).substr(2, 9)
@@ -82,6 +84,7 @@ export const MetadataEditor = React.forwardRef<HTMLDivElement, MetadataEditorPro
     maxEntries,
     validateKey,
     validateValue,
+    suppressHeader = false,
     ...props
   }, ref) => {
     // Convert value to internal format
@@ -216,21 +219,35 @@ export const MetadataEditor = React.forwardRef<HTMLDivElement, MetadataEditorPro
 
     return (
       <div ref={ref} className={cn("space-y-2", className)} {...props}>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Tag className="h-3 w-3 text-muted-foreground" />
-            <span className="text-sm font-medium leading-none text-muted-foreground peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Metadata</span>
-            {!disabled && <span className="text-[10px] text-muted-foreground">optional</span>}
+        {!suppressHeader && (
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Tag className="h-3 w-3 text-muted-foreground" />
+              <span className="text-sm font-medium leading-none text-muted-foreground peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Metadata</span>
+              {!disabled && <span className="text-[10px] text-muted-foreground">optional</span>}
+            </div>
+            {showAddButton && canAddMore && (
+              <CardButton
+                label="Add Entry"
+                onClick={addEntry}
+                disabled={disabled}
+                aria-label="Add metadata entry"
+              />
+            )}
           </div>
-          {showAddButton && canAddMore && (
+        )}
+        
+        {/* Show add button when header is suppressed but add button should be shown */}
+        {suppressHeader && showAddButton && canAddMore && (
+          <div className="flex justify-end">
             <CardButton
               label="Add Entry"
               onClick={addEntry}
               disabled={disabled}
               aria-label="Add metadata entry"
             />
-          )}
-        </div>
+          </div>
+        )}
         
         {entries.length > 0 ? (
           <div className={cn("space-y-2", disabled && "grid gap-1 grid-cols-[auto_1fr]")}>

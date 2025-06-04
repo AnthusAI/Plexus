@@ -147,6 +147,7 @@ class ScoreResult(BaseModel):
             confidence
             metadata
             trace
+            attachments
             scoringJobId
             evaluationId
             correct

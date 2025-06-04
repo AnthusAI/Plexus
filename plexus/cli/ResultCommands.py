@@ -452,6 +452,7 @@ def info(id: str):
             evaluationId
             metadata
             trace
+            attachments
             explanation
             updatedAt
             createdAt
