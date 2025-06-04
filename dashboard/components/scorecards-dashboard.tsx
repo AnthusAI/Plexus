@@ -1032,12 +1032,12 @@ export default function ScorecardsComponent({
   }
 
   return (
-    <div className="h-full flex flex-col">
-      <div className="flex h-full w-full">
+    <div className="@container flex flex-col h-full p-2 overflow-hidden">
+      <div className="flex flex-1 min-h-0">
         {/* Grid Panel */}
         <div 
           className={cn(
-            "h-full overflow-y-auto overflow-x-hidden",
+            "h-full overflow-auto",
             selectedScore || (selectedScorecard && isFullWidth) ? "hidden" : selectedScorecard ? "flex" : "w-full",
             "transition-all duration-200"
           )}
@@ -1045,7 +1045,7 @@ export default function ScorecardsComponent({
             width: `${leftPanelWidth}%`
           } : undefined}
         >
-          <div className="space-y-3 p-1.5 w-full">
+          <div className="space-y-3 w-full">
             <div className="flex justify-end">
               <Button 
                 onClick={handleCreate} 

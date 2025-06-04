@@ -547,14 +547,14 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
   }, [])
 
   return (
-    <div className="flex flex-col min-h-screen bg-frame">
+    <div className="flex flex-col h-screen bg-frame">
       <MobileHeader 
         toggleLeftSidebar={toggleLeftSidebar}
         toggleRightSidebar={toggleRightSidebar}
         rightSidebarState={rightSidebarState}
       />
       
-      <div className="flex flex-1 bg-frame">
+      <div className="flex flex-1 bg-frame min-h-0">
         <aside
           className={`
             ${isMobile ? 'fixed top-0 bottom-0 left-0 z-50 bg-background/80 backdrop-blur-sm' : 
@@ -572,21 +572,19 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
         </aside>
 
         <main 
-          className={`flex-1 flex flex-col transition-all duration-300 ease-in-out
+          className={`flex-1 flex flex-col transition-all duration-300 ease-in-out min-h-0
             ${isMobile ? 'ml-0' : (isLeftSidebarOpen ? 'ml-40' : 'ml-14')}
             ${isMobile && rightSidebarState === 'collapsed' ? 'mr-0' : 
               rightSidebarState === 'normal' ? (isMobile ? 'mr-0' : 'mr-80') : 
               rightSidebarState === 'expanded' ? (isMobile ? 'mr-0' : 'mr-[40%]') : 
               (isMobile ? 'mr-0' : 'mr-14')}
             ${rightSidebarState !== 'collapsed' ? 'pr-2' : 'pr-0'}
-            ${isMobile ? '' : 'py-2'}
+            ${isMobile ? 'p-1' : 'p-2'}
           `}
         >
-          <div className="flex-1 flex flex-col bg-background rounded-lg">
-            <div className="flex-1">
-              <div className={`pr-2 pb-2 pl-2 ${isMobile ? '' : 'pt-2'}`}>
-                {children}
-              </div>
+          <div className="flex-1 flex flex-col bg-background rounded-lg min-h-0 overflow-hidden">
+            <div className="flex-1 min-h-0">
+              {children}
             </div>
           </div>
         </main>
