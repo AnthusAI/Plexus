@@ -109,10 +109,16 @@ async def predict_impl(
                             row_result[f'{score_name}_cost'] = costs
                             logging.info(f"Got predictions: {predictions}")
                     else:
-                        # Handle dictionary result
-                        if predictions.get('value') is not None:
-                            row_result[f'{score_name}_value'] = predictions.get('value')
-                            row_result[f'{score_name}_explanation'] = predictions.get('explanation')
+                        # Handle Score.Result object
+                        if hasattr(predictions, 'value') and predictions.value is not None:
+                            row_result[f'{score_name}_value'] = predictions.value
+                            # Try to get explanation from the result object
+                            explanation = None
+                            if hasattr(predictions, 'explanation'):
+                                explanation = predictions.explanation
+                            elif hasattr(predictions, 'metadata') and predictions.metadata:
+                                explanation = predictions.metadata.get('explanation')
+                            row_result[f'{score_name}_explanation'] = explanation
                             row_result[f'{score_name}_cost'] = costs
                             logging.info(f"Got predictions: {predictions}")
                 else:
@@ -342,9 +348,18 @@ async def predict_score_impl(
         score_instance = Score.from_name(scorecard_class.properties['key'], score_name)
         async with score_instance:
             await score_instance.async_setup()
-            context = {}
-            prediction_result = await score_instance.predict(context, input_data)
-            return score_instance, prediction_result, None
+            prediction_result = await score_instance.predict(input_data)
+            
+            # Get costs if available
+            costs = None
+            if hasattr(score_instance, 'get_accumulated_costs'):
+                try:
+                    costs = score_instance.get_accumulated_costs()
+                except Exception as e:
+                    logging.warning(f"Failed to get costs: {e}")
+                    costs = None
+                    
+            return score_instance, prediction_result, costs
             
     except BatchProcessingPause:
         # Just let it propagate up - state is already stored in batch job
@@ -406,9 +421,8 @@ def create_score_input(sample_row, content_id, scorecard_class, score_name):
     score_input_class = getattr(score_class, 'Input', None)
     
     if score_input_class is None:
-        logging.warning(f"Input class not found. Using default.")
-        metadata = {"content_id": str(content_id)}
-        return {'id': content_id, 'text': "", 'metadata': metadata}
+        logging.warning(f"Input class not found. Using Score.Input default.")
+        score_input_class = Score.Input
     
     if sample_row is not None:
         row_dictionary = sample_row.iloc[0].to_dict()
@@ -420,4 +434,4 @@ def create_score_input(sample_row, content_id, scorecard_class, score_name):
         return score_input_class(text=text, metadata=metadata)
     else:
         metadata = {"content_id": str(content_id)}
-        return score_input_class(id=content_id, text="", metadata=metadata)
+        return score_input_class(text="", metadata=metadata)
