@@ -153,7 +153,8 @@ const schema = a.schema({
             feedbackItems: a.hasMany('FeedbackItem', 'scoreId'),
             championVersionId: a.string(),
             championVersion: a.belongsTo('ScoreVersion', 'championVersionId'),
-            externalId: a.string().required()
+            externalId: a.string().required(),
+            isDisabled: a.boolean()
         })
         .authorization((allow) => [
             allow.publicApiKey(),
@@ -415,6 +416,7 @@ const schema = a.schema({
             idx("itemId"),
             idx("scoringJobId"),
             idx("scorecardId").sortKeys(["updatedAt"]),
+            idx("scorecardId").sortKeys(["itemId", "createdAt"]).name("byScorecardItemAndCreatedAt"),
             idx("evaluationId"),
             idx("scoreVersionId"),
             idx("scoreId"),
