@@ -166,10 +166,11 @@ class Identifier(BaseModel):
         """
         query = """
         query FindIdentifierByValue($accountId: String!, $value: String!) {
-            listIdentifiers(filter: {
-                accountId: {eq: $accountId}
-                value: {eq: $value}
-            }) {
+            listIdentifierByAccountIdAndValue(
+                accountId: $accountId,
+                value: {eq: $value},
+                limit: 1
+            ) {
                 items {
                     %s
                 }
@@ -177,12 +178,15 @@ class Identifier(BaseModel):
         }
         """ % cls.fields()
         
-        result = client.execute(query, {
+        variables = {
             'accountId': account_id,
             'value': value
-        })
+        }
         
-        items = result.get('listIdentifiers', {}).get('items', [])
+        result = client.execute(query, variables)
+        
+        items = result.get('listIdentifierByAccountIdAndValue', {}).get('items', [])
+        
         if not items:
             return None
             
@@ -203,11 +207,14 @@ class Identifier(BaseModel):
         """
         query = """
         query FindIdentifierByNameAndValue($accountId: String!, $name: String!, $value: String!) {
-            listIdentifiers(filter: {
-                accountId: {eq: $accountId}
-                name: {eq: $name}
-                value: {eq: $value}
-            }) {
+            listIdentifierByAccountIdAndNameAndValue(
+                accountId: $accountId,
+                nameValue: {
+                    name: {eq: $name}
+                    value: {eq: $value}
+                },
+                limit: 1
+            ) {
                 items {
                     %s
                 }
@@ -221,7 +228,7 @@ class Identifier(BaseModel):
             'value': value
         })
         
-        items = result.get('listIdentifiers', {}).get('items', [])
+        items = result.get('listIdentifierByAccountIdAndNameAndValue', {}).get('items', [])
         if not items:
             return None
             
