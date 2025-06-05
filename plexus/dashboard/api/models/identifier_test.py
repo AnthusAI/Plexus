@@ -56,7 +56,7 @@ def test_create_identifier(mock_client):
 def test_find_by_value(mock_client):
     """Test finding identifier by exact value."""
     mock_client.execute.return_value = {
-        'listIdentifiers': {
+        'listIdentifierByAccountIdAndValue': {
             'items': [{
                 'id': 'found-id',
                 'itemId': 'item-123',
@@ -79,7 +79,7 @@ def test_find_by_value(mock_client):
 def test_find_by_value_not_found(mock_client):
     """Test finding identifier when none exists."""
     mock_client.execute.return_value = {
-        'listIdentifiers': {
+        'listIdentifierByAccountIdAndValue': {
             'items': []
         }
     }
