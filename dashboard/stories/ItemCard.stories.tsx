@@ -1,5 +1,6 @@
 import React from 'react'
 import type { Meta, StoryObj } from '@storybook/react'
+import { fn } from '@storybook/test'
 import ItemCard, { ItemData } from '../components/items/ItemCard'
 
 // Get the current date and time
@@ -663,6 +664,7 @@ export const DetailSingleScorecard: Story = {
     variant: 'detail',
     item: sampleItems[0], // Single scorecard
     onClose: () => console.log('Close clicked'),
+    onScoreResultsRefetchReady: fn(),
   },
   parameters: {
     docs: {
@@ -683,6 +685,7 @@ export const DetailMultipleScorecards: Story = {
     variant: 'detail',
     item: sampleItems[10], // Multiple scorecards with long duration
     onClose: () => console.log('Close clicked'),
+    onScoreResultsRefetchReady: fn(),
   },
   parameters: {
     docs: {
@@ -703,6 +706,7 @@ export const DetailLoadingResults: Story = {
     variant: 'detail',
     item: sampleItems[3], // Loading state
     onClose: () => console.log('Close clicked'),
+    onScoreResultsRefetchReady: fn(),
   },
   parameters: {
     docs: {
@@ -776,6 +780,7 @@ export const DetailSkeleton: Story = {
     item: sampleItems[0],
     skeletonMode: true,
     onClose: () => console.log('Close clicked'),
+    onScoreResultsRefetchReady: fn(),
   },
   parameters: {
     docs: {
@@ -802,6 +807,7 @@ export const DetailMultipleScorecardsSkeleton: Story = {
     item: sampleItems[10], // Multiple scorecards
     skeletonMode: true,
     onClose: () => console.log('Close clicked'),
+    onScoreResultsRefetchReady: fn(),
   },
   parameters: {
     docs: {
