@@ -168,27 +168,27 @@ def test_update_identifier(sample_identifier):
     """Test updating an identifier."""
     sample_identifier._client.execute.return_value = {
         'updateIdentifier': {
-            'id': sample_identifier.id,
             'itemId': sample_identifier.itemId,
-            'name': 'Updated Name',
-            'value': sample_identifier.value,
+            'name': sample_identifier.name,
+            'value': 'Updated Value',
             'accountId': sample_identifier.accountId,
             'createdAt': sample_identifier.createdAt.isoformat(),
             'updatedAt': datetime.now(timezone.utc).isoformat(),
-            'url': sample_identifier.url
+            'url': 'https://updated.example.com'
         }
     }
     
-    updated = sample_identifier.update(name='Updated Name')
-    assert updated.name == 'Updated Name'
+    updated = sample_identifier.update(value='Updated Value', url='https://updated.example.com')
+    assert updated.value == 'Updated Value'
+    assert updated.url == 'https://updated.example.com'
 
 def test_update_prevents_modifying_immutable_fields(sample_identifier):
     """Test that certain fields cannot be modified after creation."""
     with pytest.raises(ValueError, match="createdAt cannot be modified"):
         sample_identifier.update(createdAt=datetime.now(timezone.utc))
     
-    with pytest.raises(ValueError, match="id cannot be modified"):
-        sample_identifier.update(id='new-id')
+    with pytest.raises(ValueError, match="name cannot be modified"):
+        sample_identifier.update(name='new-name')
     
     with pytest.raises(ValueError, match="itemId cannot be modified"):
         sample_identifier.update(itemId='new-item-id')
