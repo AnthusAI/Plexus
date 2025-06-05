@@ -1,0 +1,376 @@
+"""
+Test cases for Score model configuration pull and push functionality.
+
+These tests cover:
+- Pulling configurations from API to local files
+- Pushing local configurations back to API as new versions
+- Version conflict detection and content comparison
+- Error handling for various failure scenarios
+"""
+
+import unittest
+import tempfile
+import json
+from unittest.mock import Mock, patch, mock_open
+from pathlib import Path
+from plexus.dashboard.api.models.score import Score
+from plexus.dashboard.api.models.scorecard import Scorecard
+
+
+class MockAPIClient:
+    """Mock API client for testing Score configuration methods."""
+    
+    def __init__(self):
+        self.execute_responses = {}
+        self.call_history = []
+    
+    def execute(self, query, variables=None):
+        """Mock execute method that returns pre-configured responses."""
+        self.call_history.append({'query': query, 'variables': variables})
+        
+        # Return appropriate response based on query content
+        if 'GetScore' in query and 'championVersionId' in query:
+            return self.execute_responses.get('get_champion', {
+                'getScore': {'championVersionId': 'version-123'}
+            })
+        elif 'GetScoreVersion' in query:
+            return self.execute_responses.get('get_version', {
+                'getScoreVersion': {
+                    'configuration': 'test: yaml content',
+                    'createdAt': '2024-01-01T00:00:00Z',
+                    'updatedAt': '2024-01-01T00:00:00Z',
+                    'note': 'Test version'
+                }
+            })
+        elif 'GetSection' in query:
+            return self.execute_responses.get('get_section', {
+                'getSection': {'scorecardId': 'scorecard-456'}
+            })
+        elif 'CreateScoreVersion' in query:
+            return self.execute_responses.get('create_version', {
+                'createScoreVersion': {
+                    'id': 'new-version-789',
+                    'configuration': 'test: yaml content',
+                    'createdAt': '2024-01-02T00:00:00Z',
+                    'updatedAt': '2024-01-02T00:00:00Z',
+                    'note': 'New version',
+                    'score': {
+                        'id': 'score-123',
+                        'championVersionId': 'new-version-789'
+                    }
+                }
+            })
+        
+        return {}
+
+
+class TestScoreConfiguration(unittest.TestCase):
+    """Test cases for Score configuration pull/push functionality."""
+    
+    def setUp(self):
+        """Set up test fixtures."""
+        self.mock_client = MockAPIClient()
+        self.score = Score(
+            id='score-123',
+            name='Test Score',
+            key='test_score',
+            externalId='ext-123',
+            type='Classifier',
+            order=1,
+            sectionId='section-789',
+            client=self.mock_client
+        )
+        self.temp_dir = tempfile.mkdtemp()
+        
+    def tearDown(self):
+        """Clean up test fixtures."""
+        import shutil
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    @patch('plexus.dashboard.api.models.score.get_score_yaml_path')
+    @patch('plexus.dashboard.api.models.scorecard.Scorecard.get_by_id')
+    def test_pull_configuration_success(self, mock_get_scorecard, mock_get_path):
+        """Test successful configuration pull."""
+        # Setup mocks
+        mock_scorecard = Mock()
+        mock_scorecard.name = 'Test Scorecard'
+        mock_get_scorecard.return_value = mock_scorecard
+        
+        yaml_path = Path(self.temp_dir) / 'test_score.yaml'
+        mock_get_path.return_value = yaml_path
+        
+        # Execute pull
+        result = self.score.pull_configuration()
+        
+        # Verify success
+        self.assertTrue(result['success'])
+        self.assertEqual(result['version_id'], 'version-123')
+        self.assertIn('test_score.yaml', result['file_path'])
+        
+        # Verify file was created with correct content
+        self.assertTrue(yaml_path.exists())
+        with open(yaml_path, 'r') as f:
+            content = f.read()
+        
+        self.assertIn('# Pulled from Plexus API', content)
+        self.assertIn('# Score: Test Score', content)
+        self.assertIn('# Champion Version ID: version-123', content)
+        self.assertIn('test: yaml content', content)
+
+    def test_pull_configuration_no_client(self):
+        """Test pull configuration fails without API client."""
+        score_no_client = Score(
+            id='score-123',
+            name='Test Score',
+            key='test_score',
+            externalId='ext-123',
+            type='Classifier',
+            order=1,
+            sectionId='section-789',
+            client=None
+        )
+        
+        result = score_no_client.pull_configuration()
+        
+        self.assertFalse(result['success'])
+        self.assertEqual(result['error'], 'No API client available')
+
+    def test_pull_configuration_no_champion_version(self):
+        """Test pull configuration when no champion version exists."""
+        self.mock_client.execute_responses['get_champion'] = {
+            'getScore': {'championVersionId': None}
+        }
+        
+        result = self.score.pull_configuration()
+        
+        self.assertFalse(result['success'])
+        self.assertEqual(result['error'], 'NO_CHAMPION_VERSION')
+
+    @patch('plexus.dashboard.api.models.score.get_score_yaml_path')
+    @patch('plexus.dashboard.api.models.scorecard.Scorecard.get_by_id')
+    def test_push_configuration_success(self, mock_get_scorecard, mock_get_path):
+        """Test successful configuration push with content changes."""
+        # Setup mocks
+        mock_scorecard = Mock()
+        mock_scorecard.name = 'Test Scorecard'
+        mock_get_scorecard.return_value = mock_scorecard
+        
+        yaml_path = Path(self.temp_dir) / 'test_score.yaml'
+        mock_get_path.return_value = yaml_path
+        
+        # Create test YAML file with changed content
+        with open(yaml_path, 'w') as f:
+            f.write("# Pulled from Plexus API\n")
+            f.write("# Score: Test Score\n") 
+            f.write("# Champion Version ID: version-123\n")
+            f.write("#\n")
+            f.write("test: modified yaml content")
+        
+        # Setup different current version content to trigger push
+        self.mock_client.execute_responses['get_version'] = {
+            'getScoreVersion': {
+                'configuration': 'test: original yaml content'
+            }
+        }
+        
+        # Execute push
+        result = self.score.push_configuration(note='Test update')
+        
+        # Verify success
+        self.assertTrue(result['success'])
+        self.assertEqual(result['version_id'], 'new-version-789')
+        self.assertTrue(result['champion_updated'])
+        self.assertFalse(result['skipped'])
+
+    @patch('plexus.dashboard.api.models.score.get_score_yaml_path')
+    @patch('plexus.dashboard.api.models.scorecard.Scorecard.get_by_id')
+    def test_push_configuration_no_changes(self, mock_get_scorecard, mock_get_path):
+        """Test push configuration skips when no changes detected."""
+        # Setup mocks
+        mock_scorecard = Mock()
+        mock_scorecard.name = 'Test Scorecard'
+        mock_get_scorecard.return_value = mock_scorecard
+        
+        yaml_path = Path(self.temp_dir) / 'test_score.yaml'
+        mock_get_path.return_value = yaml_path
+        
+        # Create test YAML file with same content as current version
+        with open(yaml_path, 'w') as f:
+            f.write("# Pulled from Plexus API\n")
+            f.write("# Score: Test Score\n")
+            f.write("# Champion Version ID: version-123\n") 
+            f.write("#\n")
+            f.write("test: yaml content")
+        
+        # Setup same content in current version (exactly what will be extracted after comment stripping)
+        self.mock_client.execute_responses['get_version'] = {
+            'getScoreVersion': {
+                'configuration': 'test: yaml content'
+            }
+        }
+        
+        # Execute push
+        result = self.score.push_configuration(scorecard_name='Test Scorecard')
+        
+        # Verify skipped
+        self.assertTrue(result['success'])
+        self.assertEqual(result['version_id'], 'version-123')
+        self.assertFalse(result['champion_updated'])
+        self.assertTrue(result['skipped'])
+
+    @patch('plexus.dashboard.api.models.score.get_score_yaml_path')
+    def test_push_configuration_file_not_found(self, mock_get_path):
+        """Test push configuration fails when local file doesn't exist."""
+        yaml_path = Path(self.temp_dir) / 'nonexistent.yaml'
+        mock_get_path.return_value = yaml_path
+        
+        # Provide scorecard name to avoid API lookup
+        result = self.score.push_configuration(scorecard_name='Test Scorecard')
+        
+        self.assertFalse(result['success'])
+        self.assertEqual(result['error'], 'FILE_NOT_FOUND')
+
+    def test_push_configuration_no_client(self):
+        """Test push configuration fails without API client."""
+        score_no_client = Score(
+            id='score-123',
+            name='Test Score',
+            key='test_score',
+            externalId='ext-123',
+            type='Classifier',
+            order=1,
+            sectionId='section-789',
+            client=None
+        )
+        
+        result = score_no_client.push_configuration()
+        
+        self.assertFalse(result['success'])
+        self.assertEqual(result['error'], 'NO_CLIENT')
+
+    @patch('plexus.dashboard.api.models.score.get_score_yaml_path')
+    @patch('plexus.dashboard.api.models.scorecard.Scorecard.get_by_id')
+    def test_get_local_configuration_path_with_scorecard_name(self, mock_get_scorecard, mock_get_path):
+        """Test getting local path when scorecard name is provided."""
+        mock_get_path.return_value = Path('./scorecards/Test_Scorecard/test_score.yaml')
+        
+        result = self.score.get_local_configuration_path('Test Scorecard')
+        
+        mock_get_path.assert_called_once_with('Test Scorecard', 'Test Score')
+        # Should not call API when scorecard name is provided
+        mock_get_scorecard.assert_not_called()
+
+    @patch('plexus.dashboard.api.models.score.get_score_yaml_path')
+    @patch('plexus.dashboard.api.models.scorecard.Scorecard.get_by_id')
+    def test_get_local_configuration_path_lookup_scorecard(self, mock_get_scorecard, mock_get_path):
+        """Test getting local path when scorecard name needs to be looked up."""
+        # Setup mocks
+        mock_scorecard = Mock()
+        mock_scorecard.name = 'Looked Up Scorecard'
+        mock_get_scorecard.return_value = mock_scorecard
+        mock_get_path.return_value = Path('./scorecards/Looked_Up_Scorecard/test_score.yaml')
+        
+        result = self.score.get_local_configuration_path()
+        
+        # Verify section lookup occurred
+        section_call = self.mock_client.call_history[0]
+        self.assertIn('GetSection', section_call['query'])
+        self.assertEqual(section_call['variables']['id'], 'section-789')
+        
+        # Verify scorecard lookup with correct ID
+        mock_get_scorecard.assert_called_once_with('scorecard-456', self.mock_client)
+        
+        # Verify final path call
+        mock_get_path.assert_called_once_with('Looked Up Scorecard', 'Test Score')
+
+    def test_get_local_configuration_path_no_client(self):
+        """Test getting local path fails without API client when lookup needed."""
+        score_no_client = Score(
+            id='score-123',
+            name='Test Score', 
+            key='test_score',
+            externalId='ext-123',
+            type='Classifier',
+            order=1,
+            sectionId='section-789',
+            client=None
+        )
+        
+        with self.assertRaises(ValueError) as context:
+            score_no_client.get_local_configuration_path()
+        
+        self.assertIn('No API client available', str(context.exception))
+
+    @patch('plexus.dashboard.api.models.score.get_score_yaml_path')
+    @patch('plexus.dashboard.api.models.scorecard.Scorecard.get_by_id')
+    def test_error_handling_api_failures(self, mock_get_scorecard, mock_get_path):
+        """Test error handling for various API failure scenarios."""
+        yaml_path = Path(self.temp_dir) / 'test_score.yaml'
+        mock_get_path.return_value = yaml_path
+        
+        # Test API failure during pull
+        self.mock_client.execute_responses['get_champion'] = None
+        
+        result = self.score.pull_configuration()
+        
+        self.assertFalse(result['success'])
+        self.assertEqual(result['error'], 'API_ERROR')
+
+    @patch('plexus.dashboard.api.models.score.get_score_yaml_path')
+    def test_yaml_content_cleaning(self, mock_get_path):
+        """Test that metadata comments are properly stripped during push."""
+        yaml_path = Path(self.temp_dir) / 'test_score.yaml'
+        mock_get_path.return_value = yaml_path
+        
+        # Create YAML file with metadata comments and content
+        test_content = """# Pulled from Plexus API
+# Score: Test Score
+# Champion Version ID: version-123
+# Created: 2024-01-01T00:00:00Z
+# Updated: 2024-01-01T00:00:00Z
+# Note: Previous version
+#
+test: yaml content
+nested:
+  key: value
+# This comment should remain
+"""
+        
+        with open(yaml_path, 'w') as f:
+            f.write(test_content)
+        
+        # Setup API to return different content to trigger push
+        self.mock_client.execute_responses['get_version'] = {
+            'getScoreVersion': {
+                'configuration': 'different: content'
+            }
+        }
+        
+        # Execute push
+        self.score.push_configuration(scorecard_name='Test Scorecard')
+        
+        # Verify the API call used cleaned content (no metadata comments)
+        create_call = None
+        for call in self.mock_client.call_history:
+            if 'CreateScoreVersion' in call['query']:
+                create_call = call
+                break
+        
+        self.assertIsNotNone(create_call)
+        pushed_content = create_call['variables']['input']['configuration']
+        
+        # Should not contain metadata comments
+        self.assertNotIn('# Pulled from Plexus API', pushed_content)
+        self.assertNotIn('# Score:', pushed_content)
+        self.assertNotIn('# Champion Version ID:', pushed_content)
+        
+        # Should contain the actual YAML content
+        self.assertIn('test: yaml content', pushed_content)
+        self.assertIn('nested:', pushed_content)
+        self.assertIn('key: value', pushed_content)
+        # Regular comments should remain
+        self.assertIn('# This comment should remain', pushed_content)
+
+
+if __name__ == '__main__':
+    unittest.main() 

@@ -233,10 +233,12 @@ mcp = FastMCP(
     - get_plexus_scorecard_info: Get detailed information about a specific scorecard, including sections and scores
     - get_plexus_score_details: Get configuration and version details for a specific score within a scorecard
     
-    ## Score Configuration Management (NEW)
+    ## Score Configuration Management
     - find_plexus_score: Intelligent search to find a specific score within scorecards using flexible identifiers
-    - get_plexus_score_configuration: Get the YAML configuration for a specific score version
-    - update_plexus_score_configuration: Update a score's configuration by creating a new version (MUTATION)
+    - get_plexus_score_configuration: Get the YAML configuration for a specific score version (REFACTORED to use reusable Score methods)
+    - pull_plexus_score_configuration: Pull a score's champion version YAML configuration to a local file (NEW - uses Score.pull_configuration())
+    - push_plexus_score_configuration: Push a score's local YAML configuration file to create a new version (NEW - uses Score.push_configuration())
+    - update_plexus_score_configuration: Update a score's configuration by creating a new version with provided YAML content (REFACTORED to use Score.push_configuration())
     
     ## Evaluation Tools
     - run_plexus_evaluation: Dispatches a scorecard evaluation to run in the background. 
@@ -2128,6 +2130,115 @@ async def find_plexus_score(
         # Restore original stdout
         sys.stdout = old_stdout
 
+async def _find_score_instance(scorecard_identifier: str, score_identifier: str, client) -> Dict[str, Any]:
+    """
+    Helper function to find a Score instance from scorecard and score identifiers.
+    
+    Returns a dict containing:
+    - success: bool
+    - score: Score instance (if successful)
+    - scorecard_name: str (if successful)
+    - scorecard_id: str (if successful)
+    - error: str (if failed)
+    """
+    try:
+        from plexus.dashboard.api.models.score import Score
+        from plexus.dashboard.api.models.scorecard import Scorecard
+        from plexus.cli.ScorecardCommands import resolve_scorecard_identifier
+        
+        # Resolve scorecard identifier
+        scorecard_id = resolve_scorecard_identifier(client, scorecard_identifier)
+        if not scorecard_id:
+            return {
+                "success": False,
+                "error": f"Scorecard '{scorecard_identifier}' not found."
+            }
+
+        # Get scorecard name
+        scorecard = Scorecard.get_by_id(scorecard_id, client)
+        if not scorecard:
+            return {
+                "success": False,
+                "error": f"Could not retrieve scorecard data for ID '{scorecard_id}'."
+            }
+
+        # Find the score within the scorecard
+        scorecard_query = f"""
+        query GetScorecardForScore {{
+            getScorecard(id: "{scorecard_id}") {{
+                sections {{
+                    items {{
+                        id
+                        scores {{
+                            items {{
+                                id
+                                name
+                                key
+                                externalId
+                                type
+                                order
+                            }}
+                        }}
+                    }}
+                }}
+            }}
+        }}
+        """
+        
+        result = client.execute(scorecard_query)
+        scorecard_data = result.get('getScorecard')
+        if not scorecard_data:
+            return {
+                "success": False,
+                "error": f"Could not retrieve scorecard sections for '{scorecard_identifier}'."
+            }
+
+        # Find the specific score
+        found_score_data = None
+        found_section_id = None
+        for section in scorecard_data.get('sections', {}).get('items', []):
+            for score_data in section.get('scores', {}).get('items', []):
+                if (score_data.get('id') == score_identifier or 
+                    score_data.get('name') == score_identifier or 
+                    score_data.get('key') == score_identifier or 
+                    score_data.get('externalId') == score_identifier):
+                    found_score_data = score_data
+                    found_section_id = section['id']
+                    break
+            if found_score_data:
+                break
+
+        if not found_score_data:
+            return {
+                "success": False,
+                "error": f"Score '{score_identifier}' not found within scorecard '{scorecard_identifier}'."
+            }
+
+        # Create Score instance
+        score = Score(
+            id=found_score_data['id'],
+            name=found_score_data['name'],
+            key=found_score_data['key'],
+            externalId=found_score_data['externalId'],
+            type=found_score_data['type'],
+            order=found_score_data['order'],
+            sectionId=found_section_id,
+            client=client
+        )
+
+        return {
+            "success": True,
+            "score": score,
+            "scorecard_name": scorecard.name,
+            "scorecard_id": scorecard_id
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"Error finding score: {str(e)}"
+        }
+
 @mcp.tool()
 async def get_plexus_score_configuration(
     scorecard_identifier: str,
@@ -2170,9 +2281,7 @@ async def get_plexus_score_configuration(
             sys.stdout = client_stdout
             
             try:
-                from plexus.dashboard.api.client import PlexusDashboardClient
                 from plexus.cli.client_utils import create_client as create_dashboard_client
-                from plexus.cli.ScorecardCommands import resolve_scorecard_identifier
                 client = create_dashboard_client()
             finally:
                 client_output = client_stdout.getvalue()
@@ -2186,101 +2295,126 @@ async def get_plexus_score_configuration(
         if not client:
             return "Error: Could not create dashboard client."
 
-        # Resolve scorecard identifier
-        scorecard_id = resolve_scorecard_identifier(client, scorecard_identifier)
-        if not scorecard_id:
-            return f"Error: Scorecard '{scorecard_identifier}' not found."
+        # Find the score instance
+        find_result = await _find_score_instance(scorecard_identifier, score_identifier, client)
+        if not find_result["success"]:
+            return find_result["error"]
+        
+        score = find_result["score"]
+        scorecard_name = find_result["scorecard_name"]
+        scorecard_id = find_result["scorecard_id"]
 
-        # Find the score within the scorecard
-        scorecard_query = f"""
-        query GetScorecardForScore {{
-            getScorecard(id: "{scorecard_id}") {{
-                id
-                name
-                sections {{
-                    items {{
-                        scores {{
-                            items {{
-                                id
-                                name
-                                key
-                                externalId
-                                championVersionId
-                            }}
-                        }}
-                    }}
+        # Get configuration using the Score model method
+        if version_id:
+            # If specific version requested, get that version directly
+            version_query = f"""
+            query GetScoreVersion {{
+                getScoreVersion(id: "{version_id}") {{
+                    id
+                    configuration
+                    createdAt
+                    updatedAt
+                    note
+                    isFeatured
+                    parentVersionId
                 }}
             }}
-        }}
-        """
-        
-        result = client.execute(scorecard_query)
-        scorecard_data = result.get('getScorecard')
-        if not scorecard_data:
-            return f"Error: Could not retrieve scorecard data for '{scorecard_identifier}'."
+            """
+            
+            version_result = client.execute(version_query)
+            version_data = version_result.get('getScoreVersion')
+            
+            if not version_data:
+                return f"Error: Version '{version_id}' not found."
 
-        # Find the specific score
-        found_score = None
-        for section in scorecard_data.get('sections', {}).get('items', []):
-            for score in section.get('scores', {}).get('items', []):
-                if (score.get('id') == score_identifier or 
-                    score.get('name') == score_identifier or 
-                    score.get('key') == score_identifier or 
-                    score.get('externalId') == score_identifier):
-                    found_score = score
-                    break
-            if found_score:
-                break
-
-        if not found_score:
-            return f"Error: Score '{score_identifier}' not found within scorecard '{scorecard_identifier}'."
-
-        # Determine which version to fetch
-        target_version_id = version_id or found_score.get('championVersionId')
-        if not target_version_id:
-            return f"Error: No version specified and no champion version found for score '{score_identifier}'."
-
-        # Get the version configuration
-        version_query = f"""
-        query GetScoreVersion {{
-            getScoreVersion(id: "{target_version_id}") {{
-                id
-                configuration
-                createdAt
-                updatedAt
-                note
-                isFeatured
-                parentVersionId
+            configuration = version_data.get('configuration')
+            if not configuration:
+                return f"Error: No configuration found for version '{version_id}'."
+                
+            # Check if this is the champion version
+            champion_query = f"""
+            query GetScoreChampion {{
+                getScore(id: "{score.id}") {{
+                    championVersionId
+                }}
             }}
-        }}
-        """
-        
-        version_result = client.execute(version_query)
-        version_data = version_result.get('getScoreVersion')
-        
-        if not version_data:
-            return f"Error: Version '{target_version_id}' not found."
+            """
+            champion_result = client.execute(champion_query)
+            champion_version_id = champion_result.get('getScore', {}).get('championVersionId')
+            is_champion = version_id == champion_version_id
 
-        configuration = version_data.get('configuration')
-        if not configuration:
-            return f"Error: No configuration found for version '{target_version_id}'."
+            return {
+                "scoreId": score.id,
+                "scoreName": score.name,
+                "scorecardName": scorecard_name,
+                "versionId": version_data['id'],
+                "isChampionVersion": is_champion,
+                "configuration": configuration,
+                "versionMetadata": {
+                    "createdAt": version_data.get('createdAt'),
+                    "updatedAt": version_data.get('updatedAt'),
+                    "note": version_data.get('note'),
+                    "isFeatured": version_data.get('isFeatured'),
+                    "parentVersionId": version_data.get('parentVersionId')
+                },
+                "dashboardUrl": get_plexus_url(f"lab/scorecards/{scorecard_id}/scores/{score.id}")
+            }
+        else:
+            # Use Score.get_configuration() for champion version
+            config_dict = score.get_configuration()
+            if not config_dict:
+                return f"Error: No champion version configuration found for score '{score.name}'."
+            
+            # Convert dict back to YAML string for consistency with API
+            import yaml
+            configuration = yaml.dump(config_dict, default_flow_style=False, sort_keys=False)
+            
+            # Get champion version metadata
+            champion_query = f"""
+            query GetScoreWithChampionVersion {{
+                getScore(id: "{score.id}") {{
+                    championVersionId
+                }}
+            }}
+            """
+            champion_result = client.execute(champion_query)
+            champion_version_id = champion_result.get('getScore', {}).get('championVersionId')
+            
+            if champion_version_id:
+                version_query = f"""
+                query GetScoreVersion {{
+                    getScoreVersion(id: "{champion_version_id}") {{
+                        id
+                        createdAt
+                        updatedAt
+                        note
+                        isFeatured
+                        parentVersionId
+                    }}
+                }}
+                """
+                
+                version_result = client.execute(version_query)
+                version_data = version_result.get('getScoreVersion', {})
+            else:
+                version_data = {}
 
-        return {
-            "scoreId": found_score['id'],
-            "scoreName": found_score['name'],
-            "scorecardName": scorecard_data['name'],
-            "versionId": version_data['id'],
-            "isChampionVersion": target_version_id == found_score.get('championVersionId'),
-            "configuration": configuration,
-            "versionMetadata": {
-                "createdAt": version_data.get('createdAt'),
-                "updatedAt": version_data.get('updatedAt'),
-                "note": version_data.get('note'),
-                "isFeatured": version_data.get('isFeatured'),
-                "parentVersionId": version_data.get('parentVersionId')
-            },
-            "dashboardUrl": get_plexus_url(f"lab/scorecards/{scorecard_id}/scores/{found_score['id']}")
-        }
+            return {
+                "scoreId": score.id,
+                "scoreName": score.name,
+                "scorecardName": scorecard_name,
+                "versionId": champion_version_id,
+                "isChampionVersion": True,
+                "configuration": configuration,
+                "versionMetadata": {
+                    "createdAt": version_data.get('createdAt'),
+                    "updatedAt": version_data.get('updatedAt'),
+                    "note": version_data.get('note'),
+                    "isFeatured": version_data.get('isFeatured'),
+                    "parentVersionId": version_data.get('parentVersionId')
+                },
+                "dashboardUrl": get_plexus_url(f"lab/scorecards/{scorecard_id}/scores/{score.id}")
+            }
         
     except Exception as e:
         logger.error(f"Error getting score configuration: {str(e)}", exc_info=True)
@@ -2294,6 +2428,232 @@ async def get_plexus_score_configuration(
         sys.stdout = old_stdout
 
 @mcp.tool()
+async def pull_plexus_score_configuration(
+    scorecard_identifier: str,
+    score_identifier: str
+) -> Union[str, Dict[str, Any]]:
+    """
+    Pulls a score's champion version YAML configuration to a local file.
+    Uses the reusable Score.pull_configuration() method for implementation.
+    
+    Parameters:
+    - scorecard_identifier: Identifier for the parent scorecard (ID, name, key, or external ID)
+    - score_identifier: Identifier for the score (ID, name, key, or external ID)
+    
+    Returns:
+    - Information about the pulled configuration, including local file path
+    """
+    # Temporarily redirect stdout to capture any unexpected output
+    old_stdout = sys.stdout
+    temp_stdout = StringIO()
+    sys.stdout = temp_stdout
+    
+    try:
+        # Check if Plexus core modules are available
+        if not PLEXUS_CORE_AVAILABLE:
+            return "Error: Plexus Dashboard components are not available. Core modules failed to import."
+        
+        # Check if we have the necessary credentials
+        api_url = os.environ.get('PLEXUS_API_URL', '')
+        api_key = os.environ.get('PLEXUS_API_KEY', '')
+        
+        if not api_url or not api_key:
+            logger.warning("Missing API credentials. Ensure .env file is loaded.")
+            return "Error: Missing API credentials. Use --env-file to specify your .env file path."
+        
+        # Create the client
+        try:
+            client_stdout = StringIO()
+            saved_stdout = sys.stdout
+            sys.stdout = client_stdout
+            
+            try:
+                from plexus.cli.client_utils import create_client as create_dashboard_client
+                client = create_dashboard_client()
+            finally:
+                client_output = client_stdout.getvalue()
+                if client_output:
+                    logger.warning(f"Captured unexpected stdout during client creation in pull_plexus_score_configuration: {client_output}")
+                sys.stdout = saved_stdout
+        except Exception as client_err:
+            logger.error(f"Error creating dashboard client: {str(client_err)}", exc_info=True)
+            return f"Error creating dashboard client: {str(client_err)}"
+            
+        if not client:
+            return "Error: Could not create dashboard client."
+
+        # Find the score instance
+        find_result = await _find_score_instance(scorecard_identifier, score_identifier, client)
+        if not find_result["success"]:
+            return find_result["error"]
+        
+        score = find_result["score"]
+        scorecard_name = find_result["scorecard_name"]
+        scorecard_id = find_result["scorecard_id"]
+
+        # Use the Score model's pull_configuration method
+        pull_result = score.pull_configuration(scorecard_name=scorecard_name)
+        
+        if not pull_result["success"]:
+            return f"Error: {pull_result.get('message', 'Failed to pull configuration')}"
+        
+        return {
+            "success": True,
+            "scoreId": score.id,
+            "scoreName": score.name,
+            "scorecardName": scorecard_name,
+            "filePath": pull_result["file_path"],
+            "versionId": pull_result["version_id"],
+            "message": pull_result["message"],
+            "dashboardUrl": get_plexus_url(f"lab/scorecards/{scorecard_id}/scores/{score.id}")
+        }
+        
+    except Exception as e:
+        logger.error(f"Error pulling score configuration: {str(e)}", exc_info=True)
+        return f"Error pulling score configuration: {str(e)}"
+    finally:
+        # Check if anything was written to stdout
+        captured_output = temp_stdout.getvalue()
+        if captured_output:
+            logger.warning(f"Captured unexpected stdout during pull_plexus_score_configuration: {captured_output}")
+        # Restore original stdout
+        sys.stdout = old_stdout
+
+@mcp.tool()
+async def push_plexus_score_configuration(
+    scorecard_identifier: str,
+    score_identifier: str,
+    version_note: Optional[str] = None
+) -> Union[str, Dict[str, Any]]:
+    """
+    Pushes a score's local YAML configuration file to create a new version.
+    Uses the reusable Score.push_configuration() method for implementation.
+    
+    Parameters:
+    - scorecard_identifier: Identifier for the parent scorecard (ID, name, key, or external ID)
+    - score_identifier: Identifier for the score (ID, name, key, or external ID)
+    - version_note: Optional note describing the changes made in this version
+    
+    Returns:
+    - Information about the pushed configuration and new version
+    """
+    # Temporarily redirect stdout to capture any unexpected output
+    old_stdout = sys.stdout
+    temp_stdout = StringIO()
+    sys.stdout = temp_stdout
+    
+    try:
+        # Check if Plexus core modules are available
+        if not PLEXUS_CORE_AVAILABLE:
+            return "Error: Plexus Dashboard components are not available. Core modules failed to import."
+        
+        # Check if we have the necessary credentials
+        api_url = os.environ.get('PLEXUS_API_URL', '')
+        api_key = os.environ.get('PLEXUS_API_KEY', '')
+        
+        if not api_url or not api_key:
+            logger.warning("Missing API credentials. Ensure .env file is loaded.")
+            return "Error: Missing API credentials. Use --env-file to specify your .env file path."
+        
+        # Create the client
+        try:
+            client_stdout = StringIO()
+            saved_stdout = sys.stdout
+            sys.stdout = client_stdout
+            
+            try:
+                from plexus.cli.client_utils import create_client as create_dashboard_client
+                client = create_dashboard_client()
+            finally:
+                client_output = client_stdout.getvalue()
+                if client_output:
+                    logger.warning(f"Captured unexpected stdout during client creation in push_plexus_score_configuration: {client_output}")
+                sys.stdout = saved_stdout
+        except Exception as client_err:
+            logger.error(f"Error creating dashboard client: {str(client_err)}", exc_info=True)
+            return f"Error creating dashboard client: {str(client_err)}"
+            
+        if not client:
+            return "Error: Could not create dashboard client."
+
+        # Find the score instance
+        find_result = await _find_score_instance(scorecard_identifier, score_identifier, client)
+        if not find_result["success"]:
+            return find_result["error"]
+        
+        score = find_result["score"]
+        scorecard_name = find_result["scorecard_name"]
+        scorecard_id = find_result["scorecard_id"]
+
+        # Use the Score model's push_configuration method
+        push_result = score.push_configuration(
+            scorecard_name=scorecard_name,
+            note=version_note or "Updated via MCP pull/push workflow"
+        )
+        
+        if not push_result["success"]:
+            return f"Error: {push_result.get('message', 'Failed to push configuration')}"
+        
+        # Get additional metadata for comprehensive response
+        new_version_id = push_result["version_id"]
+        
+        # Get current champion version ID for comparison
+        champion_query = f"""
+        query GetScore {{
+            getScore(id: "{score.id}") {{
+                championVersionId
+            }}
+        }}
+        """
+        champion_result = client.execute(champion_query)
+        current_champion_id = champion_result.get('getScore', {}).get('championVersionId')
+        
+        # Get version creation timestamp if a new version was created
+        if not push_result.get("skipped", False):
+            version_query = f"""
+            query GetScoreVersion {{
+                getScoreVersion(id: "{new_version_id}") {{
+                    createdAt
+                    configuration
+                }}
+            }}
+            """
+            version_result = client.execute(version_query)
+            version_data = version_result.get('getScoreVersion', {})
+            created_at = version_data.get('createdAt')
+            config_length = len(version_data.get('configuration', ''))
+        else:
+            created_at = None
+            config_length = 0
+
+        return {
+            "success": True,
+            "scoreId": score.id,
+            "scoreName": score.name,
+            "scorecardName": scorecard_name,
+            "newVersionId": new_version_id,
+            "previousChampionVersionId": current_champion_id if current_champion_id != new_version_id else None,
+            "versionNote": version_note or "Updated via MCP pull/push workflow",
+            "configurationLength": config_length,
+            "createdAt": created_at,
+            "championUpdated": push_result.get("champion_updated", True),
+            "skipped": push_result.get("skipped", False),
+            "message": push_result["message"],
+            "dashboardUrl": get_plexus_url(f"lab/scorecards/{scorecard_id}/scores/{score.id}")
+        }
+        
+    except Exception as e:
+        logger.error(f"Error pushing score configuration: {str(e)}", exc_info=True)
+        return f"Error pushing score configuration: {str(e)}"
+    finally:
+        # Check if anything was written to stdout
+        captured_output = temp_stdout.getvalue()
+        if captured_output:
+            logger.warning(f"Captured unexpected stdout during push_plexus_score_configuration: {captured_output}")
+        # Restore original stdout
+        sys.stdout = old_stdout
+
+@mcp.tool()
 async def update_plexus_score_configuration(
     scorecard_identifier: str,
     score_identifier: str,
@@ -2302,7 +2662,7 @@ async def update_plexus_score_configuration(
 ) -> Union[str, Dict[str, Any]]:
     """
     Updates a score's configuration by creating a new version with the provided YAML content.
-    This is the first mutation tool in the MCP server.
+    Uses the reusable Score.push_configuration() method for implementation.
     
     Parameters:
     - scorecard_identifier: Identifier for the parent scorecard (ID, name, key, or external ID)
@@ -2338,9 +2698,7 @@ async def update_plexus_score_configuration(
             sys.stdout = client_stdout
             
             try:
-                from plexus.dashboard.api.client import PlexusDashboardClient
                 from plexus.cli.client_utils import create_client as create_dashboard_client
-                from plexus.cli.ScorecardCommands import resolve_scorecard_identifier
                 client = create_dashboard_client()
             finally:
                 client_output = client_stdout.getvalue()
@@ -2361,140 +2719,88 @@ async def update_plexus_score_configuration(
         except yaml.YAMLError as e:
             return f"Error: Invalid YAML configuration: {str(e)}"
 
-        # Resolve scorecard identifier
-        scorecard_id = resolve_scorecard_identifier(client, scorecard_identifier)
-        if not scorecard_id:
-            return f"Error: Scorecard '{scorecard_identifier}' not found."
+        # Find the score instance
+        find_result = await _find_score_instance(scorecard_identifier, score_identifier, client)
+        if not find_result["success"]:
+            return find_result["error"]
+        
+        score = find_result["score"]
+        scorecard_name = find_result["scorecard_name"]
+        scorecard_id = find_result["scorecard_id"]
 
-        # Find the score within the scorecard
-        scorecard_query = f"""
-        query GetScorecardForScore {{
-            getScorecard(id: "{scorecard_id}") {{
-                id
-                name
-                sections {{
-                    items {{
-                        scores {{
-                            items {{
-                                id
-                                name
-                                key
-                                externalId
-                                championVersionId
-                            }}
-                        }}
-                    }}
+        # Create a temporary YAML file with the configuration
+        import tempfile
+        import os
+        
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as temp_file:
+            temp_file.write(yaml_configuration)
+            temp_yaml_path = temp_file.name
+        
+        try:
+            # Temporarily override the get_local_configuration_path method to return our temp file
+            from pathlib import Path
+            original_path_method = score.get_local_configuration_path
+            score.get_local_configuration_path = lambda scorecard_name=None: Path(temp_yaml_path)
+            
+            # Use the Score model's push_configuration method
+            push_result = score.push_configuration(
+                scorecard_name=scorecard_name,
+                note=version_note or "Updated via MCP server"
+            )
+            
+            # Restore the original method
+            score.get_local_configuration_path = original_path_method
+            
+            if not push_result["success"]:
+                return f"Error: {push_result.get('message', 'Failed to push configuration')}"
+            
+            # Get additional metadata for comprehensive response
+            new_version_id = push_result["version_id"]
+            
+            # Get current champion version ID for comparison
+            champion_query = f"""
+            query GetScore {{
+                getScore(id: "{score.id}") {{
+                    championVersionId
                 }}
             }}
-        }}
-        """
-        
-        result = client.execute(scorecard_query)
-        scorecard_data = result.get('getScorecard')
-        if not scorecard_data:
-            return f"Error: Could not retrieve scorecard data for '{scorecard_identifier}'."
-
-        # Find the specific score
-        found_score = None
-        for section in scorecard_data.get('sections', {}).get('items', []):
-            for score in section.get('scores', {}).get('items', []):
-                if (score.get('id') == score_identifier or 
-                    score.get('name') == score_identifier or 
-                    score.get('key') == score_identifier or 
-                    score.get('externalId') == score_identifier):
-                    found_score = score
-                    break
-            if found_score:
-                break
-
-        if not found_score:
-            return f"Error: Score '{score_identifier}' not found within scorecard '{scorecard_identifier}'."
-
-        score_id = found_score['id']
-        current_champion_version_id = found_score.get('championVersionId')
-
-        # Create new score version
-        create_version_mutation = """
-        mutation CreateScoreVersion($input: CreateScoreVersionInput!) {
-            createScoreVersion(input: $input) {
-                id
-                scoreId
-                configuration
-                createdAt
-                updatedAt
-                note
-                isFeatured
-                parentVersionId
-            }
-        }
-        """
-        
-        version_input = {
-            'scoreId': score_id,
-            'configuration': yaml_configuration,
-            'isFeatured': True,  # Mark as featured to make it the new champion
-        }
-        
-        if current_champion_version_id:
-            version_input['parentVersionId'] = current_champion_version_id
+            """
+            champion_result = client.execute(champion_query)
+            current_champion_id = champion_result.get('getScore', {}).get('championVersionId')
             
-        if version_note:
-            version_input['note'] = version_note
-        else:
-            version_input['note'] = 'Updated via MCP server'
+            # Get version creation timestamp
+            if not push_result.get("skipped", False):
+                version_query = f"""
+                query GetScoreVersion {{
+                    getScoreVersion(id: "{new_version_id}") {{
+                        createdAt
+                    }}
+                }}
+                """
+                version_result = client.execute(version_query)
+                created_at = version_result.get('getScoreVersion', {}).get('createdAt')
+            else:
+                created_at = None
 
-        version_result = client.execute(create_version_mutation, {'input': version_input})
-        
-        if 'errors' in version_result:
-            error_details = json.dumps(version_result['errors'], indent=2)
-            logger.error(f"Error creating score version: {error_details}")
-            return f"Error creating score version: {error_details}"
-
-        new_version = version_result.get('createScoreVersion')
-        if not new_version:
-            return "Error: Failed to create new score version."
-
-        new_version_id = new_version['id']
-
-        # Update the score to point to the new champion version
-        update_score_mutation = """
-        mutation UpdateScore($input: UpdateScoreInput!) {
-            updateScore(input: $input) {
-                id
-                name
-                championVersionId
+            return {
+                "success": True,
+                "scoreId": score.id,
+                "scoreName": score.name,
+                "scorecardName": scorecard_name,
+                "newVersionId": new_version_id,
+                "previousChampionVersionId": current_champion_id if current_champion_id != new_version_id else None,
+                "versionNote": version_note or "Updated via MCP server",
+                "configurationLength": len(yaml_configuration),
+                "createdAt": created_at,
+                "championUpdated": push_result.get("champion_updated", True),
+                "skipped": push_result.get("skipped", False),
+                "dashboardUrl": get_plexus_url(f"lab/scorecards/{scorecard_id}/scores/{score.id}")
             }
-        }
-        """
-        
-        update_input = {
-            'id': score_id,
-            'championVersionId': new_version_id
-        }
-        
-        update_result = client.execute(update_score_mutation, {'input': update_input})
-        
-        if 'errors' in update_result:
-            error_details = json.dumps(update_result['errors'], indent=2)
-            logger.error(f"Error updating score champion version: {error_details}")
-            return f"Error updating score champion version: {error_details}"
-
-        updated_score = update_result.get('updateScore')
-        if not updated_score:
-            return "Warning: New version created but failed to update champion version."
-
-        return {
-            "success": True,
-            "scoreId": score_id,
-            "scoreName": found_score['name'],
-            "scorecardName": scorecard_data['name'],
-            "newVersionId": new_version_id,
-            "previousChampionVersionId": current_champion_version_id,
-            "versionNote": version_note or "Updated via MCP server",
-            "configurationLength": len(yaml_configuration),
-            "createdAt": new_version.get('createdAt'),
-            "dashboardUrl": get_plexus_url(f"lab/scorecards/{scorecard_id}/scores/{score_id}")
-        }
+            
+        finally:
+            # Clean up temporary file
+            if os.path.exists(temp_yaml_path):
+                os.unlink(temp_yaml_path)
         
     except Exception as e:
         logger.error(f"Error updating score configuration: {str(e)}", exc_info=True)
