@@ -415,6 +415,7 @@ const schema = a.schema({
             idx("itemId"),
             idx("scoringJobId"),
             idx("scorecardId").sortKeys(["updatedAt"]),
+            idx("scorecardId").sortKeys(["itemId", "createdAt"]).name("byScorecardItemAndCreatedAt"),
             idx("evaluationId"),
             idx("scoreVersionId"),
             idx("scoreId"),
