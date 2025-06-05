@@ -133,13 +133,20 @@ const ScorecardContext: React.FC<ScorecardContextProps> = ({
     setSelectedScore(value === "all" ? null : value);
   };
 
+  const handleScorecardChange = (value: string) => {
+    const newValue = value === "all" ? null : value;
+    console.log('🏷️ SCORECARD SELECTION CHANGED:');
+    console.log('- Raw value:', value);
+    console.log('- New scorecard ID:', newValue);
+    console.log('- Previous scorecard ID:', selectedScorecard);
+    setSelectedScorecard(newValue);
+  };
+
   return (
     <div className="@container">
       <div className="flex @[450px]:flex-row flex-col @[450px]:flex-wrap gap-2">
         <Select 
-          onValueChange={skeletonMode ? undefined : (value => {
-            setSelectedScorecard(value === "all" ? null : value)
-          })}
+          onValueChange={skeletonMode ? undefined : handleScorecardChange}
           value={skeletonMode ? undefined : (selectedScorecard || "all")}
           disabled={skeletonMode}
         >

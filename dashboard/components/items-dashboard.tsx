@@ -940,24 +940,23 @@ function ItemsDashboardInner() {
         });
         itemsFromDirectQuery = directQuery.data?.listItemByScoreIdAndCreatedAt?.items || [];
       } else if (useScorecard) {
-        const directQuery = await graphqlRequest<{ 
-          listScorecardProcessedItemByScorecardId: { 
+        const directQuery = await graphqlRequest<{
+          listScoreResultByScorecardIdAndUpdatedAt: {
             items: Array<{
               itemId: string;
-              processedAt?: string;
               item: any;
             }>;
             nextToken: string | null;
           }
         }>(`
-          query ListItemsDirect($scorecardId: ID!, $limit: Int!) {
-            listScorecardProcessedItemByScorecardId(
+          query SilentRefreshItemsByScorecardViaScoreResults($scorecardId: String!, $limit: Int!) {
+            listScoreResultByScorecardIdAndUpdatedAt(
               scorecardId: $scorecardId,
+              sortDirection: DESC,
               limit: $limit
             ) {
               items {
                 itemId
-                processedAt
                 item {
                   id
                   externalId
@@ -989,14 +988,24 @@ function ItemsDashboardInner() {
           scorecardId: selectedScorecard,
           limit: 100
         });
-        itemsFromDirectQuery = directQuery.data?.listScorecardProcessedItemByScorecardId?.items
-          ?.map(association => association.item)
-          ?.filter(item => item !== null)
-          ?.sort((a, b) => {
+        
+        if (directQuery.data?.listScoreResultByScorecardIdAndUpdatedAt?.items) {
+          // Get unique items from score results
+          const itemsMap = new Map();
+          directQuery.data.listScoreResultByScorecardIdAndUpdatedAt.items.forEach(result => {
+            if (result.item && !itemsMap.has(result.item.id)) {
+              itemsMap.set(result.item.id, result.item);
+            }
+          });
+          
+          itemsFromDirectQuery = Array.from(itemsMap.values()).sort((a, b) => {
             const dateA = new Date(a.createdAt || '').getTime();
             const dateB = new Date(b.createdAt || '').getTime();
             return dateB - dateA;
-          }) || [];
+          });
+        } else {
+          itemsFromDirectQuery = [];
+        }
       } else {
         const directQuery = await graphqlRequest<{ listItemByAccountIdAndCreatedAt: { items: any[], nextToken: string | null } }>(`
           query ListItemsDirect($accountId: String!, $limit: Int!) {
@@ -1427,35 +1436,25 @@ function ItemsDashboardInner() {
             nextTokenFromDirectQuery = directQuery.data.listItemByScoreIdAndCreatedAt.nextToken;
           }
         } else if (useScorecard) {
-          // If only a scorecard is selected, get items through ScorecardProcessedItem join table
-          const directQuery = await graphqlRequest<{ 
-            listScorecardProcessedItemByScorecardId: { 
+          // If only a scorecard is selected, get items through ScoreResults
+          const directQuery = await graphqlRequest<{
+            listScoreResultByScorecardIdAndUpdatedAt: {
               items: Array<{
                 itemId: string;
-                processedAt?: string;
-                item: {
-                  id: string;
-                  externalId?: string;
-                  description?: string;
-                  accountId: string;
-                  evaluationId?: string;
-                  updatedAt?: string;
-                  createdAt?: string;
-                  isEvaluation: boolean;
-                };
+                item: any;
               }>;
               nextToken: string | null;
             }
           }>(`
-            query ListItemsMoreDirect($scorecardId: ID!, $limit: Int!, $nextToken: String) {
-              listScorecardProcessedItemByScorecardId(
+            query LoadMoreItemsByScorecardViaScoreResults($scorecardId: String!, $limit: Int!, $nextToken: String) {
+              listScoreResultByScorecardIdAndUpdatedAt(
                 scorecardId: $scorecardId,
+                sortDirection: DESC,
                 limit: $limit,
                 nextToken: $nextToken
               ) {
                 items {
                   itemId
-                  processedAt
                   item {
                     id
                     externalId
@@ -1489,18 +1488,21 @@ function ItemsDashboardInner() {
             nextToken: nextToken
           });
           
-          if (directQuery.data?.listScorecardProcessedItemByScorecardId?.items) {
-            // Extract items and sort by createdAt in descending order (most recent first)
-            itemsFromDirectQuery = directQuery.data.listScorecardProcessedItemByScorecardId.items
-              .map(association => association.item)
-              .filter(item => item !== null)
-              .sort((a, b) => {
-                // Sort by createdAt (newest first)
-                const dateA = new Date(a.createdAt || '').getTime();
-                const dateB = new Date(b.createdAt || '').getTime();
-                return dateB - dateA; // DESC order (newest first)
-              });
-            nextTokenFromDirectQuery = directQuery.data.listScorecardProcessedItemByScorecardId.nextToken;
+          if (directQuery.data?.listScoreResultByScorecardIdAndUpdatedAt?.items) {
+            // Get unique items from score results
+            const itemsMap = new Map();
+            directQuery.data.listScoreResultByScorecardIdAndUpdatedAt.items.forEach(result => {
+              if (result.item && !itemsMap.has(result.item.id)) {
+                itemsMap.set(result.item.id, result.item);
+              }
+            });
+            
+            itemsFromDirectQuery = Array.from(itemsMap.values()).sort((a, b) => {
+              const dateA = new Date(a.createdAt || '').getTime();
+              const dateB = new Date(b.createdAt || '').getTime();
+              return dateB - dateA;
+            });
+            nextTokenFromDirectQuery = directQuery.data.listScoreResultByScorecardIdAndUpdatedAt.nextToken;
           }
         } else {
           // If neither scorecard nor score is selected, filter by accountId
@@ -1601,6 +1603,7 @@ function ItemsDashboardInner() {
         
         if (useScore) {
           // If a score is selected, filter by scoreId
+          console.debug('Filtering by scoreId:', selectedScore);
           const directQuery = await graphqlRequest<{ listItemByScoreIdAndCreatedAt: { items: any[], nextToken: string | null } }>(`
             query ListItemsDirect($scoreId: String!, $limit: Int!) {
               listItemByScoreIdAndCreatedAt(
@@ -1644,76 +1647,166 @@ function ItemsDashboardInner() {
             nextTokenFromDirectQuery = directQuery.data.listItemByScoreIdAndCreatedAt.nextToken;
           }
         } else if (useScorecard) {
-          // If only a scorecard is selected, get items through ScorecardProcessedItem join table
-          const directQuery = await graphqlRequest<{ 
-            listScorecardProcessedItemByScorecardId: { 
-              items: Array<{
-                itemId: string;
-                processedAt?: string;
-                item: {
-                  id: string;
-                  externalId?: string;
-                  description?: string;
-                  accountId: string;
-                  evaluationId?: string;
-                  updatedAt?: string;
-                  createdAt?: string;
-                  isEvaluation: boolean;
-                };
-              }>;
-              nextToken: string | null;
-            }
-          }>(`
-            query ListItemsDirect($scorecardId: ID!, $limit: Int!) {
-              listScorecardProcessedItemByScorecardId(
-                scorecardId: $scorecardId,
-                limit: $limit
-              ) {
-                items {
-                  itemId
-                  processedAt
-                  item {
-                    id
-                    externalId
-                    description
-                    accountId
-                    evaluationId
-                    updatedAt
+          // If only a scorecard is selected, use optimized ScoreResult GSI
+          console.log('🔍 SCORECARD FILTERING DEBUG (OPTIMIZED GSI):');
+          console.log('- Selected scorecard ID:', selectedScorecard);
+          console.log('- Account ID:', accountId);
+          
+          try {
+            // Try the new optimized GSI first - sorted by itemId, createdAt for efficient deduplication
+            const directQuery = await graphqlRequest<{
+              listScoreResultByScorecardIdAndItemIdAndCreatedAt: {
+                items: Array<{
+                  itemId: string;
+                  item: any;
+                  createdAt: string;
+                }>;
+                nextToken: string | null;
+              }
+            }>(`
+              query GetItemsByScorecardOptimized($scorecardId: String!, $limit: Int!) {
+                listScoreResultByScorecardIdAndItemIdAndCreatedAt(
+                  scorecardId: $scorecardId,
+                  sortDirection: DESC,
+                  limit: $limit
+                ) {
+                  items {
+                    itemId
                     createdAt
-                    isEvaluation
-                    identifiers
-                    metadata
-                    attachedFiles
-                    text
-                    itemIdentifiers {
-                      items {
-                        itemId
-                        name
-                        value
-                        url
-                        position
+                    item {
+                      id
+                      externalId
+                      description
+                      accountId
+                      evaluationId
+                      updatedAt
+                      createdAt
+                      isEvaluation
+                      identifiers
+                      metadata
+                      attachedFiles
+                      text
+                      itemIdentifiers {
+                        items {
+                          itemId
+                          name
+                          value
+                          url
+                          position
+                        }
                       }
                     }
                   }
+                  nextToken
                 }
-                nextToken
               }
-            }
-          `, {
-            scorecardId: selectedScorecard,
-            limit: 100
-          });
-          
-          if (directQuery.data?.listScorecardProcessedItemByScorecardId?.items) {
-            itemsFromDirectQuery = directQuery.data.listScorecardProcessedItemByScorecardId.items
-              .map(association => association.item)
-              .filter(item => item !== null)
-              .sort((a, b) => {
+            `, {
+              scorecardId: selectedScorecard,
+              limit: 300  // Query more since we'll deduplicate
+            });
+            
+            console.log('- OPTIMIZED GSI query response:', directQuery);
+            console.log('- Raw ScoreResults count:', directQuery.data?.listScoreResultByScorecardIdAndItemIdAndCreatedAt?.items?.length || 0);
+            
+            if (directQuery.data?.listScoreResultByScorecardIdAndItemIdAndCreatedAt?.items) {
+              // Efficiently deduplicate - since results are sorted by itemId, createdAt,
+              // we can take the first (most recent) result for each itemId
+              const itemsMap = new Map();
+              let uniqueItemCount = 0;
+              
+              directQuery.data.listScoreResultByScorecardIdAndItemIdAndCreatedAt.items.forEach(result => {
+                if (result.item && !itemsMap.has(result.item.id)) {
+                  itemsMap.set(result.item.id, result.item);
+                  uniqueItemCount++;
+                  // Stop at 100 unique items for this page
+                  if (uniqueItemCount >= 100) return;
+                }
+              });
+              
+              itemsFromDirectQuery = Array.from(itemsMap.values()).sort((a, b) => {
                 const dateA = new Date(a.createdAt || '').getTime();
                 const dateB = new Date(b.createdAt || '').getTime();
-                return dateB - dateA; // DESC order (newest first)
+                return dateB - dateA;
               });
-            nextTokenFromDirectQuery = directQuery.data.listScorecardProcessedItemByScorecardId.nextToken;
+              
+              nextTokenFromDirectQuery = directQuery.data.listScoreResultByScorecardIdAndItemIdAndCreatedAt.nextToken;
+              console.log('- ✅ Using optimized GSI! Unique items:', itemsFromDirectQuery.length);
+            } else {
+              console.log('- Optimized GSI not available yet, using current method');
+              throw new Error('Optimized GSI not ready, use current method');
+            }
+            
+          } catch (error) {
+            console.log('- Optimized GSI error:', error);
+            console.log('- Using current ScoreResult method');
+            
+            // Current ScoreResult-based approach
+            const currentQuery = await graphqlRequest<{
+              listScoreResultByScorecardIdAndUpdatedAt: {
+                items: Array<{
+                  itemId: string;
+                  item: any;
+                }>;
+                nextToken: string | null;
+              }
+            }>(`
+              query GetItemsByScorecardViaScoreResults($scorecardId: String!, $limit: Int!) {
+                listScoreResultByScorecardIdAndUpdatedAt(
+                  scorecardId: $scorecardId,
+                  sortDirection: DESC,
+                  limit: $limit
+                ) {
+                  items {
+                    itemId
+                    item {
+                      id
+                      externalId
+                      description
+                      accountId
+                      evaluationId
+                      updatedAt
+                      createdAt
+                      isEvaluation
+                      identifiers
+                      metadata
+                      attachedFiles
+                      text
+                      itemIdentifiers {
+                        items {
+                          itemId
+                          name
+                          value
+                          url
+                          position
+                        }
+                      }
+                    }
+                  }
+                  nextToken
+                }
+              }
+            `, {
+              scorecardId: selectedScorecard,
+              limit: 100
+            });
+            
+            if (currentQuery.data?.listScoreResultByScorecardIdAndUpdatedAt?.items) {
+              // Get unique items from score results
+              const itemsMap = new Map();
+              currentQuery.data.listScoreResultByScorecardIdAndUpdatedAt.items.forEach(result => {
+                if (result.item && !itemsMap.has(result.item.id)) {
+                  itemsMap.set(result.item.id, result.item);
+                }
+              });
+              
+              itemsFromDirectQuery = Array.from(itemsMap.values()).sort((a, b) => {
+                const dateA = new Date(a.createdAt || '').getTime();
+                const dateB = new Date(b.createdAt || '').getTime();
+                return dateB - dateA;
+              });
+              nextTokenFromDirectQuery = currentQuery.data.listScoreResultByScorecardIdAndUpdatedAt.nextToken;
+              console.log('- ⚠️ Using current ScoreResult method, items found:', itemsFromDirectQuery.length);
+            }
           }
         } else {
           // If neither scorecard nor score is selected, filter by accountId
@@ -1840,24 +1933,23 @@ function ItemsDashboardInner() {
           });
           itemsFromDirectQuery = directQuery.data?.listItemByScoreIdAndCreatedAt?.items || [];
         } else if (useScorecard) {
-          const directQuery = await graphqlRequest<{ 
-            listScorecardProcessedItemByScorecardId: { 
+          const directQuery = await graphqlRequest<{
+            listScoreResultByScorecardIdAndUpdatedAt: {
               items: Array<{
                 itemId: string;
-                processedAt?: string;
                 item: any;
               }>;
               nextToken: string | null;
             }
           }>(`
-            query ListItemsDirect($scorecardId: ID!, $limit: Int!) {
-              listScorecardProcessedItemByScorecardId(
+            query ThrottledRefreshItemsByScorecardViaScoreResults($scorecardId: String!, $limit: Int!) {
+              listScoreResultByScorecardIdAndUpdatedAt(
                 scorecardId: $scorecardId,
+                sortDirection: DESC,
                 limit: $limit
               ) {
                 items {
                   itemId
-                  processedAt
                   item {
                     id
                     externalId
@@ -1889,14 +1981,24 @@ function ItemsDashboardInner() {
             scorecardId: selectedScorecard,
             limit: 100
           });
-          itemsFromDirectQuery = directQuery.data?.listScorecardProcessedItemByScorecardId?.items
-            ?.map(association => association.item)
-            ?.filter(item => item !== null)
-            ?.sort((a, b) => {
+          
+          if (directQuery.data?.listScoreResultByScorecardIdAndUpdatedAt?.items) {
+            // Get unique items from score results  
+            const itemsMap = new Map();
+            directQuery.data.listScoreResultByScorecardIdAndUpdatedAt.items.forEach(result => {
+              if (result.item && !itemsMap.has(result.item.id)) {
+                itemsMap.set(result.item.id, result.item);
+              }
+            });
+            
+            itemsFromDirectQuery = Array.from(itemsMap.values()).sort((a, b) => {
               const dateA = new Date(a.createdAt || '').getTime();
               const dateB = new Date(b.createdAt || '').getTime();
               return dateB - dateA;
-            }) || [];
+            });
+          } else {
+            itemsFromDirectQuery = [];
+          }
         } else {
           const directQuery = await graphqlRequest<{ listItemByAccountIdAndCreatedAt: { items: any[], nextToken: string | null } }>(`
             query ListItemsDirect($accountId: String!, $limit: Int!) {
@@ -2272,18 +2374,27 @@ function ItemsDashboardInner() {
   }, [])
 
   const filteredItems = useMemo(() => {
-    return items.filter(item => {
+    console.log('🔍 FILTERING ITEMS:');
+    console.log('- Total items to filter:', items.length);
+    console.log('- Selected scorecard:', selectedScorecard);
+    console.log('- Selected score:', selectedScore);
+    console.log('- Filter config length:', filterConfig.length);
+    
+    const filtered = items.filter(item => {
+      // If no filters are applied, show all items
       if (!selectedScorecard && !selectedScore && filterConfig.length === 0) return true
       
-      // Check for scorecard and score matches using groupedScoreResults
-      let scorecardMatch = !selectedScorecard || (item.groupedScoreResults && Object.keys(item.groupedScoreResults).includes(selectedScorecard))
-      let scoreMatch = !selectedScore || (item.groupedScoreResults && Object.values(item.groupedScoreResults).some(scorecard => 
-        scorecard.scores.some(score => score.scoreId === selectedScore)
-      ))
+      // Since we're now fetching items directly through ScoreResult filtering,
+      // items already match the scorecard/score filter when they're retrieved.
+      // We only need to apply additional filterConfig rules here.
       
-      if (filterConfig.length === 0) return scorecardMatch && scoreMatch
+      if (filterConfig.length === 0) {
+        // No additional filters, so all fetched items should be shown
+        return true;
+      }
       
-      return scorecardMatch && scoreMatch && filterConfig.some(group => {
+      // Apply additional filter config rules
+      return filterConfig.some(group => {
         return group.conditions.every(condition => {
           const itemValue = String(item[condition.field as keyof typeof item] || '')
           switch (condition.operator) {
@@ -2304,7 +2415,16 @@ function ItemsDashboardInner() {
           }
         })
       })
-    })
+    });
+    
+    console.log('- Filtered items count:', filtered.length);
+    console.log('- Sample filtered items:', filtered.slice(0, 2).map(item => ({
+      id: item.id,
+      accountId: item.accountId,
+      externalId: item.externalId
+    })));
+    
+    return filtered;
   }, [selectedScorecard, selectedScore, filterConfig, items])
 
   const getBadgeVariant = (status: string) => {
