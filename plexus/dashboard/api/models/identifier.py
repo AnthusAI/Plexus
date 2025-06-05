@@ -53,10 +53,10 @@ class Identifier(BaseModel):
     createdAt: datetime
     updatedAt: datetime
     url: Optional[str] = None
+    position: Optional[int] = None
 
     def __init__(
         self,
-        id: str,
         itemId: str,
         name: str,
         value: str,
@@ -64,9 +64,11 @@ class Identifier(BaseModel):
         createdAt: datetime,
         updatedAt: datetime,
         url: Optional[str] = None,
+        position: Optional[int] = None,
         client: Optional[PlexusDashboardClient] = None
     ):
-        super().__init__(id, client)
+        # Note: No id parameter since Identifier uses composite primary key
+        super().__init__(f"{itemId}#{name}", client)  # Use composite key as id for base class
         self.itemId = itemId
         self.name = name
         self.value = value
@@ -74,11 +76,11 @@ class Identifier(BaseModel):
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.url = url
+        self.position = position
 
     @classmethod
     def fields(cls) -> str:
         return """
-            id
             itemId
             name
             value
@@ -86,6 +88,7 @@ class Identifier(BaseModel):
             createdAt
             updatedAt
             url
+            position
         """
 
     @classmethod
@@ -96,7 +99,8 @@ class Identifier(BaseModel):
         name: str,
         value: str,
         accountId: str,
-        url: Optional[str] = None
+        url: Optional[str] = None,
+        position: Optional[int] = None
     ) -> 'Identifier':
         """Create a new identifier record."""
         now = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
@@ -112,6 +116,8 @@ class Identifier(BaseModel):
         
         if url:
             input_data['url'] = url
+        if position is not None:
+            input_data['position'] = position
         
         mutation = """
         mutation CreateIdentifier($input: CreateIdentifierInput!) {
@@ -134,7 +140,6 @@ class Identifier(BaseModel):
                 )
 
         return cls(
-            id=data['id'],
             itemId=data.get('itemId', ''),
             name=data.get('name', ''),
             value=data.get('value', ''),
@@ -142,6 +147,7 @@ class Identifier(BaseModel):
             createdAt=data.get('createdAt', datetime.now(timezone.utc)),
             updatedAt=data.get('updatedAt', datetime.now(timezone.utc)),
             url=data.get('url'),
+            position=data.get('position'),
             client=client
         )
 
@@ -343,14 +349,16 @@ class Identifier(BaseModel):
         """Update this identifier with new values."""
         if 'createdAt' in kwargs:
             raise ValueError("createdAt cannot be modified after creation")
-        if 'id' in kwargs:
-            raise ValueError("id cannot be modified after creation")
         if 'itemId' in kwargs:
             raise ValueError("itemId cannot be modified after creation")
+        if 'name' in kwargs:
+            raise ValueError("name cannot be modified after creation")
         if 'accountId' in kwargs:
             raise ValueError("accountId cannot be modified after creation")
             
         update_data = {
+            'itemId': self.itemId,
+            'name': self.name,
             'updatedAt': datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
             **kwargs
         }
@@ -364,10 +372,7 @@ class Identifier(BaseModel):
         """ % self.fields()
         
         variables = {
-            'input': {
-                'id': self.id,
-                **update_data
-            }
+            'input': update_data
         }
         
         result = self._client.execute(mutation, variables)
@@ -378,12 +383,13 @@ class Identifier(BaseModel):
         mutation = """
         mutation DeleteIdentifier($input: DeleteIdentifierInput!) {
             deleteIdentifier(input: $input) {
-                id
+                itemId
+                name
             }
         }
         """
         
-        variables = {'input': {'id': self.id}}
+        variables = {'input': {'itemId': self.itemId, 'name': self.name}}
         
         try:
             self._client.execute(mutation, variables)
