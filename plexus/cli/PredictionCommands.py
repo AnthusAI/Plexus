@@ -27,7 +27,8 @@ from plexus.cli.shared import get_scoring_jobs_for_batch
 @click.option('--excel', is_flag=True, help='Output results to an Excel file.')
 @click.option('--use-langsmith-trace', is_flag=True, default=False, help='Activate LangSmith trace client for LangChain components')
 @click.option('--fresh', is_flag=True, help='Pull fresh, non-cached data from the data lake.')
-def predict(scorecard_name, score_name, content_id, number, excel, use_langsmith_trace, fresh):
+@click.option('--task-id', default=None, type=str, help='Task ID for progress tracking')
+def predict(scorecard_name, score_name, content_id, number, excel, use_langsmith_trace, fresh, task_id):
     """Predict scores for a scorecard"""
     try:
         # Configure event loop with custom exception handler
@@ -45,7 +46,7 @@ def predict(scorecard_name, score_name, content_id, number, excel, use_langsmith
         
         coro = predict_impl(
             scorecard_name, score_names, content_id, excel, 
-            use_langsmith_trace, fresh
+            use_langsmith_trace, fresh, task_id
         )
         try:
             loop.run_until_complete(coro)
@@ -78,7 +79,8 @@ async def predict_impl(
     content_id: str = None,
     excel: bool = False,
     use_langsmith_trace: bool = False,
-    fresh: bool = False
+    fresh: bool = False,
+    task_id: str = None
 ):
     """Implementation of predict command"""
     try:
@@ -139,13 +141,35 @@ async def predict_impl(
         if excel and results:
             output_excel(results, score_names, scorecard_name)
         elif results:
+            # Print results to console for user visibility
+            rich.print("\n[bold green]Prediction Results:[/bold green]")
             for result in results:
+                rich.print(f"\n[bold]Content ID:[/bold] {result.get('content_id')}")
+                if result.get('text'):
+                    text_preview = result['text'][:200] + "..." if len(result['text']) > 200 else result['text']
+                    rich.print(f"[bold]Text Preview:[/bold] {text_preview}")
+                
+                for name in score_names:
+                    value = result.get(f'{name}_value')
+                    explanation = result.get(f'{name}_explanation')
+                    cost = result.get(f'{name}_cost')
+                    
+                    rich.print(f"\n[bold cyan]{name} Score:[/bold cyan]")
+                    rich.print(f"  [bold]Value:[/bold] {value}")
+                    if explanation:
+                        rich.print(f"  [bold]Explanation:[/bold] {explanation}")
+                    if cost:
+                        rich.print(f"  [bold]Cost:[/bold] {cost}")
+                
+                # Also log the truncated version for debugging
                 truncated_result = {
                     k: f"{str(v)[:80]}..." if isinstance(v, str) and len(str(v)) > 80 
                     else v
                     for k, v in result.items()
                 }
                 logging.info(f"Prediction result: {truncated_result}")
+        else:
+            rich.print("[yellow]No prediction results to display.[/yellow]")
     except BatchProcessingPause:
         # Let it propagate up to be handled by the event loop handler
         raise
