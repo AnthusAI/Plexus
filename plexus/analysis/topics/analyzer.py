@@ -25,6 +25,21 @@ from langchain.prompts import ChatPromptTemplate
 from langchain.chains import LLMChain
 from langchain.chains.question_answering import load_qa_chain
 from langchain_openai import ChatOpenAI
+from langchain.globals import set_llm_cache
+from langchain.cache import SQLiteCache
+
+# Initialize LLM cache for representation model (fine-tuning) - same cache as transformer
+cache_dir_path = Path("tmp/langchain.db")
+cache_db_file_path = cache_dir_path / "topics_llm_cache.db"
+
+try:
+    # Ensure the cache directory exists
+    cache_dir_path.mkdir(parents=True, exist_ok=True)
+    logger.info(f"Initializing Langchain LLM SQLite cache for analyzer at {cache_db_file_path}")
+    set_llm_cache(SQLiteCache(database_path=str(cache_db_file_path)))
+    logger.info(f"Langchain LLM SQLite cache initialized successfully for fine-tuning phase.")
+except Exception as e:
+    logger.warning(f"Could not initialize Langchain LLM SQLite cache for analyzer: {e}. Fine-tuning LLM calls will not be cached.")
 
 def ensure_directory(path: str) -> None:
     """Create directory with appropriate permissions if it doesn't exist."""

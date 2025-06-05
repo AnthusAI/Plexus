@@ -436,6 +436,7 @@ class TopicAnalysis(BaseReportBlock):
                     top_n_words=top_n_words,
                     use_representation_model=use_representation_model,
                     openai_api_key=openai_api_key, # Passed directly
+                    use_langchain=True, # Enable LangChain path to use SQLite caching
                     representation_model_provider=representation_model_provider,
                     representation_model_name=representation_model_name
                 )
@@ -500,6 +501,9 @@ class TopicAnalysis(BaseReportBlock):
                                 topic_id = row.get('Topic', -1)
                                 if topic_id != -1:  # Skip the -1 topic which is usually "noise"
                                     valid_topic_count += 1
+                                    # Only store first 20 topics to reduce DynamoDB record size
+                                    if len(topics_list) >= 20:
+                                        continue
                                     # Get the topic words and weights if available
                                     topic_words = []
                                     if hasattr(topic_model, 'get_topic'):
@@ -602,8 +606,10 @@ class TopicAnalysis(BaseReportBlock):
                             
                             # Add before topics data to fine_tuning section if available
                             if before_topics_data:
-                                final_output_data["fine_tuning"]["topics_before"] = list(before_topics_data.values())
-                                self._log(f"✅ Added 'before' topics data to fine_tuning section ({len(before_topics_data)} topics)")
+                                # Limit to first 20 topics to reduce DynamoDB record size
+                                topics_before_limited = list(before_topics_data.values())[:20]
+                                final_output_data["fine_tuning"]["topics_before"] = topics_before_limited
+                                self._log(f"✅ Added 'before' topics data to fine_tuning section ({len(topics_before_limited)} of {len(before_topics_data)} topics)")
 
                             # This is critical information - ensure it goes to both console AND attached log
                             self._log("🎯 TOPIC DISCOVERY RESULTS")

@@ -163,7 +163,24 @@ const ReportBlock: BlockComponent = ({
     if (!logFile || !logFile.path) return;
     setIsLoadingLog(true);
     try {
-      const downloadResult = await downloadData({ path: logFile.path }).result;
+      // Determine which storage bucket to use based on file path
+      let storageOptions: { path: string; options?: { bucket?: string } } = { path: logFile.path };
+      
+      if (logFile.path.startsWith('reportblocks/')) {
+        // Report block files are stored in the reportBlockDetails bucket
+        storageOptions = {
+          path: logFile.path,
+          options: { bucket: 'reportBlockDetails' }
+        };
+      } else if (logFile.path.startsWith('scoreresults/')) {
+        // Score result files are stored in the scoreResultAttachments bucket
+        storageOptions = {
+          path: logFile.path,
+          options: { bucket: 'scoreResultAttachments' }
+        };
+      }
+      
+      const downloadResult = await downloadData(storageOptions).result;
       const text = await downloadResult.body.text();
       setLogText(text);
     } catch (error) {
@@ -193,8 +210,25 @@ const ReportBlock: BlockComponent = ({
     setSelectedFileIsHtml(null);  // Reset previous HTML type
 
     try {
+      // Determine which storage bucket to use based on file path
+      let storageOptions: { path: string; options?: { bucket?: string } } = { path: file.path };
+      
+      if (file.path.startsWith('reportblocks/')) {
+        // Report block files are stored in the reportBlockDetails bucket
+        storageOptions = {
+          path: file.path,
+          options: { bucket: 'reportBlockDetails' }
+        };
+      } else if (file.path.startsWith('scoreresults/')) {
+        // Score result files are stored in the scoreResultAttachments bucket
+        storageOptions = {
+          path: file.path,
+          options: { bucket: 'scoreResultAttachments' }
+        };
+      }
+      
       if (isImageFile(file.name)) {
-        const urlResult = await getUrl({ path: file.path });
+        const urlResult = await getUrl(storageOptions);
         if (urlResult.url) {
           setSelectedFileUrl(urlResult.url.toString());
           setSelectedFileIsImage(true);
@@ -203,13 +237,13 @@ const ReportBlock: BlockComponent = ({
           throw new Error('Failed to get image URL.');
         }
       } else if (isHtmlFile(file.name)) {
-        const downloadResult = await downloadData({ path: file.path }).result;
+        const downloadResult = await downloadData(storageOptions).result;
         const text = await downloadResult.body.text();
         setSelectedFileContent(text);
         setSelectedFileIsHtml(true);
         setSelectedFileIsImage(false);
       } else {
-        const downloadResult = await downloadData({ path: file.path }).result;
+        const downloadResult = await downloadData(storageOptions).result;
         const text = await downloadResult.body.text();
         setSelectedFileContent(text);
         setSelectedFileIsImage(false);
@@ -253,7 +287,24 @@ const ReportBlock: BlockComponent = ({
   const handleDownloadFile = async (file: DetailFile) => {
     if (!file || !file.path) return;
     try {
-      const urlResult = await getUrl({ path: file.path });
+      // Determine which storage bucket to use based on file path
+      let storageOptions: { path: string; options?: { bucket?: string } } = { path: file.path };
+      
+      if (file.path.startsWith('reportblocks/')) {
+        // Report block files are stored in the reportBlockDetails bucket
+        storageOptions = {
+          path: file.path,
+          options: { bucket: 'reportBlockDetails' }
+        };
+      } else if (file.path.startsWith('scoreresults/')) {
+        // Score result files are stored in the scoreResultAttachments bucket
+        storageOptions = {
+          path: file.path,
+          options: { bucket: 'scoreResultAttachments' }
+        };
+      }
+      
+      const urlResult = await getUrl(storageOptions);
       if (urlResult.url) {
         window.open(urlResult.url.toString(), '_blank');
       } else {
@@ -267,7 +318,24 @@ const ReportBlock: BlockComponent = ({
   const handleDownloadLog = async () => {
     if (!logFile || !logFile.path) return;
     try {
-      const urlResult = await getUrl({ path: logFile.path });
+      // Determine which storage bucket to use based on file path
+      let storageOptions: { path: string; options?: { bucket?: string } } = { path: logFile.path };
+      
+      if (logFile.path.startsWith('reportblocks/')) {
+        // Report block files are stored in the reportBlockDetails bucket
+        storageOptions = {
+          path: logFile.path,
+          options: { bucket: 'reportBlockDetails' }
+        };
+      } else if (logFile.path.startsWith('scoreresults/')) {
+        // Score result files are stored in the scoreResultAttachments bucket
+        storageOptions = {
+          path: logFile.path,
+          options: { bucket: 'scoreResultAttachments' }
+        };
+      }
+      
+      const urlResult = await getUrl(storageOptions);
       if (urlResult.url) {
         window.open(urlResult.url.toString(), '_blank');
       } else {

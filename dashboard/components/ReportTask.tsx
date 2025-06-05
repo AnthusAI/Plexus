@@ -597,8 +597,9 @@ const ReportTask: React.FC<ReportTaskProps> = ({
       )}
       renderContent={(props) => (
         <TaskContent {...props} hideTaskStatus={true}>
-          {variant === 'detail' && task.data?.output && (
-            <div className="bg-background rounded-lg p-3 mb-3 overflow-y-auto flex-1 min-h-0">
+          <div className={variant === 'detail' ? 'px-3 pb-3 flex flex-col h-full' : ''}>
+            {variant === 'detail' && task.data?.output && (
+            <div className="bg-background rounded-lg p-3 overflow-y-auto flex-1 min-h-0">
               <div className="prose dark:prose-invert max-w-none">
                 <ReactMarkdown
                   components={{
@@ -643,6 +644,7 @@ const ReportTask: React.FC<ReportTaskProps> = ({
               No report content available.
             </div>
           )}
+          </div>
         </TaskContent>
       )}
     />
