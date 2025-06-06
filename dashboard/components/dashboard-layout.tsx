@@ -28,6 +28,7 @@ import { Input } from "@/components/ui/input"
 import { ChatEvaluationCard } from "@/components/chat-evaluation-card"
 
 import SquareLogo, { LogoVariant } from './logo-square'
+import { useTranslations } from '@/app/contexts/TranslationContext'
 import { useSidebar } from "@/app/contexts/SidebarContext"
 import { useAccount } from "@/app/contexts/AccountContext"
 
@@ -106,6 +107,7 @@ export const menuItems = [
 ]
 
 const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; signOut: () => Promise<void> }) => {
+  const t = useTranslations('navigation')
   const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState(true)
   const { rightSidebarState, setRightSidebarState } = useSidebar()
   const { theme, setTheme } = useTheme()
@@ -209,7 +211,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                     : "text-navigation-icon"
                 }`} />
                 {isLeftSidebarOpen && (
-                  <span className="ml-3">{item.name}</span>
+                  <span className="ml-3">{t(item.name.toLowerCase())}</span>
                 )}
               </Link>
             ))}

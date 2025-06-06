@@ -3,6 +3,7 @@ import { Clock, Timer } from 'lucide-react'
 import { formatDistanceToNow, formatDuration, intervalToDuration, format, Duration } from 'date-fns'
 import { cn } from '@/lib/utils'
 import NumberFlowWrapper from './number-flow'
+import { useTranslations } from '@/app/contexts/TranslationContext'
 
 export interface TimestampProps {
   /**
@@ -31,7 +32,7 @@ export interface TimestampProps {
   skeletonMode?: boolean
 }
 
-const formatElapsedTime = (start: Date, end: Date): { type: 'string', value: string } | { type: 'component', value: React.ReactNode } => {
+const formatElapsedTime = (start: Date, end: Date, t: (key: string, variables?: Record<string, any>) => string): { type: 'string', value: string } | { type: 'component', value: React.ReactNode } => {
   const duration = intervalToDuration({ start, end })
   
   // Calculate total minutes to determine if we should show seconds
@@ -43,32 +44,36 @@ const formatElapsedTime = (start: Date, end: Date): { type: 'string', value: str
   if (totalMinutes >= 1) {
     // Show hours and minutes
     if (duration.hours && duration.hours > 0) {
+      const hourText = duration.hours === 1 ? 'hour' : 'hours';
       parts.push(
         <span key="hours">
-          <NumberFlowWrapper value={duration.hours} /> hour{duration.hours === 1 ? '' : 's'}
+          <NumberFlowWrapper value={duration.hours} /> {t(hourText)}
         </span>
       )
     }
     if (duration.minutes && duration.minutes > 0) {
+      const minuteText = duration.minutes === 1 ? 'minute' : 'minutes';
       parts.push(
         <span key="minutes"> 
-          <NumberFlowWrapper value={duration.minutes} /> minute{duration.minutes === 1 ? '' : 's'}
+          <NumberFlowWrapper value={duration.minutes} /> {t(minuteText)}
         </span>
       )
     }
   } else {
     // Show minutes and seconds
     if (duration.minutes && duration.minutes > 0) {
+      const minuteText = duration.minutes === 1 ? 'minute' : 'minutes';
       parts.push(
         <span key="minutes">
-          <NumberFlowWrapper value={duration.minutes} /> minute{duration.minutes === 1 ? '' : 's'}
+          <NumberFlowWrapper value={duration.minutes} /> {t(minuteText)}
         </span>
       )
     }
     if (duration.seconds && duration.seconds > 0) {
+      const secondText = duration.seconds === 1 ? 'second' : 'seconds';
       parts.push(
         <span key="seconds"> 
-          <NumberFlowWrapper value={duration.seconds} /> second{duration.seconds === 1 ? '' : 's'}
+          <NumberFlowWrapper value={duration.seconds} /> {t(secondText)}
         </span>
       )
     }
@@ -91,7 +96,7 @@ const areDatesMeaningfullyDifferent = (start: Date, end: Date): boolean => {
   return diffInMs > 1000 // More than 1 second difference
 }
 
-const formatRelativeTime = (date: Date): { type: 'string', value: string } | { type: 'component', value: React.ReactNode } => {
+const formatRelativeTime = (date: Date, t: (key: string, variables?: Record<string, any>) => string): { type: 'string', value: string } | { type: 'component', value: React.ReactNode } => {
   try {
     // Check if date is valid
     if (isNaN(date.getTime())) {
@@ -103,88 +108,70 @@ const formatRelativeTime = (date: Date): { type: 'string', value: string } | { t
     
     // Handle future dates
     if (diffInSeconds < 0) {
-      return { type: 'string', value: 'in the future' };
+      return { type: 'string', value: t('inTheFuture') };
     }
     
     // Less than 1 minute
     if (diffInSeconds < 60) {
-      return { type: 'string', value: '<1 minute ago' };
+      return { type: 'string', value: t('lessThanMinute') };
     }
     
     // Minutes
     const diffInMinutes = Math.floor(diffInSeconds / 60);
     if (diffInMinutes < 60) {
+      const timeKey = diffInMinutes === 1 ? 'minuteAgo' : 'minutesAgo';
       return { 
-        type: 'component', 
-        value: (
-          <span>
-            <NumberFlowWrapper value={diffInMinutes} /> minute{diffInMinutes === 1 ? '' : 's'} ago
-          </span>
-        )
+        type: 'string', 
+        value: t(timeKey, { count: diffInMinutes })
       };
     }
     
     // Hours
     const diffInHours = Math.floor(diffInMinutes / 60);
     if (diffInHours < 24) {
+      const timeKey = diffInHours === 1 ? 'hourAgo' : 'hoursAgo';
       return { 
-        type: 'component', 
-        value: (
-          <span>
-            <NumberFlowWrapper value={diffInHours} /> hour{diffInHours === 1 ? '' : 's'} ago
-          </span>
-        )
+        type: 'string', 
+        value: t(timeKey, { count: diffInHours })
       };
     }
     
     // Days
     const diffInDays = Math.floor(diffInHours / 24);
     if (diffInDays < 7) {
+      const timeKey = diffInDays === 1 ? 'dayAgo' : 'daysAgo';
       return { 
-        type: 'component', 
-        value: (
-          <span>
-            <NumberFlowWrapper value={diffInDays} /> day{diffInDays === 1 ? '' : 's'} ago
-          </span>
-        )
+        type: 'string', 
+        value: t(timeKey, { count: diffInDays })
       };
     }
     
     // Weeks
     const diffInWeeks = Math.floor(diffInDays / 7);
     if (diffInWeeks < 4) {
+      const timeKey = diffInWeeks === 1 ? 'weekAgo' : 'weeksAgo';
       return { 
-        type: 'component', 
-        value: (
-          <span>
-            <NumberFlowWrapper value={diffInWeeks} /> week{diffInWeeks === 1 ? '' : 's'} ago
-          </span>
-        )
+        type: 'string', 
+        value: t(timeKey, { count: diffInWeeks })
       };
     }
     
     // Months
     const diffInMonths = Math.floor(diffInDays / 30);
     if (diffInMonths < 12) {
+      const timeKey = diffInMonths === 1 ? 'monthAgo' : 'monthsAgo';
       return { 
-        type: 'component', 
-        value: (
-          <span>
-            <NumberFlowWrapper value={diffInMonths} /> month{diffInMonths === 1 ? '' : 's'} ago
-          </span>
-        )
+        type: 'string', 
+        value: t(timeKey, { count: diffInMonths })
       };
     }
     
     // Years
     const diffInYears = Math.floor(diffInDays / 365);
+    const timeKey = diffInYears === 1 ? 'yearAgo' : 'yearsAgo';
     return { 
-      type: 'component', 
-      value: (
-        <span>
-          <NumberFlowWrapper value={diffInYears} /> year{diffInYears === 1 ? '' : 's'} ago
-        </span>
-      )
+      type: 'string', 
+      value: t(timeKey, { count: diffInYears })
     };
     
   } catch (e) {
@@ -213,6 +200,7 @@ export function Timestamp({
   className,
   skeletonMode = false
 }: TimestampProps) {
+  const t = useTranslations('time')
   const [displayContent, setDisplayContent] = useState<React.ReactNode>('')
   const [showAbsolute, setShowAbsolute] = useState(false)
   const timeDate = typeof time === 'string' ? new Date(time) : time
@@ -239,7 +227,7 @@ export function Timestamp({
         
         // Only show elapsed time if the dates are meaningfully different
         if (areDatesMeaningfullyDifferent(timeDate, endTime)) {
-          const result = formatElapsedTime(timeDate, endTime)
+          const result = formatElapsedTime(timeDate, endTime, t)
           setDisplayContent(result.type === 'component' ? result.value : result.value)
         } else {
           setDisplayContent('') // Return empty string if times are effectively the same
@@ -248,7 +236,7 @@ export function Timestamp({
         if (showAbsolute) {
           setDisplayContent(formatAbsoluteTime(timeDate))
         } else {
-          const result = formatRelativeTime(timeDate)
+          const result = formatRelativeTime(timeDate, t)
           setDisplayContent(result.type === 'component' ? result.value : result.value)
         }
       }

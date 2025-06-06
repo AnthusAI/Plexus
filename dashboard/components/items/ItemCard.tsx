@@ -15,6 +15,7 @@ import { IdentifierDisplay } from '@/components/ui/identifier-display'
 import NumberFlowWrapper from '@/components/ui/number-flow'
 import ItemScoreResults from '../ItemScoreResults'
 import { useItemScoreResults } from '@/hooks/useItemScoreResults'
+import { useTranslations } from '@/app/contexts/TranslationContext'
 import { MetadataEditor } from '@/components/ui/metadata-editor'
 import { FileAttachments } from './FileAttachments'
 import {
@@ -120,6 +121,8 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
   className, 
   ...props 
 }, ref) => {
+  const t = useTranslations('scorecards')
+  const tItems = useTranslations('items')
   const [isNarrowViewport, setIsNarrowViewport] = React.useState(false)
   
   // Use the score results hook for detail view
@@ -197,8 +200,8 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
           <ListChecks className="h-4 w-4 flex-shrink-0 text-muted-foreground translate-y-0.5" />
           <span className="text-foreground">
             {hasMultipleScorecards ? 
-              `${item.scorecards.length} scorecards` : 
-              item.scorecards[0]?.scorecardName || 'Scorecard'
+              `${item.scorecards.length} ${t('scorecards')}` : 
+              item.scorecards[0]?.scorecardName || t('scorecard')
             }
           </span>
         </div>
@@ -209,7 +212,7 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
         <div className="flex items-baseline gap-1 text-sm text-muted-foreground">
           <Box className="h-4 w-4 flex-shrink-0 translate-y-0.5" />
           <span>
-            <span className="text-foreground"><NumberFlowWrapper value={totalResults} skeletonMode={skeletonMode || item.isLoadingResults} /></span> score result{totalResults !== 1 ? 's' : ''}
+            <span className="text-foreground"><NumberFlowWrapper value={totalResults} skeletonMode={skeletonMode || item.isLoadingResults} /></span> {t(totalResults === 1 ? 'scoreResult' : 'scoreResults')}
           </span>
         </div>
       )}
@@ -249,8 +252,8 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
             <div className="absolute top-0 right-0 z-10">
               <div className="flex flex-col items-center text-muted-foreground space-y-1">
                 {item.icon || <StickyNote className="h-[1.75rem] w-[1.75rem]" strokeWidth={1.25} />}
-                <div className="text-xs text-center" title="Item">
-                  <span className="font-semibold">Item</span>
+                <div className="text-xs text-center" title={tItems('item')}>
+                  <span className="font-semibold">{tItems('item')}</span>
                 </div>
               </div>
             </div>
@@ -276,7 +279,7 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
         <div>
           <div className="flex items-center gap-1">
             <StickyNote className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
-            <h2 className="text-xl text-muted-foreground font-semibold">Item Details</h2>
+            <h2 className="text-xl text-muted-foreground font-semibold">{tItems('itemDetails')}</h2>
           </div>
           <div className="mt-1 space-y-1">
             <IdentifierDisplay 
@@ -296,7 +299,7 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
             {/* Total results summary */}
             {totalResults > 0 && (
               <div className="text-sm mt-2">
-                <span className="text-foreground font-medium"><NumberFlowWrapper value={totalResults} skeletonMode={skeletonMode} /></span> <span className="text-muted-foreground">score result{totalResults !== 1 ? 's' : ''} across</span> <span className="text-foreground font-medium"><NumberFlowWrapper value={item.scorecards.length} skeletonMode={skeletonMode} /></span> <span className="text-muted-foreground">scorecard{item.scorecards.length !== 1 ? 's' : ''}</span>
+                <span className="text-foreground font-medium"><NumberFlowWrapper value={totalResults} skeletonMode={skeletonMode} /></span> <span className="text-muted-foreground">{t(totalResults === 1 ? 'scoreResultAcross' : 'scoreResultsAcross')}</span> <span className="text-foreground font-medium"><NumberFlowWrapper value={item.scorecards.length} skeletonMode={skeletonMode} /></span> <span className="text-muted-foreground">{t(item.scorecards.length === 1 ? 'scorecard' : 'scorecards')}</span>
               </div>
             )}
           </div>
@@ -319,7 +322,7 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
                     onSelect={onViewData}
                   >
                     <Info className="mr-2 h-4 w-4" />
-                    View Details
+                    {tItems('viewDetails')}
                   </DropdownMenu.Item>
                 )}
               </DropdownMenu.Content>
@@ -351,7 +354,7 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
            !item.description.match(/^API Call - Report \d+$/) && 
            !item.description.match(/^(Call|Report|Session|Item) - .+$/) && (
             <div>
-              <h3 className="text-sm font-medium text-foreground mb-2">Description</h3>
+              <h3 className="text-sm font-medium text-foreground mb-2">{tItems('description')}</h3>
               <div className="p-3">
                 <p className="text-sm text-muted-foreground">{item.description}</p>
               </div>
@@ -366,7 +369,7 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
                 <AccordionTrigger className="hover:no-underline py-2 px-0">
                   <div className="flex items-center gap-2">
                     <FileText className="h-3 w-3 text-muted-foreground" />
-                    <span className="text-sm font-medium leading-none text-muted-foreground">Text</span>
+                    <span className="text-sm font-medium leading-none text-muted-foreground">{tItems('text')}</span>
                   </div>
                 </AccordionTrigger>
                 <AccordionContent className="pt-0 pb-4">
@@ -404,8 +407,8 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
                 <AccordionTrigger className="hover:no-underline py-2 px-0">
                   <div className="flex items-center gap-2">
                     <Tag className="h-3 w-3 text-muted-foreground" />
-                    <span className="text-sm font-medium leading-none text-muted-foreground">Metadata</span>
-                    {!readOnly && <span className="text-[10px] text-muted-foreground">optional</span>}
+                    <span className="text-sm font-medium leading-none text-muted-foreground">{tItems('metadata')}</span>
+                    {!readOnly && <span className="text-[10px] text-muted-foreground">{tItems('optional')}</span>}
                   </div>
                 </AccordionTrigger>
                 <AccordionContent className="pt-0 pb-4">
@@ -430,7 +433,7 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
                 <AccordionTrigger className="hover:no-underline py-2 px-0">
                   <div className="flex items-center gap-2">
                     <FileText className="h-3 w-3 text-muted-foreground" />
-                    <span className="text-sm font-medium leading-none text-muted-foreground">Attached Files</span>
+                    <span className="text-sm font-medium leading-none text-muted-foreground">{tItems('attachedFiles')}</span>
                   </div>
                 </AccordionTrigger>
                 <AccordionContent className="pt-0 pb-4">
