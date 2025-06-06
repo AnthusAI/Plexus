@@ -1,6 +1,7 @@
 "use client"
 import React, { useContext, useEffect, useMemo, useRef, useState, useCallback, Suspense } from "react"
 import { useSearchParams, useParams } from 'next/navigation'
+import { useTranslations } from '@/app/contexts/TranslationContext'
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
@@ -169,7 +170,7 @@ const GridContent = ({
   if (filteredItems.length === 0 && !isLoading && hasInitiallyLoaded) {
     return (
       <div className="flex items-center justify-center h-full text-muted-foreground">
-        No items found
+        {t('noItems')}
       </div>
     );
   }
@@ -207,7 +208,7 @@ const GridContent = ({
           {isLoadingMore && (
             <div className="flex items-center">
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              <span>Loading more items...</span>
+              <span>{t('loadingMoreItems')}</span>
             </div>
           )}
         </div>
@@ -483,10 +484,48 @@ interface Annotation {
   isThumbsUp: boolean;
 }
 
-// Add this function before the ItemsDashboard component
-const getRelativeTime = (dateString: string | undefined): string => {
-  if (!dateString) return 'Unknown date';
-  return formatTimeAgo(dateString);
+// Add this function before the ItemsDashboard component  
+const getRelativeTime = (dateString: string | undefined, t: (key: string, variables?: Record<string, any>) => string): string => {
+  if (!dateString) return t('invalidDate');
+  
+  try {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+    
+    if (diffInSeconds < 0) return t('inTheFuture');
+    if (diffInSeconds < 60) return t('lessThanMinute');
+    
+    const diffInMinutes = Math.floor(diffInSeconds / 60);
+    if (diffInMinutes < 60) {
+      return t(diffInMinutes === 1 ? 'minuteAgo' : 'minutesAgo', { count: diffInMinutes });
+    }
+    
+    const diffInHours = Math.floor(diffInMinutes / 60);
+    if (diffInHours < 24) {
+      return t(diffInHours === 1 ? 'hourAgo' : 'hoursAgo', { count: diffInHours });
+    }
+    
+    const diffInDays = Math.floor(diffInHours / 24);
+    if (diffInDays < 7) {
+      return t(diffInDays === 1 ? 'dayAgo' : 'daysAgo', { count: diffInDays });
+    }
+    
+    const diffInWeeks = Math.floor(diffInDays / 7);
+    if (diffInWeeks < 4) {
+      return t(diffInWeeks === 1 ? 'weekAgo' : 'weeksAgo', { count: diffInWeeks });
+    }
+    
+    const diffInMonths = Math.floor(diffInDays / 30);
+    if (diffInMonths < 12) {
+      return t(diffInMonths === 1 ? 'monthAgo' : 'monthsAgo', { count: diffInMonths });
+    }
+    
+    const diffInYears = Math.floor(diffInDays / 365);
+    return t(diffInYears === 1 ? 'yearAgo' : 'yearsAgo', { count: diffInYears });
+  } catch (error) {
+    return t('invalidDate');
+  }
 };
 
 // First, add a ScoreResult interface
@@ -577,6 +616,8 @@ const transformItem = (item: any, options: { isNew?: boolean } = {}): Item => {
 };
 
 function ItemsDashboardInner() {
+  const t = useTranslations('items');
+  const tCommon = useTranslations('common');
   const searchParams = useSearchParams()
   const params = useParams()
   const [selectedItem, setSelectedItem] = useState<string | null>(null)
@@ -643,7 +684,7 @@ function ItemsDashboardInner() {
 
   // Wake-from-sleep detection state
   const pageHiddenTimeRef = useRef<number | null>(null);
-  const isPageVisibleRef = useRef<boolean>(!document.hidden);
+  const isPageVisibleRef = useRef<boolean>(typeof document !== 'undefined' ? !document.hidden : true);
   const WAKE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
 
   // Search state
@@ -3019,7 +3060,7 @@ function ItemsDashboardInner() {
                 </div>
                 <Input
                   type="text"
-                  placeholder="Search by identifier"
+                  placeholder={t('searchByIdentifier')}
                   value={searchValue}
                   onChange={(e) => {
                     setSearchValue(e.target.value);
@@ -3035,7 +3076,7 @@ function ItemsDashboardInner() {
                     className="absolute inset-y-0 right-0 h-9 px-3 rounded-l-none shadow-none"
                     disabled={isSearching}
                   >
-                    {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Search'}
+                    {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : t('search')}
                   </Button>
                 )}
               </div>
@@ -3089,7 +3130,7 @@ function ItemsDashboardInner() {
                       </div>
                       <Input
                         type="text"
-                        placeholder="Search by identifier"
+                        placeholder={t('searchByIdentifier')}
                         value={searchValue}
                         onChange={(e) => {
                           setSearchValue(e.target.value);
@@ -3105,7 +3146,7 @@ function ItemsDashboardInner() {
                           className="absolute inset-y-0 right-0 h-9 px-3 rounded-l-none shadow-none"
                           disabled={isSearching}
                         >
-                          {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Search'}
+                          {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : t('search')}
                         </Button>
                       )}
                     </div>
