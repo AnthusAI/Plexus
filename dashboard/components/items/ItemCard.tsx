@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
-import { MoreHorizontal, X, Square, Columns2, StickyNote, Info, ChevronDown, ChevronUp, Loader2, Box, ListChecks, FileText, Tag } from 'lucide-react'
+import { MoreHorizontal, X, Square, Columns2, StickyNote, Info, ChevronDown, ChevronRight, ChevronUp, Loader2, Box, ListChecks, FileText, Tag } from 'lucide-react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { cn } from '@/lib/utils'
 import { CardButton } from '@/components/CardButton'
@@ -363,10 +363,12 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
             {/* Text field display */}
             {item.text && (
               <AccordionItem value="text" className="border-b-0">
-                <AccordionTrigger className="hover:no-underline py-2 px-0">
+                <AccordionTrigger className="hover:no-underline py-2 px-0 justify-start [&>svg]:hidden group">
                   <div className="flex items-center gap-2">
                     <FileText className="h-3 w-3 text-muted-foreground" />
                     <span className="text-sm font-medium leading-none text-muted-foreground">Text</span>
+                    <ChevronRight className="h-3 w-3 text-muted-foreground transition-transform duration-200 group-data-[state=open]:hidden" />
+                    <ChevronDown className="h-3 w-3 text-muted-foreground transition-transform duration-200 hidden group-data-[state=open]:block" />
                   </div>
                 </AccordionTrigger>
                 <AccordionContent className="pt-0 pb-4">
@@ -401,10 +403,12 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
             {/* Metadata section */}
             {(item.metadata && Object.keys(item.metadata).length > 0) && (
               <AccordionItem value="metadata" className="border-b-0">
-                <AccordionTrigger className="hover:no-underline py-2 px-0">
+                <AccordionTrigger className="hover:no-underline py-2 px-0 justify-start [&>svg]:hidden group">
                   <div className="flex items-center gap-2">
                     <Tag className="h-3 w-3 text-muted-foreground" />
                     <span className="text-sm font-medium leading-none text-muted-foreground">Metadata</span>
+                    <ChevronRight className="h-3 w-3 text-muted-foreground transition-transform duration-200 group-data-[state=open]:hidden" />
+                    <ChevronDown className="h-3 w-3 text-muted-foreground transition-transform duration-200 hidden group-data-[state=open]:block" />
                     {!readOnly && <span className="text-[10px] text-muted-foreground">optional</span>}
                   </div>
                 </AccordionTrigger>
@@ -427,10 +431,12 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
             {/* File attachments section */}
             {(item.attachedFiles && item.attachedFiles.length > 0) && (
               <AccordionItem value="attachments" className="border-b-0">
-                <AccordionTrigger className="hover:no-underline py-2 px-0">
+                <AccordionTrigger className="hover:no-underline py-2 px-0 justify-start [&>svg]:hidden group">
                   <div className="flex items-center gap-2">
                     <FileText className="h-3 w-3 text-muted-foreground" />
                     <span className="text-sm font-medium leading-none text-muted-foreground">Attached Files</span>
+                    <ChevronRight className="h-3 w-3 text-muted-foreground transition-transform duration-200 group-data-[state=open]:hidden" />
+                    <ChevronDown className="h-3 w-3 text-muted-foreground transition-transform duration-200 hidden group-data-[state=open]:block" />
                   </div>
                 </AccordionTrigger>
                 <AccordionContent className="pt-0 pb-4">

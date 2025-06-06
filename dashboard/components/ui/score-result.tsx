@@ -246,7 +246,15 @@ export function ScoreResultComponent({
             )}
 
             {/* Trace section */}
-            <ScoreResultTrace trace={result.trace} />
+            {result.trace && (
+              <div>
+                <div className="flex items-center mb-1">
+                  <View className="w-4 h-4 mr-1 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">Trace</p>
+                </div>
+                <ScoreResultTrace trace={result.trace} />
+              </div>
+            )}
           </div>
         </div>
       </div>
