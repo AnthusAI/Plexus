@@ -3060,8 +3060,8 @@ function ItemsDashboardInner() {
         <div className="flex flex-1 min-h-0">
           {/* Left panel - grid content */}
           <div 
-            className={`${selectedItem && !isNarrowViewport && isFullWidth ? 'hidden' : 'flex-1'} h-full overflow-auto`}
-            style={selectedItem && !isNarrowViewport && !isFullWidth ? {
+            className={`${selectedItem && !isNarrowViewport && (isFullWidth || selectedScoreResult) ? 'hidden' : 'flex-1'} h-full overflow-auto`}
+            style={selectedItem && !isNarrowViewport && !isFullWidth && !selectedScoreResult ? {
               width: `${leftPanelWidth}%`
             } : undefined}
           >
@@ -3165,7 +3165,7 @@ function ItemsDashboardInner() {
           </div>
 
           {/* Divider for split view */}
-          {selectedItem && !isNarrowViewport && !isFullWidth && (
+          {selectedItem && !isNarrowViewport && !isFullWidth && !selectedScoreResult && (
             <div
               className="w-[12px] relative cursor-col-resize flex-shrink-0 group"
               onMouseDown={handleDragStart}
@@ -3178,40 +3178,41 @@ function ItemsDashboardInner() {
           {/* Right panel - item detail view */}
           {selectedItem && !isNarrowViewport && (
             <>
-              <div 
-                className="h-full overflow-hidden"
-                style={{ 
-                  width: isFullWidth 
-                    ? '100%' 
-                    : selectedScoreResult 
-                      ? `${(100 - leftPanelWidth) * 0.5}%` 
-                      : `${100 - leftPanelWidth}%` 
-                }}
-              >
-                {renderSelectedItem()}
-              </div>
-              
-              {/* Second divider for score result panel */}
-              {selectedScoreResult && !isFullWidth && (
-                <div
-                  className="w-[12px] relative cursor-col-resize flex-shrink-0 group"
-                >
-                  <div className="absolute inset-0 rounded-full transition-colors duration-150 
-                    group-hover:bg-accent" />
-                </div>
-              )}
+              {selectedScoreResult ? (
+                // When score result is selected, show ItemCard and ScoreResultCard side by side, full-width
+                <>
+                  <div className="h-full overflow-hidden flex-1">
+                    {renderSelectedItem()}
+                  </div>
+                  
+                  {/* Divider between ItemCard and ScoreResultCard */}
+                  <div
+                    className="w-[12px] relative cursor-col-resize flex-shrink-0 group"
+                  >
+                    <div className="absolute inset-0 rounded-full transition-colors duration-150 
+                      group-hover:bg-accent" />
+                  </div>
 
-              {/* Score result panel */}
-              {selectedScoreResult && !isFullWidth && (
+                  {/* Score result panel - takes equal space with ItemCard */}
+                  <div className="h-full overflow-hidden flex-1">
+                    <ScoreResultCard
+                      scoreResult={selectedScoreResult}
+                      onClose={() => setSelectedScoreResult(null)}
+                      naturalHeight={false}
+                    />
+                  </div>
+                </>
+              ) : (
+                // When no score result is selected, show normal item view
                 <div 
                   className="h-full overflow-hidden"
-                  style={{ width: `${(100 - leftPanelWidth) * 0.5}%` }}
+                  style={{ 
+                    width: isFullWidth 
+                      ? '100%' 
+                      : `${100 - leftPanelWidth}%` 
+                  }}
                 >
-                  <ScoreResultCard
-                    scoreResult={selectedScoreResult}
-                    onClose={() => setSelectedScoreResult(null)}
-                    naturalHeight={false}
-                  />
+                  {renderSelectedItem()}
                 </div>
               )}
             </>
