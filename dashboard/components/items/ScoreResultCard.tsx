@@ -1,7 +1,7 @@
 import * as React from 'react'
 import Link from 'next/link';
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
-import { MoreHorizontal, X, Square, Columns2, Box, ListChecks, ListCheck, FileText } from 'lucide-react'
+import { MoreHorizontal, X, Square, Columns2, Box, ListChecks, ListCheck, FileText, Target, MessageSquareMore, View, Files } from 'lucide-react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { cn } from '@/lib/utils'
 import { CardButton } from '@/components/CardButton'
@@ -257,7 +257,10 @@ const ScoreResultCard = React.forwardRef<HTMLDivElement, ScoreResultCardProps>((
 
           {/* Value */}
           <div>
-            <h3 className="text-sm font-medium text-muted-foreground mb-2">Value</h3>
+            <div className="flex items-center gap-1 mb-2">
+              <Target className="h-4 w-4 text-muted-foreground" />
+              <h3 className="text-sm font-medium text-muted-foreground">Value</h3>
+            </div>
             <div className="flex items-center gap-2">
               <Badge variant="secondary">{scoreResult.value}</Badge>
               {scoreResult.confidence !== null && scoreResult.confidence !== undefined && (
@@ -271,7 +274,10 @@ const ScoreResultCard = React.forwardRef<HTMLDivElement, ScoreResultCardProps>((
           {/* Explanation */}
           {scoreResult.explanation && (
             <div>
-              <h3 className="text-sm font-medium text-muted-foreground mb-2">Explanation</h3>
+              <div className="flex items-center gap-1 mb-2">
+                <MessageSquareMore className="h-4 w-4 text-muted-foreground" />
+                <h3 className="text-sm font-medium text-muted-foreground">Explanation</h3>
+              </div>
               <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:bg-muted prose-pre:text-foreground">
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm, remarkBreaks]}
@@ -299,7 +305,10 @@ const ScoreResultCard = React.forwardRef<HTMLDivElement, ScoreResultCardProps>((
           {/* Trace */}
           {traceJsonPath && (
             <div>
-              <h3 className="text-sm font-medium text-muted-foreground mb-2">Trace</h3>
+              <div className="flex items-center gap-1 mb-2">
+                <View className="h-4 w-4 text-muted-foreground" />
+                <h3 className="text-sm font-medium text-muted-foreground">Trace</h3>
+              </div>
               <ScoreResultTrace trace={traceData} />
             </div>
           )}
@@ -307,7 +316,10 @@ const ScoreResultCard = React.forwardRef<HTMLDivElement, ScoreResultCardProps>((
           {/* Attachments */}
           {scoreResult.attachments && scoreResult.attachments.length > 0 && (
             <div>
-              <h3 className="text-sm font-medium text-muted-foreground mb-2">Attachments</h3>
+              <div className="flex items-center gap-1 mb-2">
+                <Files className="h-4 w-4 text-muted-foreground" />
+                <h3 className="text-sm font-medium text-muted-foreground">Attachments</h3>
+              </div>
               <Accordion type="multiple" className="w-full">
                 {scoreResult.attachments.map((attachmentPath, index) => (
                   <AccordionItem 
