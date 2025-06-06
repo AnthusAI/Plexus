@@ -442,7 +442,6 @@ class Scorecard:
                     'Environment': os.getenv('environment') or 'Unknown'
                 }
                 
-                logging.info(f"🔍 INDIVIDUAL SCORE DIMENSIONS: {dimensions}")
                 self.cloudwatch_logger.log_metric('Cost', score_total_cost.get('total_cost', 0), dimensions)
                 self.cloudwatch_logger.log_metric('PromptTokens', score_total_cost.get('prompt_tokens', 0), dimensions)
                 self.cloudwatch_logger.log_metric('CompletionTokens', score_total_cost.get('completion_tokens', 0), dimensions)
@@ -456,7 +455,6 @@ class Scorecard:
                     'Environment': os.getenv('environment') or 'Unknown'
                 }
 
-                logging.info(f"🔍 SCORECARD-LEVEL DIMENSIONS: {scorecard_dimensions}")
                 self.cloudwatch_logger.log_metric('CostByScorecard', score_total_cost.get('total_cost', 0), scorecard_dimensions)
                 self.cloudwatch_logger.log_metric('PromptTokensByScorecard', score_total_cost.get('prompt_tokens', 0), scorecard_dimensions)
                 self.cloudwatch_logger.log_metric('CompletionTokensByScorecard', score_total_cost.get('completion_tokens', 0), scorecard_dimensions)
