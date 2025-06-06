@@ -389,6 +389,7 @@ const schema = a.schema({
             metadata: a.json(),
             trace: a.json(),
             correct: a.boolean(),
+            cost: a.json(), // Cost information including tokens, API calls, and monetary cost
             attachments: a.string().array(), // Array of file paths for trace and log files
             itemId: a.string().required(),
             item: a.belongsTo('Item', 'itemId'),
