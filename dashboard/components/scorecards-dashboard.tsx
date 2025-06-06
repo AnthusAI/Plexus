@@ -1,5 +1,6 @@
 "use client"
 import React, { useState, useEffect } from "react"
+import { useTranslations } from '@/app/contexts/TranslationContext'
 import { Button } from "./ui/button"
 import { amplifyClient, getClient } from "@/utils/amplify-client"
 import type { Schema } from "@/amplify/data/resource"
@@ -54,6 +55,7 @@ export default function ScorecardsComponent({
 } = {}) {
   // Get the Amplify client for Tasks model
   const client = getClient();
+  const tScorecards = useTranslations('scorecards');
   
   const [scorecards, setScorecards] = useState<Schema['Scorecard']['type'][]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -1063,7 +1065,7 @@ export default function ScorecardsComponent({
                 variant="ghost" 
                 className="bg-card hover:bg-accent text-muted-foreground"
               >
-                New Scorecard
+                {tScorecards('newScorecard')}
               </Button>
             </div>
             <div className="@container">

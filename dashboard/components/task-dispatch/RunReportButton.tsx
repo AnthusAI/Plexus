@@ -7,11 +7,13 @@ import { createTask } from "@/utils/data-operations"
 import { toast } from "sonner"
 import { ReportConfigurationDialog } from "./dialogs/ReportConfigurationDialog"
 import { useAccount } from "@/app/contexts/AccountContext"
+import { useTranslations } from '@/app/contexts/TranslationContext'
 
 export function RunReportButton() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const { selectedAccount } = useAccount()
+  const tReports = useTranslations('reports')
 
   const handleOpenDialog = () => {
     setIsModalOpen(true)
@@ -53,7 +55,7 @@ export function RunReportButton() {
 
   // Mock action object for the dialog
   const mockAction = {
-    name: "Run Report",
+    name: tReports('runReport'),
     icon: <Play className="mr-2 h-4 w-4" />,
     command: "report run",
     target: "report",
@@ -68,7 +70,7 @@ export function RunReportButton() {
         variant="ghost" 
         className="bg-card hover:bg-accent text-muted-foreground"
       >
-        <Play className="mr-2 h-4 w-4" /> Run Report
+        <Play className="mr-2 h-4 w-4" /> {tReports('runReport')}
       </Button>
 
       <ReportConfigurationDialog

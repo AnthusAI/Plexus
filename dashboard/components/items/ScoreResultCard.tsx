@@ -14,6 +14,7 @@ import { IdentifierDisplay } from '@/components/ui/identifier-display'
 import { ScoreResultTrace } from '@/components/ui/score-result-trace'
 import FileContentViewer from '@/components/ui/FileContentViewer'
 import { getDashboardUrl } from '@/utils/plexus-links';
+import { useTranslations } from '@/app/contexts/TranslationContext';
 import {
   Accordion,
   AccordionContent,
@@ -66,6 +67,8 @@ const ScoreResultCard = React.forwardRef<HTMLDivElement, ScoreResultCardProps>((
   className, 
   ...props 
 }, ref) => {
+  const t = useTranslations('items');
+  
   React.useEffect(() => {
     console.log('[ScoreResultCard] Received scoreResult:', scoreResult);
     if (scoreResult) {
@@ -95,7 +98,7 @@ const ScoreResultCard = React.forwardRef<HTMLDivElement, ScoreResultCardProps>((
         <div>
           <div className="flex items-center gap-1">
             <Box className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
-            <h2 className="text-xl text-muted-foreground font-semibold">Score Result Details</h2>
+            <h2 className="text-xl text-muted-foreground font-semibold">{t('scoreResultDetails')}</h2>
           </div>
           <div className="mt-1 space-y-1">
             <IdentifierDisplay 
@@ -164,7 +167,7 @@ const ScoreResultCard = React.forwardRef<HTMLDivElement, ScoreResultCardProps>((
                   className="relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
                   onSelect={() => {}}
                 >
-                  View Raw Data
+                  {t('viewRawData')}
                 </DropdownMenu.Item>
               </DropdownMenu.Content>
             </DropdownMenu.Portal>
@@ -173,7 +176,7 @@ const ScoreResultCard = React.forwardRef<HTMLDivElement, ScoreResultCardProps>((
             <CardButton
               icon={isFullWidth ? Columns2 : Square}
               onClick={onToggleFullWidth}
-              aria-label={isFullWidth ? 'Exit full width' : 'Full width'}
+              aria-label={isFullWidth ? t('exitFullWidth') : t('fullWidth')}
               skeletonMode={skeletonMode}
             />
           )}
@@ -181,7 +184,7 @@ const ScoreResultCard = React.forwardRef<HTMLDivElement, ScoreResultCardProps>((
             <CardButton
               icon={X}
               onClick={onClose}
-              aria-label="Close"
+              aria-label={t('close')}
               skeletonMode={skeletonMode}
             />
           )}
@@ -192,12 +195,12 @@ const ScoreResultCard = React.forwardRef<HTMLDivElement, ScoreResultCardProps>((
 
           {/* Value */}
           <div>
-            <h3 className="text-sm font-medium text-muted-foreground mb-2">Value</h3>
+            <h3 className="text-sm font-medium text-muted-foreground mb-2">{t('value')}</h3>
             <div className="flex items-center gap-2">
               <Badge variant="secondary">{scoreResult.value}</Badge>
               {scoreResult.confidence !== null && scoreResult.confidence !== undefined && (
                 <span className="text-xs text-muted-foreground">
-                  {Math.round((scoreResult.confidence || 0) * 100)}% confidence
+                  {Math.round((scoreResult.confidence || 0) * 100)}% {t('confidence')}
                 </span>
               )}
             </div>
@@ -206,7 +209,7 @@ const ScoreResultCard = React.forwardRef<HTMLDivElement, ScoreResultCardProps>((
           {/* Explanation */}
           {scoreResult.explanation && (
             <div>
-              <h3 className="text-sm font-medium text-muted-foreground mb-2">Explanation</h3>
+              <h3 className="text-sm font-medium text-muted-foreground mb-2">{t('explanation')}</h3>
               <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:bg-muted prose-pre:text-foreground">
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm, remarkBreaks]}
@@ -237,7 +240,7 @@ const ScoreResultCard = React.forwardRef<HTMLDivElement, ScoreResultCardProps>((
           {/* Attachments */}
           {scoreResult.attachments && scoreResult.attachments.length > 0 && (
             <div>
-              <h3 className="text-sm font-medium text-muted-foreground mb-2 mt-4">Attachments</h3>
+              <h3 className="text-sm font-medium text-muted-foreground mb-2 mt-4">{t('attachments')}</h3>
               <Accordion type="multiple" className="w-full">
                 {scoreResult.attachments.map((attachmentPath, index) => (
                   <AccordionItem 

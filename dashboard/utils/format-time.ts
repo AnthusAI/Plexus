@@ -1,6 +1,7 @@
 import { formatDistanceToNow } from 'date-fns'
 
-export function formatTimeAgo(timestamp: string | Date, abbreviated: boolean = true): string {
+// Simple time formatting function that returns translation keys
+export function formatTimeAgo(timestamp: string | Date, abbreviated: boolean = true, locale?: string): string {
   try {
     // Handle string timestamps
     const date = typeof timestamp === 'string' ? new Date(timestamp) : timestamp

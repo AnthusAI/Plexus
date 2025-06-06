@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react"
+import { useTranslations } from '@/app/contexts/TranslationContext'
 // Import the setup file for its side effects
 import "@/components/blocks/registrySetup"; 
 import type { Schema } from "@/amplify/data/resource"
@@ -528,7 +529,8 @@ export default function ReportsDashboard({
   // Add a useEffect to potentially log when setup runs relative to mount
   useEffect(() => {
     console.log("ReportsDashboard mounted. Block registry setup should have run.");
-  }, []); 
+  }, []);
+  const tReports = useTranslations('reports'); 
 
   const { user } = useAuthenticator()
   const router = useRouter()
@@ -1327,7 +1329,7 @@ export default function ReportsDashboard({
             variant="ghost"
             className="bg-card hover:bg-accent text-muted-foreground"
           >
-            <Pencil className="mr-2 h-4 w-4"/> Edit Configurations
+            <Pencil className="mr-2 h-4 w-4"/> {tReports('editConfigurations')}
           </Button>
           <RunReportButton />
         </div>

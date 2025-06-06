@@ -2,11 +2,11 @@ import { FlaskConical, FlaskRound, TestTubes } from "lucide-react"
 import { TaskDispatchConfig } from "../types"
 import { EvaluationDialog } from "../dialogs/EvaluationDialog"
 
-export const evaluationsConfig: TaskDispatchConfig = {
-  buttonLabel: "Run",
+export const createEvaluationsConfig = (t: (key: string) => string): TaskDispatchConfig => ({
+  buttonLabel: t('run'),
   actions: [
     {
-      name: "Evaluate Accuracy",
+      name: t('evaluateAccuracy'),
       icon: <FlaskConical className="mr-2 h-4 w-4" />,
       command: "evaluate accuracy",
       target: "evaluation",
@@ -14,7 +14,7 @@ export const evaluationsConfig: TaskDispatchConfig = {
       description: "Evaluate model accuracy against ground truth"
     },
     {
-      name: "Evaluate Consistency",
+      name: t('evaluateConsistency'),
       icon: <FlaskRound className="mr-2 h-4 w-4" />,
       command: "evaluate consistency",
       target: "evaluation",
@@ -22,7 +22,7 @@ export const evaluationsConfig: TaskDispatchConfig = {
       description: "Evaluate model consistency across similar inputs"
     },
     {
-      name: "Evaluate Alignment",
+      name: t('evaluateAlignment'),
       icon: <TestTubes className="mr-2 h-4 w-4" />,
       command: "evaluate alignment",
       target: "evaluation",
@@ -33,4 +33,4 @@ export const evaluationsConfig: TaskDispatchConfig = {
   dialogs: {
     evaluation: EvaluationDialog
   }
-} 
+}) 
