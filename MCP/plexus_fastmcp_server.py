@@ -2728,79 +2728,44 @@ async def update_plexus_score_configuration(
         scorecard_name = find_result["scorecard_name"]
         scorecard_id = find_result["scorecard_id"]
 
-        # Create a temporary YAML file with the configuration
-        import tempfile
-        import os
+        # Use the foundational create_version_from_yaml method directly
+        result = score.create_version_from_yaml(
+            yaml_configuration,
+            note=version_note or "Updated via MCP server"
+        )
         
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as temp_file:
-            temp_file.write(yaml_configuration)
-            temp_yaml_path = temp_file.name
+        if not result["success"]:
+            return f"Error: {result.get('message', 'Failed to create version')}"
         
-        try:
-            # Temporarily override the get_local_configuration_path method to return our temp file
-            from pathlib import Path
-            original_path_method = score.get_local_configuration_path
-            score.get_local_configuration_path = lambda scorecard_name=None: Path(temp_yaml_path)
-            
-            # Use the Score model's push_configuration method
-            push_result = score.push_configuration(
-                scorecard_name=scorecard_name,
-                note=version_note or "Updated via MCP server"
-            )
-            
-            # Restore the original method
-            score.get_local_configuration_path = original_path_method
-            
-            if not push_result["success"]:
-                return f"Error: {push_result.get('message', 'Failed to push configuration')}"
-            
-            # Get additional metadata for comprehensive response
-            new_version_id = push_result["version_id"]
-            
-            # Get current champion version ID for comparison
-            champion_query = f"""
-            query GetScore {{
-                getScore(id: "{score.id}") {{
-                    championVersionId
+        # Get version creation timestamp if a new version was created
+        new_version_id = result["version_id"]
+        if not result.get("skipped", False):
+            version_query = f"""
+            query GetScoreVersion {{
+                getScoreVersion(id: "{new_version_id}") {{
+                    createdAt
                 }}
             }}
             """
-            champion_result = client.execute(champion_query)
-            current_champion_id = champion_result.get('getScore', {}).get('championVersionId')
-            
-            # Get version creation timestamp
-            if not push_result.get("skipped", False):
-                version_query = f"""
-                query GetScoreVersion {{
-                    getScoreVersion(id: "{new_version_id}") {{
-                        createdAt
-                    }}
-                }}
-                """
-                version_result = client.execute(version_query)
-                created_at = version_result.get('getScoreVersion', {}).get('createdAt')
-            else:
-                created_at = None
+            version_result = client.execute(version_query)
+            created_at = version_result.get('getScoreVersion', {}).get('createdAt')
+        else:
+            created_at = None
 
-            return {
-                "success": True,
-                "scoreId": score.id,
-                "scoreName": score.name,
-                "scorecardName": scorecard_name,
-                "newVersionId": new_version_id,
-                "previousChampionVersionId": current_champion_id if current_champion_id != new_version_id else None,
-                "versionNote": version_note or "Updated via MCP server",
-                "configurationLength": len(yaml_configuration),
-                "createdAt": created_at,
-                "championUpdated": push_result.get("champion_updated", True),
-                "skipped": push_result.get("skipped", False),
-                "dashboardUrl": get_plexus_url(f"lab/scorecards/{scorecard_id}/scores/{score.id}")
-            }
-            
-        finally:
-            # Clean up temporary file
-            if os.path.exists(temp_yaml_path):
-                os.unlink(temp_yaml_path)
+        return {
+            "success": True,
+            "scoreId": score.id,
+            "scoreName": score.name,
+            "scorecardName": scorecard_name,
+            "newVersionId": new_version_id,
+            "previousChampionVersionId": None,  # The Score method handles version tracking internally
+            "versionNote": version_note or "Updated via MCP server",
+            "configurationLength": len(yaml_configuration),
+            "createdAt": created_at,
+            "championUpdated": result.get("champion_updated", True),
+            "skipped": result.get("skipped", False),
+            "dashboardUrl": get_plexus_url(f"lab/scorecards/{scorecard_id}/scores/{score.id}")
+        }
         
     except Exception as e:
         logger.error(f"Error updating score configuration: {str(e)}", exc_info=True)
