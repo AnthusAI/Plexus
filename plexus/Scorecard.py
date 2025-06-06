@@ -234,11 +234,6 @@ class Scorecard:
         if (score_class is not None):
             logging.info(f"Found score class for: {score}")
 
-            # Calculate content item length in tokens using a general-purpose encoding
-            encoding = tiktoken.get_encoding("cl100k_base")
-            item_tokens = len(encoding.encode(text))
-            logging.info(f"Item tokens for {score}: {item_tokens}")
-
             score_configuration.update({
                 'scorecard_name': self.name,
                 'score_name': score
@@ -289,7 +284,6 @@ class Scorecard:
 
                 # Get the total cost for this score
                 score_total_cost = score_instance.get_accumulated_costs()
-                total_tokens = score_total_cost.get('prompt_tokens', 0) + score_total_cost.get('completion_tokens', 0)
 
                 # Update scorecard's cost accumulators
                 self.prompt_tokens += score_total_cost.get('prompt_tokens', 0)
@@ -300,37 +294,6 @@ class Scorecard:
                 self.output_cost += score_total_cost.get('output_cost', 0)
                 self.total_cost += Decimal(str(score_total_cost.get('total_cost', 0)))
                 self.scorecard_total_cost += Decimal(str(score_total_cost.get('total_cost', 0)))
-
-                # Log the cost for this individual score
-                dimensions = {
-                    'ScoreCardID': str(self.properties['id']),
-                    'ScoreCardName': str(self.properties['name']),
-                    'Score': str(score_configuration.get('name')),
-                    'ScoreID': str(score_configuration.get('id')),
-                    'Modality': modality or 'Development',
-                    'Environment': os.getenv('environment') or 'Unknown'
-                }
-                
-                self.cloudwatch_logger.log_metric('Cost', score_total_cost.get('total_cost', 0), dimensions)
-                self.cloudwatch_logger.log_metric('PromptTokens', score_total_cost.get('prompt_tokens', 0), dimensions)
-                self.cloudwatch_logger.log_metric('CompletionTokens', score_total_cost.get('completion_tokens', 0), dimensions)
-                self.cloudwatch_logger.log_metric('TotalTokens', total_tokens, dimensions)
-                self.cloudwatch_logger.log_metric('CachedTokens', score_total_cost.get('cached_tokens', 0), dimensions)
-                self.cloudwatch_logger.log_metric('ExternalAIRequests', score_total_cost.get('llm_calls', 0), dimensions)
-                self.cloudwatch_logger.log_metric('ItemTokens', item_tokens, dimensions)
-
-                scorecard_dimensions = {
-                    'ScoreCardName': str(self.properties['name']),
-                    'Environment': os.getenv('environment') or 'Unknown'
-                }
-
-                self.cloudwatch_logger.log_metric('CostByScorecard', score_total_cost.get('total_cost', 0), scorecard_dimensions)
-                self.cloudwatch_logger.log_metric('PromptTokensByScorecard', score_total_cost.get('prompt_tokens', 0), scorecard_dimensions)
-                self.cloudwatch_logger.log_metric('CompletionTokensByScorecard', score_total_cost.get('completion_tokens', 0), scorecard_dimensions)
-                self.cloudwatch_logger.log_metric('TotalTokensByScorecard', total_tokens, scorecard_dimensions)
-                self.cloudwatch_logger.log_metric('CachedTokensByScorecard', score_total_cost.get('cached_tokens', 0), scorecard_dimensions)
-                self.cloudwatch_logger.log_metric('ExternalAIRequestsByScorecard', score_total_cost.get('llm_calls', 0), scorecard_dimensions)
-                self.cloudwatch_logger.log_metric('ItemTokensByScorecard', item_tokens, scorecard_dimensions)
 
                 # Ensure we always return a list of results
                 if isinstance(score_result, list):
@@ -353,6 +316,11 @@ class Scorecard:
             subset_of_score_names = self.score_names_to_process()
         
         logging.info(f"Starting to process scores: {subset_of_score_names}")
+
+        # Calculate content item length in tokens using a general-purpose encoding
+        encoding = tiktoken.get_encoding("cl100k_base")
+        item_tokens = len(encoding.encode(text))
+        logging.info(f"Item tokens for scorecard: {item_tokens}")
 
         # Add dependend scores to the subset of score names.
         dependent_scores_added = []
@@ -450,6 +418,52 @@ class Scorecard:
                     result = score_result[0]
                 else:
                     result = score_result
+
+                # Get the total cost for this score and update scorecard's cost accumulators
+                score_total_cost = score_instance.get_accumulated_costs()
+                total_tokens = score_total_cost.get('prompt_tokens', 0) + score_total_cost.get('completion_tokens', 0)
+
+                self.prompt_tokens += score_total_cost.get('prompt_tokens', 0)
+                self.completion_tokens += score_total_cost.get('completion_tokens', 0)
+                self.cached_tokens += score_total_cost.get('cached_tokens', 0)
+                self.llm_calls += score_total_cost.get('llm_calls', 0)
+                self.input_cost += score_total_cost.get('input_cost', 0)
+                self.output_cost += score_total_cost.get('output_cost', 0)
+                self.total_cost += Decimal(str(score_total_cost.get('total_cost', 0)))
+                self.scorecard_total_cost += Decimal(str(score_total_cost.get('total_cost', 0)))
+
+                # Log CloudWatch metrics for this individual score
+                dimensions = {
+                    'ScoreCardID': str(self.properties['id']),
+                    'ScoreCardName': str(self.properties['name']),
+                    'Score': str(score_configuration.get('name')),
+                    'ScoreID': str(score_configuration.get('id')),
+                    'Modality': modality or 'Development',
+                    'Environment': os.getenv('environment') or 'Unknown'
+                }
+                
+                logging.info(f"🔍 INDIVIDUAL SCORE DIMENSIONS: {dimensions}")
+                self.cloudwatch_logger.log_metric('Cost', score_total_cost.get('total_cost', 0), dimensions)
+                self.cloudwatch_logger.log_metric('PromptTokens', score_total_cost.get('prompt_tokens', 0), dimensions)
+                self.cloudwatch_logger.log_metric('CompletionTokens', score_total_cost.get('completion_tokens', 0), dimensions)
+                self.cloudwatch_logger.log_metric('TotalTokens', total_tokens, dimensions)
+                self.cloudwatch_logger.log_metric('CachedTokens', score_total_cost.get('cached_tokens', 0), dimensions)
+                self.cloudwatch_logger.log_metric('ExternalAIRequests', score_total_cost.get('llm_calls', 0), dimensions)
+                self.cloudwatch_logger.log_metric('ItemTokens', item_tokens, dimensions)
+
+                scorecard_dimensions = {
+                    'ScoreCardName': str(self.properties['name']),
+                    'Environment': os.getenv('environment') or 'Unknown'
+                }
+
+                logging.info(f"🔍 SCORECARD-LEVEL DIMENSIONS: {scorecard_dimensions}")
+                self.cloudwatch_logger.log_metric('CostByScorecard', score_total_cost.get('total_cost', 0), scorecard_dimensions)
+                self.cloudwatch_logger.log_metric('PromptTokensByScorecard', score_total_cost.get('prompt_tokens', 0), scorecard_dimensions)
+                self.cloudwatch_logger.log_metric('CompletionTokensByScorecard', score_total_cost.get('completion_tokens', 0), scorecard_dimensions)
+                self.cloudwatch_logger.log_metric('TotalTokensByScorecard', total_tokens, scorecard_dimensions)
+                self.cloudwatch_logger.log_metric('CachedTokensByScorecard', score_total_cost.get('cached_tokens', 0), scorecard_dimensions)
+                self.cloudwatch_logger.log_metric('ExternalAIRequestsByScorecard', score_total_cost.get('llm_calls', 0), scorecard_dimensions)
+                self.cloudwatch_logger.log_metric('ItemTokensByScorecard', item_tokens, scorecard_dimensions)
                     
                 results_by_score_id[score_id] = result
                 results.append({
