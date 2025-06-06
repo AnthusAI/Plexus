@@ -633,6 +633,7 @@ function ItemsDashboardInner() {
   const [specificItemLoading, setSpecificItemLoading] = useState(false);
   const [failedItemFetches, setFailedItemFetches] = useState<Set<string>>(new Set());
   const refetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const scoreCountRefetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [specificallyFetchedItems, setSpecificallyFetchedItems] = useState<Set<string>>(new Set());
   
   // Ref map to track item elements for scroll-to-view functionality
@@ -1112,6 +1113,25 @@ function ItemsDashboardInner() {
     }
   }, [selectedAccount, selectedScorecard, selectedScore]);
 
+  // Enhanced throttled refresh that handles selected item immediately
+  const throttledRefreshScoreCounts = useCallback((priorityItemId?: string) => {
+    // If there's a priority item (like the selected item), refresh it immediately
+    if (priorityItemId && scoreCountManagerRef.current) {
+      scoreCountManagerRef.current.refreshItemCount(priorityItemId);
+    }
+    
+    // Still throttle the bulk refresh for all other items
+    if (scoreCountRefetchTimeoutRef.current) {
+      clearTimeout(scoreCountRefetchTimeoutRef.current);
+    }
+  
+    scoreCountRefetchTimeoutRef.current = setTimeout(() => {
+      if (scoreCountManagerRef.current) {
+        scoreCountManagerRef.current.refreshAllCounts();
+      }
+    }, 2000); // 2-second debounce for bulk updates
+  }, []);
+
   // Restart subscriptions function
   const restartSubscriptions = useCallback(() => {
     if (!selectedAccount || isLoadingAccounts) return;
@@ -1219,7 +1239,8 @@ function ItemsDashboardInner() {
           
           try {
             if (scoreCountManagerRef.current) {
-              scoreCountManagerRef.current.refreshAllCounts();
+              // Immediately refresh the selected item, throttle everything else
+              throttledRefreshScoreCounts(selectedItem || undefined);
             }
             
             if (scoreResultsRefetchRef.current) {
@@ -1239,7 +1260,7 @@ function ItemsDashboardInner() {
       itemUpdateSubscriptionRef.current = updateSubscription;
       scoreResultSubscriptionRef.current = scoreResultSubscription;
     }, 100);
-  }, [selectedAccount, isLoadingAccounts, silentRefresh]);
+  }, [selectedAccount, isLoadingAccounts, silentRefresh, throttledRefreshScoreCounts, selectedItem]);
 
   // Page Visibility API - detect wake from sleep
   useEffect(() => {
@@ -2134,28 +2155,10 @@ function ItemsDashboardInner() {
       
       // Subscribe to count changes with better state management
       const unsubscribe = scoreCountManagerRef.current.subscribe((counts) => {
-        // Only update state if counts have actually changed
-        setScoreResultCounts(prevCounts => {
-          // Check if the new counts Map is actually different from the previous one
-          if (prevCounts.size !== counts.size) {
-            return counts;
-          }
-          
-          // Check if any individual counts have changed
-          let hasChanges = false;
-          for (const [itemId, newCount] of counts) {
-            const prevCount = prevCounts.get(itemId);
-            if (!prevCount || 
-                prevCount.count !== newCount.count || 
-                prevCount.isLoading !== newCount.isLoading ||
-                JSON.stringify(prevCount.scorecardBreakdown) !== JSON.stringify(newCount.scorecardBreakdown)) {
-              hasChanges = true;
-              break;
-            }
-          }
-          
-          return hasChanges ? counts : prevCounts;
-        });
+        // Simplified update - always accept the new counts
+        // The ScoreResultCountManager already creates a new Map instance,
+        // so React will detect the change properly
+        setScoreResultCounts(counts);
       });
       
       return () => {
@@ -2271,10 +2274,9 @@ function ItemsDashboardInner() {
         }
         
         try {
-          // Since we can't reliably parse the subscription data, refresh all cached counts
-          // This is more aggressive but ensures consistency
+          // Immediately refresh the selected item, throttle everything else
           if (scoreCountManagerRef.current) {
-            scoreCountManagerRef.current.refreshAllCounts();
+            throttledRefreshScoreCounts(selectedItem || undefined);
           }
           
           // Also refresh the detail view score results if there's a selected item
@@ -2313,8 +2315,12 @@ function ItemsDashboardInner() {
         clearTimeout(refetchTimeoutRef.current);
         refetchTimeoutRef.current = null;
       }
+      if (scoreCountRefetchTimeoutRef.current) {
+        clearTimeout(scoreCountRefetchTimeoutRef.current);
+        scoreCountRefetchTimeoutRef.current = null;
+      }
     };
-  }, [selectedAccount, isLoadingAccounts, silentRefresh]); // Removed fetchItems, added silentRefresh which is actually used
+  }, [selectedAccount, isLoadingAccounts, silentRefresh, throttledRefreshScoreCounts, selectedItem]); // Added selectedItem to ensure subscriptions capture current selection
 
   useEffect(() => {
     const checkViewportWidth = () => {
@@ -2374,12 +2380,7 @@ function ItemsDashboardInner() {
   }, [])
 
   const filteredItems = useMemo(() => {
-    console.log('🔍 FILTERING ITEMS:');
-    console.log('- Total items to filter:', items.length);
-    console.log('- Selected scorecard:', selectedScorecard);
-    console.log('- Selected score:', selectedScore);
-    console.log('- Filter config length:', filterConfig.length);
-    
+
     const filtered = items.filter(item => {
       // If no filters are applied, show all items
       if (!selectedScorecard && !selectedScore && filterConfig.length === 0) return true
@@ -2416,13 +2417,6 @@ function ItemsDashboardInner() {
         })
       })
     });
-    
-    console.log('- Filtered items count:', filtered.length);
-    console.log('- Sample filtered items:', filtered.slice(0, 2).map(item => ({
-      id: item.id,
-      accountId: item.accountId,
-      externalId: item.externalId
-    })));
     
     return filtered;
   }, [selectedScorecard, selectedScore, filterConfig, items])
