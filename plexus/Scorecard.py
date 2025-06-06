@@ -295,6 +295,36 @@ class Scorecard:
                 self.total_cost += Decimal(str(score_total_cost.get('total_cost', 0)))
                 self.scorecard_total_cost += Decimal(str(score_total_cost.get('total_cost', 0)))
 
+                # Log CloudWatch metrics for this individual score
+                total_tokens = score_total_cost.get('prompt_tokens', 0) + score_total_cost.get('completion_tokens', 0)
+                dimensions = {
+                    'ScoreCardID': str(self.properties['id']),
+                    'ScoreCardName': str(self.properties['name']),
+                    'Score': str(score_configuration.get('name')),
+                    'ScoreID': str(score_configuration.get('id')),
+                    'Modality': modality or 'Development',
+                    'Environment': os.getenv('environment') or 'Unknown'
+                }
+                
+                self.cloudwatch_logger.log_metric('Cost', score_total_cost.get('total_cost', 0), dimensions)
+                self.cloudwatch_logger.log_metric('PromptTokens', score_total_cost.get('prompt_tokens', 0), dimensions)
+                self.cloudwatch_logger.log_metric('CompletionTokens', score_total_cost.get('completion_tokens', 0), dimensions)
+                self.cloudwatch_logger.log_metric('TotalTokens', total_tokens, dimensions)
+                self.cloudwatch_logger.log_metric('CachedTokens', score_total_cost.get('cached_tokens', 0), dimensions)
+                self.cloudwatch_logger.log_metric('ExternalAIRequests', score_total_cost.get('llm_calls', 0), dimensions)
+
+                scorecard_dimensions = {
+                    'ScoreCardName': str(self.properties['name']),
+                    'Environment': os.getenv('environment') or 'Unknown'
+                }
+
+                self.cloudwatch_logger.log_metric('CostByScorecard', score_total_cost.get('total_cost', 0), scorecard_dimensions)
+                self.cloudwatch_logger.log_metric('PromptTokensByScorecard', score_total_cost.get('prompt_tokens', 0), scorecard_dimensions)
+                self.cloudwatch_logger.log_metric('CompletionTokensByScorecard', score_total_cost.get('completion_tokens', 0), scorecard_dimensions)
+                self.cloudwatch_logger.log_metric('TotalTokensByScorecard', total_tokens, scorecard_dimensions)
+                self.cloudwatch_logger.log_metric('CachedTokensByScorecard', score_total_cost.get('cached_tokens', 0), scorecard_dimensions)
+                self.cloudwatch_logger.log_metric('ExternalAIRequestsByScorecard', score_total_cost.get('llm_calls', 0), scorecard_dimensions)
+
                 # Ensure we always return a list of results
                 if isinstance(score_result, list):
                     return score_result
