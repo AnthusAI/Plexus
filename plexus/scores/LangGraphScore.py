@@ -1070,7 +1070,7 @@ class LangGraphScore(Score, LangChainUser):
             logging.error(f"Error in predict: {e}")
             return Score.Result(
                 parameters=self.parameters,
-                value="Error",
+                value="ERROR",
                 error=str(e)
             )
 

@@ -228,7 +228,7 @@ class Scorecard:
         score_class = self.score_registry.get(score)
         if score_class is None:
             logging.error(f"Score with name '{score}' not found.")
-            return [Score.Result(value="Error", error=f"Score with name '{score}' not found.")]
+            return [Score.Result(value="ERROR", error=f"Score with name '{score}' not found.")]
 
         score_configuration = self.score_registry.get_properties(score)
         if (score_class is not None):
@@ -247,7 +247,7 @@ class Scorecard:
 
             if score_instance is None:
                 logging.error(f"Score with name '{score}' not found in scorecard '{self.name}'.")
-                return [Score.Result(value="Error", error=f"Score with name '{score}' not found in scorecard '{self.name}'.")]
+                return [Score.Result(value="ERROR", error=f"Score with name '{score}' not found in scorecard '{self.name}'.")]
 
             # Add required metadata for LangGraphScore
             if isinstance(score_instance, LangGraphScore):
@@ -346,7 +346,7 @@ class Scorecard:
         else:
             error_string = f"No score found for question: \"{score}\""
             logging.error(error_string)
-            return [Score.Result(value="Error", error=error_string)]
+            return [Score.Result(value="ERROR", error=error_string)]
 
     async def score_entire_text(self, *, text: str, metadata: dict, modality: Optional[str] = None, subset_of_score_names: Optional[List[str]] = None) -> Dict[str, Score.Result]:
         if subset_of_score_names is None:

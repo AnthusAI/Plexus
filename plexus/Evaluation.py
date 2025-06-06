@@ -442,7 +442,7 @@ class Evaluation:
             
             for score_identifier, score_result in result['results'].items():
                 # Skip if the score result is an error
-                if isinstance(score_result.value, str) and score_result.value == "Error":
+                if isinstance(score_result.value, str) and score_result.value.upper() == "ERROR":
                     continue
 
                 # Skip if this is a dependency score and not our primary score
@@ -1569,7 +1569,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                     except Exception as e:
                         logging.exception(f"Error processing {score_identifier}: {e}")
                         score_result = Score.Result(
-                            value="Error", 
+                            value="ERROR", 
                             error=str(e),
                             parameters=Score.Parameters(
                                 name=score_identifier,
