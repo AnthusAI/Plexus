@@ -1,6 +1,209 @@
+:root {
+  --background: hsl(var(--mauve-1));
+  --foreground: hsl(var(--mauve-11));
+  --foreground-true: hsl(var(--green-11));
+  --foreground-false: hsl(var(--red-11));
+  --focus: hsl(var(--mauve-12));
+  --attention: hsl(0, 0%, 0%);
+  --foreground-selected: hsl(var(--mauve-12));
+  --progress-background: hsl(var(--mauve-6));
+  --progress-background-selected: hsl(var(--mauve-7));
+  --muted: hsl(var(--mauve-4));
+  --frame: hsl(var(--mauve-3));
+  --muted-foreground: hsl(var(--mauve-10));
+  --popover: hsl(var(--mauve-1));
+  --popover-foreground: hsl(var(--mauve-11));
+  --card: hsl(var(--mauve-3));
+  --card-selected: hsl(var(--mauve-4));
+  --card-foreground: hsl(var(--mauve-11));
+  --card-selected-foreground: hsl(var(--mauve-11));
+  --border: hsl(var(--mauve-6));
+  --input: hsl(var(--mauve-6));
+  --primary: hsl(var(--blue-6));
+  --primary-selected: hsl(var(--blue-7));
+  --primary-foreground: hsl(var(--mauve-11));
+  --primary-selected-foreground: hsl(var(--mauve-11));
+  --secondary: hsl(var(--plum-6));
+  --secondary-selected: hsl(var(--plum-7));
+  --secondary-foreground: hsl(var(--mauve-11));
+  --secondary-selected-foreground: hsl(var(--mauve-11));
+  --selected: hsl(var(--violet-6));
+  --selected-selected: hsl(var(--violet-7));
+  --selected-foreground: hsl(var(--mauve-11));
+  --selected-selected-foreground: hsl(var(--mauve-11));
+  --accent: hsl(var(--violet-6));
+  --accent-selected: hsl(var(--violet-7));
+  --accent-foreground: hsl(var(--mauve-11));
+  --accent-selected-foreground: hsl(var(--mauve-11));
+  --navigation-icon: hsl(var(--violet-11));
+  --destructive: hsl(var(--red-9));
+  --destructive-selected: hsl(var(--red-10));
+  --destructive-foreground: hsl(var(--mauve-11));
+  --destructive-selected-foreground: hsl(var(--mauve-11));
+  --ring: hsl(var(--blue-7));
+  --radius: 0.5rem;
+  --user-chat: hsl(var(--blue-5));
+  --plexus-chat: hsl(var(--pink-5));
+  --chart-1: hsl(var(--blue-6));
+  --chart-1-selected: hsl(var(--blue-7));
+  --chart-2: hsl(var(--pink-6));
+  --chart-2-selected: hsl(var(--pink-7));
+  --chart-3: hsl(var(--indigo-6));
+  --chart-3-selected: hsl(var(--indigo-7));
+  --chart-4: hsl(var(--plum-6));
+  --chart-4-selected: hsl(var(--plum-7));
+  --chart-5: hsl(var(--violet-6));
+  --chart-5-selected: hsl(var(--violet-7));
+  --chart-6: hsl(var(--crimson-6));
+  --chart-6-selected: hsl(var(--crimson-7));
+  --chart-7: hsl(var(--purple-6));
+  --chart-7-selected: hsl(var(--purple-7));
+  --true: hsl(var(--green-6));
+  --true-selected: hsl(var(--green-7));
+  --false: hsl(var(--red-6));
+  --false-selected: hsl(var(--red-7));
+  --neutral: hsl(var(--mauve-6));
+  --neutral-selected: hsl(var(--mauve-7));
+  --gauge-background: hsl(var(--mauve-2));
+  --gauge-inviable: hsl(var(--mauve-6));
+  --gauge-converging: hsl(var(--green-3));
+  --gauge-almost: hsl(var(--green-5));
+  --gauge-viable: hsl(var(--green-8));
+  --gauge-great: hsl(var(--green-10));
+  --editor-comment: hsl(var(--mauve-9));
+  --editor-key: hsl(var(--blue-9));
+  --editor-string: hsl(var(--violet-9));
+  --editor-number: hsl(var(--pink-9));
+  --editor-keyword: hsl(var(--violet-9));
+}
+
+.dark {
+  --background: hsl(var(--mauve-1));
+  --foreground: hsl(var(--mauve-11));
+  --foreground-true: hsl(var(--green-11));
+  --foreground-false: hsl(var(--red-11));
+  --focus: hsl(var(--mauve-12));
+  --attention: hsl(0, 0%, 100%);
+  --foreground-selected: hsl(var(--mauve-12));
+  --progress-background: hsl(var(--mauve-6));
+  --progress-background-selected: hsl(var(--mauve-7));
+  --muted: hsl(var(--mauve-3));
+  --frame: hsl(var(--mauve-2));
+  --muted-foreground: hsl(var(--mauve-10));
+  --popover: hsl(var(--mauve-3));
+  --popover-foreground: hsl(var(--mauve-11));
+  --card: hsl(var(--mauve-2));
+  --card-selected: hsl(var(--mauve-3));
+  --card-foreground: hsl(var(--mauve-11));
+  --card-selected-foreground: hsl(var(--mauve-11));
+  --border: hsl(var(--mauve-6));
+  --input: hsl(var(--mauve-6));
+  --primary: hsl(var(--blue-6));
+  --primary-selected: hsl(var(--blue-7));
+  --primary-foreground: hsl(var(--mauve-11));
+  --primary-selected-foreground: hsl(var(--mauve-11));
+  --secondary: hsl(var(--plum-6));
+  --secondary-selected: hsl(var(--plum-7));
+  --secondary-foreground: hsl(var(--mauve-11));
+  --secondary-selected-foreground: hsl(var(--mauve-11));
+  --selected: hsl(var(--violet-6));
+  --selected-selected: hsl(var(--violet-7));
+  --selected-foreground: hsl(var(--mauve-11));
+  --selected-selected-foreground: hsl(var(--mauve-11));
+  --accent: hsl(var(--violet-6));
+  --accent-selected: hsl(var(--violet-7));
+  --accent-foreground: hsl(var(--mauve-11));
+  --accent-selected-foreground: hsl(var(--mauve-11));
+  --navigation-icon: hsl(var(--violet-11));
+  --destructive: hsl(var(--red-9));
+  --destructive-selected: hsl(var(--red-10));
+  --destructive-foreground: hsl(var(--mauve-1));
+  --destructive-selected-foreground: hsl(var(--mauve-1));
+  --ring: hsl(var(--blue-7));
+  --user-chat: hsl(var(--blue-5));
+  --plexus-chat: hsl(var(--pink-5));
+  --chart-1: hsl(var(--blue-6));
+  --chart-1-selected: hsl(var(--blue-7));
+  --chart-2: hsl(var(--pink-6));
+  --chart-2-selected: hsl(var(--pink-7));
+  --chart-3: hsl(var(--indigo-6));
+  --chart-3-selected: hsl(var(--indigo-7));
+  --chart-4: hsl(var(--plum-6));
+  --chart-4-selected: hsl(var(--plum-7));
+  --chart-5: hsl(var(--violet-6));
+  --chart-5-selected: hsl(var(--violet-7));
+  --chart-6: hsl(var(--crimson-6));
+  --chart-6-selected: hsl(var(--crimson-7));
+  --chart-7: hsl(var(--purple-6));
+  --chart-7-selected: hsl(var(--purple-7));
+  --true: hsl(var(--green-6));
+  --true-selected: hsl(var(--green-7));
+  --false: hsl(var(--red-6));
+  --false-selected: hsl(var(--red-7));
+  --neutral: hsl(var(--mauve-6));
+  --neutral-selected: hsl(var(--mauve-7));
+  --gauge-background: hsl(var(--mauve-2));
+  --gauge-inviable: hsl(var(--mauve-6));
+  --gauge-converging: hsl(var(--green-6));
+  --gauge-almost: hsl(var(--green-7));
+  --gauge-viable: hsl(var(--green-8));
+  --gauge-great: hsl(var(--green-10));
+  --editor-comment: hsl(var(--mauve-9));
+  --editor-key: hsl(var(--blue-9));
+  --editor-string: hsl(var(--violet-9));
+  --editor-number: hsl(var(--pink-9));
+  --editor-keyword: hsl(var(--violet-9));
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+.new-item-shadow {
+  box-shadow: 0 4px 12px hsl(var(--secondary) / 0.4);
+  animation: fadeInSmooth 2s ease-out;
+}
+
+.selected-border-rounded::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--selected);
+  border-radius: 0.5rem;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.selected-border-rounded::after {
+  content: '';
+  position: absolute;
+  top: 0.375rem;
+  left: 0.375rem;
+  right: 0.375rem;
+  bottom: 0.375rem;
+  background: var(--card-selected);
+  border-radius: 0.3rem;
+  pointer-events: none;
+  z-index: 0;
+}
+
+@keyframes fadeInSmooth {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
 
 @import "hsl-radix-colors/mauve.css";
 @import "hsl-radix-colors/blue.css";
@@ -15,156 +218,6 @@
 @import "hsl-radix-colors/indigo.css";
 @import "hsl-radix-colors/orange.css";
 @import "hsl-radix-colors/yellow.css";
-
-@layer base {
-  :root {
-    --background: hsl(var(--mauve-1));
-    --foreground: hsl(var(--mauve-11));
-    --foreground-true: hsl(var(--green-11));
-    --foreground-false: hsl(var(--red-11));
-    --focus: hsl(var(--mauve-12));
-    --attention: hsl(0, 0%, 0%);
-    --foreground-selected: hsl(var(--mauve-12));
-    --progress-background: hsl(var(--mauve-6));
-    --progress-background-selected: hsl(var(--mauve-7));
-    --muted: hsl(var(--mauve-4));
-    --frame: hsl(var(--mauve-3));
-    --muted-foreground: hsl(var(--mauve-10));
-    --popover: hsl(var(--mauve-1));
-    --popover-foreground: hsl(var(--mauve-11));
-    --card: hsl(var(--mauve-3));
-    --card-selected: hsl(var(--mauve-4));
-    --card-foreground: hsl(var(--mauve-11));
-    --card-selected-foreground: hsl(var(--mauve-11));
-    --border: hsl(var(--mauve-6));
-    --input: hsl(var(--mauve-6));
-    --primary: hsl(var(--blue-6));
-    --primary-selected: hsl(var(--blue-7));
-    --primary-foreground: hsl(var(--mauve-11));
-    --primary-selected-foreground: hsl(var(--mauve-11));
-    --secondary: hsl(var(--plum-6));
-    --secondary-selected: hsl(var(--plum-7));
-    --secondary-foreground: hsl(var(--mauve-11));
-    --secondary-selected-foreground: hsl(var(--mauve-11));
-    --accent: hsl(var(--violet-6));
-    --accent-selected: hsl(var(--violet-7));
-    --accent-foreground: hsl(var(--mauve-11));
-    --accent-selected-foreground: hsl(var(--mauve-11));
-    --navigation-icon: hsl(var(--violet-11));
-    --destructive: hsl(var(--red-9));
-    --destructive-selected: hsl(var(--red-10));
-    --destructive-foreground: hsl(var(--mauve-11));
-    --destructive-selected-foreground: hsl(var(--mauve-11));
-    --ring: hsl(var(--blue-7));
-    --radius: 0.5rem;
-    --user-chat: hsl(var(--blue-5));
-    --plexus-chat: hsl(var(--pink-5));
-    --chart-1: hsl(var(--blue-6));
-    --chart-1-selected: hsl(var(--blue-7));
-    --chart-2: hsl(var(--pink-6));
-    --chart-2-selected: hsl(var(--pink-7));
-    --chart-3: hsl(var(--indigo-6));
-    --chart-3-selected: hsl(var(--indigo-7));
-    --chart-4: hsl(var(--plum-6));
-    --chart-4-selected: hsl(var(--plum-7));
-    --chart-5: hsl(var(--violet-6));
-    --chart-5-selected: hsl(var(--violet-7));
-    --chart-6: hsl(var(--crimson-6));
-    --chart-6-selected: hsl(var(--crimson-7));
-    --chart-7: hsl(var(--purple-6));
-    --chart-7-selected: hsl(var(--purple-7));
-    --true: hsl(var(--green-6));
-    --true-selected: hsl(var(--green-7));
-    --false: hsl(var(--red-6));
-    --false-selected: hsl(var(--red-7));
-    --neutral: hsl(var(--mauve-6));
-    --neutral-selected: hsl(var(--mauve-7));
-    --gauge-background: hsl(var(--mauve-2));
-    --gauge-inviable: hsl(var(--mauve-6));
-    --gauge-converging: hsl(var(--green-3));
-    --gauge-almost: hsl(var(--green-5));
-    --gauge-viable: hsl(var(--green-8));
-    --gauge-great: hsl(var(--green-10));
-  }
-
-  .dark {
-    --background: hsl(var(--mauve-1));
-    --foreground: hsl(var(--mauve-11));
-    --foreground-true: hsl(var(--green-11));
-    --foreground-false: hsl(var(--red-11));
-    --focus: hsl(var(--mauve-12));
-    --attention: hsl(0, 0%, 100%);
-    --foreground-selected: hsl(var(--mauve-12));
-    --progress-background: hsl(var(--mauve-6));
-    --progress-background-selected: hsl(var(--mauve-7));
-    --muted: hsl(var(--mauve-3));
-    --frame: hsl(var(--mauve-2));
-    --muted-foreground: hsl(var(--mauve-10));
-    --popover: hsl(var(--mauve-3));
-    --popover-foreground: hsl(var(--mauve-11));
-    --card: hsl(var(--mauve-2));
-    --card-selected: hsl(var(--mauve-3));
-    --card-foreground: hsl(var(--mauve-11));
-    --card-selected-foreground: hsl(var(--mauve-11));
-    --border: hsl(var(--mauve-6));
-    --input: hsl(var(--mauve-6));
-    --primary: hsl(var(--blue-6));
-    --primary-selected: hsl(var(--blue-7));
-    --primary-foreground: hsl(var(--mauve-11));
-    --primary-selected-foreground: hsl(var(--mauve-11));
-    --secondary: hsl(var(--plum-6));
-    --secondary-selected: hsl(var(--plum-7));
-    --secondary-foreground: hsl(var(--mauve-11));
-    --secondary-selected-foreground: hsl(var(--mauve-11));
-    --accent: hsl(var(--violet-6));
-    --accent-selected: hsl(var(--violet-7));
-    --accent-foreground: hsl(var(--mauve-11));
-    --accent-selected-foreground: hsl(var(--mauve-11));
-    --navigation-icon: hsl(var(--violet-11));
-    --destructive: hsl(var(--red-9));
-    --destructive-selected: hsl(var(--red-10));
-    --destructive-foreground: hsl(var(--mauve-1));
-    --destructive-selected-foreground: hsl(var(--mauve-1));
-    --ring: hsl(var(--blue-7));
-    --user-chat: hsl(var(--blue-5));
-    --plexus-chat: hsl(var(--pink-5));
-    --chart-1: hsl(var(--blue-6));
-    --chart-1-selected: hsl(var(--blue-7));
-    --chart-2: hsl(var(--pink-6));
-    --chart-2-selected: hsl(var(--pink-7));
-    --chart-3: hsl(var(--indigo-6));
-    --chart-3-selected: hsl(var(--indigo-7));
-    --chart-4: hsl(var(--plum-6));
-    --chart-4-selected: hsl(var(--plum-7));
-    --chart-5: hsl(var(--violet-6));
-    --chart-5-selected: hsl(var(--violet-7));
-    --chart-6: hsl(var(--crimson-6));
-    --chart-6-selected: hsl(var(--crimson-7));
-    --chart-7: hsl(var(--purple-6));
-    --chart-7-selected: hsl(var(--purple-7));
-    --true: hsl(var(--green-6));
-    --true-selected: hsl(var(--green-7));
-    --false: hsl(var(--red-6));
-    --false-selected: hsl(var(--red-7));
-    --neutral: hsl(var(--mauve-6));
-    --neutral-selected: hsl(var(--mauve-7));
-    --gauge-background: hsl(var(--mauve-2));
-    --gauge-inviable: hsl(var(--mauve-6));
-    --gauge-converging: hsl(var(--green-6));
-    --gauge-almost: hsl(var(--green-7));
-    --gauge-viable: hsl(var(--green-8));
-    --gauge-great: hsl(var(--green-10));
-  }
-}
-
-@layer base {
-  * {
-    @apply border-border;
-  }
-  body {
-    @apply bg-background text-foreground;
-  }
-}
 
 [data-amplify-authenticator] {
   --amplify-components-authenticator-router-box-shadow: none;

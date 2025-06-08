@@ -1,0 +1,134 @@
+---
+description: Understanding how the reporting infrastructure works, for generating and storing and displaying reports based on data.
+globs: 
+alwaysApply: false
+---
+# Reports Feature
+
+## Architecture
+- Reports consist of three core models: ReportConfiguration, Report, and ReportBlock
+- Reports are generated via Tasks with progress tracking using TaskProgressTracker
+- Each Report links to a Task for status tracking
+- ReportBlocks are the modular components that make up a report's content
+
+## Key Locations
+- Backend:
+  - Report blocks: [plexus/reports/blocks/](mdc:plexus/reports/blocks)
+  - Report generation service: [plexus/reports/service.py](mdc:plexus/reports/service.py)
+  - CLI commands: [plexus/cli/commands/report/](mdc:plexus/cli/commands/report)
+  
+- Frontend:
+  - Report components: [dashboard/components/reports/](mdc:dashboard/components/reports)
+  - Block rendering system: [dashboard/components/blocks/](mdc:dashboard/components/blocks)
+  - Report pages: [dashboard/app/lab/reports/](mdc:dashboard/app/lab/reports)
+
+## Creating a New Report Block
+1. Backend: Create a new Python class in `plexus/reports/blocks/` that inherits from `BaseReportBlock`
+2. Implement the `generate` method that returns a JSON-serializable output
+3. Frontend: Create a React component in `dashboard/components/blocks/` to render your block's output
+4. Register your component in the `BlockRegistry`
+
+## Working with Report Block Output Data
+1. Block output data should be JSON-serializable and returned from the `generate` method
+2. Structure your output data with frontend rendering in mind:
+   - Use consistent field naming across blocks
+   - Include metadata fields like `title`, `description` when appropriate
+   - For data visualizations, format data in arrays/objects that match chart library expectations
+3. The output JSON is stored in `ReportBlock.output` and passed to your frontend component
+4. Complex data types should be serialized to strings (e.g., dates as ISO strings)
+5. Keep output size reasonable (under 400KB) for optimal performance
+
+## Task Progress Tracking
+
+Reports use the standard Task/TaskStage system for progress tracking:
+- Only stages with `total_items` show progress bars
+- Setup and Finalizing stages typically don't show progress
+- Main Processing stages show progress bars
+- Use the TaskProgressTracker for updating status during report generation
+
+## CLI Commands
+
+Key commands for report management:
+- `report config list`: List configurations
+- `report config show <id_or_name>`: Show config details
+- `report config create --name "Test Config" --file config.md`: Create new config
+- `report config delete`: Delete config
+- `report run --config "Test Config"`: Generate report
+- `report list`: List reports
+- `report show <id>`: Show report details
+- `report last`: Show most recent report
+
+## File Attachments and Media
+1. For including static images, store them in `dashboard/public/` and reference via relative paths
+2. For dynamically generated files:
+   - Save files to S3 using the AWS SDK in your block's `generate` method
+   - Store the S3 URLs in your block's output JSON
+   - Use `client.storage.uploadData()` for uploading from the block
+3. Add media references in your output JSON:
+   ```json
+   {
+     "title": "Analysis Results",
+     "data": [...],
+     "attachments": [
+       {"type": "image", "url": "s3://bucket/path", "caption": "Figure 1"},
+       {"type": "file", "url": "s3://bucket/report.csv", "name": "Download CSV"}
+     ]
+   }
+   ```
+4. Reference these in your frontend component with appropriate renderers
+
+## Example Report Configuration
+
+```markdown
+# Report Header
+
+This is a sample configuration.
+
+```block name="Score Info Block"
+class: ScoreInfo
+scorecard: example_scorecard
+score: ExampleScore
+```
+```
+
+## Example Report Blocks to Study
+
+### FeedbackAnalysis
+- **Backend:** [plexus/reports/blocks/feedback_analysis.py](mdc:plexus/reports/blocks/feedback_analysis.py)
+- **Frontend:** [dashboard/components/blocks/FeedbackAnalysis.tsx](mdc:dashboard/components/blocks/FeedbackAnalysis.tsx)
+- **Purpose:** Analyzes feedback data and calculates agreement metrics (AC1, accuracy)
+- **Features:**
+  - Processes feedback items to calculate evaluator agreement
+  - Supports multiple scores or an entire scorecard
+  - Generates per-score metrics and overall aggregates
+  - Includes distribution analysis for context
+
+### TopicAnalysis
+- **Backend:** [plexus/reports/blocks/topic_analysis.py](mdc:plexus/reports/blocks/topic_analysis.py)
+- **Frontend:** [dashboard/components/blocks/TopicAnalysis.tsx](mdc:dashboard/components/blocks/TopicAnalysis.tsx)
+- **Purpose:** Performs NLP analysis to identify topics in text data
+- **Features:**
+  - Uses BERTopic for clustering texts into topics
+  - Generates topic prevalence visualizations
+  - Creates topic keyword lists with relevance scores
+  - Includes representative examples for each topic
+
+### ScoreInfo
+- **Backend:** [plexus/reports/blocks/score_info.py](mdc:plexus/reports/blocks/score_info.py)
+- **Frontend:** [dashboard/components/blocks/ScoreInfo.tsx](mdc:dashboard/components/blocks/ScoreInfo.tsx)
+- **Purpose:** Provides detailed information about a specific score
+- **Features:**
+  - Simpler example with straightforward data retrieval
+  - Good starting point for understanding the basic block structure
+  - Shows how to format dates and percentage values
+
+## Testing Reports
+- Use `python -m plexus.cli.CommandLineInterface report config create --name "Test Config" --file config.md`
+- Run a report with `python -m plexus.cli.CommandLineInterface report run --config "Test Config"`
+- View reports with `python -m plexus.cli.CommandLineInterface report list` and `report show <id>`
+
+## Common Patterns
+- Report blocks should follow the naming convention of their Python class
+- Block components receive the JSON output from the Python block via props
+- Report configurations use Markdown with code blocks for defining report blocks
+- Design blocks to handle missing or malformed data gracefully

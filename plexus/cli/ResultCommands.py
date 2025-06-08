@@ -8,12 +8,9 @@ from rich.json import JSON
 import json
 from datetime import datetime
 from plexus.dashboard.api.models.score_result import ScoreResult
-from plexus.dashboard.api.client import PlexusDashboardClient
+from plexus.cli.client_utils import create_client
+from plexus.cli.reports.utils import resolve_account_id_for_command
 from .console import console
-
-def create_client() -> PlexusDashboardClient:
-    """Create a client and log its configuration"""
-    return PlexusDashboardClient()
 
 def format_datetime(dt: Optional[datetime]) -> str:
     """Format datetime with proper handling of None values"""
@@ -85,61 +82,6 @@ def resolve_scorecard_identifier(client, identifier):
         """
         result = client.execute(query)
         items = result.get('listScorecards', {}).get('items', [])
-        if items and len(items) > 0:
-            return items[0]['id']
-    except:
-        pass
-    
-    return None
-
-def resolve_account_identifier(client, identifier):
-    """Resolve an account identifier to its ID."""
-    # First try direct ID lookup
-    try:
-        query = f"""
-        query GetAccount {{
-            getAccount(id: "{identifier}") {{
-                id
-            }}
-        }}
-        """
-        result = client.execute(query)
-        if result.get('getAccount'):
-            return identifier
-    except:
-        pass
-    
-    # Try lookup by key
-    try:
-        query = f"""
-        query ListAccounts {{
-            listAccounts(filter: {{ key: {{ eq: "{identifier}" }} }}, limit: 1) {{
-                items {{
-                    id
-                }}
-            }}
-        }}
-        """
-        result = client.execute(query)
-        items = result.get('listAccounts', {}).get('items', [])
-        if items and len(items) > 0:
-            return items[0]['id']
-    except:
-        pass
-    
-    # Try lookup by name
-    try:
-        query = f"""
-        query ListAccounts {{
-            listAccounts(filter: {{ name: {{ eq: "{identifier}" }} }}, limit: 1) {{
-                items {{
-                    id
-                }}
-            }}
-        }}
-        """
-        result = client.execute(query)
-        items = result.get('listAccounts', {}).get('items', [])
         if items and len(items) > 0:
             return items[0]['id']
     except:
@@ -282,22 +224,21 @@ def format_score_result(result_data: Dict[str, Any]) -> Panel:
     return panel
 
 @click.group()
-def results():
+def score_results():
     """Manage score result records in the dashboard"""
     pass
 
-@results.command()
+@score_results.command()
+@click.option('--account', help='Account key or ID (optional, uses default from environment if not provided)')
 @click.option('--scorecard', help='Filter by scorecard (accepts ID, name, key, or external ID)')
-@click.option('--account', help='Filter by account (accepts ID, name, or key)')
 @click.option('--limit', type=int, default=10, help='Number of records to show (default: 10)')
-def list(scorecard: Optional[str], account: Optional[str], limit: int):
-    """List score results with optional filtering"""
+@click.option('--all', 'show_all', is_flag=True, help='Show all records')
+def list(account: Optional[str], scorecard: Optional[str], limit: int, show_all: bool):
+    """List score results with optional filtering, ordered by updated timestamp (most recent first)"""
     client = create_client()
     
-    # Require either scorecard or account
-    if not scorecard and not account:
-        console.print("[bold red]Error:[/bold red] You must specify either --scorecard or --account")
-        return
+    # Resolve account ID using the same pattern as other commands
+    account_id = resolve_account_id_for_command(client, account)
     
     # Resolve scorecard ID if provided
     scorecard_id = None
@@ -307,23 +248,12 @@ def list(scorecard: Optional[str], account: Optional[str], limit: int):
             console.print(f"[bold red]Error:[/bold red] No scorecard found with identifier: {scorecard}")
             return
     
-    # Resolve account ID if provided
-    account_id = None
-    if account:
-        account_id = resolve_account_identifier(client, account)
-        if not account_id:
-            console.print(f"[bold red]Error:[/bold red] No account found with identifier: {account}")
-            return
-    
     # Build the query based on filters
     if scorecard_id:
         # Use the GSI for scorecard-specific results
         query = f"""
-        query ListScoreResultByScorecardId($scorecardId: String!, $limit: Int!) {{
-            listScoreResultByScorecardId(
-                scorecardId: $scorecardId, 
-                limit: $limit
-            ) {{
+        query ListScoreResultByScorecardId($scorecardId: String!) {{
+            listScoreResultByScorecardId(scorecardId: $scorecardId) {{
                 items {{
                     id
                     value
@@ -343,26 +273,22 @@ def list(scorecard: Optional[str], account: Optional[str], limit: int):
             }}
         }}
         """
-        variables = {
-            'scorecardId': scorecard_id,
-            'limit': limit
-        }
+        variables = {'scorecardId': scorecard_id}
         
         console.print(f"[dim]Fetching results for scorecard {scorecard_id}...[/dim]")
         response = client.execute(query, variables)
         results = response.get('listScoreResultByScorecardId', {}).get('items', [])
         
-        # Sort results by updatedAt in descending order
+        # Sort results by updatedAt in descending order (most recent first)
         results.sort(key=lambda x: x.get('updatedAt', ''), reverse=True)
         
-    elif account_id:
+    else:
         # Use the GSI for account-specific results with updatedAt sorting
         query = f"""
-        query ListScoreResultByAccountIdAndUpdatedAt($accountId: String!, $limit: Int!) {{
+        query ListScoreResultByAccountIdAndUpdatedAt($accountId: String!) {{
             listScoreResultByAccountIdAndUpdatedAt(
                 accountId: $accountId, 
-                sortDirection: DESC,
-                limit: $limit
+                sortDirection: DESC
             ) {{
                 items {{
                     id
@@ -383,22 +309,22 @@ def list(scorecard: Optional[str], account: Optional[str], limit: int):
             }}
         }}
         """
-        variables = {
-            'accountId': account_id,
-            'limit': limit
-        }
+        variables = {'accountId': account_id}
         
         console.print(f"[dim]Fetching most recent results for account {account_id}...[/dim]")
         response = client.execute(query, variables)
         results = response.get('listScoreResultByAccountIdAndUpdatedAt', {}).get('items', [])
     
-    # Display results
     if not results:
-        console.print("[yellow]No score results found.[/yellow]")
+        console.print("[yellow]No score results found matching the criteria[/yellow]")
         return
     
-    # Print a header with the count
-    console.print(f"[bold]Score Results[/bold] ({len(results)} items)\n")
+    # Apply limit unless --all is specified
+    if not show_all:
+        results = results[:limit]
+        console.print(f"[dim]Showing {len(results)} most recent score results. Use --all to show all records.[/dim]\n")
+    else:
+        console.print(f"[dim]Showing all {len(results)} score results.[/dim]\n")
     
     # Display each result as a panel
     for result in results:
@@ -406,7 +332,106 @@ def list(scorecard: Optional[str], account: Optional[str], limit: int):
         console.print(panel)
         console.print()  # Add a blank line between panels
 
-@results.command()
+@score_results.command()
+@click.option('--account', help='Account key or ID (optional, uses default from environment if not provided)')
+@click.option('--scorecard', help='Filter by scorecard (accepts ID, name, key, or external ID)')
+def last(account: Optional[str], scorecard: Optional[str]):
+    """Show the most recent score result for an account"""
+    client = create_client()
+    
+    # Resolve account ID using the same pattern as other commands
+    account_id = resolve_account_id_for_command(client, account)
+    
+    # Resolve scorecard ID if provided
+    scorecard_id = None
+    if scorecard:
+        scorecard_id = resolve_scorecard_identifier(client, scorecard)
+        if not scorecard_id:
+            console.print(f"[bold red]Error:[/bold red] No scorecard found with identifier: {scorecard}")
+            return
+    
+    # Build the query based on filters
+    if scorecard_id:
+        # Use the GSI for scorecard-specific results
+        query = f"""
+        query ListScoreResultByScorecardId($scorecardId: String!) {{
+            listScoreResultByScorecardId(scorecardId: $scorecardId, limit: 1) {{
+                items {{
+                    id
+                    value
+                    confidence
+                    correct
+                    itemId
+                    accountId
+                    scorecardId
+                    scoringJobId
+                    evaluationId
+                    metadata
+                    trace
+                    explanation
+                    updatedAt
+                    createdAt
+                }}
+            }}
+        }}
+        """
+        variables = {'scorecardId': scorecard_id}
+        
+        response = client.execute(query, variables)
+        results = response.get('listScoreResultByScorecardId', {}).get('items', [])
+        
+        # Sort results by updatedAt in descending order and take the first one
+        results.sort(key=lambda x: x.get('updatedAt', ''), reverse=True)
+        
+    else:
+        # Use the GSI for account-specific results with updatedAt sorting
+        query = f"""
+        query ListScoreResultByAccountIdAndUpdatedAt($accountId: String!) {{
+            listScoreResultByAccountIdAndUpdatedAt(
+                accountId: $accountId, 
+                sortDirection: DESC,
+                limit: 1
+            ) {{
+                items {{
+                    id
+                    value
+                    confidence
+                    correct
+                    itemId
+                    accountId
+                    scorecardId
+                    scoringJobId
+                    evaluationId
+                    metadata
+                    trace
+                    explanation
+                    updatedAt
+                    createdAt
+                }}
+            }}
+        }}
+        """
+        variables = {'accountId': account_id}
+        
+        response = client.execute(query, variables)
+        results = response.get('listScoreResultByAccountIdAndUpdatedAt', {}).get('items', [])
+    
+    if not results:
+        console.print("[yellow]No score results found for this account[/yellow]")
+        return
+    
+    # Get the most recent result
+    result = results[0]
+    
+    # Display the result
+    panel = format_score_result(result)
+    console.print(Panel(
+        panel.renderable,
+        title=f"[bold]Most Recent Score Result: {result.get('id')}[/bold]",
+        border_style="cyan"
+    ))
+
+@score_results.command()
 @click.option('--id', required=True, help='Score result ID to get info about')
 def info(id: str):
     """Get detailed information about a specific score result"""
@@ -427,6 +452,7 @@ def info(id: str):
             evaluationId
             metadata
             trace
+            attachments
             explanation
             updatedAt
             createdAt
@@ -447,4 +473,26 @@ def info(id: str):
         console.print(panel)
         
     except Exception as e:
-        console.print(f"[bold red]Error:[/bold red] {str(e)}") 
+        console.print(f"[bold red]Error:[/bold red] {str(e)}")
+
+# Create all the synonym groups
+@click.group()
+def score_result():
+    """Manage score result records in the dashboard (alias for 'score-results')"""
+    pass
+
+@click.group()
+def result():
+    """Manage score result records in the dashboard (alias for 'score-results')"""
+    pass
+
+@click.group() 
+def results():
+    """Manage score result records in the dashboard (alias for 'score-results')"""
+    pass
+
+# Add all commands to each synonym group
+for group in [score_result, result, results]:
+    group.add_command(list)
+    group.add_command(last)
+    group.add_command(info) 

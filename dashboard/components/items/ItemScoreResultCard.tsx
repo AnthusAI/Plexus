@@ -11,6 +11,7 @@ interface ItemScoreResultCardProps {
   scorecardName: string;
   scores: ScoreInfo[];
   className?: string;
+  skeletonMode?: boolean;
 }
 
 /**
@@ -19,7 +20,44 @@ interface ItemScoreResultCardProps {
 export const ItemScoreResultCard = React.forwardRef<
   HTMLDivElement,
   ItemScoreResultCardProps
->(({ scorecardName, scores, className }, ref) => {
+>(({ scorecardName, scores, className, skeletonMode = false }, ref) => {
+  // Skeleton mode rendering
+  if (skeletonMode) {
+    return (
+      <div className="w-full" ref={ref}>
+        <div className="bg-background rounded-lg p-3">
+          {/* Skeleton scorecard name header */}
+          <div className="flex items-center justify-between mb-3">
+            <div className="h-4 w-32 bg-muted rounded animate-pulse" />
+            <div className="h-3 w-16 bg-muted rounded animate-pulse" />
+          </div>
+          
+          {/* Skeleton score results */}
+          <div className="space-y-2">
+            <div className={cn(
+              "w-full bg-card rounded-md",
+              className
+            )}>
+              <div className="p-3 flex items-center justify-between">
+                <div className="h-4 w-24 bg-muted rounded animate-pulse" />
+                <div className="h-3 w-12 bg-muted rounded animate-pulse" />
+              </div>
+            </div>
+            <div className={cn(
+              "w-full bg-card rounded-md",
+              className
+            )}>
+              <div className="p-3 flex items-center justify-between">
+                <div className="h-4 w-20 bg-muted rounded animate-pulse" />
+                <div className="h-3 w-12 bg-muted rounded animate-pulse" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="w-full" ref={ref}>
       {/* Outer container with background color - no border */}
@@ -50,6 +88,7 @@ export const ItemScoreResultCard = React.forwardRef<
                     variant="relative"
                     showIcon={false}
                     className="text-xs text-muted-foreground"
+                    skeletonMode={skeletonMode}
                   />
                 )}
               </div>

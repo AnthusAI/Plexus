@@ -540,7 +540,7 @@ class Evaluation:
                     continue # Skip if value is missing
 
                 # Skip if the score result is an error
-                if isinstance(score_result.value, str) and score_result.value == "Error":
+                if isinstance(score_result.value, str) and score_result.value.upper() == "ERROR":
                     self.logging.warning(f"  Skipping metrics calculation for error result: {score_identifier}")
                     continue
 
@@ -1834,6 +1834,7 @@ Question:     {mismatch['question']}
 
 Predicted:    {mismatch['predicted']}
 Ground Truth: {mismatch['ground_truth']}
+QA Reasoning for Ground Truth: {mismatch['human_explanation']}
 
 Explanation:
 {mismatch['explanation']}
@@ -2008,7 +2009,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                         logging.exception(f"Error processing {score_identifier}: {e}")
                         # Ensure parameters uses the correct scorecard name string
                         score_result = Score.Result(
-                            value="Error", 
+                            value="ERROR", 
                             error=str(e),
                             parameters=Score.Parameters(
                                 name=score_identifier,
@@ -2414,6 +2415,95 @@ class AccuracyEvaluation(Evaluation):
         self.completed_scores = set()  # Track which scores have completed all their results
         self.override_data = {}  # Initialize empty override data dictionary
         self.logger = logging.getLogger('plexus/evaluation')  # Add dedicated logger
+        
+        # Load override data from CSV files
+        self._load_override_data_from_csv()
+
+    def _load_override_data_from_csv(self):
+        """Load override data from CSV files using the scorecard's configuration."""
+        try:
+            # Look for scores that have column mappings defined in their data configuration
+            for score_config in self.scorecard.scores:
+                score_name = score_config.get('name')
+                if not score_name:
+                    continue
+                
+                # Check if this score has data configuration with column mappings
+                data_config = score_config.get('data', {})
+                if not data_config:
+                    continue
+                
+                # Look for searches with column mappings
+                searches = data_config.get('searches', [])
+                for search in searches:
+                    item_list_filename = search.get('item_list_filename')
+                    column_mappings = search.get('column_mappings', [])
+                    
+                    if not item_list_filename or not column_mappings:
+                        continue
+                    
+                    try:
+                        # Load the CSV file
+                        df = pd.read_csv(item_list_filename)
+                        
+                        # Find form_id column
+                        form_id_col = None
+                        for col in df.columns:
+                            if col.lower() in ['form_id', 'f_id']:
+                                form_id_col = col
+                                break
+                        
+                        if form_id_col is None:
+                            self.logging.warning(f"No form_id column found in {item_list_filename}")
+                            continue
+                        
+                        # Process each column mapping
+                        for mapping in column_mappings:
+                            dataframe_column = mapping.get('dataframe_column')
+                            csv_column = mapping.get('csv_column')
+                            
+                            if not dataframe_column or not csv_column:
+                                continue
+                            
+                            # Check if the dataframe_column matches our score name
+                            if dataframe_column == score_name:
+                                # Find the CSV column (case-insensitive)
+                                actual_csv_col = None
+                                for col in df.columns:
+                                    if col.lower() == csv_column.lower():
+                                        actual_csv_col = col
+                                        break
+                                
+                                if actual_csv_col:
+                                    # Load the override data
+                                    for _, row in df.iterrows():
+                                        form_id = row[form_id_col]
+                                        if pd.isna(form_id):
+                                            continue
+                                        
+                                        form_id = int(form_id)
+                                        answer_value = row[actual_csv_col]
+                                        
+                                        if pd.notna(answer_value):
+                                            if form_id not in self.override_data:
+                                                self.override_data[form_id] = {}
+                                            self.override_data[form_id][score_name] = str(answer_value).strip().lower()
+                                    
+                                    self.logging.info(f"Loaded override data for score '{score_name}' from {item_list_filename}: {len([r for r in df.iterrows() if pd.notna(r[1][form_id_col])])} records")
+                                else:
+                                    self.logging.warning(f"CSV column '{csv_column}' not found in {item_list_filename}")
+                    
+                    except Exception as e:
+                        self.logging.warning(f"Failed to load override data from {item_list_filename}: {e}")
+            
+            if self.override_data:
+                total_overrides = sum(len(scores) for scores in self.override_data.values())
+                self.logging.info(f"Loaded {total_overrides} override entries for {len(self.override_data)} form IDs")
+            else:
+                self.logging.info("No override data loaded from CSV files")
+                
+        except Exception as e:
+            self.logging.warning(f"Failed to load override data: {e}")
 
     async def run(self, tracker, progress_callback=None, dry_run=False):
         # --- BEGIN NEW LOGGING ---
@@ -2537,6 +2627,36 @@ class AccuracyEvaluation(Evaluation):
             # --- BEGIN NEW LOGGING ---
             self.logging.info(f"--- Calling calculate_metrics from _run_evaluation with {len(self.all_results)} results ---")
             # --- END NEW LOGGING ---
+            
+            # Reset counters and mismatches
+            self.total_correct = 0
+            self.total_questions = 0
+            self.mismatches = []
+            
+            # Count the number correct out of all questions and collect mismatches
+            for result in self.all_results:
+                for question in self.score_names():
+                    score_result = next((r for r in result['results'].values() if r.parameters.name == question), None)
+                    score_value = str(score_result.value).lower() if score_result else None
+                    human_label = str(score_result.metadata['human_label']).lower() if score_result and hasattr(score_result, 'metadata') and 'human_label' in score_result.metadata else None
+                    
+                    is_match = 1 if score_result and hasattr(score_result, 'metadata') and score_result.metadata.get('correct', False) else 0
+                    self.total_correct += is_match
+                    self.total_questions += 1
+
+                    if not is_match and len(self.mismatches) < self.max_mismatches_to_report:
+                        mismatch_data = {
+                            'form_id': result['form_id'],
+                            'question': question,
+                            'predicted': score_value,
+                            'ground_truth': human_label,
+                            'explanation': score_result.metadata['explanation'] if score_result and hasattr(score_result, 'metadata') and 'explanation' in score_result.metadata else None,
+                            'transcript': score_result.metadata['text'] if score_result and hasattr(score_result, 'metadata') and 'text' in score_result.metadata else None,
+                            'human_explanation': score_result.metadata['human_explanation'] if score_result and hasattr(score_result, 'metadata') and 'human_explanation' in score_result.metadata else None
+                        }
+                        # Only append if we have either a transcript or an explanation
+                        if mismatch_data['transcript'] is not None or mismatch_data['explanation'] is not None:
+                            self.mismatches.append(mismatch_data)
 
             # Calculate metrics from the results
             metrics = self.calculate_metrics(self.all_results)
@@ -2547,6 +2667,26 @@ class AccuracyEvaluation(Evaluation):
 
             if hasattr(self, 'progress_callback') and self.progress_callback:
                 self.progress_callback(self.number_of_texts_to_sample)
+            
+            # Generate and print evaluation report
+            if self.all_results:
+                expenses = self.scorecard.get_accumulated_costs()
+                expenses['cost_per_text'] = expenses['total_cost'] / self.number_of_texts_to_sample
+                
+                # Get the primary score name if we're evaluating a specific score
+                primary_score_name = None
+                if self.subset_of_score_names and len(self.subset_of_score_names) == 1:
+                    primary_score_name = self.subset_of_score_names[0]
+                else:
+                    primary_score_name = self.score_names()[0]
+                
+                score_instance = Score.from_name(self.scorecard_name, primary_score_name)
+                
+                # Calculate overall_accuracy from the counters we just updated
+                overall_accuracy = (self.total_correct / self.total_questions * 100) if self.total_questions > 0 else 0
+                
+                report = self.generate_report(score_instance, overall_accuracy, expenses, self.number_of_texts_to_sample)
+                print("\n" + report + "\n")
 
             return metrics
         except Exception as e:

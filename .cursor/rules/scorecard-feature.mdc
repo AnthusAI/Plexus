@@ -1,0 +1,81 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# Scorecard Feature Structure
+
+## Data Model Hierarchy
+- **Scorecard**: Top-level entity that contains sections
+- **Section**: Groups related scores together
+- **Score**: Individual metrics with specific implementations (various types)
+
+## Key Files
+### Dashboard Components
+- [dashboard/components/scorecards/create-edit-form/index.tsx](mdc:dashboard/components/scorecards/create-edit-form/index.tsx): Main form for creating and editing scorecards
+- [dashboard/components/scorecards/ScorecardComponent.tsx](mdc:dashboard/components/scorecards/ScorecardComponent.tsx): Component for displaying and editing scorecards
+- [dashboard/components/scorecards-dashboard.tsx](mdc:dashboard/components/scorecards-dashboard.tsx): Main dashboard that orchestrates scorecard views
+- [dashboard/components/score-edit.tsx](mdc:dashboard/components/score-edit.tsx): Component for editing individual scores
+
+### Routes & Pages
+- [dashboard/app/lab/scorecards/page.tsx](mdc:dashboard/app/lab/scorecards/page.tsx): Main scorecards listing page
+- [dashboard/app/lab/scorecards/[id]/page.tsx](mdc:dashboard/app/lab/scorecards/[id]/page.tsx): Scorecard detail page
+- [dashboard/app/lab/scorecards/[id]/scores/[scoreId]/page.tsx](mdc:dashboard/app/lab/scorecards/[id]/scores/[scoreId]/page.tsx): Score detail page
+
+### Data Model
+- [dashboard/amplify/data/resource.ts](mdc:dashboard/amplify/data/resource.ts): Contains Scorecard and ScorecardSection model definitions
+
+## Component Interaction Flow
+1. User navigates to `/lab/scorecards`
+2. ScorecardsComponent renders the list of scorecards
+3. User selects a scorecard -> navigates to `/lab/scorecards/[id]`
+4. ScorecardComponent loads with edit capabilities
+5. User can:
+   - Edit scorecard metadata (name, key, externalId)
+   - Add/edit/delete/reorder sections
+   - Add scores to sections
+   - Select a score to edit -> navigates to `/lab/scorecards/[id]/scores/[scoreId]`
+6. Score edit form allows configuration of specific score type
+
+## Form Data Structure
+```typescript
+interface ScoreFormState {
+  id: string
+  name: string
+  type: string
+  order: number
+  sectionId: string
+  accuracy: number
+  version: string
+  timestamp: Date
+  aiProvider?: string
+  aiModel?: string
+  metadata: ScoreMetadata
+}
+
+interface SectionFormState {
+  id?: string
+  name: string
+  order: number
+  scores: ScoreFormState[]
+}
+
+interface FormData {
+  id?: string
+  name: string
+  key: string
+  description: string
+  accountId: string
+  externalId?: string
+  sections: SectionFormState[]
+}
+```
+
+## Score Types
+- ProgrammaticScore: Custom code-based scoring
+- ComputedScore: Calculated from other scores
+- KeywordClassifier: Simple keyword matching
+- FuzzyMatchClassifier: Fuzzy text matching
+- SemanticClassifier: Embedding-based matching
+- LangGraphScore: LangGraph flow-based scoring
+- SimpleLLMScore: Direct LLM-based scoring

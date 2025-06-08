@@ -186,6 +186,7 @@ export const handler: Schema["getResourceByShareToken"]["functionHandler"] = asy
               isDatasetClassDistributionBalanced
               predictedClassDistribution
               isPredictedClassDistributionBalanced
+              universalCode
               taskId
               task {
                 id
@@ -228,6 +229,71 @@ export const handler: Schema["getResourceByShareToken"]["functionHandler"] = asy
                   trace
                   itemId
                   createdAt
+                }
+              }
+            }
+          }
+        `;
+        resourceVariables = { id: shareLink.resourceId };
+        break;
+      case 'Report':
+        resourceQuery = `
+          query GetReport($id: ID!) {
+            getReport(id: $id) {
+              id
+              name
+              createdAt
+              updatedAt
+              parameters
+              output
+              accountId
+              reportConfigurationId
+              reportConfiguration {
+                id
+                name
+                description
+              }
+              taskId
+              task {
+                id
+                type
+                status
+                target
+                command
+                description
+                dispatchStatus
+                metadata
+                createdAt
+                startedAt
+                completedAt
+                estimatedCompletionAt
+                errorMessage
+                errorDetails
+                currentStageId
+                stages {
+                  items {
+                    id
+                    name
+                    order
+                    status
+                    statusMessage
+                    startedAt
+                    completedAt
+                    estimatedCompletionAt
+                    processedItems
+                    totalItems
+                  }
+                }
+              }
+              reportBlocks {
+                items {
+                  id
+                  name
+                  position
+                  type
+                  output
+                  log
+                  reportId
                 }
               }
             }
@@ -352,6 +418,48 @@ function applyViewOptions(data: any, resourceType: string, viewOptions: any): an
         }
         
         return { getEvaluation: filteredEvaluation };
+        
+      case 'Report':
+        // Filter report data based on view options
+        const report = data.getReport;
+        
+        // Create a filtered copy of the report
+        const filteredReport = { ...report };
+        
+        // Apply view options
+        if (options.includeReportBlocks === false) {
+          delete filteredReport.reportBlocks;
+        }
+        
+        // Handle displayMode option
+        if (options.displayMode === 'summary') {
+          // In summary mode, don't include report blocks
+          delete filteredReport.reportBlocks;
+        }
+        
+        if (options.includeCostMetrics === false) {
+          delete filteredReport.cost;
+        }
+        
+        // Filter metrics if specific ones are requested
+        if (options.visibleMetrics && Array.isArray(options.visibleMetrics) && filteredReport.metrics) {
+          if (typeof filteredReport.metrics === 'string') {
+            try {
+              const metricsArray = JSON.parse(filteredReport.metrics);
+              filteredReport.metrics = metricsArray.filter((metric: any) => 
+                options.visibleMetrics.includes(metric.name.toLowerCase())
+              );
+            } catch (e) {
+              console.error('Error parsing metrics JSON:', e);
+            }
+          } else if (Array.isArray(filteredReport.metrics)) {
+            filteredReport.metrics = filteredReport.metrics.filter((metric: any) => 
+              options.visibleMetrics.includes(metric.name.toLowerCase())
+            );
+          }
+        }
+        
+        return { getReport: filteredReport };
         
       // Add cases for other resource types as needed
       default:

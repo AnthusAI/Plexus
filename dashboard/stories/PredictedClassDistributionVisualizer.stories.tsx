@@ -3,7 +3,7 @@ import type { Meta, StoryObj } from '@storybook/react'
 import PredictedClassDistributionVisualizer from '../components/PredictedClassDistributionVisualizer'
 
 const meta = {
-  title: 'Data/PredictedClassDistributionVisualizer',
+  title: 'General/Components/PredictedClassDistributionVisualizer',
   component: PredictedClassDistributionVisualizer,
   parameters: {
     layout: 'padded',

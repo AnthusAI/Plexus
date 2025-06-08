@@ -76,6 +76,19 @@ const preview: Preview = {
         query: {},
       },
     },
+    options: {
+      storySort: {
+        order: [
+          'Theme', ['Logo', 'ColorPalette', '*'],
+          'Landing Pages',
+          'General',
+          'Evaluations',
+          'Reports',
+          'Scorecards',
+          '*'
+        ],
+      },
+    },
   },
   decorators: [
     GoogleFontDecorator,

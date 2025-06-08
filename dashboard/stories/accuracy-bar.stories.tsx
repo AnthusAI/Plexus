@@ -3,7 +3,7 @@ import type { Meta, StoryObj } from '@storybook/react'
 import { AccuracyBar } from '@/components/ui/accuracy-bar'
 
 const meta: Meta<typeof AccuracyBar> = {
-  title: 'Components/AccuracyBar',
+  title: 'General/Components/AccuracyBar',
   component: AccuracyBar,
   parameters: {
     layout: 'centered',

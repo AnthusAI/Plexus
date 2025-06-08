@@ -4,7 +4,7 @@ import EvaluationTask from '@/components/EvaluationTask';
 import type { EvaluationTaskProps } from '@/components/EvaluationTask';
 
 const meta = {
-  title: 'Tasks/Types/EvaluationTask',
+  title: 'Evaluations/EvaluationTask',
   component: EvaluationTask,
   parameters: {
     layout: 'centered',

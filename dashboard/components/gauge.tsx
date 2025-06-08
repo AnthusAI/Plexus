@@ -24,8 +24,10 @@ interface GaugeProps {
   information?: string
   informationUrl?: string
   priority?: boolean
+  valueFormatter?: (value: number) => string
   valueUnit?: string
   decimalPlaces?: number
+  tickSpacingThreshold?: number
 }
 
 const calculateAngle = (percent: number) => {
@@ -63,17 +65,21 @@ const GaugeComponent: React.FC<GaugeProps> = ({
   information,
   informationUrl,
   priority = false,
+  valueFormatter,
   valueUnit = '%',
-  decimalPlaces = 1
+  decimalPlaces = 1,
+  tickSpacingThreshold = 5
 }) => {
   const [animatedValue, setAnimatedValue] = useState(0)
   const [animatedBeforeValue, setAnimatedBeforeValue] = useState(0)
   const [animatedTarget, setAnimatedTarget] = useState(0)
+  const [containerWidth, setContainerWidth] = useState(0)
+  const containerRef = React.useRef<HTMLDivElement>(null)
   const radius = 80
   const strokeWidth = 25
   const normalizedValue = value !== undefined 
     ? ((value - min) / (max - min)) * 100
-    : 0
+    : ((0 - min) / (max - min)) * 100  // When no data, point needle at 0 position
 
   useEffect(() => {
     const startTime = performance.now()
@@ -114,6 +120,40 @@ const GaugeComponent: React.FC<GaugeProps> = ({
     
     requestAnimationFrame(animate)
   }, [normalizedValue, beforeValue, target])
+
+  useEffect(() => {
+    if (!containerRef.current) return
+
+    const updateSize = () => {
+      if (containerRef.current) {
+        setContainerWidth(containerRef.current.offsetWidth)
+      }
+    }
+
+    // Initial measurement
+    updateSize()
+
+    // Setup resize observer
+    const resizeObserver = new ResizeObserver(updateSize)
+    resizeObserver.observe(containerRef.current)
+
+    return () => {
+      if (containerRef.current) {
+        resizeObserver.unobserve(containerRef.current)
+      }
+    }
+  }, [])
+  
+  // Calculate the offset for the label based on container width
+  const getLabelBottomOffset = () => {
+    if (containerWidth <= 0) return 0
+    
+    // Only apply offset when width is below 150px
+    if (containerWidth > 150) return 0
+    
+    // Calculate offset: more offset as it gets smaller
+    return Math.max(0, (150 - containerWidth) * 0.1)
+  }
 
   const calculateCoordinates = (angle: number, r: number = radius) => {
     const x = r * Math.cos(angle - Math.PI / 2)
@@ -191,54 +231,81 @@ const GaugeComponent: React.FC<GaugeProps> = ({
   }
 
   const renderTicks = (minValue: number, maxValue: number) => {
-    return [...segments || [], { start: 100, end: 100, color: 'transparent' }].map((segment, index) => {
-      const angle = calculateAngle(segment.start)
-      const { x, y } = calculateCoordinates(angle)
-      
-      const lineEndX = x * 1.08
-      const lineEndY = y * 1.08
-      
-      const angleInDegrees = (angle * 180) / Math.PI
-      const isNearTop = Math.abs(angleInDegrees - 90) < 15
-      const verticalAdjustment = isNearTop 
-        ? 0.95
-        : Math.pow(Math.abs(angleInDegrees - 90) / 90, 0.5) * 0.3
-      
-      const textOffset = radius + 25 - (verticalAdjustment * 10) + (segment.start === 100 ? 3 : 0)
-      
-      const textX = textOffset * Math.cos(angle - Math.PI / 2)
-      const textY = textOffset * Math.sin(angle - Math.PI / 2)
+    // Create an array with all segment starts plus 100
+    const allTicks = [...segments || [], { start: 100, end: 100, color: 'transparent' }]
+      .map(segment => segment.start)
+      .sort((a, b) => a - b); // Sort in ascending order
 
-      // Calculate the actual value based on min/max
-      const tickValue = minValue + (segment.start / 100) * (maxValue - minValue)
-      // Format decimal values without leading zeros
-      const formattedTickValue = formatDecimalValue(tickValue, decimalPlaces)
+    // Use the provided threshold for displaying ticks (percentage of total range)
+    const thresholdPercentage = tickSpacingThreshold;
 
-      return (
-        <g key={index}>
-          <line
-            x1={x}
-            y1={y}
-            x2={lineEndX}
-            y2={lineEndY}
-            className="stroke-muted-foreground"
-            strokeWidth="0.5"
-          />
-          <g transform={`translate(${textX} ${textY}) rotate(105)`}>
-            <text
-              x="0"
-              y="0"
-              textAnchor="middle"
-              dominantBaseline="middle"
-              fontSize="12"
-              className="fill-muted-foreground"
-            >
-              {formattedTickValue}
-            </text>
+    // Filter ticks starting from highest to lowest
+    // Keep a tick if it's at least thresholdPercentage away from the next higher tick
+    const visibleTicks = new Set<number>();
+    visibleTicks.add(100); // Always show the maximum tick
+
+    // Process remaining ticks from highest to lowest
+    for (let i = allTicks.length - 2; i >= 0; i--) {
+      const currentTick = allTicks[i];
+      const nextHigherTick = allTicks[i + 1]; // The next element is guaranteed to be higher since we sorted
+      
+      // If this tick is at least thresholdPercentage away from the next higher tick, show it
+      if (nextHigherTick - currentTick >= thresholdPercentage) {
+        visibleTicks.add(currentTick);
+      }
+    }
+
+    // Render only the visible ticks
+    return [...segments || [], { start: 100, end: 100, color: 'transparent' }]
+      .filter(segment => visibleTicks.has(segment.start))
+      .map((segment, index) => {
+        const angle = calculateAngle(segment.start)
+        const { x, y } = calculateCoordinates(angle)
+        
+        const lineEndX = x * 1.08
+        const lineEndY = y * 1.08
+        
+        const angleInDegrees = (angle * 180) / Math.PI
+        const isNearTop = Math.abs(angleInDegrees - 90) < 15
+        const verticalAdjustment = isNearTop 
+          ? 0.95
+          : Math.pow(Math.abs(angleInDegrees - 90) / 90, 0.5) * 0.3
+        
+        const textOffset = radius + 25 - (verticalAdjustment * 10) + (segment.start === 100 ? 3 : 0)
+        
+        const textX = textOffset * Math.cos(angle - Math.PI / 2)
+        const textY = textOffset * Math.sin(angle - Math.PI / 2)
+
+        // Calculate the actual value based on min/max
+        const tickValue = minValue + (segment.start / 100) * (maxValue - minValue)
+        // Format decimal values without leading zeros
+        const formattedTickValue = formatDecimalValue(tickValue, decimalPlaces)
+
+        return (
+          <g key={index}>
+            <line
+              x1={x}
+              y1={y}
+              x2={lineEndX}
+              y2={lineEndY}
+              className="stroke-muted-foreground"
+              strokeWidth="0.5"
+            />
+            <g transform={`translate(${textX} ${textY}) rotate(105)`}>
+              <text
+                x="0"
+                y="0"
+                textAnchor="middle"
+                dominantBaseline="middle"
+                fontSize="12"
+                className="fill-muted-foreground"
+              >
+                {formattedTickValue}
+              </text>
+            </g>
           </g>
-        </g>
-      )
-    })
+        )
+      })
   }
 
   const renderTargetTick = () => {
@@ -297,12 +364,13 @@ const GaugeComponent: React.FC<GaugeProps> = ({
   const viewBoxHeight = showTicks ? 200 : 170
   const textY = showTicks ? 45 : 45
   const clipHeight = showTicks ? 168 : 144
+  const labelBottomOffset = getLabelBottomOffset()
 
   return (
     <div className="flex flex-col items-center w-full h-full max-h-[220px]">
       <Popover>
         <PopoverAnchor asChild>
-          <div className="relative w-full h-full" style={{ maxWidth: '20em' }}>
+          <div ref={containerRef} className="relative w-full h-full" style={{ maxWidth: '20em' }}>
             <div className="relative w-full h-full">
               <svg 
                 viewBox={`-120 -${topPadding} 240 ${viewBoxHeight}`}
@@ -381,7 +449,10 @@ const GaugeComponent: React.FC<GaugeProps> = ({
                     dominantBaseline="middle"
                   >
                     {value !== undefined 
-                      ? `${formatDecimalValue(value, decimalPlaces)}${valueUnit}`
+                      ? (valueFormatter
+                          ? valueFormatter(value)
+                          : `${formatDecimalValue(value, decimalPlaces)}${valueUnit}`
+                        )
                       : ''}
                   </text>
                 </g>
@@ -390,11 +461,13 @@ const GaugeComponent: React.FC<GaugeProps> = ({
                 <div 
                   className={cn(
                     "absolute left-0 right-0 flex justify-center items-center whitespace-nowrap",
-                    "text-[clamp(0.75rem,4vw,1rem)] transition-colors duration-500 ease-in-out",
+                    "text-[1rem]",
+                    "transition-colors duration-500 ease-in-out",
                     priority ? "text-focus" : "text-foreground"
                   )}
                   style={{
-                    bottom: showTicks ? '5%' : '2%'
+                    bottom: `calc(${showTicks ? '5%' : '2%'} - ${labelBottomOffset}px)`,
+                    fontSize: containerWidth < 150 ? `max(0.6rem, ${8 + (containerWidth * 0.05)}px)` : undefined
                   }}
                 >
                   <span className="relative">

@@ -2,12 +2,17 @@ from typing import Any, Dict, Optional, Tuple, List
 import logging
 import asyncio
 from datetime import datetime, timedelta, timezone
+from collections import Counter
+import json # Ensure json import at the top
+import yaml # For YAML formatted output with contextual comments
 
 from plexus.analysis.metrics import GwetAC1
 from plexus.analysis.metrics.metric import Metric
 from plexus.dashboard.api.models.feedback_item import FeedbackItem
 from plexus.dashboard.api.models.score import Score
 from plexus.dashboard.api.models.scorecard import Scorecard
+from plexus.dashboard.api.models.report_block import ReportBlock
+from plexus.dashboard.api.models.item import Item  # Add Item model import
 
 from .base import BaseReportBlock
 
@@ -37,6 +42,10 @@ class FeedbackAnalysis(BaseReportBlock):
         score_id (str, optional): Specific Call Criteria Question ID to analyze.
                                  If specified, only this score will be analyzed.
     """
+    
+    # Class-level defaults for name and description
+    DEFAULT_NAME = "Feedback Analysis"
+    DEFAULT_DESCRIPTION = "Inter-rater Reliability Assessment"
 
     async def generate(self) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         """Fetches feedback data and performs agreement analysis."""
@@ -45,13 +54,13 @@ class FeedbackAnalysis(BaseReportBlock):
 
         try:
             self._log("Starting FeedbackAnalysis block generation.")
-            self._log(f"Raw config: {self.config}")
-            self._log(f"Raw params: {self.params}")
+            # Only log config keys, not full values
+            self._log(f"Config keys: {list(self.config.keys())}")
 
             # --- 1. Extract and Validate Configuration ---
             cc_scorecard_id_param = self.config.get("scorecard")
             if not cc_scorecard_id_param:
-                self._log("ERROR: 'scorecard' (Call Criteria Scorecard ID) missing in block configuration.")
+                self._log("ERROR: 'scorecard' (Call Criteria Scorecard ID) missing in block configuration.", level="ERROR")
                 raise ValueError("'scorecard' is required in the block configuration.")
             self._log(f"Call Criteria Scorecard ID from config: {cc_scorecard_id_param}")
 
@@ -92,11 +101,11 @@ class FeedbackAnalysis(BaseReportBlock):
                 )
                 if not plexus_scorecard_obj:
                     msg = f"Plexus Scorecard not found for Call Criteria Scorecard ID: {cc_scorecard_id_param}"
-                    self._log(f"ERROR: {msg}")
+                    self._log(f"ERROR: {msg}", level="ERROR")
                     raise ValueError(msg)
                 self._log(f"Found Plexus Scorecard: '{plexus_scorecard_obj.name}' (ID: {plexus_scorecard_obj.id})")
             except Exception as e:
-                self._log(f"ERROR resolving Plexus Scorecard: {e}")
+                self._log(f"ERROR resolving Plexus Scorecard: {e}", level="ERROR")
                 raise
 
             # --- 3. Determine Plexus Score(s) to Process ---
@@ -119,112 +128,238 @@ class FeedbackAnalysis(BaseReportBlock):
                         })
                         self._log(f"Found specific Plexus Score: '{plexus_score_obj.name}' (ID: {plexus_score_obj.id})")
                     else:
-                        self._log(f"WARNING: Plexus Score not found for CC Question ID: {cc_question_id_param} on Scorecard '{plexus_scorecard_obj.name}'. This score will be skipped.")
+                        self._log(f"WARNING: Plexus Score not found for CC Question ID: {cc_question_id_param} on Scorecard '{plexus_scorecard_obj.name}'. This score will be skipped.", level="WARNING")
                 except Exception as e:
-                    self._log(f"ERROR looking up specific Plexus Score (CC Question ID: {cc_question_id_param}): {e}. This score will be skipped.")
+                    self._log(f"ERROR looking up specific Plexus Score (CC Question ID: {cc_question_id_param}): {e}. This score will be skipped.", level="ERROR")
             else:
                 self._log(f"Fetching all Plexus Scores for Scorecard '{plexus_scorecard_obj.name}' (ID: {plexus_scorecard_obj.id}) to find mappable scores.")
+                # Query for scores, assuming 'position' field exists for scores
+                # to establish a definitive order. Section order will be based on API return order.
                 scores_query = """
                 query GetScorecardScores($scorecardId: ID!) {
                     getScorecard(id: $scorecardId) {
-                        id name
-                        sections { items { id scores { items { id name externalId } } } }
+                        id
+                        name
+                        sections {
+                            items {
+                                id # Section ID
+                                # position # Removed as it does not exist on ScorecardSection
+                                scores {
+                                    items {
+                                        id
+                                        name
+                                        externalId
+                                        order # Attempting to use 'order' field for scores
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 """
                 try:
                     result = await asyncio.to_thread(self.api_client.execute, scores_query, {'scorecardId': plexus_scorecard_obj.id})
                     scorecard_data = result.get('getScorecard')
+                    
+                    raw_scores_with_positions = [] # Collect all scores with their positions
+
                     if scorecard_data and scorecard_data.get('sections') and scorecard_data['sections'].get('items'):
-                        for section in scorecard_data['sections']['items']:
+                        for section_index, section in enumerate(scorecard_data['sections']['items']):
+                            # Use section_index as the primary sort order for sections.
+                            section_order = section_index
+                            
                             if section.get('scores') and section['scores'].get('items'):
-                                for score_item in section['scores']['items']:
+                                for score_index, score_item in enumerate(section['scores']['items']):
                                     if score_item.get('externalId'):
-                                        scores_to_process.append({
+                                        # Use score's 'order' field if available, otherwise fall back to its index within the section.
+                                        score_order = score_item.get('order', score_index)
+                                        raw_scores_with_positions.append({
                                             'plexus_score_id': score_item['id'],
                                             'plexus_score_name': score_item['name'],
-                                            'cc_question_id': score_item['externalId']
+                                            'cc_question_id': score_item['externalId'],
+                                            'section_order': section_order,
+                                            'score_order': score_order
                                         })
                                     else:
-                                        self._log(f"Plexus Score '{score_item.get('name')}' (ID: {score_item.get('id')}) is missing an externalId (CC Question ID). Skipping.")
-                    self._log(f"Identified {len(scores_to_process)} Plexus Scores with externalIds to process.")
+                                        self._log(f"Plexus Score '{score_item.get('name')}' (ID: {score_item.get('id')}) is missing an externalId (CC Question ID). Skipping.", level="DEBUG")
+                    
+                    # Sort the collected scores by section order (index), then by score order (position or index) within the section.
+                    raw_scores_with_positions.sort(key=lambda s: (s['section_order'], s['score_order']))
+                    
+                    # Populate scores_to_process in the now sorted order, removing temporary sort keys.
+                    scores_to_process = [
+                        {k: v for k, v in s.items() if k not in ['section_order', 'score_order']}
+                        for s in raw_scores_with_positions
+                    ]
+                    
+                    self._log(f"Identified and sorted {len(scores_to_process)} Plexus Scores with externalIds to process.")
+
                 except Exception as e:
-                    self._log(f"ERROR fetching scores for Plexus Scorecard '{plexus_scorecard_obj.name}': {e}")
-                    # Continue if some scores were found, otherwise this will be caught by the next check
+                    self._log(f"ERROR fetching and sorting scores for Plexus Scorecard '{plexus_scorecard_obj.name}': {e}", level="ERROR")
+                    # Continue if some scores were found before error, or caught by next check
             
             if not scores_to_process:
-                msg = "No Plexus Scores identified for analysis (either none found or none had a mappable CC Question ID)."
-                self._log(f"ERROR: {msg}")
+                msg = "No Plexus Scores identified for analysis (either none found or none had a mappable CC Question ID, or an error occurred during fetching/sorting)."
+                self._log(f"ERROR: {msg}", level="ERROR")
                 # Return a structure indicating no data, but not an error state for the report block itself.
                 return {
                     "overall_ac1": None, "total_items": 0, "total_mismatches": 0, "accuracy": None,
                     "scores": [],
                     "total_feedback_items_retrieved": 0,
                     "date_range": {"start": start_date.isoformat(), "end": end_date.isoformat()},
-                    "message": msg
+                    "message": msg,
+                    "classes_count": 2,  # Default to binary classification for overall
+                    "warning": None,
+                    "warnings": None,
+                    "notes": None,
+                    "discussion": None
                 }, "\n".join(self.log_messages)
 
             # --- 4. Fetch and Analyze Feedback for Each Score ---
             all_feedback_items_retrieved_count = 0
             all_date_filtered_feedback_items = [] # For overall calculation
             per_score_analysis_results = []
-
-            for score_info in scores_to_process:
+            
+            # Store the report block ID when created for attaching files later
+            report_block_id = None
+            if hasattr(self, 'report_block_id') and self.report_block_id:
+                report_block_id = self.report_block_id
+            
+            for score_index, score_info in enumerate(scores_to_process):
                 self._log(f"--- Processing Score: '{score_info['plexus_score_name']}' (ID: {score_info['plexus_score_id']}, CC ID: {score_info['cc_question_id']}) ---")
                 
                 items_for_this_score = await self._fetch_feedback_items_for_score(
                     plexus_scorecard_id=plexus_scorecard_obj.id,
-                    plexus_score_id=score_info['plexus_score_id']
+                    plexus_score_id=score_info['plexus_score_id'],
+                    start_date=start_date,
+                    end_date=end_date
                 )
                 all_feedback_items_retrieved_count += len(items_for_this_score)
-                self._log(f"Retrieved {len(items_for_this_score)} FeedbackItems for this score (before date filtering).")
-
-                # Date filter items for this score
-                date_filtered_items_for_score = [
-                    item for item in items_for_this_score
-                    if item.updatedAt and start_date <= item.updatedAt <= end_date
-                ]
-                self._log(f"{len(date_filtered_items_for_score)} items for this score within date range: {start_date.date()} - {end_date.date()}")
+                self._log(f"Retrieved {len(items_for_this_score)} FeedbackItems for this score within date range: {start_date.date()} - {end_date.date()}")
                 
-                all_date_filtered_feedback_items.extend(date_filtered_items_for_score)
+                all_date_filtered_feedback_items.extend(items_for_this_score)
 
-                if not date_filtered_items_for_score:
-                    self._log("No feedback items for this score within the date range.")
+                if not items_for_this_score:
+                    self._log("No feedback items for this score within the date range.", level="WARNING")
                     analysis_for_this_score = {
                         "score_id": score_info['plexus_score_id'],
                         "score_name": score_info['plexus_score_name'],
                         "cc_question_id": score_info['cc_question_id'],
-                        "ac1": None, "item_count": 0, "mismatches": 0, "accuracy": None,
-                        "message": "No feedback items found in the specified date range."
+                        "ac1": None, "item_count": 0, "mismatches": 0, "agreements": 0, "accuracy": None,
+                        "message": "No feedback items found in the specified date range.",
+                        "classes_count": 2,  # Default to binary classification
+                        "label_distribution": {},
+                        "confusion_matrix": None,
+                        "class_distribution": [],
+                        "predicted_class_distribution": [],
+                        "precision": None,
+                        "recall": None,
+                        "warning": "No data.",
+                        "warnings": "No data.",
+                        "notes": None,
+                        "discussion": None
                     }
                 else:
-                    analysis_for_this_score = self._analyze_feedback_data_gwet(
-                        feedback_items=date_filtered_items_for_score,
-                        score_id_info=score_info['plexus_score_id'] # For logging within analysis
-                    )
-                    analysis_for_this_score["score_id"] = score_info['plexus_score_id']
-                    analysis_for_this_score["score_name"] = score_info['plexus_score_name']
-                    analysis_for_this_score["cc_question_id"] = score_info['cc_question_id']
+                    try:
+                        analysis_for_this_score = self._analyze_feedback_data_gwet(
+                            feedback_items=items_for_this_score,
+                            score_id_info=score_info['plexus_score_id'] # For logging within analysis
+                        )
+                        analysis_for_this_score["score_id"] = score_info['plexus_score_id']
+                        analysis_for_this_score["score_name"] = score_info['plexus_score_name']
+                        analysis_for_this_score["cc_question_id"] = score_info['cc_question_id']
+                        
+                        # Create indexed feedback items structure for this score
+                        indexed_items = await self._create_indexed_feedback_items(items_for_this_score)
+                        
+                        # Export the indexed items to a JSON file
+                        if indexed_items and report_block_id:
+                            file_name = f"score-{score_index + 1}-results.json"
+                            self._log(f"Creating indexed feedback items JSON file: {file_name}")
+                            
+                            # Write the indexed items to a detail file
+                            detailed_json_content = json.dumps(indexed_items, default=str, indent=2)
+                            try:
+                                # Log the state of the ReportBlock before attaching file
+                                try:
+                                    block_before = ReportBlock.get_by_id(report_block_id, self.api_client)
+                                    if block_before:
+                                        self._log(f"BEFORE ATTACH - ReportBlock {report_block_id} state: attachedFiles={block_before.attachedFiles}", level="DEBUG")
+                                except Exception as e:
+                                    self._log(f"Error fetching ReportBlock before attach: {e}", level="WARNING")
+                                
+                                # Attach the file - this now returns a path string, not an object
+                                file_path = self.attach_detail_file(
+                                    report_block_id=report_block_id,
+                                    file_name=file_name,
+                                    content=detailed_json_content,
+                                    content_type="application/json"
+                                )
+                                self._log(f"Successfully attached indexed feedback items file: {file_name}, path: {file_path}")
+                                
+                                # Log the state of the ReportBlock after attaching file
+                                try:
+                                    block_after = ReportBlock.get_by_id(report_block_id, self.api_client)
+                                    if block_after:
+                                        self._log(f"AFTER ATTACH - ReportBlock {report_block_id} state: attachedFiles={block_after.attachedFiles}", level="INFO")
+                                        
+                                        # Try to parse and validate the attachedFiles content
+                                        if block_after.attachedFiles:
+                                            try:
+                                                # Check if already a list
+                                                if isinstance(block_after.attachedFiles, list):
+                                                    paths_list = block_after.attachedFiles
+                                                    self._log(f"attachedFiles is already a list with {len(paths_list)} paths: {paths_list}", level="INFO")
+                                                else:
+                                                    # For backward compatibility - try to parse JSON if it's a string
+                                                    paths_list = json.loads(block_after.attachedFiles)
+                                                    self._log(f"attachedFiles parsed from JSON string (for backward compatibility): {paths_list}", level="INFO")
+                                            except json.JSONDecodeError as je:
+                                                self._log(f"attachedFiles is not valid JSON but should be a list: {je}", level="WARNING")
+                                        else:
+                                            self._log(f"attachedFiles is empty or None", level="WARNING")
+                                except Exception as e:
+                                    self._log(f"Error fetching ReportBlock after attach: {e}", level="WARNING")
+                                
+                                # Add reference to the file in the analysis result - just the filename since paths are now in attachedFiles
+                                analysis_for_this_score["indexed_items_file"] = file_name
+                            except Exception as e:
+                                self._log(f"Error attaching indexed feedback items file: {e}", level="ERROR")
+                                import traceback
+                                self._log(f"Error details: {traceback.format_exc()}", level="ERROR")
+                    except Exception as e:
+                        self._log(f"Error analyzing score {score_info['plexus_score_name']}: {e}", level="ERROR")
+                        raise  # Re-raise to be caught by outer try/except
                 
                 per_score_analysis_results.append(analysis_for_this_score)
-                self._log(f"Analysis for score '{score_info['plexus_score_name']}': {analysis_for_this_score}")
+                # Only log a summary instead of the full analysis details
+                accuracy_str = f"{analysis_for_this_score.get('accuracy'):.2f}%" if analysis_for_this_score.get('accuracy') is not None else "N/A"
+                self._log(f"Analysis summary for score '{score_info['plexus_score_name']}': AC1={analysis_for_this_score.get('ac1')}, Items={analysis_for_this_score.get('item_count')}, Agreements={analysis_for_this_score.get('agreements')}, Mismatches={analysis_for_this_score.get('mismatches')}, Accuracy={accuracy_str}, Classes={analysis_for_this_score.get('classes_count')}")
 
             # --- 5. Calculate Overall Metrics ---
             self._log(f"Calculating overall metrics from {len(all_date_filtered_feedback_items)} date-filtered feedback items across all processed scores.")
             if not all_date_filtered_feedback_items:
-                overall_analysis = {"ac1": None, "item_count": 0, "mismatches": 0, "accuracy": None}
-                self._log("No date-filtered items available for overall analysis.")
+                overall_analysis = {"ac1": None, "item_count": 0, "mismatches": 0, "agreements": 0, "accuracy": None, "classes_count": 2, 
+                                    "label_distribution": {}, "confusion_matrix": None, "class_distribution": [], 
+                                    "predicted_class_distribution": [], "precision": None, "recall": None, "warning": None, "warnings": None, "notes": None, "discussion": None}
+                self._log("No date-filtered items available for overall analysis.", level="WARNING")
             else:
                 # Use a generic score_id_info for the overall log
                 overall_analysis = self._analyze_feedback_data_gwet(all_date_filtered_feedback_items, "Overall") 
             
-            self._log(f"Overall analysis: {overall_analysis}")
+            # Log a summary of the overall analysis instead of full details
+            accuracy_str = f"{overall_analysis.get('accuracy'):.2f}%" if overall_analysis.get('accuracy') is not None else "N/A"
+            self._log(f"Overall analysis summary: AC1={overall_analysis.get('ac1')}, Items={overall_analysis.get('item_count')}, Agreements={overall_analysis.get('agreements')}, Mismatches={overall_analysis.get('mismatches')}, Accuracy={accuracy_str}, Classes={overall_analysis.get('classes_count', 2)}")
 
-            # --- 6. Structure Final Output ---
+            # --- 6. Generate Summary Warning ---
+            summary_warning = self._generate_summary_warning(per_score_analysis_results)
+            
+            # --- 7. Structure Final Output ---
             final_output_data = {
                 "overall_ac1": overall_analysis.get("ac1"), # Renamed from overall_ac1
                 "total_items": overall_analysis.get("item_count"), # Renamed from item_count
                 "total_mismatches": overall_analysis.get("mismatches"), # Renamed from mismatches
+                "total_agreements": overall_analysis.get("agreements"), # Renamed from agreements
                 "accuracy": overall_analysis.get("accuracy"), # Renamed from accuracy
                 "scores": per_score_analysis_results,
                 "total_feedback_items_retrieved": all_feedback_items_retrieved_count,
@@ -232,29 +367,91 @@ class FeedbackAnalysis(BaseReportBlock):
                     "start": start_date.isoformat(),
                     "end": end_date.isoformat()
                 },
-                "message": f"Processed {len(scores_to_process)} score(s)." if scores_to_process else "No scores were processed."
+                "message": f"Processed {len(scores_to_process)} score(s)." if scores_to_process else "No scores were processed.",
+                "classes_count": overall_analysis.get("classes_count", 2),
+                "label_distribution": overall_analysis.get("label_distribution", {}),
+                # Add the new data from our enhanced analysis
+                "confusion_matrix": overall_analysis.get("confusion_matrix"),
+                "class_distribution": overall_analysis.get("class_distribution", []),
+                "predicted_class_distribution": overall_analysis.get("predicted_class_distribution", []),
+                "precision": overall_analysis.get("precision"),
+                "recall": overall_analysis.get("recall"),
+                "warning": summary_warning,  # Summary warning for ReportBlock display
+                "warnings": overall_analysis.get("warnings"),  # Keep individual warnings for backwards compatibility
+                "notes": overall_analysis.get("notes"),
+                "discussion": overall_analysis.get("discussion"),
+                # Add block metadata for frontend display
+                "block_title": self.DEFAULT_NAME,
+                "block_description": self.DEFAULT_DESCRIPTION
             }
-            self._log(f"Final output data: {final_output_data}")
+            # Don't log the full output data - it's redundant and can be large
+            self._log(f"Finished generating analysis for {len(scores_to_process)} scores with {all_feedback_items_retrieved_count} total feedback items.")
+
+            # Create a summary log for the ReportBlock.log field (keep it short)
+            summary_log = f"Processed {len(scores_to_process)} score(s) across {all_feedback_items_retrieved_count} feedback items. See detailed logs in log.txt."
+            
+            # The full detailed log will be stored in the S3 file
+            detailed_log = "\n".join(self.log_messages) if self.log_messages else "No logs generated."
 
         except ValueError as ve:
             self._log(f"Configuration or Value Error: {ve}")
             # final_output_data remains None, or could be set to an error structure
             final_output_data = {"error": str(ve), "scores": []}
+            summary_log = f"Error: {str(ve)}"
+            detailed_log = "\n".join(self.log_messages) if self.log_messages else f"Error: {str(ve)}"
         except Exception as e:
-            self._log(f"ERROR during FeedbackAnalysis generation: {str(e)}")
+            self._log(f"ERROR during FeedbackAnalysis generation: {str(e)}", level="ERROR")
+            # Log only first few lines of traceback, not the full trace
             import traceback
             self._log(traceback.format_exc())
             final_output_data = {"error": str(e), "scores": []}
+            summary_log = f"Error: {str(e)}"
+            detailed_log = "\n".join(self.log_messages) if self.log_messages else f"Error: {str(e)}"
 
-        log_string = "\n".join(self.log_messages) if self.log_messages else None
-        return final_output_data, log_string
+        # Return YAML formatted output with contextual comments
+        if final_output_data and not final_output_data.get("error"):
+            try:
+                contextual_comment = """# Feedback Analysis Report Output
+# 
+# This is the structured output from a feedback analysis process that:
+# 1. Retrieves feedback items from scorecards within a specified time range
+# 2. Analyzes agreement between initial and final answer values using Gwet's AC1 coefficient
+# 3. Provides statistical measures of inter-rater reliability and agreement
+# 4. Generates insights about feedback quality and consistency across evaluators
+#
+# The output contains agreement scores, statistical measures, detailed breakdowns,
+# and analytical insights for understanding feedback consistency and reliability.
+
+"""
+                yaml_output = yaml.dump(final_output_data, indent=2, allow_unicode=True, sort_keys=False)
+                final_output_data = contextual_comment + yaml_output
+            except Exception as e:
+                logger.error(f"Failed to create YAML formatted output: {e}")
+                # Fallback to basic YAML without comments
+                final_output_data = yaml.dump(final_output_data, indent=2, allow_unicode=True, sort_keys=False)
+
+        # Always return the detailed_log as the second return value to ensure logs are saved to S3
+        # The service.py code will use this to upload to S3
+        return final_output_data, detailed_log
     
-    async def _fetch_feedback_items_for_score(self, plexus_scorecard_id: str, plexus_score_id: str) -> List[FeedbackItem]:
-        """Fetches all FeedbackItem records for a specific Plexus Score on a Plexus Scorecard."""
+    async def _fetch_feedback_items_for_score(self, plexus_scorecard_id: str, plexus_score_id: str, 
+                                       start_date: Optional[datetime] = None, 
+                                       end_date: Optional[datetime] = None) -> List[FeedbackItem]:
+        """
+        Fetches FeedbackItem records for a specific Plexus Score on a Plexus Scorecard.
+        Now with direct GraphQL query for date-filtered items.
+        
+        Args:
+            plexus_scorecard_id: The ID of the scorecard
+            plexus_score_id: The ID of the score
+            start_date: Optional start date for filtering (UTC aware)
+            end_date: Optional end date for filtering (UTC aware)
+        """
         self._log(f"Fetching feedback items for Plexus Scorecard ID: {plexus_scorecard_id}, Plexus Score ID: {plexus_score_id}")
+        if start_date and end_date:
+            self._log(f"With date filtering: {start_date.isoformat()} to {end_date.isoformat()}")
         
         all_items_for_score = []
-        next_token = None
         account_id = self.params.get("account_id") # Assuming account_id is in self.params from Task context
         if not account_id and hasattr(self.api_client, 'context') and self.api_client.context:
              account_id = self.api_client.context.account_id # Try to get from client context
@@ -262,9 +459,8 @@ class FeedbackAnalysis(BaseReportBlock):
         if not account_id:
             # Attempt to resolve account_id if not directly available in params or context
             try:
-                self._log("Attempting to resolve account_id via PlexusDashboardClient...")
+                self._log("Attempting to resolve account_id via PlexusDashboardClient...", level="DEBUG")
                 # Ensure _resolve_account_id can be called or account_id is pre-resolved.
-                # This might require self.api_client to have context.account_key set.
                 if hasattr(self.api_client, '_resolve_account_id'):
                     account_id = await asyncio.to_thread(self.api_client._resolve_account_id) 
                 elif hasattr(self.api_client, 'account_id'): # if it was resolved and stored
@@ -272,46 +468,238 @@ class FeedbackAnalysis(BaseReportBlock):
 
                 if account_id:
                     self._log(f"Resolved account_id: {account_id}")
-                else: # Final fallback if it cannot be resolved
-                    self._log("WARNING: account_id could not be resolved. FeedbackItem fetching might be incomplete or fail.")
-                    # Depending on API, not providing account_id might fetch for all accounts (bad) or fail.
-                    # For safety, we might choose to return empty list here if account_id is critical.
-                    # For now, proceed with None, and let FeedbackItem.list handle it.
+                else:
+                    self._log("WARNING: account_id could not be resolved. FeedbackItem fetching might be incomplete or fail.", level="WARNING")
             except Exception as e:
-                self._log(f"Error resolving account_id: {e}. Proceeding with account_id as None.")
+                self._log(f"Error resolving account_id: {e}. Proceeding with account_id as None.", level="WARNING")
                 account_id = None # Ensure it's None if resolution fails
         else:
-            self._log(f"Using account_id: {account_id}")
+            self._log(f"Using account_id: {account_id}", level="DEBUG")
 
+        if not account_id:
+            self._log("No account_id available. Cannot fetch feedback items.", level="ERROR")
+            return []
 
-        while True:
-            try:
-                # Ensure all required args for FeedbackItem.list are provided.
-                # It's crucial that `FeedbackItem.list` can handle `score_id` being None if that's intended.
-                # However, in this method, `plexus_score_id` should always be provided.
-                self._log(f"Calling FeedbackItem.list with account_id='{account_id}', scorecard_id='{plexus_scorecard_id}', score_id='{plexus_score_id}', limit=100, next_token='{next_token}'")
+        try:
+            # Try using the optimized GSI directly with GraphQL
+            if plexus_scorecard_id and plexus_score_id and start_date and end_date:
+                self._log("Using direct GraphQL query with GSI", level="DEBUG")
                 
-                # Making FeedbackItem.list an async-compatible call
-                items, next_token = await asyncio.to_thread(
-                    FeedbackItem.list, # Assuming FeedbackItem.list is a static/class method
-                    client=self.api_client,
-                    account_id=account_id, # Pass resolved or param account_id
-                    scorecard_id=plexus_scorecard_id,
-                    score_id=plexus_score_id, # Specific score for this fetch
-                    limit=100,
-                    next_token=next_token
-                )
-                all_items_for_score.extend(items)
-                self._log(f"Fetched {len(items)} items for this score (total for score: {len(all_items_for_score)})")
+                # First, try to get schema information for the GSI query
+                self._log("Querying schema information for correct parameters...", level="INFO")
+                schema_query = """
+                query IntrospectionQuery {
+                  __schema {
+                    queryType {
+                      fields {
+                        name
+                        args {
+                          name
+                          type {
+                            name
+                            kind
+                            ofType {
+                              name
+                              kind
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+                """
                 
-                if not next_token:
-                    break
-            except Exception as e:
-                self._log(f"Error during paginated fetch for score {plexus_score_id}: {str(e)}")
-                import traceback
-                self._log(traceback.format_exc())
-                break # Stop fetching for this score on error
+                try:
+                    schema_response = await asyncio.to_thread(self.api_client.execute, schema_query, {})
+                    if schema_response and '__schema' in schema_response:
+                        query_fields = schema_response['__schema']['queryType']['fields']
+                        gsi_field = next((f for f in query_fields if f['name'] == 'listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt'), None)
+                        if gsi_field:
+                            self._log(f"GSI arguments: {gsi_field['args']}", level="INFO")
+                        else:
+                            self._log("Could not find GSI in schema", level="WARNING")
+                except Exception as e:
+                    self._log(f"Error querying schema: {e}", level="WARNING")
                 
+                # Construct a direct GraphQL query using the new GSI
+                # The GSI query field name is listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt
+                # It takes `accountId` and a composite sort key argument.
+                # The composite sort key is formed from scorecardId, scoreId, and updatedAt.
+                # We'll name the GraphQL variable for this composite key `composite_sk_condition`
+                # and assume its type is ModelFeedbackItemByAccountScorecardScoreUpdatedAtCompositeKeyConditionInput
+                # (or similar, based on actual schema introspection).
+                query = """
+                query ListFeedbackItemsByGSI(
+                    $accountId: String!,
+                    $composite_sk_condition: ModelFeedbackItemByAccountScorecardScoreUpdatedAtCompositeKeyConditionInput,
+                    $limit: Int,
+                    $nextToken: String,
+                    $sortDirection: ModelSortDirection
+                ) {
+                    listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt(
+                        accountId: $accountId,
+                        scorecardIdScoreIdUpdatedAt: $composite_sk_condition, # This is the argument for the composite sort key
+                        limit: $limit,
+                        nextToken: $nextToken,
+                        sortDirection: $sortDirection
+                    ) {
+                        items {
+                            id
+                            accountId
+                            scorecardId
+                            scoreId
+                            itemId
+                            cacheKey
+                            initialAnswerValue
+                            finalAnswerValue
+                            initialCommentValue
+                            finalCommentValue
+                            editCommentValue
+                            editedAt
+                            editorName
+                            isAgreement
+                            createdAt
+                            updatedAt
+                            item {
+                                id
+                                identifiers
+                                externalId
+                            }
+                        }
+                        nextToken
+                    }
+                }
+                """
+                
+                # Prepare variables for the query
+                # The composite sort key condition 'scorecardIdScoreIdUpdatedAt'
+                # expects a 'between' operator with two objects.
+                variables = {
+                    "accountId": account_id,
+                    "composite_sk_condition": {
+                        "between": [
+                            {
+                                "scorecardId": str(plexus_scorecard_id),
+                                "scoreId": str(plexus_score_id),
+                                "updatedAt": start_date.isoformat()
+                            },
+                            {
+                                "scorecardId": str(plexus_scorecard_id), # Must match the start for range scan
+                                "scoreId": str(plexus_score_id),     # Must match the start for range scan
+                                "updatedAt": end_date.isoformat()
+                            }
+                        ]
+                    },
+                    "limit": 100,
+                    "nextToken": None,
+                    "sortDirection": "DESC"
+                }
+                
+                # Log the exact query and variables to INFO level so they show up
+                self._log(f"GraphQL query: {query}", level="INFO")
+                self._log(f"GraphQL variables: {variables}", level="INFO")
+                
+                next_token = None
+                
+                while True:
+                    if next_token:
+                        variables["nextToken"] = next_token
+                    
+                    try:
+                        # Execute the query
+                        self._log(f"Executing GraphQL query with variables: {variables}", level="INFO")
+                        response = await asyncio.to_thread(self.api_client.execute, query, variables)
+                        
+                        # If there's an error, log it
+                        if response and 'errors' in response:
+                            self._log(f"GraphQL errors: {response.get('errors')}", level="ERROR")
+                            
+                            # Try a simplified query without any optional parameters
+                            self._log("Trying a simplified fallback query...", level="INFO")
+                            simplified_query = """
+                            query SimplifiedFeedbackQuery {
+                              listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt(
+                                accountId: "%s"
+                                limit: 1
+                              ) {
+                                items {
+                                  id
+                                  accountId
+                                  scorecardId
+                                  scoreId
+                                  itemId
+                                  editedAt
+                                  editorName
+                                  item {
+                                    id
+                                    identifiers
+                                  }
+                                }
+                                nextToken
+                              }
+                            }
+                            """ % account_id
+                            
+                            self._log(f"Simplified query: {simplified_query}", level="INFO")
+                            try:
+                                # No variables with hardcoded query
+                                simplified_response = await asyncio.to_thread(self.api_client.execute, simplified_query, {})
+                                self._log(f"Simplified query response: {simplified_response}", level="INFO")
+                            except Exception as e:
+                                self._log(f"Even simplified query failed: {e}", level="ERROR")
+                        
+                        if response and 'listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt' in response:
+                            result = response['listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt']
+                            item_dicts = result.get('items', [])
+                            
+                            # Log the first few items to verify we're getting identifiers
+                            if item_dicts:
+                                for i, item_dict in enumerate(item_dicts[:3]):  # Show first 3 items
+                                    if 'item' in item_dict and item_dict['item'] and 'identifiers' in item_dict['item']:
+                                        self._log(f"Found item with identifiers: {item_dict['item']['identifiers']}", level="INFO")
+                                    else:
+                                        self._log(f"Item {i} missing nested item or identifiers", level="WARNING")
+                            
+                            # Convert to FeedbackItem objects
+                            items = [FeedbackItem.from_dict(item_dict, client=self.api_client) for item_dict in item_dicts]
+                            
+                            # Log sample items to verify item relationships are correctly loaded
+                            for i, item in enumerate(items[:2]):  # Show first 2 items
+                                if hasattr(item, 'item') and item.item:
+                                    self._log(f"Processed FeedbackItem {item.id} has linked Item: {item.item.id}, identifiers: {item.item.identifiers}", level="INFO")
+                                else:
+                                    self._log(f"Processed FeedbackItem {item.id} is missing linked Item", level="WARNING")
+                            
+                            all_items_for_score.extend(items)
+                            
+                            self._log(f"Fetched {len(items)} items using GSI query (total: {len(all_items_for_score)})")
+                            
+                            # Get next token for pagination
+                            next_token = result.get('nextToken')
+                            if not next_token:
+                                break
+                        else:
+                            if response and 'errors' in response:
+                                self._log(f"GraphQL errors with GSI query: {response.get('errors')}", level="WARNING")
+                            else:
+                                self._log("Unexpected response format from GSI query", level="WARNING")
+                            raise ValueError("Invalid response format")
+                            
+                    except Exception as e:
+                        self._log(f"Error during GSI query execution: {e}. No fallback will be attempted. Current items (if any from GSI) will be cleared.", level="WARNING")
+                        # Clear items and break GSI pagination loop.
+                        all_items_for_score = []
+                        break # This break exits the GSI pagination loop.
+            
+            # The 'if plexus_scorecard_id and plexus_score_id and start_date and end_date:' block (for GSI query) ends above.
+            # The standard query fallback logic (which started with 'if not all_items_for_score:')
+            # that was previously located here has been completely removed.
+            
+        except Exception as e: # This is the outer catch block for the _fetch_feedback_items_for_score method
+            self._log(f"Error during feedback item fetch for score {plexus_score_id}: {str(e)}", level="ERROR")
+        
+        self._log(f"Total items fetched for score {plexus_score_id}: {len(all_items_for_score)}")
         return all_items_for_score
     
     def _analyze_feedback_data_gwet(self, feedback_items: List[FeedbackItem], score_id_info: str) -> Dict[str, Any]:
@@ -324,27 +712,21 @@ class FeedbackAnalysis(BaseReportBlock):
             score_id_info: Identifier string for the score (e.g., Plexus Score ID or "Overall") for logging.
             
         Returns:
-            Dictionary with analysis results: {ac1, item_count, mismatches, accuracy}
+            Dictionary with analysis results: {ac1, item_count, mismatches, accuracy, classes_count, label_distribution}
         """
         self._log(f"Analyzing {len(feedback_items)} feedback items for: {score_id_info}")
         
         if not feedback_items:
-            self._log(f"No feedback items to analyze for {score_id_info}.")
-            return {"ac1": None, "item_count": 0, "mismatches": 0, "accuracy": None}
+            self._log(f"No feedback items to analyze for {score_id_info}.", level="WARNING")
+            return {"ac1": None, "item_count": 0, "mismatches": 0, "agreements": 0, "accuracy": None, "classes_count": 2, 
+                    "label_distribution": {}, "confusion_matrix": None, "class_distribution": [], 
+                    "predicted_class_distribution": [], "precision": None, "recall": None, "warning": "No data.", "warnings": "No data.", "notes": None, "discussion": None}
             
-        initial_values = [item.initialAnswerValue for item in feedback_items if item.initialAnswerValue is not None]
-        final_values = [item.finalAnswerValue for item in feedback_items if item.finalAnswerValue is not None]
-        
-        # Gwet's AC1 requires paired data. Ensure lists are of the same length by taking the minimum.
-        # This assumes items are already somewhat paired or we're comparing corresponding entries.
-        # A more robust pairing might be needed if items aren't implicitly paired.
+        # Don't log intermediate data processing details unless debugging
         valid_pairs_count = 0
         paired_initial = []
         paired_final = []
 
-        # Iterate based on the full list of feedback_items to ensure each item is considered once for pairing
-        processed_indices = set() # To avoid double counting if items are not perfectly one-to-one by index
-        
         # For Gwet's AC1, we need a list of ratings from rater1 and rater2 for the *same set of items*.
         # Here, 'initialAnswerValue' is rater1, 'finalAnswerValue' is rater2 for the same FeedbackItem.
         for item in feedback_items:
@@ -356,20 +738,42 @@ class FeedbackAnalysis(BaseReportBlock):
         self._log(f"Found {valid_pairs_count} valid initial/final pairs for analysis for {score_id_info}.")
 
         if valid_pairs_count == 0:
-            self._log(f"No valid (non-None initial and final) pairs to analyze for {score_id_info}.")
-            return {"ac1": None, "item_count": 0, "mismatches": 0, "accuracy": None}
+            self._log(f"No valid (non-None initial and final) pairs to analyze for {score_id_info}.", level="WARNING")
+            return {"ac1": None, "item_count": 0, "mismatches": 0, "agreements": 0, "accuracy": None, "classes_count": 2, 
+                    "label_distribution": {}, "confusion_matrix": None, "class_distribution": [], 
+                    "predicted_class_distribution": [], "precision": None, "recall": None, "warning": "No data.", "warnings": "No data.", "notes": None, "discussion": None}
+
+        # Calculate label distribution
+        label_distribution = dict(Counter(paired_final))
+        self._log(f"Final value distribution for {score_id_info}: {label_distribution}")
+        
+        # Calculate initial value distribution
+        initial_label_distribution = dict(Counter(paired_initial))
+        self._log(f"Initial value distribution for {score_id_info}: {initial_label_distribution}")
 
         # Calculate Gwet's AC1
         try:
-            # Ensure GwetAC1 can handle the data format (e.g., list of strings)
-            # Convert values to string just in case they are not, as GwetAC1 might expect consistent types.
+            # Get the number of valid classes from the score configuration
+            num_classes = 2  # Default to binary classification
+            if score_id_info != "Overall":
+                try:
+                    # Get the score object and its valid classes count
+                    score = Score.get_by_id(score_id_info, client=self.api_client)
+                    if score:
+                        # Ensure the client is set on the score instance
+                        score.client = self.api_client
+                        num_classes = score.get_valid_classes_count()
+                        self._log(f"Found {num_classes} valid classes in score configuration")
+                except Exception as e:
+                    self._log(f"Error getting valid classes count, defaulting to 2: {e}", level="WARNING")
             
-            # Corrected GwetAC1 usage:
-            gwet_ac1_calculator = GwetAC1() # Instantiate without arguments
+            # Create GwetAC1 instance - it will determine classes from the input data
+            gwet_ac1_calculator = GwetAC1()
             
             # Prepare reference and predictions lists
-            reference_list = [str(i) for i in paired_initial]
-            predictions_list = [str(f) for f in paired_final]
+            # Final answer is the reference (ground truth), Initial answer is the prediction
+            reference_list = [str(f) for f in paired_final]
+            predictions_list = [str(i) for i in paired_initial]
             
             # Create Metric.Input object
             metric_input = Metric.Input(reference=reference_list, predictions=predictions_list)
@@ -379,34 +783,536 @@ class FeedbackAnalysis(BaseReportBlock):
             ac1_value = calculation_result.value # Get value from the result object
 
             self._log(f"Gwet's AC1 for {score_id_info}: {ac1_value}")
-        except Exception as e:
-            self._log(f"Error calculating Gwet's AC1 for {score_id_info}: {e}")
-            import traceback
-            self._log(traceback.format_exc())
-            ac1_value = None
             
-        # Calculate mismatches and accuracy based on the paired data
-        mismatches = sum(1 for i, f in zip(paired_initial, paired_final) if i != f)
+            # Calculate accuracy
+            mismatches = sum(1 for i, f in zip(paired_initial, paired_final) if i != f)
+            agreements = valid_pairs_count - mismatches
+            accuracy_percentage = (agreements / valid_pairs_count) * 100 if valid_pairs_count > 0 else None
+            
+            accuracy_str = f"{accuracy_percentage:.2f}%" if accuracy_percentage is not None else "N/A"
+            self._log(f"Analysis results for {score_id_info}: Gwet's AC1={ac1_value}, Items={valid_pairs_count}, Agreements={agreements}, Mismatches={mismatches}, Accuracy={accuracy_str}, Classes={num_classes}")
+            
+            # Generate confusion matrix
+            # Final answer is the reference (ground truth), Initial answer is the prediction
+            confusion_matrix = self._build_confusion_matrix(paired_final, paired_initial)
+            
+            # Generate class distribution for visualization
+            class_distribution = self._format_class_distribution(label_distribution)
+            
+            # Generate predicted class distribution for visualization
+            predicted_class_distribution = self._format_class_distribution(initial_label_distribution)
+            
+            # Calculate precision and recall metrics if there are multiple classes
+            # Final answer is the reference (ground truth), Initial answer is the prediction
+            precision_recall = self._calculate_precision_recall(paired_final, paired_initial, label_distribution.keys())
+            
+            # Generate warnings based on heuristics
+            warnings = self._generate_warnings(ac1_value, label_distribution)
+            
+            return {
+                "ac1": ac1_value,
+                "item_count": valid_pairs_count,
+                "mismatches": mismatches,
+                "agreements": agreements,
+                "accuracy": accuracy_percentage,
+                "classes_count": num_classes,
+                "label_distribution": label_distribution,
+                "confusion_matrix": confusion_matrix,
+                "class_distribution": class_distribution,
+                "predicted_class_distribution": predicted_class_distribution,
+                "precision": precision_recall.get("precision"),
+                "recall": precision_recall.get("recall"),
+                "warning": warnings,  # Individual score warning for frontend display
+                "warnings": warnings,  # Keep for backwards compatibility
+                "notes": None,
+                "discussion": None
+            }
+            
+        except Exception as e:
+            self._log(f"Error calculating Gwet's AC1 for {score_id_info}: {e}", level="ERROR")
+            # Don't log full traceback, just the error message
+            raise
+    
+    def _format_class_distribution(self, distribution: Dict[Any, int]) -> List[Dict[str, Any]]:
+        """
+        Format class distribution for visualization.
         
-        if valid_pairs_count > 0:
-            accuracy_float = (valid_pairs_count - mismatches) / valid_pairs_count
-            accuracy_percentage = accuracy_float * 100
-        else:
-            accuracy_percentage = None # MODIFIED: Set to None if no valid pairs
+        Args:
+            distribution: Dictionary mapping class labels to counts
+            
+        Returns:
+            List of dictionaries in the format expected by the UI
+        """
+        if not distribution:
+            return []
+            
+        # Calculate total for percentages
+        total = sum(distribution.values())
         
-        self._log(f"Analysis for {score_id_info} - Items: {valid_pairs_count}, Mismatches: {mismatches}, Accuracy: {f'{accuracy_percentage:.2f}%' if accuracy_percentage is not None else 'N/A'}") # MODIFIED Log
+        # Format data to match ClassDistribution interface in UI
+        result = [
+            {
+                "label": str(label),  # Ensure label is a string
+                "count": count        # Keep count as an integer
+            }
+            for label, count in distribution.items()
+        ]
         
-        return {
-            "ac1": ac1_value,
-            "item_count": valid_pairs_count, # Number of items used in AC1 calculation
-            "mismatches": mismatches,
-            "accuracy": accuracy_percentage # Return as percentage or None
+        # Sort by count descending
+        result.sort(key=lambda x: x["count"], reverse=True)
+        
+        self._log(f"Formatted class distribution: {result}")
+        return result
+    
+    def _build_confusion_matrix(self, reference_values: List, predicted_values: List) -> Dict[str, Any]:
+        """
+        Build a confusion matrix from reference and predicted values.
+        
+        Args:
+            reference_values: List of reference (ground truth) values
+            predicted_values: List of predicted values
+            
+        Returns:
+            Dictionary representation of confusion matrix in the format expected by the UI
+        """
+        # Get unique classes from both lists and ensure they are strings
+        all_classes = sorted(list(set(str(v) for v in reference_values + predicted_values)))
+        
+        # Initialize matrix structure to match UI expectations
+        matrix_result = {
+            "labels": all_classes,
+            "matrix": []
         }
+        
+        # Build matrix rows matching the ConfusionMatrixData format
+        for true_class in all_classes:
+            # Create a row object with actualClassLabel
+            row = {
+                "actualClassLabel": true_class,
+                "predictedClassCounts": {}
+            }
+            
+            # Add counts for each predicted class
+            for pred_class in all_classes:
+                # Count instances where reference is true_class and prediction is pred_class
+                count = 0
+                for ref_val, pred_val in zip(reference_values, predicted_values):
+                    str_ref = str(ref_val)
+                    str_pred = str(pred_val)
+                    if str_ref == str(true_class) and str_pred == str(pred_class):
+                        count += 1
+                        # Log the values contributing to this cell
+                        self._log(f"[Debug CM] Matched for cell true='{str(true_class)}', pred='{str(pred_class)}': item_ref='{str_ref}', item_pred='{str_pred}'", level="DEBUG")
+                row["predictedClassCounts"][pred_class] = count
+            
+            # Add this row to the matrix
+            matrix_result["matrix"].append(row)
+        
+        self._log(f"Built confusion matrix with {len(all_classes)} classes")
+        self._log(f"Matrix structure: labels={matrix_result['labels']}, row count={len(matrix_result['matrix'])}")
+        return matrix_result
+    
+    def _calculate_precision_recall(self, reference_values: List, predicted_values: List, classes: Any) -> Dict[str, float]:
+        """
+        Calculate precision and recall metrics.
+        
+        Args:
+            reference_values: List of reference (ground truth) values
+            predicted_values: List of predicted values
+            classes: Iterable of class labels
+            
+        Returns:
+            Dictionary with precision and recall values
+        """
+        # Default result if calculation fails
+        result = {"precision": None, "recall": None}
+        
+        try:
+            # Convert values to strings for comparison
+            str_reference = [str(v) for v in reference_values]
+            str_predicted = [str(v) for v in predicted_values]
+            str_classes = [str(c) for c in classes]
+            
+            # If there are only two classes, calculate binary precision/recall
+            if len(str_classes) == 2:
+                # Assuming the first class is the positive class
+                positive_class = str_classes[0]
+                
+                # Calculate TP, FP, FN
+                true_positives = sum(1 for ref, pred in zip(str_reference, str_predicted) 
+                                    if ref == positive_class and pred == positive_class)
+                false_positives = sum(1 for ref, pred in zip(str_reference, str_predicted) 
+                                     if ref != positive_class and pred == positive_class)
+                false_negatives = sum(1 for ref, pred in zip(str_reference, str_predicted) 
+                                     if ref == positive_class and pred != positive_class)
+                
+                # Calculate precision and recall
+                precision = true_positives / (true_positives + false_positives) if (true_positives + false_positives) > 0 else 0
+                recall = true_positives / (true_positives + false_negatives) if (true_positives + false_negatives) > 0 else 0
+                
+                result = {"precision": precision * 100, "recall": recall * 100}  # Convert to percentage
+            else:
+                # For multiclass, use macro averaging (average of per-class metrics)
+                precisions = []
+                recalls = []
+                
+                for cls in str_classes:
+                    # For each class, treat it as the positive class
+                    true_positives = sum(1 for ref, pred in zip(str_reference, str_predicted) 
+                                        if ref == cls and pred == cls)
+                    false_positives = sum(1 for ref, pred in zip(str_reference, str_predicted) 
+                                         if ref != cls and pred == cls)
+                    false_negatives = sum(1 for ref, pred in zip(str_reference, str_predicted) 
+                                         if ref == cls and pred != cls)
+                    
+                    # Calculate class precision and recall
+                    class_precision = true_positives / (true_positives + false_positives) if (true_positives + false_positives) > 0 else 0
+                    class_recall = true_positives / (true_positives + false_negatives) if (true_positives + false_negatives) > 0 else 0
+                    
+                    precisions.append(class_precision)
+                    recalls.append(class_recall)
+                
+                # Macro averaging
+                macro_precision = sum(precisions) / len(precisions) if precisions else 0
+                macro_recall = sum(recalls) / len(recalls) if recalls else 0
+                
+                result = {"precision": macro_precision * 100, "recall": macro_recall * 100}  # Convert to percentage
+        
+        except Exception as e:
+            self._log(f"Error calculating precision/recall: {e}", level="WARNING")
+        
+        return result
+    
+    def _generate_warnings(self, ac1: Optional[float], label_distribution: Dict[Any, int]) -> Optional[str]:
+        """
+        Generate concise warnings based on simple heuristics for problematic analysis conditions.
+        
+        Args:
+            ac1: Gwet's AC1 value (agreement coefficient)
+            label_distribution: Dictionary mapping class labels to their counts in the data
+            
+        Returns:
+            Warning text if warnings are needed, None otherwise
+        """
+        warnings = []
+        
+        # Check for negative agreement (systematic disagreement)
+        if ac1 is not None and ac1 < 0:
+            warnings.append("Systematic disagreement.")
+        
+        # Check for zero agreement (random chance)
+        elif ac1 is not None and ac1 == 0:
+            warnings.append("Random chance.")
+        
+        # Check for class imbalance (only one class present)
+        if label_distribution and len(label_distribution) == 1:
+            single_class = list(label_distribution.keys())[0]
+            warnings.append(f"Single class ({single_class}).")
+        
+        # Check for imbalanced class distribution (multiple classes, but not balanced)
+        # Using same 20% tolerance as ClassDistributionVisualizer component
+        elif label_distribution and len(label_distribution) > 1:
+            if not self._is_distribution_balanced(label_distribution):
+                warnings.append("Imbalanced classes.")
+        
+        # Return combined warnings or None if no warnings
+        if warnings:
+            return " ".join(warnings)
+        else:
+            return None
+    
+    def _is_distribution_balanced(self, label_distribution: Dict[Any, int]) -> bool:
+        """
+        Check if class distribution is balanced using same logic as ClassDistributionVisualizer.
+        Uses 20% tolerance from perfect balance.
+        
+        Args:
+            label_distribution: Dictionary mapping class labels to their counts
+            
+        Returns:
+            True if distribution is balanced, False if imbalanced
+        """
+        if not label_distribution or len(label_distribution) <= 1:
+            return True  # Single class or no classes are considered "balanced" (no imbalance warning needed)
+        
+        total = sum(label_distribution.values())
+        expected_count = total / len(label_distribution)
+        tolerance = 0.2  # 20% tolerance, same as Evaluation.py
+        
+        # Check if all classes are within 20% tolerance of expected count
+        return all(
+            abs(count - expected_count) <= expected_count * tolerance 
+            for count in label_distribution.values()
+        )
+    
+    def _generate_summary_warning(self, score_results: List[Dict[str, Any]]) -> Optional[str]:
+        """
+        Generate a concise summary warning based on individual score warnings.
+        
+        Args:
+            score_results: List of score analysis results, each potentially containing a 'warning' field
+            
+        Returns:
+            Summary warning text if warnings are present, None otherwise
+        """
+        if not score_results:
+            return None
+        
+        # Count warning types
+        warning_counts = {
+            'systematic_disagreement': 0,
+            'random_chance': 0,
+            'single_class': 0,
+            'imbalanced_classes': 0,
+            'no_data': 0
+        }
+        
+        total_scores = len(score_results)
+        scores_with_warnings = 0
+        
+        for result in score_results:
+            warning = result.get('warning')
+            if warning:
+                scores_with_warnings += 1
+                # Check for specific warning types (using our Hemingway-style phrases)
+                if 'Systematic disagreement' in warning:
+                    warning_counts['systematic_disagreement'] += 1
+                elif 'Random chance' in warning:
+                    warning_counts['random_chance'] += 1
+                elif 'Single class' in warning:
+                    warning_counts['single_class'] += 1
+                elif 'Imbalanced classes' in warning:
+                    warning_counts['imbalanced_classes'] += 1
+                elif 'No data' in warning:
+                    warning_counts['no_data'] += 1
+        
+        if scores_with_warnings == 0:
+            return None
+            
+        # Generate concise summary following Hemingway style
+        
+        # If all scores have warnings, just say "All scores" 
+        if scores_with_warnings == total_scores:
+            score_phrase = "All scores"
+        elif scores_with_warnings == 1:
+            score_phrase = "1 score"
+        else:
+            score_phrase = f"{scores_with_warnings} scores with"
+        
+        # List the warning types found
+        warning_types = []
+        if warning_counts['systematic_disagreement'] > 0:
+            warning_types.append("disagreement")
+        if warning_counts['random_chance'] > 0:
+            warning_types.append("random chance")
+        if warning_counts['single_class'] > 0:
+            warning_types.append("single class")
+        if warning_counts['imbalanced_classes'] > 0:
+            warning_types.append("imbalanced")
+        if warning_counts['no_data'] > 0:
+            warning_types.append("no data")
+        
+        if len(warning_types) == 1:
+            if scores_with_warnings == total_scores or scores_with_warnings == 1:
+                return f"{score_phrase}: {warning_types[0]}."
+            else:
+                return f"{score_phrase} {warning_types[0]}."
+        elif len(warning_types) == 2:
+            if scores_with_warnings == total_scores or scores_with_warnings == 1:
+                return f"{score_phrase}: {warning_types[0]} and {warning_types[1]}."
+            else:
+                return f"{score_phrase} {warning_types[0]} and {warning_types[1]}."
+        else:
+            # 3 or more warning types - use "multiple issues" and put each on separate line
+            if scores_with_warnings == total_scores or scores_with_warnings == 1:
+                return f"{score_phrase} with multiple issues:\n" + "\n".join(f"• {wtype}" for wtype in warning_types) + "."
+            else:
+                return f"{score_phrase} multiple issues:\n" + "\n".join(f"• {wtype}" for wtype in warning_types) + "."
 
-    def _log(self, message: str):
-        """Helper method to log messages and store them for the report block's log output."""
-        logger.info(f"[ReportBlock {self.config.get('name', 'Unnamed')} (FeedbackAnalysis)] {message}")
-        self.log_messages.append(f"{datetime.now().isoformat()} - {message}")
+    def _log(self, message: str, level="INFO"):
+        """Helper method to log messages and store them for the report block's log output.
+        
+        Args:
+            message: The message to log
+            level: Log level (INFO, DEBUG, WARNING, ERROR)
+        """
+        # Only store non-DEBUG messages in the log output
+        if level == "DEBUG":
+            # Just log to system logger but don't add to block log
+            logger.debug(f"[ReportBlock {self.config.get('name', 'Unnamed')} (FeedbackAnalysis)] {message}")
+        else:
+            # For all other levels (INFO, WARNING, ERROR), log to both system and block log
+            log_method = getattr(logger, level.lower(), logger.info)
+            log_method(f"[ReportBlock {self.config.get('name', 'Unnamed')} (FeedbackAnalysis)] {message}")
+            
+            # Add to block log with level prefix for important messages
+            if level in ("WARNING", "ERROR"):
+                self.log_messages.append(f"{datetime.now().isoformat()} - {level}: {message}")
+            else:
+                self.log_messages.append(f"{datetime.now().isoformat()} - {message}")
+
+    async def _create_indexed_feedback_items(self, feedback_items: List[FeedbackItem]) -> Dict[str, Any]:
+        """
+        Creates an indexed structure of feedback items organized by initial (predicted) and final (actual) answers.
+        This allows for quick lookup of feedback items for any cell in the confusion matrix.
+        
+        Args:
+            feedback_items: List of FeedbackItem objects to index
+            
+        Returns:
+            Dictionary with structure:
+            {
+                "answer1": {
+                    "answer1": [feedback_items_with_answer1_answer1],
+                    "answer2": [feedback_items_with_answer1_answer2],
+                    ...
+                },
+                "answer2": {
+                    "answer1": [feedback_items_with_answer2_answer1],
+                    "answer2": [feedback_items_with_answer2_answer2],
+                    ...
+                },
+                ...
+            }
+        """
+        self._log(f"Creating indexed feedback items structure for {len(feedback_items)} items")
+        
+        # Initialize the structure - simplified to use initial values directly as top-level keys
+        indexed_structure = {}
+        
+        # Process only items with both values present
+        valid_items = [item for item in feedback_items if item.initialAnswerValue is not None and item.finalAnswerValue is not None]
+        self._log(f"Found {len(valid_items)} valid items with both initial and final answer values")
+        
+        # Process each valid item
+        for item in valid_items:
+            # Ensure the item relationship is loaded
+            await self._ensure_item_loaded(item)
+            
+            # Convert values to strings to ensure consistent keys
+            initial_value = str(item.initialAnswerValue)
+            final_value = str(item.finalAnswerValue)
+            
+            # Ensure nested structure exists
+            if initial_value not in indexed_structure:
+                indexed_structure[initial_value] = {}
+            
+            if final_value not in indexed_structure[initial_value]:
+                indexed_structure[initial_value][final_value] = []
+            
+            # Log the specific keys being used for this item
+            self._log(f"[Debug Indexing] Item ID {item.id}: initial_key='{initial_value}', final_key='{final_value}'", level="DEBUG")
+
+            # Create a simplified representation of the feedback item
+            item_dict = {
+                "id": item.id,
+                "initialAnswerValue": item.initialAnswerValue,
+                "finalAnswerValue": item.finalAnswerValue,
+                "initialCommentValue": item.initialCommentValue,
+                "finalCommentValue": item.finalCommentValue,
+                "editCommentValue": item.editCommentValue,
+                "editedAt": item.editedAt,
+                "editorName": item.editorName,
+                "isAgreement": item.isAgreement,
+                "scorecardId": item.scorecardId,
+                "scoreId": item.scoreId,
+                "itemId": item.itemId,
+                "cacheKey": item.cacheKey,
+                "createdAt": item.createdAt,
+                "updatedAt": item.updatedAt
+            }
+            
+            # Add item identifiers if available
+            if hasattr(item, 'item') and item.item and hasattr(item.item, 'identifiers'):
+                item_dict["item"] = {
+                    "id": item.item.id if hasattr(item.item, 'id') else None,
+                    "identifiers": item.item.identifiers,
+                    "externalId": item.item.externalId if hasattr(item.item, 'externalId') else None,
+                }
+                # Log to confirm we're including identifiers
+                self._log(f"Including item identifiers for feedback item {item.id}: {item.item.identifiers}", level="DEBUG")
+            else:
+                # Add a message if identifiers are not available
+                self._log(f"Item identifiers not available for feedback item {item.id}", level="DEBUG")
+                item_dict["item"] = {
+                    "id": item.itemId,
+                    "identifiers": None,
+                    "message": "Item details not available"
+                }
+            
+            # Add the item to the appropriate list
+            indexed_structure[initial_value][final_value].append(item_dict)
+        
+        # Add summary count of items with identifiers
+        items_with_identifiers = 0
+        total_indexed = 0
+        for initial_value, final_values_dict in indexed_structure.items():
+            for final_value, items_list in final_values_dict.items():
+                count = len(items_list)
+                total_indexed += count
+                self._log(f"Indexed {count} items with initial={initial_value}, final={final_value}")
+                
+                for item in items_list:
+                    if "item" in item and item["item"] and "identifiers" in item["item"] and item["item"]["identifiers"] is not None:
+                        items_with_identifiers += 1
+        
+        self._log(f"Total indexed items: {total_indexed}")
+        self._log(f"Indexed items with identifiers: {items_with_identifiers} out of {total_indexed}")
+        return indexed_structure
+
+    async def _ensure_item_loaded(self, feedback_item: FeedbackItem):
+        """
+        Ensures the Item relationship is loaded for a FeedbackItem.
+        This is necessary because the relationship might not be automatically loaded, 
+        especially when the feedback item is created without the nested item data.
+        
+        Args:
+            feedback_item: The FeedbackItem to ensure item is loaded for
+        
+        Returns:
+            True if the item was loaded successfully, False otherwise
+        """
+        if hasattr(feedback_item, 'item') and feedback_item.item is not None:
+            # Item is already loaded
+            return True
+            
+        if not feedback_item.itemId or not self.api_client:
+            # No itemId or client to load with
+            return False
+            
+        try:
+            # Import here to avoid circular imports
+            from plexus.dashboard.api.models.item import Item
+            
+            # Construct a GraphQL query to fetch the item
+            query = """
+            query GetItem($id: ID!) {
+                getItem(id: $id) {
+                    id
+                    identifiers
+                    externalId
+                }
+            }
+            """
+            
+            variables = {"id": feedback_item.itemId}
+            
+            # Execute the query
+            result = await asyncio.to_thread(self.api_client.execute, query, variables)
+            
+            if result and 'getItem' in result and result['getItem']:
+                item_data = result['getItem']
+                # Create an Item instance and attach it
+                feedback_item.item = Item.from_dict(item_data, client=self.api_client)
+                self._log(f"Successfully loaded Item for FeedbackItem {feedback_item.id}: identifiers={feedback_item.item.identifiers}")
+                return True
+            else:
+                self._log(f"Failed to load Item {feedback_item.itemId} for FeedbackItem {feedback_item.id}", level="WARNING")
+                return False
+                
+        except Exception as e:
+            self._log(f"Error loading Item for FeedbackItem {feedback_item.id}: {e}", level="ERROR")
+            return False
 
 # Example of how this block might be configured in a ReportConfiguration:
 """

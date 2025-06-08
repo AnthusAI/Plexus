@@ -7,3 +7,5 @@ mlruns/
 .DS_Store
 .env
 tmp/
+.langchain.db/
+.plexus_training_data_cache/

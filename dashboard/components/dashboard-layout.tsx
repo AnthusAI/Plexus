@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useState, useEffect, useRef } from "react"
-import { Activity, StickyNote, FileBarChart, FlaskConical, ListTodo, LogOut, Menu, PanelLeft, PanelRight, Settings, Sparkles, Siren, Database, Sun, Moon, Send, Mic, Headphones, MessageCircleMore, MessageSquare, Inbox, X, ArrowLeftRight, Layers3, Monitor, CircleHelp } from "lucide-react"
+import { Activity, StickyNote, FileBarChart, FlaskConical, ListChecks, LogOut, Menu, PanelLeft, PanelRight, Settings, Sparkles, Siren, Database, Sun, Moon, Send, Mic, Headphones, MessageCircleMore, MessageSquare, Inbox, X, ArrowLeftRight, Layers3, Monitor, CircleHelp } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useTheme } from "next-themes"
@@ -63,7 +63,7 @@ const MobileHeader = ({
   toggleRightSidebar: () => void;
   rightSidebarState: 'collapsed' | 'normal' | 'expanded';
 }) => (
-  <div className="hidden max-lg:flex items-center justify-between p-1 px-2 bg-background">
+  <div className="hidden max-lg:flex items-center justify-between p-1 px-4 bg-background">
     <DashboardButton
       variant="ghost"
       size="icon"
@@ -96,7 +96,7 @@ export const menuItems = [
   { name: "Items", icon: StickyNote, path: "/lab/items" },
   { name: "Evaluations", icon: FlaskConical, path: "/lab/evaluations" },
   { name: "Reports", icon: FileBarChart, path: "/lab/reports" },
-  { name: "Scorecards", icon: ListTodo, path: "/lab/scorecards" },
+  { name: "Scorecards", icon: ListChecks, path: "/lab/scorecards" },
   { name: "Sources", icon: Database, path: "/lab/datasets" },
   { name: "Batches", icon: Layers3, path: "/lab/batches" },
   { name: "Activity", icon: Activity, path: "/lab/activity" },
@@ -159,6 +159,8 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
 
   const pathname = usePathname()
 
+  const isActivityRoute = pathname === "/lab/activity" || pathname.startsWith("/lab/tasks/");
+
   const LeftSidebar = () => {
     return (
       <div className={`flex flex-col h-full py-2 bg-frame ${isMobile ? 'pr-3' : 'pr-2'}`}>
@@ -182,20 +184,28 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                 key={item.name}
                 href={item.path}
                 className={`flex items-center w-full px-3 py-2 group !rounded-[4px] ${
-                  (pathname === item.path || 
+                  (pathname === item.path ||
                   (item.name === "Feedback" && (pathname === "/feedback-queues" || pathname.startsWith("/feedback"))) ||
-                  (item.name === "Scorecards" && pathname.startsWith("/scorecards")))
-                    ? "bg-secondary text-secondary-foreground"
+                  (item.name === "Items" && pathname.startsWith(item.path)) ||
+                  (item.name === "Evaluations" && pathname.startsWith(item.path)) ||
+                  (item.name === "Scorecards" && pathname.startsWith(item.path)) ||
+                  (item.name === "Reports" && pathname.startsWith(item.path)) ||
+                  (item.name === "Activity" && isActivityRoute))
+                    ? "bg-selected text-selected-foreground"
                     : "hover:bg-accent hover:text-accent-foreground"
                 } ${isLeftSidebarOpen ? '' : 'px-2'} ${
                   isMobile ? 'py-3' : ''
                 }`}
               >
                 <item.icon className={`h-4 w-4 flex-shrink-0 ${
-                  (pathname === item.path || 
+                  (pathname === item.path ||
                   (item.name === "Feedback" && (pathname === "/feedback-queues" || pathname.startsWith("/feedback"))) ||
-                  (item.name === "Scorecards" && pathname.startsWith("/scorecards")))
-                    ? "text-secondary-foreground"
+                  (item.name === "Items" && pathname.startsWith(item.path)) ||
+                  (item.name === "Evaluations" && pathname.startsWith(item.path)) ||
+                  (item.name === "Scorecards" && pathname.startsWith(item.path)) ||
+                  (item.name === "Reports" && pathname.startsWith(item.path)) ||
+                  (item.name === "Activity" && isActivityRoute))
+                    ? "text-selected-foreground"
                     : "text-navigation-icon"
                 }`} />
                 {isLeftSidebarOpen && (
@@ -544,10 +554,10 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
         rightSidebarState={rightSidebarState}
       />
       
-      <div className="flex flex-1 overflow-hidden bg-frame">
+      <div className="flex flex-1 bg-frame min-h-0">
         <aside
           className={`
-            ${isMobile ? 'fixed top-[40px] bottom-0 left-0 z-50 bg-background/80 backdrop-blur-sm' : 
+            ${isMobile ? 'fixed top-0 bottom-0 left-0 z-50 bg-background/80 backdrop-blur-sm' : 
               'fixed top-0 bottom-0 left-0 h-full'}
             ${isLeftSidebarOpen ? 'w-40' : 'w-14'}
             transition-all duration-300 ease-in-out overflow-hidden
@@ -562,28 +572,26 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
         </aside>
 
         <main 
-          className={`flex-1 flex flex-col transition-all duration-300 ease-in-out
+          className={`flex-1 flex flex-col transition-all duration-300 ease-in-out min-h-0
             ${isMobile ? 'ml-0' : (isLeftSidebarOpen ? 'ml-40' : 'ml-14')}
             ${isMobile && rightSidebarState === 'collapsed' ? 'mr-0' : 
               rightSidebarState === 'normal' ? (isMobile ? 'mr-0' : 'mr-80') : 
               rightSidebarState === 'expanded' ? (isMobile ? 'mr-0' : 'mr-[40%]') : 
               (isMobile ? 'mr-0' : 'mr-14')}
             ${rightSidebarState !== 'collapsed' ? 'pr-2' : 'pr-0'}
-            ${isMobile ? '' : 'py-2'}
+            ${isMobile ? 'p-1' : 'p-2'}
           `}
         >
-          <div className="flex-1 flex flex-col bg-background rounded-lg overflow-hidden">
-            <div className="flex-1 overflow-y-auto">
-              <div className={`h-full pr-2 pb-2 pl-2 ${isMobile ? '' : 'pt-2'}`}>
-                {children}
-              </div>
+          <div className="flex-1 flex flex-col bg-background rounded-lg min-h-0 overflow-hidden">
+            <div className="flex-1 min-h-0">
+              {children}
             </div>
           </div>
         </main>
 
         <aside
           className={`
-            ${isMobile ? 'fixed top-[40px] bottom-0 right-0 z-50 bg-background/80 backdrop-blur-sm' : 
+            ${isMobile ? 'fixed top-0 bottom-0 right-0 z-50 bg-background/80 backdrop-blur-sm' : 
               'fixed top-0 bottom-0 right-0 h-full'}
             ${rightSidebarState === 'collapsed' ? (isMobile ? 'w-0' : 'w-14') :
               rightSidebarState === 'normal' ? 'w-80' :

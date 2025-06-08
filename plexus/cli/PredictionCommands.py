@@ -22,12 +22,14 @@ from plexus.cli.shared import get_scoring_jobs_for_batch
 @click.command(help="Predict a scorecard or specific score(s) within a scorecard.")
 @click.option('--scorecard-name', required=True, help='The name of the scorecard.')
 @click.option('--score-name', '--score-names', help='The name(s) of the score(s) to predict, separated by commas.')
-@click.option('--content-id', help='The ID of a specific sample to use.')
+@click.option('--item-id', help='The ID of a specific item to use from the Plexus API, or an identifier value to search for.')
 @click.option('--number', type=int, default=1, help='Number of times to iterate over the list of scores.')
 @click.option('--excel', is_flag=True, help='Output results to an Excel file.')
 @click.option('--use-langsmith-trace', is_flag=True, default=False, help='Activate LangSmith trace client for LangChain components')
 @click.option('--fresh', is_flag=True, help='Pull fresh, non-cached data from the data lake.')
-def predict(scorecard_name, score_name, content_id, number, excel, use_langsmith_trace, fresh):
+@click.option('--task-id', default=None, type=str, help='Task ID for progress tracking')
+@click.option('--format', type=click.Choice(['fixed', 'json']), default='fixed', help='Output format: fixed (human-readable) or json (parseable JSON)')
+def predict(scorecard_name, score_name, item_id, number, excel, use_langsmith_trace, fresh, task_id, format):
     """Predict scores for a scorecard"""
     try:
         # Configure event loop with custom exception handler
@@ -44,8 +46,8 @@ def predict(scorecard_name, score_name, content_id, number, excel, use_langsmith
             score_names = []
         
         coro = predict_impl(
-            scorecard_name, score_names, content_id, excel, 
-            use_langsmith_trace, fresh
+            scorecard_name, score_names, item_id, excel, 
+            use_langsmith_trace, fresh, task_id, format
         )
         try:
             loop.run_until_complete(coro)
@@ -75,10 +77,12 @@ def predict(scorecard_name, score_name, content_id, number, excel, use_langsmith
 async def predict_impl(
     scorecard_name: str,
     score_names: list,
-    content_id: str = None,
+    item_id: str = None,
     excel: bool = False,
     use_langsmith_trace: bool = False,
-    fresh: bool = False
+    fresh: bool = False,
+    task_id: str = None,
+    format: str = 'fixed'
 ):
     """Implementation of predict command"""
     try:
@@ -86,17 +90,17 @@ async def predict_impl(
         scorecard_class = get_scorecard_class(scorecard_name)
         
         for score_name in score_names:
-            sample_row, used_content_id = select_sample(
-                scorecard_class, score_name, content_id, fresh
+            sample_row, used_item_id = select_sample(
+                scorecard_class, score_name, item_id, fresh
             )
             
-            row_result = {'content_id': used_content_id}
+            row_result = {'item_id': used_item_id}
             if sample_row is not None:
                 row_result['text'] = sample_row.iloc[0].get('text', '')
             
             try:
                 transcript, predictions, costs = await predict_score(
-                    score_name, scorecard_class, sample_row, used_content_id
+                    score_name, scorecard_class, sample_row, used_item_id
                 )
                 
                 if predictions:
@@ -107,18 +111,39 @@ async def predict_impl(
                             row_result[f'{score_name}_value'] = prediction.value
                             row_result[f'{score_name}_explanation'] = prediction.explanation
                             row_result[f'{score_name}_cost'] = costs
+                            # Extract trace information
+                            if hasattr(prediction, 'trace'):
+                                row_result[f'{score_name}_trace'] = prediction.trace
+                            elif hasattr(prediction, 'metadata') and prediction.metadata:
+                                row_result[f'{score_name}_trace'] = prediction.metadata.get('trace')
+                            else:
+                                row_result[f'{score_name}_trace'] = None
                             logging.info(f"Got predictions: {predictions}")
                     else:
-                        # Handle dictionary result
-                        if predictions.get('value') is not None:
-                            row_result[f'{score_name}_value'] = predictions.get('value')
-                            row_result[f'{score_name}_explanation'] = predictions.get('explanation')
+                        # Handle Score.Result object
+                        if hasattr(predictions, 'value') and predictions.value is not None:
+                            row_result[f'{score_name}_value'] = predictions.value
+                            # Try to get explanation from the result object
+                            explanation = None
+                            if hasattr(predictions, 'explanation'):
+                                explanation = predictions.explanation
+                            elif hasattr(predictions, 'metadata') and predictions.metadata:
+                                explanation = predictions.metadata.get('explanation')
+                            row_result[f'{score_name}_explanation'] = explanation
                             row_result[f'{score_name}_cost'] = costs
+                            # Extract trace information
+                            trace = None
+                            if hasattr(predictions, 'trace'):
+                                trace = predictions.trace
+                            elif hasattr(predictions, 'metadata') and predictions.metadata:
+                                trace = predictions.metadata.get('trace')
+                            row_result[f'{score_name}_trace'] = trace
                             logging.info(f"Got predictions: {predictions}")
                 else:
                     row_result[f'{score_name}_value'] = None
                     row_result[f'{score_name}_explanation'] = None
                     row_result[f'{score_name}_cost'] = None
+                    row_result[f'{score_name}_trace'] = None
                 
             except BatchProcessingPause:
                 raise
@@ -133,13 +158,69 @@ async def predict_impl(
         if excel and results:
             output_excel(results, score_names, scorecard_name)
         elif results:
-            for result in results:
-                truncated_result = {
-                    k: f"{str(v)[:80]}..." if isinstance(v, str) and len(str(v)) > 80 
-                    else v
-                    for k, v in result.items()
-                }
-                logging.info(f"Prediction result: {truncated_result}")
+            if format == 'json':
+                # JSON format: only output parseable JSON
+                json_results = []
+                for result in results:
+                    json_result = {
+                        'item_id': result.get('item_id')
+                    }
+                    for name in score_names:
+                        json_result[name] = {
+                            'value': result.get(f'{name}_value'),
+                            'explanation': result.get(f'{name}_explanation'),
+                            'cost': result.get(f'{name}_cost'),
+                            'trace': result.get(f'{name}_trace')
+                        }
+                    json_results.append(json_result)
+                
+                import json
+                from decimal import Decimal
+                
+                # Custom JSON encoder to handle Decimal objects
+                class DecimalEncoder(json.JSONEncoder):
+                    def default(self, obj):
+                        if isinstance(obj, Decimal):
+                            return float(obj)
+                        return super(DecimalEncoder, self).default(obj)
+                
+                print(json.dumps(json_results, indent=2, cls=DecimalEncoder))
+            else:
+                # Fixed format: human-readable output
+                rich.print("\n[bold green]Prediction Results:[/bold green]")
+                for result in results:
+                    rich.print(f"\n[bold]Item ID:[/bold] {result.get('item_id')}")
+                    if result.get('text'):
+                        text_preview = result['text'][:200] + "..." if len(result['text']) > 200 else result['text']
+                        rich.print(f"[bold]Text Preview:[/bold] {text_preview}")
+                    
+                    for name in score_names:
+                        value = result.get(f'{name}_value')
+                        explanation = result.get(f'{name}_explanation')
+                        cost = result.get(f'{name}_cost')
+                        trace = result.get(f'{name}_trace')
+                        
+                        rich.print(f"\n[bold cyan]{name} Score:[/bold cyan]")
+                        rich.print(f"  [bold]Value:[/bold] {value}")
+                        if explanation:
+                            rich.print(f"  [bold]Explanation:[/bold] {explanation}")
+                        if cost:
+                            rich.print(f"  [bold]Cost:[/bold] {cost}")
+                        if trace:
+                            rich.print(f"  [bold]Trace:[/bold] {trace}")
+                    
+                    # Also log the truncated version for debugging
+                    truncated_result = {
+                        k: f"{str(v)[:80]}..." if isinstance(v, str) and len(str(v)) > 80 
+                        else v
+                        for k, v in result.items()
+                    }
+                    logging.info(f"Prediction result: {truncated_result}")
+        else:
+            if format != 'json':
+                rich.print("[yellow]No prediction results to display.[/yellow]")
+            else:
+                print("[]")  # Empty JSON array for no results
     except BatchProcessingPause:
         # Let it propagate up to be handled by the event loop handler
         raise
@@ -158,12 +239,13 @@ def output_excel(results, score_names, scorecard_name):
     
     logging.info(f"Available DataFrame columns: {df.columns.tolist()}")
     
-    columns = ['content_id', 'text']
+    columns = ['item_id', 'text']
     for name in score_names:
         columns.extend([
             f'{name}_value',
             f'{name}_explanation',
-            f'{name}_cost'
+            f'{name}_cost',
+            f'{name}_trace'
         ])
     if len(score_names) > 1:
         columns.append('match?')
@@ -197,106 +279,125 @@ def output_excel(results, score_names, scorecard_name):
 
     logging.info(f"Excel file '{filename}' has been created with the prediction results.")
 
-def select_sample(scorecard_class, score_name, content_id, fresh):
-
-    score_configuration = next((score for score in scorecard_class.scores if score['name'] == score_name), {})
+def select_sample(scorecard_class, score_name, item_id, fresh):
+    """Select an item from the Plexus API instead of from score datasets."""
+    from plexus.cli.client_utils import create_client
+    from plexus.dashboard.api.models.item import Item
+    from plexus.cli.reports.utils import resolve_account_id_for_command
     
-    # Check if the score uses the new data-driven approach
-    if 'data' in score_configuration:
-        return select_sample_data_driven(scorecard_class, score_name, content_id, score_configuration, fresh)
-    else:
-        # Use labeled-samples.csv for old scores
-        scorecard_key = scorecard_class.properties.get('key')        
-        csv_path = os.path.join('scorecards', scorecard_key, 'experiments', 'labeled-samples.csv')
-        return select_sample_csv(csv_path, content_id)
-
-def select_sample_data_driven(scorecard_class, score_name, content_id, score_configuration, fresh):
-    score_class = scorecard_class.score_registry.get(score_name)
-    if score_class is None:
-        logging.error(f"Score class for '{score_name}' not found in the registry.")
-        raise ValueError(f"Score class for '{score_name}' not found in the registry.")
-
-    score_configuration['scorecard_name'] = scorecard_class.name
-    score_configuration['score_name'] = score_name
-
-    score_instance = score_class(**score_configuration)
-    score_instance.load_data(data=score_configuration['data'], fresh=fresh)
-    score_instance.process_data()
-
-    batch_mode = os.getenv('PLEXUS_ENABLE_BATCH_MODE', '').lower() == 'true'
+    # Create API client
+    client = create_client()
+    account_id = resolve_account_id_for_command(client, None)
     
-    if content_id:
-        # Convert content_id to integer since all values in DataFrame are integers
+    if item_id:
+        # First try to fetch specific item by ID
         try:
-            content_id_int = int(content_id)
-            exists = content_id_int in score_instance.dataframe['content_id'].values
-            logging.info(f"Content ID {content_id_int} {'exists' if exists else 'does not exist'} in dataset")
+            item = Item.get_by_id(item_id, client)
+            logging.info(f"Fetched item {item_id} from API by direct ID lookup")
             
-            sample_row = score_instance.dataframe[
-                score_instance.dataframe['content_id'] == content_id_int
-            ]
-            if sample_row.empty:
-                logging.warning(f"Content ID '{content_id}' not found in the data. Selecting a random sample.")
-                sample_row = score_instance.dataframe.sample(n=1)
-        except ValueError:
-            logging.error(f"Invalid content ID format: {content_id}. Must be an integer.")
-            raise
+            # Create a pandas-like row structure for compatibility
+            sample_data = {
+                'text': item.text or '',
+                'item_id': item.id,
+                'metadata': json.dumps({
+                    "item_id": item.id,
+                    "account_key": os.getenv('PLEXUS_ACCOUNT_KEY', 'call-criteria'),
+                    "scorecard_key": scorecard_class.properties.get('key'),
+                    "score_name": score_name
+                })
+            }
+            
+            # Convert to DataFrame-like structure for compatibility
+            import pandas as pd
+            sample_row = pd.DataFrame([sample_data])
+            
+            return sample_row, item.id
+            
+        except ValueError as e:
+            logging.info(f"Item {item_id} not found by direct ID lookup, trying identifier search: {e}")
+            
+            # Fallback: try to find by identifier value
+            try:
+                from plexus.utils.identifier_search import find_item_by_identifier
+                
+                item = find_item_by_identifier(item_id, account_id, client)
+                if item:
+                    logging.info(f"Found item {item.id} by identifier value '{item_id}'")
+                    
+                    # Create a pandas-like row structure for compatibility
+                    sample_data = {
+                        'text': item.text or '',
+                        'item_id': item.id,
+                        'metadata': json.dumps({
+                            "item_id": item.id,
+                            "account_key": os.getenv('PLEXUS_ACCOUNT_KEY', 'call-criteria'),
+                            "scorecard_key": scorecard_class.properties.get('key'),
+                            "score_name": score_name
+                        })
+                    }
+                    
+                    # Convert to DataFrame-like structure for compatibility
+                    import pandas as pd
+                    sample_row = pd.DataFrame([sample_data])
+                    
+                    return sample_row, item.id
+                else:
+                    raise ValueError(f"No item found with ID '{item_id}' or identifier value '{item_id}'")
+                    
+            except Exception as identifier_error:
+                logging.error(f"Identifier search also failed: {identifier_error}")
+                raise ValueError(f"No item found with ID '{item_id}' or identifier value '{item_id}'")
     else:
-        sample_row = score_instance.dataframe.sample(n=1)
-    
-    used_content_id = sample_row.iloc[0]['content_id']
-    logging.info(f"Selected content_id: {used_content_id}")
-    
-    # Add required metadata for batch processing
-    metadata = {
-        "content_id": str(used_content_id),
-        "account_key": os.getenv('PLEXUS_ACCOUNT_KEY', 'call-criteria'),
-        "scorecard_key": scorecard_class.properties.get('key'),
-        "score_name": score_name
-    }
-    sample_row['metadata'] = json.dumps(metadata)
-    
-    return sample_row, used_content_id
+        # Get the most recent item for the account
+        query = f"""
+        query ListItemByAccountIdAndCreatedAt($accountId: String!) {{
+            listItemByAccountIdAndCreatedAt(accountId: $accountId, sortDirection: DESC, limit: 1) {{
+                items {{
+                    {Item.fields()}
+                }}
+            }}
+        }}
+        """
+        
+        response = client.execute(query, {'accountId': account_id})
+        items = response.get('listItemByAccountIdAndCreatedAt', {}).get('items', [])
+        
+        if not items:
+            raise ValueError("No items found in the account")
+        
+        item_data = items[0]
+        item = Item.from_dict(item_data, client)
+        
+        logging.info(f"Selected most recent item {item.id} from API")
+        
+        # Create a pandas-like row structure for compatibility
+        sample_data = {
+            'text': item.text or '',
+            'item_id': item.id,
+            'metadata': json.dumps({
+                "item_id": item.id,
+                "account_key": os.getenv('PLEXUS_ACCOUNT_KEY', 'call-criteria'),
+                "scorecard_key": scorecard_class.properties.get('key'),
+                "score_name": score_name
+            })
+        }
+        
+        # Convert to DataFrame-like structure for compatibility
+        import pandas as pd
+        sample_row = pd.DataFrame([sample_data])
+        
+        return sample_row, item.id
 
-def select_sample_csv(csv_path, content_id):
-    if not os.path.exists(csv_path):
-        logging.error(f"labeled-samples.csv not found at {csv_path}")
-        raise FileNotFoundError(f"labeled-samples.csv not found at {csv_path}")
 
-    df = pd.read_csv(csv_path)
-    if content_id:
-        sample_row = df[df['id'] == content_id]
-        if sample_row.empty:
-            logging.warning(f"ID '{content_id}' not found in {csv_path}. Selecting a random sample.")
-            sample_row = df.sample(n=1)
-    else:
-        sample_row = df.sample(n=1)
-    
-    used_content_id = sample_row.iloc[0]['id']
-    
-    # Get scorecard key from the csv_path
-    # Path format is 'scorecards/<scorecard_key>/experiments/labeled-samples.csv'
-    scorecard_key = csv_path.split('/')[1]
-    
-    # Add required metadata for batch processing
-    metadata = {
-        "content_id": str(used_content_id),
-        "account_key": "call-criteria",
-        "scorecard_key": scorecard_key,
-        "score_name": "accuracy"
-    }
-    sample_row['metadata'] = json.dumps(metadata)
-    
-    return sample_row, used_content_id
 
-async def predict_score(score_name, scorecard_class, sample_row, used_content_id):
+async def predict_score(score_name, scorecard_class, sample_row, used_item_id):
     """Predict a single score."""
     score_instance = None  # Initialize outside try block
     try:
         # Create score instance
         score_input = create_score_input(
             sample_row=sample_row, 
-            content_id=used_content_id, 
+            item_id=used_item_id, 
             scorecard_class=scorecard_class,
             score_name=score_name
         )
@@ -306,7 +407,7 @@ async def predict_score(score_name, scorecard_class, sample_row, used_content_id
             result = await predict_score_impl(
                 scorecard_class=scorecard_class,
                 score_name=score_name,
-                content_id=used_content_id,
+                item_id=used_item_id,
                 input_data=score_input,
                 fresh=False
             )
@@ -333,7 +434,7 @@ async def predict_score(score_name, scorecard_class, sample_row, used_content_id
 async def predict_score_impl(
     scorecard_class,
     score_name,
-    content_id,
+    item_id,
     input_data,
     use_langsmith_trace=False,
     fresh=False
@@ -342,9 +443,18 @@ async def predict_score_impl(
         score_instance = Score.from_name(scorecard_class.properties['key'], score_name)
         async with score_instance:
             await score_instance.async_setup()
-            context = {}
-            prediction_result = await score_instance.predict(context, input_data)
-            return score_instance, prediction_result, None
+            prediction_result = await score_instance.predict(input_data)
+            
+            # Get costs if available
+            costs = None
+            if hasattr(score_instance, 'get_accumulated_costs'):
+                try:
+                    costs = score_instance.get_accumulated_costs()
+                except Exception as e:
+                    logging.warning(f"Failed to get costs: {e}")
+                    costs = None
+                    
+            return score_instance, prediction_result, costs
             
     except BatchProcessingPause:
         # Just let it propagate up - state is already stored in batch job
@@ -375,12 +485,12 @@ def handle_exception(loop, context, scorecard_name=None, score_name=None):
         print("2. Either:")
         print("   a. Set PLEXUS_ENABLE_LLM_BREAKPOINTS=false to run without stopping")
         print("   b. Keep PLEXUS_ENABLE_LLM_BREAKPOINTS=true to continue stopping at breakpoints")
-        print(f"3. Run the same command with --content-id {exception.thread_id}")
+        print(f"3. Run the same command with --item-id {exception.thread_id}")
         print("\nExample:")
         print(f"  plexus predict --scorecard-name {scorecard_name}", end="")
         if score_name:
             print(f" --score-name {score_name}", end="")
-        print(f" --content-id {exception.thread_id}")
+        print(f" --item-id {exception.thread_id}")
         print("=" * 80 + "\n")
         
         # Stop the event loop gracefully
@@ -400,24 +510,23 @@ def get_scorecard_class(scorecard_name: str):
         raise ValueError(f"Scorecard with name '{scorecard_name}' not found.")
     return scorecard_class
 
-def create_score_input(sample_row, content_id, scorecard_class, score_name):
+def create_score_input(sample_row, item_id, scorecard_class, score_name):
     """Create a Score.Input object from sample data."""
     score_class = Score.from_name(scorecard_class.properties['key'], score_name)
     score_input_class = getattr(score_class, 'Input', None)
     
     if score_input_class is None:
-        logging.warning(f"Input class not found. Using default.")
-        metadata = {"content_id": str(content_id)}
-        return {'id': content_id, 'text': "", 'metadata': metadata}
+        logging.warning(f"Input class not found. Using Score.Input default.")
+        score_input_class = Score.Input
     
     if sample_row is not None:
         row_dictionary = sample_row.iloc[0].to_dict()
         text = row_dictionary.get('text', '')
         metadata_str = row_dictionary.get('metadata', '{}')
         metadata = json.loads(metadata_str)
-        if 'content_id' not in metadata:
-            metadata['content_id'] = str(content_id)
+        if 'item_id' not in metadata:
+            metadata['item_id'] = str(item_id)
         return score_input_class(text=text, metadata=metadata)
     else:
-        metadata = {"content_id": str(content_id)}
-        return score_input_class(id=content_id, text="", metadata=metadata)
+        metadata = {"item_id": str(item_id)}
+        return score_input_class(text="", metadata=metadata)

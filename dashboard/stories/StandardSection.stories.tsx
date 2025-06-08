@@ -6,7 +6,7 @@ import type { ComponentProps } from 'react'
 type SectionProps = ComponentProps<typeof StandardSection>
 
 const meta = {
-  title: 'Landing/StandardSection',
+  title: 'Landing Pages/StandardSection',
   component: StandardSection,
   argTypes: {
     headlinePosition: { control: { type: 'radio', options: ['top', 'inline'] } },

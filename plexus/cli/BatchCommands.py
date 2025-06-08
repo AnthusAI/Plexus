@@ -26,7 +26,7 @@ from plexus.scores.Score import Score
 from plexus.Scorecard import Scorecard
 from plexus.dashboard.api.client import PlexusDashboardClient
 from plexus.dashboard.api.models.batch_job import BatchJob
-from plexus.cli.PredictionCommands import select_sample_data_driven, select_sample_csv
+from plexus.cli.shared import select_sample_data_driven, select_sample_csv
 
 # Maximum number of requests per batch
 MAX_BATCH_SIZE = 1000
