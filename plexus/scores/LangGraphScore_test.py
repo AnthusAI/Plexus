@@ -14,12 +14,12 @@ pytest_plugins = ('pytest_asyncio',)
 class MockGraphState(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)  # Use ConfigDict instead of Config class
     
-    classification: Optional[str]
-    explanation: Optional[str]
+    classification: Optional[str] = None
+    explanation: Optional[str] = None
     retry_count: Optional[int] = Field(default=0)
-    text: Optional[str]
-    metadata: Optional[dict]
-    results: Optional[dict]
+    text: Optional[str] = None
+    metadata: Optional[dict] = None
+    results: Optional[dict] = None
 
 class AsyncIteratorMock:
     """Mock async iterator for testing"""
@@ -790,11 +790,12 @@ def graph_config_with_edge():
 @pytest.mark.asyncio
 async def test_edge_routing(graph_config_with_edge, mock_azure_openai, mock_yes_no_classifier):
     """Test that edge clause correctly routes to specified node with output aliasing"""
-    with patch('plexus.LangChainUser.LangChainUser._initialize_model', return_value=mock_azure_openai):
-        instance = await LangGraphScore.create(**graph_config_with_edge)
+    # Mock the entire workflow creation and state management
+    with patch('plexus.LangChainUser.LangChainUser._initialize_model', return_value=await mock_azure_openai), \
+         patch('plexus.scores.LangGraphScore.LangGraphScore.build_compiled_workflow') as mock_build_workflow:
         
         # Mock workflow to simulate state with classification and explanation
-        mock_workflow = MagicMock()
+        mock_workflow = AsyncMock()
         mock_workflow.ainvoke = AsyncMock(return_value={
             "customer_type": "Revenue Only",  # This comes from classification
             "reason": "Customer is marked as revenue only",  # This comes from explanation
@@ -814,13 +815,28 @@ async def test_edge_routing(graph_config_with_edge, mock_azure_openai, mock_yes_
             "revenue_classifier": MagicMock()
         }
         mock_workflow.graph = mock_graph
-        instance.workflow = mock_workflow
         
-        result = await instance.predict(Score.Input(
-            text="test text",
-            metadata={"key": "value"},
-            results=[]
-        ))
+        # Mock build_workflow to return our mock workflow
+        mock_build_workflow.return_value = mock_workflow
+        
+        instance = await LangGraphScore.create(**graph_config_with_edge)
+        
+        # Set the combined_state_class on the instance after creation
+        instance.combined_state_class = MockGraphState
+        
+        # The key fix: call predict with the correct signature that matches the actual implementation
+        result = await instance.predict(
+            model_input=Score.Input(
+                text="test text",
+                metadata={
+                    "key": "value",
+                    "account_key": "test-account",
+                    "scorecard_name": "test-scorecard",
+                    "score_name": "test-score"
+                },
+                results=[]
+            )
+        )
         
         # Verify the result includes both aliased variables and literal values
         assert result.value == "Revenue Only"  # Aliased from customer_type
