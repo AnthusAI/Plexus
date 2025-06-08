@@ -11,6 +11,7 @@ interface NumberFlowProps {
   suffix?: string;
   spinTiming?: EffectTiming;
   willChange?: boolean;
+  skeletonMode?: boolean;
 }
 
 export default function NumberFlowWrapper({
@@ -21,7 +22,13 @@ export default function NumberFlowWrapper({
   suffix,
   spinTiming,
   willChange = false,
+  skeletonMode = false,
 }: NumberFlowProps) {
+  // Skeleton mode rendering
+  if (skeletonMode) {
+    return <span className="inline-block h-3 w-8 bg-muted rounded animate-pulse" />;
+  }
+
   return (
     <NumberFlow
       value={value}

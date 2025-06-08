@@ -5,5 +5,6 @@ This module provides various analysis tools and metrics for evaluating agreement
 """
 
 from .metrics import GwetAC1, Accuracy, Precision, Recall
+from . import topics
 
-__all__ = ['GwetAC1', 'Accuracy', 'Precision', 'Recall'] 
+__all__ = ['GwetAC1', 'Accuracy', 'Precision', 'Recall', 'topics'] 

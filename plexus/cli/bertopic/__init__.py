@@ -1,8 +1,24 @@
 """
-BERTopic analysis module for call transcript topic modeling.
+BERTopic module for topic modeling on call transcripts.
+
+This module is deprecated and redirects to the new location at 'plexus.analysis.topics'.
+Use 'plexus.analysis.topics' instead.
 """
 
-__version__ = "0.1.0"
+from plexus.analysis.topics import (
+    transform_transcripts,
+    transform_transcripts_llm,
+    transform_transcripts_itemize,
+    inspect_data,
+    analyze_topics,
+    test_ollama_chat
+)
 
-from .transformer import transform_transcripts
-from .analyzer import analyze_topics 
+__all__ = [
+    'transform_transcripts',
+    'transform_transcripts_llm',
+    'transform_transcripts_itemize',
+    'inspect_data',
+    'analyze_topics',
+    'test_ollama_chat',
+] 

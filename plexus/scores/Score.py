@@ -223,7 +223,7 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         3. Error case:
             result = Score.Result(
                 parameters=self.parameters,
-                value="Error",
+                value="ERROR",
                 error="API timeout"
             )
         """

@@ -7,59 +7,82 @@ from ..client import _BaseAPIClient
 @dataclass
 class Item(BaseModel):
     evaluationId: str
-    data: Dict
     createdAt: datetime
     updatedAt: datetime
-    prediction: Optional[str] = None
-    groundTruth: Optional[str] = None
-    isCorrect: Optional[bool] = None
+    accountId: str
+    isEvaluation: bool
+    text: Optional[str] = None
+    metadata: Optional[Dict] = None
+    identifiers: Optional[Dict] = None
+    externalId: Optional[str] = None
+    description: Optional[str] = None
+    scoreId: Optional[str] = None
+    attachedFiles: Optional[list] = None
 
     def __init__(
         self,
         id: str,
         evaluationId: str,
-        data: Dict,
         createdAt: datetime,
         updatedAt: datetime,
-        prediction: Optional[str] = None,
-        groundTruth: Optional[str] = None,
-        isCorrect: Optional[bool] = None,
+        accountId: str,
+        isEvaluation: bool,
+        text: Optional[str] = None,
+        metadata: Optional[Dict] = None,
+        identifiers: Optional[Dict] = None,
+        externalId: Optional[str] = None,
+        description: Optional[str] = None,
+        scoreId: Optional[str] = None,
+        attachedFiles: Optional[list] = None,
         client: Optional[_BaseAPIClient] = None
     ):
         super().__init__(id, client)
         self.evaluationId = evaluationId
-        self.data = data
+        self.text = text
+        self.metadata = metadata
         self.createdAt = createdAt
         self.updatedAt = updatedAt
-        self.prediction = prediction
-        self.groundTruth = groundTruth
-        self.isCorrect = isCorrect
+        self.identifiers = identifiers
+        self.externalId = externalId
+        self.description = description
+        self.accountId = accountId
+        self.scoreId = scoreId
+        self.isEvaluation = isEvaluation
+        self.attachedFiles = attachedFiles
 
     @classmethod
     def fields(cls) -> str:
         return """
             id
+            externalId
+            description
+            accountId
             evaluationId
-            data
-            createdAt
+            scoreId
             updatedAt
-            prediction
-            groundTruth
-            isCorrect
+            createdAt
+            isEvaluation
+            identifiers
+            metadata
+            attachedFiles
         """
 
     @classmethod
-    def create(cls, client: _BaseAPIClient, evaluationId: str, data: Dict, 
-               **kwargs) -> 'Item':
+    def create(cls, client: _BaseAPIClient, evaluationId: str, text: Optional[str] = None, 
+               metadata: Optional[Dict] = None, **kwargs) -> 'Item':
         now = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
         
         input_data = {
             'evaluationId': evaluationId,
-            'data': data,
             'createdAt': now,
             'updatedAt': now,
             **kwargs
         }
+        
+        if text is not None:
+            input_data['text'] = text
+        if metadata is not None:
+            input_data['metadata'] = metadata
         
         mutation = """
         mutation CreateItem($input: CreateItemInput!) {
@@ -82,13 +105,18 @@ class Item(BaseModel):
 
         return cls(
             id=data['id'],
-            evaluationId=data['evaluationId'],
-            data=data['data'],
-            createdAt=data['createdAt'],
-            updatedAt=data['updatedAt'],
-            prediction=data.get('prediction'),
-            groundTruth=data.get('groundTruth'),
-            isCorrect=data.get('isCorrect'),
+            evaluationId=data.get('evaluationId', ''),
+            createdAt=data.get('createdAt', datetime.now(timezone.utc)),
+            updatedAt=data.get('updatedAt', datetime.now(timezone.utc)),
+            accountId=data.get('accountId', ''),
+            isEvaluation=data.get('isEvaluation', True),
+            text=data.get('text'),
+            metadata=data.get('metadata'),
+            identifiers=data.get('identifiers'),
+            externalId=data.get('externalId'),
+            description=data.get('description'),
+            scoreId=data.get('scoreId'),
+            attachedFiles=data.get('attachedFiles'),
             client=client
         )
 

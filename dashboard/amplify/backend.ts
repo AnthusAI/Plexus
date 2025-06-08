@@ -1,6 +1,7 @@
 import { defineBackend } from '@aws-amplify/backend';
 import { data } from './data/resource';
 import { auth } from './auth/resource';
+import { reportBlockDetails, attachments, scoreResultAttachments } from './storage/resource';
 import { TaskDispatcherStack } from './functions/taskDispatcher/resource';
 import { Stack } from 'aws-cdk-lib';
 import { PolicyStatement } from 'aws-cdk-lib/aws-iam';
@@ -9,7 +10,10 @@ import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 // Create the backend
 const backend = defineBackend({
     auth,
-    data
+    data,
+    reportBlockDetails,
+    attachments,
+    scoreResultAttachments
 });
 
 // Get access to the getResourceByShareToken function

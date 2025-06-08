@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react'
 import { ScoreResultComponent } from '../components/ui/score-result'
 
 const meta: Meta<typeof ScoreResultComponent> = {
-  title: 'Components/ScoreResult',
+  title: 'Scorecards/ScoreResult',
   component: ScoreResultComponent,
   parameters: {
     layout: 'centered',

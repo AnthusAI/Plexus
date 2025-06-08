@@ -3,7 +3,7 @@ import type { Meta, StoryObj } from '@storybook/react'
 import MultiTypeWorkflow from '../components/workflow/layouts/multi-type-workflow'
 
 const meta = {
-  title: 'Workflow Pictograms/Diagrams/Multi Type',
+  title: 'Landing Pages/Pictograms/Diagrams/Multi Type',
   component: MultiTypeWorkflow,
   parameters: {
     layout: 'centered',

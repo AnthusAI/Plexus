@@ -28,30 +28,35 @@ export function TaskDispatchButton({ config }: { config: TaskDispatchConfig }) {
     setIsDropdownOpen(false)
   }
 
-  const handleDispatch = async () => {
-    if (!selectedAction?.name || !selectedAction?.command) {
+  const handleDispatch = async (commandStr?: string, target?: string) => {
+    if (!selectedAction?.name) {
       toast.error("Invalid action configuration");
       return;
     }
 
-    // Get the command string, handling both direct strings and function commands
-    const commandStr = typeof selectedAction.command === 'function' 
+    // Use the dynamically generated command if provided, otherwise fall back to the static command
+    const actualCommand = commandStr || (typeof selectedAction.command === 'function' 
       ? selectedAction.command({}) 
-      : selectedAction.command;
+      : selectedAction.command);
+    
+    // Use the provided target or fall back to the action's target
+    const actualTarget = target || selectedAction.target || '';
+
+    console.log('Dispatching task with command:', actualCommand, 'target:', actualTarget);
 
     try {
       setIsLoading(true);
       const task = await createTask({
         type: selectedAction.name === 'Accuracy' ? 'Accuracy Evaluation' : selectedAction.name.toLowerCase(),
-        target: selectedAction.target || '',
-        command: commandStr,
+        target: actualTarget,
+        command: actualCommand,
         accountId: selectedAccount?.id || 'call-criteria',
         dispatchStatus: 'PENDING',
         status: 'PENDING'
       });
       if (task) {
         toast.success("Task announced", {
-          description: <span className="font-mono text-sm truncate block">{commandStr}</span>
+          description: <span className="font-mono text-sm truncate block">{actualCommand}</span>
         });
       } else {
         toast.error("Failed to dispatch task");

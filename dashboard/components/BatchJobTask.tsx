@@ -7,7 +7,7 @@ import { DualPhaseProgressBar } from "@/components/ui/dual-phase-progress-bar"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { CardButton } from '@/components/CardButton'
-import { formatTimeAgo } from '@/lib/format-time'
+import { Timestamp } from '@/components/ui/timestamp'
 import { BatchJobProgressBar, BatchJobStatus } from "@/components/ui/batch-job-progress-bar"
 import { getClient, listFromModel, getFromModel } from '@/utils/data-operations'
 import type { Schema } from "@/amplify/data/resource"
@@ -334,7 +334,7 @@ export default function BatchJobTask({
                   {task.score}
                 </div>
                 <div className="text-sm text-muted-foreground">
-                  {formatTimeAgo(taskWithTime.time)}
+                  <Timestamp time={taskWithTime.time} variant="relative" />
                 </div>
                 <div className="text-sm text-muted-foreground">
                   <div>{taskData.type}</div>
@@ -392,7 +392,7 @@ export default function BatchJobTask({
                               Item: {job.itemId}
                             </div>
                             <div className="text-xs text-muted-foreground">
-                              {formatTimeAgo(job.createdAt)}
+                              <Timestamp time={job.createdAt || ''} variant="relative" />
                             </div>
                           </div>
                           <Badge 

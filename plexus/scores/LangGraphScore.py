@@ -1323,7 +1323,7 @@ class LangGraphScore(Score, LangChainUser):
             logging.error(f"Error in predict: {e}", exc_info=True) # Add exc_info for traceback
             return Score.Result(
                 parameters=self.parameters,
-                value="Error",
+                value="ERROR",
                 error=str(e)
             )
 

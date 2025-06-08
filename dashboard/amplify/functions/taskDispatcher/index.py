@@ -20,11 +20,16 @@ aws_access_key = safequote(os.environ.get("CELERY_AWS_ACCESS_KEY_ID", ""))
 aws_secret_key = safequote(os.environ.get("CELERY_AWS_SECRET_ACCESS_KEY", ""))
 aws_region = os.environ.get("CELERY_AWS_REGION_NAME", "")
 
+# Get queue name from environment variable or use default
+sqs_queue_name = os.environ.get("CELERY_QUEUE_NAME", "plexus-celery-development")
+logger.info(f"Using queue name: {sqs_queue_name}" + 
+            (f" (from CELERY_QUEUE_NAME environment variable)" if os.environ.get("CELERY_QUEUE_NAME") else " (default)"))
+
 logger.info(f"AWS Region configured: {bool(aws_region)}")
 logger.info(f"AWS credentials configured: {bool(aws_access_key and aws_secret_key)}")
 
 # Construct broker URL from AWS credentials
-broker_url = f"sqs://{aws_access_key}:{aws_secret_key}@"
+broker_url = f"sqs://{aws_access_key}:{aws_secret_key}@/{sqs_queue_name}"
 
 # Get backend URL template and construct full URL
 backend_url_template = os.environ.get("CELERY_RESULT_BACKEND_TEMPLATE")
@@ -53,7 +58,7 @@ celery_app = Celery(
 # Configure Celery app
 celery_app.conf.update(
     broker_connection_retry_on_startup=True,
-    task_default_queue='celery'
+    task_default_queue=sqs_queue_name
 )
 
 # Initialize DynamoDB deserializer
@@ -126,6 +131,7 @@ def handler(event, context):
             target = task.get('target', 'default/command')
 
             logger.info(f"Dispatching task: id={task_id}, command={command}, target={target}")
+            logger.info(f"Command breakdown: {repr(command)}")
 
             # Dispatch the Celery task using the existing Celery task name
             result = celery_app.send_task(

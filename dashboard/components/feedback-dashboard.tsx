@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import { Square, Columns2, X, ChevronDown, ChevronUp, Info, MessageCircleMore, Plus, ThumbsUp, ThumbsDown, ChevronLeft } from "lucide-react"
+import { ChevronDown, ChevronUp, Info, MessageCircleMore, Plus, ThumbsUp, ThumbsDown, ChevronLeft } from "lucide-react"
 import { formatDistanceToNow, parseISO } from "date-fns"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -24,8 +24,9 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import Link from 'next/link'
 import { FilterControl, FilterConfig } from "@/components/filter-control"
-import ItemDetail from './ItemDetail'
+import ItemCard from './items/ItemCard'
 import { ProgressBar } from "@/components/ui/progress-bar"
+import type { FeedbackItem } from '@/types/feedback'
 
 // Add this type definition
 type TimeRangeOption = {
@@ -88,8 +89,8 @@ const scorecardScoreCounts = {
   "SelectQuote Term Life v1": 42,
 };
 
-// Update the FeedbackItem interface to match actual data structure
-export interface FeedbackItem {
+// Local data structure for feedback dashboard - has different structure from the ItemCard ItemData
+export interface FeedbackDashboardItem {
   id: number
   scorecard: string
   score: number
@@ -152,7 +153,7 @@ const getScoreResults = (status: string) => {
 };
 
 // Now, let's update the initialFeedbackItems declaration
-const initialFeedbackItems: FeedbackItem[] = [
+const initialFeedbackItems: FeedbackDashboardItem[] = [
   { id: 30, scorecard: "CS3 Services v2", score: 80, date: relativeDate(0, 0, 5), status: "New", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Services v2"], lastUpdated: "", inferences: "", results: "", cost: "", sampleMetadata: [], sampleTranscript: [], sampleScoreResults: [], scoreResults: getScoreResults("New") },
   { id: 29, scorecard: "CS3 Audigy", score: 89, date: relativeDate(0, 0, 15), status: "New", hasFeedback: false, scoreCount: scorecardScoreCounts["CS3 Audigy"], lastUpdated: "", inferences: "", results: "", cost: "", sampleMetadata: [], sampleTranscript: [], sampleScoreResults: [], scoreResults: getScoreResults("New") },
   { id: 28, scorecard: "AW IB Sales", score: 96, date: relativeDate(0, 0, 30), status: "New", hasFeedback: false, scoreCount: scorecardScoreCounts["AW IB Sales"], lastUpdated: "", inferences: "", results: "", cost: "", sampleMetadata: [], sampleTranscript: [], sampleScoreResults: [], scoreResults: getScoreResults("New") },
@@ -257,7 +258,7 @@ export default function FeedbackDashboard() {
   const [newAnnotation, setNewAnnotation] = useState({ value: "", explanation: "", annotation: "" });
   const [showNewAnnotationForm, setShowNewAnnotationForm] = useState<{ scoreName: string | null, isThumbsUp: boolean }>({ scoreName: null, isThumbsUp: false });
   const [thumbedUpScores, setThumbedUpScores] = useState<Set<string>>(new Set());
-  const [feedbackItems, setFeedbackItems] = useState<FeedbackItem[]>(initialFeedbackItems);
+  const [feedbackItems, setFeedbackItems] = useState<FeedbackDashboardItem[]>(initialFeedbackItems);
   const [isDataExpandedDefault, setIsDataExpandedDefault] = useState(false);
   const [isErrorExpanded, setIsErrorExpanded] = useState(true);
   const [sampleMetadata] = useState([
@@ -474,9 +475,9 @@ export default function FeedbackDashboard() {
     setFeedbackItems(prevItems => {
       return prevItems.map(item => {
         if (item.id === selectedItem) {
-          const updatedScoreResults = item.scoreResults?.map(section => ({
+          const updatedScoreResults = item.scoreResults?.map((section: any) => ({
             ...section,
-            scores: section.scores.map(score => 
+            scores: section.scores.map((score: any) => 
               score.name === scoreName 
                 ? { 
                     ...score, 
@@ -497,9 +498,9 @@ export default function FeedbackDashboard() {
     });
 
     setScoreResults(prevResults => 
-      prevResults.map(section => ({
+      prevResults.map((section: any) => ({
         ...section,
-        scores: section.scores.map(score => 
+        scores: section.scores.map((score: any) => 
           score.name === scoreName 
             ? { 
                 ...score, 
@@ -559,56 +560,38 @@ export default function FeedbackDashboard() {
     toggleNewAnnotationForm(scoreName, false);
   };
 
+  // Helper function to convert FeedbackDashboardItem to ItemData for ItemCard
+  const convertToItemData = (dashboardItem: FeedbackDashboardItem) => ({
+    id: dashboardItem.id,
+    timestamp: dashboardItem.date,
+    scorecards: [{
+      scorecardId: 'feedback-scorecard',
+      scorecardName: dashboardItem.scorecard,
+      resultCount: dashboardItem.scoreCount || 0
+    }],
+    externalId: `FEEDBACK-${dashboardItem.id}`,
+    description: `Feedback item ${dashboardItem.id}`,
+    isNew: false,
+    isLoadingResults: false,
+    status: dashboardItem.status,
+    isEvaluation: false,
+    accountId: 'feedback-account',
+    createdAt: dashboardItem.date,
+    updatedAt: dashboardItem.lastUpdated
+  });
+
   const renderSelectedItem = () => {
     if (!selectedItem) return null;
 
     const selectedItemData = feedbackItems.find(item => item.id === selectedItem);
     if (!selectedItemData) return null;
 
-    const DetailViewControlButtons = (
-      <>
-        {!isNarrowViewport && (
-          <Button variant="outline" size="icon" onClick={() => setIsFullWidth(!isFullWidth)}>
-            {isFullWidth ? <Columns2 className="h-4 w-4" /> : <Square className="h-4 w-4" />}
-          </Button>
-        )}
-        <Button variant="outline" size="icon" onClick={() => {
-          setSelectedItem(null)
-          setIsFullWidth(false)
-        }} className="ml-2">
-          <X className="h-4 w-4" />
-        </Button>
-      </>
-    );
-
     return (
-      <ItemDetail
-        item={selectedItemData as unknown as FeedbackItem}
-        controlButtons={DetailViewControlButtons}
+      <ItemCard
+        item={convertToItemData(selectedItemData)}
+        variant="detail"
         getBadgeVariant={getBadgeVariant}
-        getRelativeTime={getRelativeTime}
-        isMetadataExpanded={isMetadataExpanded}
-        setIsMetadataExpanded={setIsMetadataExpanded}
-        isDataExpanded={isDataExpanded}
-        setIsDataExpanded={setIsDataExpanded}
-        isErrorExpanded={isErrorExpanded}
-        setIsErrorExpanded={setIsErrorExpanded}
-        sampleMetadata={sampleMetadata}
-        sampleTranscript={sampleTranscript}
-        sampleScoreResults={scoreResults}
-        handleThumbsUp={handleThumbsUp}
-        handleThumbsDown={handleThumbsDown}
-        handleNewAnnotationSubmit={handleNewAnnotationSubmit}
-        toggleAnnotations={toggleAnnotations}
-        showNewAnnotationForm={showNewAnnotationForm}
-        newAnnotation={newAnnotation}
-        setNewAnnotation={setNewAnnotation}
-        expandedAnnotations={expandedAnnotations}
-        thumbedUpScores={thumbedUpScores}
-        setShowNewAnnotationForm={setShowNewAnnotationForm}
-        setThumbedUpScores={setThumbedUpScores}
         isFullWidth={isFullWidth}
-        isFeedbackMode={true}
         onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
         onClose={() => setSelectedItem(null)}
       />

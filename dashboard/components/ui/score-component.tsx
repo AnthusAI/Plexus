@@ -1,10 +1,16 @@
 import * as React from 'react'
 import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { MoreHorizontal, X, Square, Columns2, FileStack, ChevronDown, ChevronUp, Award, FileCode, Minimize, Maximize, ArrowDownWideNarrow, Expand, Shrink } from 'lucide-react'
+import { MoreHorizontal, X, Square, Columns2, FileStack, ChevronDown, ChevronUp, Award, FileCode, Minimize, Maximize, ArrowDownWideNarrow, Expand, Shrink, TestTube, FlaskConical, FlaskRound, TestTubes } from 'lucide-react'
 import { CardButton } from '@/components/CardButton'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Popover from '@radix-ui/react-popover'
+import {
+  DropdownMenu as ShadcnDropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { generateClient } from 'aws-amplify/api'
@@ -16,6 +22,8 @@ import * as monaco from 'monaco-editor'
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import type { editor } from 'monaco-editor'
+import { defineCustomMonacoThemes, applyMonacoTheme, setupMonacoThemeWatcher, getCommonMonacoOptions } from '@/lib/monaco-theme'
+import { TestScoreDialog } from '@/components/scorecards/test-score-dialog'
 
 const client = generateClient();
 
@@ -94,6 +102,10 @@ interface ScoreComponentProps extends React.HTMLAttributes<HTMLDivElement> {
   onToggleFullWidth?: () => void
   isFullWidth?: boolean
   onSave?: () => void
+  exampleItems?: Array<{
+    id: string
+    displayValue: string
+  }>
 }
 
 interface DetailContentProps {
@@ -114,6 +126,11 @@ interface DetailContentProps {
   versionNote: string
   onNoteChange: (note: string) => void
   resetEditingCounter: number
+  forceExpandHistory?: boolean
+  exampleItems?: Array<{
+    id: string
+    displayValue: string
+  }>
 }
 
 const GridContent = React.memo(({ 
@@ -123,12 +140,18 @@ const GridContent = React.memo(({
   score: ScoreData
   isSelected?: boolean
 }) => {
+  // Pre-compute all displayed values in a single operation before rendering
+  // This ensures React renders them in the same cycle
+  const displayData = React.useMemo(() => ({
+    name: score.name,
+    description: score.description || ''
+  }), [score.name, score.description]);
+  
   return (
     <div className="flex justify-between items-start">
-      <div className="space-y-2">
-        <div className="font-medium">{score.name}</div>
-        <div className="text-sm text-muted-foreground">{score.type}</div>
-        <div className="text-sm">{score.description}</div>
+      <div className="space-y-2 min-h-[4.5rem]">
+        <div className="font-medium">{displayData.name}</div>
+        <div className="text-sm">{displayData.description}</div>
       </div>
       {score.icon && (
         <div className="text-muted-foreground">
@@ -167,9 +190,9 @@ const ResizableEditorContainer = ({
     <div 
       ref={containerRef}
       className={cn(
-        "relative border bg-background rounded-md",
-        isResizing && "border-accent",
-        isFullscreen ? "h-full" : "resize-y overflow-auto"
+        "relative bg-background rounded-lg",
+        isResizing && "border border-accent",
+        isFullscreen ? "h-full overflow-hidden" : "resize-y overflow-auto"
       )}
       style={!isFullscreen ? { 
         height: `${height}px`,
@@ -218,6 +241,8 @@ const DetailContent = React.memo(({
   versionNote,
   onNoteChange,
   resetEditingCounter,
+  forceExpandHistory,
+  exampleItems = [],
 }: DetailContentProps) => {
   // Get the current version's configuration
   const currentVersion = versions?.find(v => 
@@ -237,31 +262,23 @@ const DetailContent = React.memo(({
   // Track if we're currently editing to prevent useEffect from overriding changes
   const [isEditing, setIsEditing] = React.useState(false)
   
-  // Add showOnlyFeatured state directly to the DetailContent component
-  // Default to false to show all versions, not just featured ones
-  // This ensures all versions are visible, including the champion version
-  const [showOnlyFeatured, setShowOnlyFeatured] = React.useState(false)
+  // Let ScoreVersionHistory component handle its own featured filtering with smart defaults
   
   // Reset isEditing when resetEditingCounter changes
   React.useEffect(() => {
-    console.log('resetEditingCounter changed, resetting isEditing');
     setIsEditing(false);
   }, [resetEditingCounter])
   
   // Update currentConfig when score or version changes, but only if we're not editing
   React.useEffect(() => {
     if (!isEditing) {
-      console.log('Updating currentConfig from version/score change');
       setCurrentConfig(currentVersion?.configuration || defaultYaml);
-    } else {
-      console.log('Skipping currentConfig update because isEditing is true');
     }
   }, [currentVersion, defaultYaml, score, isEditing])
   
   // Update currentConfig when score.configuration changes (from parent component)
   React.useEffect(() => {
     if (score.configuration && !isEditing) {
-      console.log('Updating currentConfig from score.configuration:', score.configuration);
       setCurrentConfig(score.configuration);
     }
   }, [score.configuration, isEditing])
@@ -270,7 +287,6 @@ const DetailContent = React.memo(({
   const parsedConfig = React.useMemo(() => {
     try {
       const parsed = parseYaml(currentConfig);
-      console.log('DetailContent parsed YAML:', parsed);
       
       // Handle all possible external ID formats: externalId, external_id, and id
       // Important: Check for the presence of the field in the parsed object, not just in the string
@@ -278,14 +294,6 @@ const DetailContent = React.memo(({
         parsed.externalId : 
         (parsed.external_id !== undefined ? parsed.external_id : 
          (parsed.id !== undefined ? parsed.id : score.externalId));
-      
-      console.log('Extracted external ID value:', externalIdValue, 'from formats:', {
-        externalId: parsed.externalId,
-        external_id: parsed.external_id,
-        id: parsed.id,
-        scoreExternalId: score.externalId,
-        parsedKeys: Object.keys(parsed)
-      });
       
       return {
         ...parsed,
@@ -304,7 +312,6 @@ const DetailContent = React.memo(({
 
   // Handle form field changes
   const handleFormChange = (field: string, value: string) => {
-    console.log(`Form field ${field} changed to:`, value);
     
     // Set editing flag to prevent useEffect from overriding our changes
     setIsEditing(true);
@@ -321,13 +328,7 @@ const DetailContent = React.memo(({
       const hasExternalId = 'externalId' in parsed;
       const hasExternalUnderscoreId = 'external_id' in parsed;
       const hasSimpleId = 'id' in parsed && !hasExternalId && !hasExternalUnderscoreId;
-      
-      console.log('External ID format detection (from parsed object):', {
-        hasExternalId,
-        hasExternalUnderscoreId,
-        hasSimpleId,
-        parsedKeys: Object.keys(parsed)
-      });
+
       
       // Update the field
       if (field === 'externalId') {
@@ -354,7 +355,6 @@ const DetailContent = React.memo(({
       
       // Update the configuration
       const updatedYaml = stringifyYaml(parsed);
-      console.log('Updated YAML from form field:', updatedYaml);
       setCurrentConfig(updatedYaml);
       
       // Also pass the updated configuration to the parent
@@ -373,154 +373,13 @@ const DetailContent = React.memo(({
   // Create a ref to store the Monaco instance
   const monacoRef = useRef<Monaco | null>(null);
   
-  // Define a custom Monaco Editor theme that matches our Tailwind theme
-  const defineCustomTheme = useCallback((monaco: Monaco) => {
-    // Helper function to get CSS variable value
-    const getCssVar = (name: string) => {
-      const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-      
-      // If the value is an HSL color, convert it to hex
-      if (value.startsWith('hsl(')) {
-        // Create a temporary element to use the browser's color conversion
-        const tempEl = document.createElement('div');
-        tempEl.style.color = value;
-        document.body.appendChild(tempEl);
-        const computedColor = getComputedStyle(tempEl).color;
-        document.body.removeChild(tempEl);
-        
-        // Convert rgb() format to hex
-        if (computedColor.startsWith('rgb')) {
-          const rgbValues = computedColor.match(/\d+/g);
-          if (rgbValues && rgbValues.length >= 3) {
-            const hex = rgbValues.slice(0, 3).map(x => {
-              const hex = parseInt(x).toString(16);
-              return hex.length === 1 ? '0' + hex : hex;
-            }).join('');
-            return hex; // Return without # prefix as Monaco requires
-          }
-        }
-      }
-      
-      // If it's already a hex color, remove the # prefix
-      if (value.startsWith('#')) {
-        return value.substring(1);
-      }
-      
-      return value;
-    };
-
-    // More comprehensive token rules for YAML syntax highlighting
-    const commonRules = [
-      // Comments - muted foreground with italic style
-      { token: 'comment', foreground: getCssVar('--muted-foreground'), fontStyle: 'italic' },
-      
-      // Keys - primary color (blue in your theme)
-      { token: 'type', foreground: getCssVar('--primary') },
-      { token: 'key', foreground: getCssVar('--primary') },
-      
-      // Values - foreground color (main text color)
-      { token: 'string', foreground: getCssVar('--foreground') },
-      { token: 'number', foreground: getCssVar('--foreground') },
-      { token: 'boolean', foreground: getCssVar('--foreground') },
-      
-      // Structural elements - muted color
-      { token: 'delimiter', foreground: getCssVar('--muted-foreground') },
-      { token: 'bracket', foreground: getCssVar('--muted-foreground') },
-      
-      // Keywords - accent color (violet in your theme)
-      { token: 'keyword', foreground: getCssVar('--accent') },
-      
-      // Identifiers - foreground color
-      { token: 'identifier', foreground: getCssVar('--foreground') },
-      
-      // YAML specific
-      { token: 'tag', foreground: getCssVar('--primary') },
-      { token: 'number.yaml', foreground: getCssVar('--foreground') },
-      { token: 'string.yaml', foreground: getCssVar('--foreground') },
-      { token: 'keyword.yaml', foreground: getCssVar('--accent') },
-    ];
-
-    // Create a light theme that uses CSS variables
-    monaco.editor.defineTheme('plexusLightTheme', {
-      base: 'vs',
-      inherit: true,
-      rules: commonRules,
-      colors: {
-        'editor.background': '#' + getCssVar('--background'),
-        'editor.foreground': '#' + getCssVar('--foreground'),
-        'editor.lineHighlightBackground': '#' + getCssVar('--muted'),
-        'editorLineNumber.foreground': '#' + getCssVar('--muted-foreground'),
-        'editor.selectionBackground': '#' + getCssVar('--primary'),
-        'editorIndentGuide.background': '#' + getCssVar('--border'),
-        'editor.selectionHighlightBackground': '#' + getCssVar('--muted'),
-        'editorCursor.foreground': '#' + getCssVar('--foreground'),
-        'editorWhitespace.foreground': '#' + getCssVar('--border'),
-        'editorLineNumber.activeForeground': '#' + getCssVar('--foreground'),
-      }
-    } as editor.IStandaloneThemeData);
-
-    // Create a dark theme that uses CSS variables
-    monaco.editor.defineTheme('plexusDarkTheme', {
-      base: 'vs-dark',
-      inherit: true,
-      rules: commonRules,
-      colors: {
-        'editor.background': '#' + getCssVar('--background'),
-        'editor.foreground': '#' + getCssVar('--foreground'),
-        'editor.lineHighlightBackground': '#' + getCssVar('--muted'),
-        'editorLineNumber.foreground': '#' + getCssVar('--muted-foreground'),
-        'editor.selectionBackground': '#' + getCssVar('--primary'),
-        'editorIndentGuide.background': '#' + getCssVar('--border'),
-        'editor.selectionHighlightBackground': '#' + getCssVar('--muted'),
-        'editorCursor.foreground': '#' + getCssVar('--foreground'),
-        'editorWhitespace.foreground': '#' + getCssVar('--border'),
-        'editorLineNumber.activeForeground': '#' + getCssVar('--foreground'),
-      }
-    } as editor.IStandaloneThemeData);
-  }, []);
-
-  // Detect theme changes and update Monaco theme accordingly
+  // Set up Monaco theme watcher
   useEffect(() => {
-    // Function to apply the appropriate theme
-    const applyTheme = () => {
-      if (!monacoRef.current) return;
-      
-      // Check if we're in dark mode
-      const isDarkMode = document.documentElement.classList.contains('dark');
-      console.log('Theme changed, isDarkMode:', isDarkMode);
-      
-      // Force a refresh of CSS variables before applying theme
-      const background = getComputedStyle(document.documentElement).getPropertyValue('--background').trim();
-      const foreground = getComputedStyle(document.documentElement).getPropertyValue('--foreground').trim();
-      console.log('Current CSS variables - background:', background, 'foreground:', foreground);
-      
-      // Redefine themes to ensure they have the latest CSS variables
-      defineCustomTheme(monacoRef.current);
-      
-      // Apply the appropriate theme
-      monacoRef.current.editor.setTheme(isDarkMode ? 'plexusDarkTheme' : 'plexusLightTheme');
-    };
+    if (!monacoRef.current) return
     
-    // Apply theme immediately if Monaco is available
-    applyTheme();
-    
-    // Set up a mutation observer to detect theme changes
-    const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        if (mutation.attributeName === 'class') {
-          applyTheme();
-        }
-      });
-    });
-    
-    // Start observing the document element for class changes
-    observer.observe(document.documentElement, { attributes: true });
-    
-    // Clean up the observer when the component unmounts
-    return () => {
-      observer.disconnect();
-    };
-  }, [defineCustomTheme]);
+    const cleanup = setupMonacoThemeWatcher(monacoRef.current)
+    return cleanup
+  }, [monacoRef.current])
 
   // Add state for editor height with localStorage persistence
   const [editorHeight, setEditorHeight] = useState(() => {
@@ -563,6 +422,9 @@ const DetailContent = React.memo(({
   // Add state to detect if we're on an iPad/mobile device
   const [isMobileDevice, setIsMobileDevice] = React.useState(false);
   
+  // Add state for test score dialog
+  const [isTestDialogOpen, setIsTestDialogOpen] = React.useState(false);
+  
   // Detect mobile devices on component mount
   React.useEffect(() => {
     const checkMobileDevice = () => {
@@ -573,15 +435,28 @@ const DetailContent = React.memo(({
       const isMobile = /iphone|ipod|android|blackberry|opera mini|opera mobi|skyfire|maemo|windows phone|palm|iemobile|symbian|symbianos|fennec/i.test(userAgent);
       
       setIsMobileDevice(isIPad || isTablet || isMobile);
-      console.log('Device detection:', { isIPad, isTablet, isMobile });
     };
     
     checkMobileDevice();
   }, []);
 
+  const handleTestScore = () => {
+    setIsTestDialogOpen(true);
+  };
+
+  const handleTestScoreWithItem = (itemId: string) => {
+    console.log('Testing score with item:', { scoreId: score.id, scoreName: score.name, itemId });
+    // TODO: Implement actual test logic
+    toast.success(`Testing score "${score.name}" with selected item`);
+  };
+
+  const closeTestScoreDialog = () => {
+    setIsTestDialogOpen(false);
+  };
+
   return (
     <div className={cn(
-      "w-full flex flex-col min-h-0 overflow-y-auto",
+      "w-full flex flex-col min-h-0 h-full",
       isEditorFullscreen && "absolute inset-0 z-10 bg-background p-4 rounded-lg"
     )}>
       {/* Hide the header section when in fullscreen mode */}
@@ -634,19 +509,45 @@ const DetailContent = React.memo(({
             />
           </div>
           <div className="flex gap-2 ml-4">
-            <DropdownMenu.Root>
-              <DropdownMenu.Trigger asChild>
-                <CardButton
-                  icon={MoreHorizontal}
-                  onClick={() => {}}
+            <ShadcnDropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 rounded-md border-0 shadow-none bg-border"
                   aria-label="More options"
-                />
-              </DropdownMenu.Trigger>
-              <DropdownMenu.Portal>
-                <DropdownMenu.Content align="end" className="min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md">
-                </DropdownMenu.Content>
-              </DropdownMenu.Portal>
-            </DropdownMenu.Root>
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={handleTestScore}>
+                  <TestTube className="mr-2 h-4 w-4" />
+                  Test
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => {
+                  console.log('Evaluate Accuracy clicked');
+                  toast.success('Evaluate Accuracy action triggered');
+                }}>
+                  <FlaskConical className="mr-2 h-4 w-4" />
+                  Evaluate Accuracy
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => {
+                  console.log('Evaluate Consistency clicked');
+                  toast.success('Evaluate Consistency action triggered');
+                }}>
+                  <FlaskRound className="mr-2 h-4 w-4" />
+                  Evaluate Consistency
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => {
+                  console.log('Evaluate Alignment clicked');
+                  toast.success('Evaluate Alignment action triggered');
+                }}>
+                  <TestTubes className="mr-2 h-4 w-4" />
+                  Evaluate Alignment
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </ShadcnDropdownMenu>
             {onToggleFullWidth && (
               <CardButton
                 icon={isFullWidth ? Columns2 : Square}
@@ -679,6 +580,47 @@ const DetailContent = React.memo(({
           )}
         </div>
         <div className="flex items-center gap-2">
+          {isEditorFullscreen && (
+            <ShadcnDropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 rounded-md border-0 shadow-none bg-border"
+                  aria-label="More options"
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={handleTestScore}>
+                  <TestTube className="mr-2 h-4 w-4" />
+                  Test
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => {
+                  console.log('Evaluate Accuracy clicked');
+                  toast.success('Evaluate Accuracy action triggered');
+                }}>
+                  <FlaskConical className="mr-2 h-4 w-4" />
+                  Evaluate Accuracy
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => {
+                  console.log('Evaluate Consistency clicked');
+                  toast.success('Evaluate Consistency action triggered');
+                }}>
+                  <FlaskRound className="mr-2 h-4 w-4" />
+                  Evaluate Consistency
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => {
+                  console.log('Evaluate Alignment clicked');
+                  toast.success('Evaluate Alignment action triggered');
+                }}>
+                  <TestTubes className="mr-2 h-4 w-4" />
+                  Evaluate Alignment
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </ShadcnDropdownMenu>
+          )}
           <CardButton
             icon={isEditorFullscreen ? Shrink : Expand}
             onClick={() => setIsEditorFullscreen(!isEditorFullscreen)}
@@ -687,25 +629,97 @@ const DetailContent = React.memo(({
         </div>
       </div>
 
-      {/* YAML Editor */}
+      {/* YAML Editor - Make it flex to fill available space */}
       <div className={cn(
-        "mt-2",
-        isEditorFullscreen && "flex-1"
+        "flex-1 flex flex-col min-h-0",
+        isEditorFullscreen ? "mt-2" : "mt-2"
       )} style={{ transition: 'none' }}>
-        <ResizableEditorContainer 
-          height={isEditorFullscreen ? 
-            // Use a percentage of the container height instead of window height
-            800 : editorHeight}
-          onHeightChange={handleHeightChange}
-          isFullscreen={isEditorFullscreen}
-        >
+                  {!isEditorFullscreen ? (
+          // Normal mode: flexible height container
+          <div className="flex-1 bg-background rounded-lg overflow-hidden relative min-h-[300px]">
+            <Editor
+              height="100%"
+              defaultLanguage="yaml"
+              value={currentConfig}
+              key={`editor-${selectedVersionId || championVersionId}`}
+              onMount={(editor, monaco) => {
+                // Store the editor instance
+                editorInstanceRef.current = editor;
+                
+                // Store the Monaco instance
+                monacoRef.current = monaco;
+                
+                // Apply our custom theme when the editor mounts
+                defineCustomMonacoThemes(monaco);
+                applyMonacoTheme(monaco);
+                
+                // Force immediate layout to ensure correct sizing
+                editor.layout();
+                
+                // Add error handling for iPad-specific issues
+                window.addEventListener('error', (event) => {
+                  if (event.message === 'Canceled: Canceled' || 
+                      event.error?.message === 'Canceled: Canceled') {
+                    event.preventDefault();
+                    return true; // Prevent the error from propagating
+                  }
+                  return false;
+                });
+              }}
+              onChange={(value) => {
+                if (!value) return;
+                
+                try {
+                  // Set editing flag to prevent useEffect from overriding our changes
+                  setIsEditing(true);
+                  
+                  // Parse YAML to validate it and get values for form
+                  const parsed = parseYaml(value)
+                  
+                  // Extract external ID from all possible formats
+                  const externalIdValue = parsed.externalId !== undefined ? 
+                    parsed.externalId : 
+                    (parsed.external_id !== undefined ? parsed.external_id : 
+                     (parsed.id !== undefined ? parsed.id : undefined));
+
+                  
+                  // Update our local state
+                  setCurrentConfig(value);
+                  
+                  // Pass the updated configuration to the parent
+                  onEditChange?.({
+                    name: parsed.name,
+                    externalId: externalIdValue !== undefined ? String(externalIdValue) : undefined,
+                    key: parsed.key,
+                    description: parsed.description,
+                    configuration: value // Store the original YAML string
+                  });
+                } catch (error) {
+                  // Handle cancellation errors gracefully
+                  if (error instanceof Error && 
+                      (error.message === 'Canceled' || error.message === 'Canceled: Canceled')) {
+                    return; // Just ignore the error
+                  }
+                  
+                  // Ignore other parse errors while typing
+                }
+              }}
+              options={getCommonMonacoOptions(isMobileDevice)}
+            />
+          </div>
+        ) : (
+          // Fullscreen mode: use the old resizable container
+          <ResizableEditorContainer 
+            height={800}
+            onHeightChange={handleHeightChange}
+            isFullscreen={isEditorFullscreen}
+          >
           <Editor
             height="100%"
             defaultLanguage="yaml"
             value={currentConfig}
             key={`editor-${selectedVersionId || championVersionId}`}
             onMount={(editor, monaco) => {
-              console.log('Editor mounted');
               // Store the editor instance
               editorInstanceRef.current = editor;
               
@@ -713,19 +727,8 @@ const DetailContent = React.memo(({
               monacoRef.current = monaco;
               
               // Apply our custom theme when the editor mounts
-              defineCustomTheme(monaco);
-              
-              // Set the initial theme based on current mode
-              const isDarkMode = document.documentElement.classList.contains('dark');
-              console.log('Editor mounted, isDarkMode:', isDarkMode);
-              
-              // Force a refresh of CSS variables before applying theme
-              const background = getComputedStyle(document.documentElement).getPropertyValue('--background').trim();
-              const foreground = getComputedStyle(document.documentElement).getPropertyValue('--foreground').trim();
-              console.log('Current CSS variables - background:', background, 'foreground:', foreground);
-              
-              // Apply the appropriate theme
-              monaco.editor.setTheme(isDarkMode ? 'plexusDarkTheme' : 'plexusLightTheme');
+              defineCustomMonacoThemes(monaco);
+              applyMonacoTheme(monaco);
               
               // Force immediate layout to ensure correct sizing
               editor.layout();
@@ -734,7 +737,6 @@ const DetailContent = React.memo(({
               window.addEventListener('error', (event) => {
                 if (event.message === 'Canceled: Canceled' || 
                     event.error?.message === 'Canceled: Canceled') {
-                  console.log('Caught Monaco editor cancellation error (expected on iPad)');
                   event.preventDefault();
                   return true; // Prevent the error from propagating
                 }
@@ -750,20 +752,13 @@ const DetailContent = React.memo(({
                 
                 // Parse YAML to validate it and get values for form
                 const parsed = parseYaml(value)
-                console.log('YAML editor onChange parsed:', parsed);
                 
                 // Extract external ID from all possible formats
                 const externalIdValue = parsed.externalId !== undefined ? 
                   parsed.externalId : 
                   (parsed.external_id !== undefined ? parsed.external_id : 
                    (parsed.id !== undefined ? parsed.id : undefined));
-                
-                console.log('YAML editor extracted externalId:', externalIdValue, 'from formats:', {
-                  externalId: parsed.externalId,
-                  external_id: parsed.external_id,
-                  id: parsed.id,
-                  parsedKeys: Object.keys(parsed)
-                });
+
                 
                 // Update our local state
                 setCurrentConfig(value);
@@ -780,93 +775,79 @@ const DetailContent = React.memo(({
                 // Handle cancellation errors gracefully
                 if (error instanceof Error && 
                     (error.message === 'Canceled' || error.message === 'Canceled: Canceled')) {
-                  console.log('Caught Monaco editor cancellation error in onChange');
                   return; // Just ignore the error
                 }
                 
                 // Ignore other parse errors while typing
-                console.log('YAML parse error (ignored):', error)
               }
             }}
-            options={{
-              minimap: { enabled: false },
-              fontSize: 14,
-              lineNumbers: 'on',
-              scrollBeyondLastLine: false,
-              wordWrap: 'on',
-              wrappingIndent: 'indent',
-              automaticLayout: true,
-              fontFamily: 'monospace',
-              fontLigatures: true,
-              contextmenu: true,
-              cursorBlinking: 'smooth',
-              cursorSmoothCaretAnimation: 'on',
-              smoothScrolling: true,
-              renderLineHighlight: 'all',
-              colorDecorators: true,
-              // iPad/mobile specific options
-              ...(isMobileDevice ? {
-                // Reduce features that might cause issues on mobile
-                quickSuggestions: false,
-                parameterHints: { enabled: false },
-                folding: false,
-                dragAndDrop: false,
-                links: false,
-                // Optimize touch handling
-                mouseWheelZoom: false,
-                scrollbar: {
-                  useShadows: false,
-                  verticalHasArrows: true,
-                  horizontalHasArrows: true,
-                  vertical: 'visible',
-                  horizontal: 'visible',
-                  verticalScrollbarSize: 20,
-                  horizontalScrollbarSize: 20,
-                },
-                // Improve performance
-                renderWhitespace: 'none',
-                renderControlCharacters: false,
-                renderIndentGuides: false,
-              } : {})
-            }}
+            options={getCommonMonacoOptions(isMobileDevice)}
           />
-        </ResizableEditorContainer>
+          </ResizableEditorContainer>
+        )}
       </div>
 
-      {/* Hide the action buttons and version history when in fullscreen mode */}
-      {!isEditorFullscreen && (
-        <>
-          {hasChanges && (
-            <div className="mt-4 space-y-4">
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => {
-                  setIsEditing(false); // Reset editing flag
-                  onCancel?.();
-                }}>Cancel</Button>
-                <Button onClick={() => {
-                  setIsEditing(false); // Reset editing flag
-                  onSave?.();
-                }}>Save Changes</Button>
-              </div>
-            </div>
-          )}
-
-          {versions && (
-            <div className="mt-6 overflow-hidden">
-              <ScoreVersionHistory
-                versions={versions}
-                championVersionId={championVersionId}
-                selectedVersionId={selectedVersionId}
-                onVersionSelect={onVersionSelect}
-                onToggleFeature={onToggleFeature}
-                onPromoteToChampion={onPromoteToChampion}
-                showOnlyFeatured={showOnlyFeatured}
-                onToggleShowOnlyFeatured={() => setShowOnlyFeatured(prev => !prev)}
+      {/* Action buttons - show in both normal and fullscreen modes */}
+      {hasChanges && (
+        <div className={cn(
+          "mt-4 space-y-4",
+          isEditorFullscreen && "mt-4"
+        )}>
+          <div className={cn(
+            "flex gap-2",
+            isEditorFullscreen ? "flex-row items-end" : "justify-end"
+          )}>
+            {isEditorFullscreen && (
+              <textarea
+                value={versionNote}
+                onChange={(e) => onNoteChange(e.target.value)}
+                placeholder="Add a note about this version..."
+                className="flex-1 px-3 py-2 rounded-md bg-background border border-input text-sm resize-none h-10
+                         focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2
+                         placeholder:text-muted-foreground"
+                rows={1}
               />
+            )}
+            <div className="flex gap-2">
+              <Button className="bg-card hover:bg-card/80 text-card-foreground shadow-none border-0" onClick={() => {
+                setIsEditing(false); // Reset editing flag
+                onCancel?.();
+              }}>Cancel</Button>
+              <Button onClick={() => {
+                setIsEditing(false); // Reset editing flag
+                if (isEditorFullscreen) {
+                  setIsEditorFullscreen(false); // Exit fullscreen after save
+                }
+                onSave?.();
+              }}>Save Changes</Button>
             </div>
-          )}
-        </>
+          </div>
+        </div>
       )}
+
+      {/* Version history - hide in fullscreen mode */}
+      {!isEditorFullscreen && versions && (
+        <div className="mt-6 overflow-hidden flex-shrink-0">
+          <ScoreVersionHistory
+            versions={versions}
+            championVersionId={championVersionId}
+            selectedVersionId={selectedVersionId}
+            onVersionSelect={onVersionSelect}
+            onToggleFeature={onToggleFeature}
+            onPromoteToChampion={onPromoteToChampion}
+            forceExpanded={forceExpandHistory}
+          />
+        </div>
+      )}
+
+      {/* Test Score Dialog */}
+      <TestScoreDialog
+        isOpen={isTestDialogOpen}
+        onClose={closeTestScoreDialog}
+        onTest={handleTestScoreWithItem}
+        scoreName={score.name}
+        exampleItems={exampleItems}
+      />
     </div>
   )
 })
@@ -880,6 +861,7 @@ export function ScoreComponent({
   onToggleFullWidth,
   isFullWidth = false,
   onSave,
+  exampleItems = [],
   className,
   ...props
 }: ScoreComponentProps) {
@@ -890,26 +872,23 @@ export function ScoreComponent({
   const [selectedVersionId, setSelectedVersionId] = React.useState<string>()
   const [versionNote, setVersionNote] = React.useState('')
   const [resetEditingCounter, setResetEditingCounter] = React.useState(0)
+  const [forceExpandHistory, setForceExpandHistory] = React.useState(false)
   
-  // Debug log when editedScore changes
-  React.useEffect(() => {
-    console.log('editedScore updated:', editedScore);
-  }, [editedScore]);
+
   
   // Ensure editedScore is updated when score prop changes
   React.useEffect(() => {
-    console.log('Score prop changed, updating editedScore:', score);
     setEditedScore(score)
     setVersionNote('') // Reset note when score changes
     setHasChanges(false) // Reset changes flag when score changes
     setResetEditingCounter(prev => prev + 1) // Signal to DetailContent to reset editing state
+    setForceExpandHistory(false) // Reset expansion when score changes
   }, [score])
   
   // Fetch versions when score changes
   React.useEffect(() => {
     const fetchVersions = async () => {
       try {
-        console.log('Fetching versions for score:', score.id);
         
         // First, get the score details to get the championVersionId
         const scoreResponse = await client.graphql({
@@ -967,11 +946,8 @@ export function ScoreComponent({
           }
         }) as GraphQLResult<GetScoreVersionsByScoreIdResponse>;
         
-        console.log('API Response:', response);
-        
         if ('data' in response && response.data?.listScoreVersionByScoreIdAndCreatedAt?.items) {
           const versionItems = response.data.listScoreVersionByScoreIdAndCreatedAt.items;
-          console.log('Found versions:', versionItems);
           setVersions(versionItems);
           
           // Sort versions by createdAt in descending order
@@ -1015,15 +991,12 @@ export function ScoreComponent({
                     }
                   }
                 });
-                
-                console.log('Set initial champion version (first version ever):', sortedVersions[0].id);
+
               } catch (error) {
                 console.error('Error setting initial champion version:', error);
               }
             }
           }
-        } else {
-          console.log('No versions found in response:', response);
         }
       } catch (error) {
         console.error('Error fetching versions:', error);
@@ -1033,7 +1006,6 @@ export function ScoreComponent({
   }, [score])
 
   const handleEditChange = (changes: Partial<ScoreData>) => {
-    console.log('handleEditChange called with:', changes);
     
     // Always update the editedScore state with the changes
     setEditedScore(prev => {
@@ -1046,19 +1018,12 @@ export function ScoreComponent({
       // If we're changing fields other than the note, reset onlyNoteChanged flag
       if ('name' in changes || 'key' in changes || 'externalId' in changes || 
           'description' in changes || 'configuration' in changes) {
-        console.log('Field changes detected:', {
-          name: changes.name !== undefined ? `${prev.name} -> ${changes.name}` : undefined,
-          key: changes.key !== undefined ? `${prev.key} -> ${changes.key}` : undefined,
-          externalId: changes.externalId !== undefined ? `${prev.externalId} -> ${changes.externalId}` : undefined,
-          description: changes.description !== undefined ? `${prev.description} -> ${changes.description}` : undefined,
-          configChanged: changes.configuration !== undefined
-        });
+        // Mark field changes detected
       }
       
       // If we're directly setting the configuration (from the YAML editor or form field handler),
       // we don't need to regenerate it
       if (changes.configuration) {
-        console.log('Using provided configuration:', changes.configuration);
         return updated;
       }
       
@@ -1114,7 +1079,6 @@ export function ScoreComponent({
         
         // Update the configuration
         updated.configuration = stringifyYaml(updatedConfig);
-        console.log('Generated updated YAML configuration:', updated.configuration);
       } catch (error) {
         console.error('Error updating YAML configuration:', error);
       }
@@ -1134,7 +1098,6 @@ export function ScoreComponent({
   const handleVersionSelect = (version: ScoreVersion) => {
     setSelectedVersionId(version.id)
     setVersionNote(version.note || '')
-    console.log('handleVersionSelect called with version:', version.id);
     
     // Signal to DetailContent to reset editing state
     setResetEditingCounter(prev => prev + 1)
@@ -1142,19 +1105,13 @@ export function ScoreComponent({
     try {
       // Parse the YAML configuration to extract all fields
       const config = parseYaml(version.configuration)
-      console.log('Parsed YAML configuration:', config);
       
       // Extract external ID from either format
       const externalIdValue = config.externalId !== undefined ? 
         config.externalId : 
         (config.external_id !== undefined ? config.external_id : 
          (config.id !== undefined ? config.id : undefined));
-      
-      console.log('Extracted externalId value:', externalIdValue, 'from formats:', {
-        externalId: config.externalId,
-        external_id: config.external_id,
-        id: config.id
-      });
+
       
       // Update the editedScore with values from the YAML configuration
       // This ensures we're using the YAML as the source of truth
@@ -1170,7 +1127,6 @@ export function ScoreComponent({
           // Store the complete configuration for the editor
           configuration: version.configuration
         };
-        console.log('Updated editedScore with version data:', updated);
         return updated;
       })
       
@@ -1223,14 +1179,10 @@ export function ScoreComponent({
 
   // Handle note changes and set hasChanges to true
   const handleNoteChange = (note: string) => {
-    console.log('Note changed:', note);
     setVersionNote(note);
     
     // Set hasChanges to true when note is changed
     setHasChanges(true);
-    
-    // Log the change
-    console.log('Note changed, hasChanges=true');
   };
 
   const handleSave = async () => {
@@ -1285,28 +1237,18 @@ export function ScoreComponent({
           const hasExternalId = 'externalId' in parsed;
           const hasExternalUnderscoreId = 'external_id' in parsed;
           const hasSimpleId = 'id' in parsed && !hasExternalId && !hasExternalUnderscoreId;
-          
-          console.log('Saving configuration - external ID format detection:', {
-            hasExternalId,
-            hasExternalUnderscoreId,
-            hasSimpleId,
-            parsedKeys: Object.keys(parsed),
-            externalId: editedScore.externalId
-          });
+
           
           // Update the external ID field using the same format that was in the original YAML
           if (hasSimpleId) {
             // Using simple id format
             parsed.id = editedScore.externalId;
-            console.log('Using simple id format for external ID:', editedScore.externalId);
           } else if (hasExternalUnderscoreId) {
             // Using snake_case format
             parsed.external_id = editedScore.externalId;
-            console.log('Using snake_case format for external ID:', editedScore.externalId);
           } else {
             // Using camelCase format (default)
             parsed.externalId = editedScore.externalId;
-            console.log('Using camelCase format for external ID:', editedScore.externalId);
           }
           
           // Update other fields
@@ -1320,13 +1262,7 @@ export function ScoreComponent({
           console.error('Error updating configuration YAML:', error);
         }
       }
-      
-      // Log what we're doing
-      if (isEditingExistingVersion) {
-        console.log('Creating new version from existing version');
-      } else {
-        console.log('Creating new version (not editing an existing version)');
-      }
+
       
       const versionPayload = {
         scoreId: String(score.id),
@@ -1334,8 +1270,6 @@ export function ScoreComponent({
         isFeatured: false,
         note: versionNote || 'Updated score configuration',
       };
-
-      console.log('Creating new version with payload:', versionPayload);
 
       const createVersionResponse = await client.graphql({
         query: `
@@ -1407,6 +1341,7 @@ export function ScoreComponent({
       
       setHasChanges(false);
       setVersionNote('');
+      setForceExpandHistory(true); // Auto-expand version history after save
     } catch (error) {
       console.error('Error saving score:', error);
       toast.error(error instanceof Error ? error.message : 'Error updating score');
@@ -1461,6 +1396,11 @@ export function ScoreComponent({
         variant === 'detail' && "h-full flex flex-col overflow-hidden",
         className
       )}
+      style={{
+        ...(isSelected && variant === 'grid' && {
+          boxShadow: 'inset 0 0 0 0.5rem var(--secondary)'
+        })
+      }}
       {...props}
     >
       <div className={cn(
@@ -1504,6 +1444,8 @@ export function ScoreComponent({
               versionNote={versionNote}
               onNoteChange={handleNoteChange}
               resetEditingCounter={resetEditingCounter}
+              forceExpandHistory={forceExpandHistory}
+              exampleItems={exampleItems}
             />
           )}
         </div>

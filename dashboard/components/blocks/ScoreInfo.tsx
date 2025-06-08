@@ -14,8 +14,20 @@ const ScoreInfo: React.FC<ReportBlockProps> = ({
   position,
   children
 }) => {
-  // Extract data from output (now directly from output since we removed data nesting)
-  const data = output || {};
+  // Handle both string and object output formats
+  let data: Record<string, any> = {};
+  try {
+    if (typeof output === 'string') {
+      // Parse string output as JSON
+      data = JSON.parse(output);
+    } else {
+      // Use object output directly
+      data = output || {};
+    }
+  } catch (error) {
+    console.error('Failed to parse ScoreInfo output:', error);
+    data = {};
+  }
   
   // Format a percentage display with 1 decimal place
   const formatPercent = (value: number | undefined) => {

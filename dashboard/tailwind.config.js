@@ -11,7 +11,9 @@ module.exports = {
         { pattern: /^text-.*-foreground$/ },
         'grid',
         'bg-progress-background',
-        'bg-progress-background-selected'
+        'bg-progress-background-selected',
+        'border-3',
+        'border-secondary'
     ],
     theme: {
         extend: {
@@ -19,6 +21,9 @@ module.exports = {
                 lg: 'var(--radius)',
                 md: 'calc(var(--radius) - 2px)',
                 sm: 'calc(var(--radius) - 4px)'
+            },
+            borderWidth: {
+                '3': '0.75rem'
             },
             colors: {
                 background: 'var(--background)',
@@ -53,6 +58,12 @@ module.exports = {
                     foreground: 'var(--secondary-foreground)',
                     selected: 'var(--secondary-selected)',
                     'selected-foreground': 'var(--secondary-selected-foreground)'
+                },
+                selected: {
+                    DEFAULT: 'var(--selected)',
+                    foreground: 'var(--selected-foreground)',
+                    selected: 'var(--selected-selected)',
+                    'selected-foreground': 'var(--selected-selected-foreground)'
                 },
                 muted: {
                     DEFAULT: 'var(--muted)',
@@ -125,6 +136,11 @@ module.exports = {
                 'gauge-almost': 'var(--gauge-almost)',
                 'gauge-viable': 'var(--gauge-viable)',
                 'gauge-great': 'var(--gauge-great)',
+                'editor-comment': 'var(--editor-comment)',
+                'editor-key': 'var(--editor-key)',
+                'editor-string': 'var(--editor-string)',
+                'editor-number': 'var(--editor-number)',
+                'editor-keyword': 'var(--editor-keyword)',
             },
             keyframes: {
                 'accordion-down': {
@@ -142,11 +158,38 @@ module.exports = {
                     to: {
                         height: '0'
                     }
+                },
+                'gentle-bounce': {
+                    '0%, 20%, 50%, 80%, 100%': {
+                        transform: 'translateY(0)'
+                    },
+                    '10%': {
+                        transform: 'translateY(-3px)'
+                    },
+                    '30%': {
+                        transform: 'translateY(-2px)'
+                    }
+                },
+                'attention-bounce': {
+                    '0%, 15%, 35%, 55%, 100%': {
+                        transform: 'translateY(0)'
+                    },
+                    '5%': {
+                        transform: 'translateY(-8px)'
+                    },
+                    '25%': {
+                        transform: 'translateY(-6px)'
+                    },
+                    '45%': {
+                        transform: 'translateY(-4px)'
+                    }
                 }
             },
             animation: {
                 'accordion-down': 'accordion-down 0.2s ease-out',
-                'accordion-up': 'accordion-up 0.2s ease-out'
+                'accordion-up': 'accordion-up 0.2s ease-out',
+                'gentle-bounce': 'gentle-bounce 2.5s ease-in-out infinite',
+                'attention-bounce': 'attention-bounce 2s ease-in-out infinite'
             }
         },
         screens: {

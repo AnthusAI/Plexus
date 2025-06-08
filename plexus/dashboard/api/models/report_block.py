@@ -20,6 +20,7 @@ class ReportBlock(BaseModel):
     output: Optional[Dict[str, Any]] = field(default_factory=dict) # Store parsed JSON
     name: Optional[str] = None
     log: Optional[str] = None
+    attachedFiles: Optional[str] = None  # Renamed from detailsFiles
     createdAt: Optional[datetime] = None # Assuming these are set by backend
     updatedAt: Optional[datetime] = None # Assuming these are set by backend
 
@@ -38,6 +39,7 @@ class ReportBlock(BaseModel):
             type
             output # Expecting JSON string from API
             log
+            attachedFiles # Renamed from detailsFiles
             createdAt
             updatedAt
         """
@@ -75,6 +77,7 @@ class ReportBlock(BaseModel):
         # Handle potential missing optional fields gracefully
         name = data.get('name')
         log = data.get('log')
+        attached_files = data.get('attachedFiles')  # Renamed from details_files / detailsFiles
         position = data.get('position')
         if position is None:
             # Position is required in our plan, raise error or default?
@@ -97,6 +100,7 @@ class ReportBlock(BaseModel):
             output=output_data, # Store the parsed dict/None
             name=name,
             log=log,
+            attachedFiles=attached_files,  # Renamed from detailsFiles
             createdAt=data['createdAt'],
             updatedAt=data['updatedAt']
             # Removed: client=client
@@ -117,6 +121,7 @@ class ReportBlock(BaseModel):
         output: Optional[str] = None, # Expecting JSON string as input here
         name: Optional[str] = None,
         log: Optional[str] = None,
+        attachedFiles: Optional[str] = None,  # Renamed from detailsFiles
     ) -> 'ReportBlock':
         """Create a new ReportBlock record via GraphQL mutation."""
         mutation = f"""
@@ -135,10 +140,32 @@ class ReportBlock(BaseModel):
             'output': output, 
             'name': name,
             'log': log,
+            'attachedFiles': attachedFiles,  # Renamed from detailsFiles
             # createdAt/updatedAt are usually set by the backend automatically
         }
         # Remove keys with None values if the mutation expects them to be absent
         input_data = {k: v for k, v in input_data.items() if v is not None}
+
+        # Add detailed logging about sizes
+        if 'output' in input_data:
+            input_data_size = len(json.dumps(input_data))
+            output_size = len(input_data['output']) if isinstance(input_data['output'], str) else 0
+            other_fields_size = input_data_size - output_size
+            
+            logger.info(f"ReportBlock create sizes - Total input: {input_data_size} bytes")
+            logger.info(f"ReportBlock create sizes - Output field: {output_size} bytes")
+            logger.info(f"ReportBlock create sizes - Other fields: {other_fields_size} bytes")
+            
+            # Log detailsFiles size if present
+            if 'attachedFiles' in input_data: # Renamed from detailsFiles
+                details_size = len(input_data['attachedFiles']) if isinstance(input_data['attachedFiles'], str) else 0 # Renamed from detailsFiles
+                logger.info(f"ReportBlock create sizes - attachedFiles field: {details_size} bytes") # Renamed from detailsFiles
+            
+            if output_size > 350000:
+                logger.warning(f"ReportBlock output field size ({output_size} bytes) approaching DynamoDB limit!")
+            
+            if input_data_size > 380000:
+                logger.error(f"TOTAL input data size ({input_data_size} bytes) exceeds DynamoDB limit!")
 
         try:
             logger.debug(f"Creating ReportBlock with input: {input_data}")
@@ -234,3 +261,102 @@ class ReportBlock(BaseModel):
                 break # Stop fetching on error
 
         return blocks 
+
+    def update(self, client: Optional[_BaseAPIClient] = None, **kwargs) -> 'ReportBlock':
+        """Update an existing ReportBlock record via GraphQL mutation."""
+        if not self.id:
+            raise ValueError("Cannot update ReportBlock without an ID.")
+
+        # Use the instance's client if one isn't provided
+        api_client = client if client else self._client
+        if not api_client:
+            raise ValueError("API client not available for update operation.")
+
+        mutation = f"""
+        mutation UpdateReportBlock($input: UpdateReportBlockInput!) {{
+            updateReportBlock(input: $input) {{
+                {self.fields()}
+            }}
+        }}
+        """
+        
+        input_data = {'id': self.id}
+        
+        # Prepare allowed fields for update from kwargs
+        # Only include fields that are part of the model and were actually passed
+        allowed_update_fields = {
+            'reportId', 'name', 'position', 'type', 
+            'output', 'log', 'attachedFiles' # Renamed from detailsFiles
+        }
+        
+        # Special handling for specific fields
+        for key, value in kwargs.items():
+            if key in allowed_update_fields:
+                # Special handling for 'output' if it's a dict, needs to be JSON string for GQL
+                if key == 'output' and isinstance(value, dict):
+                    input_data[key] = json.dumps(value)
+                    logger.info(f"ReportBlock update: Converted 'output' dict to JSON string ({len(input_data[key])} bytes)")
+                elif key == 'attachedFiles': # Renamed from detailsFiles
+                    # Log original value
+                    logger.info(f"ReportBlock update: attachedFiles before processing - Type: {type(value)}, Value: {value}") 
+                    
+                    # Don't convert attachedFiles to JSON string - it's already a string array in the schema
+                    input_data[key] = value
+                else:
+                    input_data[key] = value
+            else:
+                logger.warning(f"Field '{key}' not allowed for ReportBlock update or not recognized.")
+
+        if len(input_data) == 1 and 'id' in input_data:
+            logger.warning("Update called with no fields to update other than ID.")
+            return self
+
+        try:
+            logger.debug(f"Updating ReportBlock {self.id} with input: {input_data}")
+            result = api_client.execute(mutation, {'input': input_data})
+            if not result or 'updateReportBlock' not in result or not result['updateReportBlock']:
+                error_msg = f"Failed to update ReportBlock {self.id}. Response: {result}"
+                logger.error(error_msg)
+                raise Exception(error_msg)
+            
+            updated_data = result['updateReportBlock']
+            logger.info(f"Update result for ReportBlock {self.id}: {updated_data}")
+            
+            # Specifically log attachedFiles to track if it was properly updated
+            if 'attachedFiles' in kwargs:
+                if 'attachedFiles' in updated_data:
+                    logger.info(f"attachedFiles after update: {updated_data['attachedFiles']}")
+                else:
+                    logger.warning("attachedFiles missing from update response")
+            
+            for field_name, value in updated_data.items():
+                if hasattr(self, field_name):
+                    if field_name == 'output' and isinstance(value, str):
+                        try:
+                            setattr(self, field_name, json.loads(value))
+                        except json.JSONDecodeError:
+                            logger.warning(f"Could not parse output from update response: {value}")
+                            setattr(self, field_name, {"error": "Failed to parse output JSON", "raw_output": value})
+                    elif field_name == 'attachedFiles': # Renamed from detailsFiles
+                        # Store attachedFiles directly - it's already a string array
+                        setattr(self, field_name, value)
+                        logger.info(f"Set attachedFiles attribute on instance: {value}")
+                    elif field_name in ['createdAt', 'updatedAt'] and isinstance(value, str):
+                        try:
+                            setattr(self, field_name, datetime.fromisoformat(value.replace('Z', '+00:00')))
+                        except (ValueError, TypeError):
+                            setattr(self, field_name, None)
+                    else:
+                        setattr(self, field_name, value)
+            
+            self.id = updated_data.get('id', self.id)
+            logger.info(f"Successfully updated ReportBlock {self.id}")
+            return self
+        except Exception as e:
+            logger.exception(f"Error updating ReportBlock {self.id}: {e}")
+            raise
+
+# TODO: If list_by_report_id is used, ensure it's correctly implemented or remove if unused.
+# Consider if this file is the single source of truth for ReportBlock or if there's another.
+# BaseModel might provide some of these methods, verify to avoid duplication or conflicts.
+# Example: if BaseModel has _client or generic get_by_id, update, delete methods. 

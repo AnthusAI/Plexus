@@ -1,139 +1,209 @@
 import React from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
-import { BlockRenderer } from '@/components/blocks/BlockRegistry';
-import ReportBlock from '@/components/blocks/ReportBlock';
+import ReportBlock, { ReportBlockProps } from '@/components/blocks/ReportBlock';
 
-const meta: Meta<typeof BlockRenderer> = {
-  title: 'Report Blocks/ReportBlock',
-  component: BlockRenderer,
+const meta: Meta<typeof ReportBlock> = {
+  title: 'Reports/Blocks/ReportBlock',
+  component: ReportBlock,
   parameters: {
     layout: 'padded',
   },
-  decorators: [
-    (Story) => (
-      <div className="bg-card p-6 rounded-lg">
-        <Story />
-      </div>
-    ),
-  ],
 };
 
 export default meta;
-type Story = StoryObj<typeof BlockRenderer>;
+type Story = StoryObj<typeof ReportBlock>;
 
-// Update stories to use BlockRenderer and pass appropriate props
-// NOTE: These stories now test BlockRenderer rendering the default ReportBlock
+// Sample mock files for testing
+const sampleDetailsFiles = JSON.stringify([
+  {
+    name: 'log.txt',
+    path: 'files/mock-log.txt',
+    description: 'Log file for the report',
+    size: 2048,
+    type: 'text/plain'
+  },
+  {
+    name: 'results.json',
+    path: 'files/results.json',
+    description: 'JSON results data',
+    size: 4096,
+    type: 'application/json'
+  },
+  {
+    name: 'chart-data.csv',
+    path: 'files/chart-data.csv',
+    description: 'CSV data for charts',
+    size: 3072,
+    type: 'text/csv'
+  }
+]);
+
+const sampleFiles = [
+  { name: 'Log File', path: 'dummy/log.txt' },
+  { name: 'Output Data', path: 'dummy/output.csv' },
+];
+const sampleAttachedFiles = JSON.stringify(sampleFiles);
 
 export const Basic: Story = {
   args: {
-    name: 'Default Score Info Block',
-    output: {
-      name: 'Temperature Check',
-      description: 'A score that measures the customer\'s sentiment',
-      accuracy: 0.92,
-      value: 0.78,
-      updatedAt: '2023-10-27T10:05:00Z',
-    },
+    name: 'Basic Report',
+    title: 'Report Block',
+    subtitle: 'Demonstration of the base report block component',
+    notes: 'This example shows the common functionality that all report blocks inherit.',
+    id: 'basic-report-block',
     position: 0,
+    type: 'CustomReport',
+    log: 'This is a sample log output for the report block.',
+    attachedFiles: sampleAttachedFiles,
+    output: JSON.stringify({ message: 'This is a sample JSON output.' }),
     config: {
-      class: 'default',
-    },
-  },
-};
-
-export const LongContent: Story = {
-  args: {
-    name: 'Default Feedback Analysis Block',
-    output: {
-      feedback_categories: {
-        positive: [
-          'User interface is intuitive',
-          'Customer service is responsive',
-          'Navigation is clear and logical',
-          'Documentation is helpful and detailed',
-          'Search functionality works well',
-        ],
-        negative: [
-          'Loading times could be improved',
-          'Occasional errors when submitting forms',
-          'Missing advanced filtering options',
-          'Limited export capabilities',
-          'Some features are difficult to discover',
-        ],
-        neutral: [
-          'Would like to see more customization options',
-          'Instructions could be clearer in some areas',
-          'Not sure about the pricing model',
-          'Integration with other tools is adequate',
-          'Update frequency is reasonable but could be faster',
-        ],
-      },
-      sentiment_analysis: {
-        overall_score: 0.65,
-        breakdown: {
-          positive: 0.72,
-          negative: 0.23,
-          neutral: 0.05,
-        },
-        trend: 'Improving',
-        commonWords: ['easy', 'helpful', 'slow', 'confusing', 'reliable', 'intuitive'],
-        longTextExample: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.',
-      },
-    },
-    position: 1,
-    config: {
-      class: 'default',
-    },
-  },
-};
-
-// This story tests the BlockRenderer's handling of unknown types
-export const UnknownBlockType: Story = {
-  args: {
-    name: 'Original Name Before Error',
-    output: {
-      type: 'UnknownType',
-      data: {
-        someKey: 'someValue',
-        anotherKey: 123,
-        nestedData: { foo: 'bar', items: [1, 2, 3] }
+      blockType: 'CustomReport',
+      settings: {
+        option1: true,
+        option2: 'value2'
       }
     },
-    position: 2,
-    config: {
-      class: 'UnknownType',
-      someParam: 'value'
-    }
+    children: (
+      <div className="bg-card p-4 rounded-md mt-4">
+        <h3 className="text-lg font-medium mb-2">Custom Report Content</h3>
+        <p className="text-sm text-muted-foreground">
+          Any specialized report can place its unique content here while inheriting
+          standard report features like title display, log viewing, and file attachments.
+        </p>
+        <div className="grid grid-cols-3 gap-4 mt-4">
+          <div className="bg-primary/10 p-3 rounded-md">
+            <div className="text-xl font-bold">42</div>
+            <div className="text-xs text-muted-foreground">Metric One</div>
+          </div>
+          <div className="bg-primary/10 p-3 rounded-md">
+            <div className="text-xl font-bold">87%</div>
+            <div className="text-xs text-muted-foreground">Metric Two</div>
+          </div>
+          <div className="bg-primary/10 p-3 rounded-md">
+            <div className="text-xl font-bold">13.5</div>
+            <div className="text-xs text-muted-foreground">Metric Three</div>
+          </div>
+        </div>
+      </div>
+    ),
   },
 };
 
-// Keep ComplexData if needed, showing default rendering
-export const ComplexDataDefault: Story = {
+export const WithWarning: Story = {
   args: {
-    name: 'Default Complex Data Block',
-    output: {
-      type: 'ComplexData',
-      data: {
-        metrics: [
-          { name: 'Accuracy', value: 0.95 },
-          { name: 'Precision', value: 0.87 },
-          { name: 'Recall', value: 0.92 },
-        ],
-        analysis: {
-          summary: 'This is a complex data structure that would be rendered by the ReportBlock',
-          details: 'When no specialized block component is available, ReportBlock provides a fallback visualization'
-        },
-        timestamps: {
-          started: '2023-10-15T08:30:00Z',
-          completed: '2023-10-15T09:45:00Z',
-          duration: '1h 15m'
-        }
+    ...Basic.args,
+    title: 'Report With Warning',
+    warning: 'This is a warning message that appears at the top of the report.',
+    children: (
+      <div className="bg-card p-4 rounded-md mt-4">
+        <h3 className="text-lg font-medium mb-2">Report with Warning</h3>
+        <p className="text-sm text-muted-foreground">
+          This example demonstrates how warnings are displayed in reports.
+        </p>
+      </div>
+    ),
+  },
+};
+
+export const WithError: Story = {
+  args: {
+    ...Basic.args,
+    title: 'Report With Error',
+    error: 'This is an error message that appears at the top of the report. Errors take precedence over warnings.',
+    children: (
+      <div className="bg-card p-4 rounded-md mt-4">
+        <h3 className="text-lg font-medium mb-2">Report with Error</h3>
+        <p className="text-sm text-muted-foreground">
+          This example demonstrates how errors are displayed in reports.
+        </p>
+      </div>
+    ),
+  },
+};
+
+export const WithDateRange: Story = {
+  args: {
+    ...Basic.args,
+    title: 'Report With Date Range',
+    dateRange: {
+      start: '2023-01-01T00:00:00Z',
+      end: '2023-03-31T23:59:59Z',
+    },
+    children: (
+      <div className="bg-card p-4 rounded-md mt-4">
+        <h3 className="text-lg font-medium mb-2">Report with Date Range</h3>
+        <p className="text-sm text-muted-foreground">
+          This example demonstrates how date ranges are displayed in reports.
+        </p>
+      </div>
+    ),
+  },
+};
+
+export const DefaultRenderer: Story = {
+  args: {
+    name: 'Default Report',
+    id: 'default-report',
+    position: 0,
+    type: 'default',
+    config: {
+      option1: 'value1',
+      option2: 42,
+      nested: {
+        key1: 'nested value',
+        key2: true
       }
     },
-    position: 3,
-    config: {
-      class: 'default',
-      analysisType: 'comprehensive'
+    output: {
+      result: 'success',
+      data: {
+        item1: 'value1',
+        item2: 'value2'
+      },
+      metrics: [10, 20, 30, 40]
+    },
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'When no children are provided, the ReportBlock falls back to showing JSON of the output and config'
+      }
     }
+  }
+};
+
+export const Minimal: Story = {
+  args: {
+    name: 'Minimal Report',
+    id: 'minimal-report',
+    position: 0,
+    type: 'CustomReport',
+    output: {},
+    config: {},
+    children: (
+      <div className="bg-card p-4 rounded-md">
+        <p className="text-sm">
+          This is a minimal report with only essential properties.
+        </p>
+      </div>
+    ),
+  },
+};
+
+export const Default: Story = {
+  args: {
+    block: {
+      id: 'block1',
+      reportId: 'report1',
+      name: 'Sample Report Block',
+      type: 'TextBlock',
+      position: 1,
+      output: JSON.stringify({ message: 'This is a sample JSON output.' }),
+      log: 'This is a sample log output for the report block.',
+      attachedFiles: sampleAttachedFiles,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      configuration: JSON.stringify({ setting: 'value' }),
+    },
   },
 }; 

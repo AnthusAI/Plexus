@@ -439,6 +439,24 @@ export default function BatchesDashboard({
   const subscriptionsRef = useRef<Subscription[]>([])
   const params = useParams()
   const pathname = usePathname()
+  
+  // Ref map to track batch job elements for scroll-to-view functionality
+  const batchJobRefsMap = useRef<Map<string, HTMLTableRowElement | null>>(new Map())
+  
+  // Function to scroll to a selected batch job
+  const scrollToSelectedBatchJob = useCallback((batchJobId: string) => {
+    // Use requestAnimationFrame to ensure the layout has updated after selection
+    requestAnimationFrame(() => {
+      const batchJobElement = batchJobRefsMap.current.get(batchJobId);
+      if (batchJobElement) {
+        batchJobElement.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start', // Align to the top of the container
+          inline: 'nearest'
+        });
+      }
+    });
+  }, [])
   // Use a ref to track if this is the initial render for URL updates
   const isInitialUrlUpdateRef = useRef(true)
   // Add back the dragStateRef
@@ -620,6 +638,11 @@ export default function BatchesDashboard({
     const newPathname = `/lab/batches/${job.id}`;
     window.history.pushState(null, '', newPathname);
     
+    // Scroll to the selected batch job after a brief delay to allow layout updates
+    setTimeout(() => {
+      scrollToSelectedBatchJob(job.id);
+    }, 100);
+    
     if (isNarrowViewport) {
       setIsFullWidth(true);
     }
@@ -733,6 +756,9 @@ export default function BatchesDashboard({
                         onClick={() => handleBatchJobClick(job)}
                         className={`cursor-pointer transition-colors duration-200 
                           ${job.id === selectedBatchJob?.id ? 'bg-muted' : 'hover:bg-muted'}`}
+                        ref={(el) => {
+                          batchJobRefsMap.current.set(job.id, el);
+                        }}
                       >
                         <TableCell>
                           {/* Mobile variant - visible when container is narrow */}
