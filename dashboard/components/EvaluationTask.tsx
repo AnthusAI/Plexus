@@ -362,7 +362,7 @@ const GridContent = React.memo(({ data, extra, isSelected }: {
   ]);
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2 pb-3">
       <TaskStatus {...taskStatus} />
       {extra && (
         <EvaluationListAccuracyBar 
