@@ -27,7 +27,7 @@ export const Square = {
   },
   decorators: [
     (Story: StoryFn<typeof SquareLogo>, context) => (
-      <div className="w-full flex justify-center bg-background p-8">
+      <div className="w-full h-screen flex justify-center items-center bg-white p-8">
         <div className="w-1/2">
           <Story {...context.args} />
         </div>
@@ -39,8 +39,17 @@ export const Square = {
 export const Wide = {
   args: {
     variant: LogoVariant.Wide,
-    className: 'w-128',
+    className: 'w-full',
   },
+  decorators: [
+    (Story: StoryFn<typeof SquareLogo>, context) => (
+      <div className="w-full h-screen flex justify-center items-center bg-white p-8">
+        <div className="w-1/2">
+          <Story {...context.args} />
+        </div>
+      </div>
+    ),
+  ],
 } satisfies Story
 
 export const Narrow = {
@@ -49,12 +58,109 @@ export const Narrow = {
     className: 'w-full',
   },
   decorators: [
-    (Story: StoryFn<typeof SquareLogo>) => (
-      <div className="w-24 aspect-square">
-        <Story {...Narrow.args} />
+    (Story: StoryFn<typeof SquareLogo>, context) => (
+      <div className="w-full h-screen flex justify-center items-center bg-white p-8">
+        <div className="w-24 aspect-square">
+          <Story {...context.args} />
+        </div>
       </div>
     ),
   ],
+} satisfies Story
+
+export const WithShadow = {
+  args: {
+    variant: LogoVariant.Square,
+    className: 'w-64',
+    shadowEnabled: true,
+  },
+  decorators: [
+    (Story: StoryFn<typeof SquareLogo>, context) => (
+      <div className="w-full h-screen flex justify-center items-center p-8" style={{ backgroundColor: '#ffffff' }}>
+        <div className="w-1/2">
+          <Story {...context.args} />
+        </div>
+      </div>
+    ),
+  ],
+} satisfies Story
+
+export const WideWithShadow = {
+  args: {
+    variant: LogoVariant.Wide,
+    className: 'w-full',
+    shadowEnabled: true,
+  },
+  decorators: [
+    (Story: StoryFn<typeof SquareLogo>, context) => (
+      <div className="w-full h-screen flex justify-center items-center p-8" style={{ backgroundColor: '#ffffff' }}>
+        <div className="w-1/2">
+          <Story {...context.args} />
+        </div>
+      </div>
+    ),
+  ],
+} satisfies Story
+
+export const NarrowWithShadow = {
+  args: {
+    variant: LogoVariant.Narrow,
+    className: 'w-full',
+    shadowEnabled: true,
+  },
+  decorators: [
+    (Story: StoryFn<typeof SquareLogo>, context) => (
+      <div className="w-full h-screen flex justify-center items-center p-8" style={{ backgroundColor: '#ffffff' }}>
+        <div className="w-24 aspect-square">
+          <Story {...context.args} />
+        </div>
+      </div>
+    ),
+  ],
+} satisfies Story
+
+export const ShadowWidths = {
+  render: () => (
+    <div className="space-y-8 p-8" style={{ backgroundColor: '#ffffff' }}>
+      <div className="text-lg font-bold">Shadow Widths</div>
+      <div className="flex items-center justify-around">
+        <div className="text-center">
+          <div className="text-sm text-muted-foreground mb-2">12px</div>
+          <SquareLogo variant={LogoVariant.Wide} className="w-96" shadowEnabled shadowWidth="12px" />
+        </div>
+        <div className="text-center">
+          <div className="text-sm text-muted-foreground mb-2">24px (default)</div>
+          <SquareLogo variant={LogoVariant.Wide} className="w-96" shadowEnabled />
+        </div>
+        <div className="text-center">
+          <div className="text-sm text-muted-foreground mb-2">48px</div>
+          <SquareLogo variant={LogoVariant.Wide} className="w-96" shadowEnabled shadowWidth="48px" />
+        </div>
+      </div>
+    </div>
+  ),
+} satisfies Story
+
+export const ShadowIntensities = {
+  render: () => (
+    <div className="space-y-8 p-8" style={{ backgroundColor: '#ffffff' }}>
+      <div className="text-lg font-bold">Shadow Intensities</div>
+      <div className="flex items-center justify-around">
+        <div className="text-center">
+          <div className="text-sm text-muted-foreground mb-2">0.25</div>
+          <SquareLogo variant={LogoVariant.Narrow} className="w-24" shadowEnabled shadowIntensity={0.25} />
+        </div>
+        <div className="text-center">
+          <div className="text-sm text-muted-foreground mb-2">0.5 (default)</div>
+          <SquareLogo variant={LogoVariant.Narrow} className="w-24" shadowEnabled />
+        </div>
+        <div className="text-center">
+          <div className="text-sm text-muted-foreground mb-2">0.9</div>
+          <SquareLogo variant={LogoVariant.Narrow} className="w-24" shadowEnabled shadowIntensity={0.9} />
+        </div>
+      </div>
+    </div>
+  ),
 } satisfies Story
 
 export const AllVariants = {
