@@ -1277,7 +1277,7 @@ class LangGraphScore(Score, LangChainUser):
                 logging.debug(f"Original graph_result['metadata'] (truncated): {truncate_dict_strings(graph_result['metadata'], 100) if isinstance(graph_result['metadata'], dict) else str(graph_result['metadata'])[:100]}")
 
                 # Ensure the incoming metadata is serializable BEFORE merging
-                serializable_graph_metadata = ensure_serializable(graph_result['metadata'])
+                serializable_graph_metadata = _ensure_serializable(graph_result['metadata'])
                 logging.debug(f"Serialized graph_result['metadata'] type: {type(serializable_graph_metadata)}")
                 logging.debug(f"Serialized graph_result['metadata'] (truncated): {truncate_dict_strings(serializable_graph_metadata, 100) if isinstance(serializable_graph_metadata, dict) else str(serializable_graph_metadata)[:100]}")
 
@@ -1297,7 +1297,7 @@ class LangGraphScore(Score, LangChainUser):
                 if result.metadata and isinstance(result.metadata, dict):
                     logging.debug(f"Pre-final serialization result.metadata type: {type(result.metadata)}")
                     logging.debug(f"Pre-final serialization result.metadata (truncated): {truncate_dict_strings(result.metadata, 100)}")
-                    result.metadata = ensure_serializable(result.metadata)
+                    result.metadata = _ensure_serializable(result.metadata)
                     logging.debug(f"Post-final serialization result.metadata type: {type(result.metadata)}")
                     logging.debug(f"Post-final serialization result.metadata (truncated): {truncate_dict_strings(result.metadata, 100)}")
                     logging.info("Final serialization pass on result.metadata completed.")
