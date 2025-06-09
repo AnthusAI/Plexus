@@ -9,7 +9,9 @@ interface MetricsData {
   itemsAveragePerHour: number
   itemsPeakHourly: number
   scoreResultsPeakHourly: number
-  chartData: Array<{ time: string; items: number; scoreResults: number }>
+  itemsTotal24h: number
+  scoreResultsTotal24h: number
+  chartData: Array<{ time: string; items: number; scoreResults: number; bucketStart: string; bucketEnd: string }>
 }
 
 interface UseItemsMetricsResult {
@@ -19,15 +21,15 @@ interface UseItemsMetricsResult {
   refetch: () => void
 }
 
-// Helper function to get hourly time buckets for the last 24 hours
+// Helper function to get hourly time buckets for the last 24 hours (rolling buckets based on current time)
 function getHourlyBuckets(): string[] {
   const buckets: string[] = []
   const now = new Date()
   
   for (let i = 23; i >= 0; i--) {
-    const hour = new Date(now)
-    hour.setHours(hour.getHours() - i, 0, 0, 0)
-    buckets.push(hour.toISOString())
+    const bucketStart = new Date(now)
+    bucketStart.setTime(now.getTime() - (i * 60 * 60 * 1000)) // Go back i hours from now
+    buckets.push(bucketStart.toISOString())
   }
   
   return buckets
@@ -306,7 +308,9 @@ export function useItemsMetrics(): UseItemsMetricsResult {
         const bucketData = {
           time: formatTimeForDisplay(bucketStart),
           items: itemsInBucket.length,
-          scoreResults: scoreResultsInBucket.length
+          scoreResults: scoreResultsInBucket.length,
+          bucketStart,
+          bucketEnd
         }
 
         console.log(`📊 useItemsMetrics: Bucket ${index}:`, {
@@ -361,6 +365,8 @@ export function useItemsMetrics(): UseItemsMetricsResult {
         itemsAveragePerHour,
         itemsPeakHourly,
         scoreResultsPeakHourly,
+        itemsTotal24h: itemsLast24Hours.length,
+        scoreResultsTotal24h: scoreResultsLast24Hours.length,
         chartData
       }
       
