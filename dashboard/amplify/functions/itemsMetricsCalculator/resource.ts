@@ -13,7 +13,7 @@ const __dirname = path.dirname(__filename);
 
 // Interface for ItemsMetricsCalculator stack props
 interface ItemsMetricsCalculatorStackProps extends StackProps {
-  graphqlEndpoint?: string;
+  graphqlEndpointArn?: string;
   appSyncApiId?: string;
 }
 
@@ -28,7 +28,7 @@ export class ItemsMetricsCalculatorStack extends Stack {
     const functionDir = path.join(__dirname, '.');
 
     // Get GraphQL configuration from props or environment
-    const graphqlEndpoint = props.graphqlEndpoint || process.env.GRAPHQL_ENDPOINT || 'WILL_BE_SET_AFTER_DEPLOYMENT';
+    const graphqlEndpointArn = props.graphqlEndpointArn || process.env.GRAPHQL_ENDPOINT_ARN || 'WILL_BE_SET_AFTER_DEPLOYMENT';
     const appSyncApiId = props.appSyncApiId || process.env.APPSYNC_API_ID || 'WILL_BE_SET_AFTER_DEPLOYMENT';
 
     this.itemsMetricsCalculatorFunction = new lambda.Function(this, 'ItemsMetricsCalculatorFunction', {
@@ -65,7 +65,7 @@ export class ItemsMetricsCalculatorStack extends Stack {
       memorySize: 512, // More memory for processing large datasets
       environment: {
         // Use AWS-standard environment variable names that match the GraphQL resolver
-        API_PLEXUSDASHBOARD_GRAPHQLAPIENDPOINTOUTPUT: graphqlEndpoint,
+        API_PLEXUSDASHBOARD_GRAPHQLAPIARNOUTPUT: graphqlEndpointArn,
         AWS_REGION: this.region
       }
     });
