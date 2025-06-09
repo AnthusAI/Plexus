@@ -3,6 +3,7 @@ import { data } from './data/resource';
 import { auth } from './auth/resource';
 import { reportBlockDetails, attachments, scoreResultAttachments } from './storage/resource';
 import { TaskDispatcherStack } from './functions/taskDispatcher/resource';
+import { ItemsMetricsCalculatorStack } from './functions/itemsMetricsCalculator/resource';
 import { Stack } from 'aws-cdk-lib';
 import { PolicyStatement } from 'aws-cdk-lib/aws-iam';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
@@ -63,6 +64,17 @@ taskDispatcherStack.taskDispatcherFunction.addToRolePolicy(
         actions: ['sqs:SendMessage'],
         resources: [process.env.CELERY_QUEUE_URL || '*']
     })
+);
+
+// Create the ItemsMetricsCalculator stack
+const itemsMetricsCalculatorStack = new ItemsMetricsCalculatorStack(
+    backend.createStack('ItemsMetricsCalculatorStack'),
+    'itemsMetricsCalculator',
+    {
+        // Pass the GraphQL endpoint and AppSync API ID from the data backend
+        graphqlEndpoint: backend.data.resources.graphqlApi.graphqlEndpoint,
+        appSyncApiId: backend.data.resources.graphqlApi.apiId
+    }
 );
 
 export { backend };

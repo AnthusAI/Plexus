@@ -51,7 +51,25 @@ const getResourceByShareTokenHandler = defineFunction({
     entry: './resolvers/getResourceByShareToken.ts'
 });
 
+const getItemsMetricsHandler = defineFunction({
+    entry: './resolvers/getItemsMetrics.ts'
+});
+
 const schema = a.schema({
+    // Custom query to get items metrics
+    getItemsMetrics: a.customQuery()
+        .arguments({
+            accountId: a.string().required(),
+            hours: a.integer().default(24),
+            bucketMinutes: a.integer().default(60)
+        })
+        .returns(a.json())
+        .handler(a.handler.function(getItemsMetricsHandler))
+        .authorization((allow) => [
+            allow.publicApiKey(),
+            allow.authenticated()
+        ]),
+
     Account: a
         .model({
             name: a.string().required(),

@@ -263,8 +263,10 @@ const GET_REPORT_WITH_BLOCKS = `
           id
           name
           position
+          type
           output
           log
+          attachedFiles
         }
       }
     }
@@ -382,8 +384,10 @@ const SUBSCRIBE_ON_CREATE_REPORT_BLOCK = `
       id
       name
       position
+      type
       output
       log
+      attachedFiles
       reportId
     }
   }
@@ -395,8 +399,10 @@ const SUBSCRIBE_ON_UPDATE_REPORT_BLOCK = `
       id
       name
       position
+      type
       output
       log
+      attachedFiles
       reportId
     }
   }
@@ -438,8 +444,10 @@ interface RawReportBlock {
   id: string;
   name?: string | null;
   position: number;
+  type: string;
   output: Record<string, any>;
   log?: string | null;
+  attachedFiles?: string[] | null;
 }
 
 // Function to safely access nested properties in objects
@@ -846,12 +854,13 @@ export default function ReportsDashboard({
           }
           
           return {
-            type: outputData.class || 'unknown', // Extract type from output.class
+            type: block.type || outputData.class || 'unknown', // Use API type first, then output.class as fallback
             config: outputData, // Use output as config
             output: outputData,
             log: block.log || undefined,
             name: block.name || undefined,
-            position: block.position
+            position: block.position,
+            attachedFiles: block.attachedFiles || undefined
           };
         });
         

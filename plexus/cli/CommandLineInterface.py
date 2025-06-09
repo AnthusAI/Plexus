@@ -6,6 +6,7 @@ from typing import Dict, Any
 import click
 import os
 import json
+import logging
 
 from plexus.cli.TaskCommands import tasks, task
 from plexus.cli.ItemCommands import items, item
@@ -24,6 +25,7 @@ from plexus.cli.ScoreChatCommands import score_chat
 from plexus.cli.DataLakeCommands import lake_group
 from plexus.cli.FeedbackCommands import feedback
 from plexus.cli.ScorecardCommands import scorecards, scorecard
+from plexus.cli.RecordCountCommands import count
 
 # Define OrderCommands class for command ordering
 class OrderCommands(click.Group):
@@ -32,11 +34,25 @@ class OrderCommands(click.Group):
 
 # Create the main CLI group
 @click.group(cls=OrderCommands)
-def cli():
+@click.option('--debug', is_flag=True, help="Enable debug logging.")
+def cli(debug):
     """
     Plexus CLI for managing scorecards, scores, and evaluations.
     """
-    pass
+    log_level = logging.DEBUG if debug else logging.INFO
+    # Get the root logger and set its level. This is more robust than
+    # basicConfig, which only works if no handlers are configured.
+    root_logger = logging.getLogger()
+    
+    # If the root logger already has handlers, just update their level
+    if root_logger.handlers:
+        for handler in root_logger.handlers:
+            handler.setLevel(log_level)
+    else:
+        # Otherwise, configure the basicConfig
+        logging.basicConfig(level=log_level)
+    
+    root_logger.setLevel(log_level)
 
 # Register all commands
 cli.add_command(score)
@@ -62,6 +78,7 @@ cli.add_command(score_chat)
 cli.add_command(lake_group)
 cli.add_command(feedback)
 cli.add_command(scorecards)
+cli.add_command(count)
 
 def main():
     """
