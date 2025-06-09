@@ -7,6 +7,7 @@ import { AreaChart, Area, XAxis, CartesianGrid, ResponsiveContainer } from 'rech
 import { cn } from '@/lib/utils'
 import { useItemsMetrics } from '@/hooks/useItemsMetrics'
 import { Loader2 } from 'lucide-react'
+import { Timestamp } from '@/components/ui/timestamp'
 
 // Fallback data for the area chart when loading or no data
 const fallbackChartData = [
@@ -35,12 +36,66 @@ const toPercentage = (value: number, max: number): number => {
   return Math.round((value / max) * 100)
 }
 
+// Custom tooltip component for the chart
+const CustomChartTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    // Get the bucket times from the payload data
+    const dataPoint = payload[0]?.payload
+    const bucketStart = dataPoint?.bucketStart ? new Date(dataPoint.bucketStart) : null
+    const bucketEnd = dataPoint?.bucketEnd ? new Date(dataPoint.bucketEnd) : null
+    
+    return (
+      <div className="bg-background border rounded-lg shadow-lg p-3 text-sm">
+        <div className="space-y-2">
+          {payload.map((entry: any, index: number) => {
+            // Use proper labels from chartConfig
+            const displayName = chartConfig[entry.dataKey as keyof typeof chartConfig]?.label || entry.name
+            return (
+              <div key={index} className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div 
+                    className="w-3 h-3 rounded-sm" 
+                    style={{ backgroundColor: entry.color }}
+                  />
+                  <span className="font-medium">{displayName}:</span>
+                </div>
+                <span className="font-mono font-medium text-foreground">{entry.value}</span>
+              </div>
+            )
+          })}
+        </div>
+        {bucketStart && bucketEnd && (
+          <div className="border-t pt-2 mt-2">
+            <div className="text-xs text-muted-foreground space-y-1">
+              <div className="flex items-center justify-between">
+                <span>From:</span>
+                <Timestamp time={bucketStart} variant="relative" showIcon={false} className="text-xs" />
+              </div>
+              <div className="flex items-center justify-between">
+                <span>To:</span>
+                <Timestamp time={bucketEnd} variant="relative" showIcon={false} className="text-xs" />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+  return null
+}
+
 interface ItemsGaugesProps {
   className?: string
   // Override props for Storybook/testing
   scoreResultsPerHour?: number
   itemsPerHour?: number
-  chartData?: Array<{ time: string; items: number; scoreResults: number }>
+  scoreResultsAveragePerHour?: number
+  itemsAveragePerHour?: number
+  itemsPeakHourly?: number
+  scoreResultsPeakHourly?: number
+  itemsTotal24h?: number
+  scoreResultsTotal24h?: number
+  chartData?: Array<{ time: string; items: number; scoreResults: number; bucketStart?: string; bucketEnd?: string }>
   // Control whether to use real data or override props
   useRealData?: boolean
 }
@@ -48,7 +103,13 @@ interface ItemsGaugesProps {
 export function ItemsGauges({ 
   className, 
   scoreResultsPerHour: overrideScoreResults, 
-  itemsPerHour: overrideItems, 
+  itemsPerHour: overrideItems,
+  scoreResultsAveragePerHour: overrideScoreResultsAverage,
+  itemsAveragePerHour: overrideItemsAverage,
+  itemsPeakHourly: overrideItemsPeak,
+  scoreResultsPeakHourly: overrideScoreResultsPeak,
+  itemsTotal24h: overrideItemsTotal24h,
+  scoreResultsTotal24h: overrideScoreResultsTotal24h,
   chartData: overrideChartData,
   useRealData = true 
 }: ItemsGaugesProps) {
@@ -57,10 +118,12 @@ export function ItemsGauges({
   // Determine which data to use
   const scoreResultsPerHour = useRealData && metrics ? metrics.scoreResultsPerHour : (overrideScoreResults ?? 0)
   const itemsPerHour = useRealData && metrics ? metrics.itemsPerHour : (overrideItems ?? 0)
-  const scoreResultsAveragePerHour = useRealData && metrics ? metrics.scoreResultsAveragePerHour : 0
-  const itemsAveragePerHour = useRealData && metrics ? metrics.itemsAveragePerHour : 0
-  const itemsPeakHourly = useRealData && metrics ? metrics.itemsPeakHourly : 50
-  const scoreResultsPeakHourly = useRealData && metrics ? metrics.scoreResultsPeakHourly : 300
+  const scoreResultsAveragePerHour = useRealData && metrics ? metrics.scoreResultsAveragePerHour : (overrideScoreResultsAverage ?? 0)
+  const itemsAveragePerHour = useRealData && metrics ? metrics.itemsAveragePerHour : (overrideItemsAverage ?? 0)
+  const itemsPeakHourly = useRealData && metrics ? metrics.itemsPeakHourly : (overrideItemsPeak ?? Math.max(...(overrideChartData ?? fallbackChartData).map(point => point.items), 50))
+  const scoreResultsPeakHourly = useRealData && metrics ? metrics.scoreResultsPeakHourly : (overrideScoreResultsPeak ?? Math.max(...(overrideChartData ?? fallbackChartData).map(point => point.scoreResults), 300))
+  const itemsTotal24h = useRealData && metrics ? metrics.itemsTotal24h : (overrideItemsTotal24h ?? itemsAveragePerHour * 24)
+  const scoreResultsTotal24h = useRealData && metrics ? metrics.scoreResultsTotal24h : (overrideScoreResultsTotal24h ?? scoreResultsAveragePerHour * 24)
   const chartData = useRealData && metrics ? metrics.chartData : (overrideChartData ?? fallbackChartData)
   
   
@@ -73,6 +136,10 @@ export function ItemsGauges({
       scoreResultsAveragePerHour,
       itemsPerHour,
       itemsAveragePerHour
+    },
+    totals: {
+      scoreResultsTotal24h,
+      itemsTotal24h
     },
     dynamicScaling: {
       itemsPeakHourly,
@@ -139,7 +206,17 @@ export function ItemsGauges({
             value={scoreResultsPerHour}
             beforeValue={scoreResultsAveragePerHour}
             title="Score Results/Hour"
-            information={`Current: ${scoreResultsPerHour} | Average: ${scoreResultsAveragePerHour} | Peak: ${scoreResultsPeakHourly}`}
+            information={`Current: ${scoreResultsPerHour}
+Current hourly rate (last 60 minutes)
+
+Average: ${scoreResultsAveragePerHour}
+24-hour average hourly rate
+
+Peak: ${scoreResultsPeakHourly}
+Peak hourly rate over last 24 hours
+
+Total: ${scoreResultsTotal24h}
+Total score results over last 24 hours`}
             valueUnit=""
             min={0}
             max={scoreResultsPeakHourly}
@@ -160,7 +237,17 @@ export function ItemsGauges({
             value={itemsPerHour}
             beforeValue={itemsAveragePerHour}
             title="Items/Hour"
-            information={`Current: ${itemsPerHour} | Average: ${itemsAveragePerHour} | Peak: ${itemsPeakHourly}`}
+            information={`Current: ${itemsPerHour}
+Current hourly rate (last 60 minutes)
+
+Average: ${itemsAveragePerHour}
+24-hour average hourly rate
+
+Peak: ${itemsPeakHourly}
+Peak hourly rate over last 24 hours
+
+Total: ${itemsTotal24h}
+Total items over last 24 hours`}
             valueUnit=""
             min={0}
             max={itemsPeakHourly}
@@ -218,7 +305,7 @@ export function ItemsGauges({
                   />
                   <ChartTooltip
                     cursor={false}
-                    content={<ChartTooltipContent hideLabel />}
+                    content={<CustomChartTooltip />}
                   />
                   <Area
                     dataKey="items"

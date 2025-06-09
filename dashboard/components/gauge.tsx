@@ -32,6 +32,12 @@ interface GaugeProps {
 
 const calculateAngle = (percent: number) => {
   // Use 7π/6 (210 degrees) - halfway between π and 4π/3
+  // For pegged gauges (105%), extend slightly beyond the normal range
+  if (percent > 100) {
+    // Map 100-105% to a small extension beyond the normal range
+    const overPercent = Math.min(percent - 100, 5) / 5 // 0-1 for 100-105%
+    return (Math.PI * 7/6) + (overPercent * (Math.PI * 7/6) * 0.05) // Add 5% more arc
+  }
   return (percent / 100) * (Math.PI * 7/6)
 }
 
@@ -77,9 +83,14 @@ const GaugeComponent: React.FC<GaugeProps> = ({
   const containerRef = React.useRef<HTMLDivElement>(null)
   const radius = 80
   const strokeWidth = 25
-  const normalizedValue = value !== undefined 
+  const rawNormalizedValue = value !== undefined 
     ? ((value - min) / (max - min)) * 100
     : ((0 - min) / (max - min)) * 100  // When no data, point needle at 0 position
+  
+  // Check if value is pegged (exceeds max)
+  const isPegged = value !== undefined && value > max
+  // Cap normalized value at 105% for pegged gauges
+  const normalizedValue = isPegged ? 105 : Math.min(rawNormalizedValue, 100)
 
   useEffect(() => {
     const startTime = performance.now()
@@ -231,8 +242,12 @@ const GaugeComponent: React.FC<GaugeProps> = ({
   }
 
   const renderTicks = (minValue: number, maxValue: number) => {
-    // Create an array with all segment starts plus 100
-    const allTicks = [...segments || [], { start: 100, end: 100, color: 'transparent' }]
+    // Create an array with all segment starts plus 100, and 105 if pegged
+    const baseTicks = [...segments || [], { start: 100, end: 100, color: 'transparent' }]
+    if (isPegged) {
+      baseTicks.push({ start: 105, end: 105, color: 'transparent' })
+    }
+    const allTicks = baseTicks
       .map(segment => segment.start)
       .sort((a, b) => a - b); // Sort in ascending order
 
@@ -244,6 +259,9 @@ const GaugeComponent: React.FC<GaugeProps> = ({
     const visibleTicks = new Set<number>();
     visibleTicks.add(100); // Always show the maximum tick
     visibleTicks.add(0);   // Always show the minimum tick
+    if (isPegged) {
+      visibleTicks.add(105); // Always show the pegged tick when over max
+    }
 
     // Process remaining ticks from highest to lowest
     for (let i = allTicks.length - 2; i >= 0; i--) {
@@ -260,7 +278,12 @@ const GaugeComponent: React.FC<GaugeProps> = ({
     }
 
     // Render only the visible ticks
-    return [...segments || [], { start: 100, end: 100, color: 'transparent' }]
+    const ticksToRender = [...segments || [], { start: 100, end: 100, color: 'transparent' }]
+    if (isPegged) {
+      ticksToRender.push({ start: 105, end: 105, color: 'transparent' })
+    }
+    
+    return ticksToRender
       .filter(segment => visibleTicks.has(segment.start))
       .map((segment, index) => {
         const angle = calculateAngle(segment.start)
@@ -281,7 +304,13 @@ const GaugeComponent: React.FC<GaugeProps> = ({
         const textY = textOffset * Math.sin(angle - Math.PI / 2)
 
         // Calculate the actual value based on min/max
-        const tickValue = minValue + (segment.start / 100) * (maxValue - minValue)
+        let tickValue: number
+        if (segment.start === 105 && isPegged && value !== undefined) {
+          // For the 105% pegged tick, show the actual over-max value
+          tickValue = value
+        } else {
+          tickValue = minValue + (segment.start / 100) * (maxValue - minValue)
+        }
         // Format decimal values without leading zeros
         const formattedTickValue = formatDecimalValue(tickValue, decimalPlaces)
 
@@ -292,8 +321,8 @@ const GaugeComponent: React.FC<GaugeProps> = ({
               y1={y}
               x2={lineEndX}
               y2={lineEndY}
-              className="stroke-muted-foreground"
-              strokeWidth="0.5"
+              className={segment.start === 105 && isPegged ? "stroke-[var(--gauge-great)]" : "stroke-muted-foreground"}
+              strokeWidth={segment.start === 105 && isPegged ? "1.5" : "0.5"}
             />
             <g transform={`translate(${textX} ${textY}) rotate(105)`}>
               <text
@@ -302,7 +331,7 @@ const GaugeComponent: React.FC<GaugeProps> = ({
                 textAnchor="middle"
                 dominantBaseline="middle"
                 fontSize="12"
-                className="fill-muted-foreground"
+                className={segment.start === 105 && isPegged ? "fill-[var(--gauge-great)] font-medium" : "fill-muted-foreground"}
               >
                 {formattedTickValue}
               </text>
@@ -425,7 +454,7 @@ const GaugeComponent: React.FC<GaugeProps> = ({
                       <path
                         d={`M 0,-${radius} L -6,0 L 6,0 Z`}
                         className={cn(
-                          priority ? "fill-focus" : "fill-foreground",
+                          isPegged ? "fill-[var(--gauge-great)]" : priority ? "fill-focus" : "fill-foreground",
                           value === undefined && "fill-card",
                           "transition-[fill] duration-500 ease-in-out"
                         )}
@@ -487,11 +516,51 @@ const GaugeComponent: React.FC<GaugeProps> = ({
                           </button>
                         </PopoverTrigger>
                         <PopoverContent className="w-80 text-sm">
-                          {information.split('\n\n').map((paragraph, index) => (
-                            <p key={index} className={index > 0 ? 'mt-4' : ''}>
-                              {paragraph}
-                            </p>
-                          ))}
+                          {(() => {
+                            // Check if this is the new table format (contains lines with just labels and numbers)
+                            const lines = information.split('\n')
+                            const isTableFormat = lines.some(line => /^(Current|Average|Peak|Total):\s*\d+$/.test(line.trim()))
+                            
+                            if (isTableFormat) {
+                              // Parse table format: label: value followed by description
+                              const rows = []
+                              
+                              // Filter out empty lines first
+                              const nonEmptyLines = lines.filter(line => line.trim() !== '')
+                              
+                              for (let i = 0; i < nonEmptyLines.length; i += 2) {
+                                const labelLine = nonEmptyLines[i]?.trim()
+                                const descLine = nonEmptyLines[i + 1]?.trim()
+                                if (labelLine && descLine) {
+                                  const match = labelLine.match(/^(.+):\s*(.+)$/)
+                                  if (match) {
+                                    rows.push({ label: match[1], value: match[2], description: descLine })
+                                  }
+                                }
+                              }
+                              
+                              return (
+                                <div className="space-y-3">
+                                  {rows.map((row, index) => (
+                                    <div key={index} className="flex justify-between items-start">
+                                      <div className="flex-1">
+                                        <div className="font-medium">{row.label}</div>
+                                        <div className="text-xs text-muted-foreground mt-0.5">{row.description}</div>
+                                      </div>
+                                      <div className="ml-6 font-mono font-medium text-right text-foreground">{row.value}</div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )
+                            } else {
+                              // Fall back to original paragraph format
+                              return information.split('\n\n').map((paragraph, index) => (
+                                <p key={index} className={index > 0 ? 'mt-4' : ''}>
+                                  {paragraph}
+                                </p>
+                              ))
+                            }
+                          })()}
                           {informationUrl && (
                             <a 
                               href={informationUrl}
