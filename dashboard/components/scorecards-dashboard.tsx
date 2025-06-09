@@ -989,6 +989,15 @@ export default function ScorecardsComponent({
             setSelectedScore(null);
             setMaximizedScoreId(null);
           }}
+          exampleItems={scorecardExamples.map(example => {
+            // Extract item ID from "item:uuid" format
+            const itemId = example.replace('item:', '');
+            return {
+              id: itemId,
+              displayValue: `Item ${itemId.slice(0, 8)}...` // Show first 8 chars of ID as display
+            };
+          })}
+          scorecardName={selectedScorecard?.name}
         />
       </div>
     );
