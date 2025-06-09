@@ -271,7 +271,21 @@ class Classifier(BaseNode):
             else:
                 logging.info("Building new messages from prompt template")
                 try:
-                    prompt = prompt_templates[0].format_prompt(**state.model_dump())
+                    state_dict = state.model_dump()
+                    logging.info(f"Template context keys: {list(state_dict.keys())}")
+                    logging.info(f"Looking for enrollment_type_detector in state: {'enrollment_type_detector' in state_dict}")
+                    
+                    # Flatten node results into the state dict for template access
+                    if 'node_results' in state_dict and state_dict['node_results']:
+                        for node_name, node_result in state_dict['node_results'].items():
+                            if node_name not in state_dict:  # Don't overwrite existing keys
+                                state_dict[node_name] = node_result
+                                logging.info(f"Flattened node result for template access: {node_name} = {node_result}")
+                    
+                    if 'enrollment_type_detector' in state_dict:
+                        logging.info(f"enrollment_type_detector value: {state_dict['enrollment_type_detector']}")
+                    
+                    prompt = prompt_templates[0].format_prompt(**state_dict)
                     messages = prompt.to_messages()
                     logging.info(f"Built new messages: {[type(m).__name__ for m in messages]}")
                 except Exception as e:
@@ -620,7 +634,7 @@ class Classifier(BaseNode):
             self.should_retry,
             {
                 "retry": "retry",
-                "end": END,
+                "end": "store_node_result",  # Route successful completion through node result storage
                 "max_retries": "max_retries"
             }
         )
@@ -630,7 +644,7 @@ class Classifier(BaseNode):
         workflow.add_edge("llm_prompt", "llm_call")
         workflow.add_edge("llm_call", "parse")
         workflow.add_edge("retry", "llm_prompt")
-        workflow.add_edge("max_retries", END)
+        workflow.add_edge("max_retries", "store_node_result")  # Route max retries through node result storage too
         logging.info("Added regular edges")
         
         # Set entry point

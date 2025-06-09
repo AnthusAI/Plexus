@@ -797,14 +797,25 @@ def accuracy(
                 logging.info(f"Using first score as primary: {primary_score_config.get('name')} (ID: {primary_score_config.get('id')})")
                 logging.info(f"Using first score '{primary_score_name}' for fetching samples.")
 
-            # Resolve the canonical scorecard name
+            # Resolve the canonical scorecard name, key, and ID
             scorecard_name_resolved = None
+            scorecard_key_resolved = None
+            scorecard_id_resolved = None
             if hasattr(scorecard_instance, 'properties') and isinstance(scorecard_instance.properties, dict):
                 scorecard_name_resolved = scorecard_instance.properties.get('name')
+                scorecard_key_resolved = scorecard_instance.properties.get('key')
+                scorecard_id_resolved = scorecard_instance.properties.get('id')
+                logging.info(f"Resolved from properties: name='{scorecard_name_resolved}', key='{scorecard_key_resolved}', id='{scorecard_id_resolved}' (type: {type(scorecard_id_resolved)})")
             elif hasattr(scorecard_instance, 'name') and not callable(scorecard_instance.name):
                 scorecard_name_resolved = scorecard_instance.name
+                scorecard_key_resolved = getattr(scorecard_instance, 'key', None)
+                scorecard_id_resolved = getattr(scorecard_instance, 'id', None)
+                logging.info(f"Resolved from attributes: name='{scorecard_name_resolved}', key='{scorecard_key_resolved}', id='{scorecard_id_resolved}' (type: {type(scorecard_id_resolved)})")
             else:
                 scorecard_name_resolved = scorecard # Fallback to initial identifier
+                scorecard_key_resolved = scorecard # Fallback to initial identifier
+                scorecard_id_resolved = scorecard # Fallback to initial identifier
+                logging.info(f"Using fallback: name='{scorecard_name_resolved}', key='{scorecard_key_resolved}', id='{scorecard_id_resolved}' (type: {type(scorecard_id_resolved)})")
             
             # Fetch samples using the primary score's config
             logging.info(f"Fetching samples using data source for score: '{primary_score_name}'")
@@ -900,8 +911,40 @@ def accuracy(
                 # In dry run mode, we'll use a mock ID that will be set in AccuracyEvaluation.run
                 eval_id_for_eval = None
             
+            # For Score.from_name(), we need the integer scorecard ID from the YAML, not the UUID from dashboard
+            # Look for the integer ID in the scorecard properties or configurations
+            yaml_scorecard_id = None
+            
+            # First try to get it from properties (API-loaded scorecards)
+            if hasattr(scorecard_instance, 'properties') and isinstance(scorecard_instance.properties, dict):
+                # The integer ID is stored in externalId, not id (id is the UUID)
+                yaml_scorecard_id = scorecard_instance.properties.get('externalId')
+                if yaml_scorecard_id and yaml_scorecard_id.isdigit():
+                    yaml_scorecard_id = int(yaml_scorecard_id)
+                logging.info(f"Found scorecard ID from properties.externalId: {yaml_scorecard_id} (type: {type(yaml_scorecard_id)})")
+            
+            # If not found in properties, try scorecard_configurations (YAML-loaded scorecards)
+            if not yaml_scorecard_id and hasattr(scorecard_instance, 'scorecard_configurations') and scorecard_instance.scorecard_configurations:
+                config = scorecard_instance.scorecard_configurations[0]
+                yaml_scorecard_id = config.get('id')
+                logging.info(f"Found scorecard ID from scorecard_configurations: {yaml_scorecard_id} (type: {type(yaml_scorecard_id)})")
+            
+            # If still not found, try the scorecard_id_resolved we found earlier
+            if not yaml_scorecard_id:
+                yaml_scorecard_id = scorecard_id_resolved
+                logging.info(f"Using scorecard_id_resolved: {yaml_scorecard_id} (type: {type(yaml_scorecard_id)})")
+            
+            # For API-loaded scorecards, use the scorecard key since Score.from_name() looks in scorecard_registry
+            # The integer ID is only useful for YAML-loaded scorecards  
+            if yaml and isinstance(yaml_scorecard_id, int):
+                scorecard_identifier = yaml_scorecard_id
+                logging.info(f"Using integer scorecard ID for YAML-loaded scorecard: {scorecard_identifier}")
+            else:
+                scorecard_identifier = scorecard_key_resolved or scorecard_name_resolved
+                logging.info(f"Using scorecard key/name for AccuracyEvaluation: {scorecard_identifier} (API-loaded scorecard uses registry key)")
+            
             accuracy_eval = AccuracyEvaluation(
-                scorecard_name=scorecard_name_resolved,
+                scorecard_name=scorecard_identifier,
                 scorecard=scorecard_instance,
                 labeled_samples=labeled_samples_data,
                 number_of_texts_to_sample=len(labeled_samples_data), # Use actual sample count
