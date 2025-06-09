@@ -6,6 +6,9 @@ import { CardButton } from '@/components/CardButton'
 import { LabelBadgeComparison } from '@/components/LabelBadgeComparison'
 import { Button } from '@/components/ui/button'
 import { ScoreResultTrace } from './score-result-trace'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import remarkBreaks from 'remark-breaks'
 
 export interface ScoreResultData {
   id: string
@@ -153,9 +156,27 @@ export function ScoreResultComponent({
                   <p className="text-sm text-muted-foreground">Explanation</p>
                 </div>
                 <div className="bg-background rounded-md p-3">
-                  <p className="text-sm whitespace-pre-wrap">
-                    {result.explanation}
-                  </p>
+                  <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-muted-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:bg-muted prose-pre:text-foreground">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm, remarkBreaks]}
+                      components={{
+                        // Customize components for better styling
+                        p: ({ children }) => <p className="mb-2 last:mb-0 text-sm">{children}</p>,
+                        ul: ({ children }) => <ul className="mb-2 ml-4 list-disc">{children}</ul>,
+                        ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal">{children}</ol>,
+                        li: ({ children }) => <li className="mb-1">{children}</li>,
+                        strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+                        em: ({ children }) => <em className="italic">{children}</em>,
+                        code: ({ children }) => <code className="bg-muted px-1 py-0.5 rounded text-xs font-mono">{children}</code>,
+                        pre: ({ children }) => <pre className="bg-muted p-2 rounded overflow-x-auto text-xs">{children}</pre>,
+                        h1: ({ children }) => <h1 className="text-base font-semibold mb-2 text-foreground">{children}</h1>,
+                        h2: ({ children }) => <h2 className="text-sm font-semibold mb-2 text-foreground">{children}</h2>,
+                        h3: ({ children }) => <h3 className="text-sm font-medium mb-1 text-foreground">{children}</h3>,
+                      }}
+                    >
+                      {result.explanation}
+                    </ReactMarkdown>
+                  </div>
                 </div>
               </div>
             )}
@@ -166,9 +187,27 @@ export function ScoreResultComponent({
                   <MessageSquareMore className="w-4 h-4 mr-1 text-muted-foreground" />
                   <p className="text-sm text-muted-foreground">Label comment</p>
                 </div>
-                <p className="text-sm whitespace-pre-wrap">
-                  {result.metadata.human_explanation}
-                </p>
+                <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-muted-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:bg-muted prose-pre:text-foreground">
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm, remarkBreaks]}
+                    components={{
+                      // Customize components for better styling
+                      p: ({ children }) => <p className="mb-2 last:mb-0 text-sm">{children}</p>,
+                      ul: ({ children }) => <ul className="mb-2 ml-4 list-disc">{children}</ul>,
+                      ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal">{children}</ol>,
+                      li: ({ children }) => <li className="mb-1">{children}</li>,
+                      strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+                      em: ({ children }) => <em className="italic">{children}</em>,
+                      code: ({ children }) => <code className="bg-muted px-1 py-0.5 rounded text-xs font-mono">{children}</code>,
+                      pre: ({ children }) => <pre className="bg-muted p-2 rounded overflow-x-auto text-xs">{children}</pre>,
+                      h1: ({ children }) => <h1 className="text-base font-semibold mb-2 text-foreground">{children}</h1>,
+                      h2: ({ children }) => <h2 className="text-sm font-semibold mb-2 text-foreground">{children}</h2>,
+                      h3: ({ children }) => <h3 className="text-sm font-medium mb-1 text-foreground">{children}</h3>,
+                    }}
+                  >
+                    {result.metadata.human_explanation}
+                  </ReactMarkdown>
+                </div>
               </div>
             )}
 
