@@ -184,17 +184,55 @@ class Evaluation:
             # Initialize scorecard_id as None
             self.scorecard_id = None
             
-            self.logging.info(f"Looking up scorecard with name: {self.scorecard.name}")
+            # Get the actual scorecard name by calling the method if it exists
+            scorecard_display_name = None
+            if hasattr(self.scorecard, 'name') and callable(self.scorecard.name):
+                scorecard_display_name = self.scorecard.name()
+            elif hasattr(self.scorecard, 'properties') and isinstance(self.scorecard.properties, dict):
+                scorecard_display_name = self.scorecard.properties.get('name')
+            else:
+                scorecard_display_name = str(self.scorecard_name)
+                
+            self.logging.info(f"Looking up scorecard with name: {scorecard_display_name}")
             try:
-                if hasattr(self.scorecard, 'key'):
-                    self.logging.info(f"Using scorecard key: {self.scorecard.key}")
-                    scorecard_obj = DashboardScorecard.get_by_key(self.scorecard.key, self.dashboard_client)
-                elif hasattr(self.scorecard, 'id'):
-                    self.logging.info(f"Using scorecard ID: {self.scorecard.id}")
-                    scorecard_obj = DashboardScorecard.get_by_id(self.scorecard.id, self.dashboard_client)
-                else:
-                    self.logging.info(f"Looking up scorecard by name: {self.scorecard_name}")
-                    scorecard_obj = DashboardScorecard.get_by_name(self.scorecard_name, self.dashboard_client)
+                # Try different lookup methods in order of preference
+                scorecard_obj = None
+                
+                # First try by key from properties (API-loaded scorecards)
+                if hasattr(self.scorecard, 'properties') and isinstance(self.scorecard.properties, dict):
+                    scorecard_key = self.scorecard.properties.get('key')
+                    if scorecard_key:
+                        self.logging.info(f"Using scorecard key from properties: {scorecard_key}")
+                        try:
+                            scorecard_obj = DashboardScorecard.get_by_key(scorecard_key, self.dashboard_client)
+                        except ValueError:
+                            self.logging.info(f"Scorecard not found by key: {scorecard_key}")
+                
+                # If not found by key, try by display name
+                if not scorecard_obj and scorecard_display_name:
+                    self.logging.info(f"Trying lookup by display name: {scorecard_display_name}")
+                    try:
+                        scorecard_obj = DashboardScorecard.get_by_name(scorecard_display_name, self.dashboard_client)
+                    except ValueError:
+                        self.logging.info(f"Scorecard not found by display name: {scorecard_display_name}")
+                
+                # If still not found, try with the scorecard_name parameter
+                if not scorecard_obj:
+                    self.logging.info(f"Trying lookup by scorecard_name parameter: {self.scorecard_name}")
+                    try:
+                        scorecard_obj = DashboardScorecard.get_by_name(self.scorecard_name, self.dashboard_client)
+                    except ValueError:
+                        self.logging.info(f"Scorecard not found by scorecard_name: {self.scorecard_name}")
+                
+                # If still not found, try by external ID if available
+                if not scorecard_obj and hasattr(self.scorecard, 'properties') and isinstance(self.scorecard.properties, dict):
+                    external_id = self.scorecard.properties.get('externalId')
+                    if external_id:
+                        self.logging.info(f"Trying lookup by external ID: {external_id}")
+                        try:
+                            scorecard_obj = DashboardScorecard.get_by_id(external_id, self.dashboard_client)
+                        except ValueError:
+                            self.logging.info(f"Scorecard not found by external ID: {external_id}")
                 
                 if scorecard_obj:
                     self.logging.info(f"Found scorecard: {scorecard_obj.name} ({scorecard_obj.id})")
@@ -1280,6 +1318,11 @@ class Evaluation:
         processed_counter = 0
         total_rows = len(selected_sample_rows)
         
+        # Add counter for ScoreResult creation attempts
+        self.scoreresult_creation_attempts = getattr(self, 'scoreresult_creation_attempts', 0)
+        self.scoreresult_creation_successes = getattr(self, 'scoreresult_creation_successes', 0)
+        self.scoreresult_creation_failures = getattr(self, 'scoreresult_creation_failures', 0)
+        
         async def process_text(row, idx):
             async with semaphore:  # This ensures only N concurrent operations
                 try:
@@ -1998,12 +2041,29 @@ Total cost:       ${expenses['total_cost']:.6f}
                         has_processed_scores = True
 
                         # Create ScoreResult in a non-blocking way only for the primary score
-                        if self.dashboard_client and self.experiment_id:
-                            await self._create_score_result(
-                                score_result=score_result,
-                                content_id=content_id,
-                                result=result
-                            )
+                        if getattr(self, 'dry_run', False):
+                            self.logging.info(f"[DRY RUN] Skipping ScoreResult creation for {score_name}")
+                        elif self.dashboard_client and self.experiment_id:
+                            try:
+                                self.scoreresult_creation_attempts = getattr(self, 'scoreresult_creation_attempts', 0) + 1
+                                self.logging.info(f"Attempting to create ScoreResult for {score_name} with content_id: {content_id} (attempt #{self.scoreresult_creation_attempts})")
+                                await self._create_score_result(
+                                    score_result=score_result,
+                                    content_id=content_id,
+                                    result=result
+                                )
+                                self.scoreresult_creation_successes = getattr(self, 'scoreresult_creation_successes', 0) + 1
+                                self.logging.info(f"Successfully created ScoreResult for {score_name} (success #{self.scoreresult_creation_successes})")
+                            except Exception as score_result_error:
+                                self.scoreresult_creation_failures = getattr(self, 'scoreresult_creation_failures', 0) + 1
+                                self.logging.error(f"Failed to create ScoreResult for {score_name}: {str(score_result_error)} (failure #{self.scoreresult_creation_failures})")
+                                self.logging.error(f"ScoreResult creation error details:", exc_info=True)
+                                # Don't re-raise - continue with evaluation but log the failure
+                        else:
+                            if not self.dashboard_client:
+                                self.logging.warning(f"Skipping ScoreResult creation - no dashboard_client available")
+                            if not self.experiment_id:
+                                self.logging.warning(f"Skipping ScoreResult creation - no experiment_id available")
 
                     except Exception as e:
                         logging.exception(f"Error processing {score_identifier}: {e}")
@@ -2092,13 +2152,18 @@ Total cost:       ${expenses['total_cost']:.6f}
         """Create a score result in the dashboard."""
         try:
             # Log the raw inputs
-            logging.info("Creating score result with raw inputs:")
-            logging.info(f"score_result value: {score_result.value}")
-            logging.info(f"score_result metadata: {truncate_dict_strings_inner(score_result.metadata)}")
-            logging.info(f"content_id: {content_id}")
-            logging.info(f"result dict: {truncate_dict_strings_inner(result)}")
+            self.logging.info("=== Creating ScoreResult in Dashboard ===")
+            self.logging.info(f"score_result value: {score_result.value}")
+            self.logging.info(f"score_result metadata keys: {list(score_result.metadata.keys()) if score_result.metadata else 'None'}")
+            self.logging.info(f"content_id: {content_id}")
+            self.logging.info(f"result form_id: {result.get('form_id', 'N/A')}")
 
             # Validate required attributes are available
+            self.logging.info(f"Validating required attributes...")
+            self.logging.info(f"  experiment_id: {getattr(self, 'experiment_id', 'NOT SET')}")
+            self.logging.info(f"  account_id: {getattr(self, 'account_id', 'NOT SET')}")
+            self.logging.info(f"  scorecard_id: {getattr(self, 'scorecard_id', 'NOT SET')}")
+            
             if not hasattr(self, 'experiment_id') or not self.experiment_id:
                 raise ValueError("experiment_id is not set")
             if not hasattr(self, 'account_id') or not self.account_id:
@@ -2127,14 +2192,14 @@ Total cost:       ${expenses['total_cost']:.6f}
                 }
             }
             
-            # First, create or upsert the Item record
-            # We'll use the content_id as the externalId
-            await self._create_or_upsert_item(content_id=content_id, score_result=score_result, result=result)
+            # First, create or upsert the Item record and get the database ID
+            # We'll use the content_id as the externalId but need the database ID for the ScoreResult
+            item_database_id = await self._create_or_upsert_item(content_id=content_id, score_result=score_result, result=result)
             
             # Create data dictionary with all required fields
             data = {
                 'evaluationId': self.experiment_id,
-                'itemId': content_id,  # Use content_id as the itemId
+                'itemId': item_database_id or content_id,  # Use database ID if available, fallback to content_id
                 'accountId': self.account_id,
                 'scorecardId': self.scorecard_id,
             }
@@ -2193,39 +2258,65 @@ Total cost:       ${expenses['total_cost']:.6f}
             }
             
             # Log the exact mutation and variables being sent
-            logging.info("Sending GraphQL mutation:")
-            logging.info(f"Mutation: {mutation}")
-            logging.info("Variables:")
+            self.logging.info("=== Sending CreateScoreResult GraphQL Mutation ===")
+            self.logging.info("Mutation data being sent:")
             for key, value in data.items():
-                logging.info(f"{key}: {value}")
+                if key == 'metadata':
+                    self.logging.info(f"  {key}: {truncate_dict_strings_inner(value)}")
+                else:
+                    self.logging.info(f"  {key}: {value}")
             
             # Execute the API call in a non-blocking way
+            self.logging.info("Executing GraphQL mutation...")
             response = await asyncio.to_thread(self.dashboard_client.execute, mutation, variables)
+            self.logging.info(f"GraphQL response received: {type(response)}")
             
             # Check for GraphQL errors in the response
             if 'errors' in response:
                 error_messages = [error.get('message', 'Unknown error') for error in response.get('errors', [])]
                 error_str = '; '.join(error_messages)
-                logging.error(f"GraphQL errors creating score result: {error_str}")
-                logging.error(f"Full error response: {response['errors']}")
+                self.logging.error(f"GraphQL errors creating score result: {error_str}")
+                self.logging.error(f"Full error response: {response['errors']}")
+                # Log each error with more details
+                for i, error in enumerate(response.get('errors', [])):
+                    self.logging.error(f"  Error {i+1}:")
+                    self.logging.error(f"    Message: {error.get('message', 'No message')}")
+                    self.logging.error(f"    Path: {error.get('path', 'No path')}")
+                    self.logging.error(f"    Extensions: {error.get('extensions', 'No extensions')}")
                 raise Exception(f"Failed to create score result: {error_str}")
             
             if not response.get('createScoreResult'):
-                logging.error(f"No data returned from createScoreResult mutation. Full response: {response}")
+                self.logging.error(f"No data returned from createScoreResult mutation.")
+                self.logging.error(f"Full response keys: {list(response.keys()) if isinstance(response, dict) else 'Not a dict'}")
+                self.logging.error(f"Full response: {truncate_dict_strings_inner(response)}")
                 raise Exception("Failed to create score result - no data returned")
             
             # Log the successful response
-            logging.debug("Successfully created score result:")
-            logging.debug(f"Response: {truncate_dict_strings_inner(response)}")
+            created_result = response.get('createScoreResult')
+            self.logging.info("=== Successfully Created ScoreResult ===")
+            self.logging.info(f"ScoreResult ID: {created_result.get('id', 'N/A')}")
+            self.logging.info(f"Evaluation ID: {created_result.get('evaluationId', 'N/A')}")
+            self.logging.info(f"Item ID: {created_result.get('itemId', 'N/A')}")
+            self.logging.info(f"Value: {created_result.get('value', 'N/A')}")
             
         except Exception as e:
-            logging.error(f"Error creating score result: {e}")
-            logging.error(f"Error details:", exc_info=True)
+            self.logging.error(f"=== ScoreResult Creation Failed ===")
+            self.logging.error(f"Error: {str(e)}")
+            self.logging.error(f"Error type: {type(e).__name__}")
+            self.logging.error(f"Full error details:", exc_info=True)
             raise
 
     async def _create_or_upsert_item(self, *, content_id, score_result, result):
-        """Create or update an Item record for the given content_id."""
+        """Create or update an Item record for the given content_id.
+        
+        Returns:
+            str: The database ID of the Item record, or None if creation failed
+        """
         try:
+            self.logging.info(f"=== Creating/Upserting Item Record ===")
+            self.logging.info(f"Content ID: {content_id}")
+            self.logging.info(f"Account ID: {self.account_id}")
+            
             # First, check if an item with this externalId already exists for this account
             query = """
             query GetItemByAccountAndExternalId($accountId: String!, $externalId: String!) {
@@ -2242,7 +2333,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                 "externalId": content_id
             }
             
-            logging.info(f"Checking if item exists with externalId: {content_id}")
+            self.logging.info(f"Checking if item exists with externalId: {content_id}")
             response = await asyncio.to_thread(self.dashboard_client.execute, query, variables)
             
             existing_items = response.get('listItems', {}).get('items', [])
@@ -2250,7 +2341,7 @@ Total cost:       ${expenses['total_cost']:.6f}
             if existing_items:
                 # Item exists, we'll update it
                 item_id = existing_items[0]['id']
-                logging.info(f"Found existing item with id: {item_id}, will update")
+                self.logging.info(f"Found existing item with id: {item_id}, will update")
                 
                 # Update the item with latest information
                 mutation = """
@@ -2278,11 +2369,12 @@ Total cost:       ${expenses['total_cost']:.6f}
                 }
                 
                 await asyncio.to_thread(self.dashboard_client.execute, mutation, update_variables)
-                logging.info(f"Successfully updated item: {item_id}")
+                self.logging.info(f"Successfully updated item: {item_id}")
+                return item_id
                 
             else:
                 # Item doesn't exist, create a new one
-                logging.info(f"No existing item found with externalId: {content_id}, creating new item")
+                self.logging.info(f"No existing item found with externalId: {content_id}, creating new item")
                 
                 mutation = """
                 mutation CreateItem($input: CreateItemInput!) {
@@ -2318,13 +2410,20 @@ Total cost:       ${expenses['total_cost']:.6f}
                 # Remove None values
                 create_variables["input"] = {k: v for k, v in create_variables["input"].items() if v is not None}
                 
-                await asyncio.to_thread(self.dashboard_client.execute, mutation, create_variables)
-                logging.info(f"Successfully created new item with externalId: {content_id}")
+                create_response = await asyncio.to_thread(self.dashboard_client.execute, mutation, create_variables)
+                created_item = create_response.get('createItem', {})
+                new_item_id = created_item.get('id')
+                self.logging.info(f"Successfully created new item with externalId: {content_id}, ID: {new_item_id}")
+                return new_item_id
                 
         except Exception as e:
-            logging.error(f"Error creating/upserting item: {e}")
-            logging.error("Error details:", exc_info=True)
+            self.logging.error(f"=== Item Creation/Update Failed ===")
+            self.logging.error(f"Error: {str(e)}")
+            self.logging.error(f"Error type: {type(e).__name__}")
+            self.logging.error("Full error details:", exc_info=True)
             # We'll continue with score result creation even if item creation fails
+            self.logging.warning("Continuing with ScoreResult creation despite Item creation failure")
+            return None  # Return None if item creation fails
 
     async def cleanup(self):
         """Clean up all resources"""
@@ -2513,6 +2612,7 @@ class AccuracyEvaluation(Evaluation):
 
         """Modified run method to accept tracker argument"""
         self.progress_callback = progress_callback
+        self.dry_run = dry_run  # Store dry_run flag for use in ScoreResult creation
         
         # Store the evaluation ID from the parent process
         self.experiment_id = self.evaluation_id
@@ -2664,6 +2764,20 @@ class AccuracyEvaluation(Evaluation):
             # --- BEGIN NEW LOGGING ---
             self.logging.info(f"--- calculate_metrics from _run_evaluation returned: {metrics} ---")
             # --- END NEW LOGGING ---
+            
+            # Log ScoreResult creation statistics
+            attempts = getattr(self, 'scoreresult_creation_attempts', 0)
+            successes = getattr(self, 'scoreresult_creation_successes', 0)
+            failures = getattr(self, 'scoreresult_creation_failures', 0)
+            self.logging.info(f"=== ScoreResult Creation Summary ===")
+            self.logging.info(f"Total ScoreResult creation attempts: {attempts}")
+            self.logging.info(f"Successful ScoreResult creations: {successes}")
+            self.logging.info(f"Failed ScoreResult creations: {failures}")
+            if attempts > 0:
+                success_rate = (successes / attempts) * 100
+                self.logging.info(f"ScoreResult creation success rate: {success_rate:.1f}%")
+            else:
+                self.logging.warning("No ScoreResult creation attempts were made!")
 
             if hasattr(self, 'progress_callback') and self.progress_callback:
                 self.progress_callback(self.number_of_texts_to_sample)
@@ -2680,13 +2794,24 @@ class AccuracyEvaluation(Evaluation):
                 else:
                     primary_score_name = self.score_names()[0]
                 
-                score_instance = Score.from_name(self.scorecard_name, primary_score_name)
-                
-                # Calculate overall_accuracy from the counters we just updated
-                overall_accuracy = (self.total_correct / self.total_questions * 100) if self.total_questions > 0 else 0
-                
-                report = self.generate_report(score_instance, overall_accuracy, expenses, self.number_of_texts_to_sample)
-                print("\n" + report + "\n")
+                # Try to get score instance for report generation, but skip if not found in registry
+                # (This can happen with API-loaded scorecards that aren't registered)
+                try:
+                    score_instance = Score.from_name(self.scorecard_name, primary_score_name)
+                    
+                    # Calculate overall_accuracy from the counters we just updated
+                    overall_accuracy = (self.total_correct / self.total_questions * 100) if self.total_questions > 0 else 0
+                    
+                    report = self.generate_report(score_instance, overall_accuracy, expenses, self.number_of_texts_to_sample)
+                    print("\n" + report + "\n")
+                except ValueError as e:
+                    if "not found" in str(e):
+                        self.logging.info(f"Skipping report generation - scorecard not found in registry: {e}")
+                        # Calculate overall_accuracy anyway for logging
+                        overall_accuracy = (self.total_correct / self.total_questions * 100) if self.total_questions > 0 else 0
+                        self.logging.info(f"Overall accuracy: {overall_accuracy}%")
+                    else:
+                        raise
 
             return metrics
         except Exception as e:
