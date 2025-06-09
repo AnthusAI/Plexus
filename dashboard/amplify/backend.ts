@@ -71,8 +71,8 @@ const itemsMetricsCalculatorStack = new ItemsMetricsCalculatorStack(
     backend.createStack('ItemsMetricsCalculatorStack'),
     'itemsMetricsCalculator',
     {
-        // Pass the GraphQL endpoint and AppSync API ID from the data backend
-        graphqlEndpoint: backend.data.resources.graphqlApi.graphqlEndpoint,
+        // Pass the GraphQL endpoint ARN and AppSync API ID from the data backend
+        graphqlEndpointArn: backend.data.resources.graphqlApi.graphQLEndpointArn,
         appSyncApiId: backend.data.resources.graphqlApi.apiId
     }
 );
