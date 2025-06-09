@@ -179,13 +179,47 @@ class BaseNode(ABC, LangChainUser):
             output_aliasing_function = LangGraphScore.generate_output_aliasing_function(self.parameters.output)
             workflow.add_node('output_aliasing', output_aliasing_function)
             workflow.add_edge(list(workflow.nodes.keys())[-2], 'output_aliasing')
+        
+        # Add node result storage function
+        def store_node_result(state):
+            """Store this node's result under the node name for template access by other nodes."""
+            logging.info(f"=== Node Result Storage for '{self.node_name}' ===")
+            
+            # Create node result object
+            node_result = {}
+            if hasattr(state, 'classification') and state.classification is not None:
+                node_result['classification'] = state.classification
+            if hasattr(state, 'explanation') and state.explanation is not None:
+                node_result['explanation'] = state.explanation
+            if hasattr(state, 'value') and state.value is not None:
+                node_result['value'] = state.value
+            if hasattr(state, 'confidence') and state.confidence is not None:
+                node_result['confidence'] = state.confidence
+                
+            # Create new state with node result stored under node name
+            new_state = state.model_dump()
+            new_state[self.node_name] = node_result
+            
+            logging.info(f"Stored node result under '{self.node_name}': {node_result}")
+            return state.__class__(**new_state)
+        
+        # Add the node result storage as the final step
+        logging.info(f"Adding store_node_result node for '{self.node_name}'")
+        workflow.add_node('store_node_result', store_node_result)
+        
+        # Connect store_node_result to END
+        workflow.add_edge('store_node_result', END)
+        
+        # Modify existing edges to route through store_node_result instead of directly to END
+        # This requires replacing END edges with edges to store_node_result
+        logging.info(f"Redirecting workflow termination through store_node_result for '{self.node_name}'")
 
         if workflow.nodes:
             workflow.set_entry_point(next(iter(workflow.nodes)))
 
         if workflow.nodes:
-            last_node = list(workflow.nodes.keys())[-1]
-            workflow.add_edge(last_node, END)
+            # Connect the final node (store_node_result) to END
+            workflow.add_edge('store_node_result', END)
 
         app = workflow.compile()
 
