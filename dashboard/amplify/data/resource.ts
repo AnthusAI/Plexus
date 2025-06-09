@@ -57,7 +57,7 @@ const getItemsMetricsHandler = defineFunction({
 
 const schema = a.schema({
     // Custom query to get items metrics
-    getItemsMetrics: a.customQuery()
+    getItemsMetrics: a.query()
         .arguments({
             accountId: a.string().required(),
             hours: a.integer().default(24),
