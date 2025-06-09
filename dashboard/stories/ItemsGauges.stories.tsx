@@ -1,3 +1,4 @@
+import React from 'react'
 import type { Meta, StoryObj } from '@storybook/react'
 import { ItemsGauges } from '@/components/ItemsGauges'
 import { AccountProvider } from '@/app/contexts/AccountContext'
