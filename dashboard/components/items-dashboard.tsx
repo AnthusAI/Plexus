@@ -39,6 +39,7 @@ import { useAccount } from '@/app/contexts/AccountContext'
 import { ItemsDashboardSkeleton, ItemCardSkeleton } from './loading-skeleton'
 import { ScoreResultCountManager, type ScoreResultCount } from '@/utils/score-result-counter'
 import { motion, AnimatePresence } from 'framer-motion'
+import { ItemsGauges } from './ItemsGauges'
 
 // Get the current date and time
 const now = new Date();
@@ -3116,7 +3117,7 @@ function ItemsDashboardInner() {
             )}
 
             {/* Grid content or item content for mobile */}
-            <div className="@container">
+            <div className="@container space-y-3">
               {isNarrowViewport && selectedItem ? (
                 // Mobile full-screen item view
                 <div className="h-full">
@@ -3131,29 +3132,34 @@ function ItemsDashboardInner() {
                   )}
                 </div>
               ) : (
-                // Grid view
-                !hasInitiallyLoaded && isLoading ? (
-                  <div className="grid grid-cols-2 @[500px]:grid-cols-3 @[700px]:grid-cols-4 @[900px]:grid-cols-5 @[1100px]:grid-cols-6 gap-3 animate-pulse">
-                    {[...Array(12)].map((_, i) => (
-                      <ItemCardSkeleton key={i} />
-                    ))}
-                  </div>
-                ) : (
-                  <GridContent
-                    filteredItems={filteredItems}
-                    selectedItem={selectedItem}
-                    handleItemClick={handleItemClick}
-                    getBadgeVariant={getBadgeVariant}
-                    scoreCountManagerRef={scoreCountManagerRef}
-                    itemRefsMap={itemRefsMap}
-                    scoreResultCounts={scoreResultCounts}
-                    nextToken={nextToken}
-                    isLoadingMore={isLoadingMore}
-                    loadMoreRef={loadMoreRef}
-                    isLoading={isLoading}
-                    hasInitiallyLoaded={hasInitiallyLoaded}
-                  />
-                )
+                // Grid view with gauges at top
+                <>
+                  {/* ItemsGauges at the top - only show when not in mobile selected item view */}
+                  <ItemsGauges />
+                  
+                  {!hasInitiallyLoaded && isLoading ? (
+                    <div className="grid grid-cols-2 @[500px]:grid-cols-3 @[700px]:grid-cols-4 @[900px]:grid-cols-5 @[1100px]:grid-cols-6 gap-3 animate-pulse">
+                      {[...Array(12)].map((_, i) => (
+                        <ItemCardSkeleton key={i} />
+                      ))}
+                    </div>
+                  ) : (
+                    <GridContent
+                      filteredItems={filteredItems}
+                      selectedItem={selectedItem}
+                      handleItemClick={handleItemClick}
+                      getBadgeVariant={getBadgeVariant}
+                      scoreCountManagerRef={scoreCountManagerRef}
+                      itemRefsMap={itemRefsMap}
+                      scoreResultCounts={scoreResultCounts}
+                      nextToken={nextToken}
+                      isLoadingMore={isLoadingMore}
+                      loadMoreRef={loadMoreRef}
+                      isLoading={isLoading}
+                      hasInitiallyLoaded={hasInitiallyLoaded}
+                    />
+                  )}
+                </>
               )}
             </div>
           </div>

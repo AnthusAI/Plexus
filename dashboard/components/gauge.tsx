@@ -243,11 +243,15 @@ const GaugeComponent: React.FC<GaugeProps> = ({
     // Keep a tick if it's at least thresholdPercentage away from the next higher tick
     const visibleTicks = new Set<number>();
     visibleTicks.add(100); // Always show the maximum tick
+    visibleTicks.add(0);   // Always show the minimum tick
 
     // Process remaining ticks from highest to lowest
     for (let i = allTicks.length - 2; i >= 0; i--) {
       const currentTick = allTicks[i];
       const nextHigherTick = allTicks[i + 1]; // The next element is guaranteed to be higher since we sorted
+      
+      // Skip if this is the minimum tick (0) as we already added it
+      if (currentTick === 0) continue;
       
       // If this tick is at least thresholdPercentage away from the next higher tick, show it
       if (nextHigherTick - currentTick >= thresholdPercentage) {
