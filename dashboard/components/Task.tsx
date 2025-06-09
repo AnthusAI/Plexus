@@ -329,7 +329,7 @@ const TaskContent = <TData extends BaseTaskData = BaseTaskData>({
   return (
     <CardContent className={cn(
       "h-full p-0 flex flex-col flex-1",
-      variant === 'grid' ? 'px-3' : ''
+      variant === 'grid' ? 'px-3 pb-3' : ''
     )}>
       {!hideTaskStatus && (
         <div>
@@ -342,7 +342,7 @@ const TaskContent = <TData extends BaseTaskData = BaseTaskData>({
             startedAt={task.startedAt}
             estimatedCompletionAt={task.estimatedCompletionAt}
             status={task.status || 'PENDING'}
-            command={task.command}
+            command={task.command || task.description}
             statusMessage={statusMessage}
             errorMessage={task.errorMessage}
             dispatchStatus={task.dispatchStatus}
