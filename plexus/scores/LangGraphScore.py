@@ -415,6 +415,38 @@ class LangGraphScore(Score, LangChainUser):
                 node_config = next((node for node in graph_config
                                   if node['name'] == previous_node), None)
                 
+                # Add node result storage between nodes
+                storage_node_name = f"{previous_node}_result_storage"
+                def create_storage_function(prev_node_name):
+                    def store_node_result(state):
+                        """Store this node's result under the node name for template access by other nodes."""
+                        logging.info(f"=== Node Result Storage for '{prev_node_name}' ===")
+                        
+                        # Create node result object
+                        node_result = {}
+                        if hasattr(state, 'classification') and state.classification is not None:
+                            node_result['classification'] = state.classification
+                        if hasattr(state, 'explanation') and state.explanation is not None:
+                            node_result['explanation'] = state.explanation
+                        if hasattr(state, 'value') and state.value is not None:
+                            node_result['value'] = state.value
+                        if hasattr(state, 'confidence') and state.confidence is not None:
+                            node_result['confidence'] = state.confidence
+                            
+                        # Create new state with node result stored in node_results container
+                        new_state = state.model_dump()
+                        
+                        # Store in the node_results container
+                        if 'node_results' not in new_state or new_state['node_results'] is None:
+                            new_state['node_results'] = {}
+                        new_state['node_results'][prev_node_name] = node_result
+                        
+                        logging.info(f"Stored node result under '{prev_node_name}': {node_result}")
+                        return state.__class__(**new_state)
+                    return store_node_result
+                
+                workflow.add_node(storage_node_name, create_storage_function(previous_node))
+                
                 if node_config:
                     # Handle output field in node config directly - this is critical for node-level output aliasing
                     if 'output' in node_config:
@@ -425,12 +457,13 @@ class LangGraphScore(Score, LangChainUser):
                                 node_config['output']
                             )
                         )
-                        workflow.add_edge(previous_node, value_setter_name)
+                        workflow.add_edge(previous_node, storage_node_name)
+                        workflow.add_edge(storage_node_name, value_setter_name)
                         workflow.add_edge(value_setter_name, node_name)
                         continue  # Skip other edge processing for this node
                         
                     # Handle edge clause - direct routing with output aliasing
-                    if 'edge' in node_config:
+                    elif 'edge' in node_config:
                         edge = node_config['edge']
                         value_setter_name = f"{previous_node}_value_setter"
                         # Create value setter node for the edge
@@ -440,8 +473,9 @@ class LangGraphScore(Score, LangChainUser):
                                 edge.get('output', {})
                             )
                         )
-                        # Add edge from previous node to value setter
-                        workflow.add_edge(previous_node, value_setter_name)
+                        # Add edge from previous node to result storage then to value setter
+                        workflow.add_edge(previous_node, storage_node_name)
+                        workflow.add_edge(storage_node_name, value_setter_name)
                         # Add edge from value setter to target node
                         target_node = edge.get('node', node_name)
                         if target_node == 'END':
@@ -467,8 +501,30 @@ class LangGraphScore(Score, LangChainUser):
                                     )
                                 )
 
-                            def create_routing_function(conditions, value_setters, next_node):
+                            def create_routing_function(conditions, value_setters, storage_node, next_node):
                                 def routing_function(state):
+                                    if hasattr(state, 'classification') and state.classification is not None:
+                                        state_value = state.classification.lower()
+                                        # Check if we have a value setter for this classification
+                                        if state_value in value_setters:
+                                            return storage_node  # Route through storage first
+                                    # Default case - route through storage to next node
+                                    return storage_node
+                                return routing_function
+
+                            # Create a list of valid targets for conditional edges
+                            valid_targets = [storage_node_name]
+                            
+                            # Add conditional routing to storage node
+                            workflow.add_conditional_edges(
+                                previous_node,
+                                create_routing_function(conditions, value_setters, storage_node_name, node_name),
+                                valid_targets
+                            )
+                            
+                            # Add conditional routing from storage node to value setters or next node
+                            def create_storage_routing_function(conditions, value_setters, next_node):
+                                def storage_routing_function(state):
                                     if hasattr(state, 'classification') and state.classification is not None:
                                         state_value = state.classification.lower()
                                         # Check if we have a value setter for this classification
@@ -476,16 +532,13 @@ class LangGraphScore(Score, LangChainUser):
                                             return value_setters[state_value]
                                     # Default case - route to next node
                                     return next_node
-                                return routing_function
-
-                            # Create a list of valid targets for conditional edges
-                            valid_targets = list(value_setters.values()) + [node_name]
+                                return storage_routing_function
                             
-                            # Add conditional routing only to valid targets
+                            storage_valid_targets = list(value_setters.values()) + [node_name]
                             workflow.add_conditional_edges(
-                                previous_node,
-                                create_routing_function(conditions, value_setters, node_name),
-                                valid_targets
+                                storage_node_name,
+                                create_storage_routing_function(conditions, value_setters, node_name),
+                                storage_valid_targets
                             )
 
                             # Add edges from value setters to their target nodes
@@ -498,12 +551,18 @@ class LangGraphScore(Score, LangChainUser):
                                     workflow.add_edge(value_setter_name, target_node)
                         else:
                             logging.error(f"Conditions is not a list: {conditions}")
-                            workflow.add_edge(previous_node, node_name)
+                            workflow.add_edge(previous_node, storage_node_name)
+                            workflow.add_edge(storage_node_name, node_name)
                     
-                    # No edge or conditions clause - add direct edge to next node
+                    # No edge or conditions clause - add direct edge through storage to next node
                     else:
                         logging.debug(f"Node '{previous_node}' does not have conditions or edge clause")
-                        workflow.add_edge(previous_node, node_name)
+                        workflow.add_edge(previous_node, storage_node_name)
+                        workflow.add_edge(storage_node_name, node_name)
+                else:
+                    # No node config found - add direct edge through storage
+                    workflow.add_edge(previous_node, storage_node_name)
+                    workflow.add_edge(storage_node_name, node_name)
 
     async def build_compiled_workflow(self):
         """Build the LangGraph workflow with optional persistence."""
@@ -852,6 +911,10 @@ class LangGraphScore(Score, LangChainUser):
         base_annotations = self.GraphState.__annotations__.copy()
         logging.info(f"Starting with base annotations: {base_annotations}")
 
+        # Add a special field to store all node results
+        base_annotations['node_results'] = Optional[dict]
+        logging.info(f"Added node_results field to store all node outputs")
+        
         # First collect all attributes from node instances
         for instance in instances:
             # Add fields from the node's GraphState
@@ -926,6 +989,9 @@ class LangGraphScore(Score, LangChainUser):
                 validate_assignment=False,  # Don't validate on assignment
                 populate_by_name=True,  # Allow population by field name
                 use_enum_values=True,  # Use enum values instead of enum objects
+                # Allow fields to be set dynamically
+                protected_namespaces=(),  # Don't protect any namespaces
+                validate_call=False,  # Don't validate function calls
             )
 
             def __init__(self, **data):
