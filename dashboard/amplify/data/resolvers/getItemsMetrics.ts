@@ -20,8 +20,19 @@ export const handler: AppSyncResolverHandler<GetItemsMetricsArgs, any> = async (
     const { accountId, hours = 24, bucketMinutes = 60 } = event.arguments;
 
     if (!ITEMS_METRICS_CALCULATOR_LAMBDA_NAME) {
-        console.error("AMPLIFY_DASHBOARD_ITEMSMETRICSCALCULATOR_NAME environment variable not set.");
-        throw new Error("AMPLIFY_DASHBOARD_ITEMSMETRICSCALCULATOR_NAME environment variable not set.");
+        console.error("AMPLIFY_DASHBOARD_ITEMSMETRICSCALCULATOR_NAME environment variable not set. ItemsMetricsCalculator is temporarily disabled during stack cleanup.");
+        // Return mock data instead of throwing an error during the transition period
+        return {
+            itemsPerHour: 0,
+            itemsAveragePerHour: 0,
+            itemsPeakHourly: 0,
+            itemsTotal24h: 0,
+            scoreResultsPerHour: 0,
+            scoreResultsAveragePerHour: 0,
+            scoreResultsPeakHourly: 0,
+            scoreResultsTotal24h: 0,
+            chartData: []
+        };
     }
     console.log(`Invoking Lambda: ${ITEMS_METRICS_CALCULATOR_LAMBDA_NAME}`);
 

@@ -85,12 +85,13 @@ const itemsMetricsCalculatorStack = new ItemsMetricsCalculatorStack(
 // Get access to the getItemsMetrics function
 const getItemsMetricsFunction = backend.data.resources.functions.getItemsMetrics as lambda.Function;
 
-// Add the environment variable to the function
-if (getItemsMetricsFunction) {
-    getItemsMetricsFunction.addEnvironment(
-        'AMPLIFY_DASHBOARD_ITEMSMETRICSCALCULATOR_NAME',
-        itemsMetricsCalculatorStack.itemsMetricsCalculatorFunction.functionName
-    );
-}
+// TODO: Re-enable this after the old ItemsMetricsCalculatorStack is cleaned up
+// Temporarily commented out to allow the old stack to be removed
+// if (getItemsMetricsFunction) {
+//     getItemsMetricsFunction.addEnvironment(
+//         'AMPLIFY_DASHBOARD_ITEMSMETRICSCALCULATOR_NAME',
+//         itemsMetricsCalculatorStack.itemsMetricsCalculatorFunction.functionName
+//     );
+// }
 
 export { backend };
