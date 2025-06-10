@@ -74,7 +74,8 @@ describe('Lambda Handler', () => {
 
     expect(MockedMetricsCalculator).toHaveBeenCalledWith(
       'https://api.example.com/graphql',
-      'test-api-key'
+      'test-api-key',
+      15
     );
 
     expect(mockCalculatorInstance.getItemsSummary).toHaveBeenCalledWith('test-account-id', 24);
@@ -149,7 +150,7 @@ describe('Lambda Handler', () => {
     };
 
     await expect(handler(event, mockContext, jest.fn())).rejects.toThrow(
-      'PLEXUS_API_URL and PLEXUS_API_KEY environment variables must be set'
+      'GraphQL endpoint and API key environment variables must be set'
     );
   });
 
@@ -163,7 +164,7 @@ describe('Lambda Handler', () => {
     };
 
     await expect(handler(event, mockContext, jest.fn())).rejects.toThrow(
-      'PLEXUS_API_URL and PLEXUS_API_KEY environment variables must be set'
+      'GraphQL endpoint and API key environment variables must be set'
     );
   });
 
@@ -177,7 +178,7 @@ describe('Lambda Handler', () => {
     };
 
     await expect(handler(event, mockContext, jest.fn())).rejects.toThrow(
-      'PLEXUS_API_URL and PLEXUS_API_KEY environment variables must be set'
+      'GraphQL endpoint and API key environment variables must be set'
     );
   });
 

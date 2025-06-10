@@ -107,6 +107,7 @@ The TypeScript Lambda implementation is now deployment-ready with:
 - Fixed package.json dependencies 
 - Updated cache implementation for Lambda environment
 - Added cache cleanup on execution completion
+- Updated test suite to use InMemoryCache instead of SQLiteCache
 
 ### Immediate Actions
 1. **Deploy and Test**:
