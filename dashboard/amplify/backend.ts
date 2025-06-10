@@ -3,7 +3,7 @@ import { data } from './data/resource.js';
 import { auth } from './auth/resource.js';
 import { reportBlockDetails, attachments, scoreResultAttachments } from './storage/resource.js';
 import { TaskDispatcherStack } from './functions/taskDispatcher/resource.js';
-import { ItemsMetricsCalculatorStack } from "./functions/itemsMetricsCalculator/resource.js";
+import { ItemsMetricsCalculator } from "./functions/itemsMetricsCalculator/resource.js";
 import { Stack } from 'aws-cdk-lib';
 import { PolicyStatement } from 'aws-cdk-lib/aws-iam';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
@@ -30,13 +30,11 @@ if (!backend.data.resources.cfnResources.cfnApiKey) {
     throw new Error('API Key is not configured for this backend and is required by the ItemsMetricsCalculator.');
 }
 
-// The ItemsMetricsCalculatorStack is a separate stack that creates the Python Lambda.
-const itemsMetricsCalculatorStack = new ItemsMetricsCalculatorStack(
-    backend.createStack('ItemsMetricsCalculatorStack'),
+// Instantiate the ItemsMetricsCalculator construct directly in the backend scope.
+const itemsMetricsCalculator = new ItemsMetricsCalculator(
+    backend.data.resources.cfnResources.cfnGraphqlApi.stack, // Use the data resource's stack as the scope
     'ItemsMetricsCalculator',
     {
-        // The Python lambda needs the GraphQL endpoint and API key to function.
-        // We get these from the `data` resource which manages the AppSync API.
         graphqlEndpoint: backend.data.resources.cfnResources.cfnGraphqlApi.attrGraphQlUrl,
         apiKey: backend.data.resources.cfnResources.cfnApiKey.attrApiKey,
     }
@@ -46,13 +44,13 @@ const itemsMetricsCalculatorStack = new ItemsMetricsCalculatorStack(
 const getItemsMetricsResolver = backend.data.resources.functions.getItemsMetrics;
 
 if (getItemsMetricsResolver) {
-    // We need to grant it permission to invoke the Python lambda.
-    itemsMetricsCalculatorStack.itemsMetricsCalculatorFunction.grantInvoke(getItemsMetricsResolver);
+    // Grant the resolver permission to invoke the Python lambda.
+    itemsMetricsCalculator.itemsMetricsCalculatorFunction.grantInvoke(getItemsMetricsResolver);
     
     // Pass the Python function ARN as an environment variable.
     (getItemsMetricsResolver as lambda.Function).addEnvironment(
         'ITEMS_METRICS_CALCULATOR_FUNCTION_ARN',
-        itemsMetricsCalculatorStack.itemsMetricsCalculatorFunction.functionArn
+        itemsMetricsCalculator.itemsMetricsCalculatorFunction.functionArn
     );
     
     // Add permissions for CloudWatch Logs

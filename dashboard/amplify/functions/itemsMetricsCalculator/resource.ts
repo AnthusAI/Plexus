@@ -1,65 +1,36 @@
-import { CfnOutput, Stack, StackProps, Duration } from 'aws-cdk-lib';
+import { Stack, Duration } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as path from 'path';
-import { execSync } from 'child_process';
-import { Policy, PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
+import { PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
 
-// Interface for ItemsMetricsCalculator stack props
-interface ItemsMetricsCalculatorStackProps extends StackProps {
+// Interface for ItemsMetricsCalculator construct props
+interface ItemsMetricsCalculatorProps {
   graphqlEndpoint: string;
   apiKey: string;
 }
 
-// Custom CDK stack for the Python Items Metrics Calculator function
-export class ItemsMetricsCalculatorStack extends Stack {
+// Custom CDK construct for the Python Items Metrics Calculator function
+export class ItemsMetricsCalculator extends Construct {
   public readonly itemsMetricsCalculatorFunction: lambda.Function;
 
-  constructor(scope: Construct, id: string, props: ItemsMetricsCalculatorStackProps) {
-    super(scope, id, props);
+  constructor(scope: Construct, id: string, props: ItemsMetricsCalculatorProps) {
+    super(scope, id);
     
-    // Get the directory containing the function code
-    const functionDir = path.join(process.cwd(), 'amplify/functions/itemsMetricsCalculator');
+    const stack = Stack.of(this);
 
     this.itemsMetricsCalculatorFunction = new lambda.Function(this, 'ItemsMetricsCalculatorFunction', {
-      runtime: lambda.Runtime.PYTHON_3_11,
+      runtime: lambda.Runtime.PYTHON_3_9,
       handler: 'index.handler',
-      code: lambda.Code.fromAsset(functionDir, {
-        bundling: {
-          image: lambda.Runtime.PYTHON_3_11.bundlingImage,
-          local: {
-            tryBundle(outputDir: string) {
-              try {
-                const command = `
-                    # Copy handler and requirements
-                    cp ${path.join(functionDir, 'index.py')} ${outputDir}
-                    cp ${path.join(functionDir, 'requirements.txt')} ${outputDir}
-
-                    # Copy the shared plexus metrics module
-                    rsync -av --exclude '__pycache__' ${path.join(process.cwd(), '../plexus/metrics/')} ${path.join(outputDir, 'plexus/metrics/')}
-                    
-                    # Create __init__.py to make plexus a package
-                    touch ${path.join(outputDir, 'plexus/__init__.py')}
-
-                    # Install python dependencies
-                    python3 -m pip install -r ${path.join(outputDir, 'requirements.txt')} -t ${outputDir} --platform manylinux2014_x86_64 --implementation cp --python 3.11 --only-binary=:all: --upgrade
-                `;
-                execSync(command, { stdio: 'inherit' });
-                return true;
-              } catch (e) {
-                console.error("Bundling failed:", e);
-                return false;
-              }
-            }
-          }
-        }
-      }),
-      timeout: Duration.minutes(10),
-      memorySize: 512,
+      code: lambda.Code.fromAsset(path.join(__dirname, '.')),
       environment: {
-        PLEXUS_API_URL: props.graphqlEndpoint,
-        PLEXUS_API_KEY: props.apiKey
-      }
+        GRAPHQL_ENDPOINT: props.graphqlEndpoint,
+        API_KEY: props.apiKey,
+        AWS_REGION: stack.region,
+        ACCOUNT_ID: stack.account
+      },
+      timeout: Duration.seconds(60),
+      memorySize: 512,
     });
 
     // Grant permissions to make AppSync GraphQL calls
@@ -67,18 +38,8 @@ export class ItemsMetricsCalculatorStack extends Stack {
       new PolicyStatement({
         effect: Effect.ALLOW,
         actions: ['appsync:GraphQL'],
-        resources: [`arn:aws:appsync:${this.region}:${this.account}:apis/*`],
+        resources: [`arn:aws:appsync:${stack.region}:${stack.account}:apis/*`],
       })
     );
-
-    new CfnOutput(this, 'ItemsMetricsCalculatorFunctionArn', {
-      value: this.itemsMetricsCalculatorFunction.functionArn,
-      exportName: `${this.stackName}-ItemsMetricsCalculatorFunctionArn`
-    });
-
-    new CfnOutput(this, 'ItemsMetricsCalculatorFunctionName', {
-      value: this.itemsMetricsCalculatorFunction.functionName,
-      exportName: `${this.stackName}-ItemsMetricsCalculatorFunctionName`
-    });
   }
 } 
