@@ -2,24 +2,40 @@
 
 This document outlines a caching strategy to optimize the calculation of item and score result count metrics. The goal is to reduce the number of queries to the backend by caching counts in small, time-aligned buckets.
 
+## Implementation Strategy Update (2025-06-10)
+
+Due to cyclic dependency issues with Python Lambda deployment in AWS Amplify, we have implemented a dual-language strategy:
+- **TypeScript**: Lambda function implementation (COMPLETED)
+- **Python**: For CLI tools and MCP server (existing implementation maintained)
+
 ## 1. Caching Mechanism
 
 - **Cache Granularity:** The core of the caching mechanism will be 5-minute, clock-aligned time buckets.
 - **Bucket Alignment:** These buckets will align with the clock, starting at `:00`, `:05`, `:10`, etc., for every hour. For example, `10:00:00 - 10:04:59`.
 - **Cached Data:** The cache will store the total count of items and score results for each 5-minute bucket. We will not cache the individual item IDs, only the aggregate counts.
-- **Cache Storage:** Initially, an in-memory dictionary will be used for the cache. This can be extended to a more persistent store like Redis or a DynamoDB table in the future.
+- **Cache Storage:** 
+  - **TypeScript Lambda**: Currently using direct GraphQL queries without caching (future enhancement: DynamoDB cache)
+  - **Python CLI**: SQLite for local persistence
 
 ## 2. Configurable Bucket Width
 The width of the cache buckets will be configurable.
 - **Default Width:** The default width will be 5 minutes.
 - **Configuration:** This will be a parameter in the `MetricsCalculator` class, making it easy to adjust for different performance needs (e.g., switching to 1-minute buckets).
 
-## 3. Cache Storage: SQLite
-To provide persistence for local development and CLI tools, the caching mechanism will be updated to use a local SQLite database.
+## 3. Cache Storage
+
+### Python Implementation (CLI Tools)
+To provide persistence for local development and CLI tools, the caching mechanism will use a local SQLite database.
 
 - **Database File:** The cache will be stored in a local SQLite file (e.g., `tmp/metrics_cache.db`).
 - **Cache Table:** A simple table will be created to store the cache keys and their corresponding counts.
-- **Future Migration:** This SQLite implementation is an intermediate step. It is designed to be easily replaced with a more robust, shared caching solution at the API level (e.g., using DynamoDB) in the future.
+
+### TypeScript Implementation (Lambda) - Future Enhancement
+For the Lambda function, we'll use DynamoDB for distributed caching:
+
+- **DynamoDB Table**: A dedicated cache table with TTL for automatic cleanup
+- **Key Structure**: Composite key of account ID, metric type, and time bucket
+- **TTL**: Set to expire cached entries after 24 hours
 
 ## 4. Querying and Caching Logic
 
@@ -47,10 +63,48 @@ For each hourly analysis bucket:
     *   The counts from all the fully-contained 5-minute buckets (retrieved from the cache or newly fetched).
     *   The counts from the two overlap queries.
 
-## 5. Implementation Plan
+## 5. Implementation Status
 
--   **Location:** The new logic will be implemented within the `MetricsCalculator` class in `plexus/utils/metrics_calculator.py`.
--   **Helper Functions:**
-    *   A function to calculate the 5-minute clock-aligned buckets for a given time range.
-    *   A function to manage cache lookups, fetching from the database, and storing new entries in the cache.
--   **Testing:** The `test_metrics_calculator.py` will be updated to include tests for the caching logic, ensuring that it correctly calculates totals and handles cache hits and misses. 
+### Phase 1: TypeScript Lambda Implementation ✅ COMPLETED
+1. **Location**: `dashboard/amplify/functions/itemsMetricsCalculator/`
+2. **Components Implemented**:
+   - ✅ MetricsCalculator class ported from Python to TypeScript
+   - ✅ Lambda handler function (`index.ts`)
+   - ✅ GraphQL queries using axios
+   - ✅ Package configuration (`package.json`, `tsconfig.json`)
+   - ✅ CDK resource configuration updated for Node.js runtime
+   - ✅ Direct AppSync resolver integration in `backend.ts`
+   
+3. **Future Enhancements**:
+   - Add DynamoDB caching layer
+   - Add comprehensive unit tests
+
+### Phase 2: Python CLI Implementation (Existing)
+1. **Location**: `plexus/metrics/calculator.py`
+2. **Components**:
+   - ✅ Existing implementation maintained
+   - ✅ SQLite caching layer
+   - ✅ Backward compatibility
+   - ✅ Tests in `test_metrics_calculator.py`
+
+### Phase 3: Testing and Validation
+1. **Cross-validation**: Ensure TypeScript and Python implementations produce identical results
+2. **Performance testing**: Measure query performance in Lambda environment
+3. **Integration testing**: Test AppSync resolver integration
+
+## 6. Next Steps
+
+1. **Deploy and Test**:
+   - Deploy the TypeScript Lambda function
+   - Test the AppSync resolver integration
+   - Monitor performance and error rates
+
+2. **Add Caching (Future)**:
+   - Create DynamoDB cache table
+   - Implement cache read/write logic
+   - Add cache hit/miss metrics
+
+3. **Performance Optimization**:
+   - Implement parallel query execution for multiple time buckets
+   - Add request batching for GraphQL queries
+   - Optimize memory usage for large result sets 

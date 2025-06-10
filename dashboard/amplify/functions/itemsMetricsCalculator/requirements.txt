@@ -1,8 +1,0 @@
-# This function uses the shared plexus.metrics module.
-# The dependencies for that module are installed from plexus/metrics/requirements.txt
-# during the bundling process defined in this function's resource.ts.
-# This file is intentionally left blank, but is required by the bundler.
-
-requests
-boto3
-# Note: The standalone metrics_calculator module is included locally
