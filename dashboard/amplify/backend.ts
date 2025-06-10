@@ -47,6 +47,13 @@ if (getItemsMetricsResolver) {
     // We need to grant it permission to invoke the Python lambda.
     itemsMetricsCalculator.itemsMetricsCalculatorFunction.grantInvoke(getItemsMetricsResolver);
 
+    // Add environment variable with the ItemsMetricsCalculator function name
+    if (getItemsMetricsResolver.node.defaultChild) {
+        const cfnFunction = getItemsMetricsResolver.node.defaultChild as lambda.CfnFunction;
+        cfnFunction.addPropertyOverride('Environment.Variables.AMPLIFY_DASHBOARD_ITEMSMETRICSCALCULATOR_NAME', 
+            itemsMetricsCalculator.itemsMetricsCalculatorFunction.functionName);
+    }
+
     // Add permission to list Lambda functions so it can discover the function name
     getItemsMetricsResolver.addToRolePolicy(
         new PolicyStatement({

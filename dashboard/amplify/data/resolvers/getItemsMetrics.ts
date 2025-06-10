@@ -18,6 +18,14 @@ async function getItemsMetricsCalculatorFunctionName(): Promise<string> {
         return cachedFunctionName;
     }
 
+    // First, check if the function name is provided via environment variable
+    const envFunctionName = process.env.AMPLIFY_DASHBOARD_ITEMSMETRICSCALCULATOR_NAME;
+    if (envFunctionName) {
+        console.log(`Using ItemsMetricsCalculator function name from environment: ${envFunctionName}`);
+        cachedFunctionName = envFunctionName;
+        return cachedFunctionName;
+    }
+
     try {
         console.log('Listing functions to find the metrics calculator...');
         const command = new ListFunctionsCommand({});
