@@ -13,8 +13,8 @@ const __dirname = path.dirname(__filename);
 
 // Interface for ItemsMetricsCalculator stack props
 interface ItemsMetricsCalculatorStackProps extends StackProps {
-  graphqlEndpointArn?: string;
-  appSyncApiId?: string;
+  graphqlEndpoint?: string;
+  apiKey?: string;
 }
 
 // Custom CDK stack for the Python Items Metrics Calculator function
@@ -68,12 +68,12 @@ export class ItemsMetricsCalculatorStack extends Stack {
           }
         }
       }),
-      timeout: Duration.minutes(5), // Longer timeout for potentially large data processing
+      timeout: Duration.minutes(10), // Extended timeout to handle cold starts with heavy dependencies
       memorySize: 512, // More memory for processing large datasets
       environment: {
-        // Amplify will automatically provide these environment variables
-        // API_PLEXUSDASHBOARD_GRAPHQLAPIENDPOINTOUTPUT: GraphQL endpoint (auto-injected)
-        // API_PLEXUSDASHBOARD_GRAPHQLAPIKEYOUTPUT: API key (auto-injected)
+        // Set GraphQL endpoint and API key from props
+        PLEXUS_API_URL: props.graphqlEndpoint || 'WILL_BE_SET_AFTER_DEPLOYMENT',
+        PLEXUS_API_KEY: props.apiKey || 'WILL_BE_SET_AFTER_DEPLOYMENT'
       }
     });
 

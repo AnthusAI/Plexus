@@ -1,6 +1,9 @@
 import { type ClientSchema, a, defineData, defineFunction } from "@aws-amplify/backend";
 import * as aws_dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import { Construct } from 'constructs';
+import * as lambda from 'aws-cdk-lib/aws-lambda';
+import * as path from 'path';
+import { Duration } from 'aws-cdk-lib';
 
 // Define types for authorization callback
 type AuthorizationCallback = {
@@ -52,7 +55,7 @@ const getResourceByShareTokenHandler = defineFunction({
 });
 
 const getItemsMetricsHandler = defineFunction({
-    entry: './resolvers/getItemsMetrics.ts'
+    entry: './resolvers/getItemsMetrics.py'
 });
 
 const schema = a.schema({
