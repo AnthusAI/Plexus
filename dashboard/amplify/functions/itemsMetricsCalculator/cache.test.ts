@@ -1,44 +1,24 @@
-import { SQLiteCache } from './cache';
-import * as fs from 'fs';
-import * as path from 'path';
+import { InMemoryCache } from './cache';
 
-describe('SQLiteCache', () => {
-  let cache: SQLiteCache;
-  const testDbName = 'test-cache.db';
+describe('InMemoryCache', () => {
+  let cache: InMemoryCache;
   
   beforeEach(() => {
-    // Clean up any existing test database
-    const testDbPath = path.join('tmp', testDbName);
-    if (fs.existsSync(testDbPath)) {
-      fs.unlinkSync(testDbPath);
-    }
-    
-    cache = new SQLiteCache(testDbName);
+    cache = new InMemoryCache(1000); // 1 second TTL for testing
   });
 
   afterEach(async () => {
     await cache.close();
-    
-    // Clean up test database
-    const testDbPath = path.join('tmp', testDbName);
-    if (fs.existsSync(testDbPath)) {
-      fs.unlinkSync(testDbPath);
-    }
   });
 
   describe('constructor', () => {
-    it('should create cache with default database name', () => {
-      const defaultCache = new SQLiteCache();
+    it('should create cache with default TTL', () => {
+      const defaultCache = new InMemoryCache();
       expect(defaultCache).toBeDefined();
       defaultCache.close();
     });
 
-    it('should create cache with custom database name', () => {
-      expect(cache).toBeDefined();
-    });
-
-    it('should prefer /tmp directory in Lambda environment', () => {
-      // This test verifies the path logic but actual path depends on environment
+    it('should create cache with custom TTL', () => {
       expect(cache).toBeDefined();
     });
   });
@@ -78,7 +58,7 @@ describe('SQLiteCache', () => {
       }
     });
 
-    it('should update existing values (INSERT OR REPLACE)', async () => {
+    it('should update existing values', async () => {
       const key = 'update-test';
       const originalValue = 123;
       const updatedValue = 456;
@@ -104,6 +84,73 @@ describe('SQLiteCache', () => {
     });
   });
 
+  describe('TTL functionality', () => {
+    it('should expire entries after TTL', async () => {
+      const key = 'ttl-test';
+      const value = 789;
+      
+      await cache.set(key, value);
+      
+      // Should be available immediately
+      let result = await cache.get(key);
+      expect(result).toBe(value);
+      
+      // Wait for TTL to expire
+      await new Promise(resolve => setTimeout(resolve, 1100));
+      
+      // Should be expired now
+      result = await cache.get(key);
+      expect(result).toBeNull();
+    });
+
+    it('should refresh timestamp on set', async () => {
+      const key = 'refresh-test';
+      const value1 = 100;
+      const value2 = 200;
+      
+      await cache.set(key, value1);
+      
+      // Wait half the TTL
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Update the value (should refresh timestamp)
+      await cache.set(key, value2);
+      
+      // Wait another half TTL (total time now exceeds original TTL)
+      await new Promise(resolve => setTimeout(resolve, 600));
+      
+      // Should still be available due to timestamp refresh
+      const result = await cache.get(key);
+      expect(result).toBe(value2);
+    });
+  });
+
+  describe('cache management', () => {
+    it('should report correct size', () => {
+      expect(cache.size()).toBe(0);
+    });
+
+    it('should update size when adding entries', async () => {
+      await cache.set('key1', 100);
+      expect(cache.size()).toBe(1);
+      
+      await cache.set('key2', 200);
+      expect(cache.size()).toBe(2);
+    });
+
+    it('should clear all entries', async () => {
+      await cache.set('key1', 100);
+      await cache.set('key2', 200);
+      expect(cache.size()).toBe(2);
+      
+      cache.clear();
+      expect(cache.size()).toBe(0);
+      
+      const result = await cache.get('key1');
+      expect(result).toBeNull();
+    });
+  });
+
   describe('cache key patterns', () => {
     it('should handle complex cache keys like the MetricsCalculator uses', async () => {
       const accountId = 'acc-123';
@@ -126,17 +173,6 @@ describe('SQLiteCache', () => {
       const result = await cache.get(specialKey);
       
       expect(result).toBe(value);
-    });
-  });
-
-  describe('error handling', () => {
-    it('should handle errors gracefully on invalid operations', async () => {
-      // Close the cache to simulate a closed database
-      await cache.close();
-      
-      // Operations on closed database should reject
-      await expect(cache.get('test-key')).rejects.toThrow();
-      await expect(cache.set('test-key', 123)).rejects.toThrow();
     });
   });
 
@@ -199,25 +235,22 @@ describe('SQLiteCache', () => {
     });
   });
 
-  describe('database persistence', () => {
-    it('should persist data across cache instances', async () => {
-      const key = 'persistence-test';
-      const value = 12345;
+  describe('cleanup functionality', () => {
+    it('should clean up expired entries on close', async () => {
+      const shortTtlCache = new InMemoryCache(100); // Very short TTL
       
-      // Store value in first instance
-      await cache.set(key, value);
-      await cache.close();
+      await shortTtlCache.set('key1', 100);
+      await shortTtlCache.set('key2', 200);
+      expect(shortTtlCache.size()).toBe(2);
       
-      // Create new instance with same database file
-      const newCache = new SQLiteCache(testDbName);
+      // Wait for entries to expire
+      await new Promise(resolve => setTimeout(resolve, 150));
       
-      try {
-        // Verify value persists
-        const result = await newCache.get(key);
-        expect(result).toBe(value);
-      } finally {
-        await newCache.close();
-      }
+      // Close should clean up expired entries
+      await shortTtlCache.close();
+      
+      // Verify entries are cleaned up (size should be 0)
+      expect(shortTtlCache.size()).toBe(0);
     });
   });
 }); 

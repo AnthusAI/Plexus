@@ -1,134 +1,66 @@
-import * as sqlite3 from 'sqlite3';
-import * as fs from 'fs';
-import * as path from 'path';
-
 /**
- * A SQLite-based cache for storing metric counts.
- * This mirrors the Python SQLiteCache implementation exactly.
+ * An in-memory cache for storing metric counts.
+ * Suitable for Lambda environments where persistence across invocations is not required.
  */
-export class SQLiteCache {
-  private db: sqlite3.Database;
-  private dbPath: string;
+export class InMemoryCache {
+  private cache: Map<string, { value: number; timestamp: number }> = new Map();
+  private ttlMs: number;
 
-  constructor(dbName: string = 'plexus-record-count-cache.db') {
-    // Check if /tmp exists and is writable, common for Lambda environments
-    if (fs.existsSync('/tmp') && this.canWrite('/tmp')) {
-      this.dbPath = path.join('/tmp', dbName);
-    } else {
-      // Fallback to a local tmp directory for local development
-      const localTmpDir = 'tmp';
-      if (!fs.existsSync(localTmpDir)) {
-        fs.mkdirSync(localTmpDir, { recursive: true });
-      }
-      this.dbPath = path.join(localTmpDir, dbName);
-    }
-
-    // Use an absolute path to avoid ambiguity
-    const absDbPath = path.resolve(this.dbPath);
-    console.log(`Initializing SQLite cache at ${absDbPath}`);
-    
-    this.db = new sqlite3.Database(absDbPath);
-    this.createTable();
-  }
-
-  private canWrite(dirPath: string): boolean {
-    try {
-      fs.accessSync(dirPath, fs.constants.W_OK);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  private createTable(): void {
-    const sql = `
-      CREATE TABLE IF NOT EXISTS cache (
-        key TEXT PRIMARY KEY,
-        value INTEGER,
-        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-      )
-    `;
-    
-    this.db.run(sql, (err) => {
-      if (err) {
-        console.error('Error creating cache table:', err);
-      }
-    });
+  constructor(ttlMs: number = 5 * 60 * 1000) { // 5 minutes default TTL
+    this.ttlMs = ttlMs;
   }
 
   public async get(key: string): Promise<number | null> {
-    return new Promise((resolve, reject) => {
-      this.db.get(
-        "SELECT value FROM cache WHERE key = ?",
-        [key],
-        (err, row: any) => {
-          if (err) {
-            console.error(`Cache GET error for key '${key}':`, err);
-            reject(err);
-            return;
-          }
-          
-          if (row) {
-            console.debug(`Cache GET - HIT: key='${key}', value=${row.value}`);
-            resolve(row.value);
-          } else {
-            console.debug(`Cache GET - MISS: key='${key}'`);
-            resolve(null);
-          }
-        }
-      );
-    });
+    const entry = this.cache.get(key);
+    
+    if (!entry) {
+      console.debug(`Cache GET - MISS: key='${key}'`);
+      return null;
+    }
+    
+    // Check if entry has expired
+    const now = Date.now();
+    if (now - entry.timestamp > this.ttlMs) {
+      console.debug(`Cache GET - EXPIRED: key='${key}'`);
+      this.cache.delete(key);
+      return null;
+    }
+    
+    console.debug(`Cache GET - HIT: key='${key}', value=${entry.value}`);
+    return entry.value;
   }
 
   public async set(key: string, value: number): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.db.run(
-        "INSERT OR REPLACE INTO cache (key, value) VALUES (?, ?)",
-        [key, value],
-        function(err) {
-          if (err) {
-            console.error(`Cache SET error for key '${key}':`, err);
-            reject(err);
-            return;
-          }
-          
-          console.debug(`Cache SET: key='${key}', value=${value}`);
-          resolve();
-        }
-      );
-    });
+    const timestamp = Date.now();
+    this.cache.set(key, { value, timestamp });
+    console.debug(`Cache SET: key='${key}', value=${value}`);
   }
 
   public async close(): Promise<void> {
-    return new Promise((resolve) => {
-      if (this.db) {
-        this.db.close((err) => {
-          if (err) {
-            console.error('Error closing SQLite cache:', err);
-          } else {
-            console.log("SQLite cache connection closed.");
-          }
-          resolve();
-        });
-      } else {
-        resolve();
+    // Clean up expired entries
+    const now = Date.now();
+    for (const [key, entry] of this.cache.entries()) {
+      if (now - entry.timestamp > this.ttlMs) {
+        this.cache.delete(key);
       }
-    });
+    }
+    console.log("In-memory cache cleaned up.");
+  }
+
+  public clear(): void {
+    this.cache.clear();
+    console.debug("Cache cleared");
+  }
+
+  public size(): number {
+    return this.cache.size;
   }
 }
 
 // Instantiate the cache once at the module level
-export const cache = new SQLiteCache();
+export const cache = new InMemoryCache();
 
-// Ensure graceful cleanup on process exit
-process.on('exit', () => {
+// Ensure graceful cleanup on Lambda execution completion
+export const cleanupCache = () => {
   cache.close();
-});
-
-process.on('SIGINT', () => {
-  cache.close();
-});
-
-process.on('SIGTERM', () => {
-  cache.close();
-}); 
+}; 
