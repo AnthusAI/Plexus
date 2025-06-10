@@ -1,4 +1,4 @@
-import { CfnOutput, Stack, StackProps, Duration } from 'aws-cdk-lib';
+import { CfnOutput, Stack, StackProps, Duration, Fn } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as path from 'path';
@@ -7,8 +7,8 @@ import { Policy, PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
 
 // Interface for ItemsMetricsCalculator stack props
 interface ItemsMetricsCalculatorStackProps extends StackProps {
-  graphqlEndpoint: string;
-  apiKey: string;
+  // Remove direct props to break cyclic dependency
+  // graphqlEndpoint and apiKey will be imported from CloudFormation exports
 }
 
 // Custom CDK stack for the Python Items Metrics Calculator function
@@ -20,6 +20,10 @@ export class ItemsMetricsCalculatorStack extends Stack {
 
     // Get the directory containing the function code
     const functionDir = path.join(process.cwd(), 'amplify/functions/itemsMetricsCalculator');
+
+    // Import GraphQL API URL and API key from the main stack exports
+    const graphqlEndpoint = Fn.importValue('amplify-data-GraphQLAPIURL');
+    const apiKey = Fn.importValue('amplify-data-APIKey');
 
     this.itemsMetricsCalculatorFunction = new lambda.Function(this, 'ItemsMetricsCalculatorFunction', {
       runtime: lambda.Runtime.PYTHON_3_11,
@@ -57,8 +61,8 @@ export class ItemsMetricsCalculatorStack extends Stack {
       timeout: Duration.minutes(10),
       memorySize: 512,
       environment: {
-        PLEXUS_API_URL: props.graphqlEndpoint,
-        PLEXUS_API_KEY: props.apiKey
+        PLEXUS_API_URL: graphqlEndpoint,
+        PLEXUS_API_KEY: apiKey
       }
     });
 

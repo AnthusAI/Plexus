@@ -4,7 +4,7 @@ import { auth } from './auth/resource.js';
 import { reportBlockDetails, attachments, scoreResultAttachments } from './storage/resource.js';
 import { TaskDispatcherStack } from './functions/taskDispatcher/resource.js';
 import { ItemsMetricsCalculatorStack } from "./functions/itemsMetricsCalculator/resource.js";
-import { Stack } from 'aws-cdk-lib';
+import { Stack, CfnOutput, Fn } from 'aws-cdk-lib';
 import { PolicyStatement, PolicyDocument, Role, ServicePrincipal, Effect } from 'aws-cdk-lib/aws-iam';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
@@ -25,15 +25,26 @@ if (!backend.data.resources.cfnResources.cfnApiKey) {
     throw new Error('API Key is not configured for this backend and is required by the ItemsMetricsCalculator.');
 }
 
-// Create the ItemsMetricsCalculator as a separate stack to avoid cyclic dependencies
+// Export GraphQL API URL and API key for ItemsMetricsCalculator to import
+new CfnOutput(backend.data.resources.cfnResources.cfnGraphqlApi.stack, 'GraphQLAPIURLExport', {
+    value: backend.data.resources.cfnResources.cfnGraphqlApi.attrGraphQlUrl,
+    exportName: 'amplify-data-GraphQLAPIURL'
+});
+
+new CfnOutput(backend.data.resources.cfnResources.cfnGraphqlApi.stack, 'APIKeyExport', {
+    value: backend.data.resources.cfnResources.cfnApiKey.attrApiKey,
+    exportName: 'amplify-data-APIKey'
+});
+
+// Create the ItemsMetricsCalculator as a separate stack without props dependency
 const itemsMetricsCalculatorStack = new ItemsMetricsCalculatorStack(
     backend.createStack('ItemsMetricsCalculatorStack'),
     'ItemsMetricsCalculator',
-    {
-        graphqlEndpoint: backend.data.resources.cfnResources.cfnGraphqlApi.attrGraphQlUrl,
-        apiKey: backend.data.resources.cfnResources.cfnApiKey.attrApiKey,
-    }
+    {}
 );
+
+// Import the function ARN from the ItemsMetricsCalculator stack
+const functionArn = Fn.importValue(`${itemsMetricsCalculatorStack.stackName}-ItemsMetricsCalculatorFunctionArn`);
 
 // Create IAM role for AppSync to invoke Lambda functions
 const appSyncServiceRole = new Role(
@@ -47,7 +58,7 @@ const appSyncServiceRole = new Role(
                     new PolicyStatement({
                         effect: Effect.ALLOW,
                         actions: ['lambda:InvokeFunction'],
-                        resources: [itemsMetricsCalculatorStack.itemsMetricsCalculatorFunction.functionArn]
+                        resources: [functionArn]
                     })
                 ]
             })
@@ -64,7 +75,7 @@ const itemsMetricsDataSource = new appsync.CfnDataSource(
         name: 'ItemsMetricsDataSource',
         type: 'AWS_LAMBDA',
         lambdaConfig: {
-            lambdaFunctionArn: itemsMetricsCalculatorStack.itemsMetricsCalculatorFunction.functionArn
+            lambdaFunctionArn: functionArn
         },
         serviceRoleArn: appSyncServiceRole.roleArn
     }
