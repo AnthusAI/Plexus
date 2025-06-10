@@ -341,9 +341,9 @@ const TopicAnalysisResults: React.FC<{
             type="single" 
             collapsible 
             className="w-full" 
-            value={selectedTopicIndex >= 0 ? `item-${selectedTopicIndex}` : undefined}
+            value={selectedTopicIndex >= 0 ? `item-${selectedTopicIndex}` : ""}
             onValueChange={(value) => {
-              if (value) {
+              if (value && value !== "") {
                 const index = parseInt(value.replace('item-', ''));
                 setSelectedTopicIndex(index);
               } else {
@@ -351,14 +351,18 @@ const TopicAnalysisResults: React.FC<{
               }
             }}
           >
-            {topics.map((topic, index) => (
-              <AccordionItem key={topic.id} value={`item-${index}`} className="mb-4">
-                <AccordionTrigger className="py-2">
-                  <div className="flex items-center justify-between w-full pr-4">
-                    <span className="font-medium text-left">{cleanTopicName(topic.name)}</span>
-                    <Badge variant="secondary" className="border-none bg-card font-normal">{topic.count} items</Badge>
-                  </div>
-                </AccordionTrigger>
+            {topics.map((topic, index) => {
+              const isSelected = selectedTopicIndex === index;
+              return (
+                <AccordionItem key={topic.id} value={`item-${index}`} className="mb-4">
+                  <AccordionTrigger className={`py-2 px-3 rounded-lg transition-colors ${
+                    isSelected ? 'bg-primary text-primary-foreground' : 'hover:bg-muted/50'
+                  }`}>
+                    <div className="flex items-center justify-between w-full pr-4">
+                      <span className="font-medium text-left">{cleanTopicName(topic.name)}</span>
+                      <Badge variant="secondary" className="border-none bg-card font-normal">{topic.count} items</Badge>
+                    </div>
+                  </AccordionTrigger>
                 <AccordionContent>
                   <div className="space-y-3 p-1">
                     {topic.words && topic.words.length > 0 && (
@@ -393,7 +397,8 @@ const TopicAnalysisResults: React.FC<{
                   </div>
                 </AccordionContent>
               </AccordionItem>
-            ))}
+              );
+            })}
           </Accordion>
         </div>
       </div>
@@ -1170,7 +1175,7 @@ const TopicDistributionChart: React.FC<{
               outerRadius = 0,
               ...props
             }: PieSectorDataItem) => (
-              <Sector {...props} outerRadius={outerRadius + 10} />
+              <Sector {...props} outerRadius={outerRadius + 20} />
             )}
             onClick={handlePieClick}
           >
