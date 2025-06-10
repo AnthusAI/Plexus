@@ -2,7 +2,11 @@ import { Stack, Duration } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
 import { PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
+
+// Get the directory name of the current module
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Interface for ItemsMetricsCalculator construct props
 interface ItemsMetricsCalculatorProps {
