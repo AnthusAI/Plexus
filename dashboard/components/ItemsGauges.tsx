@@ -160,7 +160,7 @@ export function ItemsGauges({
         <div className="grid grid-cols-2 @[500px]:grid-cols-3 @[700px]:grid-cols-4 @[900px]:grid-cols-5 @[1100px]:grid-cols-6 gap-3 items-start">
           {/* Loading skeletons */}
           {[1, 2, 3].map((i) => (
-            <div key={i} className={`bg-card rounded-lg p-4 border h-48 flex items-center justify-center ${i === 3 ? 'col-span-2 @[500px]:col-span-1 @[700px]:col-span-2 @[900px]:col-span-3 @[1100px]:col-span-4' : ''}`}>
+            <div key={i} className={`bg-card rounded-lg p-4 h-48 flex items-center justify-center ${i === 3 ? 'col-span-2 @[500px]:col-span-1 @[700px]:col-span-2 @[900px]:col-span-3 @[1100px]:col-span-4' : ''}`}>
               <div className="flex flex-col items-center space-y-2">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                 <span className="text-sm text-muted-foreground">Loading...</span>
@@ -177,7 +177,7 @@ export function ItemsGauges({
       <div className={cn("w-full", className)}>
         <div className="grid grid-cols-2 @[500px]:grid-cols-3 @[700px]:grid-cols-4 @[900px]:grid-cols-5 @[1100px]:grid-cols-6 gap-3 items-start">
           {/* Error state */}
-          <div className="col-span-2 @[500px]:col-span-3 @[700px]:col-span-4 @[900px]:col-span-5 @[1100px]:col-span-6 bg-card rounded-lg p-4 border h-48 flex items-center justify-center">
+          <div className="col-span-2 @[500px]:col-span-3 @[700px]:col-span-4 @[900px]:col-span-5 @[1100px]:col-span-6 bg-card rounded-lg p-4 h-48 flex items-center justify-center">
             <div className="text-center">
               <p className="text-sm text-muted-foreground mb-2">Failed to load metrics</p>
               <p className="text-xs text-muted-foreground">{error}</p>
@@ -201,7 +201,7 @@ export function ItemsGauges({
       <div className="grid grid-cols-2 @[500px]:grid-cols-3 @[700px]:grid-cols-4 @[900px]:grid-cols-5 @[1100px]:grid-cols-6 gap-3 items-start">
         
         {/* First gauge - Score Results per Hour */}
-        <div className="bg-card rounded-lg p-4 border h-48">
+        <div className="bg-card rounded-lg p-4 h-48">
           <Gauge
             value={scoreResultsPerHour}
             beforeValue={scoreResultsAveragePerHour}
@@ -232,7 +232,7 @@ Total score results over last 24 hours`}
         </div>
 
         {/* Second gauge - Items per Hour */}
-        <div className="bg-card rounded-lg p-4 border h-48">
+        <div className="bg-card rounded-lg p-4 h-48">
           <Gauge
             value={itemsPerHour}
             beforeValue={itemsAveragePerHour}
@@ -270,7 +270,7 @@ Total items over last 24 hours`}
           - @[900px]:grid-cols-5 (≥ 900px): spans 3 remaining columns (col-span-3) 
           - @[1100px]:grid-cols-6 (≥ 1100px): spans 4 remaining columns (col-span-4)
         */}
-        <div className="col-span-2 @[500px]:col-span-1 @[700px]:col-span-2 @[900px]:col-span-3 @[1100px]:col-span-4 bg-card rounded-lg p-4 border h-48 flex flex-col">
+        <div className="col-span-2 @[500px]:col-span-1 @[700px]:col-span-2 @[900px]:col-span-3 @[1100px]:col-span-4 bg-card rounded-lg p-4 h-48 flex flex-col">
           <div className="flex flex-col h-full min-w-0">
             <h3 className="text-sm font-medium text-foreground truncate mb-2 flex-shrink-0">Activity Over Time</h3>
             <div className="w-full flex-1 min-h-0 min-w-0">
