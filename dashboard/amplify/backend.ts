@@ -47,14 +47,7 @@ if (getItemsMetricsResolver) {
     // We need to grant it permission to invoke the Python lambda.
     itemsMetricsCalculator.itemsMetricsCalculatorFunction.grantInvoke(getItemsMetricsResolver);
 
-    // Add environment variable with the ItemsMetricsCalculator function name
-    if (getItemsMetricsResolver.node.defaultChild) {
-        const cfnFunction = getItemsMetricsResolver.node.defaultChild as lambda.CfnFunction;
-        cfnFunction.addPropertyOverride('Environment.Variables.AMPLIFY_DASHBOARD_ITEMSMETRICSCALCULATOR_NAME', 
-            itemsMetricsCalculator.itemsMetricsCalculatorFunction.functionName);
-    }
-
-    // Add permission to list Lambda functions so it can discover the function name
+    // Add permission to list Lambda functions so it can discover the function name (fallback)
     getItemsMetricsResolver.addToRolePolicy(
         new PolicyStatement({
             actions: ['lambda:ListFunctions'],
@@ -73,6 +66,13 @@ if (getItemsMetricsResolver) {
             resources: ['arn:aws:logs:*:*:*'],
         })
     );
+
+    // Set the environment variable by accessing the underlying CDK construct
+    const cfnFunction = getItemsMetricsResolver.node.findChild('Resource') as lambda.CfnFunction;
+    if (cfnFunction) {
+        cfnFunction.addPropertyOverride('Environment.Variables.AMPLIFY_DASHBOARD_ITEMSMETRICSCALCULATOR_NAME',
+            itemsMetricsCalculator.itemsMetricsCalculatorFunction.functionName);
+    }
 }
 
 // Get access to the getResourceByShareToken function

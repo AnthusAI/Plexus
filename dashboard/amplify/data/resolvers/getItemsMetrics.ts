@@ -18,6 +18,9 @@ async function getItemsMetricsCalculatorFunctionName(): Promise<string> {
         return cachedFunctionName;
     }
 
+    // Log all environment variables for debugging
+    console.log('Environment variables:', JSON.stringify(process.env, null, 2));
+
     // First, check if the function name is provided via environment variable
     const envFunctionName = process.env.AMPLIFY_DASHBOARD_ITEMSMETRICSCALCULATOR_NAME;
     if (envFunctionName) {
@@ -25,6 +28,8 @@ async function getItemsMetricsCalculatorFunctionName(): Promise<string> {
         cachedFunctionName = envFunctionName;
         return cachedFunctionName;
     }
+
+    console.log('AMPLIFY_DASHBOARD_ITEMSMETRICSCALCULATOR_NAME environment variable not set, falling back to discovery...');
 
     try {
         console.log('Listing functions to find the metrics calculator...');
