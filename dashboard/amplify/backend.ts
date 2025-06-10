@@ -25,9 +25,9 @@ if (!backend.data.resources.cfnResources.cfnApiKey) {
     throw new Error('API Key is not configured for this backend and is required by the ItemsMetricsCalculator.');
 }
 
-// Instantiate the ItemsMetricsCalculator construct directly in the backend scope.
-const itemsMetricsCalculator = new ItemsMetricsCalculatorStack(
-    backend.data.resources.cfnResources.cfnGraphqlApi.stack, // Use the data resource's stack as the scope
+// Create the ItemsMetricsCalculator as a separate stack to avoid cyclic dependencies
+const itemsMetricsCalculatorStack = new ItemsMetricsCalculatorStack(
+    backend.createStack('ItemsMetricsCalculatorStack'),
     'ItemsMetricsCalculator',
     {
         graphqlEndpoint: backend.data.resources.cfnResources.cfnGraphqlApi.attrGraphQlUrl,
@@ -47,7 +47,7 @@ const appSyncServiceRole = new Role(
                     new PolicyStatement({
                         effect: Effect.ALLOW,
                         actions: ['lambda:InvokeFunction'],
-                        resources: [itemsMetricsCalculator.itemsMetricsCalculatorFunction.functionArn]
+                        resources: [itemsMetricsCalculatorStack.itemsMetricsCalculatorFunction.functionArn]
                     })
                 ]
             })
@@ -64,7 +64,7 @@ const itemsMetricsDataSource = new appsync.CfnDataSource(
         name: 'ItemsMetricsDataSource',
         type: 'AWS_LAMBDA',
         lambdaConfig: {
-            lambdaFunctionArn: itemsMetricsCalculator.itemsMetricsCalculatorFunction.functionArn
+            lambdaFunctionArn: itemsMetricsCalculatorStack.itemsMetricsCalculatorFunction.functionArn
         },
         serviceRoleArn: appSyncServiceRole.roleArn
     }
