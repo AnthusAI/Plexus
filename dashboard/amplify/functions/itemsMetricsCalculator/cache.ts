@@ -1,121 +1,75 @@
-import sqlite3 from 'sqlite3';
-import * as path from 'path';
-import * as fs from 'fs';
-
-const DB_NAME = 'plexus-record-count-cache.db';
-const LAMBDA_TMP_DIR = '/tmp';
-
 /**
- * A simple SQLite-based cache for storing metric counts.
- * It stores the database in /tmp if available (for Lambda), otherwise in a local tmp/ directory.
+ * A simple in-memory cache for storing metric counts within a Lambda execution.
+ * Since Lambda functions are stateless, this cache only persists for the duration
+ * of a single invocation, but it can help avoid redundant queries within that timeframe.
  */
-export class SQLiteCache {
-  private db: sqlite3.Database | null = null;
-  private dbPath: string;
+export class InMemoryCache {
+  private cache: Map<string, { value: number; timestamp: number }> = new Map();
+  private readonly TTL_MS = 5 * 60 * 1000; // 5 minutes TTL
 
   constructor() {
-    let dbDir = LAMBDA_TMP_DIR;
-    // Check if /tmp exists and is writable, common for Lambda environments
-    try {
-      fs.accessSync(LAMBDA_TMP_DIR, fs.constants.W_OK);
-    } catch (e) {
-      // Fallback to a local tmp directory for local development
-      dbDir = 'tmp';
-      if (!fs.existsSync(dbDir)) {
-        fs.mkdirSync(dbDir);
-      }
-    }
-    this.dbPath = path.join(dbDir, DB_NAME);
-    console.log(`Initializing SQLite cache at ${this.dbPath}`);
-  }
-
-  private async connect(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (this.db) {
-        resolve();
-        return;
-      }
-      this.db = new sqlite3.Database(this.dbPath, (err: Error | null) => {
-        if (err) {
-          console.error('Error opening SQLite database:', err);
-          reject(err);
-        } else {
-          resolve();
-        }
-      });
-    });
+    console.log('Initializing in-memory cache for Lambda execution');
   }
 
   public async createTable(): Promise<void> {
-    await this.connect();
-    const query = `
-      CREATE TABLE IF NOT EXISTS cache (
-        key TEXT PRIMARY KEY,
-        value INTEGER,
-        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-      )
-    `;
-    return new Promise((resolve, reject) => {
-      this.db!.run(query, (err: Error | null) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
+    // No-op for in-memory cache
+    return Promise.resolve();
   }
 
   public async get(key: string): Promise<number | null> {
-    await this.connect();
-    const query = 'SELECT value FROM cache WHERE key = ?';
-    return new Promise((resolve, reject) => {
-      this.db!.get(query, [key], (err: Error | null, row: { value: number }) => {
-        if (err) {
-          reject(err);
-        } else {
-          if (row) {
-            console.debug(`Cache GET - HIT: key='${key}', value=${row.value}`);
-            resolve(row.value);
-          } else {
-            console.debug(`Cache GET - MISS: key='${key}'`);
-            resolve(null);
-          }
-        }
-      });
-    });
+    const cached = this.cache.get(key);
+    
+    if (!cached) {
+      console.debug(`Cache GET - MISS: key='${key}'`);
+      return null;
+    }
+
+    // Check if the cached value has expired
+    const now = Date.now();
+    if (now - cached.timestamp > this.TTL_MS) {
+      this.cache.delete(key);
+      console.debug(`Cache GET - EXPIRED: key='${key}'`);
+      return null;
+    }
+
+    console.debug(`Cache GET - HIT: key='${key}', value=${cached.value}`);
+    return cached.value;
   }
 
   public async set(key: string, value: number): Promise<void> {
-    await this.connect();
-    const query = 'INSERT OR REPLACE INTO cache (key, value) VALUES (?, ?)';
-    return new Promise((resolve, reject) => {
-      this.db!.run(query, [key, value], (err: Error | null) => {
-        if (err) reject(err);
-        else {
-          console.debug(`Cache SET: key='${key}', value=${value}`);
-          resolve();
-        }
-      });
-    });
+    const now = Date.now();
+    this.cache.set(key, { value, timestamp: now });
+    console.debug(`Cache SET: key='${key}', value=${value}`);
+    return Promise.resolve();
   }
 
   public async close(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (this.db) {
-        this.db.close((err: Error | null) => {
-          if (err) reject(err);
-          else {
-            this.db = null;
-            console.log('SQLite cache connection closed.');
-            resolve();
-          }
-        });
-      } else {
-        resolve();
+    this.cache.clear();
+    console.log('In-memory cache cleared');
+    return Promise.resolve();
+  }
+
+  /**
+   * Clean up expired entries from the cache
+   */
+  public cleanup(): void {
+    const now = Date.now();
+    let cleaned = 0;
+    
+    for (const [key, cached] of this.cache.entries()) {
+      if (now - cached.timestamp > this.TTL_MS) {
+        this.cache.delete(key);
+        cleaned++;
       }
-    });
+    }
+    
+    if (cleaned > 0) {
+      console.debug(`Cache cleanup: removed ${cleaned} expired entries`);
+    }
   }
 }
 
 // Instantiate the cache once at the module level
-export const cache = new SQLiteCache();
-// Ensure the table is created
+export const cache = new InMemoryCache();
+// Ensure the table is "created" (no-op for in-memory)
 cache.createTable(); 
