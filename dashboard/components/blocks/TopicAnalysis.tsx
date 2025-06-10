@@ -8,10 +8,18 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ChevronDown, ChevronUp, ChevronRight, Eye, EyeOff, MessagesSquare, Microscope, FileText } from 'lucide-react';
+import { ChevronDown, ChevronUp, ChevronRight, Eye, EyeOff, MessagesSquare, Microscope, FileText, PocketKnife } from 'lucide-react';
 import * as yaml from 'js-yaml';
 import { PieChart, Pie, Cell, Tooltip, Label, ResponsiveContainer, Sector } from 'recharts';
 import { PieSectorDataItem } from 'recharts/types/polar/Pie';
+import { TopicAnalysisViewer } from '@/components/diagrams';
+import { TemplateVariables } from '@/components/diagrams/topic-analysis-diagram';
+import { 
+  formatPreprocessor, 
+  formatLLM, 
+  formatBERTopic, 
+  formatFineTuning 
+} from '@/components/diagrams/text-formatting-utils';
 
 interface TopicAnalysisData {
   summary?: string;
@@ -163,6 +171,34 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
     } : 'No topics'
   });
 
+  // Extract configuration summaries for the pipeline diagram
+  const getDiagramVariables = (): TemplateVariables => {
+    return {
+      preprocessor: formatPreprocessor(
+        preprocessing.method || 'Standard',
+        preprocessing.sample_size
+      ),
+      LLM: formatLLM(
+        llmExtraction.llm_provider || 'LLM',
+        llmExtraction.llm_model,
+        llmExtraction.prompt_used
+      ),
+      BERTopic: formatBERTopic({
+        minTopicSize: bertopicAnalysis.min_topic_size,
+        requestedTopics: bertopicAnalysis.num_topics_requested,
+        minNgram: bertopicAnalysis.min_ngram,
+        maxNgram: bertopicAnalysis.max_ngram,
+        topNWords: bertopicAnalysis.top_n_words,
+        discoveredTopics: topics.length
+      }),
+      finetune: formatFineTuning({
+        useRepresentationModel: fineTuning.use_representation_model || false,
+        provider: fineTuning.representation_model_provider,
+        model: fineTuning.representation_model_name
+      })
+    };
+  };
+
 
 
   return (
@@ -182,6 +218,26 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
 
         {/* Main Topic Analysis Results */}
         <TopicAnalysisResults topics={topics} />
+
+        {/* Pipeline Setup */}
+        <div className="w-full">
+          <div className="text-lg font-medium mb-4">
+            <div className="flex items-center gap-2">
+              <PocketKnife className="h-5 w-5" />
+              Pipeline Setup
+            </div>
+          </div>
+          <Card>
+            <CardContent className="p-0">
+              <TopicAnalysisViewer 
+                variables={getDiagramVariables()}
+                className="rounded-lg"
+                viewModeEnabled={true}
+                height={600}
+              />
+            </CardContent>
+          </Card>
+        </div>
 
         {/* Analysis Details Section */}
         <div className="w-full">
