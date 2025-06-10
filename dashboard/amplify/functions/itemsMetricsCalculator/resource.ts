@@ -30,8 +30,6 @@ export class ItemsMetricsCalculator extends Construct {
       environment: {
         GRAPHQL_ENDPOINT: props.graphqlEndpoint,
         API_KEY: props.apiKey,
-        AWS_REGION: stack.region,
-        ACCOUNT_ID: stack.account
       },
       timeout: Duration.seconds(60),
       memorySize: 512,
