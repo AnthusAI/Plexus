@@ -55,38 +55,10 @@ const getResourceByShareTokenHandler = defineFunction({
     entry: './resolvers/getResourceByShareToken.ts'
 });
 
-const functionDir = path.join(__dirname, 'resolvers');
-
-const getItemsMetricsHandler = defineFunction(
-    (scope) =>
-        new lambda.Function(scope, "get-items-metrics", {
-            handler: "getItemsMetrics.handler",
-            runtime: lambda.Runtime.PYTHON_3_11,
-            timeout: Duration.seconds(600), // 10 minute timeout
-            code: lambda.Code.fromAsset(functionDir, {
-                bundling: {
-                    image: DockerImage.fromRegistry("public.ecr.aws/sam/build-python3.11:latest"),
-                    local: {
-                        tryBundle(outputDir: string) {
-                            try {
-                                const command = `
-                                    rsync -av --exclude '__pycache__' ${path.join(__dirname, '../../../plexus/metrics/')} ${path.join(outputDir, 'plexus/metrics/')} &&
-                                    touch ${path.join(outputDir, 'plexus/__init__.py')} &&
-                                    rsync -av ${path.join(functionDir, 'getItemsMetrics.py')} ${outputDir} &&
-                                    python3 -m pip install -r ${path.join(outputDir, 'plexus/metrics/requirements.txt')} -t ${outputDir}
-                                `;
-                                execSync(command, { stdio: 'inherit' });
-                                return true;
-                            } catch (e) {
-                                console.error("Bundling failed:", e);
-                                return false;
-                            }
-                        },
-                    },
-                },
-            }),
-        }),
-);
+const getItemsMetricsHandler = defineFunction({
+    name: "get-items-metrics-ts-resolver",
+    entry: './resolvers/getItemsMetrics.ts',
+});
 
 const schema = a.schema({
     // Custom query to get items metrics

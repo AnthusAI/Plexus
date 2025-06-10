@@ -9,14 +9,14 @@ type GetItemsMetricsArgs = {
 };
 
 // Amplify will inject this environment variable. The name is derived from the function resource name.
-const ITEMS_METRICS_CALCULATOR_LAMBDA_NAME = process.env.AMPLIFY_DASHBOARD_ITEMSMETRICSCALCULATOR_NAME;
+const ITEMS_METRICS_CALCULATOR_LAMBDA_NAME = process.env.ITEMS_METRICS_CALCULATOR_LAMBDA_NAME;
 const lambdaClient = new LambdaClient({});
 
 export const handler: AppSyncResolverHandler<GetItemsMetricsArgs, any> = async (event) => {
     console.log('Invoking Python metrics calculator with event:', JSON.stringify(event, null, 2));
     
     if (!ITEMS_METRICS_CALCULATOR_LAMBDA_NAME) {
-        throw new Error("ITEMS_METRICS_CALCULATOR_NAME environment variable not set.");
+        throw new Error("ITEMS_METRICS_CALCULATOR_LAMBDA_NAME environment variable not set.");
     }
 
     // The payload for the Python lambda is the arguments from the GraphQL query

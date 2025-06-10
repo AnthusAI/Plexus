@@ -2,13 +2,8 @@ import { CfnOutput, Stack, StackProps, Duration } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as path from 'path';
-import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
 import { Policy, PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
-
-// Get the directory path in ES module context
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 // Interface for ItemsMetricsCalculator stack props
 interface ItemsMetricsCalculatorStackProps extends StackProps {
@@ -24,7 +19,7 @@ export class ItemsMetricsCalculatorStack extends Stack {
     super(scope, id, props);
     
     // Get the directory containing the function code
-    const functionDir = path.join(__dirname, '.');
+    const functionDir = path.join(process.cwd(), 'amplify/functions/itemsMetricsCalculator');
 
     this.itemsMetricsCalculatorFunction = new lambda.Function(this, 'ItemsMetricsCalculatorFunction', {
       runtime: lambda.Runtime.PYTHON_3_11,
@@ -37,11 +32,11 @@ export class ItemsMetricsCalculatorStack extends Stack {
               try {
                 const command = `
                     # Copy handler and requirements
-                    rsync -av ${functionDir}/index.py ${outputDir}
-                    rsync -av ${functionDir}/requirements.txt ${outputDir}
+                    cp ${path.join(functionDir, 'index.py')} ${outputDir}
+                    cp ${path.join(functionDir, 'requirements.txt')} ${outputDir}
 
                     # Copy the shared plexus metrics module
-                    rsync -av --exclude '__pycache__' ${path.join(__dirname, '../../../../plexus/metrics/')} ${path.join(outputDir, 'plexus/metrics/')}
+                    rsync -av --exclude '__pycache__' ${path.join(process.cwd(), '../plexus/metrics/')} ${path.join(outputDir, 'plexus/metrics/')}
                     
                     # Create __init__.py to make plexus a package
                     touch ${path.join(outputDir, 'plexus/__init__.py')}
