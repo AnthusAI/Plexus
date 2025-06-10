@@ -65,8 +65,7 @@ export class ItemsMetricsCalculatorStack extends Stack {
       memorySize: 512, // More memory for processing large datasets
       environment: {
         // Use AWS-standard environment variable names that match the GraphQL resolver
-        API_PLEXUSDASHBOARD_GRAPHQLAPIARNOUTPUT: graphqlEndpointArn,
-        AWS_REGION: this.region
+        API_PLEXUSDASHBOARD_GRAPHQLAPIARNOUTPUT: graphqlEndpointArn
       }
     });
 

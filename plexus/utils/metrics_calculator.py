@@ -21,8 +21,17 @@ logger = logging.getLogger(__name__)
 
 class SQLiteCache:
     """A simple SQLite-based cache for storing metric counts."""
-    def __init__(self, db_path='tmp/metrics_cache.db'):
-        self.db_path = db_path
+    def __init__(self, db_name='plexus-record-count-cache.db'):
+        # Check if /tmp exists and is writable, common for Lambda environments
+        if os.path.exists('/tmp') and os.access('/tmp', os.W_OK):
+            self.db_path = os.path.join('/tmp', db_name)
+        else:
+            # Fallback to a local tmp directory for local development
+            local_tmp_dir = 'tmp'
+            if not os.path.exists(local_tmp_dir):
+                os.makedirs(local_tmp_dir)
+            self.db_path = os.path.join(local_tmp_dir, db_name)
+
         # Use an absolute path to avoid ambiguity
         abs_db_path = os.path.abspath(self.db_path)
         logger.info(f"Initializing SQLite cache at {abs_db_path}")
