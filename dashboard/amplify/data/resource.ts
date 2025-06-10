@@ -58,6 +58,9 @@ const getResourceByShareTokenHandler = defineFunction({
 const getItemsMetricsHandler = defineFunction({
     name: "get-items-metrics-ts-resolver",
     entry: './resolvers/getItemsMetrics.ts',
+    environment: {
+        AMPLIFY_DASHBOARD_ITEMSMETRICSCALCULATOR_NAME: ''  // Will be overridden in backend.ts
+    }
 });
 
 const schema = a.schema({
