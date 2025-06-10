@@ -49,6 +49,12 @@ export class ItemsMetricsCalculatorStack extends Stack {
               // Copy function code to output directory
               execSync(`cp -r ${functionDir}/* ${outputDir}`);
               
+              // Copy the plexus module from the project root
+              const plexusSourcePath = path.join(functionDir, '../../../../plexus');
+              const plexusDestPath = path.join(outputDir, 'plexus');
+              console.log(`Copying plexus module from ${plexusSourcePath} to ${plexusDestPath}`);
+              execSync(`cp -r ${plexusSourcePath} ${plexusDestPath}`);
+              
               // Clean up
               execSync('rm -rf /tmp/package');
               
