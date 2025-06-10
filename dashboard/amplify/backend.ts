@@ -73,12 +73,14 @@ taskDispatcherStack.taskDispatcherFunction.addToRolePolicy(
     })
 );
 
-// Create the ItemsMetricsCalculator stack with no dependencies to avoid circular references
+// Create the ItemsMetricsCalculator stack with GraphQL endpoint and API key
 const itemsMetricsCalculatorStack = new ItemsMetricsCalculatorStack(
     backend.createStack('ItemsMetricsCalculatorStack'),
     'ItemsMetricsCalculator',
     {
-        // No dependencies on the data stack to avoid circular references
+        // Pass the GraphQL endpoint and API key from the data stack
+        graphqlEndpoint: backend.data.resources.graphqlApi.graphqlUrl,
+        apiKey: backend.data.resources.graphqlApi.apiKey
     }
 );
 

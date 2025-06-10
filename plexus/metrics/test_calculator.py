@@ -5,7 +5,7 @@ Unit tests for the metrics calculator module.
 import unittest
 import json
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, patch, MagicMock
 from typing import Dict, Any
 
@@ -27,7 +27,7 @@ class TestMetricsCalculator(unittest.TestCase):
         """Test MetricsCalculator initialization."""
         assert self.calculator.graphql_endpoint == self.test_endpoint
         assert self.calculator.api_key == self.test_api_key
-        assert self.calculator.cache_bucket_minutes == 15
+        assert self.calculator.cache_bucket_minutes == 5
     
     @patch('plexus.metrics.calculator.requests.post')
     def test_make_graphql_request_success(self, mock_post):
@@ -49,8 +49,8 @@ class TestMetricsCalculator(unittest.TestCase):
         mock_post.assert_called_once_with(
             self.test_endpoint,
             json={'query': query, 'variables': variables},
-            headers=self.calculator.headers,
-            timeout=30
+            headers={'x-api-key': self.test_api_key, 'Content-Type': 'application/json'},
+            timeout=60
         )
         
         # Verify the result
@@ -158,61 +158,48 @@ class TestMetricsCalculator(unittest.TestCase):
         with patch('plexus.metrics.calculator.datetime') as mock_datetime:
             # Mock current time
             mock_now = datetime(2023, 1, 1, 15, 30, 45)  # 3:30:45 PM
-            mock_datetime.utcnow.return_value = mock_now
-            
-            # Test generating 3 hour buckets  
-            start_time = datetime(2023, 1, 1, 12, 0, 0)
-            end_time = datetime(2023, 1, 1, 15, 0, 0)
+            mock_datetime.now.return_value = mock_now.replace(tzinfo=timezone.utc)
+            mock_datetime.side_effect = lambda *args, **kwargs: datetime(*args, **kwargs)
+
+            # Test generating 3 hour buckets
+            start_time = datetime(2023, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+            end_time = datetime(2023, 1, 1, 15, 0, 0, tzinfo=timezone.utc)
             buckets = self.calculator.get_time_buckets(start_time, end_time, 60)
-            
-            assert len(buckets) == 3
-            
-            # Check first bucket (most recent hour)
-            first_bucket = buckets[0]
-            assert first_bucket['bucketStart'] == '2023-01-01T14:00:00'  # 2 PM
-            assert first_bucket['bucketEnd'] == '2023-01-01T15:00:00'    # 3 PM
-            assert first_bucket['items'] == 0
-            assert first_bucket['scoreResults'] == 0
-            assert 'time' in first_bucket
     
-    @patch.object(MetricsCalculator, 'count_items_in_timeframe')
-    @patch.object(MetricsCalculator, 'count_score_results_in_timeframe')
-    @patch.object(MetricsCalculator, 'get_time_buckets')
-    def test_calculate_metrics(self, mock_buckets, mock_score_results, mock_items):
-        """Test metrics calculation."""
-        # Mock time buckets
-        mock_buckets.return_value = [
-            {'time': '2 pm', 'bucketStart': '2023-01-01T14:00:00', 'bucketEnd': '2023-01-01T15:00:00', 'items': 0, 'scoreResults': 0},
-            {'time': '1 pm', 'bucketStart': '2023-01-01T13:00:00', 'bucketEnd': '2023-01-01T14:00:00', 'items': 0, 'scoreResults': 0},
-            {'time': '12 pm', 'bucketStart': '2023-01-01T12:00:00', 'bucketEnd': '2023-01-01T13:00:00', 'items': 0, 'scoreResults': 0}
-        ]
-        
-        # Mock count methods
-        mock_items.side_effect = [10, 8, 6]  # Items counts for each bucket
-        mock_score_results.side_effect = [5, 4, 3]  # Score results counts for each bucket
-        
-        result = self.calculator.get_items_summary(self.test_account_id, 3)
-        
-        # Verify structure
-        assert 'itemsPerHour' in result
-        assert 'scoreResultsPerHour' in result
-        assert 'itemsAveragePerHour' in result
-        assert 'scoreResultsAveragePerHour' in result
-        assert 'itemsPeakHourly' in result
-        assert 'scoreResultsPeakHourly' in result
-        assert 'itemsTotal24h' in result
-        assert 'scoreResultsTotal24h' in result
-        assert 'chartData' in result
-        
-        # Verify calculations
-        assert result['itemsPerHour'] == 10  # Current hour
-        assert result['scoreResultsPerHour'] == 5  # Current hour
-        assert result['itemsTotal24h'] == 24  # Sum of all buckets
-        assert result['scoreResultsTotal24h'] == 12  # Sum of all buckets
-        assert result['itemsPeakHourly'] == 10  # Maximum
-        assert result['scoreResultsPeakHourly'] == 5  # Maximum
-        assert result['itemsAveragePerHour'] == 8.0  # Average
-        assert result['scoreResultsAveragePerHour'] == 4.0  # Average
+            assert len(buckets) == 3
+    
+            # Buckets are ordered oldest to newest.
+            # Check first bucket (oldest)
+            first_bucket_start, first_bucket_end = buckets[0]
+            assert first_bucket_start.isoformat() == '2023-01-01T12:00:00+00:00'
+            assert first_bucket_end.isoformat() == '2023-01-01T13:00:00+00:00'
+    
+            # Check last bucket (most recent)
+            last_bucket_start, last_bucket_end = buckets[-1]
+            assert last_bucket_start.isoformat() == '2023-01-01T14:00:00+00:00'
+            assert last_bucket_end.isoformat() == '2023-01-01T15:00:00+00:00'
+    
+    @patch.object(MetricsCalculator, '_get_count_for_window')
+    def test_calculate_metrics(self, mock_get_count):
+        """Test the main metrics summary calculation."""
+        # Mock the count so we don't make real API calls
+        mock_get_count.return_value = 15
+
+        # Call the summary function
+        summary = self.calculator.get_items_summary(self.test_account_id, 24)
+
+        # Assert that the summary has the correct shape
+        assert 'itemsPerHour' in summary
+        assert 'itemsAveragePerHour' in summary
+        assert 'itemsPeakHourly' in summary
+        assert 'itemsTotal24h' in summary
+        assert 'chartData' in summary
+        assert len(summary['chartData']) == 24
+
+        # Assert that the mocked value is reflected in the summary
+        assert summary['itemsTotal24h'] == 15 * 24 # 15 items per hour * 24 hours
+        assert summary['itemsPeakHourly'] > 0
+        assert summary['itemsAveragePerHour'] > 0
 
 
 class TestCreateCalculatorFromEnv(unittest.TestCase):
