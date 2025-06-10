@@ -5,15 +5,10 @@ import { reportBlockDetails, attachments, scoreResultAttachments } from './stora
 import { TaskDispatcherStack } from './functions/taskDispatcher/resource.js';
 import { ItemsMetricsCalculatorStack } from "./functions/itemsMetricsCalculator/resource.js";
 import { Stack } from 'aws-cdk-lib';
-import { PolicyStatement } from 'aws-cdk-lib/aws-iam';
+import { PolicyStatement, PolicyDocument, Role, ServicePrincipal, Effect } from 'aws-cdk-lib/aws-iam';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
-import {
-  Effect,
-  Policy,
-  Role,
-  ServicePrincipal,
-} from 'aws-cdk-lib/aws-iam';
+import * as appsync from 'aws-cdk-lib/aws-appsync';
 import { IFunction } from 'aws-cdk-lib/aws-lambda';
 import { IGraphqlApi, CfnGraphQLApi, CfnApiKey } from 'aws-cdk-lib/aws-appsync';
 
@@ -40,40 +35,61 @@ const itemsMetricsCalculator = new ItemsMetricsCalculatorStack(
     }
 );
 
-// The getItemsMetrics query has a resolver function (a TypeScript lambda).
-const getItemsMetricsResolver = backend.data.resources.functions.getItemsMetricsHandler;
-
-if (getItemsMetricsResolver) {
-    // We need to grant it permission to invoke the Python lambda.
-    itemsMetricsCalculator.itemsMetricsCalculatorFunction.grantInvoke(getItemsMetricsResolver);
-
-    // Add permission to list Lambda functions so it can discover the function name (fallback)
-    getItemsMetricsResolver.addToRolePolicy(
-        new PolicyStatement({
-            actions: ['lambda:ListFunctions'],
-            resources: ['*']
-        })
-    );
-    
-    // Add permissions for CloudWatch Logs
-    getItemsMetricsResolver.addToRolePolicy(
-        new PolicyStatement({
-            actions: [
-                'logs:CreateLogGroup',
-                'logs:CreateLogStream',
-                'logs:PutLogEvents',
-            ],
-            resources: ['arn:aws:logs:*:*:*'],
-        })
-    );
-
-    // Set the environment variable by accessing the underlying CDK construct
-    const cfnFunction = getItemsMetricsResolver.node.findChild('Resource') as lambda.CfnFunction;
-    if (cfnFunction) {
-        cfnFunction.addPropertyOverride('Environment.Variables.AMPLIFY_DASHBOARD_ITEMSMETRICSCALCULATOR_NAME',
-            itemsMetricsCalculator.itemsMetricsCalculatorFunction.functionName);
+// Create IAM role for AppSync to invoke Lambda functions
+const appSyncServiceRole = new Role(
+    backend.data.resources.cfnResources.cfnGraphqlApi.stack,
+    'AppSyncServiceRole',
+    {
+        assumedBy: new ServicePrincipal('appsync.amazonaws.com'),
+        inlinePolicies: {
+            LambdaInvokePolicy: new PolicyDocument({
+                statements: [
+                    new PolicyStatement({
+                        effect: Effect.ALLOW,
+                        actions: ['lambda:InvokeFunction'],
+                        resources: [itemsMetricsCalculator.itemsMetricsCalculatorFunction.functionArn]
+                    })
+                ]
+            })
+        }
     }
-}
+);
+
+// Create AppSync data source for the Python Lambda function using proper CDK constructs
+const itemsMetricsDataSource = new appsync.CfnDataSource(
+    backend.data.resources.cfnResources.cfnGraphqlApi.stack,
+    'ItemsMetricsDataSource',
+    {
+        apiId: backend.data.resources.cfnResources.cfnGraphqlApi.attrApiId,
+        name: 'ItemsMetricsDataSource',
+        type: 'AWS_LAMBDA',
+        lambdaConfig: {
+            lambdaFunctionArn: itemsMetricsCalculator.itemsMetricsCalculatorFunction.functionArn
+        },
+        serviceRoleArn: appSyncServiceRole.roleArn
+    }
+);
+
+// Create resolver for the getItemsMetrics query
+new appsync.CfnResolver(
+    backend.data.resources.cfnResources.cfnGraphqlApi.stack,
+    'GetItemsMetricsResolver',
+    {
+        apiId: backend.data.resources.cfnResources.cfnGraphqlApi.attrApiId,
+        typeName: 'Query',
+        fieldName: 'getItemsMetrics',
+        dataSourceName: itemsMetricsDataSource.name,
+        requestMappingTemplate: `{
+            "version": "2017-02-28",
+            "operation": "Invoke",
+            "payload": $util.toJson($ctx.args)
+        }`,
+        responseMappingTemplate: `$util.toJson($ctx.result)`
+    }
+);
+
+// Ensure the resolver depends on the data source
+itemsMetricsDataSource.addDependency(backend.data.resources.cfnResources.cfnGraphqlApi);
 
 // Get access to the getResourceByShareToken function
 const getResourceByShareTokenFunction = backend.data.resources.functions.getResourceByShareToken;
