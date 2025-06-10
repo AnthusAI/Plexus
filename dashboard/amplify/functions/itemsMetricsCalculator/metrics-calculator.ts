@@ -30,14 +30,16 @@ interface ScoreResultsMetrics {
   chartData: TimeBucket[];
 }
 
+type CountFunction = (accountId: string, startTime: Date, endTime: Date) => Promise<number>;
+
 /**
  * A utility class for calculating items and score results metrics over time periods.
  * Uses API key authentication to connect to the Plexus GraphQL API and provides
  * methods to count items and score results within specific timeframes,
  * generate time buckets, and calculate hourly rates and statistics.
  *
- * This implementation includes a SQLite-based caching layer to reduce redundant
- * API calls for overlapping time periods.
+ * This implementation mirrors the Python MetricsCalculator exactly, including
+ * the SQLite-based caching mechanism with clock-aligned buckets and margin handling.
  */
 export class MetricsCalculator {
   private graphqlEndpoint: string;
@@ -57,33 +59,39 @@ export class MetricsCalculator {
     this.cacheBucketMinutes = cacheBucketMinutes;
   }
 
-  private _getCacheKey(metricType: 'items' | 'scoreResults', accountId: string, startTime: Date): string {
-    return `${accountId}:${metricType}:${startTime.toISOString()}`;
-  }
-
   /**
    * Make a GraphQL request to the API using API key authentication.
    */
   private async makeGraphQLRequest(query: string, variables: Record<string, any>): Promise<any> {
     const payload = { query, variables };
 
-    console.log('Making GraphQL request:', { 
-      queryType: this.getQueryType(query),
-      variables: { ...variables, _page_number: undefined }
-    });
+    // Log the request with a brief description
+    const queryType = this.getQueryType(query);
+    const pageInfo = variables.nextToken ? ` (page ${variables._page_number || '?'})` : '';
+    
+    console.log(`GraphQL request: ${queryType}${pageInfo}`);
+    console.debug(`Making GraphQL request to ${this.graphqlEndpoint}`);
+    console.debug(`Query: ${query}`);
+    console.debug(`Variables: ${JSON.stringify(variables)}`);
+
+    const headers = {
+      'x-api-key': this.apiKey,
+      'Content-Type': 'application/json'
+    };
 
     try {
       const response = await axios.post(
         this.graphqlEndpoint,
         payload,
         {
-          headers: {
-            'x-api-key': this.apiKey,
-            'Content-Type': 'application/json'
-          },
-          timeout: 60000 // 60 seconds
+          headers,
+          timeout: 60000 // 60 seconds - increased timeout as in Python
         }
       );
+
+      if (response.status !== 200) {
+        throw new Error(`GraphQL request failed with status ${response.status}: ${response.data}`);
+      }
 
       const data = response.data as GraphQLResponse;
 
@@ -93,9 +101,12 @@ export class MetricsCalculator {
       }
 
       return data.data || {};
+
     } catch (error) {
       if (axios.isAxiosError(error)) {
-        if (error.response) {
+        if (error.code === 'ECONNABORTED') {
+          throw new Error('GraphQL request timed out after 60 seconds');
+        } else if (error.response) {
           throw new Error(`GraphQL request failed with status ${error.response.status}: ${error.response.data}`);
         } else if (error.request) {
           throw new Error('GraphQL request failed: No response received');
@@ -107,6 +118,7 @@ export class MetricsCalculator {
 
   private getQueryType(query: string): string {
     if (query.includes('listItemByAccountIdAndCreatedAt')) return 'items';
+    if (query.includes('listScoreResultByAccountIdAndCreatedAt')) return 'score_results';
     if (query.includes('listScoreResultByAccountIdAndUpdatedAt')) return 'score_results';
     if (query.includes('listItems')) return 'items';
     if (query.includes('listScoreResults')) return 'score_results';
@@ -143,7 +155,7 @@ export class MetricsCalculator {
     let totalCount = 0;
     let nextToken: string | null = null;
     let pageCount = 0;
-    const maxPages = 500;
+    const maxPages = 500; // Increased page limit as in Python
 
     console.log(`Counting items for account ${accountId} between ${startTime.toISOString()} and ${endTime.toISOString()}`);
 
@@ -157,7 +169,11 @@ export class MetricsCalculator {
       if (nextToken) {
         currentVariables.nextToken = nextToken;
       }
+      
+      // Add page number to variables for logging
       currentVariables._page_number = pageCount + 1;
+
+      console.debug(`Fetching items page ${pageCount + 1}`);
 
       try {
         const data = await this.makeGraphQLRequest(query, currentVariables);
@@ -166,12 +182,12 @@ export class MetricsCalculator {
         totalCount += itemCount;
         pageCount++;
 
-        console.log(`Fetched ${itemCount} items on page ${pageCount}, total so far: ${totalCount}`);
+        console.debug(`Fetched ${itemCount} items on page ${pageCount}, total so far: ${totalCount}`);
 
         nextToken = data.listItemByAccountIdAndCreatedAt?.nextToken;
         if (!nextToken) break;
       } catch (error) {
-        console.error(`Failed to fetch items page ${pageCount + 1}:`, error);
+        console.error(`Failed to fetch items page ${pageCount + 1}: ${error}`);
         break;
       }
     }
@@ -210,7 +226,7 @@ export class MetricsCalculator {
     let totalCount = 0;
     let nextToken: string | null = null;
     let pageCount = 0;
-    const maxPages = 500;
+    const maxPages = 500; // Increased page limit as in Python
 
     console.log(`Counting score results for account ${accountId} between ${startTime.toISOString()} and ${endTime.toISOString()}`);
 
@@ -224,7 +240,11 @@ export class MetricsCalculator {
       if (nextToken) {
         currentVariables.nextToken = nextToken;
       }
+      
+      // Add page number to variables for logging
       currentVariables._page_number = pageCount + 1;
+
+      console.debug(`Fetching score results page ${pageCount + 1}`);
 
       try {
         const data = await this.makeGraphQLRequest(query, currentVariables);
@@ -233,12 +253,12 @@ export class MetricsCalculator {
         totalCount += itemCount;
         pageCount++;
 
-        console.log(`Fetched ${itemCount} score results on page ${pageCount}, total so far: ${totalCount}`);
+        console.debug(`Fetched ${itemCount} score results on page ${pageCount}, total so far: ${totalCount}`);
 
         nextToken = data.listScoreResultByAccountIdAndUpdatedAt?.nextToken;
         if (!nextToken) break;
       } catch (error) {
-        console.error(`Failed to fetch score results page ${pageCount + 1}:`, error);
+        console.error(`Failed to fetch score results page ${pageCount + 1}: ${error}`);
         break;
       }
     }
@@ -248,101 +268,170 @@ export class MetricsCalculator {
   }
 
   /**
-   * Generates a list of clock-aligned time buckets within a given time range.
-   * For example, with 15-minute buckets, it will generate buckets like
-   * 10:00-10:15, 10:15-10:30, etc.
-   *
-   * @param startTime The start of the overall time range.
-   * @param endTime The end of the overall time range.
-   * @param bucketSizeMinutes The size of each bucket in minutes.
-   * @returns A list of tuples, where each tuple is a [start, end] Date pair for a bucket.
+   * Generate time buckets of a specific size between a start and end time.
    */
-  private getClockAlignedBuckets(startTime: Date, endTime: Date, bucketSizeMinutes: number): Array<[Date, Date]> {
+  private getTimeBuckets(startTime: Date, endTime: Date, bucketSizeMinutes: number): Array<[Date, Date]> {
     const buckets: Array<[Date, Date]> = [];
-    let current = new Date(startTime);
-
-    // Find the first aligned bucket start time
-    const minutes = current.getMinutes();
-    const remainder = minutes % bucketSizeMinutes;
-    if (remainder !== 0) {
-      current.setMinutes(minutes - remainder);
-      current.setSeconds(0);
-      current.setMilliseconds(0);
+    let currentTime = new Date(startTime);
+    
+    while (currentTime < endTime) {
+      const bucketEndTime = new Date(currentTime.getTime() + bucketSizeMinutes * 60 * 1000);
+      buckets.push([currentTime, new Date(Math.min(bucketEndTime.getTime(), endTime.getTime()))]);
+      currentTime = bucketEndTime;
     }
-    // If the first alignment is before the start time, move to the next one
-    if (current < startTime) {
-        current = new Date(current.getTime() + bucketSizeMinutes * 60 * 1000);
-    }
-
-    while (current < endTime) {
-      const bucketStartTime = new Date(current);
-      const bucketEndTime = new Date(bucketStartTime.getTime() + bucketSizeMinutes * 60 * 1000);
-
-      if (bucketEndTime <= endTime) {
-        buckets.push([bucketStartTime, bucketEndTime]);
-      }
-      current = bucketEndTime;
-    }
+    
     return buckets;
   }
 
   /**
-   * Retrieves a count for a given time window, utilizing a cache to avoid
-   * redundant queries for the same time buckets.
-   *
-   * @param accountId The account ID.
-   * @param startTime The start of the time window.
-   * @param endTime The end of the time window.
-   * @param countFunction The function to call to get the count for a time range (if not cached).
-   * @param metricType The type of metric being counted ('items' or 'scoreResults'), for the cache key.
-   * @returns The total count for the window.
+   * Calculates the clock-aligned buckets that are fully contained within the given time range.
+   * This mirrors the Python implementation exactly.
+   */
+  private getClockAlignedBuckets(startTime: Date, endTime: Date, bucketSizeMinutes: number): Array<[Date, Date]> {
+    const buckets: Array<[Date, Date]> = [];
+    
+    // Find the start of the first full bucket
+    let firstBucketStart = new Date(startTime);
+    if (startTime.getMinutes() % bucketSizeMinutes !== 0 || startTime.getSeconds() !== 0 || startTime.getMilliseconds() !== 0) {
+      const minutesToAdd = bucketSizeMinutes - (startTime.getMinutes() % bucketSizeMinutes);
+      firstBucketStart = new Date(startTime.getTime() + minutesToAdd * 60 * 1000);
+      firstBucketStart.setMinutes((startTime.getMinutes() + minutesToAdd) % 60);
+      firstBucketStart.setSeconds(0);
+      firstBucketStart.setMilliseconds(0);
+    }
+
+    // Iterate through buckets and add the ones that are fully contained
+    let currentTime = new Date(firstBucketStart);
+    while (currentTime.getTime() + bucketSizeMinutes * 60 * 1000 <= endTime.getTime()) {
+      const bucketEnd = new Date(currentTime.getTime() + bucketSizeMinutes * 60 * 1000);
+      buckets.push([new Date(currentTime), bucketEnd]);
+      currentTime = bucketEnd;
+    }
+    
+    return buckets;
+  }
+
+  /**
+   * Get count for a time range, using clock-aligned cache buckets.
+   * This is a simpler version used within the more complex _getCountForWindow method.
    */
   private async getCountWithCaching(
-    accountId: string,
-    startTime: Date,
-    endTime: Date,
-    countFunction: (accountId: string, startTime: Date, endTime: Date) => Promise<number>,
-    metricType: 'items' | 'scoreResults'
+    accountId: string, 
+    startTime: Date, 
+    endTime: Date, 
+    countFunction: CountFunction
   ): Promise<number> {
+    // Extract the actual function name, removing "bound " prefix if present
+    const cacheKeyPrefix = countFunction.name.replace(/^bound /, '');
     let totalCount = 0;
+    
+    // Get the clock-aligned buckets that are fully contained in the time range
     const alignedBuckets = this.getClockAlignedBuckets(startTime, endTime, this.cacheBucketMinutes);
 
     if (alignedBuckets.length === 0) {
-      // The window is smaller than a single bucket, query directly
+      // If no full buckets, just query the whole range
       return await countFunction(accountId, startTime, endTime);
     }
 
-    let lastAlignedTime = startTime;
-
-    // 1. Handle the initial partial bucket (if any)
-    const firstBucketStartTime = alignedBuckets[0][0];
-    if (firstBucketStartTime > startTime) {
-      console.log(`Querying initial partial bucket: ${startTime.toISOString()} - ${firstBucketStartTime.toISOString()}`);
-      totalCount += await countFunction(accountId, startTime, firstBucketStartTime);
+    // 1. Count items in the first partial bucket (if any)
+    const firstBucketStart = alignedBuckets[0][0];
+    if (startTime < firstBucketStart) {
+      totalCount += await countFunction(accountId, startTime, firstBucketStart);
     }
 
-    // 2. Process the full, aligned buckets using the cache
+    // 2. Count items in the full buckets (using cache)
     for (const [bucketStart, bucketEnd] of alignedBuckets) {
-      const cacheKey = this._getCacheKey(metricType, accountId, bucketStart);
-      let count = await cache.get(cacheKey);
-
-      if (count === null) {
-        console.log(`Cache MISS for ${metricType}. Querying bucket: ${bucketStart.toISOString()} - ${bucketEnd.toISOString()}`);
+      const cacheKey = `${cacheKeyPrefix}:${accountId}:${bucketStart.toISOString()}`;
+      let cachedValue = await cache.get(cacheKey);
+      let count: number;
+      
+      if (cachedValue !== null) {
+        count = cachedValue;
+        console.debug(`Cache hit for ${cacheKey}: ${count} items`);
+      } else {
         count = await countFunction(accountId, bucketStart, bucketEnd);
         await cache.set(cacheKey, count);
-      } else {
-        console.log(`Cache HIT for ${metricType}. Bucket: ${bucketStart.toISOString()} - ${bucketEnd.toISOString()}`);
+        console.debug(`Cache miss for ${cacheKey}. Fetched and cached ${count} items`);
       }
       totalCount += count;
-      lastAlignedTime = bucketEnd;
     }
 
-    // 3. Handle the final partial bucket (if any)
-    if (endTime > lastAlignedTime) {
-      console.log(`Querying final partial bucket: ${lastAlignedTime.toISOString()} - ${endTime.toISOString()}`);
-      totalCount += await countFunction(accountId, lastAlignedTime, endTime);
+    // 3. Count items in the last partial bucket (if any)
+    const lastBucketEnd = alignedBuckets[alignedBuckets.length - 1][1];
+    if (endTime > lastBucketEnd) {
+      totalCount += await countFunction(accountId, lastBucketEnd, endTime);
     }
+
+    return totalCount;
+  }
+
+  /**
+   * Gets the count for an arbitrary time window, using cached buckets and querying for margins.
+   * Implements the logic from the caching plan - this is the core method that mirrors the Python implementation exactly.
+   */
+  private async _getCountForWindow(
+    accountId: string, 
+    startTime: Date, 
+    endTime: Date, 
+    countFunction: CountFunction
+  ): Promise<number> {
+    const bucketMinutes = this.cacheBucketMinutes;
+    let totalCount = 0;
+
+    // 1. Calculate the boundaries of the fully cached portion of the window
     
+    // Round start_time UP to the next bucket boundary
+    // If start_time is already on a boundary, it will be moved to the next one, so we handle that.
+    let cachePeriodStart: Date;
+    if (startTime.getMinutes() % bucketMinutes === 0 && startTime.getSeconds() === 0 && startTime.getMilliseconds() === 0) {
+      cachePeriodStart = new Date(startTime);
+    } else {
+      const cachePeriodStartMinute = ((Math.floor(startTime.getMinutes() / bucketMinutes)) + 1) * bucketMinutes;
+      cachePeriodStart = new Date(startTime);
+      cachePeriodStart.setSeconds(0);
+      cachePeriodStart.setMilliseconds(0);
+      
+      if (cachePeriodStartMinute >= 60) {
+        cachePeriodStart = new Date(cachePeriodStart.getTime() + 60 * 60 * 1000);
+        cachePeriodStart.setMinutes(0);
+      } else {
+        cachePeriodStart.setMinutes(cachePeriodStartMinute);
+      }
+    }
+
+    // Round end_time DOWN to the previous bucket boundary
+    const cachePeriodEndMinute = Math.floor(endTime.getMinutes() / bucketMinutes) * bucketMinutes;
+    const cachePeriodEnd = new Date(endTime);
+    cachePeriodEnd.setMinutes(cachePeriodEndMinute);
+    cachePeriodEnd.setSeconds(0);
+    cachePeriodEnd.setMilliseconds(0);
+
+    // 2. Check if the window is too small to contain any full buckets
+    if (cachePeriodStart >= cachePeriodEnd || cachePeriodStart > endTime || cachePeriodEnd < startTime) {
+      // The entire window is a margin, query it directly
+      console.debug(`Window ${startTime.toISOString()} to ${endTime.toISOString()} has no full cache buckets. Querying directly.`);
+      return await countFunction(accountId, startTime, endTime);
+    }
+
+    // 3. Query the start margin (if it exists)
+    const startMarginEnd = new Date(Math.min(cachePeriodStart.getTime(), endTime.getTime()));
+    if (startTime < startMarginEnd) {
+      console.debug(`Querying start margin: ${startTime.toISOString()} to ${startMarginEnd.toISOString()}`);
+      totalCount += await countFunction(accountId, startTime, startMarginEnd);
+    }
+
+    // 4. Get counts from the fully enclosed, cached buckets
+    const cachedBuckets = this.getClockAlignedBuckets(cachePeriodStart, cachePeriodEnd, bucketMinutes);
+    for (const [subStart, subEnd] of cachedBuckets) {
+      totalCount += await this.getCountWithCaching(accountId, subStart, subEnd, countFunction);
+    }
+
+    // 5. Query the end margin (if it exists)
+    if (endTime > cachePeriodEnd) {
+      console.debug(`Querying end margin: ${cachePeriodEnd.toISOString()} to ${endTime.toISOString()}`);
+      totalCount += await countFunction(accountId, cachePeriodEnd, endTime);
+    }
+
     return totalCount;
   }
 
@@ -360,16 +449,16 @@ export class MetricsCalculator {
       const bucketEnd = new Date(endTimeUTC.getTime() - i * 60 * 60 * 1000);
       const bucketStart = new Date(endTimeUTC.getTime() - (i + 1) * 60 * 60 * 1000);
 
-      // Count score results in this hourly window
-      const scoreResultsCount = await this.getCountWithCaching(
-        accountId,
-        bucketStart,
-        bucketEnd,
-        this.countScoreResultsInTimeframe.bind(this),
-        'scoreResults'
+      // This is the hourly window we want to analyze.
+      // It is NOT clock-aligned.
+      const scoreResultsCount = await this._getCountForWindow(
+        accountId, 
+        bucketStart, 
+        bucketEnd, 
+        this.countScoreResultsInTimeframe.bind(this)
       );
 
-      // Format the time label
+      // The label should reflect the clock hour it ends in.
       const timeLabel = bucketEnd.toLocaleTimeString('en-US', { 
         hour: 'numeric', 
         hour12: true,
@@ -398,7 +487,7 @@ export class MetricsCalculator {
     }
 
     const totalScoreResults = chartData.reduce((sum, bucket) => sum + (bucket.scoreResults || 0), 0);
-    const currentHourScoreResults = chartData[chartData.length - 1].scoreResults || 0;
+    const currentHourScoreResults = chartData[chartData.length - 1].scoreResults || 0; // The most recent hour
     const averageScoreResults = totalScoreResults / chartData.length;
     const peakScoreResults = Math.max(...chartData.map(bucket => bucket.scoreResults || 0));
 
@@ -425,16 +514,13 @@ export class MetricsCalculator {
       const bucketEnd = new Date(endTimeUTC.getTime() - i * 60 * 60 * 1000);
       const bucketStart = new Date(endTimeUTC.getTime() - (i + 1) * 60 * 60 * 1000);
 
-      // Count items in this hourly window
-      const itemsCount = await this.getCountWithCaching(
-        accountId,
-        bucketStart,
-        bucketEnd,
-        this.countItemsInTimeframe.bind(this),
-        'items'
+      const itemsCount = await this._getCountForWindow(
+        accountId, 
+        bucketStart, 
+        bucketEnd, 
+        this.countItemsInTimeframe.bind(this)
       );
 
-      // Format the time label
       const timeLabel = bucketEnd.toLocaleTimeString('en-US', { 
         hour: 'numeric', 
         hour12: true,
