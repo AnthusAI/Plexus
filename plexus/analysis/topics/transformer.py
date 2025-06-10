@@ -203,7 +203,18 @@ def transform_transcripts(
     # Check if cached files exist and fresh is False
     if not fresh and os.path.exists(cached_parquet_path) and os.path.exists(text_file_path):
         logging.info(f"Using cached files: {cached_parquet_path} and {text_file_path}")
-        return cached_parquet_path, text_file_path
+        # Return minimal preprocessing info for cached chunk method
+        preprocessing_info = {
+            "method": "chunk",
+            "examples": [],
+            "hit_rate_stats": {
+                "total_processed": 0,
+                "successful_extractions": 0,
+                "failed_extractions": 0,
+                "hit_rate_percentage": 0.0
+            }
+        }
+        return cached_parquet_path, text_file_path, preprocessing_info
     
     # Load input data
     logging.info(f"Loading transcript data from {input_file}")
@@ -252,9 +263,22 @@ def transform_transcripts(
         example = processed_row[content_column][:500] + ("..." if len(processed_row[content_column]) > 500 else "")
         examples.append(example)
     
+    # Calculate hit rate statistics for chunk method
+    # For chunk method, we consider all non-empty speaking turns as successful
+    total_processed = len(df)
+    successful_extractions = len(transformed_df)
+    failed_extractions = 0  # Chunk method doesn't really fail, it just extracts speaking turns
+    hit_rate = (successful_extractions / total_processed * 100) if total_processed > 0 else 0
+    
     preprocessing_info = {
         "method": "chunk",
-        "examples": examples
+        "examples": examples,
+        "hit_rate_stats": {
+            "total_processed": total_processed,
+            "successful_extractions": successful_extractions,
+            "failed_extractions": failed_extractions,
+            "hit_rate_percentage": round(hit_rate, 1)
+        }
     }
     
     return cached_parquet_path, text_file_path, preprocessing_info
@@ -465,13 +489,33 @@ async def _transform_transcripts_llm_async(
                 
                 Key topics:"""
             
+            # Try to load hit rate stats from metadata file
+            hit_rate_stats = {
+                "total_processed": 0,
+                "successful_extractions": 0,
+                "failed_extractions": 0,
+                "hit_rate_percentage": 0.0
+            }
+            
+            try:
+                metadata_path = f"{cached_parquet_path}.metadata.json"
+                if os.path.exists(metadata_path):
+                    with open(metadata_path, 'r') as f:
+                        metadata = json.load(f)
+                        if "hit_rate_stats" in metadata:
+                            hit_rate_stats = metadata["hit_rate_stats"]
+                            logging.info(f"Loaded hit rate stats from metadata: {hit_rate_stats['hit_rate_percentage']}% success rate")
+            except Exception as e:
+                logging.warning(f"Failed to load hit rate metadata: {e}")
+            
             # Build preprocessing info from cached context
             preprocessing_info = {
                 "method": "llm",
                 "prompt_used": template,
                 "llm_provider": provider,
                 "llm_model": model,
-                "examples": examples
+                "examples": examples,
+                "hit_rate_stats": hit_rate_stats
             }
             
             return cached_parquet_path, text_file_path, preprocessing_info
@@ -484,7 +528,13 @@ async def _transform_transcripts_llm_async(
                 "prompt_used": "Unknown (cached)",
                 "llm_provider": provider,
                 "llm_model": model,
-                "examples": []
+                "examples": [],
+                "hit_rate_stats": {
+                    "total_processed": 0,
+                    "successful_extractions": 0,
+                    "failed_extractions": 0,
+                    "hit_rate_percentage": 0.0
+                }
             }
             return cached_parquet_path, text_file_path, preprocessing_info
     
@@ -616,13 +666,56 @@ async def _transform_transcripts_llm_async(
     logging.info(f"Saved LLM-processed text to {text_file_path}")
     
     # Create preprocessing info with examples and prompt
+    # Calculate hit rate statistics for LLM method
+    total_processed = len(all_results) if valid_texts else 0
+    successful_extractions = 0
+    failed_extractions = 0
+    
+    for response, row in all_results:
+        if isinstance(response, Exception):
+            failed_extractions += 1
+        else:
+            # For LLM method, consider any non-empty response as successful
+            if provider.lower() == 'openai' and hasattr(response, 'content'):
+                response_text = response.content
+            else:
+                response_text = str(response)
+            
+            if response_text and response_text.strip():
+                successful_extractions += 1
+            else:
+                failed_extractions += 1
+    
+    hit_rate = (successful_extractions / total_processed * 100) if total_processed > 0 else 0
+    
     preprocessing_info = {
         "method": "llm",
         "prompt_used": template,
         "llm_provider": provider,
         "llm_model": model,
-        "examples": preprocessing_examples
+        "examples": preprocessing_examples,
+        "hit_rate_stats": {
+            "total_processed": total_processed,
+            "successful_extractions": successful_extractions,
+            "failed_extractions": failed_extractions,
+            "hit_rate_percentage": round(hit_rate, 1)
+        }
     }
+    
+    # Save hit rate stats to a metadata file for future cached runs
+    try:
+        metadata_path = f"{cached_parquet_path}.metadata.json"
+        with open(metadata_path, 'w') as f:
+            json.dump({
+                "hit_rate_stats": preprocessing_info["hit_rate_stats"],
+                "method": "llm",
+                "llm_provider": provider,
+                "llm_model": model,
+                "prompt_used": template
+            }, f, indent=2)
+        logging.info(f"Saved hit rate metadata to {metadata_path}")
+    except Exception as e:
+        logging.warning(f"Failed to save hit rate metadata: {e}")
     
     gc.collect()
     return cached_parquet_path, text_file_path, preprocessing_info
@@ -1123,13 +1216,33 @@ async def _transform_transcripts_itemize_async(
                 
                 Key topics:"""
             
+            # Try to load hit rate stats from metadata file
+            hit_rate_stats = {
+                "total_processed": 0,
+                "successful_extractions": 0,
+                "failed_extractions": 0,
+                "hit_rate_percentage": 0.0
+            }
+            
+            try:
+                metadata_path = f"{cached_parquet_path}.metadata.json"
+                if os.path.exists(metadata_path):
+                    with open(metadata_path, 'r') as f:
+                        metadata = json.load(f)
+                        if "hit_rate_stats" in metadata:
+                            hit_rate_stats = metadata["hit_rate_stats"]
+                            logging.info(f"Loaded hit rate stats from metadata: {hit_rate_stats['hit_rate_percentage']}% success rate")
+            except Exception as e:
+                logging.warning(f"Failed to load hit rate metadata: {e}")
+            
             # Build preprocessing info from cached context
             preprocessing_info = {
                 "method": "itemize",
                 "prompt_used": template,
                 "llm_provider": provider,
                 "llm_model": model,
-                "examples": examples
+                "examples": examples,
+                "hit_rate_stats": hit_rate_stats
             }
             
             return cached_parquet_path, text_file_path, preprocessing_info
@@ -1138,13 +1251,19 @@ async def _transform_transcripts_itemize_async(
             logging.warning(f"Could not extract examples from cached data: {e}")
             # Fallback to minimal preprocessing info
             preprocessing_info = {
-                "method": "itemize",
+                "method": "itemize", 
                 "prompt_used": "Unknown (cached)",
                 "llm_provider": provider,
                 "llm_model": model,
-                "examples": []
+                "examples": [],
+                "hit_rate_stats": {
+                    "total_processed": 0,
+                    "successful_extractions": 0,
+                    "failed_extractions": 0,
+                    "hit_rate_percentage": 0.0
+                }
             }
-            return cached_parquet_path, text_file_path, preprocessing_info
+            return cached_parquet_path, text_file_path, preprocessing_info 
 
     logging.info(f"Loading transcript data from {input_file}")
     df = pd.read_parquet(input_file)
@@ -1247,6 +1366,7 @@ async def _transform_transcripts_itemize_async(
     
     transformed_rows = []
     preprocessing_examples = []
+    all_results = []  # Initialize to empty list
     
     if valid_rows:
         logging.info(f"Processing all {len(valid_rows)} valid transcripts concurrently for itemization.")
@@ -1333,13 +1453,64 @@ async def _transform_transcripts_itemize_async(
     logging.info(f"Saved itemized text to {text_file_path}")
     
     # Create preprocessing info with examples and prompt
+    # Calculate hit rate statistics
+    total_processed = len(all_results) if all_results else 0
+    successful_extractions = 0
+    failed_extractions = 0
+    
+    if all_results:
+        for result_pair, row in all_results:
+            if isinstance(result_pair, Exception):
+                failed_extractions += 1
+            else:
+                success, data = result_pair
+                if success:
+                    # Check if any items were actually extracted
+                    if isinstance(data, SimpleTranscriptItems):
+                        if data.items and len(data.items) > 0:
+                            successful_extractions += 1
+                        else:
+                            failed_extractions += 1
+                    elif hasattr(data, 'items'):
+                        if data.items and len(data.items) > 0:
+                            successful_extractions += 1
+                        else:
+                            failed_extractions += 1
+                    else:
+                        failed_extractions += 1
+                else:
+                    failed_extractions += 1
+    
+    hit_rate = (successful_extractions / total_processed * 100) if total_processed > 0 else 0
+    
     preprocessing_info = {
         "method": "itemize",
         "prompt_used": template,
         "llm_provider": provider,
         "llm_model": model,
-        "examples": preprocessing_examples
+        "examples": preprocessing_examples,
+        "hit_rate_stats": {
+            "total_processed": total_processed,
+            "successful_extractions": successful_extractions,
+            "failed_extractions": failed_extractions,
+            "hit_rate_percentage": round(hit_rate, 1)
+        }
     }
+    
+    # Save hit rate stats to a metadata file for future cached runs
+    try:
+        metadata_path = f"{cached_parquet_path}.metadata.json"
+        with open(metadata_path, 'w') as f:
+            json.dump({
+                "hit_rate_stats": preprocessing_info["hit_rate_stats"],
+                "method": "itemize",
+                "llm_provider": provider,
+                "llm_model": model,
+                "prompt_used": template
+            }, f, indent=2)
+        logging.info(f"Saved hit rate metadata to {metadata_path}")
+    except Exception as e:
+        logging.warning(f"Failed to save hit rate metadata: {e}")
     
     gc.collect()
     return cached_parquet_path, text_file_path, preprocessing_info 
