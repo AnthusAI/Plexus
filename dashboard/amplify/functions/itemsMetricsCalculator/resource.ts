@@ -11,7 +11,7 @@ interface ItemsMetricsCalculatorStackProps extends StackProps {
 }
 
 // Custom CDK stack for the TypeScript Items Metrics Calculator function
-export class ItemsMetricsCalculatorStack extends Stack {
+class ItemsMetricsCalculatorStack extends Stack {
   public readonly itemsMetricsCalculatorFunction: lambda.Function;
 
   constructor(scope: Construct, id: string, props: ItemsMetricsCalculatorStackProps) {
@@ -63,4 +63,8 @@ export class ItemsMetricsCalculatorStack extends Stack {
       exportName: `${this.stackName}-ItemsMetricsCalculatorFunctionName`
     });
   }
-} 
+}
+
+// Export using both ES modules and CommonJS for compatibility
+export { ItemsMetricsCalculatorStack };
+export default ItemsMetricsCalculatorStack;
