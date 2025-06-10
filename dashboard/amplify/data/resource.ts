@@ -55,29 +55,12 @@ const getResourceByShareTokenHandler = defineFunction({
     entry: './resolvers/getResourceByShareToken.ts'
 });
 
-// Remove the TypeScript resolver - we'll wire the Python Lambda directly
-// const getItemsMetricsHandler = defineFunction({
-//     name: "get-items-metrics-ts-resolver",
-//     entry: './resolvers/getItemsMetrics.ts',
-//     environment: {
-//         AMPLIFY_DASHBOARD_ITEMSMETRICSCALCULATOR_NAME: ''  // Will be overridden in backend.ts
-//     }
-// });
+// Note: getItemsMetrics query is defined entirely in backend.ts using CDK
+// to allow direct Python Lambda integration without TypeScript proxy
 
 const schema = a.schema({
-    // Custom query to get items metrics - will be wired to Python Lambda in backend.ts
-    getItemsMetrics: a.query()
-        .arguments({
-            accountId: a.string().required(),
-            hours: a.integer(),
-            bucketMinutes: a.integer()
-        })
-        .returns(a.json())
-        // We'll set the handler in backend.ts using the Python Lambda
-        .authorization((allow) => [
-            allow.publicApiKey(),
-            allow.authenticated()
-        ]),
+    // Note: getItemsMetrics query is defined entirely in backend.ts using CDK
+    // to allow direct Python Lambda integration without TypeScript proxy
 
     Account: a
         .model({
