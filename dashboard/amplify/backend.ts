@@ -75,8 +75,8 @@ taskDispatcherStack.taskDispatcherFunction.addToRolePolicy(
 
 // Create the ItemsMetricsCalculator stack with no dependencies to avoid circular references
 const itemsMetricsCalculatorStack = new ItemsMetricsCalculatorStack(
-    backend.createStack('ItemsMetricsCalculatorStack'),
-    'ItemsMetricsCalculator',
+    backend.createStack('ItemsMetricsCalculatorStackV2'),
+    'ItemsMetricsCalculatorV2',
     {
         // No dependencies on the data stack to avoid circular references
     }
