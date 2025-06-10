@@ -17,7 +17,7 @@ const lambdaClient = new LambdaClient({});
 
 export const handler: AppSyncResolverHandler<GetItemsMetricsArgs, any> = async (event) => {
     console.log('Received event:', JSON.stringify(event, null, 2));
-    const { accountId, hours, bucketMinutes } = event.arguments;
+    const { accountId, hours = 24, bucketMinutes = 60 } = event.arguments;
 
     if (!ITEMS_METRICS_CALCULATOR_LAMBDA_NAME) {
         console.error("AMPLIFY_DASHBOARD_ITEMSMETRICSCALCULATOR_NAME environment variable not set.");

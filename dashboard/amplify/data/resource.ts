@@ -60,8 +60,8 @@ const schema = a.schema({
     getItemsMetrics: a.query()
         .arguments({
             accountId: a.string().required(),
-            hours: a.integer().default(24),
-            bucketMinutes: a.integer().default(60)
+            hours: a.integer(),
+            bucketMinutes: a.integer()
         })
         .returns(a.json())
         .handler(a.handler.function(getItemsMetricsHandler))
