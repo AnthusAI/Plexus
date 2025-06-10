@@ -82,19 +82,15 @@ const itemsMetricsCalculatorStack = new ItemsMetricsCalculatorStack(
     }
 );
 
-// Get the stack that contains the Amplify data resources (including the resolver functions)
-const dataStack = Stack.of(backend.data);
-
-// Find the getItemsMetrics function resource within the data stack.
-// The logical ID is derived from the schema's query name.
-const getItemsMetricsLambda = dataStack.node.findChild(
-  'GetItemsMetricsFunction'
-) as lambda.Function;
+// Get access to the getItemsMetrics function
+const getItemsMetricsFunction = backend.data.resources.functions.getItemsMetrics as lambda.Function;
 
 // Add the environment variable to the function
-getItemsMetricsLambda.addEnvironment(
-  'AMPLIFY_DASHBOARD_ITEMSMETRICSCALCULATOR_NAME',
-  itemsMetricsCalculatorStack.itemsMetricsCalculatorFunction.functionName
-);
+if (getItemsMetricsFunction) {
+    getItemsMetricsFunction.addEnvironment(
+        'AMPLIFY_DASHBOARD_ITEMSMETRICSCALCULATOR_NAME',
+        itemsMetricsCalculatorStack.itemsMetricsCalculatorFunction.functionName
+    );
+}
 
 export { backend };
