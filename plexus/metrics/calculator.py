@@ -556,12 +556,26 @@ class MetricsCalculator:
 def create_calculator_from_env(cache_bucket_minutes: int = 15) -> MetricsCalculator:
     """
     Create a MetricsCalculator instance from environment variables.
+    
+    Supports both Amplify environment variables (for Lambda functions) and 
+    custom environment variables (for CLI and local development).
     """
-    endpoint = os.getenv('PLEXUS_API_URL')
-    api_key = os.getenv('PLEXUS_API_KEY')
+    # Try Amplify environment variables first (for Lambda functions)
+    endpoint = os.getenv('API_PLEXUSDASHBOARD_GRAPHQLAPIENDPOINTOUTPUT')
+    api_key = os.getenv('API_PLEXUSDASHBOARD_GRAPHQLAPIKEYOUTPUT')
+    
+    # Fall back to custom environment variables (for CLI and local development)
+    if not endpoint:
+        endpoint = os.getenv('PLEXUS_API_URL')
+    if not api_key:
+        api_key = os.getenv('PLEXUS_API_KEY')
     
     if not endpoint or not api_key:
-        raise ValueError("PLEXUS_API_URL and PLEXUS_API_KEY environment variables must be set")
+        raise ValueError(
+            "GraphQL endpoint and API key environment variables must be set. "
+            "For Lambda functions, Amplify provides API_PLEXUSDASHBOARD_GRAPHQLAPIENDPOINTOUTPUT and API_PLEXUSDASHBOARD_GRAPHQLAPIKEYOUTPUT. "
+            "For CLI/local development, set PLEXUS_API_URL and PLEXUS_API_KEY."
+        )
         
     logger.info(f"Creating MetricsCalculator with endpoint: {endpoint}")
     logger.info(f"Using API key: ***{api_key[-4:]}")

@@ -234,7 +234,7 @@ class TestCreateCalculatorFromEnv(unittest.TestCase):
             with self.assertRaises(Exception) as context:
                 create_calculator_from_env()
             
-            assert "PLEXUS_API_URL and PLEXUS_API_KEY environment variables must be set" in str(context.exception)
+            assert "GraphQL endpoint and API key environment variables must be set" in str(context.exception)
     
     @patch.dict('os.environ', {'PLEXUS_API_URL': 'https://test.com/graphql'}, clear=True)  # Only endpoint, no API key
     def test_create_calculator_from_env_missing_api_key(self):
@@ -243,7 +243,7 @@ class TestCreateCalculatorFromEnv(unittest.TestCase):
             with self.assertRaises(Exception) as context:
                 create_calculator_from_env()
             
-            assert "PLEXUS_API_URL and PLEXUS_API_KEY environment variables must be set" in str(context.exception)
+            assert "GraphQL endpoint and API key environment variables must be set" in str(context.exception)
 
 
 if __name__ == '__main__':

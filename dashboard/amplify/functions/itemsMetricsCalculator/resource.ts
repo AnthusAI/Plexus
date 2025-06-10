@@ -71,10 +71,9 @@ export class ItemsMetricsCalculatorStack extends Stack {
       timeout: Duration.minutes(5), // Longer timeout for potentially large data processing
       memorySize: 512, // More memory for processing large datasets
       environment: {
-        // Set placeholder values that will be updated after deployment
-        // to avoid circular dependencies during stack creation
-        PLEXUS_API_URL: 'WILL_BE_SET_AFTER_DEPLOYMENT',
-        PLEXUS_API_KEY: 'WILL_BE_SET_AFTER_DEPLOYMENT'
+        // Amplify will automatically provide these environment variables
+        // API_PLEXUSDASHBOARD_GRAPHQLAPIENDPOINTOUTPUT: GraphQL endpoint (auto-injected)
+        // API_PLEXUSDASHBOARD_GRAPHQLAPIKEYOUTPUT: API key (auto-injected)
       }
     });
 
