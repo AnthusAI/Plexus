@@ -1,17 +1,16 @@
-import { CfnOutput, Stack, StackProps, Duration } from 'aws-cdk-lib';
+import { CfnOutput, Stack, StackProps, Duration, Fn } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as path from 'path';
-import { execSync } from 'child_process';
 import { Policy, PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
 
 // Interface for ItemsMetricsCalculator stack props
 interface ItemsMetricsCalculatorStackProps extends StackProps {
-  graphqlEndpoint: string;
-  apiKey: string;
+  // Remove direct props to break cyclic dependency
+  // graphqlEndpoint and apiKey will be imported from CloudFormation exports
 }
 
-// Custom CDK stack for the Python Items Metrics Calculator function
+// Custom CDK stack for the TypeScript Items Metrics Calculator function
 export class ItemsMetricsCalculatorStack extends Stack {
   public readonly itemsMetricsCalculatorFunction: lambda.Function;
 
@@ -21,44 +20,27 @@ export class ItemsMetricsCalculatorStack extends Stack {
     // Get the directory containing the function code
     const functionDir = path.join(process.cwd(), 'amplify/functions/itemsMetricsCalculator');
 
+    // Import GraphQL API URL and API key from the main stack exports
+    const graphqlEndpoint = Fn.importValue('amplify-data-GraphQLAPIURL');
+    const apiKey = Fn.importValue('amplify-data-APIKey');
+
     this.itemsMetricsCalculatorFunction = new lambda.Function(this, 'ItemsMetricsCalculatorFunction', {
-      runtime: lambda.Runtime.PYTHON_3_11,
+      runtime: lambda.Runtime.NODEJS_18_X,
       handler: 'index.handler',
       code: lambda.Code.fromAsset(functionDir, {
         bundling: {
-          image: lambda.Runtime.PYTHON_3_11.bundlingImage,
-          local: {
-            tryBundle(outputDir: string) {
-              try {
-                const command = `
-                    # Copy handler and requirements
-                    cp ${path.join(functionDir, 'index.py')} ${outputDir}
-                    cp ${path.join(functionDir, 'requirements.txt')} ${outputDir}
-
-                    # Copy the shared plexus metrics module
-                    rsync -av --exclude '__pycache__' ${path.join(process.cwd(), '../plexus/metrics/')} ${path.join(outputDir, 'plexus/metrics/')}
-                    
-                    # Create __init__.py to make plexus a package
-                    touch ${path.join(outputDir, 'plexus/__init__.py')}
-
-                    # Install python dependencies
-                    python3 -m pip install -r ${path.join(outputDir, 'requirements.txt')} -t ${outputDir} --platform manylinux2014_x86_64 --implementation cp --python 3.11 --only-binary=:all: --upgrade
-                `;
-                execSync(command, { stdio: 'inherit' });
-                return true;
-              } catch (e) {
-                console.error("Bundling failed:", e);
-                return false;
-              }
-            }
-          }
+          image: lambda.Runtime.NODEJS_18_X.bundlingImage,
+          command: [
+            'bash', '-c',
+            'npm install && cp -au . /asset-output'
+          ],
         }
       }),
       timeout: Duration.minutes(10),
       memorySize: 512,
       environment: {
-        PLEXUS_API_URL: props.graphqlEndpoint,
-        PLEXUS_API_KEY: props.apiKey
+        PLEXUS_API_URL: graphqlEndpoint,
+        PLEXUS_API_KEY: apiKey
       }
     });
 

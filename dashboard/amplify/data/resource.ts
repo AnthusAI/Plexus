@@ -55,25 +55,12 @@ const getResourceByShareTokenHandler = defineFunction({
     entry: './resolvers/getResourceByShareToken.ts'
 });
 
-const getItemsMetricsHandler = defineFunction({
-    name: "get-items-metrics-ts-resolver",
-    entry: './resolvers/getItemsMetrics.ts',
-});
+// Note: getItemsMetrics query is defined entirely in backend.ts using CDK
+// to allow direct Python Lambda integration without TypeScript proxy
 
 const schema = a.schema({
-    // Custom query to get items metrics
-    getItemsMetrics: a.query()
-        .arguments({
-            accountId: a.string().required(),
-            hours: a.integer(),
-            bucketMinutes: a.integer()
-        })
-        .returns(a.json())
-        .handler(a.handler.function(getItemsMetricsHandler))
-        .authorization((allow) => [
-            allow.publicApiKey(),
-            allow.authenticated()
-        ]),
+    // Note: getItemsMetrics query is defined entirely in backend.ts using CDK
+    // to allow direct Python Lambda integration without TypeScript proxy
 
     Account: a
         .model({
