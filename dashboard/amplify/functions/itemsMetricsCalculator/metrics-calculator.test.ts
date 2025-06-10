@@ -1,5 +1,5 @@
 import { MetricsCalculator } from './metrics-calculator';
-import { SQLiteCache } from './cache';
+import { InMemoryCache } from './cache';
 
 // Mock axios to avoid actual GraphQL requests
 jest.mock('axios');
@@ -14,7 +14,7 @@ jest.mock('./cache', () => {
   };
   
   return {
-    SQLiteCache: jest.fn().mockImplementation(() => mockCache),
+    InMemoryCache: jest.fn().mockImplementation(() => mockCache),
     cache: mockCache
   };
 });
