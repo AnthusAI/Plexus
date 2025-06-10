@@ -6,23 +6,20 @@ def handler(event, context):
     """
     AWS Lambda handler for calculating item and score result metrics.
 
-    This function is invoked by a proxy Lambda resolver attached to the
+    This function is invoked directly by AppSync as a resolver for the
     `getItemsMetrics` GraphQL query. It receives the query arguments,
     instantiates a MetricsCalculator, and returns the calculated metrics.
     """
     print(f"Received event: {json.dumps(event, indent=2)}")
 
-    # The event payload is the "arguments" object from the AppSync event
+    # The event payload contains the GraphQL arguments from AppSync
     args = event
     account_id = args.get("accountId")
     hours = args.get("hours")
     bucket_minutes = args.get("bucketMinutes")
 
     if not account_id:
-        return {
-            "statusCode": 400,
-            "body": json.dumps({"error": "accountId is a required argument."}),
-        }
+        raise Exception("accountId is a required argument.")
     
     # Environment variables are set by the CDK stack
     api_url = os.environ.get("PLEXUS_API_URL")
@@ -30,10 +27,7 @@ def handler(event, context):
 
     if not api_url or not api_key:
         print("Error: PLEXUS_API_URL and PLEXUS_API_KEY environment variables must be set.")
-        return {
-            "statusCode": 500,
-            "body": json.dumps({"error": "Lambda function is not configured correctly."}),
-        }
+        raise Exception("Lambda function is not configured correctly.")
 
     try:
         # Initialize the calculator with credentials from the environment
@@ -76,11 +70,10 @@ def handler(event, context):
 
         print(f"Successfully calculated metrics: {json.dumps(metrics, indent=2)}")
 
-        # The Lambda proxy integration expects a JSON-serializable object.
-        # The calling TypeScript resolver will parse this.
+        # Return the metrics directly to AppSync
         return metrics
 
     except Exception as e:
         print(f"An error occurred: {str(e)}")
-        # Propagate a descriptive error back to the caller
+        # Propagate a descriptive error back to AppSync
         raise Exception(f"Failed to calculate metrics: {str(e)}")
