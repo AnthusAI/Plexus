@@ -1,5 +1,6 @@
 import { Handler } from 'aws-lambda';
 import { MetricsCalculator } from './metrics-calculator';
+import { cache } from './cache';
 
 /**
  * Lambda handler for calculating items and score results metrics
@@ -42,10 +43,18 @@ export const handler: Handler = async (event) => {
     };
 
     console.log('Result:', JSON.stringify(result, null, 2));
+    
+    // Clean up cache before returning
+    cache.cleanup();
+    
     return result;
 
   } catch (error) {
     console.error('Error calculating metrics:', error);
+    
+    // Clean up cache even on error
+    cache.cleanup();
+    
     throw error;
   }
 }; 
