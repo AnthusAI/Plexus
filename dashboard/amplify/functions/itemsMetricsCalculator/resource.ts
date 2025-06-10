@@ -11,7 +11,7 @@ interface ItemsMetricsCalculatorStackProps extends StackProps {
 }
 
 // Custom CDK stack for the TypeScript Items Metrics Calculator function
-class ItemsMetricsCalculatorStack extends Stack {
+export class ItemsMetricsCalculatorStack extends Stack {
   public readonly itemsMetricsCalculatorFunction: lambda.Function;
 
   constructor(scope: Construct, id: string, props: ItemsMetricsCalculatorStackProps) {
@@ -27,15 +27,7 @@ class ItemsMetricsCalculatorStack extends Stack {
     this.itemsMetricsCalculatorFunction = new lambda.Function(this, 'ItemsMetricsCalculatorFunction', {
       runtime: lambda.Runtime.NODEJS_18_X,
       handler: 'index.handler',
-      code: lambda.Code.fromAsset(functionDir, {
-        bundling: {
-          image: lambda.Runtime.NODEJS_18_X.bundlingImage,
-          command: [
-            'bash', '-c',
-            'npm install && cp -au . /asset-output'
-          ],
-        }
-      }),
+      code: lambda.Code.fromAsset(functionDir),
       timeout: Duration.minutes(10),
       memorySize: 512,
       environment: {
@@ -64,7 +56,3 @@ class ItemsMetricsCalculatorStack extends Stack {
     });
   }
 }
-
-// Export using both ES modules and CommonJS for compatibility
-export { ItemsMetricsCalculatorStack };
-export default ItemsMetricsCalculatorStack;
