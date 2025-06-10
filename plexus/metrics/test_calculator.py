@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from unittest.mock import Mock, patch, MagicMock
 from typing import Dict, Any
 
-from plexus.utils.metrics_calculator import MetricsCalculator, create_calculator_from_env
+from plexus.metrics.calculator import MetricsCalculator, create_calculator_from_env
 
 
 class TestMetricsCalculator(unittest.TestCase):
@@ -27,10 +27,9 @@ class TestMetricsCalculator(unittest.TestCase):
         """Test MetricsCalculator initialization."""
         assert self.calculator.graphql_endpoint == self.test_endpoint
         assert self.calculator.api_key == self.test_api_key
-        assert self.calculator.headers['Authorization'] == f'Bearer {self.test_api_key}'
-        assert self.calculator.headers['Content-Type'] == 'application/json'
+        assert self.calculator.cache_bucket_minutes == 15
     
-    @patch('plexus.utils.metrics_calculator.requests.post')
+    @patch('plexus.metrics.calculator.requests.post')
     def test_make_graphql_request_success(self, mock_post):
         """Test successful GraphQL request."""
         # Mock successful response
@@ -57,7 +56,7 @@ class TestMetricsCalculator(unittest.TestCase):
         # Verify the result
         assert result == {'test': 'result'}
     
-    @patch('plexus.utils.metrics_calculator.requests.post')
+    @patch('plexus.metrics.calculator.requests.post')
     def test_make_graphql_request_with_errors(self, mock_post):
         """Test GraphQL request with errors."""
         # Mock response with errors
@@ -84,7 +83,7 @@ class TestMetricsCalculator(unittest.TestCase):
         """Test counting items in a timeframe."""
         # Mock GraphQL response
         mock_request.return_value = {
-            'listItems': {
+            'listItemByAccountIdAndCreatedAt': {
                 'items': [{'id': '1'}, {'id': '2'}, {'id': '3'}],
                 'nextToken': None
             }
@@ -100,8 +99,8 @@ class TestMetricsCalculator(unittest.TestCase):
         # Verify the GraphQL query was called with correct parameters
         mock_request.assert_called_once()
         call_args = mock_request.call_args
-        assert 'filter' in call_args[0][1]
-        assert call_args[0][1]['filter']['accountId']['eq'] == self.test_account_id
+        assert 'accountId' in call_args[0][1]
+        assert call_args[0][1]['accountId'] == self.test_account_id
     
     @patch.object(MetricsCalculator, 'make_graphql_request')
     def test_count_items_with_pagination(self, mock_request):
@@ -109,13 +108,13 @@ class TestMetricsCalculator(unittest.TestCase):
         # Mock paginated GraphQL responses
         mock_request.side_effect = [
             {
-                'listItems': {
+                'listItemByAccountIdAndCreatedAt': {
                     'items': [{'id': '1'}, {'id': '2'}],
                     'nextToken': 'token123'
                 }
             },
             {
-                'listItems': {
+                'listItemByAccountIdAndCreatedAt': {
                     'items': [{'id': '3'}, {'id': '4'}, {'id': '5'}],
                     'nextToken': None
                 }
@@ -135,7 +134,7 @@ class TestMetricsCalculator(unittest.TestCase):
         """Test counting score results in a timeframe."""
         # Mock GraphQL response
         mock_request.return_value = {
-            'listScoreResults': {
+            'listScoreResultByAccountIdAndUpdatedAt': {
                 'items': [{'id': '1'}, {'id': '2'}],
                 'nextToken': None
             }
@@ -151,18 +150,20 @@ class TestMetricsCalculator(unittest.TestCase):
         # Verify the GraphQL query was called with correct parameters
         mock_request.assert_called_once()
         call_args = mock_request.call_args
-        assert 'filter' in call_args[0][1]
-        assert call_args[0][1]['filter']['accountId']['eq'] == self.test_account_id
+        assert 'accountId' in call_args[0][1]
+        assert call_args[0][1]['accountId'] == self.test_account_id
     
     def test_generate_time_buckets(self):
         """Test time bucket generation."""
-        with patch('plexus.utils.metrics_calculator.datetime') as mock_datetime:
+        with patch('plexus.metrics.calculator.datetime') as mock_datetime:
             # Mock current time
             mock_now = datetime(2023, 1, 1, 15, 30, 45)  # 3:30:45 PM
             mock_datetime.utcnow.return_value = mock_now
             
-            # Test generating 3 hour buckets
-            buckets = self.calculator.generate_time_buckets(3)
+            # Test generating 3 hour buckets  
+            start_time = datetime(2023, 1, 1, 12, 0, 0)
+            end_time = datetime(2023, 1, 1, 15, 0, 0)
+            buckets = self.calculator.get_time_buckets(start_time, end_time, 60)
             
             assert len(buckets) == 3
             
@@ -176,7 +177,7 @@ class TestMetricsCalculator(unittest.TestCase):
     
     @patch.object(MetricsCalculator, 'count_items_in_timeframe')
     @patch.object(MetricsCalculator, 'count_score_results_in_timeframe')
-    @patch.object(MetricsCalculator, 'generate_time_buckets')
+    @patch.object(MetricsCalculator, 'get_time_buckets')
     def test_calculate_metrics(self, mock_buckets, mock_score_results, mock_items):
         """Test metrics calculation."""
         # Mock time buckets
@@ -190,7 +191,7 @@ class TestMetricsCalculator(unittest.TestCase):
         mock_items.side_effect = [10, 8, 6]  # Items counts for each bucket
         mock_score_results.side_effect = [5, 4, 3]  # Score results counts for each bucket
         
-        result = self.calculator.calculate_metrics(self.test_account_id, 3)
+        result = self.calculator.get_items_summary(self.test_account_id, 3)
         
         # Verify structure
         assert 'itemsPerHour' in result
@@ -220,7 +221,7 @@ class TestCreateCalculatorFromEnv(unittest.TestCase):
     @patch.dict('os.environ', {'PLEXUS_API_URL': 'https://test.com/graphql', 'PLEXUS_API_KEY': 'test-key'})
     def test_create_calculator_from_env_success(self):
         """Test successful creation from environment variables."""
-        with patch('plexus.utils.metrics_calculator.load_dotenv'):
+        with patch('plexus.metrics.calculator.load_dotenv'):
             calculator = create_calculator_from_env()
             
             assert calculator.graphql_endpoint == 'https://test.com/graphql'
@@ -229,20 +230,20 @@ class TestCreateCalculatorFromEnv(unittest.TestCase):
     @patch.dict('os.environ', {'PLEXUS_API_KEY': 'test-key'}, clear=True)  # Only API key, no endpoint
     def test_create_calculator_from_env_missing_endpoint(self):
         """Test creation fails when endpoint is missing."""
-        with patch('plexus.utils.metrics_calculator.load_dotenv'):
+        with patch('plexus.metrics.calculator.load_dotenv'):
             with self.assertRaises(Exception) as context:
                 create_calculator_from_env()
             
-            assert "PLEXUS_API_URL environment variable is required" in str(context.exception)
+            assert "PLEXUS_API_URL and PLEXUS_API_KEY environment variables must be set" in str(context.exception)
     
     @patch.dict('os.environ', {'PLEXUS_API_URL': 'https://test.com/graphql'}, clear=True)  # Only endpoint, no API key
     def test_create_calculator_from_env_missing_api_key(self):
         """Test creation fails when API key is missing."""
-        with patch('plexus.utils.metrics_calculator.load_dotenv'):
+        with patch('plexus.metrics.calculator.load_dotenv'):
             with self.assertRaises(Exception) as context:
                 create_calculator_from_env()
             
-            assert "PLEXUS_API_KEY environment variable is required" in str(context.exception)
+            assert "PLEXUS_API_URL and PLEXUS_API_KEY environment variables must be set" in str(context.exception)
 
 
 if __name__ == '__main__':

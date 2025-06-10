@@ -49,11 +49,16 @@ export class ItemsMetricsCalculatorStack extends Stack {
               // Copy function code to output directory
               execSync(`cp -r ${functionDir}/* ${outputDir}`);
               
-              // Copy the plexus module from the project root
-              const plexusSourcePath = path.join(functionDir, '../../../../plexus');
-              const plexusDestPath = path.join(outputDir, 'plexus');
-              console.log(`Copying plexus module from ${plexusSourcePath} to ${plexusDestPath}`);
-              execSync(`cp -r ${plexusSourcePath} ${plexusDestPath}`);
+              // Copy only the lightweight plexus.metrics module (not the entire Plexus codebase)
+              const plexusMetricsSourcePath = path.join(functionDir, '../../../../plexus/metrics');
+              const plexusMetricsDestPath = path.join(outputDir, 'plexus/metrics');
+              console.log(`Copying lightweight plexus.metrics module from ${plexusMetricsSourcePath} to ${plexusMetricsDestPath}`);
+              execSync(`mkdir -p ${path.dirname(plexusMetricsDestPath)}`);
+              execSync(`cp -r ${plexusMetricsSourcePath} ${plexusMetricsDestPath}`);
+              
+              // Create plexus/__init__.py to make it a proper Python package
+              const plexusInitPath = path.join(outputDir, 'plexus/__init__.py');
+              execSync(`touch ${plexusInitPath}`);
               
               // Clean up
               execSync('rm -rf /tmp/package');

@@ -1,12 +1,13 @@
 import os
 import json
 import logging
+
+# Import from the lightweight Plexus metrics sub-module
+# This only loads the metrics calculator without heavy Plexus dependencies
 import sys
-
-# Add the current directory to the path so we can import the plexus module
-sys.path.insert(0, os.path.dirname(__file__))
-
-from plexus.utils.metrics_calculator import create_calculator_from_env
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..'))
+from plexus.metrics.calculator import create_calculator_from_env
 
 # Set up basic logging with more detailed format
 logging.basicConfig(
@@ -23,8 +24,8 @@ def handler(event, context):
     AWS Lambda handler for calculating items metrics.
     
     This function calculates comprehensive metrics for items and score results
-    over the last 24 hours (or specified timeframe) using the factored-out
-    MetricsCalculator class.
+    over the last 24 hours (or specified timeframe) using the standalone
+    MetricsCalculator class (no longer requires the full Plexus module).
     
     Event structure:
     {
