@@ -78,7 +78,8 @@ const itemsMetricsCalculatorStack = new ItemsMetricsCalculatorStack(
     backend.createStack('ItemsMetricsCalculatorStack'),
     'ItemsMetricsCalculator',
     {
-        appSyncApiId: backend.data.resources.graphqlApi.apiId,
+        // Remove the direct dependency on the data stack
+        // The AppSync API ID will be resolved at runtime
     }
 );
 
@@ -92,5 +93,12 @@ if (getItemsMetricsFunction) {
         itemsMetricsCalculatorStack.itemsMetricsCalculatorFunction.functionName
     );
 }
+
+// Add the GraphQL API endpoint to the ItemsMetricsCalculator function
+// This creates a dependency from ItemsMetricsCalculator to data, but not the reverse
+itemsMetricsCalculatorStack.itemsMetricsCalculatorFunction.addEnvironment(
+    'API_PLEXUSDASHBOARD_GRAPHQLAPIARNOUTPUT',
+    backend.data.resources.graphqlApi.graphQLEndpointArn
+);
 
 export { backend };
