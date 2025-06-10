@@ -15,14 +15,15 @@ const functionArn = process.env.ITEMS_METRICS_CALCULATOR_FUNCTION_ARN;
 
 export const handler: AppSyncResolverHandler<GetItemsMetricsArgs, any> = async (event) => {
     console.log('Invoking Python metrics calculator with event:', JSON.stringify(event, null, 2));
-    
-    // Debug: Log all environment variables to understand what's available
-    console.log('Available environment variables:', JSON.stringify(process.env, null, 2));
-    console.log('ITEMS_METRICS_CALCULATOR_FUNCTION_ARN specifically:', process.env.ITEMS_METRICS_CALCULATOR_FUNCTION_ARN);
 
     if (!functionArn) {
         console.error('ITEMS_METRICS_CALCULATOR_FUNCTION_ARN environment variable is not set.');
-        throw new Error('Items Metrics Calculator function ARN is not configured.');
+        // Instead of throwing, return a JSON object with debug info.
+        // The GraphQL schema returns JSON, so this is a valid response.
+        return {
+            error: "Items Metrics Calculator function ARN is not configured.",
+            environment: process.env
+        };
     }
     
     console.log('Using Lambda function ARN:', functionArn);
