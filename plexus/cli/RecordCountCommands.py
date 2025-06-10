@@ -13,7 +13,7 @@ from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from dotenv import load_dotenv
 
-from plexus.utils.metrics_calculator import create_calculator_from_env
+from plexus.metrics.calculator import create_calculator_from_env
 
 # Load environment variables from .env file
 load_dotenv('.env', override=True)
