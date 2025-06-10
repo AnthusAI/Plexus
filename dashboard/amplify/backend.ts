@@ -49,14 +49,12 @@ if (getItemsMetricsResolver) {
     // We need to grant it permission to invoke the Python lambda.
     itemsMetricsCalculatorStack.itemsMetricsCalculatorFunction.grantInvoke(getItemsMetricsResolver);
     
-    // Add permission to list Lambda functions so it can discover the function name
-    getItemsMetricsResolver.addToRolePolicy(
-        new PolicyStatement({
-            actions: ['lambda:ListFunctions'],
-            resources: ['*']
-        })
+    // Pass the Python function name as an environment variable instead of discovering it.
+    (getItemsMetricsResolver as lambda.Function).addEnvironment(
+        'ITEMS_METRICS_CALCULATOR_FUNCTION_NAME',
+        itemsMetricsCalculatorStack.itemsMetricsCalculatorFunction.functionName
     );
-
+    
     // Add permissions for CloudWatch Logs
     getItemsMetricsResolver.addToRolePolicy(
         new PolicyStatement({
