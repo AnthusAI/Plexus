@@ -1,4 +1,4 @@
-import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
+import { LambdaClient, InvokeCommand, ListFunctionsCommand } from "@aws-sdk/client-lambda";
 import type { AppSyncResolverHandler } from 'aws-lambda';
 
 // Define the arguments for the resolver
@@ -8,22 +8,49 @@ type GetItemsMetricsArgs = {
   bucketMinutes: number;
 };
 
-// Amplify will inject this environment variable. The name is derived from the function resource name.
-const ITEMS_METRICS_CALCULATOR_LAMBDA_NAME = process.env.ITEMS_METRICS_CALCULATOR_LAMBDA_NAME;
 const lambdaClient = new LambdaClient({});
+
+// Cache the function name to avoid repeated API calls
+let cachedFunctionName: string | null = null;
+
+async function getItemsMetricsCalculatorFunctionName(): Promise<string> {
+    if (cachedFunctionName) {
+        return cachedFunctionName;
+    }
+
+    try {
+        const command = new ListFunctionsCommand({});
+        const response = await lambdaClient.send(command);
+        
+        // Look for a function that matches our naming pattern
+        const targetFunction = response.Functions?.find(func => 
+            func.FunctionName?.includes('ItemsMetricsCalculator') ||
+            func.FunctionName?.includes('itemsMetricsCalculator')
+        );
+
+        if (!targetFunction?.FunctionName) {
+            throw new Error('ItemsMetricsCalculator Lambda function not found');
+        }
+
+        cachedFunctionName = targetFunction.FunctionName;
+        return cachedFunctionName;
+    } catch (error) {
+        console.error('Error finding ItemsMetricsCalculator function:', error);
+        throw new Error('Failed to locate ItemsMetricsCalculator Lambda function');
+    }
+}
 
 export const handler: AppSyncResolverHandler<GetItemsMetricsArgs, any> = async (event) => {
     console.log('Invoking Python metrics calculator with event:', JSON.stringify(event, null, 2));
     
-    if (!ITEMS_METRICS_CALCULATOR_LAMBDA_NAME) {
-        throw new Error("ITEMS_METRICS_CALCULATOR_LAMBDA_NAME environment variable not set.");
-    }
+    const functionName = await getItemsMetricsCalculatorFunctionName();
+    console.log('Using Lambda function:', functionName);
 
     // The payload for the Python lambda is the arguments from the GraphQL query
     const payload = event.arguments;
 
     const command = new InvokeCommand({
-        FunctionName: ITEMS_METRICS_CALCULATOR_LAMBDA_NAME,
+        FunctionName: functionName,
         Payload: JSON.stringify(payload)
     });
 
