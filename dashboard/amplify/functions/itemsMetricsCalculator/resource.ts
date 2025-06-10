@@ -27,7 +27,15 @@ export class ItemsMetricsCalculatorStack extends Stack {
     this.itemsMetricsCalculatorFunction = new lambda.Function(this, 'ItemsMetricsCalculatorFunction', {
       runtime: lambda.Runtime.NODEJS_18_X,
       handler: 'index.handler',
-      code: lambda.Code.fromAsset(functionDir),
+      code: lambda.Code.fromAsset(functionDir, {
+              bundling: {
+        image: lambda.Runtime.NODEJS_18_X.bundlingImage,
+        command: [
+          'bash', '-c',
+          'npm install && npm run build && cp -au . /asset-output'
+        ],
+      }
+      }),
       timeout: Duration.minutes(10),
       memorySize: 512,
       environment: {

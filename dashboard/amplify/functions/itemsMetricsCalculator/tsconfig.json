@@ -14,6 +14,6 @@
     "sourceMap": true,
     "resolveJsonModule": true
   },
-  "include": ["resource.ts", "index.ts", "cache.ts", "metrics-calculator.ts"],
+  "include": ["index.ts", "cache.ts", "metrics-calculator.ts"],
   "exclude": ["node_modules", "**/*.test.ts"]
 } 
