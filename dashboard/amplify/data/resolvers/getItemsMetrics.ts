@@ -21,7 +21,7 @@ export const handler: AppSyncResolverHandler<GetItemsMetricsArgs, any> = async (
 
     if (!ITEMS_METRICS_CALCULATOR_LAMBDA_NAME) {
         console.error("AMPLIFY_DASHBOARD_ITEMSMETRICSCALCULATOR_NAME environment variable not set.");
-        throw new Error("ITEMS_METRICS_CALCULATOR_FUNCTION_NAME environment variable not set.");
+        throw new Error("AMPLIFY_DASHBOARD_ITEMSMETRICSCALCULATOR_NAME environment variable not set.");
     }
     console.log(`Invoking Lambda: ${ITEMS_METRICS_CALCULATOR_LAMBDA_NAME}`);
 
