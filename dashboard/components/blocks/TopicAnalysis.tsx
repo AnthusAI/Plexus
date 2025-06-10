@@ -37,6 +37,12 @@ interface TopicAnalysisData {
     prompt_used?: string;
     examples?: string[];
     llm_provider?: string;
+    hit_rate_stats?: {
+      total_processed: number;
+      successful_extractions: number;
+      failed_extractions: number;
+      hit_rate_percentage: number;
+    };
   };
   bertopic_analysis?: {
     num_topics_requested?: number;
@@ -515,6 +521,132 @@ const PreprocessingSection: React.FC<{
 };
 
 /**
+ * LLM Extraction Hit Rate Chart Component
+ * Shows the success rate of LLM extraction as a pie chart
+ */
+const LLMExtractionHitRateChart: React.FC<{
+  hitRateStats: {
+    total_processed: number;
+    successful_extractions: number;
+    failed_extractions: number;
+    hit_rate_percentage: number;
+  };
+}> = ({ hitRateStats }) => {
+  // Get the computed CSS custom property values for true/false colors
+  const trueColor = React.useMemo(() => {
+    if (typeof window !== 'undefined') {
+      const style = getComputedStyle(document.documentElement);
+      return style.getPropertyValue('--true').trim();
+    }
+    return 'hsl(142 76% 36%)'; // fallback
+  }, []);
+
+  const falseColor = React.useMemo(() => {
+    if (typeof window !== 'undefined') {
+      const style = getComputedStyle(document.documentElement);
+      return style.getPropertyValue('--false').trim();
+    }
+    return 'hsl(358 75% 59%)'; // fallback
+  }, []);
+
+  const chartData = [
+    {
+      name: "Successful",
+      value: hitRateStats.successful_extractions,
+      percentage: hitRateStats.hit_rate_percentage,
+    },
+    {
+      name: "Failed", 
+      value: hitRateStats.failed_extractions,
+      percentage: 100 - hitRateStats.hit_rate_percentage,
+    }
+  ];
+
+  return (
+    <div className="space-y-3">
+      <h4 className="font-medium">Extraction Hit Rate</h4>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+        <div className="w-full aspect-square max-w-[200px] mx-auto" style={{ pointerEvents: 'none' }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={chartData}
+                dataKey="value"
+                nameKey="name"
+                innerRadius="50%"
+                outerRadius="80%"
+                strokeWidth={2}
+                stroke="hsl(var(--background))"
+                paddingAngle={2}
+                onClick={() => {}}
+                onMouseEnter={() => {}}
+                onMouseLeave={() => {}}
+              >
+                <Cell fill={trueColor} style={{ outline: 'none', cursor: 'default' }} />
+                <Cell fill={falseColor} style={{ outline: 'none', cursor: 'default' }} />
+                <Label
+                  content={({ viewBox }) => {
+                    if (viewBox && "cx" in viewBox && "cy" in viewBox) {
+                      return (
+                        <text
+                          x={viewBox.cx}
+                          y={viewBox.cy}
+                          textAnchor="middle"
+                          dominantBaseline="middle"
+                        >
+                          <tspan
+                            x={viewBox.cx}
+                            y={viewBox.cy}
+                            className="fill-foreground text-2xl font-bold"
+                          >
+                            {hitRateStats.hit_rate_percentage}%
+                          </tspan>
+                        </text>
+                      );
+                    }
+                    return null;
+                  }}
+                  position="center"
+                />
+              </Pie>
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+        
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-true"></div>
+              <span className="text-sm font-medium">Successful</span>
+            </div>
+            <span className="text-sm text-muted-foreground">
+              {hitRateStats.successful_extractions} items
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-false"></div>
+              <span className="text-sm font-medium">Failed</span>
+            </div>
+            <span className="text-sm text-muted-foreground">
+              {hitRateStats.failed_extractions} items
+            </span>
+          </div>
+          <div className="pt-2 border-t">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Total Processed</span>
+              <span className="text-sm text-muted-foreground">
+                {hitRateStats.total_processed} items
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/**
  * LLM Extraction Section Component
  * Displays the prompt and extracted examples with collapsible/expandable sections
  */
@@ -600,6 +732,29 @@ const LLMExtractionSection: React.FC<{
             </CollapsibleContent>
           </Collapsible>
         </div>
+      )}
+
+      {/* Hit Rate Section */}
+      {llmExtraction.hit_rate_stats && (
+        <>
+          {llmExtraction.hit_rate_stats.total_processed > 0 ? (
+            <LLMExtractionHitRateChart hitRateStats={llmExtraction.hit_rate_stats} />
+          ) : (
+            <div className="space-y-3">
+              <h4 className="font-medium">Extraction Hit Rate</h4>
+              <div className="p-3 bg-muted/20 rounded-md border-l-2 border-primary/20">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-3 h-3 rounded-full bg-primary"></div>
+                  <span className="text-sm font-medium">Using Cached Results</span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  This analysis used previously processed data for faster results. 
+                  Hit rate statistics are only available when processing fresh data.
+                </p>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {/* Examples Section */}
