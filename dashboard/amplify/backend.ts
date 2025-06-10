@@ -77,4 +77,10 @@ const itemsMetricsCalculatorStack = new ItemsMetricsCalculatorStack(
     }
 );
 
+// Get the underlying L1 CfnFunction construct
+const getItemsMetricsLambda = backend.data.resources.functions.getItemsMetrics.node.defaultChild as dynamodb.CfnTable;
+
+// Add the environment variable to the function
+getItemsMetricsLambda.addPropertyOverride('Environment.Variables.AMPLIFY_DASHBOARD_ITEMSMETRICSCALCULATOR_NAME', itemsMetricsCalculatorStack.itemsMetricsCalculatorFunction.functionName);
+
 export { backend };
