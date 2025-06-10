@@ -48,16 +48,13 @@ const getItemsMetricsResolver = backend.data.resources.functions.getItemsMetrics
 if (getItemsMetricsResolver) {
     // We need to grant it permission to invoke the Python lambda.
     itemsMetricsCalculatorStack.itemsMetricsCalculatorFunction.grantInvoke(getItemsMetricsResolver);
-
-    // We also need to pass the name of the Python lambda to the TypeScript resolver
-    // as an environment variable so it knows which function to invoke.
-    // The `backend.data.resources.functions.getItemsMetrics` returns an IFunction, 
-    // so we need to get the underlying Function construct to add an environment variable.
-    // We can do this by accessing the node and finding the child 'Resource' which is the L2 construct.
-    const resolverFunction = getItemsMetricsResolver.node.findChild('Resource') as lambda.Function;
-    resolverFunction.addEnvironment(
-        'ITEMS_METRICS_CALCULATOR_LAMBDA_NAME',
-        itemsMetricsCalculatorStack.itemsMetricsCalculatorFunction.functionName
+    
+    // Add permission to list Lambda functions so it can discover the function name
+    getItemsMetricsResolver.addToRolePolicy(
+        new PolicyStatement({
+            actions: ['lambda:ListFunctions'],
+            resources: ['*']
+        })
     );
 }
 
