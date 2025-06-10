@@ -5,6 +5,7 @@ import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as path from 'path';
 import { DockerImage, Duration } from 'aws-cdk-lib';
 import { execSync } from 'child_process';
+import { Stack } from 'aws-cdk-lib';
 
 // Define types for authorization callback
 type AuthorizationCallback = {
@@ -55,12 +56,39 @@ const getResourceByShareTokenHandler = defineFunction({
     entry: './resolvers/getResourceByShareToken.ts'
 });
 
-// Note: getItemsMetrics query is defined entirely in backend.ts using CDK
-// to allow direct Python Lambda integration without TypeScript proxy
+// Define the items metrics calculator function
+const itemsMetricsCalculator = defineFunction({
+    entry: '../functions/itemsMetricsCalculator/index.ts'
+});
 
 const schema = a.schema({
-    // Note: getItemsMetrics query is defined entirely in backend.ts using CDK
-    // to allow direct Python Lambda integration without TypeScript proxy
+    // Define the return type for the metrics query
+    ItemsMetricsResponse: a.customType({
+        accountId: a.string().required(),
+        hours: a.integer().required(),
+        timestamp: a.string().required(),
+        // Items metrics
+        totalItems: a.integer().required(),
+        itemsLast24Hours: a.integer().required(),
+        itemsLastHour: a.integer().required(),
+        itemsHourlyBreakdown: a.json().required(),
+        // Score results metrics  
+        totalScoreResults: a.integer().required(),
+        scoreResultsLast24Hours: a.integer().required(),
+        scoreResultsLastHour: a.integer().required(),
+        scoreResultsHourlyBreakdown: a.json().required()
+    }),
+
+    // Define the custom query for getting items metrics
+    getItemsMetrics: a
+        .query()
+        .arguments({
+            accountId: a.string().required(),
+            hours: a.integer() // Optional, defaults to 24
+        })
+        .returns(a.ref('ItemsMetricsResponse'))
+        .authorization(allow => [allow.publicApiKey(), allow.authenticated()])
+        .handler(a.handler.function(itemsMetricsCalculator)),
 
     Account: a
         .model({

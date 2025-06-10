@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { cache } from './cache';
+import { getFromCache, setInCache } from './cache';
 
 interface GraphQLResponse {
   data?: any;
@@ -45,6 +45,7 @@ export class MetricsCalculator {
   private graphqlEndpoint: string;
   private apiKey: string;
   private cacheBucketMinutes: number;
+  private metricType: string;
 
   /**
    * Initialize the MetricsCalculator.
@@ -52,11 +53,13 @@ export class MetricsCalculator {
    * @param graphqlEndpoint The GraphQL API endpoint URL
    * @param apiKey The API key for authentication
    * @param cacheBucketMinutes The width of the cache buckets in minutes. Defaults to 15.
+   * @param metricType The type of metric being calculated (e.g., 'items' or 'score_results')
    */
-  constructor(graphqlEndpoint: string, apiKey: string, cacheBucketMinutes = 15) {
+  constructor(graphqlEndpoint: string, apiKey: string, cacheBucketMinutes = 15, metricType: string) {
     this.graphqlEndpoint = graphqlEndpoint;
     this.apiKey = apiKey;
     this.cacheBucketMinutes = cacheBucketMinutes;
+    this.metricType = metricType;
   }
 
   /**
@@ -342,15 +345,15 @@ export class MetricsCalculator {
     // 2. Count items in the full buckets (using cache)
     for (const [bucketStart, bucketEnd] of alignedBuckets) {
       const cacheKey = `${cacheKeyPrefix}:${accountId}:${bucketStart.toISOString()}`;
-      let cachedValue = await cache.get(cacheKey);
+      let cachedValue = await getFromCache<number>(cacheKey);
       let count: number;
       
-      if (cachedValue !== null) {
+      if (cachedValue !== undefined && cachedValue !== null) {
         count = cachedValue;
         console.debug(`Cache hit for ${cacheKey}: ${count} items`);
       } else {
         count = await countFunction(accountId, bucketStart, bucketEnd);
-        await cache.set(cacheKey, count);
+        setInCache(cacheKey, count);
         console.debug(`Cache miss for ${cacheKey}. Fetched and cached ${count} items`);
       }
       totalCount += count;
@@ -560,5 +563,28 @@ export class MetricsCalculator {
       itemsTotal24h: totalItems,
       chartData
     };
+  }
+
+  private getCacheKey(timeBucket: Date): string {
+    return `${this.metricType}:${timeBucket.toISOString()}`;
+  }
+
+  private async fetchAndCache(timeBucket: Date): Promise<number> {
+    const cacheKey = this.getCacheKey(timeBucket);
+    console.debug(`Cache miss for key: ${cacheKey}. Fetching from source.`);
+
+    const countFunction = this.metricType === 'items' 
+      ? this.countItemsInTimeframe.bind(this) 
+      : this.countScoreResultsInTimeframe.bind(this);
+      
+    const value = await this._getCountForWindow(
+      'dummy-account-id-for-cache', // Account ID is not relevant for this cache layer
+      timeBucket,
+      new Date(timeBucket.getTime() + this.cacheBucketMinutes * 60 * 1000),
+      countFunction
+    );
+
+    setInCache(cacheKey, value);
+    return value;
   }
 } 

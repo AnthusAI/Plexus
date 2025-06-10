@@ -1,59 +1,43 @@
 import { MetricsCalculator } from './metrics-calculator';
-import { InMemoryCache } from './cache';
+import { getFromCache, setInCache, cleanupCache } from './cache';
 
-// Mock axios to avoid actual GraphQL requests
+// Mock the axios library
 jest.mock('axios');
-const mockedAxios = require('axios');
+import axios from 'axios';
+const mockedAxios = axios as jest.Mocked<typeof axios>;
 
-// Mock the cache module to avoid shared state between tests
-jest.mock('./cache', () => {
-  const mockCache = {
-    get: jest.fn().mockResolvedValue(null), // Default to cache miss
-    set: jest.fn().mockResolvedValue(undefined),
-    close: jest.fn().mockResolvedValue(undefined)
-  };
-  
-  return {
-    InMemoryCache: jest.fn().mockImplementation(() => mockCache),
-    cache: mockCache
-  };
-});
+// Mock the cache functions
+jest.mock('./cache', () => ({
+  getFromCache: jest.fn(),
+  setInCache: jest.fn(),
+  cleanupCache: jest.fn()
+}));
 
-// Get the mocked cache instance for test setup
-const { cache: mockCache } = require('./cache');
+const mockedGetFromCache = getFromCache as jest.Mock;
+const mockedSetInCache = setInCache as jest.Mock;
 
 describe('MetricsCalculator', () => {
   let calculator: MetricsCalculator;
-  const mockEndpoint = 'https://test-api.example.com/graphql';
-  const mockApiKey = 'test-api-key-12345';
-  
-  beforeEach(() => {
-    calculator = new MetricsCalculator(mockEndpoint, mockApiKey, 15);
-    
-    // Reset mocks
-    mockedAxios.post.mockReset();
-    mockedAxios.isAxiosError.mockReset();
-  });
+  const mockEndpoint = 'https://api.example.com/graphql';
+  const mockApiKey = 'test-api-key';
 
-  afterEach(async () => {
+  beforeEach(() => {
     jest.clearAllMocks();
-    mockCache.get.mockReset();
-    mockCache.set.mockReset();
-    mockCache.close.mockReset();
+    calculator = new MetricsCalculator(mockEndpoint, mockApiKey, 15, 'items');
   });
 
   describe('constructor', () => {
-    it('should initialize with correct parameters', () => {
+    it('should initialize with provided values', () => {
       expect(calculator).toBeDefined();
     });
 
-    it('should use default cache bucket size of 15 minutes', () => {
-      const defaultCalculator = new MetricsCalculator(mockEndpoint, mockApiKey);
+    it('should use default cacheBucketMinutes', () => {
+      const defaultCalculator = new MetricsCalculator(mockEndpoint, mockApiKey, undefined, 'items');
       expect(defaultCalculator).toBeDefined();
     });
 
-    it('should use custom cache bucket size', () => {
-      const customCalculator = new MetricsCalculator(mockEndpoint, mockApiKey, 30);
+    it('should allow custom cacheBucketMinutes', () => {
+      const customCalculator = new MetricsCalculator(mockEndpoint, mockApiKey, 30, 'items');
       expect(customCalculator).toBeDefined();
     });
   });
@@ -113,7 +97,7 @@ describe('MetricsCalculator', () => {
       const bucketEnd = new Date('2023-12-01T10:30:00.000Z');
       
       // Mock cache miss for the bucket
-      mockCache.get.mockResolvedValue(null);
+      mockedGetFromCache.mockResolvedValue(null);
       
       // First call should query the API
       const result1 = await (calculator as any).getCountWithCaching(
@@ -127,7 +111,7 @@ describe('MetricsCalculator', () => {
       
       // Verify the result was cached
       const cacheKey = `countItemsInTimeframe:${accountId}:${bucketStart.toISOString()}`;
-      expect(mockCache.set).toHaveBeenCalledWith(cacheKey, 2);
+      expect(mockedSetInCache).toHaveBeenCalledWith(cacheKey, 2);
     });
 
     it('should use cached values for subsequent requests', async () => {
@@ -137,7 +121,7 @@ describe('MetricsCalculator', () => {
       
       // Pre-populate the cache
       const cacheKey = `countItemsInTimeframe:${accountId}:${bucketStart.toISOString()}`;
-      mockCache.get.mockImplementation((key: string) => {
+      mockedGetFromCache.mockImplementation((key: string) => {
         if (key === cacheKey) {
           return Promise.resolve(42); // Cache hit with value 42
         }
@@ -207,7 +191,7 @@ describe('MetricsCalculator', () => {
       // Mock cache miss for the aligned bucket (so it gets queried and cached)
       const alignedBucketStart = new Date('2023-12-01T10:15:00.000Z');
       const cacheKey = `countItemsInTimeframe:${accountId}:${alignedBucketStart.toISOString()}`;
-      mockCache.get.mockImplementation((key: string) => {
+      mockedGetFromCache.mockImplementation((key: string) => {
         if (key === cacheKey) {
           return Promise.resolve(null); // Cache miss for aligned bucket
         }
@@ -227,7 +211,7 @@ describe('MetricsCalculator', () => {
       expect(mockedAxios.post).toHaveBeenCalledTimes(3);
       
       // Verify that the aligned bucket was cached
-      expect(mockCache.set).toHaveBeenCalledWith(cacheKey, 5);
+      expect(mockedSetInCache).toHaveBeenCalledWith(cacheKey, 5);
     });
 
     it('should handle windows smaller than bucket size by querying directly', async () => {
@@ -330,6 +314,60 @@ describe('MetricsCalculator', () => {
       // Verify some cache entries were created
       // Note: The exact number depends on how many aligned buckets were created
       expect(mockedAxios.post).toHaveBeenCalled();
+    });
+  });
+
+  describe('getItemsSummary', () => {
+    it('should calculate items summary correctly', async () => {
+      // Mock GraphQL responses
+      mockedAxios.post.mockResolvedValue({
+        data: {
+          data: {
+            listItemByAccountIdAndCreatedAt: {
+              items: new Array(10).fill({ id: 'item-id' }),
+              nextToken: null
+            }
+          }
+        },
+        status: 200
+      });
+
+      const summary = await calculator.getItemsSummary('test-account-id', 24);
+
+      expect(summary).toHaveProperty('itemsTotal24h');
+      expect(summary).toHaveProperty('itemsPerHour');
+      expect(summary).toHaveProperty('itemsAveragePerHour');
+      expect(summary).toHaveProperty('itemsPeakHourly');
+      expect(summary).toHaveProperty('chartData');
+      expect(Array.isArray(summary.chartData)).toBe(true);
+    });
+  });
+
+  describe('getScoreResultsSummary', () => {
+    it('should calculate score results summary correctly', async () => {
+      const scoreResultsCalculator = new MetricsCalculator(mockEndpoint, mockApiKey, 15, 'score_results');
+      
+      // Mock GraphQL responses
+      mockedAxios.post.mockResolvedValue({
+        data: {
+          data: {
+            listScoreResultByAccountIdAndCreatedAt: {
+              items: new Array(5).fill({ id: 'result-id' }),
+              nextToken: null
+            }
+          }
+        },
+        status: 200
+      });
+
+      const summary = await scoreResultsCalculator.getScoreResultsSummary('test-account-id', 24);
+
+      expect(summary).toHaveProperty('scoreResultsTotal24h');
+      expect(summary).toHaveProperty('scoreResultsPerHour');
+      expect(summary).toHaveProperty('scoreResultsAveragePerHour');
+      expect(summary).toHaveProperty('scoreResultsPeakHourly');
+      expect(summary).toHaveProperty('chartData');
+      expect(Array.isArray(summary.chartData)).toBe(true);
     });
   });
 }); 
