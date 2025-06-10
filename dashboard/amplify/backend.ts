@@ -49,10 +49,10 @@ if (getItemsMetricsResolver) {
     // We need to grant it permission to invoke the Python lambda.
     itemsMetricsCalculatorStack.itemsMetricsCalculatorFunction.grantInvoke(getItemsMetricsResolver);
     
-    // Pass the Python function name as an environment variable instead of discovering it.
+    // Pass the Python function ARN as an environment variable.
     (getItemsMetricsResolver as lambda.Function).addEnvironment(
-        'ITEMS_METRICS_CALCULATOR_FUNCTION_NAME',
-        itemsMetricsCalculatorStack.itemsMetricsCalculatorFunction.functionName
+        'ITEMS_METRICS_CALCULATOR_FUNCTION_ARN',
+        itemsMetricsCalculatorStack.itemsMetricsCalculatorFunction.functionArn
     );
     
     // Add permissions for CloudWatch Logs

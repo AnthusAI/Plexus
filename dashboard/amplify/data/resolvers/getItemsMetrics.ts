@@ -10,24 +10,24 @@ type GetItemsMetricsArgs = {
 
 const lambdaClient = new LambdaClient({});
 
-// The name of the Python function is passed in as an environment variable.
-const functionName = process.env.ITEMS_METRICS_CALCULATOR_FUNCTION_NAME;
+// The ARN of the Python function is passed in as an environment variable.
+const functionArn = process.env.ITEMS_METRICS_CALCULATOR_FUNCTION_ARN;
 
 export const handler: AppSyncResolverHandler<GetItemsMetricsArgs, any> = async (event) => {
     console.log('Invoking Python metrics calculator with event:', JSON.stringify(event, null, 2));
 
-    if (!functionName) {
-        console.error('ITEMS_METRICS_CALCULATOR_FUNCTION_NAME environment variable is not set.');
-        throw new Error('Items Metrics Calculator function name is not configured.');
+    if (!functionArn) {
+        console.error('ITEMS_METRICS_CALCULATOR_FUNCTION_ARN environment variable is not set.');
+        throw new Error('Items Metrics Calculator function ARN is not configured.');
     }
     
-    console.log('Using Lambda function:', functionName);
+    console.log('Using Lambda function ARN:', functionArn);
 
     // The payload for the Python lambda is the arguments from the GraphQL query
     const payload = event.arguments;
 
     const command = new InvokeCommand({
-        FunctionName: functionName,
+        FunctionName: functionArn,
         Payload: JSON.stringify(payload)
     });
 
