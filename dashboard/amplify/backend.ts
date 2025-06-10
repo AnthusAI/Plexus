@@ -3,7 +3,7 @@ import { data } from './data/resource.js';
 import { auth } from './auth/resource.js';
 import { reportBlockDetails, attachments, scoreResultAttachments } from './storage/resource.js';
 import { TaskDispatcherStack } from './functions/taskDispatcher/resource.js';
-// import { ItemsMetricsCalculatorStack } from './functions/itemsMetricsCalculator/resource.js'; // Temporarily disabled to break circular dependency
+import { ItemsMetricsCalculatorStack } from './functions/itemsMetricsCalculator/resource.js';
 import { Stack } from 'aws-cdk-lib';
 import { PolicyStatement } from 'aws-cdk-lib/aws-iam';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
@@ -73,27 +73,24 @@ taskDispatcherStack.taskDispatcherFunction.addToRolePolicy(
     })
 );
 
-// TODO: Re-enable ItemsMetricsCalculator after breaking the circular dependency deadlock
-// The old ItemsMetricsCalculatorStack needs to be manually deleted from AWS Console first
-//
-// // Create the ItemsMetricsCalculator stack with no dependencies to avoid circular references
-// const itemsMetricsCalculatorStack = new ItemsMetricsCalculatorStack(
-//     backend.createStack('ItemsMetricsCalculatorStackV2'),
-//     'ItemsMetricsCalculatorV2',
-//     {
-//         // No dependencies on the data stack to avoid circular references
-//     }
-// );
-//
-// // Get access to the getItemsMetrics function
-// const getItemsMetricsFunction = backend.data.resources.functions.getItemsMetrics as lambda.Function;
-//
-// // Add the environment variable to the function
-// if (getItemsMetricsFunction) {
-//     getItemsMetricsFunction.addEnvironment(
-//         'AMPLIFY_DASHBOARD_ITEMSMETRICSCALCULATOR_NAME',
-//         itemsMetricsCalculatorStack.itemsMetricsCalculatorFunction.functionName
-//     );
-// }
+// Create the ItemsMetricsCalculator stack with no dependencies to avoid circular references
+const itemsMetricsCalculatorStack = new ItemsMetricsCalculatorStack(
+    backend.createStack('ItemsMetricsCalculatorStack'),
+    'ItemsMetricsCalculator',
+    {
+        // No dependencies on the data stack to avoid circular references
+    }
+);
+
+// Get access to the getItemsMetrics function
+const getItemsMetricsFunction = backend.data.resources.functions.getItemsMetrics as lambda.Function;
+
+// Add the environment variable to the function
+if (getItemsMetricsFunction) {
+    getItemsMetricsFunction.addEnvironment(
+        'AMPLIFY_DASHBOARD_ITEMSMETRICSCALCULATOR_NAME',
+        itemsMetricsCalculatorStack.itemsMetricsCalculatorFunction.functionName
+    );
+}
 
 export { backend };
