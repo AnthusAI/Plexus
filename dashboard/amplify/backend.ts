@@ -3,7 +3,7 @@ import { data } from './data/resource.js';
 import { auth } from './auth/resource.js';
 import { reportBlockDetails, attachments, scoreResultAttachments } from './storage/resource.js';
 import { TaskDispatcherStack } from './functions/taskDispatcher/resource.js';
-import { ItemsMetricsCalculatorStack } from "./functions/itemsMetricsCalculator/resource.js";
+import { ItemsMetricsCalculatorStack } from "./functions/itemsMetricsCalculator/resource.ts";
 import { Stack, CfnOutput, Fn } from 'aws-cdk-lib';
 import { PolicyStatement, PolicyDocument, Role, ServicePrincipal, Effect } from 'aws-cdk-lib/aws-iam';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
