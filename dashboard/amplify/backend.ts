@@ -56,6 +56,18 @@ if (getItemsMetricsResolver) {
             resources: ['*']
         })
     );
+
+    // Add permissions for CloudWatch Logs
+    getItemsMetricsResolver.addToRolePolicy(
+        new PolicyStatement({
+            actions: [
+                'logs:CreateLogGroup',
+                'logs:CreateLogStream',
+                'logs:PutLogEvents',
+            ],
+            resources: ['arn:aws:logs:*:*:*'],
+        })
+    );
 }
 
 // Get access to the getResourceByShareToken function
