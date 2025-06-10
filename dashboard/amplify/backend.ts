@@ -55,7 +55,7 @@ const appSyncServiceRole = new Role(
     }
 );
 
-// Create AppSync data source for the Python Lambda function using proper CDK constructs
+// Create AppSync data source for the Python Lambda function
 const itemsMetricsDataSource = new appsync.CfnDataSource(
     backend.data.resources.cfnResources.cfnGraphqlApi.stack,
     'ItemsMetricsDataSource',
@@ -71,7 +71,7 @@ const itemsMetricsDataSource = new appsync.CfnDataSource(
 );
 
 // Create resolver for the getItemsMetrics query
-new appsync.CfnResolver(
+const itemsMetricsResolver = new appsync.CfnResolver(
     backend.data.resources.cfnResources.cfnGraphqlApi.stack,
     'GetItemsMetricsResolver',
     {
@@ -88,7 +88,8 @@ new appsync.CfnResolver(
     }
 );
 
-// Ensure the resolver depends on the data source
+// Ensure proper dependency ordering
+itemsMetricsResolver.addDependency(itemsMetricsDataSource);
 itemsMetricsDataSource.addDependency(backend.data.resources.cfnResources.cfnGraphqlApi);
 
 // Get access to the getResourceByShareToken function
