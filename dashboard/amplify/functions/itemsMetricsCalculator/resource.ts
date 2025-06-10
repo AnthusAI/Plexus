@@ -27,10 +27,6 @@ export class ItemsMetricsCalculatorStack extends Stack {
     // Get the directory containing the function code
     const functionDir = path.join(__dirname, '.');
 
-    // Get GraphQL configuration from props or environment
-    const graphqlEndpointArn = props.graphqlEndpointArn || process.env.GRAPHQL_ENDPOINT_ARN || 'WILL_BE_SET_AFTER_DEPLOYMENT';
-    const appSyncApiId = props.appSyncApiId || process.env.APPSYNC_API_ID || 'WILL_BE_SET_AFTER_DEPLOYMENT';
-
     this.itemsMetricsCalculatorFunction = new lambda.Function(this, 'ItemsMetricsCalculatorFunction', {
       runtime: lambda.Runtime.PYTHON_3_11,
       handler: 'index.handler',
@@ -63,13 +59,11 @@ export class ItemsMetricsCalculatorStack extends Stack {
       }),
       timeout: Duration.minutes(5), // Longer timeout for potentially large data processing
       memorySize: 512, // More memory for processing large datasets
-      environment: {
-        // Use AWS-standard environment variable names that match the GraphQL resolver
-        API_PLEXUSDASHBOARD_GRAPHQLAPIARNOUTPUT: graphqlEndpointArn
-      }
+      // Environment variables will be set externally to avoid circular dependencies
     });
 
     // Add permissions for AppSync access
+    // Use a wildcard for AppSync resources since we don't have the API ID at build time
     this.itemsMetricsCalculatorFunction.addToRolePolicy(
       new PolicyStatement({
         effect: Effect.ALLOW,
@@ -77,7 +71,7 @@ export class ItemsMetricsCalculatorStack extends Stack {
           'appsync:GraphQL'
         ],
         resources: [
-          `arn:aws:appsync:${this.region}:${this.account}:apis/${appSyncApiId}/*`
+          `arn:aws:appsync:${this.region}:${this.account}:apis/*`
         ]
       })
     );
