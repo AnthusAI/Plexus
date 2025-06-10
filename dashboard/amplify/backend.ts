@@ -3,7 +3,6 @@ import { data } from './data/resource.js';
 import { auth } from './auth/resource.js';
 import { reportBlockDetails, attachments, scoreResultAttachments } from './storage/resource.js';
 import { TaskDispatcherStack } from './functions/taskDispatcher/resource.js';
-import { ItemsMetricsCalculatorStack } from './functions/itemsMetricsCalculator/resource.js';
 import { Stack } from 'aws-cdk-lib';
 import { PolicyStatement } from 'aws-cdk-lib/aws-iam';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
@@ -72,27 +71,5 @@ taskDispatcherStack.taskDispatcherFunction.addToRolePolicy(
         resources: [process.env.CELERY_QUEUE_URL || '*']
     })
 );
-
-// Create the ItemsMetricsCalculator stack with GraphQL endpoint and API key
-const itemsMetricsCalculatorStack = new ItemsMetricsCalculatorStack(
-    backend.createStack('ItemsMetricsCalculatorStack'),
-    'ItemsMetricsCalculator',
-    {
-        // Pass the GraphQL endpoint and API key from the data stack
-        graphqlEndpoint: backend.data.resources.graphqlApi.graphqlUrl,
-        apiKey: backend.data.resources.graphqlApi.apiKey
-    }
-);
-
-// Get access to the getItemsMetrics function
-const getItemsMetricsFunction = backend.data.resources.functions.getItemsMetrics as lambda.Function;
-
-// Add the environment variable to the function
-if (getItemsMetricsFunction) {
-    getItemsMetricsFunction.addEnvironment(
-        'AMPLIFY_DASHBOARD_ITEMSMETRICSCALCULATOR_NAME',
-        itemsMetricsCalculatorStack.itemsMetricsCalculatorFunction.functionName
-    );
-}
 
 export { backend };

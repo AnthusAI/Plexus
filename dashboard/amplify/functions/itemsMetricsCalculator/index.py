@@ -1,87 +1,39 @@
 import os
 import json
 import logging
-
-# Import from the lightweight Plexus metrics sub-module
-# This only loads the metrics calculator without heavy Plexus dependencies
 import sys
-import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..'))
+from pathlib import Path
+
+# Add the bundled plexus module to the path
+sys.path.insert(0, str(Path(__file__).parent))
+
 from plexus.metrics.calculator import create_calculator_from_env
 
-# Set up basic logging with more detailed format
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
+# Set up logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
-
 
 def handler(event, context):
     """
     AWS Lambda handler for calculating items metrics.
-    
-    This function calculates comprehensive metrics for items and score results
-    over the last 24 hours (or specified timeframe) using the standalone
-    MetricsCalculator class (no longer requires the full Plexus module).
-    
-    Event structure:
-    {
-        "accountId": "string",           # Required: Account ID to calculate metrics for
-        "hours": 24                      # Optional: Number of hours to look back (default: 24)
-    }
-    
-    Environment variables required:
-    - PLEXUS_API_URL: GraphQL API endpoint
-    - PLEXUS_API_KEY: API key for authentication
-    
-    Returns:
-    {
-        "statusCode": 200,
-        "body": {
-            "itemsPerHour": 15,
-            "itemsAveragePerHour": 12.5,
-            "itemsPeakHourly": 20,
-            "itemsTotal24h": 300,
-            "scoreResultsPerHour": 45,
-            "scoreResultsAveragePerHour": 38.2,
-            "scoreResultsPeakHourly": 60,
-            "scoreResultsTotal24h": 917,
-            "chartData": [
-                {
-                    "time": "3 pm",
-                    "items": 15,
-                    "scoreResults": 45,
-                    "bucketStart": "2024-01-01T15:00:00Z",
-                    "bucketEnd": "2024-01-01T16:00:00Z"
-                }
-                // ... more hourly data
-            ]
-        }
-    }
+    This function is invoked by a resolver and uses the Plexus metrics module.
     """
     try:
         logger.info(f"Lambda function invoked with event: {json.dumps(event)}")
         
-        # Parse input
+        # The actual arguments are passed directly in the event payload
+        # from the upstream AppSync resolver.
         account_id = event.get('accountId')
         if not account_id:
-            logger.error("Missing required parameter: accountId")
-            return {
-                'statusCode': 400,
-                'body': json.dumps({
-                    'error': 'Missing required parameter: accountId'
-                })
-            }
+            raise ValueError("Missing required parameter: accountId")
         
         hours = event.get('hours', 24)
         logger.info(f"Calculating metrics for account {account_id} over {hours} hours")
         
-        # Create calculator and get metrics using the new summary functions
+        # Create calculator using environment variables provided by the CDK stack
         calculator = create_calculator_from_env()
         
+        # Get metrics summaries
         items_summary = calculator.get_items_summary(account_id, hours)
         score_results_summary = calculator.get_score_results_summary(account_id, hours)
         
@@ -104,26 +56,18 @@ def handler(event, context):
             'itemsAveragePerHour': items_summary['itemsAveragePerHour'],
             'itemsPeakHourly': items_summary['itemsPeakHourly'],
             'itemsTotal24h': items_summary['itemsTotal24h'],
-            
             'scoreResultsPerHour': score_results_summary['scoreResultsPerHour'],
             'scoreResultsAveragePerHour': score_results_summary['scoreResultsAveragePerHour'],
             'scoreResultsPeakHourly': score_results_summary['scoreResultsPeakHourly'],
             'scoreResultsTotal24h': score_results_summary['scoreResultsTotal24h'],
-            
             'chartData': chart_data
         }
         
         logger.info("Metrics calculated successfully")
-        return {
-            'statusCode': 200,
-            'body': json.dumps(metrics)
-        }
+        # Return the raw JSON object, the resolver will handle the response format
+        return metrics
         
     except Exception as e:
         logger.error(f"Error calculating metrics: {str(e)}")
-        return {
-            'statusCode': 500,
-            'body': json.dumps({
-                'error': f'Internal server error: {str(e)}'
-            })
-        } 
+        # Re-raise the exception to be handled by the AppSync resolver
+        raise e 
