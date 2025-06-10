@@ -1,12 +1,19 @@
 import { defineBackend } from '@aws-amplify/backend';
-import { data } from './data/resource';
-import { auth } from './auth/resource';
-import { reportBlockDetails, attachments, scoreResultAttachments } from './storage/resource';
-import { TaskDispatcherStack } from './functions/taskDispatcher/resource';
-import { ItemsMetricsCalculatorStack } from './functions/itemsMetricsCalculator/resource';
+import { data } from './data/resource.js';
+import { auth } from './auth/resource.js';
+import { reportBlockDetails, attachments, scoreResultAttachments } from './storage/resource.js';
+import { TaskDispatcherStack } from './functions/taskDispatcher/resource.js';
+import { ItemsMetricsCalculatorStack } from './functions/itemsMetricsCalculator/resource.js';
 import { Stack } from 'aws-cdk-lib';
 import { PolicyStatement } from 'aws-cdk-lib/aws-iam';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
+import * as lambda from 'aws-cdk-lib/aws-lambda';
+import {
+  Effect,
+  Policy,
+  Role,
+  ServicePrincipal,
+} from 'aws-cdk-lib/aws-iam';
 
 // Create the backend
 const backend = defineBackend({
@@ -47,7 +54,7 @@ if (cfnTable) {
 // Create the TaskDispatcher stack with the table reference
 const taskDispatcherStack = new TaskDispatcherStack(
     backend.createStack('TaskDispatcherStack'),
-    'taskDispatcher',
+    'TaskDispatcher',
     {
         taskTable,
         // These will be set in the Lambda function's environment variables after deployment
@@ -66,15 +73,24 @@ taskDispatcherStack.taskDispatcherFunction.addToRolePolicy(
     })
 );
 
-// Create the ItemsMetricsCalculator stack
+// Create the ItemsMetricsCalculator stack with no dependencies to avoid circular references
 const itemsMetricsCalculatorStack = new ItemsMetricsCalculatorStack(
     backend.createStack('ItemsMetricsCalculatorStack'),
-    'itemsMetricsCalculator',
+    'ItemsMetricsCalculator',
     {
-        // Pass the GraphQL endpoint ARN and AppSync API ID from the data backend
-        graphqlEndpointArn: backend.data.resources.graphqlApi.graphQLEndpointArn,
-        appSyncApiId: backend.data.resources.graphqlApi.apiId
+        // No dependencies on the data stack to avoid circular references
     }
 );
+
+// Get access to the getItemsMetrics function
+const getItemsMetricsFunction = backend.data.resources.functions.getItemsMetrics as lambda.Function;
+
+// Add the environment variable to the function
+if (getItemsMetricsFunction) {
+    getItemsMetricsFunction.addEnvironment(
+        'AMPLIFY_DASHBOARD_ITEMSMETRICSCALCULATOR_NAME',
+        itemsMetricsCalculatorStack.itemsMetricsCalculatorFunction.functionName
+    );
+}
 
 export { backend };
