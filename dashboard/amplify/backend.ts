@@ -3,6 +3,7 @@ import { data } from './data/resource.js';
 import { auth } from './auth/resource.js';
 import { reportBlockDetails, attachments, scoreResultAttachments } from './storage/resource.js';
 import { TaskDispatcherStack } from './functions/taskDispatcher/resource.js';
+import { ItemsMetricsCalculatorStack } from "./functions/itemsMetricsCalculator/resource.js";
 import { Stack } from 'aws-cdk-lib';
 import { PolicyStatement } from 'aws-cdk-lib/aws-iam';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
@@ -13,6 +14,8 @@ import {
   Role,
   ServicePrincipal,
 } from 'aws-cdk-lib/aws-iam';
+import { IFunction } from 'aws-cdk-lib/aws-lambda';
+import { IGraphqlApi, CfnGraphQLApi, CfnApiKey } from 'aws-cdk-lib/aws-appsync';
 
 // Create the backend
 const backend = defineBackend({
@@ -22,6 +25,41 @@ const backend = defineBackend({
     attachments,
     scoreResultAttachments
 });
+
+if (!backend.data.resources.cfnResources.cfnApiKey) {
+    throw new Error('API Key is not configured for this backend and is required by the ItemsMetricsCalculator.');
+}
+
+// The ItemsMetricsCalculatorStack is a separate stack that creates the Python Lambda.
+const itemsMetricsCalculatorStack = new ItemsMetricsCalculatorStack(
+    backend.createStack('ItemsMetricsCalculatorStack'),
+    'ItemsMetricsCalculator',
+    {
+        // The Python lambda needs the GraphQL endpoint and API key to function.
+        // We get these from the `data` resource which manages the AppSync API.
+        graphqlEndpoint: backend.data.resources.cfnResources.cfnGraphqlApi.attrGraphQlUrl,
+        apiKey: backend.data.resources.cfnResources.cfnApiKey.attrApiKey,
+    }
+);
+
+// The getItemsMetrics query has a resolver function (a TypeScript lambda).
+const getItemsMetricsResolver = backend.data.resources.functions.getItemsMetrics;
+
+if (getItemsMetricsResolver) {
+    // We need to grant it permission to invoke the Python lambda.
+    itemsMetricsCalculatorStack.itemsMetricsCalculatorFunction.grantInvoke(getItemsMetricsResolver);
+
+    // We also need to pass the name of the Python lambda to the TypeScript resolver
+    // as an environment variable so it knows which function to invoke.
+    // The `backend.data.resources.functions.getItemsMetrics` returns an IFunction, 
+    // so we need to get the underlying Function construct to add an environment variable.
+    // We can do this by accessing the node and finding the child 'Resource' which is the L2 construct.
+    const resolverFunction = getItemsMetricsResolver.node.findChild('Resource') as lambda.Function;
+    resolverFunction.addEnvironment(
+        'ITEMS_METRICS_CALCULATOR_LAMBDA_NAME',
+        itemsMetricsCalculatorStack.itemsMetricsCalculatorFunction.functionName
+    );
+}
 
 // Get access to the getResourceByShareToken function
 const getResourceByShareTokenFunction = backend.data.resources.functions.getResourceByShareToken;
@@ -71,5 +109,12 @@ taskDispatcherStack.taskDispatcherFunction.addToRolePolicy(
         resources: [process.env.CELERY_QUEUE_URL || '*']
     })
 );
+
+const cfnApi = backend.data.resources.cfnResources.cfnGraphqlApi;
+const cfnApiKey = backend.data.resources.cfnResources.cfnApiKey;
+
+if (!cfnApiKey) {
+    throw new Error('API Key is not configured for this backend and is required by the ItemsMetricsCalculator.');
+}
 
 export { backend };
