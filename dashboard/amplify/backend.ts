@@ -41,7 +41,7 @@ const itemsMetricsCalculator = new ItemsMetricsCalculator(
 );
 
 // The getItemsMetrics query has a resolver function (a TypeScript lambda).
-const getItemsMetricsResolver = backend.data.resources.functions.getItemsMetrics;
+const getItemsMetricsResolver = backend.data.resources.functions.getItemsMetricsHandler;
 
 if (getItemsMetricsResolver) {
     // Grant the resolver permission to invoke the Python lambda.
