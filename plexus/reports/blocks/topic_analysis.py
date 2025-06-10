@@ -361,6 +361,20 @@ class TopicAnalysis(BaseReportBlock):
             
             # 2. LLM Extraction (what was previously called preprocessing)
             final_output_data["llm_extraction"] = preprocessing_info
+
+            # Add debug logging to verify hit rate stats are included
+            self._log("🔍 DEBUG: LLM Extraction preprocessing_info contents:")
+            self._log(f"   • Method: {preprocessing_info.get('method', 'unknown')}")
+            self._log(f"   • Hit rate stats present: {'hit_rate_stats' in preprocessing_info}")
+            if 'hit_rate_stats' in preprocessing_info:
+                hit_stats = preprocessing_info['hit_rate_stats']
+                self._log(f"   • Total processed: {hit_stats.get('total_processed', 'unknown')}")
+                self._log(f"   • Successful: {hit_stats.get('successful_extractions', 'unknown')}")
+                self._log(f"   • Failed: {hit_stats.get('failed_extractions', 'unknown')}")
+                self._log(f"   • Hit rate: {hit_stats.get('hit_rate_percentage', 'unknown')}%")
+            else:
+                self._log("   • No hit_rate_stats found in preprocessing_info")
+                self._log(f"   • Available keys: {list(preprocessing_info.keys())}")
             
             # 3. Add debugging information - show sample of transformed text file
             debug_info = {}
@@ -763,6 +777,21 @@ class TopicAnalysis(BaseReportBlock):
 
         # Add block metadata for frontend display
         final_output_data["block_title"] = self.config.get("name", self.DEFAULT_NAME)
+
+        # Debug logging to verify hit rate stats are in final output
+        self._log("🔍 DEBUG: Final output data structure verification:")
+        if "llm_extraction" in final_output_data:
+            llm_data = final_output_data["llm_extraction"]
+            self._log(f"   • LLM extraction present: True")
+            self._log(f"   • Hit rate stats in final output: {'hit_rate_stats' in llm_data}")
+            if 'hit_rate_stats' in llm_data:
+                hit_stats = llm_data['hit_rate_stats']
+                self._log(f"   • Final hit rate: {hit_stats.get('hit_rate_percentage', 'unknown')}%")
+                self._log(f"   • Final total processed: {hit_stats.get('total_processed', 'unknown')}")
+            else:
+                self._log(f"   • LLM extraction keys: {list(llm_data.keys())}")
+        else:
+            self._log("   • LLM extraction missing from final output")
 
         # Return YAML formatted output with contextual comments
         try:
