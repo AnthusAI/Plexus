@@ -94,11 +94,7 @@ if (getItemsMetricsFunction) {
     );
 }
 
-// Add the GraphQL API endpoint to the ItemsMetricsCalculator function
-// This creates a dependency from ItemsMetricsCalculator to data, but not the reverse
-itemsMetricsCalculatorStack.itemsMetricsCalculatorFunction.addEnvironment(
-    'API_PLEXUSDASHBOARD_GRAPHQLAPIARNOUTPUT',
-    backend.data.resources.graphqlApi.graphQLEndpointArn
-);
+// Note: GraphQL API endpoint will be configured through other means to avoid circular dependency
+// The ItemsMetricsCalculator function will need to discover the GraphQL endpoint at runtime
 
 export { backend };
