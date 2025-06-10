@@ -15,6 +15,10 @@ const functionArn = process.env.ITEMS_METRICS_CALCULATOR_FUNCTION_ARN;
 
 export const handler: AppSyncResolverHandler<GetItemsMetricsArgs, any> = async (event) => {
     console.log('Invoking Python metrics calculator with event:', JSON.stringify(event, null, 2));
+    
+    // Debug: Log all environment variables to understand what's available
+    console.log('Available environment variables:', JSON.stringify(process.env, null, 2));
+    console.log('ITEMS_METRICS_CALCULATOR_FUNCTION_ARN specifically:', process.env.ITEMS_METRICS_CALCULATOR_FUNCTION_ARN);
 
     if (!functionArn) {
         console.error('ITEMS_METRICS_CALCULATOR_FUNCTION_ARN environment variable is not set.');
