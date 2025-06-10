@@ -3,8 +3,8 @@ import json
 import logging
 import sys
 
-# Add the parent directory to the path so we can import the metrics calculator
-sys.path.append('/opt/python')
+# Add the current directory to the path so we can import the plexus module
+sys.path.insert(0, os.path.dirname(__file__))
 
 from plexus.utils.metrics_calculator import create_calculator_from_env
 
