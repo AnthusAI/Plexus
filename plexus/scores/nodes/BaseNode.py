@@ -63,49 +63,39 @@ class BaseNode(ABC, LangChainUser):
         GraphState
             A new state object with the updated trace information
         """
-        # Use empty dicts if input_state or output_state not provided
         input_state = input_state or {}
         output_state = output_state or {}
-            
-        # Create the node name with optional suffix
+
         full_node_name = self.node_name
         if node_suffix:
             full_node_name = f"{full_node_name}.{node_suffix}"
-            
-        # Create the node result
+
         node_result = {
             "node_name": full_node_name,
             "input": input_state,
             "output": output_state
         }
-        
-        # Get the state as a dictionary
+
         if hasattr(state, 'dict'):
             state_dict = state.dict()
         elif hasattr(state, 'model_dump'):
             state_dict = state.model_dump()
         else:
             state_dict = dict(state)
-            
-        # Initialize metadata if it doesn't exist
+
         if 'metadata' not in state_dict or state_dict['metadata'] is None:
             state_dict['metadata'] = {}
-            
-        # Initialize trace if it doesn't exist
+
         if 'trace' not in state_dict['metadata']:
             state_dict['metadata']['trace'] = {}
-            
-        # Initialize node_results if it doesn't exist
+
         if 'node_results' not in state_dict['metadata']['trace']:
             state_dict['metadata']['trace']['node_results'] = []
-            
-        # Add the new node result
+
         state_dict['metadata']['trace']['node_results'].append(node_result)
-        
-        # Log for debugging
+
         logging.info(f"=== LOGGING STATE FOR {full_node_name} ===")
-        
-        # Create and return a new state object
+
         return self.GraphState(**state_dict)
 
     def get_prompt_templates(self):
@@ -119,7 +109,6 @@ class BaseNode(ABC, LangChainUser):
         for message_type in message_types:
             if hasattr(self.parameters, message_type) and getattr(self.parameters, message_type):
                 content = getattr(self.parameters, message_type)
-                # Convert any message to single line if configured
                 if self.parameters.single_line_messages:
                     content = ' '.join(content.split())
                 role = message_type.split('_')[0]
@@ -161,12 +150,10 @@ class BaseNode(ABC, LangChainUser):
         """
         workflow = StateGraph(graph_state_class)
 
-        # Add input aliasing function if needed
         if hasattr(self.parameters, 'input') and self.parameters.input is not None:
             input_aliasing_function = LangGraphScore.generate_input_aliasing_function(self.parameters.input)
             workflow.add_node('input_aliasing', input_aliasing_function)
 
-        # Call add_core_nodes (node name is available via self.node_name)
         workflow = self.add_core_nodes(workflow)
         
         if 'input_aliasing' in workflow.nodes:
@@ -174,7 +161,6 @@ class BaseNode(ABC, LangChainUser):
             second_node = list(workflow.nodes.keys())[1]
             workflow.add_edge(first_node, second_node)
 
-        # Add output aliasing function if needed
         if hasattr(self.parameters, 'output') and self.parameters.output is not None:
             output_aliasing_function = LangGraphScore.generate_output_aliasing_function(self.parameters.output)
             workflow.add_node('output_aliasing', output_aliasing_function)
@@ -188,8 +174,5 @@ class BaseNode(ABC, LangChainUser):
             workflow.add_edge(last_node, END)
 
         app = workflow.compile()
-
-        # logging.info(f"Graph for {self.__class__.__name__}:")
-        # app.get_graph().print_ascii()
 
         return app

@@ -17,7 +17,7 @@ class AWSComprehendEntityExtractor(Score):
     def __init__(self, **parameters):
         super().__init__(**parameters)
         self.comprehend_client = boto3.client('comprehend', region_name=os.getenv('AWS_REGION_NAME'))
-        nltk.download('punkt', quiet=True)  # Download the necessary data for the tokenizer
+        nltk.download('punkt', quiet=True)
 
     class Result(Score.Result):
         """

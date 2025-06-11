@@ -69,16 +69,13 @@ class DeepLearningOneStepSemanticClassifier(DeepLearningSemanticClassifier):
         
         self.embeddings_model = TFAutoModel.from_pretrained(self.parameters.embeddings_model)
 
-        # # Set all layers of the embeddings model to non-trainable first
         for layer in self.embeddings_model.layers:
             layer.trainable = False
 
-        # # Set only the top few layers to trainable, for fine-tuning
         trainable_layers = self.embeddings_model.layers[-self.parameters.embeddings_model_trainable_layers:]
         for layer in trainable_layers:
             layer.trainable = True
 
-        # # Verify the trainability of each layer
         for i, layer in enumerate(self.embeddings_model.layers):
             logging.info(f"Layer {i} ({layer.name}) trainable: {layer.trainable}")
 
@@ -86,14 +83,11 @@ class DeepLearningOneStepSemanticClassifier(DeepLearningSemanticClassifier):
         last_hidden_state = embeddings_layer([input_ids, attention_mask])
         logging.info(f"Shape of last_hidden_state: {last_hidden_state.shape}")
 
-        # Get the hidden size from the pre-loaded model
         hidden_size = self.embeddings_model.config.hidden_size
 
-        # Use the TimeDistributed layer to apply the dense layer to each window embedding
         window_level_output = tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(hidden_size, activation='relu'))(last_hidden_state)
         logging.info(f"Shape of window_level_output: {window_level_output.shape}")
 
-        # Perform max pooling over the window dimension
         aggregated_output = tf.reduce_max(window_level_output, axis=-2)
         logging.info(f"Shape of aggregated_output: {aggregated_output.shape}")
 
@@ -103,7 +97,6 @@ class DeepLearningOneStepSemanticClassifier(DeepLearningSemanticClassifier):
         dropout = tf.keras.layers.Dropout(rate=self.parameters.dropout_rate, name="dropout")(tanh_output)
         logging.info(f"Shape of dropout: {dropout.shape}")
 
-        # Add the final output layer
         if self.is_multi_class:
             number_of_labels = tf.shape(self.train_labels)[1]
             logging.info(f"Multi-class -- Number of labels: {number_of_labels}")

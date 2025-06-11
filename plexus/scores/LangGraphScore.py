@@ -49,9 +49,11 @@ class BatchProcessingPause(Exception):
         self.message = message or f"Execution paused for batch processing. Thread ID: {thread_id}"
         super().__init__(self.message)
 
-# Temporarily suppress the specific Pydantic warning about protected namespaces
-warnings.filterwarnings("ignore", 
-    message="Field \"model_.*\" .* has conflict with protected namespace \"model_\".*")
+# Temporarily suppress specific Pydantic warnings
+warnings.filterwarnings(
+    "ignore",
+    message="Field \"model_.*\" .* has conflict with protected namespace \"model_\".*"
+)
 
 class LangGraphScore(Score, LangChainUser):
     """
@@ -208,21 +210,14 @@ class LangGraphScore(Score, LangChainUser):
         """Asynchronous setup for LangGraphScore."""
         self.model = await self._ainitialize_model()
         
-        # Load environment variables
         load_dotenv('.env', override=True)
-        
-        # Get PostgreSQL URL from parameters or environment
         db_uri = self.parameters.postgres_url or \
                  os.getenv('PLEXUS_LANGGRAPH_CHECKPOINTER_POSTGRES_URI')
         
         if db_uri:
             logging.info("Using PostgreSQL checkpoint database")
-            # Create checkpointer and store the context manager
             self._checkpointer_context = AsyncPostgresSaver.from_conn_string(db_uri)
-            # Enter the context and store the checkpointer
             self.checkpointer = await self._checkpointer_context.__aenter__()
-            
-            # Initialize tables
             logging.info("Setting up checkpointer database tables...")
             await self.checkpointer.setup()
             logging.info("PostgreSQL checkpointer setup complete")
@@ -231,7 +226,6 @@ class LangGraphScore(Score, LangChainUser):
             self.checkpointer = None
             self._checkpointer_context = None
         
-        # Build workflow with optional checkpointer
         self.workflow = await self.build_compiled_workflow()
 
     @staticmethod
