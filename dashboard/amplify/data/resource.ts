@@ -35,9 +35,6 @@ type BatchJobScoringJobIndexFields = "batchJobId" | "scoringJobId";
 type TaskIndexFields = "accountId" | "type" | "status" | "target" | 
     "currentStageId" | "updatedAt" | "scorecardId" | "scoreId";
 type TaskStageIndexFields = "taskId" | "name" | "order" | "status";
-type DatasetIndexFields = "scorecardId" | "scoreId";
-type DatasetVersionIndexFields = "datasetId";
-type DatasetProfileIndexFields = "datasetId" | "datasetVersionId";
 type ShareLinkIndexFields = "token" | "resourceType" | "resourceId" | "accountId";
 type ScoreVersionIndexFields = "scoreId" | "versionNumber" | "isFeatured";
 type ReportConfigurationIndexFields = "accountId" | "name";
@@ -135,7 +132,6 @@ const schema = a.schema({
             scoringJobs: a.hasMany('ScoringJob', 'scorecardId'),
             scoreResults: a.hasMany('ScoreResult', 'scorecardId'),
             tasks: a.hasMany('Task', 'scorecardId'),
-            datasets: a.hasMany('Dataset', 'scorecardId'),
             feedbackItems: a.hasMany('FeedbackItem', 'scorecardId'),
             externalId: a.string(),
             exampleItems: a.hasMany('ScorecardExampleItem', 'scorecardId'),
@@ -188,7 +184,6 @@ const schema = a.schema({
             evaluations: a.hasMany('Evaluation', 'scoreId'),
             batchJobs: a.hasMany('BatchJob', 'scoreId'),
             scoringJobs: a.hasMany('ScoringJob', 'scoreId'),
-            datasets: a.hasMany('Dataset', 'scoreId'),
             tasks: a.hasMany('Task', 'scoreId'),
             versions: a.hasMany('ScoreVersion', 'scoreId'),
             items: a.hasMany('Item', 'scoreId'),
@@ -555,67 +550,6 @@ const schema = a.schema({
             idx("status")
         ]),
 
-    Dataset: a
-        .model({
-            name: a.string().required(),
-            description: a.string(),
-            scorecardId: a.string().required(),
-            scorecard: a.belongsTo('Scorecard', 'scorecardId'),
-            scoreId: a.string(),
-            score: a.belongsTo('Score', 'scoreId'),
-            currentVersionId: a.string(),
-            currentVersion: a.belongsTo('DatasetVersion', 'currentVersionId'),
-            versions: a.hasMany('DatasetVersion', 'datasetId'),
-            profiles: a.hasMany('DatasetProfile', 'datasetId'),
-            createdAt: a.datetime().required(),
-            updatedAt: a.datetime().required(),
-        })
-        .authorization((allow) => [
-            allow.publicApiKey(),
-            allow.authenticated()
-        ])
-        .secondaryIndexes((idx: (field: DatasetIndexFields) => any) => [
-            idx("scorecardId"),
-            idx("scoreId")
-        ]),
-
-    DatasetVersion: a
-        .model({
-            datasetId: a.string().required(),
-            dataset: a.belongsTo('Dataset', 'datasetId'),
-            versionNumber: a.integer().required(),
-            configuration: a.json().required(),
-            createdAt: a.datetime().required(),
-            profiles: a.hasMany('DatasetProfile', 'datasetVersionId'),
-            datasetsAsCurrentVersion: a.hasMany('Dataset', 'currentVersionId'),
-        })
-        .authorization((allow) => [
-            allow.publicApiKey(),
-            allow.authenticated()
-        ])
-        .secondaryIndexes((idx: (field: DatasetVersionIndexFields) => any) => [
-            idx("datasetId")
-        ]),
-
-    DatasetProfile: a
-        .model({
-            datasetId: a.string().required(),
-            dataset: a.belongsTo('Dataset', 'datasetId'),
-            datasetVersionId: a.string().required(),
-            datasetVersion: a.belongsTo('DatasetVersion', 'datasetVersionId'),
-            columnList: a.string().array().required(),
-            recordCounts: a.json().required(),
-            answerDistribution: a.json().required(),
-            createdAt: a.datetime().required(),
-        })
-        .authorization((allow) => [
-            allow.publicApiKey(),
-            allow.authenticated()
-        ])
-        .secondaryIndexes((idx: (field: DatasetProfileIndexFields) => any) => [
-            idx("datasetId"),
-            idx("datasetVersionId")
-        ]),
         
     ShareLink: a
         .model({
