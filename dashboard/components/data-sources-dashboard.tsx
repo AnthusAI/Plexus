@@ -131,30 +131,69 @@ export default function DataSourcesDashboard() {
 
   // Handle data source duplication
   const handleDuplicateDataSource = async (dataSource: Schema['DataSource']['type']) => {
-    if (!selectedAccount?.id) return
+    console.log('Duplicate button clicked for:', dataSource.name)
+    if (!selectedAccount?.id) {
+      console.error('No selected account ID')
+      alert('No account selected. Please try again.')
+      return
+    }
 
     try {
-      const duplicatedDataSource = await amplifyClient.DataSource.create({
+      console.log('Creating duplicate with data:', {
         name: `${dataSource.name} copy`,
         key: dataSource.key ? `${dataSource.key}-copy` : undefined,
-        description: dataSource.description,
-        yamlConfiguration: dataSource.yamlConfiguration,
-        attachedFiles: dataSource.attachedFiles,
-        accountId: selectedAccount.id,
-        scorecardId: dataSource.scorecardId,
-        scoreId: dataSource.scoreId,
-        currentVersionId: dataSource.currentVersionId
+        accountId: selectedAccount.id
       })
+      
+      // Prepare the data, only including non-null fields
+      const createData: any = {
+        name: `${dataSource.name} copy`,
+        accountId: selectedAccount.id,
+      }
+      
+      // Only add optional fields if they have values
+      if (dataSource.key && dataSource.key.trim()) {
+        createData.key = `${dataSource.key.trim()}-copy`
+      }
+      if (dataSource.description && dataSource.description.trim()) {
+        createData.description = dataSource.description.trim()
+      }
+      if (dataSource.yamlConfiguration && dataSource.yamlConfiguration.trim()) {
+        createData.yamlConfiguration = dataSource.yamlConfiguration.trim()
+      }
+      if (dataSource.attachedFiles && dataSource.attachedFiles.length > 0) {
+        createData.attachedFiles = [...dataSource.attachedFiles]
+      }
+      if (dataSource.scorecardId) {
+        createData.scorecardId = dataSource.scorecardId
+      }
+      if (dataSource.scoreId) {
+        createData.scoreId = dataSource.scoreId
+      }
+      if (dataSource.currentVersionId) {
+        createData.currentVersionId = dataSource.currentVersionId
+      }
+      
+      console.log('Final create data:', createData)
+      
+      const duplicatedDataSource = await amplifyClient.DataSource.create(createData)
+
+      console.log('Duplicate creation result:', duplicatedDataSource)
 
       // Refresh the data sources list
       await fetchDataSources()
+      console.log('Data sources refreshed')
       
       // Navigate to the duplicated data source
       if (duplicatedDataSource.data) {
+        console.log('Navigating to duplicated data source:', duplicatedDataSource.data.id)
         handleSelectDataSource(duplicatedDataSource.data)
+      } else {
+        console.warn('No data in duplicate result')
       }
     } catch (error) {
       console.error('Error duplicating data source:', error)
+      console.error('Error details:', JSON.stringify(error, null, 2))
       alert('Failed to duplicate data source. Please try again.')
     }
   }
@@ -331,6 +370,7 @@ export default function DataSourcesDashboard() {
                 dataSets={dataSets}
                 onDataSetSelect={handleSelectDataSet}
                 selectedDataSetId={selectedDataSet?.id}
+                accountId={selectedAccount?.id}
               />
             </div>
           )}
@@ -360,6 +400,7 @@ export default function DataSourcesDashboard() {
                   dataSets={dataSets}
                   onDataSetSelect={handleSelectDataSet}
                   selectedDataSetId={selectedDataSet.id}
+                  accountId={selectedAccount?.id}
                 />
               </div>
               
