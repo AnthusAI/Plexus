@@ -23,10 +23,6 @@ export const attachments = defineStorage({
   name: 'attachments',
   isDefault: true,
   access: (allow) => ({
-    'attachments/*': [
-      allow.guest.to(['read']),
-      allow.authenticated.to(['read', 'write', 'delete'])
-    ],
     'datasources/*': [
       allow.guest.to(['read']),
       allow.authenticated.to(['read', 'write', 'delete'])
@@ -35,10 +31,6 @@ export const attachments = defineStorage({
       allow.guest.to(['read']),
       allow.authenticated.to(['read', 'write', 'delete'])
     ],
-    // Add wildcard permission for any path
-    '*': [
-      allow.authenticated.to(['read', 'write', 'delete'])
-    ]
   })
 });
 
