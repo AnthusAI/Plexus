@@ -105,6 +105,7 @@ export const FileAttachments = React.forwardRef<HTMLDivElement, FileAttachmentsP
     }, [files, emitChange, readOnly])
 
     const addFile = useCallback(() => {
+      console.log('addFile called', { readOnly, filesLength: files.length, maxFiles })
       if (readOnly || files.length >= maxFiles) return
       
       const newFile: FileEntry = {
@@ -112,9 +113,11 @@ export const FileAttachments = React.forwardRef<HTMLDivElement, FileAttachmentsP
         path: ''
       }
       const newFiles = [...files, newFile]
+      console.log('Adding new file, newFiles:', newFiles)
       setFiles(newFiles)
-      emitChange(newFiles)
-    }, [files, maxFiles, emitChange, readOnly])
+      // Don't emit change immediately for empty files - let the user fill them in first
+      // emitChange will be called when they type in the input
+    }, [files, maxFiles, readOnly])
 
     const removeFile = useCallback((id: string) => {
       if (readOnly) return
@@ -162,8 +165,17 @@ export const FileAttachments = React.forwardRef<HTMLDivElement, FileAttachmentsP
       }
     }, [onUpload, readOnly, allowedTypes, files, emitChange])
 
-    const hasFiles = files.length > 0 && files.some(file => file.path.trim())
+    const hasFiles = files.length > 0
     const canAddMore = !readOnly && files.length < maxFiles
+
+    console.log('FileAttachments render:', { 
+      readOnly, 
+      hasFiles, 
+      canAddMore, 
+      filesLength: files.length, 
+      maxFiles, 
+      attachedFiles 
+    })
 
     // In read-only mode, don't render the component at all if there are no files
     if (readOnly && !hasFiles) {
@@ -180,6 +192,7 @@ export const FileAttachments = React.forwardRef<HTMLDivElement, FileAttachmentsP
           </div>
           {canAddMore && (
             <CardButton
+              icon={Plus}
               label="Add File"
               onClick={addFile}
               aria-label="Add file attachment"
