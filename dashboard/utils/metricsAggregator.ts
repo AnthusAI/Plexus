@@ -285,7 +285,170 @@ export async function getCachedAggregation(
   }
 }
 
-// Cache storage function
+// Helper function to get existing aggregation (complete or incomplete)
+async function getExistingAggregation(
+  accountId: string,
+  recordType: RecordType,
+  startTime: Date,
+  endTime: Date,
+  numberOfMinutes: number,
+  scorecardId?: string,
+  scoreId?: string
+): Promise<CachedAggregation | null> {
+  try {
+    // Choose the appropriate GSI based on segmentation
+    let query: string
+    let variables: any
+
+    if (scoreId) {
+      query = /* GraphQL */ `
+        query GetExistingAggregationByScore(
+          $recordType: String!
+          $timeRangeStart: String!
+          $scoreId: String!
+          $numberOfMinutes: Int!
+        ) {
+          listAggregatedMetricsByRecordTypeAndTimeRangeStart(
+            recordType: $recordType
+            timeRangeStart: { eq: $timeRangeStart }
+            filter: {
+              scoreId: { eq: $scoreId }
+              numberOfMinutes: { eq: $numberOfMinutes }
+            }
+          ) {
+            items {
+              id
+              accountId
+              scorecardId
+              scoreId
+              recordType
+              timeRangeStart
+              timeRangeEnd
+              numberOfMinutes
+              count
+              cost
+              decisionCount
+              externalAiApiCount
+              cachedAiApiCount
+              errorCount
+              complete
+              createdAt
+              updatedAt
+            }
+          }
+        }
+      `
+      variables = {
+        recordType,
+        timeRangeStart: startTime.toISOString(),
+        scoreId,
+        numberOfMinutes
+      }
+    } else if (scorecardId) {
+      query = /* GraphQL */ `
+        query GetExistingAggregationByScorecard(
+          $recordType: String!
+          $timeRangeStart: String!
+          $scorecardId: String!
+          $numberOfMinutes: Int!
+        ) {
+          listAggregatedMetricsByRecordTypeAndTimeRangeStart(
+            recordType: $recordType
+            timeRangeStart: { eq: $timeRangeStart }
+            filter: {
+              scorecardId: { eq: $scorecardId }
+              numberOfMinutes: { eq: $numberOfMinutes }
+            }
+          ) {
+            items {
+              id
+              accountId
+              scorecardId
+              scoreId
+              recordType
+              timeRangeStart
+              timeRangeEnd
+              numberOfMinutes
+              count
+              cost
+              decisionCount
+              externalAiApiCount
+              cachedAiApiCount
+              errorCount
+              complete
+              createdAt
+              updatedAt
+            }
+          }
+        }
+      `
+      variables = {
+        recordType,
+        timeRangeStart: startTime.toISOString(),
+        scorecardId,
+        numberOfMinutes
+      }
+    } else {
+      query = /* GraphQL */ `
+        query GetExistingAggregationByRecordType(
+          $recordType: String!
+          $timeRangeStart: String!
+          $accountId: String!
+          $numberOfMinutes: Int!
+        ) {
+          listAggregatedMetricsByRecordTypeAndTimeRangeStart(
+            recordType: $recordType
+            timeRangeStart: { eq: $timeRangeStart }
+            filter: {
+              accountId: { eq: $accountId }
+              numberOfMinutes: { eq: $numberOfMinutes }
+            }
+          ) {
+            items {
+              id
+              accountId
+              scorecardId
+              scoreId
+              recordType
+              timeRangeStart
+              timeRangeEnd
+              numberOfMinutes
+              count
+              cost
+              decisionCount
+              externalAiApiCount
+              cachedAiApiCount
+              errorCount
+              complete
+              createdAt
+              updatedAt
+            }
+          }
+        }
+      `
+      variables = {
+        recordType,
+        timeRangeStart: startTime.toISOString(),
+        accountId,
+        numberOfMinutes
+      }
+    }
+
+    const response = await graphqlRequest(query, variables)
+    const items = (response.data as any)?.listAggregatedMetricsByRecordTypeAndTimeRangeStart?.items || []
+    
+    if (items.length > 0) {
+      return items[0]
+    }
+
+    return null
+  } catch (error) {
+    console.error('❌ Error looking up existing aggregation:', error)
+    return null
+  }
+}
+
+// Cache storage function with upsert logic
 export async function cacheAggregationResult(
   accountId: string,
   recordType: RecordType,
@@ -317,51 +480,100 @@ export async function cacheAggregationResult(
       break
   }
 
-  const startTimeStr = alignedStartTime.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' })
+  // Determine if this time bucket is complete
+  // A bucket is complete if its end time is in the past
+  const now = new Date()
+  const isComplete = endTime <= now
 
   try {
-    const mutation = /* GraphQL */ `
-      mutation CreateAggregatedMetrics($input: CreateAggregatedMetricsInput!) {
-        createAggregatedMetrics(input: $input) {
-          id
-          accountId
-          scorecardId
-          scoreId
-          recordType
-          timeRangeStart
-          timeRangeEnd
-          numberOfMinutes
-          count
-          cost
-          decisionCount
-          externalAiApiCount
-          cachedAiApiCount
-          errorCount
-          complete
-          createdAt
-          updatedAt
+    // First, check if there's an existing record (complete or incomplete)
+    const existingRecord = await getExistingAggregation(
+      accountId, recordType, alignedStartTime, endTime, numberOfMinutes, scorecardId, scoreId
+    )
+
+    if (existingRecord) {
+      // Update existing record
+      const updateMutation = /* GraphQL */ `
+        mutation UpdateAggregatedMetrics($input: UpdateAggregatedMetricsInput!) {
+          updateAggregatedMetrics(input: $input) {
+            id
+            accountId
+            scorecardId
+            scoreId
+            recordType
+            timeRangeStart
+            timeRangeEnd
+            numberOfMinutes
+            count
+            cost
+            decisionCount
+            externalAiApiCount
+            cachedAiApiCount
+            errorCount
+            complete
+            createdAt
+            updatedAt
+          }
         }
+      `
+
+      const updateInput = {
+        id: existingRecord.id,
+        count: metrics.count,
+        cost: metrics.cost,
+        decisionCount: metrics.decisionCount,
+        externalAiApiCount: metrics.externalAiApiCount,
+        cachedAiApiCount: metrics.cachedAiApiCount,
+        errorCount: metrics.errorCount,
+        complete: isComplete
       }
-    `
 
-    const input = {
-      accountId,
-      scorecardId,
-      scoreId,
-      recordType,
-      timeRangeStart: alignedStartTime.toISOString(),
-      timeRangeEnd: endTime.toISOString(),
-      numberOfMinutes,
-      count: metrics.count,
-      cost: metrics.cost,
-      decisionCount: metrics.decisionCount,
-      externalAiApiCount: metrics.externalAiApiCount,
-      cachedAiApiCount: metrics.cachedAiApiCount,
-      errorCount: metrics.errorCount,
-      complete: true
+      await graphqlRequest(updateMutation, { input: updateInput })
+    } else {
+      // Create new record
+      const createMutation = /* GraphQL */ `
+        mutation CreateAggregatedMetrics($input: CreateAggregatedMetricsInput!) {
+          createAggregatedMetrics(input: $input) {
+            id
+            accountId
+            scorecardId
+            scoreId
+            recordType
+            timeRangeStart
+            timeRangeEnd
+            numberOfMinutes
+            count
+            cost
+            decisionCount
+            externalAiApiCount
+            cachedAiApiCount
+            errorCount
+            complete
+            createdAt
+            updatedAt
+          }
+        }
+      `
+
+      const createInput = {
+        accountId,
+        scorecardId,
+        scoreId,
+        recordType,
+        timeRangeStart: alignedStartTime.toISOString(),
+        timeRangeEnd: endTime.toISOString(),
+        numberOfMinutes,
+        count: metrics.count,
+        cost: metrics.cost,
+        decisionCount: metrics.decisionCount,
+        externalAiApiCount: metrics.externalAiApiCount,
+        cachedAiApiCount: metrics.cachedAiApiCount,
+        errorCount: metrics.errorCount,
+        complete: isComplete
+      }
+
+      await graphqlRequest(createMutation, { input: createInput })
     }
-
-    await graphqlRequest(mutation, { input })
   } catch (error) {
     console.error('❌ Error caching aggregation result:', error)
     // Don't throw - caching failures shouldn't break the main flow
@@ -865,7 +1077,7 @@ export async function getAggregatedMetrics(
     const bucketStartTime = bucket.start.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' })
     const bucketEndTime = bucket.end.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' })
     
-    // Try cache first
+    // First, try to get a complete cached result
     const cachedResult = await getCachedAggregation(
       accountId, recordType, bucket.start, bucket.end, bucket.minutes, scorecardId, scoreId
     )
@@ -884,7 +1096,9 @@ export async function getAggregatedMetrics(
         errorCount: cachedResult.errorCount || 0
       }
     } else {
-      cacheStatus = '🔄'
+      // No complete cache found - compute the bucket
+      cacheStatus = '🔄' // Computing bucket
+      
       bucketMetrics = await performJITAggregation(
         accountId, recordType, bucket.start, bucket.end, scorecardId, scoreId
       )

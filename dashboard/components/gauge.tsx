@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react'
 import { cn } from '@/lib/utils'
 import { Popover, PopoverContent, PopoverTrigger, PopoverAnchor } from '@/components/ui/popover'
 import { CircleHelp } from 'lucide-react'
+import NumberFlowWrapper from '@/components/ui/number-flow'
 
 export interface Segment {
   start: number
@@ -471,36 +472,50 @@ const GaugeComponent: React.FC<GaugeProps> = ({
                       />
                     </g>
                   </g>
-                  <text 
-                    x="0" 
-                    y={textY}
-                    textAnchor="middle" 
-                    className={cn(
-                      "text-[2.25rem] font-bold transition-[fill] duration-500 ease-in-out",
-                      priority ? "fill-focus" : "fill-foreground"
-                    )}
-                    dominantBaseline="middle"
-                  >
-                    {value !== undefined 
-                      ? (valueFormatter
-                          ? valueFormatter(value)
-                          : `${formatDecimalValue(value, decimalPlaces)}${valueUnit}`
-                        )
-                      : ''}
-                  </text>
+
                 </g>
               </svg>
+              {/* NumberFlow value display positioned over the SVG */}
+              {value !== undefined && (
+                <div 
+                  className={cn(
+                    "absolute left-1/2 top-1/2 -translate-x-1/2 flex items-center justify-center",
+                    "text-[2.25rem] font-bold transition-colors duration-500 ease-in-out pointer-events-none",
+                    priority ? "text-focus" : "text-foreground"
+                  )}
+                  style={{
+                    transform: `translate(-50%, calc(-50% + ${showTicks ? '12px' : '12px'} + 0.5em))`,
+                    '--number-flow-mask-height': '0.1em'
+                  } as React.CSSProperties}
+                >
+                  {valueFormatter ? (
+                    valueFormatter(value)
+                  ) : (
+                    <>
+                      <NumberFlowWrapper 
+                        value={parseFloat(formatDecimalValue(value, decimalPlaces))}
+                        format={{ 
+                          minimumFractionDigits: value % 1 === 0 ? 0 : decimalPlaces,
+                          maximumFractionDigits: decimalPlaces,
+                          useGrouping: false
+                        }}
+                      />
+                      {valueUnit && <span>{valueUnit}</span>}
+                    </>
+                  )}
+                </div>
+              )}
               {title && (
                 <div 
                   className={cn(
                     "absolute left-0 right-0 flex justify-center items-center whitespace-nowrap",
-                    "text-[1rem]",
+                    "text-[0.875rem]",
                     "transition-colors duration-500 ease-in-out",
-                    priority ? "text-focus" : "text-foreground"
+                    priority ? "text-focus" : "text-muted-foreground"
                   )}
                   style={{
                     bottom: `calc(${showTicks ? '5%' : '2%'} - ${labelBottomOffset}px)`,
-                    fontSize: containerWidth < 150 ? `max(0.6rem, ${8 + (containerWidth * 0.05)}px)` : undefined
+                    fontSize: containerWidth < 150 ? `max(0.55rem, ${7 + (containerWidth * 0.045)}px)` : undefined
                   }}
                 >
                   <span className="relative">

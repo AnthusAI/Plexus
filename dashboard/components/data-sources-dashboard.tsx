@@ -137,13 +137,13 @@ export default function DataSourcesDashboard() {
       const duplicatedDataSource = await amplifyClient.DataSource.create({
         name: `${dataSource.name} copy`,
         key: dataSource.key ? `${dataSource.key}-copy` : undefined,
-        description: dataSource.description,
-        yamlConfiguration: dataSource.yamlConfiguration,
-        attachedFiles: dataSource.attachedFiles,
+        description: dataSource.description || undefined,
+        yamlConfiguration: dataSource.yamlConfiguration || undefined,
+        attachedFiles: dataSource.attachedFiles?.filter((file): file is string => file !== null) || undefined,
         accountId: selectedAccount.id,
-        scorecardId: dataSource.scorecardId,
-        scoreId: dataSource.scoreId,
-        currentVersionId: dataSource.currentVersionId
+        scorecardId: dataSource.scorecardId || undefined,
+        scoreId: dataSource.scoreId || undefined,
+        currentVersionId: dataSource.currentVersionId || undefined
       })
 
       // Refresh the data sources list
@@ -163,7 +163,7 @@ export default function DataSourcesDashboard() {
   const handleCreate = () => {
     if (!selectedAccount?.id) return
 
-    const blankDataSource: Schema['DataSource']['type'] = {
+    const blankDataSource = {
       id: '',
       name: '',
       key: '',
@@ -176,7 +176,7 @@ export default function DataSourcesDashboard() {
       currentVersionId: null,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-    }
+    } as unknown as Schema['DataSource']['type']
 
     handleSelectDataSource(blankDataSource)
   }
@@ -252,10 +252,7 @@ export default function DataSourcesDashboard() {
 
   return (
     <div className="@container flex flex-col h-full p-3 overflow-hidden">
-      {/* Scorecard Context Selector */}
-      <div className="mb-4">
-        <ScorecardContext />
-      </div>
+
 
       <div className="flex flex-1 min-h-0">
         {/* Grid Panel */}
@@ -330,7 +327,7 @@ export default function DataSourcesDashboard() {
                 onDuplicate={handleDuplicateDataSource}
                 dataSets={dataSets}
                 onDataSetSelect={handleSelectDataSet}
-                selectedDataSetId={selectedDataSet?.id}
+                selectedDataSetId={undefined}
               />
             </div>
           )}
@@ -359,7 +356,7 @@ export default function DataSourcesDashboard() {
                   onDuplicate={handleDuplicateDataSource}
                   dataSets={dataSets}
                   onDataSetSelect={handleSelectDataSet}
-                  selectedDataSetId={selectedDataSet.id}
+                  selectedDataSetId={selectedDataSet?.id}
                 />
               </div>
               

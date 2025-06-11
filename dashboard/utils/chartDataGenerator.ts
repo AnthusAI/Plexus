@@ -69,10 +69,9 @@ export async function generateChartData(
     onProgress([...chartData])
   }
   
-  // Process hours backward from most recent to oldest for real-time visual feedback
-  for (let i = chartData.length - 1; i >= 0; i--) {
-    const dataPoint = chartData[i]
-    
+  // Process buckets in parallel for much faster loading
+  // Create promises for all bucket calculations
+  const bucketPromises = chartData.map(async (dataPoint, index) => {
     // Use the full calendar-aligned hour for data aggregation
     const fullBucketStart = new Date(dataPoint._fullBucketStart!)
     const fullBucketEnd = new Date(dataPoint._fullBucketEnd!)
@@ -83,19 +82,41 @@ export async function generateChartData(
       getAggregatedMetrics(accountId, 'scoreResults', fullBucketStart, fullBucketEnd, scorecardId, scoreId)
     ])
 
-    // Update the chart data point with the full hour's data
-    chartData[i].items = itemsMetrics.count
-    chartData[i].scoreResults = scoreResultsMetrics.count
+    return {
+      index,
+      items: itemsMetrics.count,
+      scoreResults: scoreResultsMetrics.count
+    }
+  })
 
-    // Clean up the internal properties before sending to UI
-    delete (chartData[i] as any)._fullBucketStart
-    delete (chartData[i] as any)._fullBucketEnd
-
-    // Send progressive update to UI
-    if (onProgress) {
+  // Process buckets as they complete (for progressive updates)
+  let completedBuckets = 0
+  const bucketResults = await Promise.allSettled(bucketPromises.map(async (promise, index) => {
+    const result = await promise
+    
+    // Update the chart data point
+    chartData[result.index].items = result.items
+    chartData[result.index].scoreResults = result.scoreResults
+    
+    // Clean up the internal properties
+    delete (chartData[result.index] as any)._fullBucketStart
+    delete (chartData[result.index] as any)._fullBucketEnd
+    
+    completedBuckets++
+    
+    // Send progressive update every few completed buckets or on completion
+    if (onProgress && (completedBuckets % 3 === 0 || completedBuckets === chartData.length)) {
       onProgress([...chartData])
     }
-  }
+    
+    return result
+  }))
+
+  // Ensure final cleanup for any remaining internal properties
+  chartData.forEach(point => {
+    delete (point as any)._fullBucketStart
+    delete (point as any)._fullBucketEnd
+  })
   
   return chartData
 }
