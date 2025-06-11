@@ -46,7 +46,13 @@ const CustomChartTooltip = ({ active, payload, label }: any) => {
     const bucketEnd = dataPoint?.bucketEnd ? new Date(dataPoint.bucketEnd) : null
     
     return (
-      <div className="bg-background rounded-lg shadow-lg p-3 text-sm">
+      <div 
+        className="bg-background rounded-lg shadow-lg p-3 text-sm relative z-[9999]" 
+        style={{ 
+          zIndex: 99999,
+          position: 'relative'
+        }}
+      >
         <div className="space-y-2">
           {payload.map((entry: any, index: number) => {
             // Use proper labels from chartConfig
@@ -353,7 +359,7 @@ Total score results over last 24 hours`}
                     willChange: 'filter'
                   }}
                 >
-                  <ChartContainer config={chartConfig} className="w-full h-full">
+                  <ChartContainer config={chartConfig} className="w-full h-full" style={{ isolation: 'isolate' }}>
                     <AreaChart
                       accessibilityLayer
                       data={chartData}
@@ -422,9 +428,9 @@ Total score results over last 24 hours`}
               </div>
               
               {/* 24-hour totals at the bottom - responsive layout */}
-              <div className="flex justify-between items-end text-sm flex-shrink-0 relative">
+              <div className="flex justify-between items-end text-sm flex-shrink-0">
                 {/* Items metric */}
-                <div className="flex items-center gap-2 @[500px]:flex-col @[500px]:gap-1 @[500px]:items-center @[700px]:flex-row @[700px]:gap-2 @[700px]:items-center">
+                                  <div className="flex items-center gap-2 @[500px]:flex-col @[500px]:gap-1 @[500px]:items-center @[700px]:flex-row @[700px]:gap-2 @[700px]:items-center">
                   <div className="flex flex-col items-center">
                     <div className="flex items-center gap-1">
                       <span className="font-medium text-foreground text-base leading-tight">
