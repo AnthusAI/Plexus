@@ -20,7 +20,6 @@ class BeforeAfterSlicer(BaseNode, LangChainUser):
 
     def __init__(self, **parameters):
         LangChainUser.__init__(self, **parameters)
-        # We intentionally override super().__init__() to allow for a carefully-crafted Pydantic model here.
         combined_parameters_model = pydantic.create_model(
             "CombinedParameters",
             __base__=(BeforeAfterSlicer.Parameters, LangChainUser.Parameters))
@@ -43,14 +42,12 @@ class BeforeAfterSlicer(BaseNode, LangChainUser):
 
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
-            # Add debug logging
             logging.info(f"NLTK data path: {nltk.data.path}")
             try:
                 nltk.data.find('tokenizers/punkt/english.pickle')
                 logging.info("Found punkt tokenizer data")
             except LookupError as e:
                 logging.error(f"Could not find punkt tokenizer data: {e}")
-                # Try downloading with verbose output
                 nltk.download('punkt', quiet=False)
             self._initialize_tokenizer()
 
@@ -67,10 +64,8 @@ class BeforeAfterSlicer(BaseNode, LangChainUser):
             return "custom_output_parser"
         
         def parse(self, output: str) -> Dict[str, Any]:
-            # Remove any leading/trailing whitespace and quotes
             output = output.strip().strip('"')
             
-            # Remove the prefix if it exists
             prefix = "Quote:"
             if output.startswith(prefix):
                 output = output[len(prefix):].strip()
@@ -79,10 +74,7 @@ class BeforeAfterSlicer(BaseNode, LangChainUser):
             
             logging.info(f"Cleaned output: {output}")
             
-            # Tokenize the text into sentences using our initialized tokenizer
             sentences = self.tokenize(self.text)
-            
-            # Use RapidFuzz to find the best match among sentences
             result = process.extractOne(
                 output,
                 sentences,
@@ -116,10 +108,7 @@ class BeforeAfterSlicer(BaseNode, LangChainUser):
 
         def slicer_node(state):
             prompts = self.get_prompt_templates()
-            # Assuming the first prompt in the list is the one we want to use
             prompt = prompts[0] if isinstance(prompts, list) else prompts
-            
-            # Ensure prompt is a ChatPromptTemplate
             if not isinstance(prompt, ChatPromptTemplate):
                 prompt = ChatPromptTemplate.from_template(prompt)
             

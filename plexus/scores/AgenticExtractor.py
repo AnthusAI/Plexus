@@ -9,9 +9,6 @@ from langchain_community.chat_models import ChatOpenAI
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages, AnyMessage
 
-# Logging.
-# from langchain.globals import set_debug
-# set_debug(True)
 
 class ExtractorState(TypedDict):
     messages: Annotated[list[AnyMessage], add_messages]
@@ -130,7 +127,7 @@ This is the text of a call center phone call that we're reviewing for QA purpose
 
     @staticmethod
     def clean_quote(quote: str) -> str:
-        quote = ' '.join(quote.split())  # Condense any whitespace into single characters
+        quote = ' '.join(quote.split())
         if not (quote.startswith('“') and quote.endswith('”')):
             if quote.startswith("'") and quote.endswith("'"):
                 quote = f'"{quote[1:-1]}"'

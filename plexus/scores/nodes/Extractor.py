@@ -119,7 +119,6 @@ class Extractor(BaseNode, LangChainUser):
                 return {"extracted_text": output}
 
             if self.use_exact_matching:
-                # Exact matching approach
                 if output in self.text:
                     return {"extracted_text": output}
                     
@@ -141,7 +140,6 @@ class Extractor(BaseNode, LangChainUser):
                     logging.warning("No match found. Using original output.")
                     extracted_text = output
             else:
-                # Sliding window approach (default)
                 window_size = len(output.split())
                 best_match = None
                 best_score = 0
@@ -180,27 +178,19 @@ class Extractor(BaseNode, LangChainUser):
                 trust_model_output=self.parameters.trust_model_output
             )
             
-            # Invoke the chain to get the extraction result
             extraction_result = chain.invoke({
                 **state.dict()
             })
-            
-            # Create the result state with the extracted text
             state_dict = state.model_dump()
-            
-            # Update the state dictionary with the extracted text
             state_dict["extracted_text"] = extraction_result["extracted_text"]
                 
             result_state = self.GraphState(
                 **state_dict
             )
             
-            # Create output state for logging
             output_state = {
                 "extracted_text": extraction_result["extracted_text"]
             }
-            
-            # Log the state and get a new state object with updated node_results
             updated_state = self.log_state(result_state, None, output_state)
             
             return updated_state
