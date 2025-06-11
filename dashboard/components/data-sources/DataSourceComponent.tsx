@@ -152,6 +152,41 @@ const DetailContent = React.memo(function DetailContent({
         }
       }).result
       
+      console.log('File uploaded to S3, now updating database with path:', filePath)
+      
+      // Immediately update the database with the new file
+      if (dataSource.id && dataSource.id !== '') {
+        // For existing data sources, get current attachedFiles from the latest state
+        const currentFiles = dataSource.attachedFiles || []
+        const updatedFiles = [...currentFiles, filePath]
+        
+        console.log('=== FILE UPLOAD DATABASE UPDATE ===')
+        console.log('DataSource ID:', dataSource.id)
+        console.log('Current files before update:', currentFiles)
+        console.log('Adding new file:', filePath)
+        console.log('Updated files array:', updatedFiles)
+        console.log('About to call amplifyClient.DataSource.update with:', {
+          id: dataSource.id,
+          attachedFiles: updatedFiles
+        })
+        
+        const updateResult = await amplifyClient.DataSource.update({
+          id: dataSource.id,
+          attachedFiles: updatedFiles
+        })
+        
+        console.log('Update result:', updateResult)
+        if (updateResult.data) {
+          console.log('Database updated successfully!')
+          console.log('Returned attachedFiles from DB:', updateResult.data.attachedFiles)
+          console.log('Returned attachedFiles length:', updateResult.data.attachedFiles?.length || 0)
+          
+          console.log('File upload completed - database now has', updateResult.data.attachedFiles?.length, 'files')
+        } else {
+          console.error('No data returned from update operation!')
+        }
+      }
+      
       // Return the path that was uploaded
       return filePath
     } catch (error) {
@@ -159,6 +194,7 @@ const DetailContent = React.memo(function DetailContent({
       throw new Error(error instanceof Error ? error.message : 'File upload failed')
     }
   }
+
   
   // Set up Monaco theme watcher
   useEffect(() => {
@@ -218,6 +254,7 @@ const DetailContent = React.memo(function DetailContent({
             attachedFiles={dataSource.attachedFiles || []}
             onChange={(files) => {
               console.log('FileAttachments onChange called with:', files)
+              console.log('Current dataSource.attachedFiles:', dataSource.attachedFiles)
               onEditChange?.({ attachedFiles: files })
             }}
             onUpload={handleFileUpload}
@@ -430,6 +467,7 @@ export default function DataSourceComponent({
   }
 
   const handleSave = async () => {
+    console.log('handleSave called with editedDataSource.attachedFiles:', editedDataSource.attachedFiles)
     try {
       if (editedDataSource.id === '') {
         // Create new data source
@@ -461,6 +499,7 @@ export default function DataSourceComponent({
         }
         if (editedDataSource.attachedFiles && editedDataSource.attachedFiles.length > 0) {
           createData.attachedFiles = editedDataSource.attachedFiles
+          console.log('Including attachedFiles in create:', editedDataSource.attachedFiles)
         }
         if (editedDataSource.scorecardId) {
           createData.scorecardId = editedDataSource.scorecardId
@@ -484,6 +523,7 @@ export default function DataSourceComponent({
         }
       } else {
         // Update existing data source
+        console.log('Updating data source with attachedFiles:', editedDataSource.attachedFiles)
         const result = await amplifyClient.DataSource.update({
           id: editedDataSource.id,
           name: editedDataSource.name,
