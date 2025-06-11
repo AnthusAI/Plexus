@@ -50,7 +50,7 @@ export function DashboardDrawer({
           
           <div className="px-4 pb-6">
             <div className="@container">
-              <ItemsGauges />
+              <ItemsGauges disableEmergenceAnimation={true} />
             </div>
           </div>
         </div>

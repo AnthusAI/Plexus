@@ -1,12 +1,12 @@
 'use client'
 
 import React from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { Gauge } from '@/components/gauge'
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
 import { AreaChart, Area, XAxis, CartesianGrid, ResponsiveContainer } from 'recharts'
 import { cn } from '@/lib/utils'
-import { useItemsMetrics } from '@/hooks/useItemsMetrics'
-import { Loader2 } from 'lucide-react'
+import { useMetrics } from '@/app/contexts/MetricsContext'
 import { Timestamp } from '@/components/ui/timestamp'
 
 // Fallback data for the area chart when loading or no data
@@ -98,6 +98,8 @@ interface ItemsGaugesProps {
   chartData?: Array<{ time: string; items: number; scoreResults: number; bucketStart?: string; bucketEnd?: string }>
   // Control whether to use real data or override props
   useRealData?: boolean
+  // Disable emergence animation (for drawer usage)
+  disableEmergenceAnimation?: boolean
 }
 
 export function ItemsGauges({ 
@@ -111,9 +113,10 @@ export function ItemsGauges({
   itemsTotal24h: overrideItemsTotal24h,
   scoreResultsTotal24h: overrideScoreResultsTotal24h,
   chartData: overrideChartData,
-  useRealData = true 
+  useRealData = true,
+  disableEmergenceAnimation = false
 }: ItemsGaugesProps) {
-  const { metrics, isLoading, error } = useItemsMetrics()
+  const { metrics, isInitialLoading, isRefreshing, error, hasData } = useMetrics()
 
   // Determine which data to use
   const scoreResultsPerHour = useRealData && metrics ? metrics.scoreResultsPerHour : (overrideScoreResults ?? 0)
@@ -131,6 +134,9 @@ export function ItemsGauges({
   console.log('📊 ItemsGauges: Chart data received:', { 
     useRealData, 
     hasMetrics: !!metrics, 
+    hasData,
+    isInitialLoading,
+    isRefreshing,
     gaugeValues: {
       scoreResultsPerHour,
       scoreResultsAveragePerHour,
@@ -153,85 +159,106 @@ export function ItemsGauges({
     chartDataLength: chartData.length,
     hasNonZeroValues: chartData.some(point => point.items > 0 || point.scoreResults > 0)
   })
-  // Show loading or error state
-  if (useRealData && isLoading) {
-    return (
-      <div className={cn("w-full", className)}>
-        <div className="grid grid-cols-2 @[500px]:grid-cols-3 @[700px]:grid-cols-4 @[900px]:grid-cols-5 @[1100px]:grid-cols-6 gap-3 items-start">
-          {/* Loading skeletons */}
-          {[1, 2, 3].map((i) => (
-            <div key={i} className={`bg-card rounded-lg p-4 h-48 flex items-center justify-center ${i === 3 ? 'col-span-2 @[500px]:col-span-1 @[700px]:col-span-2 @[900px]:col-span-3 @[1100px]:col-span-4' : ''}`}>
-              <div className="flex flex-col items-center space-y-2">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">Loading...</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    )
-  }
-
-  if (useRealData && error) {
-    return (
-      <div className={cn("w-full", className)}>
-        <div className="grid grid-cols-2 @[500px]:grid-cols-3 @[700px]:grid-cols-4 @[900px]:grid-cols-5 @[1100px]:grid-cols-6 gap-3 items-start">
-          {/* Error state */}
-          <div className="col-span-2 @[500px]:col-span-3 @[700px]:col-span-4 @[900px]:col-span-5 @[1100px]:col-span-6 bg-card rounded-lg p-4 h-48 flex items-center justify-center">
-            <div className="text-center">
-              <p className="text-sm text-muted-foreground mb-2">Failed to load metrics</p>
-              <p className="text-xs text-muted-foreground">{error}</p>
-            </div>
+  
+  // For real data usage, hide component when no data (progressive disclosure)
+  // Show error state if there's an error and no existing data
+  if (useRealData) {
+    if (error && !hasData) {
+      return (
+        <div className={cn("w-full", className)}>
+          <div className="text-center p-8">
+            <p className="text-sm text-muted-foreground mb-2">Unable to load metrics</p>
+            <p className="text-xs text-muted-foreground">{error}</p>
           </div>
         </div>
-      </div>
-    )
+      )
+    }
+    
+    // Return null (hidden) when no data is available yet
+    if (!hasData) {
+      return null
+    }
+  }
+
+  // Animation variants for progressive disclosure (faster, 1 second total)
+  const containerVariants = {
+    hidden: { 
+      height: 0,
+      opacity: 0,
+      scale: 0.95
+    },
+    visible: { 
+      height: 'auto',
+      opacity: 1,
+      scale: 1,
+      transition: {
+        height: { duration: 1, ease: 'easeOut' },
+        opacity: { duration: 0.6, ease: 'easeOut', delay: 0.1 },
+        scale: { duration: 0.6, ease: 'easeOut', delay: 0.1 }
+      }
+    },
+    exit: {
+      height: 0,
+      opacity: 0,
+      scale: 0.95,
+      transition: {
+        height: { duration: 0.4, ease: 'easeIn' },
+        opacity: { duration: 0.3, ease: 'easeIn' },
+        scale: { duration: 0.3, ease: 'easeIn' }
+      }
+    }
+  }
+  
+  const contentVariants = {
+    hidden: { y: 20, opacity: 0 },
+    visible: { 
+      y: 0, 
+      opacity: 1,
+      transition: {
+        duration: 0.4,
+        ease: 'easeOut',
+        delay: 0.5 // Delay content animation until height animation is well underway
+      }
+    }
+  }
+  
+  // Instant variants for drawer usage (no emergence animation)
+  const instantVariants = {
+    visible: { 
+      height: 'auto',
+      opacity: 1,
+      scale: 1,
+      y: 0,
+      transition: { duration: 0 }
+    }
   }
 
   return (
-    <div className={cn("w-full", className)}>
-      {/* 
-        Complex responsive grid layout - MUST match ItemCards grid breakpoints exactly:
-        - grid-cols-2 (base, < 500px): gauges stack vertically, chart below full width  
-        - @[500px]:grid-cols-3 (≥ 500px): 3 cols, chart takes 1 remaining column
-        - @[700px]:grid-cols-4 (≥ 700px): 4 cols, chart takes 2 remaining columns  
-        - @[900px]:grid-cols-5 (≥ 900px): 5 cols, chart takes 3 remaining columns
-        - @[1100px]:grid-cols-6 (≥ 1100px): 6 cols, chart takes 4 remaining columns
-      */}
-      <div className="grid grid-cols-2 @[500px]:grid-cols-3 @[700px]:grid-cols-4 @[900px]:grid-cols-5 @[1100px]:grid-cols-6 gap-3 items-start">
+    <AnimatePresence>
+      {(useRealData ? hasData : true) && (
+        <motion.div 
+          className={cn("w-full overflow-hidden", className)}
+          variants={disableEmergenceAnimation ? instantVariants : containerVariants}
+          initial={useRealData && !disableEmergenceAnimation ? "hidden" : "visible"}
+          animate="visible"
+          exit={disableEmergenceAnimation ? undefined : "exit"}
+        >
+          <motion.div 
+            variants={disableEmergenceAnimation ? instantVariants : contentVariants}
+            initial={useRealData && !disableEmergenceAnimation ? "hidden" : "visible"}
+            animate="visible"
+          >
+            {/* 
+              Complex responsive grid layout - MUST match ItemCards grid breakpoints exactly:
+              - grid-cols-2 (base, < 500px): gauges stack vertically, chart below full width  
+              - @[500px]:grid-cols-3 (≥ 500px): 3 cols, chart takes 1 remaining column
+              - @[700px]:grid-cols-4 (≥ 700px): 4 cols, chart takes 2 remaining columns  
+              - @[900px]:grid-cols-5 (≥ 900px): 5 cols, chart takes 3 remaining columns
+              - @[1100px]:grid-cols-6 (≥ 1100px): 6 cols, chart takes 4 remaining columns
+            */}
+            <div className="grid grid-cols-2 @[500px]:grid-cols-3 @[700px]:grid-cols-4 @[900px]:grid-cols-5 @[1100px]:grid-cols-6 gap-3 items-start">
         
-        {/* First gauge - Score Results per Hour */}
-        <div className="bg-card rounded-lg p-4 h-48">
-          <Gauge
-            value={scoreResultsPerHour}
-            beforeValue={scoreResultsAveragePerHour}
-            title="Score Results/Hour"
-            information={`Current: ${scoreResultsPerHour}
-Current hourly rate (last 60 minutes)
-
-Average: ${scoreResultsAveragePerHour}
-24-hour average hourly rate
-
-Peak: ${scoreResultsPeakHourly}
-Peak hourly rate over last 24 hours
-
-Total: ${scoreResultsTotal24h}
-Total score results over last 24 hours`}
-            valueUnit=""
-            min={0}
-            max={scoreResultsPeakHourly}
-            showTicks={true}
-            decimalPlaces={0}
-            tickSpacingThreshold={85}  // Large threshold to only show min and max ticks
-            segments={[
-              { start: 0, end: 10, color: 'var(--false)' },
-              { start: 10, end: 90, color: 'var(--neutral)' },
-              { start: 90, end: 100, color: 'var(--true)' }
-            ]}
-          />
-        </div>
-
-        {/* Second gauge - Items per Hour */}
+        {/* First gauge - Items per Hour */}
         <div className="bg-card rounded-lg p-4 h-48">
           <Gauge
             value={itemsPerHour}
@@ -262,6 +289,37 @@ Total items over last 24 hours`}
           />
         </div>
 
+        {/* Second gauge - Score Results per Hour */}
+        <div className="bg-card rounded-lg p-4 h-48">
+          <Gauge
+            value={scoreResultsPerHour}
+            beforeValue={scoreResultsAveragePerHour}
+            title="Score Results/Hour"
+            information={`Current: ${scoreResultsPerHour}
+Current hourly rate (last 60 minutes)
+
+Average: ${scoreResultsAveragePerHour}
+24-hour average hourly rate
+
+Peak: ${scoreResultsPeakHourly}
+Peak hourly rate over last 24 hours
+
+Total: ${scoreResultsTotal24h}
+Total score results over last 24 hours`}
+            valueUnit=""
+            min={0}
+            max={scoreResultsPeakHourly}
+            showTicks={true}
+            decimalPlaces={0}
+            tickSpacingThreshold={85}  // Large threshold to only show min and max ticks
+            segments={[
+              { start: 0, end: 10, color: 'var(--false)' },
+              { start: 10, end: 90, color: 'var(--neutral)' },
+              { start: 90, end: 100, color: 'var(--true)' }
+            ]}
+          />
+        </div>
+
         {/* 
           Line Chart - Complex responsive behavior matching ItemCards grid exactly:
           - grid-cols-2 (< 500px): spans full width (col-span-2) on second row
@@ -272,14 +330,14 @@ Total items over last 24 hours`}
         */}
         <div className="col-span-2 @[500px]:col-span-1 @[700px]:col-span-2 @[900px]:col-span-3 @[1100px]:col-span-4 bg-card rounded-lg p-4 h-48 flex flex-col">
           <div className="flex flex-col h-full min-w-0">
-            <h3 className="text-sm font-medium text-foreground truncate mb-2 flex-shrink-0">Activity Over Time</h3>
-            <div className="w-full flex-1 min-h-0 min-w-0">
+            {/* Chart area - responsive height based on width - taller when wide */}
+            <div className="w-full flex-[3] min-h-0 min-w-0 mb-1 @[700px]:flex-[4] @[700px]:mb-0">
               <ChartContainer config={chartConfig} className="w-full h-full">
                 <AreaChart
                   accessibilityLayer
                   data={chartData}
                   margin={{
-                    top: 8,
+                    top: 12,
                     right: 8,
                     left: 20,
                     bottom: 8,
@@ -328,9 +386,47 @@ Total items over last 24 hours`}
                 </AreaChart>
               </ChartContainer>
             </div>
+            
+            {/* 24-hour totals at the bottom - responsive layout */}
+            <div className="flex justify-between items-end text-sm flex-shrink-0">
+              {/* Items metric */}
+              <div className="flex items-center gap-2 @[500px]:flex-col @[500px]:gap-1 @[500px]:items-center @[700px]:flex-row @[700px]:gap-2 @[700px]:items-center">
+                <div className="flex flex-col items-center">
+                  <span className="font-mono font-medium text-foreground text-base leading-tight">{itemsTotal24h.toLocaleString()}</span>
+                  <span className="text-muted-foreground text-xs leading-tight">Items/24h</span>
+                  <div 
+                    className="w-3 h-3 rounded-sm mt-1 hidden @[500px]:block @[700px]:hidden" 
+                    style={{ backgroundColor: '#3b82f6' }}
+                  />
+                </div>
+                <div 
+                  className="w-3 h-3 rounded-sm flex-shrink-0 block @[500px]:hidden @[700px]:block" 
+                  style={{ backgroundColor: '#3b82f6' }}
+                />
+              </div>
+              
+              {/* Score Results metric */}
+              <div className="flex items-center gap-2 @[500px]:flex-col @[500px]:gap-1 @[500px]:items-center @[700px]:flex-row @[700px]:gap-2 @[700px]:items-center">
+                <div className="flex flex-col items-center">
+                  <span className="font-mono font-medium text-foreground text-base leading-tight">{scoreResultsTotal24h.toLocaleString()}</span>
+                  <span className="text-muted-foreground text-xs leading-tight">Results/24h</span>
+                  <div 
+                    className="w-3 h-3 rounded-sm mt-1 hidden @[500px]:block @[700px]:hidden" 
+                    style={{ backgroundColor: '#a855f7' }}
+                  />
+                </div>
+                <div 
+                  className="w-3 h-3 rounded-sm flex-shrink-0 block @[500px]:hidden @[700px]:block" 
+                  style={{ backgroundColor: '#a855f7' }}
+                />
+              </div>
+            </div>
           </div>
         </div>
       </div>
-    </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   )
 }
