@@ -63,6 +63,8 @@ const itemsMetricsCalculatorTemp = defineFunction({
 });
 
 const schema = a.schema({
+    // Temporarily commented out to resolve deployment dependency lock
+    /*
     // Define the return type for the metrics query
     ItemsMetricsResponse: a.customType({
         accountId: a.string().required(),
@@ -79,6 +81,7 @@ const schema = a.schema({
         scoreResultsLastHour: a.integer().required(),
         scoreResultsHourlyBreakdown: a.json().required()
     }),
+    */
 
     // Temporarily commented out to resolve deployment dependency lock
     // Will be re-enabled after successful deployment
