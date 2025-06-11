@@ -79,6 +79,9 @@ const schema = a.schema({
         scoreResultsHourlyBreakdown: a.json().required()
     }),
 
+    // Temporarily commented out to resolve deployment dependency lock
+    // Will be re-enabled after successful deployment
+    /*
     // Define the custom query for getting items metrics
     getItemsMetrics: a
         .query()
@@ -89,6 +92,7 @@ const schema = a.schema({
         .returns(a.ref('ItemsMetricsResponse'))
         .authorization(allow => [allow.publicApiKey(), allow.authenticated()])
         .handler(a.handler.function(itemsMetricsCalculator)),
+    */
 
     Account: a
         .model({
