@@ -58,7 +58,11 @@ const getResourceByShareTokenHandler = defineFunction({
 
 // Define the items metrics calculator function
 const itemsMetricsCalculator = defineFunction({
-    entry: '../functions/itemsMetricsCalculator/index.ts'
+    entry: '../functions/itemsMetricsCalculator/index.ts',
+    environment: {
+        PLEXUS_API_URL: process.env.PLEXUS_API_URL || 'https://api.plexus.com/graphql',
+        PLEXUS_API_KEY: process.env.PLEXUS_API_KEY || 'WILL_BE_SET_AFTER_DEPLOYMENT'
+    }
 });
 
 const schema = a.schema({
