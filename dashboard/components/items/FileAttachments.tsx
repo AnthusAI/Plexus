@@ -81,7 +81,9 @@ export const FileAttachments = React.forwardRef<HTMLDivElement, FileAttachmentsP
 
     // Update internal state when attachedFiles prop changes
     React.useEffect(() => {
+      console.log('FileAttachments useEffect - attachedFiles changed:', attachedFiles)
       const newFiles = attachedFiles.map(path => ({ id: generateId(), path }))
+      console.log('FileAttachments useEffect - setting files to:', newFiles)
       setFiles(newFiles)
     }, [attachedFiles])
 
@@ -174,7 +176,8 @@ export const FileAttachments = React.forwardRef<HTMLDivElement, FileAttachmentsP
       canAddMore, 
       filesLength: files.length, 
       maxFiles, 
-      attachedFiles 
+      attachedFiles,
+      files: files.map(f => ({ id: f.id, path: f.path }))
     })
 
     // In read-only mode, don't render the component at all if there are no files
