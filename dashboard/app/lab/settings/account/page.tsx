@@ -29,7 +29,7 @@ const accountApi = {
 const MENU_ITEMS = [
     "Activity",
     "Scorecards",
-    "Datasets",
+    "Sources",
     "Evaluations",
     "Items",
     "Batches",
