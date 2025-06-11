@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useState, useEffect, useRef } from "react"
-import { Activity, StickyNote, FileBarChart, FlaskConical, ListChecks, LogOut, Menu, PanelLeft, PanelRight, Settings, Sparkles, Siren, Database, Sun, Moon, Send, Mic, Headphones, MessageCircleMore, MessageSquare, Inbox, X, ArrowLeftRight, Layers3, Monitor, CircleHelp } from "lucide-react"
+import { Activity, StickyNote, FileBarChart, FlaskConical, ListChecks, LogOut, Menu, PanelLeft, PanelRight, Settings, Sparkles, Siren, Database, Sun, Moon, Send, Mic, Headphones, MessageCircleMore, MessageSquare, Inbox, X, ArrowLeftRight, Layers3, Monitor, CircleHelp, Gauge } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useTheme } from "next-themes"
@@ -30,6 +30,7 @@ import { ChatEvaluationCard } from "@/components/chat-evaluation-card"
 import SquareLogo, { LogoVariant } from './logo-square'
 import { useSidebar } from "@/app/contexts/SidebarContext"
 import { useAccount } from "@/app/contexts/AccountContext"
+import { DashboardDrawer } from "@/components/DashboardDrawer"
 
 const useMediaQuery = (query: string): boolean => {
   const [matches, setMatches] = useState(false)
@@ -107,11 +108,13 @@ export const menuItems = [
 
 const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; signOut: () => Promise<void> }) => {
   const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState(true)
+  const [isDashboardDrawerOpen, setIsDashboardDrawerOpen] = useState(false)
   const { rightSidebarState, setRightSidebarState } = useSidebar()
   const { theme, setTheme } = useTheme()
   const isDesktop = useMediaQuery("(min-width: 1024px)")
   const isMobile = useMediaQuery("(max-width: 1023px)")
   const { accounts, selectedAccount, isLoadingAccounts, visibleMenuItems, setSelectedAccount } = useAccount()
+  const pathname = usePathname()
 
   useEffect(() => {    
     if (isDesktop) {
@@ -157,7 +160,35 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
     }
   }
 
-  const pathname = usePathname()
+  // Keyboard shortcut for dashboard drawer (.) - only on /lab/ paths
+  useEffect(() => {
+    const isLabPath = pathname.startsWith('/lab/')
+    if (!isLabPath) return
+
+    const handleKeydown = (event: KeyboardEvent) => {
+      if (event.key === '.' && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        // Only trigger if not focused on an input/textarea
+        const activeElement = document.activeElement
+        if (activeElement && (
+          activeElement.tagName === 'INPUT' || 
+          activeElement.tagName === 'TEXTAREA' ||
+          activeElement.getAttribute('contenteditable') === 'true'
+        )) {
+          return
+        }
+        
+        event.preventDefault()
+        setIsDashboardDrawerOpen(prev => !prev)
+      }
+    }
+    
+    document.addEventListener('keydown', handleKeydown)
+    return () => document.removeEventListener('keydown', handleKeydown)
+  }, [pathname])
+
+  const toggleDashboardDrawer = () => {
+    setIsDashboardDrawerOpen(prev => !prev)
+  }
 
   const isActivityRoute = pathname === "/lab/activity" || pathname.startsWith("/lab/tasks/");
 
@@ -236,6 +267,14 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-[200px]">
+              <DropdownMenuItem 
+                className={`cursor-pointer ${!pathname.startsWith('/lab/') ? 'opacity-50' : ''}`} 
+                onClick={pathname.startsWith('/lab/') ? toggleDashboardDrawer : undefined}
+              >
+                <Gauge className="mr-2 h-4 w-4 text-navigation-icon" />
+                Dashboard
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <Link href="/settings">
                 <DropdownMenuItem className="cursor-pointer">
                   <Settings className="mr-2 h-4 w-4 text-navigation-icon" />
@@ -619,6 +658,14 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
           </div>
         </aside>
       </div>
+      
+      {/* Dashboard Drawer - only enabled on /lab/ paths */}
+      {pathname.startsWith('/lab/') && (
+        <DashboardDrawer 
+          open={isDashboardDrawerOpen} 
+          onOpenChange={setIsDashboardDrawerOpen} 
+        />
+      )}
     </div>
   )
 }
