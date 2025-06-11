@@ -767,6 +767,7 @@ const schema = a.schema({
             key: a.string(),
             description: a.string(),
             yamlConfiguration: a.string(),
+            attachedFiles: a.string().array(),
             accountId: a.string().required(),
             account: a.belongsTo('Account', 'accountId'),
             scorecardId: a.string(),
@@ -823,6 +824,7 @@ const schema = a.schema({
             name: a.string(),
             description: a.string(),
             file: a.string(), // S3 path to the generated dataset file
+            attachedFiles: a.string().array(),
             accountId: a.string().required(),
             account: a.belongsTo('Account', 'accountId'),
             scorecardId: a.string(),

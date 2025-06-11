@@ -514,5 +514,89 @@ export const amplifyClient = {
         throw error;
       }
     }
+  },
+  DataSource: {
+    list: async (params?: any) => {
+      const response = await (getClient().models.DataSource as any).list(params)
+      return response as AmplifyResponse<Schema['DataSource']['type'][]>
+    },
+    get: async (params: any) => {
+      const response = await (getClient().models.DataSource as any).get(params)
+      return { data: response.data as Schema['DataSource']['type'] | null }
+    },
+    create: async (data: {
+      name: string
+      key?: string
+      description?: string
+      yamlConfiguration?: string
+      attachedFiles?: string[]
+      accountId: string
+      scorecardId?: string
+      scoreId?: string
+      currentVersionId?: string
+    }) => {
+      const response = await (getClient().models.DataSource as any).create(data)
+      return { data: response.data as Schema['DataSource']['type'] }
+    },
+    update: async (data: {
+      id: string
+      name?: string
+      key?: string
+      description?: string
+      yamlConfiguration?: string
+      attachedFiles?: string[]
+      scorecardId?: string
+      scoreId?: string
+      currentVersionId?: string
+    }) => {
+      const response = await (getClient().models.DataSource as any).update(data)
+      return { data: response.data as Schema['DataSource']['type'] }
+    },
+    delete: async (params: { id: string }) => {
+      const response = await (getClient().models.DataSource as any).delete(params)
+      return { data: response.data as Schema['DataSource']['type'] }
+    }
+  },
+  DataSet: {
+    list: async (params?: any) => {
+      const response = await (getClient().models.DataSet as any).list(params)
+      return response as AmplifyResponse<Schema['DataSet']['type'][]>
+    },
+    get: async (params: any) => {
+      const response = await (getClient().models.DataSet as any).get(params)
+      return { data: response.data as Schema['DataSet']['type'] | null }
+    },
+    create: async (data: {
+      name?: string
+      description?: string
+      file?: string
+      attachedFiles?: string[]
+      accountId: string
+      scorecardId?: string
+      scoreId?: string
+      scoreVersionId: string
+      dataSourceVersionId: string
+    }) => {
+      const response = await (getClient().models.DataSet as any).create(data)
+      return { data: response.data as Schema['DataSet']['type'] }
+    },
+    update: async (data: {
+      id: string
+      name?: string
+      description?: string
+      file?: string
+      attachedFiles?: string[]
+      scorecardId?: string
+      scoreId?: string
+      scoreVersionId?: string
+      dataSourceVersionId?: string
+    }) => {
+      const response = await (getClient().models.DataSet as any).update(data)
+      return { data: response.data as Schema['DataSet']['type'] }
+    },
+    delete: async (params: { id: string }) => {
+      const response = await (getClient().models.DataSet as any).delete(params)
+      return { data: response.data as Schema['DataSet']['type'] }
+    }
   }
 } 

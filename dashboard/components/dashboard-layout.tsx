@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useState, useEffect, useRef } from "react"
-import { Activity, StickyNote, FileBarChart, FlaskConical, ListChecks, LogOut, Menu, PanelLeft, PanelRight, Settings, Sparkles, Siren, Database, Sun, Moon, Send, Mic, Headphones, MessageCircleMore, MessageSquare, Inbox, X, ArrowLeftRight, Layers3, Monitor, CircleHelp, Gauge } from "lucide-react"
+import { Activity, StickyNote, FileBarChart, FlaskConical, ListChecks, LogOut, Menu, PanelLeft, PanelRight, Settings, Sparkles, Siren, HardDriveDownload, Sun, Moon, Send, Mic, Headphones, MessageCircleMore, MessageSquare, Inbox, X, ArrowLeftRight, Layers3, Monitor, CircleHelp, Gauge } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useTheme } from "next-themes"
@@ -98,7 +98,7 @@ export const menuItems = [
   { name: "Evaluations", icon: FlaskConical, path: "/lab/evaluations" },
   { name: "Reports", icon: FileBarChart, path: "/lab/reports" },
   { name: "Scorecards", icon: ListChecks, path: "/lab/scorecards" },
-  { name: "Sources", icon: Database, path: "/lab/datasets" },
+  { name: "Sources", icon: HardDriveDownload, path: "/lab/sources" },
   { name: "Batches", icon: Layers3, path: "/lab/batches" },
   { name: "Activity", icon: Activity, path: "/lab/activity" },
   { name: "Feedback", icon: MessageCircleMore, path: "/lab/feedback-queues" },
