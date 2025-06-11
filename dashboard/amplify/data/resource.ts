@@ -59,6 +59,7 @@ const getResourceByShareTokenHandler = defineFunction({
 // Define the items metrics calculator function
 const itemsMetricsCalculator = defineFunction({
     entry: '../functions/itemsMetricsCalculator/index.ts',
+    timeoutSeconds: 120, // 2 minutes for cold starts with no cached data
     environment: {
         PLEXUS_API_URL: process.env.PLEXUS_API_URL || 'https://7ubj23ym5vekxagab2damu2euy.appsync-api.us-west-2.amazonaws.com/graphql',
         PLEXUS_API_KEY: process.env.PLEXUS_API_KEY || 'da2-mrwmpcj2xjb3piioidfe76zkdq'
