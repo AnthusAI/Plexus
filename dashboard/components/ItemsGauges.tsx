@@ -45,7 +45,7 @@ const CustomChartTooltip = ({ active, payload, label }: any) => {
     const bucketEnd = dataPoint?.bucketEnd ? new Date(dataPoint.bucketEnd) : null
     
     return (
-      <div className="bg-background border rounded-lg shadow-lg p-3 text-sm">
+      <div className="bg-background rounded-lg shadow-lg p-3 text-sm">
         <div className="space-y-2">
           {payload.map((entry: any, index: number) => {
             // Use proper labels from chartConfig
@@ -57,7 +57,7 @@ const CustomChartTooltip = ({ active, payload, label }: any) => {
                     className="w-3 h-3 rounded-sm" 
                     style={{ backgroundColor: entry.color }}
                   />
-                  <span className="font-medium">{displayName}:</span>
+                  <span className="font-medium">{displayName}: </span>
                 </div>
                 <span className="font-mono font-medium text-foreground">{entry.value}</span>
               </div>
@@ -65,14 +65,14 @@ const CustomChartTooltip = ({ active, payload, label }: any) => {
           })}
         </div>
         {bucketStart && bucketEnd && (
-          <div className="border-t pt-2 mt-2">
+          <div className="pt-2 mt-2">
             <div className="text-xs text-muted-foreground space-y-1">
               <div className="flex items-center justify-between">
-                <span>From:</span>
+                <span>From: </span>
                 <Timestamp time={bucketStart} variant="relative" showIcon={false} className="text-xs" />
               </div>
               <div className="flex items-center justify-between">
-                <span>To:</span>
+                <span>To: </span>
                 <Timestamp time={bucketEnd} variant="relative" showIcon={false} className="text-xs" />
               </div>
             </div>
