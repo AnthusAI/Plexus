@@ -30,7 +30,6 @@ import {
 } from "lucide-react"
 import { ScoreCount } from "./scorecards/score-count"
 import { CardButton } from "./CardButton"
-import { DatasetConfigFormComponent } from "./dataset-config-form"
 import { listFromModel } from "@/utils/amplify-helpers"
 import { AmplifyListResult } from '@/types/shared'
 import { graphqlRequest } from "@/utils/amplify-client"
@@ -88,8 +87,6 @@ export default function ScorecardsComponent({
   const [error, setError] = useState<Error | null>(null)
   const [isFullWidth, setIsFullWidth] = useState(!!initialSelectedScorecardId)
   const [isNarrowViewport, setIsNarrowViewport] = useState(false)
-  const [showDatasetConfig, setShowDatasetConfig] = useState(false)
-  const [selectedScorecardForDataset, setSelectedScorecardForDataset] = useState<string>("")
   const [leftPanelWidth, setLeftPanelWidth] = useState(40)
   const [scorecardScoreCounts, setScorecardScoreCounts] = useState<Record<string, number>>({})
   const [scorecardDetailWidth, setScorecardDetailWidth] = useState(50)
@@ -930,8 +927,8 @@ export default function ScorecardsComponent({
           score={scorecardData}
           onEdit={() => handleEdit(selectedScorecard)}
           onViewData={() => {
-            setSelectedScorecardForDataset(selectedScorecard.id)
-            setShowDatasetConfig(true)
+            console.log('View data for scorecard:', selectedScorecard.id)
+            // TODO: Implement data source view
           }}
           isFullWidth={isFullWidth}
           onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
@@ -1171,15 +1168,6 @@ export default function ScorecardsComponent({
         </div>
       </div>
 
-      {showDatasetConfig && selectedScorecardForDataset && (
-        <DatasetConfigFormComponent
-          scorecardId={selectedScorecardForDataset}
-          onClose={() => {
-            setShowDatasetConfig(false)
-            setSelectedScorecardForDataset("")
-          }}
-        />
-      )}
     </div>
   )
 }
