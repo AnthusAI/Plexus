@@ -23,10 +23,14 @@ export const attachments = defineStorage({
   name: 'attachments',
   isDefault: true,
   access: (allow) => ({
-    'attachments/*': [
+    'datasources/*': [
       allow.guest.to(['read']),
       allow.authenticated.to(['read', 'write', 'delete'])
-    ]
+    ],
+    'datasets/*': [
+      allow.guest.to(['read']),
+      allow.authenticated.to(['read', 'write', 'delete'])
+    ],
   })
 });
 
