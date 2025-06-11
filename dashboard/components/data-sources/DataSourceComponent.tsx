@@ -1,13 +1,19 @@
 "use client"
 
 import React, { useEffect, useRef, useState } from "react"
-import { Calendar, HardDriveDownload, MoreHorizontal, X, Square, Columns2, FileCode, Table, Trash2, CopyPlus } from "lucide-react"
+import { Calendar, HardDriveDownload, MoreHorizontal, X, Square, Columns2, FileCode, Table, Trash2, CopyPlus, Plus } from "lucide-react"
 import type { Schema } from "@/amplify/data/resource"
 import { formatDistanceToNow, parseISO } from "date-fns"
 import { cn } from "@/lib/utils"
 import { CardButton } from "@/components/CardButton"
 import { Timestamp } from "@/components/ui/timestamp"
-import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import Editor, { Monaco } from '@monaco-editor/react'
@@ -15,6 +21,9 @@ import * as monaco from 'monaco-editor'
 import type { editor } from 'monaco-editor'
 import { defineCustomMonacoThemes, applyMonacoTheme, setupMonacoThemeWatcher, getCommonMonacoOptions } from '@/lib/monaco-theme'
 import { amplifyClient } from "@/utils/amplify-client"
+import { FileAttachments } from "@/components/items/FileAttachments"
+import { uploadData } from 'aws-amplify/storage'
+import { toast } from 'sonner'
 
 interface DataSourceComponentProps {
   variant: 'grid' | 'detail'
@@ -32,6 +41,7 @@ interface DataSourceComponentProps {
   dataSets?: Schema['DataSet']['type'][]
   onDataSetSelect?: (dataSet: Schema['DataSet']['type']) => void
   selectedDataSetId?: string
+  accountId?: string
 }
 
 // Grid content component
@@ -86,12 +96,16 @@ const DetailContent = React.memo(function DetailContent({
   onToggleFullWidth,
   onClose,
   onSave,
+  onDelete,
+  onLoad,
+  onDuplicate,
   onEditChange,
   hasChanges,
   onCancel,
   dataSets,
   onDataSetSelect,
-  selectedDataSetId
+  selectedDataSetId,
+  accountId
 }: {
   dataSource: Schema['DataSource']['type']
   isFullWidth?: boolean
@@ -107,6 +121,7 @@ const DetailContent = React.memo(function DetailContent({
   dataSets?: Schema['DataSet']['type'][]
   onDataSetSelect?: (dataSet: Schema['DataSet']['type']) => void
   selectedDataSetId?: string
+  accountId?: string
 }) {
   // Create a ref to store the Monaco instance
   const monacoRef = useRef<Monaco | null>(null)
@@ -114,6 +129,36 @@ const DetailContent = React.memo(function DetailContent({
   
   // Add state to detect if we're on an iPad/mobile device
   const [isMobileDevice, setIsMobileDevice] = useState(false)
+
+  // File upload handler
+  const handleFileUpload = async (file: File): Promise<string> => {
+    try {
+      // Generate a unique file path for data sources organized by account
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+      const fileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_') // Sanitize filename
+      const filePath = `datasources/${accountId || 'default'}/${dataSource.id || 'new'}/${timestamp}-${fileName}`
+      
+      // Upload to the attachments bucket
+      const result = await uploadData({
+        path: filePath,
+        data: file,
+        options: {
+          onProgress: ({ transferredBytes, totalBytes }) => {
+            if (totalBytes) {
+              const percentage = Math.round((transferredBytes / totalBytes) * 100)
+              console.log(`Upload progress: ${percentage}%`)
+            }
+          }
+        }
+      }).result
+      
+      // Return the path that was uploaded
+      return filePath
+    } catch (error) {
+      console.error('File upload error:', error)
+      throw new Error(error instanceof Error ? error.message : 'File upload failed')
+    }
+  }
   
   // Set up Monaco theme watcher
   useEffect(() => {
@@ -169,43 +214,44 @@ const DetailContent = React.memo(function DetailContent({
                      placeholder:text-muted-foreground rounded-md"
             placeholder="Description"
           />
+          <FileAttachments
+            attachedFiles={dataSource.attachedFiles || []}
+            onChange={(files) => {
+              console.log('FileAttachments onChange called with:', files)
+              onEditChange?.({ attachedFiles: files })
+            }}
+            onUpload={handleFileUpload}
+            className="mt-4"
+            maxFiles={5}
+          />
         </div>
         <div className="flex gap-2 ml-4">
-          <DropdownMenu.Root>
-            <DropdownMenu.Trigger asChild>
-              <CardButton
-                icon={MoreHorizontal}
-                onClick={() => {}}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-8 w-8 rounded-md bg-border"
                 aria-label="More options"
-              />
-            </DropdownMenu.Trigger>
-            <DropdownMenu.Portal>
-              <DropdownMenu.Content align="end" className="min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md">
-                <DropdownMenu.Item 
-                  className="relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
-                  onSelect={() => onLoad?.(dataSource)}
-                >
-                  <HardDriveDownload className="mr-2 h-4 w-4" />
-                  Load
-                </DropdownMenu.Item>
-                <DropdownMenu.Item 
-                  className="relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
-                  onSelect={() => onDuplicate?.(dataSource)}
-                >
-                  <CopyPlus className="mr-2 h-4 w-4" />
-                  Duplicate
-                </DropdownMenu.Item>
-                <DropdownMenu.Separator className="h-px bg-muted my-1" />
-                <DropdownMenu.Item 
-                  className="relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 text-destructive focus:text-destructive"
-                  onSelect={() => onDelete?.(dataSource)}
-                >
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Delete
-                </DropdownMenu.Item>
-              </DropdownMenu.Content>
-            </DropdownMenu.Portal>
-          </DropdownMenu.Root>
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => onLoad?.(dataSource)}>
+                <HardDriveDownload className="mr-2 h-4 w-4" />
+                <span>Load</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onDuplicate?.(dataSource)}>
+                <CopyPlus className="mr-2 h-4 w-4" />
+                <span>Duplicate</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onDelete?.(dataSource)}>
+                <Trash2 className="mr-2 h-4 w-4" />
+                <span>Delete</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           {onClose && (
             <CardButton
               icon={X}
@@ -362,6 +408,7 @@ export default function DataSourceComponent({
   dataSets,
   onDataSetSelect,
   selectedDataSetId,
+  accountId,
   ...props 
 }: DataSourceComponentProps) {
   const [editedDataSource, setEditedDataSource] = React.useState<Schema['DataSource']['type']>(dataSource)
@@ -375,7 +422,7 @@ export default function DataSourceComponent({
     setEditedDataSource(prev => {
       const updated = { ...prev, ...changes }
       // Set hasChanges if any field was changed
-      if ('name' in changes || 'key' in changes || 'description' in changes || 'yamlConfiguration' in changes) {
+      if ('name' in changes || 'key' in changes || 'description' in changes || 'yamlConfiguration' in changes || 'attachedFiles' in changes) {
         setHasChanges(true)
       }
       return updated
@@ -521,6 +568,7 @@ export default function DataSourceComponent({
               dataSets={dataSets}
               onDataSetSelect={onDataSetSelect}
               selectedDataSetId={selectedDataSetId}
+              accountId={accountId}
             />
           )}
         </div>

@@ -34,6 +34,10 @@ export const attachments = defineStorage({
     'datasets/*': [
       allow.guest.to(['read']),
       allow.authenticated.to(['read', 'write', 'delete'])
+    ],
+    // Add wildcard permission for any path
+    '*': [
+      allow.authenticated.to(['read', 'write', 'delete'])
     ]
   })
 });
