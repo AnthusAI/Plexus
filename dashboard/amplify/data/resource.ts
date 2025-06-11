@@ -56,15 +56,16 @@ const getResourceByShareTokenHandler = defineFunction({
     entry: './resolvers/getResourceByShareToken.ts'
 });
 
-// Temporarily renamed to break CloudFormation dependency lock
-// Will be renamed back after successful deployment
-const itemsMetricsCalculatorTemp = defineFunction({
-    entry: '../functions/itemsMetricsCalculator/index.ts'
+// Define the items metrics calculator function
+const itemsMetricsCalculator = defineFunction({
+    entry: '../functions/itemsMetricsCalculator/index.ts',
+    environment: {
+        PLEXUS_API_URL: process.env.PLEXUS_API_URL || 'https://api.plexus.com/graphql',
+        PLEXUS_API_KEY: process.env.PLEXUS_API_KEY || 'WILL_BE_SET_AFTER_DEPLOYMENT'
+    }
 });
 
 const schema = a.schema({
-    // Temporarily commented out to resolve deployment dependency lock
-    /*
     // Define the return type for the metrics query
     ItemsMetricsResponse: a.customType({
         accountId: a.string().required(),
@@ -81,11 +82,7 @@ const schema = a.schema({
         scoreResultsLastHour: a.integer().required(),
         scoreResultsHourlyBreakdown: a.json().required()
     }),
-    */
 
-    // Temporarily commented out to resolve deployment dependency lock
-    // Will be re-enabled after successful deployment
-    /*
     // Define the custom query for getting items metrics
     getItemsMetrics: a
         .query()
@@ -96,7 +93,6 @@ const schema = a.schema({
         .returns(a.ref('ItemsMetricsResponse'))
         .authorization(allow => [allow.publicApiKey(), allow.authenticated()])
         .handler(a.handler.function(itemsMetricsCalculator)),
-    */
 
     Account: a
         .model({

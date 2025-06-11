@@ -18,8 +18,7 @@ const backend = defineBackend({
 
 // Get access to the functions
 const getResourceByShareTokenFunction = backend.data.resources.functions.getResourceByShareToken;
-// Completely removed to resolve deployment dependency lock
-// const itemsMetricsCalculatorFunction = backend.data.resources.functions.itemsMetricsCalculatorTemp;
+const itemsMetricsCalculatorFunction = backend.data.resources.functions.itemsMetricsCalculator;
 
 // Add AppSync permissions to the getResourceByShareToken function
 if (getResourceByShareTokenFunction) {
@@ -31,17 +30,8 @@ if (getResourceByShareTokenFunction) {
     );
 }
 
-// Completely commented out to resolve deployment dependency lock
-/*
-// Configure the itemsMetricsCalculator function (temporarily renamed)
+// Configure the itemsMetricsCalculator function
 if (itemsMetricsCalculatorFunction) {
-    // Add environment variables for Plexus API access
-    const lambdaFunction = itemsMetricsCalculatorFunction.node.defaultChild as any;
-    if (lambdaFunction) {
-        lambdaFunction.addPropertyOverride('Environment.Variables.PLEXUS_API_URL', process.env.PLEXUS_API_URL || 'https://api.plexus.com/graphql');
-        lambdaFunction.addPropertyOverride('Environment.Variables.PLEXUS_API_KEY', process.env.PLEXUS_API_KEY || 'WILL_BE_SET_AFTER_DEPLOYMENT');
-    }
-    
     // Add AppSync permissions to access the GraphQL API
     itemsMetricsCalculatorFunction.addToRolePolicy(
         new PolicyStatement({
@@ -50,7 +40,6 @@ if (itemsMetricsCalculatorFunction) {
         })
     );
 }
-*/
 
 // Get reference to the Task table and enable streams
 const taskTable = backend.data.resources.tables.Task;
