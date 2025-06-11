@@ -2989,7 +2989,7 @@ function ItemsDashboardInner() {
   }
 
   return (
-    <div className="@container flex flex-col h-full p-2 overflow-hidden">
+    <div className="@container flex flex-col h-full p-3 overflow-hidden">
       {/* Fixed header - always show for wider viewports */}
       {!isNarrowViewport && (
         <div className="flex @[600px]:flex-row flex-col @[600px]:items-center @[600px]:justify-between items-stretch gap-3 pb-3 flex-shrink-0">

@@ -1052,7 +1052,7 @@ export default function ScorecardsComponent({
   }
 
   return (
-    <div className="@container flex flex-col h-full p-2 overflow-hidden">
+    <div className="@container flex flex-col h-full p-3 overflow-hidden">
       <div className="flex flex-1 min-h-0">
         {/* Grid Panel */}
         <div 

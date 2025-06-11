@@ -84,7 +84,7 @@
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "date-fns": "^3.6.0",
-    "framer-motion": "^12.4.1",
+    "framer-motion": "^12.16.0",
     "hsl-radix-colors": "^1.0.2",
     "js-yaml": "^4.1.0",
     "lucide-react": "^0.447.0",
