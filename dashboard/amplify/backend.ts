@@ -32,13 +32,6 @@ if (getResourceByShareTokenFunction) {
 
 // Configure the itemsMetricsCalculator function
 if (itemsMetricsCalculatorFunction) {
-    // Add environment variables for Plexus API access
-    const lambdaFunction = itemsMetricsCalculatorFunction.node.defaultChild as any;
-    if (lambdaFunction) {
-        lambdaFunction.addPropertyOverride('Environment.Variables.PLEXUS_API_URL', process.env.PLEXUS_API_URL || 'https://api.plexus.com/graphql');
-        lambdaFunction.addPropertyOverride('Environment.Variables.PLEXUS_API_KEY', process.env.PLEXUS_API_KEY || 'WILL_BE_SET_AFTER_DEPLOYMENT');
-    }
-    
     // Add AppSync permissions to access the GraphQL API
     itemsMetricsCalculatorFunction.addToRolePolicy(
         new PolicyStatement({
