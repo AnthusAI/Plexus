@@ -18,22 +18,10 @@ const backend = defineBackend({
 
 // Get access to the functions
 const getResourceByShareTokenFunction = backend.data.resources.functions.getResourceByShareToken;
-const itemsMetricsCalculatorFunction = backend.data.resources.functions.itemsMetricsCalculator;
 
 // Add AppSync permissions to the getResourceByShareToken function
 if (getResourceByShareTokenFunction) {
     getResourceByShareTokenFunction.addToRolePolicy(
-        new PolicyStatement({
-            actions: ['appsync:*'],  // Allow all AppSync actions
-            resources: ['*']
-        })
-    );
-}
-
-// Configure the itemsMetricsCalculator function
-if (itemsMetricsCalculatorFunction) {
-    // Add AppSync permissions to access the GraphQL API
-    itemsMetricsCalculatorFunction.addToRolePolicy(
         new PolicyStatement({
             actions: ['appsync:*'],  // Allow all AppSync actions
             resources: ['*']

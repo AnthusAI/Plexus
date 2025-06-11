@@ -57,45 +57,7 @@ const getResourceByShareTokenHandler = defineFunction({
     entry: './resolvers/getResourceByShareToken.ts'
 });
 
-// Define the items metrics calculator function
-const itemsMetricsCalculator = defineFunction({
-    entry: '../functions/itemsMetricsCalculator/index.ts',
-    timeoutSeconds: 120, // 2 minutes for cold starts with no cached data
-    environment: {
-        PLEXUS_API_URL: process.env.PLEXUS_API_URL || 'https://7ubj23ym5vekxagab2damu2euy.appsync-api.us-west-2.amazonaws.com/graphql',
-        PLEXUS_API_KEY: process.env.PLEXUS_API_KEY || 'da2-mrwmpcj2xjb3piioidfe76zkdq'
-    }
-});
-
 const schema = a.schema({
-    // Define the return type for the metrics query
-    ItemsMetricsResponse: a.customType({
-        accountId: a.string().required(),
-        hours: a.integer().required(),
-        timestamp: a.string().required(),
-        // Items metrics
-        totalItems: a.integer().required(),
-        itemsLast24Hours: a.integer().required(),
-        itemsLastHour: a.integer().required(),
-        itemsHourlyBreakdown: a.json().required(),
-        // Score results metrics  
-        totalScoreResults: a.integer().required(),
-        scoreResultsLast24Hours: a.integer().required(),
-        scoreResultsLastHour: a.integer().required(),
-        scoreResultsHourlyBreakdown: a.json().required()
-    }),
-
-    // Define the custom query for getting items metrics
-    getItemsMetrics: a
-        .query()
-        .arguments({
-            accountId: a.string().required(),
-            hours: a.integer() // Optional, defaults to 24
-        })
-        .returns(a.ref('ItemsMetricsResponse'))
-        .authorization(allow => [allow.publicApiKey(), allow.authenticated()])
-        .handler(a.handler.function(itemsMetricsCalculator)),
-
     Account: a
         .model({
             name: a.string().required(),
