@@ -44,6 +44,7 @@ type FeedbackItemIndexFields = "accountId" | "scorecardId" | "scoreId" | "cacheK
 type ScorecardExampleItemIndexFields = "scorecardId" | "itemId" | "addedAt";
 type ScorecardProcessedItemIndexFields = "scorecardId" | "itemId" | "processedAt";
 type IdentifierIndexFields = "accountId" | "value" | "name" | "itemId" | "position";
+type AggregatedMetricsIndexFields = "accountId" | "scorecardId" | "scoreId" | "recordType" | "timeRangeStart" | "timeRangeEnd" | "numberOfMinutes" | "count" | "cost" | "decisionCount" | "externalAiApiCount" | "cachedAiApiCount" | "errorCount" | "createdAt" | "updatedAt";
 
 // New index types for Feedback Analysis
 // type FeedbackAnalysisIndexFields = "accountId" | "scorecardId" | "createdAt"; // REMOVED
@@ -109,6 +110,7 @@ const schema = a.schema({
             reports: a.hasMany('Report', 'accountId'),
             feedbackItems: a.hasMany('FeedbackItem', 'accountId'),
             identifiers: a.hasMany('Identifier', 'accountId'),
+            aggregatedMetrics: a.hasMany('AggregatedMetrics', 'accountId'),
         })
         .authorization((allow) => [
             allow.publicApiKey(),
@@ -136,6 +138,7 @@ const schema = a.schema({
             externalId: a.string(),
             exampleItems: a.hasMany('ScorecardExampleItem', 'scorecardId'),
             processedItems: a.hasMany('ScorecardProcessedItem', 'scorecardId'),
+            aggregatedMetrics: a.hasMany('AggregatedMetrics', 'scorecardId'),
         })
         .authorization((allow) => [
             allow.publicApiKey(),
@@ -192,7 +195,8 @@ const schema = a.schema({
             championVersionId: a.string(),
             championVersion: a.belongsTo('ScoreVersion', 'championVersionId'),
             externalId: a.string().required(),
-            isDisabled: a.boolean()
+            isDisabled: a.boolean(),
+            aggregatedMetrics: a.hasMany('AggregatedMetrics', 'scoreId')
         })
         .authorization((allow) => [
             allow.publicApiKey(),
@@ -722,6 +726,46 @@ const schema = a.schema({
             idx("scorecardId"),
             idx("itemId"),
             idx("scorecardId").sortKeys(["addedAt"]),
+        ]),
+
+    AggregatedMetrics: a
+        .model({
+            accountId: a.string().required(),
+            account: a.belongsTo('Account', 'accountId'),
+            scorecardId: a.string(),
+            scorecard: a.belongsTo('Scorecard', 'scorecardId'),
+            scoreId: a.string(),
+            score: a.belongsTo('Score', 'scoreId'),
+            recordType: a.string().required(), // "items" or "scoreResults"
+            timeRangeStart: a.datetime().required(),
+            timeRangeEnd: a.datetime().required(),
+            numberOfMinutes: a.integer().required(), // Duration: 1, 5, 15, or 60 minutes
+            count: a.integer().required(),
+            cost: a.integer(), // Fixed-point currency values (optional)
+            decisionCount: a.integer(), // Number of decisions made (optional)
+            externalAiApiCount: a.integer(), // External AI API calls (optional)
+            cachedAiApiCount: a.integer(), // Cached AI API calls (optional)
+            errorCount: a.integer(), // Number of errors (optional)
+            metadata: a.json(),
+            complete: a.boolean().required(),
+            createdAt: a.datetime().required(),
+            updatedAt: a.datetime().required(),
+        })
+        .authorization((allow) => [
+            allow.publicApiKey(),
+            allow.authenticated()
+        ])
+        .secondaryIndexes((idx: (field: AggregatedMetricsIndexFields) => any) => [
+            // Primary access pattern: account + time + record type
+            idx("accountId").sortKeys(["timeRangeStart", "recordType"]).name("byAccountTimeRangeRecord"),
+            // Scorecard-specific access pattern
+            idx("scorecardId").sortKeys(["timeRangeStart", "recordType"]).name("byScorecardTimeRangeRecord"),
+            // Score-specific access pattern  
+            idx("scoreId").sortKeys(["timeRangeStart", "recordType"]).name("byScoreTimeRangeRecord"),
+            // Maintenance/cleanup access pattern
+            idx("accountId").sortKeys(["recordType", "timeRangeStart"]).name("byAccountRecordType"),
+            // Additional useful indexes
+            idx("recordType").sortKeys(["timeRangeStart"]).name("byRecordTypeAndTime")
         ]),
 
     ScorecardProcessedItem: a
