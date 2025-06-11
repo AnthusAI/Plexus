@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useAccount } from '@/app/contexts/AccountContext'
-import { graphqlRequest } from '@/utils/amplify-client'
+import { getAggregatedMetrics, AggregatedMetricsData } from '@/utils/metricsAggregator'
+import { generateChartData, calculatePeakValues, calculateAverageValues, ChartDataPoint } from '@/utils/chartDataGenerator'
 
 interface MetricsData {
   scoreResultsPerHour: number
@@ -11,7 +12,15 @@ interface MetricsData {
   scoreResultsPeakHourly: number
   itemsTotal24h: number
   scoreResultsTotal24h: number
-  chartData: Array<{ time: string; items: number; scoreResults: number; bucketStart: string; bucketEnd: string }>
+  chartData: ChartDataPoint[]
+  lastUpdated: Date
+  // New comprehensive metrics
+  totalCost24h: number
+  totalDecisions24h: number
+  totalExternalApiCalls24h: number
+  totalCachedApiCalls24h: number
+  totalErrors24h: number
+  costPerHour: number
 }
 
 interface UseItemsMetricsResult {
@@ -21,106 +30,111 @@ interface UseItemsMetricsResult {
   refetch: () => void
 }
 
-// GraphQL response type matching the schema
-interface ItemsMetricsResponse {
-  accountId: string;
-  hours: number;
-  timestamp: string;
-  totalItems: number;
-  itemsLast24Hours: number;
-  itemsLastHour: number;
-  itemsHourlyBreakdown: any;
-  totalScoreResults: number;
-  scoreResultsLast24Hours: number;
-  scoreResultsLastHour: number;
-  scoreResultsHourlyBreakdown: any;
-}
-
-async function invokeLambdaFunction(accountId: string): Promise<MetricsData> {
-  console.log('Invoking getItemsMetrics GraphQL query for account:', accountId);
-  const query = /* GraphQL */ `
-    query GetItemsMetrics($accountId: String!, $hours: Int) {
-      getItemsMetrics(accountId: $accountId, hours: $hours) {
-        accountId
-        hours
-        timestamp
-        totalItems
-        itemsLast24Hours
-        itemsLastHour
-        itemsHourlyBreakdown
-        totalScoreResults
-        scoreResultsLast24Hours
-        scoreResultsLastHour
-        scoreResultsHourlyBreakdown
-      }
-    }
-  `;
+/**
+ * Calculate comprehensive metrics for items and score results
+ * Implements parallel loading: hourly metrics (for immediate gauge display) and 24-hour data (for charts)
+ * Uses bucket-level synchronization to avoid duplicate computation while allowing parallel processing
+ */
+async function calculateMetrics(
+  accountId: string, 
+  onProgressUpdate?: (partialMetrics: Partial<MetricsData>) => void
+): Promise<MetricsData> {
+  const now = new Date();
+  const last24Hours = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const lastHour = new Date(now.getTime() - 60 * 60 * 1000);
   
-  const variables = {
-    accountId: accountId,
-    hours: 24
-  };
-
   try {
-    const response: any = await graphqlRequest(query, variables);
-    console.log('Received response from getItemsMetrics query:', response);
+    // PARALLEL EXECUTION STRATEGY:
+    // 1. Start hourly metrics computation immediately (Priority 1 - for gauges)
+    // 2. Start 24-hour chart data generation in parallel (Priority 2 - for charts)
+    // 3. The hierarchical caching system prevents duplicate bucket computation
+    // 4. Both can work on different time buckets simultaneously
     
-    if (response.data?.getItemsMetrics) {
-      const metricsResponse: ItemsMetricsResponse = response.data.getItemsMetrics;
-      
-      // Transform the response to match the expected UI format
-      // Parse JSON strings if they come as strings
-      const itemsChartData = typeof metricsResponse.itemsHourlyBreakdown === 'string' 
-        ? JSON.parse(metricsResponse.itemsHourlyBreakdown) 
-        : (metricsResponse.itemsHourlyBreakdown || []);
-      const scoreResultsChartData = typeof metricsResponse.scoreResultsHourlyBreakdown === 'string'
-        ? JSON.parse(metricsResponse.scoreResultsHourlyBreakdown)
-        : (metricsResponse.scoreResultsHourlyBreakdown || []);
-      
-      // Calculate averages and peaks from chart data
-      const itemsValues = itemsChartData.map((d: any) => d.items || 0);
-      const scoreResultsValues = scoreResultsChartData.map((d: any) => d.scoreResults || 0);
-      
-      const itemsAveragePerHour = itemsValues.length > 0 ? itemsValues.reduce((a: number, b: number) => a + b, 0) / itemsValues.length : 0;
-      const scoreResultsAveragePerHour = scoreResultsValues.length > 0 ? scoreResultsValues.reduce((a: number, b: number) => a + b, 0) / scoreResultsValues.length : 0;
-      const itemsPeakHourly = itemsValues.length > 0 ? Math.max(...itemsValues) : 0;
-      const scoreResultsPeakHourly = scoreResultsValues.length > 0 ? Math.max(...scoreResultsValues) : 0;
-      
-      // Combine chart data from both sources
-      const combinedChartData = itemsChartData.map((itemData: any, index: number) => {
-        const scoreData = scoreResultsChartData[index] || {};
-        return {
-          time: itemData.time || itemData.bucketStart || '',
-          items: itemData.items || 0,
-          scoreResults: scoreData.scoreResults || 0,
-          bucketStart: itemData.bucketStart || '',
-          bucketEnd: itemData.bucketEnd || ''
-        };
-      });
-      
-      return {
-        scoreResultsPerHour: metricsResponse.scoreResultsLastHour,
-        itemsPerHour: metricsResponse.itemsLastHour,
-        scoreResultsAveragePerHour,
-        itemsAveragePerHour,
-        itemsPeakHourly,
-        scoreResultsPeakHourly,
-        itemsTotal24h: metricsResponse.itemsLast24Hours,
-        scoreResultsTotal24h: metricsResponse.scoreResultsLast24Hours,
-        chartData: combinedChartData
-      };
-    } else {
-      // Check for GraphQL errors
-      if (response.errors) {
-        console.error('GraphQL errors:', response.errors);
-        throw new Error(response.errors.map((e: any) => e.message).join(', '));
+    const hourlyMetricsPromise = Promise.all([
+      getAggregatedMetrics(accountId, 'items', lastHour, now),
+      getAggregatedMetrics(accountId, 'scoreResults', lastHour, now)
+    ]).then(([itemsMetricsLastHour, scoreResultsMetricsLastHour]) => {
+      // FIRST PROGRESS UPDATE: Send hourly gauge data as soon as it's ready
+      // This allows the UI to show meaningful values immediately
+      if (onProgressUpdate) {
+        onProgressUpdate({
+          itemsPerHour: itemsMetricsLastHour.count,
+          scoreResultsPerHour: scoreResultsMetricsLastHour.count,
+          costPerHour: scoreResultsMetricsLastHour.cost || 0,
+          lastUpdated: now
+        })
       }
-      throw new Error('Failed to get metrics from Lambda via GraphQL.');
-    }
+      return { itemsMetricsLastHour, scoreResultsMetricsLastHour }
+    })
+
+    // Start chart data generation in parallel (this will also compute 24-hour totals)
+    // This benefits from any caching done by the hourly computation above
+    const chartDataPromise = generateChartData(
+      accountId, 
+      last24Hours, 
+      now,
+      undefined, // scorecardId
+      undefined, // scoreId
+      (progressChartData) => {
+        // PROGRESSIVE CHART UPDATES: Update chart as buckets are computed
+        const { itemsAverage, scoreResultsAverage } = calculateAverageValues(progressChartData)
+        const { itemsPeak, scoreResultsPeak } = calculatePeakValues(progressChartData)
+        
+        if (onProgressUpdate) {
+          onProgressUpdate({
+            chartData: progressChartData,
+            itemsAveragePerHour: itemsAverage,
+            scoreResultsAveragePerHour: scoreResultsAverage,
+            itemsPeakHourly: itemsPeak,
+            scoreResultsPeakHourly: scoreResultsPeak,
+            itemsTotal24h: progressChartData.reduce((sum, point) => sum + point.items, 0),
+            scoreResultsTotal24h: progressChartData.reduce((sum, point) => sum + point.scoreResults, 0),
+            lastUpdated: now
+          })
+        }
+      }
+    )
+
+    // Wait for hourly metrics first (should be fastest - smaller time range)
+    const { itemsMetricsLastHour, scoreResultsMetricsLastHour } = await hourlyMetricsPromise
+    
+    // Wait for chart data completion
+    const chartData = await chartDataPromise
+    
+    // Get final 24-hour totals (these should be mostly cached from chart generation)
+    const [itemsMetrics24h, scoreResultsMetrics24h] = await Promise.all([
+      getAggregatedMetrics(accountId, 'items', last24Hours, now),
+      getAggregatedMetrics(accountId, 'scoreResults', last24Hours, now)
+    ]);
+    
+    // Calculate derived metrics
+    const { itemsAverage, scoreResultsAverage } = calculateAverageValues(chartData);
+    const { itemsPeak, scoreResultsPeak } = calculatePeakValues(chartData);
+    
+    const result: MetricsData = {
+      itemsPerHour: itemsMetricsLastHour.count,
+      scoreResultsPerHour: scoreResultsMetricsLastHour.count,
+      itemsTotal24h: itemsMetrics24h.count,
+      scoreResultsTotal24h: scoreResultsMetrics24h.count,
+      itemsAveragePerHour: itemsAverage,
+      scoreResultsAveragePerHour: scoreResultsAverage,
+      itemsPeakHourly: itemsPeak,
+      scoreResultsPeakHourly: scoreResultsPeak,
+      chartData,
+      lastUpdated: now,
+      // New comprehensive metrics
+      totalCost24h: scoreResultsMetrics24h.cost || 0,
+      totalDecisions24h: scoreResultsMetrics24h.decisionCount || 0,
+      totalExternalApiCalls24h: scoreResultsMetrics24h.externalAiApiCount || 0,
+      totalCachedApiCalls24h: scoreResultsMetrics24h.cachedAiApiCount || 0,
+      totalErrors24h: scoreResultsMetrics24h.errorCount || 0,
+      costPerHour: scoreResultsMetricsLastHour.cost || 0,
+    };
+    
+    return result;
   } catch (error) {
-    console.error('Error invoking getItemsMetrics query:', error);
-    const e = error as Error;
-    throw new Error(`Failed to fetch metrics: ${e.message}`);
+    console.error('❌ Error in client-side metrics calculation:', error);
+    throw error;
   }
 }
 
@@ -131,43 +145,49 @@ export function useItemsMetrics(): UseItemsMetricsResult {
   const { selectedAccount } = useAccount()
 
   const fetchMetrics = useCallback(async () => {
-    console.log('🔍 useItemsMetrics: Starting fetchMetrics')
-    
     if (!selectedAccount) {
-      console.log('❌ useItemsMetrics: No selected account, clearing metrics')
       setMetrics(null)
       setIsLoading(false)
       return
     }
 
-    console.log('✅ useItemsMetrics: Selected account:', selectedAccount)
-    
+    // Only show loading if we don't have any metrics yet
     if (!metrics) {
       setIsLoading(true)
     }
     setError(null)
 
     try {
-      console.log('🚀 useItemsMetrics: Invoking Lambda function...')
+      await calculateMetrics(
+        selectedAccount.id,
+        (partialMetrics) => {
+          // Progressive update: merge partial metrics with existing data
+          setMetrics(prevMetrics => ({
+            ...prevMetrics,
+            ...partialMetrics
+          } as MetricsData))
+          
+          // CRITICAL: Only set loading to false when we have hourly gauge data
+          // This prevents showing zeros and ensures we have meaningful data before displaying
+          if (partialMetrics.itemsPerHour !== undefined && partialMetrics.scoreResultsPerHour !== undefined) {
+            setIsLoading(false)
+          }
+        }
+      )
       
-      const metricsData = await invokeLambdaFunction(selectedAccount.id)
-      
-      console.log('✅ useItemsMetrics: Lambda function returned metrics:', {
-        ...metricsData,
-        chartDataLength: metricsData.chartData?.length || 0
-      })
-      
-      setMetrics(metricsData)
+      // Final result is already set through progressive updates
+      // No need to overwrite - the last progressive update contains the complete data
 
     } catch (err) {
-      console.error('❌ useItemsMetrics: Error fetching metrics:', err)
-      setError(err instanceof Error ? err.message : 'Failed to fetch metrics from Lambda function')
-    } finally {
+      console.error('❌ useItemsMetrics: Error calculating metrics:', err)
+      setError(err instanceof Error ? err.message : 'Failed to calculate metrics using client-side aggregation')
       setIsLoading(false)
     }
   }, [selectedAccount, metrics])
 
   const refetch = useCallback(() => {
+    // Clear existing metrics to force fresh calculation
+    setMetrics(null)
     fetchMetrics()
   }, [fetchMetrics])
 
