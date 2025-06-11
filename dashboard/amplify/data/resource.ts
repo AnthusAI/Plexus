@@ -56,10 +56,14 @@ const getResourceByShareTokenHandler = defineFunction({
     entry: './resolvers/getResourceByShareToken.ts'
 });
 
+// Temporarily commented out to resolve deployment dependency lock
+// Will be re-enabled after successful deployment
+/*
 // Define the items metrics calculator function
 const itemsMetricsCalculator = defineFunction({
     entry: '../functions/itemsMetricsCalculator/index.ts'
 });
+*/
 
 const schema = a.schema({
     // Define the return type for the metrics query
