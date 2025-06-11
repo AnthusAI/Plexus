@@ -23,7 +23,7 @@ const MockAccountProvider = ({ children }: { children: React.ReactNode }) => (
 )
 
 const meta: Meta<typeof ItemsGauges> = {
-  title: 'Components/ItemsGauges',
+  title: 'Items/ItemsGauges',
   component: ItemsGauges,
   decorators: [
     (Story) => (
