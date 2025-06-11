@@ -6,7 +6,7 @@ import { Gauge } from '@/components/gauge'
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
 import { AreaChart, Area, XAxis, CartesianGrid, ResponsiveContainer } from 'recharts'
 import { cn } from '@/lib/utils'
-import { useMetrics } from '@/app/contexts/MetricsContext'
+import { useItemsMetrics } from '@/hooks/useItemsMetrics'
 import { Timestamp } from '@/components/ui/timestamp'
 
 // Fallback data for the area chart when loading or no data
@@ -116,49 +116,22 @@ export function ItemsGauges({
   useRealData = true,
   disableEmergenceAnimation = false
 }: ItemsGaugesProps) {
-  const { metrics, isInitialLoading, isRefreshing, error, hasData } = useMetrics()
+  const { metrics, isLoading, error } = useItemsMetrics()
+  // Only consider we have data when we have meaningful hourly metrics (not just partial data)
+  const hasData = !!metrics && metrics.itemsPerHour !== undefined && metrics.scoreResultsPerHour !== undefined
+  const isInitialLoading = isLoading && !hasData
+  const isRefreshing = isLoading && hasData
 
-  // Determine which data to use
-  const scoreResultsPerHour = useRealData && metrics ? metrics.scoreResultsPerHour : (overrideScoreResults ?? 0)
-  const itemsPerHour = useRealData && metrics ? metrics.itemsPerHour : (overrideItems ?? 0)
-  const scoreResultsAveragePerHour = useRealData && metrics ? metrics.scoreResultsAveragePerHour : (overrideScoreResultsAverage ?? 0)
-  const itemsAveragePerHour = useRealData && metrics ? metrics.itemsAveragePerHour : (overrideItemsAverage ?? 0)
-  const itemsPeakHourly = useRealData && metrics ? metrics.itemsPeakHourly : (overrideItemsPeak ?? Math.max(...(overrideChartData ?? fallbackChartData).map(point => point.items), 50))
-  const scoreResultsPeakHourly = useRealData && metrics ? metrics.scoreResultsPeakHourly : (overrideScoreResultsPeak ?? Math.max(...(overrideChartData ?? fallbackChartData).map(point => point.scoreResults), 300))
-  const itemsTotal24h = useRealData && metrics ? metrics.itemsTotal24h : (overrideItemsTotal24h ?? itemsAveragePerHour * 24)
-  const scoreResultsTotal24h = useRealData && metrics ? metrics.scoreResultsTotal24h : (overrideScoreResultsTotal24h ?? scoreResultsAveragePerHour * 24)
-  const chartData = useRealData && metrics ? metrics.chartData : (overrideChartData ?? fallbackChartData)
-  
-  
-  // Debug chart data in component
-  console.log('📊 ItemsGauges: Chart data received:', { 
-    useRealData, 
-    hasMetrics: !!metrics, 
-    hasData,
-    isInitialLoading,
-    isRefreshing,
-    gaugeValues: {
-      scoreResultsPerHour,
-      scoreResultsAveragePerHour,
-      itemsPerHour,
-      itemsAveragePerHour
-    },
-    totals: {
-      scoreResultsTotal24h,
-      itemsTotal24h
-    },
-    dynamicScaling: {
-      itemsPeakHourly,
-      scoreResultsPeakHourly,
-      itemsPercentage: toPercentage(itemsPerHour, itemsPeakHourly),
-      scoreResultsPercentage: toPercentage(scoreResultsPerHour, scoreResultsPeakHourly),
-      itemsAveragePercentage: toPercentage(itemsAveragePerHour, itemsPeakHourly),
-      scoreResultsAveragePercentage: toPercentage(scoreResultsAveragePerHour, scoreResultsPeakHourly)
-    },
-    chartData,
-    chartDataLength: chartData.length,
-    hasNonZeroValues: chartData.some(point => point.items > 0 || point.scoreResults > 0)
-  })
+  // Determine which data to use - only use override values when NOT using real data
+  const scoreResultsPerHour = useRealData ? (metrics?.scoreResultsPerHour ?? 0) : (overrideScoreResults ?? 0)
+  const itemsPerHour = useRealData ? (metrics?.itemsPerHour ?? 0) : (overrideItems ?? 0)
+  const scoreResultsAveragePerHour = useRealData ? (metrics?.scoreResultsAveragePerHour ?? 0) : (overrideScoreResultsAverage ?? 0)
+  const itemsAveragePerHour = useRealData ? (metrics?.itemsAveragePerHour ?? 0) : (overrideItemsAverage ?? 0)
+  const itemsPeakHourly = useRealData ? (metrics?.itemsPeakHourly ?? 50) : (overrideItemsPeak ?? Math.max(...(overrideChartData ?? fallbackChartData).map(point => point.items), 50))
+  const scoreResultsPeakHourly = useRealData ? (metrics?.scoreResultsPeakHourly ?? 300) : (overrideScoreResultsPeak ?? Math.max(...(overrideChartData ?? fallbackChartData).map(point => point.scoreResults), 300))
+  const itemsTotal24h = useRealData ? (metrics?.itemsTotal24h ?? 0) : (overrideItemsTotal24h ?? itemsAveragePerHour * 24)
+  const scoreResultsTotal24h = useRealData ? (metrics?.scoreResultsTotal24h ?? 0) : (overrideScoreResultsTotal24h ?? scoreResultsAveragePerHour * 24)
+  const chartData = useRealData ? (metrics?.chartData ?? fallbackChartData) : (overrideChartData ?? fallbackChartData)
   
   // For real data usage, hide component when no data (progressive disclosure)
   // Show error state if there's an error and no existing data

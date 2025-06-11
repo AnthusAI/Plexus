@@ -236,14 +236,11 @@ export class ScoreResultCountManager {
    * Use this when you want the next loadCountForItem to show a loading state
    */
   clearCount(itemId: string) {
-    console.log('📊 Clearing count cache for item:', itemId);
     const wasInCache = this.countCache.has(itemId);
     const wasInPending = this.pendingCounts.has(itemId);
     
     this.countCache.delete(itemId);
     this.pendingCounts.delete(itemId);
-    
-    console.log('📊 Count cleared for item:', itemId, { wasInCache, wasInPending });
     
     // Notify callbacks immediately so UI shows loading state
     this.notifyCallbacks();
@@ -253,7 +250,6 @@ export class ScoreResultCountManager {
    * Force refresh count for a specific item immediately
    */
   refreshItemCount(itemId: string) {
-    console.log('📊 Immediate refresh requested for item:', itemId);
     // Always refresh immediately, regardless of cache status
     // This ensures selected items get priority updates
     this.loadCountForItem(itemId, false);

@@ -6,7 +6,6 @@ import { HydrationOverlay } from "@builder.io/react-hydration-overlay";
 import "@aws-amplify/ui-react/styles.css";
 import { AccountProvider } from "./contexts/AccountContext"
 import { SidebarProvider } from "./contexts/SidebarContext"
-import { MetricsProvider } from "./contexts/MetricsContext"
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -62,13 +61,11 @@ export default function RootLayout({
       </head>
       <body className={inter.className}>
         <AccountProvider>
-          <MetricsProvider>
-            <SidebarProvider>
-              <HydrationOverlay>
-                <ClientLayout>{children}</ClientLayout>
-              </HydrationOverlay>
-            </SidebarProvider>
-          </MetricsProvider>
+          <SidebarProvider>
+            <HydrationOverlay>
+              <ClientLayout>{children}</ClientLayout>
+            </HydrationOverlay>
+          </SidebarProvider>
         </AccountProvider>
       </body>
     </html>
