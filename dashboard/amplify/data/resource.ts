@@ -60,8 +60,8 @@ const getResourceByShareTokenHandler = defineFunction({
 const itemsMetricsCalculator = defineFunction({
     entry: '../functions/itemsMetricsCalculator/index.ts',
     environment: {
-        PLEXUS_API_URL: process.env.PLEXUS_API_URL || 'https://api.plexus.com/graphql',
-        PLEXUS_API_KEY: process.env.PLEXUS_API_KEY || 'WILL_BE_SET_AFTER_DEPLOYMENT'
+        PLEXUS_API_URL: process.env.PLEXUS_API_URL || 'https://7ubj23ym5vekxagab2damu2euy.appsync-api.us-west-2.amazonaws.com/graphql',
+        PLEXUS_API_KEY: process.env.PLEXUS_API_KEY || 'da2-mrwmpcj2xjb3piioidfe76zkdq'
     }
 });
 
