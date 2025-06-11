@@ -130,7 +130,7 @@ async function fetchMetricsFromAPI(accountId: string): Promise<MetricsData> {
         itemsTotal24h: metricsResponse.itemsLast24Hours,
         scoreResultsTotal24h: metricsResponse.scoreResultsLast24Hours,
         chartData: combinedChartData,
-        lastUpdated: new Date()
+        lastUpdated: new Date(metricsResponse.timestamp)
       };
     } else {
       // Check for GraphQL errors

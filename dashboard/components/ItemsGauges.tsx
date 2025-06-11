@@ -388,7 +388,7 @@ Total score results over last 24 hours`}
             </div>
             
             {/* 24-hour totals at the bottom - responsive layout */}
-            <div className="flex justify-between items-end text-sm flex-shrink-0">
+            <div className="flex justify-between items-end text-sm flex-shrink-0 relative">
               {/* Items metric */}
               <div className="flex items-center gap-2 @[500px]:flex-col @[500px]:gap-1 @[500px]:items-center @[700px]:flex-row @[700px]:gap-2 @[700px]:items-center">
                 <div className="flex flex-col items-center">
@@ -404,6 +404,19 @@ Total score results over last 24 hours`}
                   style={{ backgroundColor: '#3b82f6' }}
                 />
               </div>
+              
+              {/* Last updated timestamp - centered */}
+              {useRealData && metrics?.lastUpdated && (
+                <div className="absolute left-1/2 transform -translate-x-1/2 flex flex-col items-center">
+                  <span className="text-[10px] text-muted-foreground leading-tight">Last updated</span>
+                  <Timestamp 
+                    time={metrics.lastUpdated} 
+                    variant="relative" 
+                    showIcon={false}
+                    className="text-[10px] text-muted-foreground"
+                  />
+                </div>
+              )}
               
               {/* Score Results metric */}
               <div className="flex items-center gap-2 @[500px]:flex-col @[500px]:gap-1 @[500px]:items-center @[700px]:flex-row @[700px]:gap-2 @[700px]:items-center">
