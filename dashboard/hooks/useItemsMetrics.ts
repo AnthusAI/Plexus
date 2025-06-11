@@ -69,8 +69,13 @@ async function invokeLambdaFunction(accountId: string): Promise<MetricsData> {
       const metricsResponse: ItemsMetricsResponse = response.data.getItemsMetrics;
       
       // Transform the response to match the expected UI format
-      const itemsChartData = metricsResponse.itemsHourlyBreakdown || [];
-      const scoreResultsChartData = metricsResponse.scoreResultsHourlyBreakdown || [];
+      // Parse JSON strings if they come as strings
+      const itemsChartData = typeof metricsResponse.itemsHourlyBreakdown === 'string' 
+        ? JSON.parse(metricsResponse.itemsHourlyBreakdown) 
+        : (metricsResponse.itemsHourlyBreakdown || []);
+      const scoreResultsChartData = typeof metricsResponse.scoreResultsHourlyBreakdown === 'string'
+        ? JSON.parse(metricsResponse.scoreResultsHourlyBreakdown)
+        : (metricsResponse.scoreResultsHourlyBreakdown || []);
       
       // Calculate averages and peaks from chart data
       const itemsValues = itemsChartData.map((d: any) => d.items || 0);
