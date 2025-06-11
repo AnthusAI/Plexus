@@ -18,7 +18,8 @@ const backend = defineBackend({
 
 // Get access to the functions
 const getResourceByShareTokenFunction = backend.data.resources.functions.getResourceByShareToken;
-const itemsMetricsCalculatorFunction = backend.data.resources.functions.itemsMetricsCalculator;
+// Temporarily commented out to resolve deployment dependency lock
+// const itemsMetricsCalculatorFunction = backend.data.resources.functions.itemsMetricsCalculator;
 
 // Add AppSync permissions to the getResourceByShareToken function
 if (getResourceByShareTokenFunction) {
@@ -30,6 +31,8 @@ if (getResourceByShareTokenFunction) {
     );
 }
 
+// Temporarily commented out to resolve deployment dependency lock
+/*
 // Configure the itemsMetricsCalculator function
 if (itemsMetricsCalculatorFunction) {
     // Add environment variables for Plexus API access
@@ -47,6 +50,7 @@ if (itemsMetricsCalculatorFunction) {
         })
     );
 }
+*/
 
 // Get reference to the Task table and enable streams
 const taskTable = backend.data.resources.tables.Task;
