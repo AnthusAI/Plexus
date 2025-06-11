@@ -41,4 +41,15 @@ export const scoreResultAttachments = defineStorage({
       allow.authenticated.to(['read', 'write', 'delete'])
     ]
   })
+});
+
+// Define a storage bucket for dataset files
+export const datasets = defineStorage({
+  name: 'datasets',
+  access: (allow) => ({
+    'datasets/*': [
+      allow.guest.to(['read']),
+      allow.authenticated.to(['read', 'write', 'delete'])
+    ]
+  })
 }); 
