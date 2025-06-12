@@ -157,7 +157,7 @@ const DetailContent = React.memo(function DetailContent({
       // Immediately update the database with the new file
       if (dataSource.id && dataSource.id !== '') {
         // For existing data sources, get current attachedFiles from the latest state
-        const currentFiles = dataSource.attachedFiles || []
+        const currentFiles = (dataSource.attachedFiles || []).filter((file): file is string => file !== null)
         const updatedFiles = [...currentFiles, filePath]
         
         console.log('=== FILE UPLOAD DATABASE UPDATE ===')
@@ -251,7 +251,7 @@ const DetailContent = React.memo(function DetailContent({
             placeholder="Description"
           />
           <FileAttachments
-            attachedFiles={dataSource.attachedFiles || []}
+            attachedFiles={dataSource.attachedFiles?.filter((file): file is string => file !== null) || []}
             onChange={(files) => {
               console.log('FileAttachments onChange called with:', files)
               console.log('Current dataSource.attachedFiles:', dataSource.attachedFiles)
@@ -375,7 +375,7 @@ const DetailContent = React.memo(function DetailContent({
         {hasChanges && (
           <div className="flex justify-end gap-2 mt-4 flex-shrink-0">
             <Button variant="outline" onClick={onCancel}>Cancel</Button>
-            <Button onClick={onSave}>Save Changes</Button>
+            <Button onClick={() => onSave?.()}>Save Changes</Button>
           </div>
         )}
 
@@ -527,13 +527,13 @@ export default function DataSourceComponent({
         const result = await amplifyClient.DataSource.update({
           id: editedDataSource.id,
           name: editedDataSource.name,
-          key: editedDataSource.key,
-          description: editedDataSource.description,
-          yamlConfiguration: editedDataSource.yamlConfiguration,
-          attachedFiles: editedDataSource.attachedFiles,
-          scorecardId: editedDataSource.scorecardId,
-          scoreId: editedDataSource.scoreId,
-          currentVersionId: editedDataSource.currentVersionId
+          key: editedDataSource.key || undefined,
+          description: editedDataSource.description || undefined,
+          yamlConfiguration: editedDataSource.yamlConfiguration || undefined,
+          attachedFiles: editedDataSource.attachedFiles?.filter((file): file is string => file !== null) || undefined,
+          scorecardId: editedDataSource.scorecardId || undefined,
+          scoreId: editedDataSource.scoreId || undefined,
+          currentVersionId: editedDataSource.currentVersionId || undefined
         })
         
         if (result.data) {

@@ -374,7 +374,7 @@ export default function DataSourcesDashboard() {
                 onDuplicate={handleDuplicateDataSource}
                 dataSets={dataSets}
                 onDataSetSelect={handleSelectDataSet}
-                selectedDataSetId={selectedDataSet?.id}
+                selectedDataSetId={undefined}
                 accountId={selectedAccount?.id}
               />
             </div>
