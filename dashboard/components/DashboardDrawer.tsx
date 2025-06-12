@@ -48,8 +48,8 @@ export function DashboardDrawer({
             </DrawerClose>
           </DrawerHeader>
           
-          <div className="px-4 pb-6">
-            <div className="@container">
+          <div className="px-4 pb-6 overflow-visible">
+            <div className="@container overflow-visible">
               <ItemsGauges disableEmergenceAnimation={true} />
             </div>
           </div>

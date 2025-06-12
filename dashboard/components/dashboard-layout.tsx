@@ -621,7 +621,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
             ${isMobile ? 'p-1' : 'p-2'}
           `}
         >
-          <div className="flex-1 flex flex-col bg-background rounded-lg min-h-0 overflow-hidden">
+          <div className="flex-1 flex flex-col bg-background rounded-lg min-h-0 overflow-visible">
             <div className="flex-1 min-h-0">
               {children}
             </div>

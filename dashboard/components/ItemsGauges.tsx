@@ -210,7 +210,7 @@ export function ItemsGauges({
     <AnimatePresence>
       {shouldShowComponent && (
         <motion.div 
-          className={cn("w-full overflow-hidden", className)}
+          className={cn("w-full overflow-visible", className)}
           variants={disableEmergenceAnimation ? instantVariants : containerVariants}
           initial={useRealData && !disableEmergenceAnimation ? "hidden" : "visible"}
           animate="visible"
@@ -232,12 +232,13 @@ export function ItemsGauges({
             <div className="grid grid-cols-2 @[500px]:grid-cols-3 @[700px]:grid-cols-4 @[900px]:grid-cols-5 @[1100px]:grid-cols-6 gap-3 items-start">
         
         {/* First gauge - Items per Hour */}
-        <div className="bg-card rounded-lg p-4 h-48">
-          <Gauge
-            value={scoreResultsPerHour > 0 || itemsPerHour > 0 ? itemsPerHour : undefined}
-            beforeValue={scoreResultsAveragePerHour > 0 || itemsAveragePerHour > 0 ? itemsAveragePerHour : undefined}
-            title="Items / hour"
-            information={hasHourlyData ? `Current: ${itemsPerHour}
+        <div className="bg-card rounded-lg h-48 overflow-visible flex items-center justify-center">
+          <div className="w-full h-full flex items-center justify-center">
+            <Gauge
+              value={scoreResultsPerHour > 0 || itemsPerHour > 0 ? itemsPerHour : undefined}
+              beforeValue={scoreResultsAveragePerHour > 0 || itemsAveragePerHour > 0 ? itemsAveragePerHour : undefined}
+              title="Items / hour"
+              information={hasHourlyData ? `Current: ${itemsPerHour}
 Current hourly rate (rolling 60-min window)
 
 Average: ${itemsAveragePerHour}
@@ -248,27 +249,29 @@ Peak hourly rate over last 24 hours
 
 Total: ${itemsTotal24h}
 Total items over last 24 hours` : "Loading hourly metrics..."}
-            valueUnit=""
-            min={0}
-            max={itemsPeakHourly}
-            showTicks={true}
-            decimalPlaces={0}
-            showOnlyEssentialTicks={true}  // Show only 0, max, and average ticks
-            segments={[
-              { start: 0, end: 10, color: 'var(--false)' },
-              { start: 10, end: 90, color: 'var(--neutral)' },
-              { start: 90, end: 100, color: 'var(--true)' }
-            ]}
-          />
+              valueUnit=""
+              min={0}
+              max={itemsPeakHourly}
+              showTicks={true}
+              decimalPlaces={0}
+              showOnlyEssentialTicks={true}  // Show only 0, max, and average ticks
+              segments={[
+                { start: 0, end: 10, color: 'var(--false)' },
+                { start: 10, end: 90, color: 'var(--neutral)' },
+                { start: 90, end: 100, color: 'var(--true)' }
+              ]}
+            />
+          </div>
         </div>
 
         {/* Second gauge - Score Results per Hour */}
-        <div className="bg-card rounded-lg p-4 h-48">
-          <Gauge
-            value={scoreResultsPerHour > 0 || itemsPerHour > 0 ? scoreResultsPerHour : undefined}
-            beforeValue={scoreResultsAveragePerHour > 0 || itemsAveragePerHour > 0 ? scoreResultsAveragePerHour : undefined}
-            title="Score Results / hour"
-            information={hasHourlyData ? `Current: ${scoreResultsPerHour}
+        <div className="bg-card rounded-lg h-48 overflow-visible flex items-center justify-center">
+          <div className="w-full h-full flex items-center justify-center">
+            <Gauge
+              value={scoreResultsPerHour > 0 || itemsPerHour > 0 ? scoreResultsPerHour : undefined}
+              beforeValue={scoreResultsAveragePerHour > 0 || itemsAveragePerHour > 0 ? scoreResultsAveragePerHour : undefined}
+              title="Score Results / hour"
+              information={hasHourlyData ? `Current: ${scoreResultsPerHour}
 Current hourly rate (rolling 60-min window)
 
 Average: ${scoreResultsAveragePerHour}
@@ -279,18 +282,19 @@ Peak hourly rate over last 24 hours
 
 Total: ${scoreResultsTotal24h}
 Total score results over last 24 hours` : "Loading hourly metrics..."}
-            valueUnit=""
-            min={0}
-            max={scoreResultsPeakHourly}
-            showTicks={true}
-            decimalPlaces={0}
-            showOnlyEssentialTicks={true}  // Show only 0, max, and average ticks
-            segments={[
-              { start: 0, end: 10, color: 'var(--false)' },
-              { start: 10, end: 90, color: 'var(--neutral)' },
-              { start: 90, end: 100, color: 'var(--true)' }
-            ]}
-          />
+              valueUnit=""
+              min={0}
+              max={scoreResultsPeakHourly}
+              showTicks={true}
+              decimalPlaces={0}
+              showOnlyEssentialTicks={true}  // Show only 0, max, and average ticks
+              segments={[
+                { start: 0, end: 10, color: 'var(--false)' },
+                { start: 10, end: 90, color: 'var(--neutral)' },
+                { start: 90, end: 100, color: 'var(--true)' }
+              ]}
+            />
+          </div>
         </div>
 
         {/* 

@@ -442,18 +442,18 @@ const GaugeComponent: React.FC<GaugeProps> = ({
     )
   }
 
-  const topPadding = showTicks ? 104 : 80
-  const viewBoxHeight = showTicks ? 200 : 170
-  const textY = showTicks ? 45 : 45
-  const clipHeight = showTicks ? 168 : 144
+  const topPadding = showTicks ? 124 : 100
+  const viewBoxHeight = showTicks ? 240 : 200
+  const textY = showTicks ? 65 : 65
+  const clipHeight = showTicks ? 208 : 184
   const labelBottomOffset = getLabelBottomOffset()
 
   return (
-    <div className="flex flex-col items-center w-full h-full max-h-[220px]">
+    <div className="flex flex-col items-center w-full h-full max-h-[260px] overflow-visible">
       <Popover>
         <PopoverAnchor asChild>
-          <div ref={containerRef} className="relative w-full h-full" style={{ maxWidth: '20em' }}>
-            <div className="relative w-full h-full">
+          <div ref={containerRef} className="relative w-full h-full overflow-visible" style={{ maxWidth: '20em' }}>
+            <div className="relative w-full h-full overflow-visible">
               <svg 
                 viewBox={`-120 -${topPadding} 240 ${viewBoxHeight}`}
                 preserveAspectRatio="xMidYMid meet"
