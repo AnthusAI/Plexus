@@ -14,9 +14,9 @@ export interface ChartDataPoint {
  * Generate chart data for the last 24 hours using the new aggregation system
  * Now supports progressive loading with real-time UI updates
  * 
- * Key insight: For display buckets that represent full hours, we should show the full
- * calendar-aligned hour's data even if part of that hour falls outside our time range.
- * The visual width still represents only the portion within our time range.
+ * Key insight: For completed hour buckets, we show the full calendar-aligned hour's data.
+ * For the current incomplete hour bucket, we show only the data up to the current time
+ * to provide real-time visibility into current activity.
  */
 export async function generateChartData(
   accountId: string,
@@ -72,14 +72,22 @@ export async function generateChartData(
   // Process buckets in parallel for much faster loading
   // Create promises for all bucket calculations
   const bucketPromises = chartData.map(async (dataPoint, index) => {
-    // Use the full calendar-aligned hour for data aggregation
+    // For the current incomplete hour bucket, use the actual time range (up to now)
+    // For completed hour buckets, use the full calendar-aligned hour
     const fullBucketStart = new Date(dataPoint._fullBucketStart!)
     const fullBucketEnd = new Date(dataPoint._fullBucketEnd!)
     
-    // Get aggregated metrics for the FULL hour bucket (not just the visible portion)
+    // Determine if this is the current incomplete hour bucket
+    const isCurrentIncompleteHour = fullBucketEnd > endTime
+    
+    // Use appropriate time range for data aggregation
+    const aggregationStart = fullBucketStart
+    const aggregationEnd = isCurrentIncompleteHour ? endTime : fullBucketEnd
+    
+    // Get aggregated metrics for the appropriate time range
     const [itemsMetrics, scoreResultsMetrics] = await Promise.all([
-      getAggregatedMetrics(accountId, 'items', fullBucketStart, fullBucketEnd, scorecardId, scoreId),
-      getAggregatedMetrics(accountId, 'scoreResults', fullBucketStart, fullBucketEnd, scorecardId, scoreId)
+      getAggregatedMetrics(accountId, 'items', aggregationStart, aggregationEnd, scorecardId, scoreId),
+      getAggregatedMetrics(accountId, 'scoreResults', aggregationStart, aggregationEnd, scorecardId, scoreId)
     ])
 
     return {
