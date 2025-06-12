@@ -194,7 +194,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
 
   const LeftSidebar = () => {
     return (
-      <div className={`flex flex-col h-full py-2 bg-frame ${isMobile ? 'pr-3' : 'pr-2'}`}>
+      <div className={`flex flex-col h-full py-2 bg-frame ${isMobile ? 'pr-3' : ''}`}>
         <div className={`mb-4 ${isLeftSidebarOpen ? 'pl-2' : ''}`}>
           <Link href="/" className={`block relative ${isLeftSidebarOpen ? 'w-full max-w-md' : 'w-12 pl-2'}`}>
             <div className="absolute -inset-1 bg-gradient-to-r from-secondary to-primary rounded-md blur-sm opacity-50"></div>
