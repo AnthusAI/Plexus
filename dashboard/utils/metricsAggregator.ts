@@ -622,18 +622,27 @@ export async function performJITAggregation(
   const computationPromise = (async (): Promise<AggregatedMetricsData> => {
     try {
       const durationMinutes = Math.round((endTime.getTime() - startTime.getTime()) / (1000 * 60))
+      let metrics: AggregatedMetricsData
       
-      // For large time ranges, use hierarchical aggregation with caching at each level
+      // For large time ranges, use hierarchical aggregation, which caches its own sub-buckets
       if (durationMinutes > 15) {
-        return await performHierarchicalAggregation(accountId, recordType, startTime, endTime, scorecardId, scoreId)
+        metrics = await performHierarchicalAggregation(accountId, recordType, startTime, endTime, scorecardId, scoreId)
+      } else {
+        // For small ranges, do direct aggregation
+        if (recordType === 'items') {
+          metrics = await aggregateItemMetrics(accountId, startTime, endTime, scorecardId, scoreId)
+        } else {
+          metrics = await aggregateScoreResultMetrics(accountId, startTime, endTime, scorecardId, scoreId)
+        }
       }
       
-      // For small ranges, do direct aggregation
-      if (recordType === 'items') {
-        return await aggregateItemMetrics(accountId, startTime, endTime, scorecardId, scoreId)
-      } else {
-        return await aggregateScoreResultMetrics(accountId, startTime, endTime, scorecardId, scoreId)
-      }
+      // Cache the result for this bucket since it was computed directly
+      // This is the key fix: caching is now inside the lock, preventing race conditions.
+      await cacheAggregationResult(
+        accountId, recordType, startTime, endTime, durationMinutes, metrics, scorecardId, scoreId
+      )
+      
+      return metrics
     } finally {
       // Always clean up the lock when computation is complete
       bucketComputationLocks.delete(lockKey)
@@ -1108,12 +1117,9 @@ export async function getAggregatedMetrics(
       // No complete cache found - compute the bucket
       cacheStatus = '🔄' // Computing bucket
       
+      // This function now handles both computation and caching inside a lock
       bucketMetrics = await performJITAggregation(
         accountId, recordType, bucket.start, bucket.end, scorecardId, scoreId
-      )
-
-      await cacheAggregationResult(
-        accountId, recordType, bucket.start, bucket.end, bucket.minutes, bucketMetrics, scorecardId, scoreId
       )
     }
 
