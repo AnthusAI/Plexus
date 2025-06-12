@@ -438,9 +438,7 @@ const schema = a.schema({
             idx("scoreId"),
             idx("scorecardId").sortKeys(["scoreId", "itemId"]).name("byScorecardScoreItem"),
             idx("itemId").sortKeys(["scorecardId", "scoreId"]).name("byItemScorecardScore"),
-            idx("itemId").sortKeys(["scorecardId", "scoreId", "updatedAt"]).name("byItemScorecardScoreUpdated"),
-            idx("accountId").sortKeys(["isError", "updatedAt"]).name("byAccountErrorAndUpdatedAt"),
-            idx("scorecardId").sortKeys(["isError", "updatedAt"]).name("byScorecardErrorAndUpdatedAt")
+            idx("itemId").sortKeys(["scorecardId", "scoreId", "updatedAt"]).name("byItemScorecardScoreUpdated")
         ]),
 
     BatchJobScoringJob: a
