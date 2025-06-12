@@ -260,6 +260,7 @@ Total items over last 24 hours` : "Loading hourly metrics..."}
                 { start: 10, end: 90, color: 'var(--neutral)' },
                 { start: 90, end: 100, color: 'var(--true)' }
               ]}
+              backgroundColor="var(--background)"
             />
           </div>
         </div>
@@ -293,6 +294,7 @@ Total score results over last 24 hours` : "Loading hourly metrics..."}
                 { start: 10, end: 90, color: 'var(--neutral)' },
                 { start: 90, end: 100, color: 'var(--true)' }
               ]}
+              backgroundColor="var(--background)"
             />
           </div>
         </div>

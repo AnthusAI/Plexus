@@ -445,11 +445,43 @@ const GaugeComponent: React.FC<GaugeProps> = ({
   const topPadding = showTicks ? 124 : 100
   const viewBoxHeight = showTicks ? 240 : 200
   const textY = showTicks ? 65 : 65
-  const clipHeight = showTicks ? 208 : 184
+  const clipHeight = showTicks ? 184 : 160
   const labelBottomOffset = getLabelBottomOffset()
 
+  // Proportional label positioning: value label always centered, title label always just below arc
+  // Value label: flexbox center
+  // Title label: top as a percentage of container height, calculated from SVG geometry
+  const titleLabelY_svg = radius + strokeWidth / 2 + 8;
+  const titleLabelTopPercent = ((titleLabelY_svg + topPadding) / viewBoxHeight) * 100;
+
+  // Cap the maximum rendered circle diameter to 160px (SVG circle is 160 units wide)
+  const maxCirclePixelDiameter = 160;
+  const circlePixelDiameter = containerWidth > 0 ? Math.min(containerWidth * (2 * radius / 240), maxCirclePixelDiameter) : 0;
+  // Font sizes based on the actual circle diameter, with reduced scaling factors (half as tall)
+  const valueFontSizePx = circlePixelDiameter * 0.20;
+  const titleFontSizePx = circlePixelDiameter * 0.09;
+
+  // Calculate the actual pixel center of the circle
+  // SVG viewBox: -120 -topPadding 240 viewBoxHeight
+  // Center X: containerWidth / 2
+  // Center Y: containerHeight * (topPadding / viewBoxHeight)
+  const containerHeight = containerRef.current?.offsetHeight || 0;
+  const circleCenterX = containerWidth / 2;
+  const circleCenterY = containerHeight * (topPadding / viewBoxHeight);
+
+  // Calculate the top offset for the value label, subtracting half the font size (in viewBox %)
+  const valueLabelBaseTop = (radius + strokeWidth / 2 + (showTicks ? 40 : 30)) / viewBoxHeight;
+  const valueLabelTop = valueLabelBaseTop - (valueFontSizePx / viewBoxHeight) * 0.5;
+  // Calculate the top offset for the title label, using the same base plus a fixed offset and the title font size
+  const titleLabelTop = valueLabelBaseTop + 0.195 + (titleFontSizePx / viewBoxHeight) * 0.2;
+
+  // Calculate the pixel Y position of the clipped bottom of the gauge (corrected)
+  const clippedBottomY_px = containerHeight > 0 ? containerHeight * (clipHeight / viewBoxHeight) : 0;
+  // Position the value label a fixed proportion above the clipped bottom (increase padding)
+  const valueLabelY = clippedBottomY_px - (circlePixelDiameter * 0.26);
+
   return (
-    <div className="flex flex-col items-center w-full h-full max-h-[260px] overflow-visible">
+    <div className="flex flex-col items-center w-full h-full max-h-[260px] overflow-visible relative">
       <Popover>
         <PopoverAnchor asChild>
           <div ref={containerRef} className="relative w-full h-full overflow-visible" style={{ maxWidth: '20em' }}>
@@ -460,7 +492,7 @@ const GaugeComponent: React.FC<GaugeProps> = ({
                 style={{ 
                   width: '100%', 
                   height: '100%',
-                  maxHeight: '100%' 
+                  maxHeight: '100%'
                 }}
               >
                 <defs>
@@ -523,121 +555,60 @@ const GaugeComponent: React.FC<GaugeProps> = ({
 
                 </g>
               </svg>
-              {/* NumberFlow value display positioned over the SVG */}
+              {/* NumberFlow value display positioned over the SVG, using absolutely positioned div */}
               {value !== undefined && (
-                <div 
+                <div
                   className={cn(
-                    "absolute left-1/2 top-1/2 -translate-x-1/2 flex items-center justify-center",
-                    "text-[2.25rem] font-bold transition-colors duration-500 ease-in-out pointer-events-none",
+                    "absolute left-0 right-0 flex justify-center pointer-events-none",
                     priority ? "text-focus" : "text-foreground"
                   )}
                   style={{
-                    transform: `translate(-50%, calc(-50% + ${showTicks ? '12px' : '12px'} + 0.5em))`,
-                    '--number-flow-mask-height': '0.1em'
+                    fontSize: `${valueFontSizePx}px`,
+                    top: `${valueLabelY}px`,
+                    left: 0,
+                    right: 0,
+                    overflow: 'visible',
+                    '--number-flow-mask-height': '0.1em',
+                    textAlign: 'center'
                   } as React.CSSProperties}
                 >
-                  {valueFormatter ? (
-                    valueFormatter(value)
-                  ) : (
-                    <>
-                      <NumberFlowWrapper 
-                        value={parseFloat(formatDecimalValue(value, decimalPlaces))}
-                        format={{ 
-                          minimumFractionDigits: value % 1 === 0 ? 0 : decimalPlaces,
-                          maximumFractionDigits: decimalPlaces,
-                          useGrouping: false
-                        }}
-                      />
-                      {valueUnit && <span>{valueUnit}</span>}
-                    </>
-                  )}
+                  <span className={cn(
+                    "font-bold transition-colors duration-500 ease-in-out"
+                  )}>
+                    {valueFormatter ? (
+                      valueFormatter(value)
+                    ) : (
+                      <>
+                        <NumberFlowWrapper 
+                          value={parseFloat(formatDecimalValue(value, decimalPlaces))}
+                          format={{ 
+                            minimumFractionDigits: value % 1 === 0 ? 0 : decimalPlaces,
+                            maximumFractionDigits: decimalPlaces,
+                            useGrouping: false
+                          }}
+                        />
+                        {valueUnit && <span>{valueUnit}</span>}
+                      </>
+                    )}
+                  </span>
                 </div>
               )}
+              {/* Title label positioned just below the value label, using absolutely positioned div */}
               {title && (
-                <div 
+                <div
                   className={cn(
                     "absolute left-0 right-0 flex justify-center items-center whitespace-nowrap",
-                    "text-[0.875rem]",
                     "transition-colors duration-500 ease-in-out",
                     priority ? "text-focus" : "text-muted-foreground"
                   )}
                   style={{
-                    bottom: `calc(${showTicks ? '5%' : '2%'} - ${labelBottomOffset}px)`,
-                    fontSize: containerWidth < 150 ? `max(0.55rem, ${7 + (containerWidth * 0.045)}px)` : undefined
+                    fontSize: `${titleFontSizePx}px`,
+                    top: `${titleLabelTop * 100}%`, // Optionally, use `${circleCenterY + valueFontSizePx * 0.7}px` for below value label
+                    transform: 'translateY(0.2em)',
+                    textAlign: 'center'
                   }}
                 >
-                  <span className="relative">
-                    {title}
-                    {information && (
-                      <div className="absolute -right-5 top-1/2 -translate-y-1/2 inline-flex">
-                        <PopoverTrigger asChild>
-                          <button
-                            className="text-muted-foreground hover:text-foreground transition-colors duration-500 ease-in-out"
-                            aria-label="More information"
-                          >
-                            <CircleHelp className="h-4 w-4 transition-[stroke] duration-500 ease-in-out" />
-                          </button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-80 text-sm">
-                          {(() => {
-                            // Check if this is the new table format (contains lines with just labels and numbers)
-                            const lines = information.split('\n')
-                            const isTableFormat = lines.some(line => /^(Current|Average|Peak|Total):\s*\d+$/.test(line.trim()))
-                            
-                            if (isTableFormat) {
-                              // Parse table format: label: value followed by description
-                              const rows = []
-                              
-                              // Filter out empty lines first
-                              const nonEmptyLines = lines.filter(line => line.trim() !== '')
-                              
-                              for (let i = 0; i < nonEmptyLines.length; i += 2) {
-                                const labelLine = nonEmptyLines[i]?.trim()
-                                const descLine = nonEmptyLines[i + 1]?.trim()
-                                if (labelLine && descLine) {
-                                  const match = labelLine.match(/^(.+):\s*(.+)$/)
-                                  if (match) {
-                                    rows.push({ label: match[1], value: match[2], description: descLine })
-                                  }
-                                }
-                              }
-                              
-                              return (
-                                <div className="space-y-3">
-                                  {rows.map((row, index) => (
-                                    <div key={index} className="flex justify-between items-start">
-                                      <div className="flex-1">
-                                        <div className="font-medium">{row.label}</div>
-                                        <div className="text-xs text-muted-foreground mt-0.5">{row.description}</div>
-                                      </div>
-                                      <div className="ml-6 font-mono font-medium text-right text-foreground">{row.value}</div>
-                                    </div>
-                                  ))}
-                                </div>
-                              )
-                            } else {
-                              // Fall back to original paragraph format
-                              return information.split('\n\n').map((paragraph, index) => (
-                                <p key={index} className={index > 0 ? 'mt-4' : ''}>
-                                  {paragraph}
-                                </p>
-                              ))
-                            }
-                          })()}
-                          {informationUrl && (
-                            <a 
-                              href={informationUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-primary hover:underline mt-3 inline-block"
-                            >
-                              more...
-                            </a>
-                          )}
-                        </PopoverContent>
-                      </div>
-                    )}
-                  </span>
+                  <span className="relative">{title}</span>
                 </div>
               )}
             </div>
