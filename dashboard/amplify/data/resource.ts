@@ -30,7 +30,7 @@ type ItemIndexFields = "name" | "description" | "accountId" | "evaluationId" | "
 type ScoringJobIndexFields = "accountId" | "scorecardId" | "itemId" | "status" | 
     "scoreId" | "evaluationId" | "startedAt" | "completedAt" | "errorMessage" | "updatedAt" | "createdAt";
 type ScoreResultIndexFields = "accountId" | "scorecardId" | "itemId" | 
-    "scoringJobId" | "evaluationId" | "scoreVersionId" | "updatedAt" | "createdAt" | "scoreId";
+    "scoringJobId" | "evaluationId" | "scoreVersionId" | "updatedAt" | "createdAt" | "scoreId" | "isError";
 type BatchJobScoringJobIndexFields = "batchJobId" | "scoringJobId";
 type TaskIndexFields = "accountId" | "type" | "status" | "target" | 
     "currentStageId" | "updatedAt" | "scorecardId" | "scoreId";
@@ -419,6 +419,7 @@ const schema = a.schema({
             scoreVersion: a.belongsTo('ScoreVersion', 'scoreVersionId'),
             scoreId: a.string(),
             score: a.belongsTo('Score', 'scoreId'),
+            isError: a.boolean(),
             updatedAt: a.datetime(),
             createdAt: a.datetime(),
         })
@@ -437,7 +438,8 @@ const schema = a.schema({
             idx("scoreId"),
             idx("scorecardId").sortKeys(["scoreId", "itemId"]).name("byScorecardScoreItem"),
             idx("itemId").sortKeys(["scorecardId", "scoreId"]).name("byItemScorecardScore"),
-            idx("itemId").sortKeys(["scorecardId", "scoreId", "updatedAt"]).name("byItemScorecardScoreUpdated")
+            idx("itemId").sortKeys(["scorecardId", "scoreId", "updatedAt"]).name("byItemScorecardScoreUpdated"),
+            idx("accountId").sortKeys(["isError", "updatedAt"]).name("byAccountErrorAndUpdatedAt")
         ]),
 
     BatchJobScoringJob: a
