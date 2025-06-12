@@ -77,7 +77,7 @@ const ScoreResultCard: React.FC<{
       animate={{ opacity: 1 }}
       transition={{ duration: 0.5, ease: "easeOut" }}
       className={`mb-3 bg-background rounded-lg p-4 relative overflow-visible cursor-pointer hover:bg-accent/50 transition-colors ${
-        result.isNew ? 'new-item-shadow' : ''
+        result.isNew ? 'new-score-result-glow' : ''
       } ${
         isSelected ? 'bg-card-selected selected-border-rounded' : ''
       }`}

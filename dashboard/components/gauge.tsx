@@ -29,6 +29,7 @@ interface GaugeProps {
   valueUnit?: string
   decimalPlaces?: number
   tickSpacingThreshold?: number
+  showOnlyEssentialTicks?: boolean
 }
 
 const calculateAngle = (percent: number) => {
@@ -75,7 +76,8 @@ const GaugeComponent: React.FC<GaugeProps> = ({
   valueFormatter,
   valueUnit = '%',
   decimalPlaces = 1,
-  tickSpacingThreshold = 5
+  tickSpacingThreshold = 5,
+  showOnlyEssentialTicks = false
 }) => {
   const [animatedValue, setAnimatedValue] = useState(0)
   const [animatedBeforeValue, setAnimatedBeforeValue] = useState(0)
@@ -243,49 +245,95 @@ const GaugeComponent: React.FC<GaugeProps> = ({
   }
 
   const renderTicks = (minValue: number, maxValue: number) => {
-    // Create an array with all segment starts plus 100, and 105 if pegged
-    const baseTicks = [...segments || [], { start: 100, end: 100, color: 'transparent' }]
-    if (isPegged) {
-      baseTicks.push({ start: 105, end: 105, color: 'transparent' })
-    }
-    const allTicks = baseTicks
-      .map(segment => segment.start)
-      .sort((a, b) => a - b); // Sort in ascending order
-
-    // Use the provided threshold for displaying ticks (percentage of total range)
-    const thresholdPercentage = tickSpacingThreshold;
-
-    // Filter ticks starting from highest to lowest
-    // Keep a tick if it's at least thresholdPercentage away from the next higher tick
-    const visibleTicks = new Set<number>();
-    visibleTicks.add(100); // Always show the maximum tick
-    visibleTicks.add(0);   // Always show the minimum tick
-    if (isPegged) {
-      visibleTicks.add(105); // Always show the pegged tick when over max
-    }
-
-    // Process remaining ticks from highest to lowest
-    for (let i = allTicks.length - 2; i >= 0; i--) {
-      const currentTick = allTicks[i];
-      const nextHigherTick = allTicks[i + 1]; // The next element is guaranteed to be higher since we sorted
+    let visibleTicks = new Set<number>();
+    
+    if (showOnlyEssentialTicks) {
+      // Essential ticks mode: only show 0, beforeValue position, and 100 (plus 105 if pegged)
+      visibleTicks.add(0);   // Always show the minimum tick
+      visibleTicks.add(100); // Always show the maximum tick
+      if (isPegged) {
+        visibleTicks.add(105); // Always show the pegged tick when over max
+      }
       
-      // Skip if this is the minimum tick (0) as we already added it
-      if (currentTick === 0) continue;
-      
-      // If this tick is at least thresholdPercentage away from the next higher tick, show it
-      if (nextHigherTick - currentTick >= thresholdPercentage) {
-        visibleTicks.add(currentTick);
+      // Add the beforeValue (average) position if it exists
+      if (beforeValue !== undefined) {
+        const beforeValuePercent = ((beforeValue - min) / (max - min)) * 100;
+        visibleTicks.add(beforeValuePercent);
+      }
+    } else {
+      // Original logic for segment-based ticks
+      // Create an array with all segment starts plus 100, and 105 if pegged
+      const baseTicks = [...segments || [], { start: 100, end: 100, color: 'transparent' }]
+      if (isPegged) {
+        baseTicks.push({ start: 105, end: 105, color: 'transparent' })
+      }
+      const allTicks = baseTicks
+        .map(segment => segment.start)
+        .sort((a, b) => a - b); // Sort in ascending order
+
+      // Use the provided threshold for displaying ticks (percentage of total range)
+      const thresholdPercentage = tickSpacingThreshold;
+
+      // Filter ticks starting from highest to lowest
+      // Keep a tick if it's at least thresholdPercentage away from the next higher tick
+      visibleTicks.add(100); // Always show the maximum tick
+      visibleTicks.add(0);   // Always show the minimum tick
+      if (isPegged) {
+        visibleTicks.add(105); // Always show the pegged tick when over max
+      }
+
+      // Process remaining ticks from highest to lowest
+      for (let i = allTicks.length - 2; i >= 0; i--) {
+        const currentTick = allTicks[i];
+        const nextHigherTick = allTicks[i + 1]; // The next element is guaranteed to be higher since we sorted
+        
+        // Skip if this is the minimum tick (0) as we already added it
+        if (currentTick === 0) continue;
+        
+        // If this tick is at least thresholdPercentage away from the next higher tick, show it
+        if (nextHigherTick - currentTick >= thresholdPercentage) {
+          visibleTicks.add(currentTick);
+        }
       }
     }
 
-    // Render only the visible ticks
-    const ticksToRender = [...segments || [], { start: 100, end: 100, color: 'transparent' }]
-    if (isPegged) {
-      ticksToRender.push({ start: 105, end: 105, color: 'transparent' })
+    // Create ticks to render based on visible ticks
+    const ticksToRender = [];
+    
+    // Add essential ticks
+    if (visibleTicks.has(0)) {
+      ticksToRender.push({ start: 0, end: 0, color: 'transparent' });
+    }
+    if (visibleTicks.has(100)) {
+      ticksToRender.push({ start: 100, end: 100, color: 'transparent' });
+    }
+    if (isPegged && visibleTicks.has(105)) {
+      ticksToRender.push({ start: 105, end: 105, color: 'transparent' });
+    }
+    
+    // Add beforeValue tick if in essential mode and beforeValue exists
+    if (showOnlyEssentialTicks && beforeValue !== undefined) {
+      const beforeValuePercent = ((beforeValue - min) / (max - min)) * 100;
+      if (visibleTicks.has(beforeValuePercent)) {
+        ticksToRender.push({ start: beforeValuePercent, end: beforeValuePercent, color: 'transparent' });
+      }
+    }
+    
+    // Add segment-based ticks if not in essential mode
+    if (!showOnlyEssentialTicks) {
+      const segmentTicks = [...segments || [], { start: 100, end: 100, color: 'transparent' }];
+      if (isPegged) {
+        segmentTicks.push({ start: 105, end: 105, color: 'transparent' });
+      }
+      
+      for (const segment of segmentTicks) {
+        if (visibleTicks.has(segment.start) && !ticksToRender.some(t => t.start === segment.start)) {
+          ticksToRender.push(segment);
+        }
+      }
     }
     
     return ticksToRender
-      .filter(segment => visibleTicks.has(segment.start))
       .map((segment, index) => {
         const angle = calculateAngle(segment.start)
         const { x, y } = calculateCoordinates(angle)
