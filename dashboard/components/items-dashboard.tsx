@@ -272,17 +272,15 @@ const GridItemCard = ({
     <motion.div
       layoutId={`item-${item.id}`}
       layout
-      initial={{ opacity: 0 }}
-      animate={{ 
-        opacity: 1
-      }}
+      initial={item.isNew ? {} : { opacity: 0 }}
+      animate={item.isNew ? {} : { opacity: 1 }}
       exit={{ 
         opacity: 0,
         transition: { duration: 0.2 }
       }}
       transition={{
         layout: {
-          duration: 1.5,
+          duration: 1.0,
           ease: "easeInOut"
         },
         opacity: { duration: 0.4 }

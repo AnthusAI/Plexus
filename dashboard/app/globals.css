@@ -172,12 +172,12 @@
 
 .new-item-glow {
   filter: drop-shadow(0 0 1em hsl(var(--blue-6)));
-  animation: fadeOutGlowPrimary 4s ease-out forwards;
+  animation: fadeInAndOutGlowPrimary 4s ease-out forwards;
 }
 
 .new-score-result-glow {
   filter: drop-shadow(0 0 1em hsl(var(--plum-6)));
-  animation: fadeOutGlowSecondary 4s ease-out forwards;
+  animation: fadeInAndOutGlowSecondary 4s ease-out forwards;
 }
 
 .selected-border-rounded::before {
@@ -215,20 +215,32 @@
   }
 }
 
-@keyframes fadeOutGlowPrimary {
+@keyframes fadeInAndOutGlowPrimary {
   0% {
+    opacity: 0;
+    filter: drop-shadow(0 0 1em hsl(var(--blue-6)));
+  }
+  10% {
+    opacity: 1;
     filter: drop-shadow(0 0 1em hsl(var(--blue-6)));
   }
   100% {
+    opacity: 1;
     filter: drop-shadow(0 0 0em transparent);
   }
 }
 
-@keyframes fadeOutGlowSecondary {
+@keyframes fadeInAndOutGlowSecondary {
   0% {
+    opacity: 0;
+    filter: drop-shadow(0 0 1em hsl(var(--plum-6)));
+  }
+  10% {
+    opacity: 1;
     filter: drop-shadow(0 0 1em hsl(var(--plum-6)));
   }
   100% {
+    opacity: 1;
     filter: drop-shadow(0 0 0em transparent);
   }
 }
