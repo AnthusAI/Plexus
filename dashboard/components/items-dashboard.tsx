@@ -3053,7 +3053,7 @@ function ItemsDashboardInner() {
         <div className="flex flex-1 min-h-0">
           {/* Left panel - grid content */}
           <div 
-            className={`${selectedItem && !isNarrowViewport && (isFullWidth || selectedScoreResult) ? 'hidden' : 'flex-1'} h-full overflow-auto`}
+            className={`${selectedItem && !isNarrowViewport && (isFullWidth || selectedScoreResult) ? 'hidden' : 'flex-1'} h-full overflow-auto overflow-x-visible`}
             style={selectedItem && !isNarrowViewport && !isFullWidth && !selectedScoreResult ? {
               width: `${leftPanelWidth}%`
             } : undefined}
@@ -3115,7 +3115,7 @@ function ItemsDashboardInner() {
             )}
 
             {/* Grid content or item content for mobile */}
-            <div className="@container space-y-3">
+            <div className="@container space-y-3 overflow-visible">
               {isNarrowViewport && selectedItem ? (
                 // Mobile full-screen item view
                 <div className="h-full">
