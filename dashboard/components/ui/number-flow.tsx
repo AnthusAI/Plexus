@@ -30,14 +30,16 @@ export default function NumberFlowWrapper({
   }
 
   return (
-    <NumberFlow
-      value={value}
-      format={format}
-      locales={locales}
-      prefix={prefix}
-      suffix={suffix}
-      spinTiming={spinTiming}
-      willChange={willChange}
-    />
+    <span style={{ zIndex: 0, position: 'relative' }}>
+      <NumberFlow
+        value={value}
+        format={format}
+        locales={locales}
+        prefix={prefix}
+        suffix={suffix}
+        spinTiming={spinTiming}
+        willChange={willChange}
+      />
+    </span>
   );
 }
