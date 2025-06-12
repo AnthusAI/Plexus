@@ -102,4 +102,4 @@ async function testAggregation() {
 }
 
 // Run the test
-testAggregationV2().catch(console.error); 
+testAggregation().catch(console.error); 

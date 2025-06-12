@@ -1,7 +1,7 @@
 /**
- * Test suite for MetricsAggregatorV2
+ * Test suite for MetricsAggregator
  * 
- * This test suite validates the V2 metrics aggregator integration with
+ * This test suite validates the metrics aggregator integration with
  * the hierarchical aggregator.
  */
 
@@ -19,7 +19,7 @@ jest.mock('../hierarchicalAggregator', () => ({
 import { hierarchicalAggregator } from '../hierarchicalAggregator';
 const mockHierarchicalAggregator = hierarchicalAggregator as jest.Mocked<typeof hierarchicalAggregator>;
 
-describe('MetricsAggregatorV2', () => {
+describe('MetricsAggregator', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });

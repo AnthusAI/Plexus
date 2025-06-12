@@ -1,5 +1,5 @@
 /**
- * Metrics Aggregation System V2
+ * Metrics Aggregation System
  * 
  * This module provides a simplified interface to the hierarchical aggregation engine
  * for both items and score result metrics. It maintains backward compatibility while using the
@@ -92,7 +92,7 @@ export async function getAggregatedMetrics(
 
     return result;
   } catch (error) {
-    console.error('Error in getAggregatedMetrics V2:', error);
+    console.error('Error in getAggregatedMetrics:', error);
     
     // Return empty result on error
     return {
