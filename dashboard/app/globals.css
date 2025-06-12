@@ -170,6 +170,16 @@
   animation: fadeInSmooth 2s ease-out;
 }
 
+.new-item-glow {
+  filter: drop-shadow(0 0 1em hsl(var(--blue-6)));
+  animation: fadeOutGlowPrimary 4s ease-out forwards;
+}
+
+.new-score-result-glow {
+  filter: drop-shadow(0 0 1em hsl(var(--plum-6)));
+  animation: fadeOutGlowSecondary 4s ease-out forwards;
+}
+
 .selected-border-rounded::before {
   content: '';
   position: absolute;
@@ -202,6 +212,24 @@
   }
   to {
     opacity: 1;
+  }
+}
+
+@keyframes fadeOutGlowPrimary {
+  0% {
+    filter: drop-shadow(0 0 1em hsl(var(--blue-6)));
+  }
+  100% {
+    filter: drop-shadow(0 0 0em transparent);
+  }
+}
+
+@keyframes fadeOutGlowSecondary {
+  0% {
+    filter: drop-shadow(0 0 1em hsl(var(--plum-6)));
+  }
+  100% {
+    filter: drop-shadow(0 0 0em transparent);
   }
 }
 

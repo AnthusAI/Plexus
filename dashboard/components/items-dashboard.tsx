@@ -268,7 +268,7 @@ const GridItemCard = ({
     }
   }, [item.id, scoreCountManagerRef, itemRefsMap]);
   
-  return (
+    return (
     <motion.div
       layoutId={`item-${item.id}`}
       layout
@@ -282,12 +282,12 @@ const GridItemCard = ({
       }}
       transition={{
         layout: {
-          duration: 0.2,
+          duration: 1.5,
           ease: "easeInOut"
         },
         opacity: { duration: 0.4 }
       }}
-
+      className={item.isNew ? 'new-item-glow' : ''}
     >
       <ItemCard
         variant="grid"
