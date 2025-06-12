@@ -8,6 +8,7 @@ import { AreaChart, Area, XAxis, CartesianGrid, ResponsiveContainer } from 'rech
 import { cn } from '@/lib/utils'
 import { useItemsMetrics } from '@/hooks/useItemsMetrics'
 import { Timestamp } from '@/components/ui/timestamp'
+import NumberFlowWrapper from '@/components/ui/number-flow'
 
 // Fallback data for the area chart when loading or no data
 const fallbackChartData = [
@@ -235,9 +236,9 @@ export function ItemsGauges({
           <Gauge
             value={scoreResultsPerHour > 0 || itemsPerHour > 0 ? itemsPerHour : undefined}
             beforeValue={scoreResultsAveragePerHour > 0 || itemsAveragePerHour > 0 ? itemsAveragePerHour : undefined}
-            title="Items/Hour"
+            title="Items / hour"
             information={hasHourlyData ? `Current: ${itemsPerHour}
-Current hourly rate (last 60 minutes)
+Current hourly rate (rolling 60-min window)
 
 Average: ${itemsAveragePerHour}
 24-hour average hourly rate
@@ -252,7 +253,7 @@ Total items over last 24 hours` : "Loading hourly metrics..."}
             max={itemsPeakHourly}
             showTicks={true}
             decimalPlaces={0}
-            tickSpacingThreshold={85}  // Large threshold to only show min and max ticks
+            showOnlyEssentialTicks={true}  // Show only 0, max, and average ticks
             segments={[
               { start: 0, end: 10, color: 'var(--false)' },
               { start: 10, end: 90, color: 'var(--neutral)' },
@@ -266,9 +267,9 @@ Total items over last 24 hours` : "Loading hourly metrics..."}
           <Gauge
             value={scoreResultsPerHour > 0 || itemsPerHour > 0 ? scoreResultsPerHour : undefined}
             beforeValue={scoreResultsAveragePerHour > 0 || itemsAveragePerHour > 0 ? scoreResultsAveragePerHour : undefined}
-            title="Score Results/Hour"
+            title="Score Results / hour"
             information={hasHourlyData ? `Current: ${scoreResultsPerHour}
-Current hourly rate (last 60 minutes)
+Current hourly rate (rolling 60-min window)
 
 Average: ${scoreResultsAveragePerHour}
 24-hour average hourly rate
@@ -283,7 +284,7 @@ Total score results over last 24 hours` : "Loading hourly metrics..."}
             max={scoreResultsPeakHourly}
             showTicks={true}
             decimalPlaces={0}
-            tickSpacingThreshold={85}  // Large threshold to only show min and max ticks
+            showOnlyEssentialTicks={true}  // Show only 0, max, and average ticks
             segments={[
               { start: 0, end: 10, color: 'var(--false)' },
               { start: 10, end: 90, color: 'var(--neutral)' },
@@ -313,91 +314,107 @@ Total score results over last 24 hours` : "Loading hourly metrics..."}
                   </div>
                 </div>
               ) : (
-                <ChartContainer config={chartConfig} className="w-full h-full">
-                  <AreaChart
-                    accessibilityLayer
-                    data={chartData}
-                    margin={{
-                      top: 12,
-                      right: 8,
-                      left: 20,
-                      bottom: 8,
-                    }}
-                  >
-                    <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis
-                      dataKey="time"
-                      tickLine={false}
-                      axisLine={false}
-                      tickMargin={3}
-                      tick={{ fontSize: 9 }}
-                      interval={0}
-                      tickFormatter={(value, index) => {
-                        const totalPoints = chartData.length
-                        if (index === 0) return "24h ago"
-                        if (index === totalPoints - 1) return "now"
-                        // Show middle label only if chart is wide enough (2+ grid cells)
-                        // We can approximate this by checking if we have enough data points
-                        if (totalPoints >= 12 && index === Math.floor(totalPoints / 2)) return "12h ago"
-                        return "" // Hide other ticks
+                <motion.div
+                  key={chartData.length} // Re-trigger animation when data changes
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 4, ease: 'easeOut' }}
+                  className="w-full h-full"
+                  style={{
+                    filter: 'drop-shadow(0 0 8px rgba(59, 130, 246, 0.2)) drop-shadow(0 0 8px rgba(168, 85, 247, 0.2))',
+                    willChange: 'filter'
+                  }}
+                >
+                  <ChartContainer config={chartConfig} className="w-full h-full">
+                    <AreaChart
+                      accessibilityLayer
+                      data={chartData}
+                      margin={{
+                        top: 12,
+                        right: 8,
+                        left: 20,
+                        bottom: 8,
                       }}
-                    />
-                    <ChartTooltip
-                      cursor={false}
-                      content={<CustomChartTooltip />}
-                    />
-                    <Area
-                      dataKey="items"
-                      type="step"
-                      fill="#3b82f6"
-                      fillOpacity={0.8}
-                      stroke="none"
-                      strokeWidth={0}
-                      stackId="1"
-                      animationBegin={0}
-                      animationDuration={300}
-                      isAnimationActive={true}
-                    />
-                    <Area
-                      dataKey="scoreResults"
-                      type="step"
-                      fill="#a855f7"
-                      fillOpacity={0.8}
-                      stroke="none"
-                      strokeWidth={0}
-                      stackId="1"
-                      animationBegin={100}
-                      animationDuration={300}
-                      isAnimationActive={true}
-                    />
-                  </AreaChart>
-                </ChartContainer>
+                    >
+                      <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis
+                        dataKey="time"
+                        tickLine={false}
+                        axisLine={false}
+                        tickMargin={3}
+                        tick={{ fontSize: 9 }}
+                        interval={0}
+                        tickFormatter={(value, index) => {
+                          const totalPoints = chartData.length
+                          if (index === 0) return "24h ago"
+                          if (index === totalPoints - 1) return "now"
+                          // Show middle label only if chart is wide enough (2+ grid cells)
+                          // We can approximate this by checking if we have enough data points
+                          if (totalPoints >= 12 && index === Math.floor(totalPoints / 2)) return "12h ago"
+                          return "" // Hide other ticks
+                        }}
+                      />
+                      <ChartTooltip
+                        cursor={false}
+                        content={<CustomChartTooltip />}
+                      />
+                      <Area
+                        dataKey="items"
+                        type="step"
+                        fill="#3b82f6"
+                        fillOpacity={0.8}
+                        stroke="none"
+                        strokeWidth={0}
+                        stackId="1"
+                        animationBegin={0}
+                        animationDuration={300}
+                        isAnimationActive={true}
+                      />
+                      <Area
+                        dataKey="scoreResults"
+                        type="step"
+                        fill="#a855f7"
+                        fillOpacity={0.8}
+                        stroke="none"
+                        strokeWidth={0}
+                        stackId="1"
+                        animationBegin={100}
+                        animationDuration={300}
+                        isAnimationActive={true}
+                      />
+                    </AreaChart>
+                  </ChartContainer>
+                </motion.div>
               )}
             </div>
             
             {/* 24-hour totals at the bottom - responsive layout */}
             <div className="flex justify-between items-end text-sm flex-shrink-0 relative">
-              {/* Items metric */}
-              <div className="flex items-center gap-2 @[500px]:flex-col @[500px]:gap-1 @[500px]:items-center @[700px]:flex-row @[700px]:gap-2 @[700px]:items-center">
-                <div className="flex flex-col items-center">
-                  <span className="font-mono font-medium text-foreground text-base leading-tight">
-                    {hasChartData ? itemsTotal24h.toLocaleString() : (hasHourlyData ? itemsTotal24h.toLocaleString() : "...")}
-                  </span>
-                  <span className="text-muted-foreground text-xs leading-tight">Items/24h</span>
-                  <div 
-                    className="w-3 h-3 rounded-sm mt-1 hidden @[500px]:block @[700px]:hidden" 
-                    style={{ backgroundColor: chartConfig.items.color }}
-                  />
+              {/* Items metric - left-justified with color on the left */}
+              <div className="flex items-center gap-2 @[500px]:flex-col @[500px]:gap-1 @[500px]:items-center @[700px]:flex-row @[700px]:gap-2 @[700px]:items-start">
+                <div className="flex flex-col items-start @[500px]:items-center">
+                  <div className="flex items-center gap-1">
+                    <div 
+                      className="w-3 h-3 rounded-sm" 
+                      style={{ 
+                        backgroundColor: '#3b82f6',
+                        filter: 'drop-shadow(0 0 8px rgba(59, 130, 246, 0.2))'
+                      }}
+                    />
+                    <span className="font-medium text-foreground text-base leading-tight">
+                      <NumberFlowWrapper 
+                        value={hasChartData ? itemsTotal24h : (hasHourlyData ? itemsTotal24h : 0)} 
+                        format={{ useGrouping: false }}
+                      />
+                    </span>
+                  </div>
+                  <span className="text-muted-foreground text-xs leading-tight">Items / day</span>
                 </div>
-                <div 
-                  className="w-3 h-3 rounded-sm flex-shrink-0 block @[500px]:hidden @[700px]:block" 
-                  style={{ backgroundColor: chartConfig.items.color }}
-                />
               </div>
               
-              {/* Last updated timestamp - centered */}
+              {/* Last updated timestamp - centered - only show when chart is 2+ cells wide */}
               {useRealData && metrics?.lastUpdated && (
-                <div className="absolute left-1/2 transform -translate-x-1/2 flex flex-col items-center">
+                <div className="absolute left-1/2 transform -translate-x-1/2 flex-col items-center hidden @[700px]:flex">
                   <span className="text-[10px] text-muted-foreground leading-tight">Last updated</span>
                   <Timestamp 
                     time={metrics.lastUpdated} 
@@ -408,22 +425,26 @@ Total score results over last 24 hours` : "Loading hourly metrics..."}
                 </div>
               )}
               
-              {/* Score Results metric */}
-              <div className="flex items-center gap-2 @[500px]:flex-col @[500px]:gap-1 @[500px]:items-center @[700px]:flex-row @[700px]:gap-2 @[700px]:items-center">
-                <div className="flex flex-col items-center">
-                  <span className="font-mono font-medium text-foreground text-base leading-tight">
-                    {hasChartData ? scoreResultsTotal24h.toLocaleString() : (hasHourlyData ? scoreResultsTotal24h.toLocaleString() : "...")}
-                  </span>
-                  <span className="text-muted-foreground text-xs leading-tight">Results/24h</span>
-                  <div 
-                    className="w-3 h-3 rounded-sm mt-1 hidden @[500px]:block @[700px]:hidden" 
-                    style={{ backgroundColor: chartConfig.scoreResults.color }}
-                  />
+              {/* Score Results metric - right-justified with color on the right */}
+              <div className="flex items-center gap-2 @[500px]:flex-col @[500px]:gap-1 @[500px]:items-end @[700px]:flex-row-reverse @[700px]:gap-2 @[700px]:items-end">
+                <div className="flex flex-col items-end">
+                  <div className="flex items-center gap-1">
+                    <span className="font-medium text-foreground text-base leading-tight">
+                      <NumberFlowWrapper 
+                        value={hasChartData ? scoreResultsTotal24h : (hasHourlyData ? scoreResultsTotal24h : 0)} 
+                        format={{ useGrouping: false }}
+                      />
+                    </span>
+                    <div 
+                      className="w-3 h-3 rounded-sm" 
+                      style={{ 
+                        backgroundColor: '#a855f7',
+                        filter: 'drop-shadow(0 0 8px rgba(168, 85, 247, 0.2))'
+                      }}
+                    />
+                  </div>
+                  <span className="text-muted-foreground text-xs leading-tight">Score Results / day</span>
                 </div>
-                <div 
-                  className="w-3 h-3 rounded-sm flex-shrink-0 block @[500px]:hidden @[700px]:block" 
-                  style={{ backgroundColor: chartConfig.scoreResults.color }}
-                />
               </div>
             </div>
           </div>

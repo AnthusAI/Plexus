@@ -41,7 +41,20 @@ async function calculateMetrics(
 ): Promise<MetricsData> {
   const now = new Date();
   const last24Hours = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-  const lastHour = new Date(now.getTime() - 60 * 60 * 1000);
+  
+  // Fix for rolling 60-minute window: ensure we capture complete time periods
+  // The issue: a simple "60 minutes ago" misses data when crossing hour boundaries
+  // Solution: extend the window to ensure we get at least 60 minutes of complete data
+  const nowAligned = new Date(now);
+  nowAligned.setSeconds(0, 0); // Align current time to minute boundary
+  
+  // Calculate how much of the current hour we have
+  const currentHourMinutes = nowAligned.getMinutes();
+  
+  // Extend the window to ensure we get at least 60 complete minutes
+  // If we're 5 minutes into the hour, we need to go back 65 minutes to get the full previous hour
+  const windowMinutes = 60 + currentHourMinutes;
+  const lastHour = new Date(nowAligned.getTime() - windowMinutes * 60 * 1000);
   
   try {
     // PARALLEL EXECUTION STRATEGY:
@@ -56,16 +69,26 @@ async function calculateMetrics(
     ]).then(([itemsMetricsLastHour, scoreResultsMetricsLastHour]) => {
       // FIRST PROGRESS UPDATE: Send hourly gauge data as soon as it's ready
       // This allows the UI to show meaningful values immediately
+
+      // Normalize the count to a true hourly rate.
+      // The window (`lastHour` to `now`) is slightly larger than 60 minutes to ensure complete bucket coverage.
+      const actualWindowMinutes = (now.getTime() - lastHour.getTime()) / (60 * 1000);
+      const normalizationFactor = actualWindowMinutes > 0 ? 60 / actualWindowMinutes : 1;
+      
+      const itemsPerHour = Math.round(itemsMetricsLastHour.count * normalizationFactor);
+      const scoreResultsPerHour = Math.round(scoreResultsMetricsLastHour.count * normalizationFactor);
+      const costPerHour = (scoreResultsMetricsLastHour.cost || 0) * normalizationFactor;
+
       if (onProgressUpdate) {
         onProgressUpdate({
-          itemsPerHour: itemsMetricsLastHour.count,
-          scoreResultsPerHour: scoreResultsMetricsLastHour.count,
-          costPerHour: scoreResultsMetricsLastHour.cost || 0,
+          itemsPerHour,
+          scoreResultsPerHour,
+          costPerHour,
           lastUpdated: now
         })
       }
-      return { itemsMetricsLastHour, scoreResultsMetricsLastHour }
-    })
+      return { itemsMetricsLastHour, scoreResultsMetricsLastHour, itemsPerHour, scoreResultsPerHour, costPerHour };
+    });
 
     // Start chart data generation in parallel (this will also compute 24-hour totals)
     // This benefits from any caching done by the hourly computation above
@@ -96,7 +119,7 @@ async function calculateMetrics(
     )
 
     // Wait for hourly metrics first (should be fastest - smaller time range)
-    const { itemsMetricsLastHour, scoreResultsMetricsLastHour } = await hourlyMetricsPromise
+    const { itemsMetricsLastHour, scoreResultsMetricsLastHour, itemsPerHour, scoreResultsPerHour, costPerHour } = await hourlyMetricsPromise;
     
     // Wait for chart data completion
     const chartData = await chartDataPromise
@@ -112,8 +135,8 @@ async function calculateMetrics(
     const { itemsPeak, scoreResultsPeak } = calculatePeakValues(chartData);
     
     const result: MetricsData = {
-      itemsPerHour: itemsMetricsLastHour.count,
-      scoreResultsPerHour: scoreResultsMetricsLastHour.count,
+      itemsPerHour,
+      scoreResultsPerHour,
       itemsTotal24h: itemsMetrics24h.count,
       scoreResultsTotal24h: scoreResultsMetrics24h.count,
       itemsAveragePerHour: itemsAverage,
@@ -128,7 +151,7 @@ async function calculateMetrics(
       totalExternalApiCalls24h: scoreResultsMetrics24h.externalAiApiCount || 0,
       totalCachedApiCalls24h: scoreResultsMetrics24h.cachedAiApiCount || 0,
       totalErrors24h: scoreResultsMetrics24h.errorCount || 0,
-      costPerHour: scoreResultsMetricsLastHour.cost || 0,
+      costPerHour,
     };
     
     return result;
