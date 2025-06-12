@@ -427,7 +427,7 @@ const schema = a.schema({
             allow.publicApiKey(),
             allow.authenticated()
         ])
-        .secondaryIndexes((idx: (field: ScoreResultIndexFields) => any) => [
+        .secondaryIndexes((idx) => [
             idx("accountId").sortKeys(["updatedAt"]),
             idx("itemId"),
             idx("scoringJobId"),
@@ -438,7 +438,9 @@ const schema = a.schema({
             idx("scoreId"),
             idx("scorecardId").sortKeys(["scoreId", "itemId"]).name("byScorecardScoreItem"),
             idx("itemId").sortKeys(["scorecardId", "scoreId"]).name("byItemScorecardScore"),
-            idx("itemId").sortKeys(["scorecardId", "scoreId", "updatedAt"]).name("byItemScorecardScoreUpdated")
+            idx("itemId").sortKeys(["scorecardId", "scoreId", "updatedAt"]).name("byItemScorecardScoreUpdated"),
+            idx("accountId").sortKeys(["isError", "updatedAt"]).name("byAccountErrorAndUpdatedAt"),
+            idx("scorecardId").sortKeys(["isError", "updatedAt"]).name("byScorecardErrorAndUpdatedAt")
         ]),
 
     BatchJobScoringJob: a
