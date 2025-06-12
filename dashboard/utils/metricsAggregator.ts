@@ -519,6 +519,15 @@ export async function cacheAggregationResult(
 
       const updateInput = {
         id: existingRecord.id,
+        // Include all GSI key fields to satisfy DynamoDB constraints
+        accountId: existingRecord.accountId,
+        scorecardId: existingRecord.scorecardId,
+        scoreId: existingRecord.scoreId,
+        recordType: existingRecord.recordType,
+        timeRangeStart: existingRecord.timeRangeStart,
+        timeRangeEnd: existingRecord.timeRangeEnd,
+        numberOfMinutes: existingRecord.numberOfMinutes,
+        // Update the actual metric values
         count: metrics.count,
         cost: metrics.cost,
         decisionCount: metrics.decisionCount,
