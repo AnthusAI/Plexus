@@ -46,13 +46,7 @@ const CustomChartTooltip = ({ active, payload, label }: any) => {
     const bucketEnd = dataPoint?.bucketEnd ? new Date(dataPoint.bucketEnd) : null
     
     return (
-      <div 
-        className="bg-background rounded-lg shadow-lg p-3 text-sm relative z-[9999]" 
-        style={{ 
-          zIndex: 99999,
-          position: 'relative'
-        }}
-      >
+      <div className="bg-background rounded-lg shadow-lg p-3 text-sm">
         <div className="space-y-2">
           {payload.map((entry: any, index: number) => {
             // Use proper labels from chartConfig
@@ -308,7 +302,7 @@ Total items over last 24 hours`}
             <Gauge
               value={safeScoreResultsPerHour}
               beforeValue={safeScoreResultsAveragePerHour}
-              title="Score Results / day"
+              title="Score Results / hour"
               information={`Current: ${safeScoreResultsPerHour}
 Current hourly rate (last 60 minutes)
 
@@ -359,7 +353,7 @@ Total score results over last 24 hours`}
                     willChange: 'filter'
                   }}
                 >
-                  <ChartContainer config={chartConfig} className="w-full h-full" style={{ isolation: 'isolate' }}>
+                  <ChartContainer config={chartConfig} className="w-full h-full">
                     <AreaChart
                       accessibilityLayer
                       data={chartData}
@@ -428,17 +422,11 @@ Total score results over last 24 hours`}
               </div>
               
               {/* 24-hour totals at the bottom - responsive layout */}
-              <div className="flex justify-between items-end text-sm flex-shrink-0">
-                {/* Items metric */}
-                                  <div className="flex items-center gap-2 @[500px]:flex-col @[500px]:gap-1 @[500px]:items-center @[700px]:flex-row @[700px]:gap-2 @[700px]:items-center">
-                  <div className="flex flex-col items-center">
+              <div className="flex justify-between items-end text-sm flex-shrink-0 relative">
+                {/* Items metric - left-justified with color on the left */}
+                <div className="flex items-center gap-2 @[500px]:flex-col @[500px]:gap-1 @[500px]:items-center @[700px]:flex-row @[700px]:gap-2 @[700px]:items-start">
+                  <div className="flex flex-col items-start @[500px]:items-center">
                     <div className="flex items-center gap-1">
-                      <span className="font-medium text-foreground text-base leading-tight">
-                        <NumberFlowWrapper 
-                          value={safeItemsTotal24h} 
-                          format={{ useGrouping: false }}
-                        />
-                      </span>
                       <div 
                         className="w-3 h-3 rounded-sm" 
                         style={{ 
@@ -446,6 +434,12 @@ Total score results over last 24 hours`}
                           filter: 'drop-shadow(0 0 8px rgba(59, 130, 246, 0.2))'
                         }}
                       />
+                      <span className="font-medium text-foreground text-base leading-tight">
+                        <NumberFlowWrapper 
+                          value={safeItemsTotal24h} 
+                          format={{ useGrouping: false }}
+                        />
+                      </span>
                     </div>
                     <span className="text-muted-foreground text-xs leading-tight">Items / day</span>
                   </div>
@@ -464,10 +458,16 @@ Total score results over last 24 hours`}
                   </div>
                 )}
                 
-                {/* Score Results metric */}
-                <div className="flex items-center gap-2 @[500px]:flex-col @[500px]:gap-1 @[500px]:items-center @[700px]:flex-row-reverse @[700px]:gap-2 @[700px]:items-center">
-                  <div className="flex flex-col items-center">
+                {/* Score Results metric - right-justified with color on the right */}
+                <div className="flex items-center gap-2 @[500px]:flex-col @[500px]:gap-1 @[500px]:items-end @[700px]:flex-row-reverse @[700px]:gap-2 @[700px]:items-end">
+                  <div className="flex flex-col items-end">
                     <div className="flex items-center gap-1">
+                      <span className="font-medium text-foreground text-base leading-tight">
+                        <NumberFlowWrapper 
+                          value={safeScoreResultsTotal24h} 
+                          format={{ useGrouping: false }}
+                        />
+                      </span>
                       <div 
                         className="w-3 h-3 rounded-sm" 
                         style={{ 
@@ -475,12 +475,6 @@ Total score results over last 24 hours`}
                           filter: 'drop-shadow(0 0 8px rgba(168, 85, 247, 0.2))'
                         }}
                       />
-                      <span className="font-medium text-foreground text-base leading-tight">
-                        <NumberFlowWrapper 
-                          value={safeScoreResultsTotal24h} 
-                          format={{ useGrouping: false }}
-                        />
-                      </span>
                     </div>
                     <span className="text-muted-foreground text-xs leading-tight">Score Results / day</span>
                   </div>
