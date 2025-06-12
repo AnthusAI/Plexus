@@ -74,21 +74,22 @@ const formatElapsedTime = (start: Date, end: Date): { type: 'string', value: str
     }
   }
   
-  // If no parts, return empty
+  // If no parts, it means the duration is less than a second, so we show 0 seconds.
   if (parts.length === 0) {
-    return { type: 'string', value: '' }
+    return {
+      type: 'component',
+      value: (
+        <span key="seconds">
+          <NumberFlowWrapper value={0} /> seconds
+        </span>
+      ),
+    }
   }
   
   return { 
     type: 'component', 
     value: <span>{parts}</span>
   }
-}
-
-const areDatesMeaningfullyDifferent = (start: Date, end: Date): boolean => {
-  // Return false if times are the same or within 1 second of each other
-  const diffInMs = Math.abs(end.getTime() - start.getTime())
-  return diffInMs > 1000 // More than 1 second difference
 }
 
 const formatRelativeTime = (date: Date): { type: 'string', value: string } | { type: 'component', value: React.ReactNode } => {
@@ -237,13 +238,8 @@ export function Timestamp({
           ? (typeof completionTime === 'string' ? new Date(completionTime) : completionTime)
           : new Date()
         
-        // Only show elapsed time if the dates are meaningfully different
-        if (areDatesMeaningfullyDifferent(timeDate, endTime)) {
-          const result = formatElapsedTime(timeDate, endTime)
-          setDisplayContent(result.type === 'component' ? result.value : result.value)
-        } else {
-          setDisplayContent('') // Return empty string if times are effectively the same
-        }
+        const result = formatElapsedTime(timeDate, endTime)
+        setDisplayContent(result.value)
       } else {
         if (showAbsolute) {
           setDisplayContent(formatAbsoluteTime(timeDate))
