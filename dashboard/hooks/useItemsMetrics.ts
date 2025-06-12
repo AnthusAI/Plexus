@@ -210,14 +210,67 @@ export function useItemsMetrics(): UseItemsMetricsResult {
   }, [selectedAccount])
 
   const refetch = useCallback(() => {
-    // Clear existing metrics to force fresh calculation
+    // Clear existing metrics to force fresh calculation and show loading spinner
     setMetrics(null)
+    setIsLoading(true)
     fetchMetrics()
   }, [fetchMetrics])
 
+  // Lightweight refresh for hourly metrics (gauges)
+  const refreshHourlyMetrics = useCallback(async () => {
+    if (!selectedAccount || !metrics) return;
+
+    const now = new Date();
+    const nowAligned = new Date(now);
+    nowAligned.setSeconds(0, 0);
+    const currentHourMinutes = nowAligned.getMinutes();
+    const windowMinutes = 60 + currentHourMinutes;
+    const lastHour = new Date(nowAligned.getTime() - windowMinutes * 60 * 1000);
+
+    try {
+      const [itemsMetricsLastHour, scoreResultsMetricsLastHour] = await Promise.all([
+        getAggregatedMetrics(selectedAccount.id, 'items', lastHour, now),
+        getAggregatedMetrics(selectedAccount.id, 'scoreResults', lastHour, now)
+      ]);
+
+      const actualWindowMinutes = (now.getTime() - lastHour.getTime()) / (60 * 1000);
+      const normalizationFactor = actualWindowMinutes > 0 ? 60 / actualWindowMinutes : 1;
+      
+      const itemsPerHour = Math.round(itemsMetricsLastHour.count * normalizationFactor);
+      const scoreResultsPerHour = Math.round(scoreResultsMetricsLastHour.count * normalizationFactor);
+      const costPerHour = (scoreResultsMetricsLastHour.cost || 0) * normalizationFactor;
+
+      setMetrics(prevMetrics => {
+        if (!prevMetrics) return null
+        
+        // Preserve existing chart data, totals, averages, peaks
+        // Only update the rolling 60-min window metrics for a smooth refresh
+        return {
+          ...prevMetrics,
+          itemsPerHour,
+          scoreResultsPerHour,
+          costPerHour,
+          lastUpdated: now,
+        }
+      })
+    } catch (error) {
+      console.error('Error during silent refresh of hourly metrics:', error);
+      // Don't set a global error state for silent refresh failures
+    }
+  }, [selectedAccount, metrics]);
+
   useEffect(() => {
     fetchMetrics()
-  }, [selectedAccount])
+  }, [fetchMetrics])
+
+  // Set up auto-refresh interval for hourly metrics
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      refreshHourlyMetrics()
+    }, 30000) // Refresh every 30 seconds
+
+    return () => clearInterval(intervalId)
+  }, [refreshHourlyMetrics])
 
   return {
     metrics,
