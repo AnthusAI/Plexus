@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useAccount } from '@/app/contexts/AccountContext'
 import { getAggregatedMetrics, AggregatedMetricsData } from '@/utils/metricsAggregator'
 import { generateChartData, calculatePeakValues, calculateAverageValues, ChartDataPoint } from '@/utils/chartDataGenerator'
+import { graphqlRequest } from '@/utils/amplify-client'
 
 interface MetricsData {
   scoreResultsPerHour: number
@@ -21,6 +22,8 @@ interface MetricsData {
   totalCachedApiCalls24h: number
   totalErrors24h: number
   costPerHour: number
+  // Error detection for dashboard alerts
+  hasErrorsLast24h: boolean
 }
 
 interface UseItemsMetricsResult {
@@ -28,6 +31,65 @@ interface UseItemsMetricsResult {
   isLoading: boolean
   error: string | null
   refetch: () => void
+}
+
+/**
+ * Check if there are any ScoreResults with error codes (5xx) in the last 24 hours
+ */
+async function checkForErrorsLast24h(accountId: string): Promise<boolean> {
+  console.log('🔍 checkForErrorsLast24h called with accountId:', accountId)
+  const now = new Date()
+  const last24Hours = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+  console.log('🕐 Checking for errors since:', last24Hours.toISOString())
+  
+  try {
+    // Use the dedicated code GSI to efficiently find 5xx errors
+    const response = await graphqlRequest<{
+      listScoreResultByAccountIdAndCodeAndUpdatedAt: {
+        items: Array<{ id: string; updatedAt: string }>
+      }
+    }>(`
+      query CheckForErrors($accountId: String!) {
+        listScoreResultByAccountIdAndCodeAndUpdatedAt(
+          accountId: $accountId,
+          codeUpdatedAt: { beginsWith: { code: "5" } },
+          sortDirection: DESC,
+          limit: 10
+        ) {
+          items {
+            id
+            updatedAt
+          }
+        }
+      }
+    `, {
+      accountId
+    })
+    
+    console.log('📊 GSI query response:', response)
+    
+    // Filter results to only those in the last 24 hours (client-side filtering on small result set)
+    const recentErrors = response.data?.listScoreResultByAccountIdAndCodeAndUpdatedAt?.items?.filter(item => {
+      const itemDate = new Date(item.updatedAt)
+      console.log('📅 Checking item:', item.id, 'updatedAt:', item.updatedAt, 'isRecent:', itemDate >= last24Hours)
+      return itemDate >= last24Hours
+    }) || []
+    
+    console.log('🚨 Found recent errors:', recentErrors.length)
+    return recentErrors.length > 0
+  } catch (error) {
+    console.error('❌ Error checking for ScoreResult errors:', error)
+    
+    // Check if this is because the GSI doesn't exist yet
+    const errorMessage = (error as any)?.message || ''
+    if (errorMessage.includes('Field') && errorMessage.includes('undefined')) {
+      console.log('Code GSI not yet deployed, error detection disabled until deployment')
+    }
+    
+    // Return false on error - no fallback to avoid table scans on huge tables
+    console.log('🚫 Returning false due to error')
+    return false
+  }
 }
 
 /**
@@ -124,11 +186,14 @@ async function calculateMetrics(
     // Wait for chart data completion
     const chartData = await chartDataPromise
     
-    // Get final 24-hour totals (these should be mostly cached from chart generation)
-    const [itemsMetrics24h, scoreResultsMetrics24h] = await Promise.all([
+    // Get final 24-hour totals and check for errors in parallel (these should be mostly cached from chart generation)
+    const [itemsMetrics24h, scoreResultsMetrics24h, hasErrorsLast24h] = await Promise.all([
       getAggregatedMetrics(accountId, 'items', last24Hours, now),
-      getAggregatedMetrics(accountId, 'scoreResults', last24Hours, now)
+      getAggregatedMetrics(accountId, 'scoreResults', last24Hours, now),
+      checkForErrorsLast24h(accountId)
     ]);
+    
+    console.log('🎯 Final hasErrorsLast24h value:', hasErrorsLast24h);
     
     // Calculate derived metrics
     const { itemsAverage, scoreResultsAverage } = calculateAverageValues(chartData);
@@ -152,8 +217,11 @@ async function calculateMetrics(
       totalCachedApiCalls24h: scoreResultsMetrics24h.cachedAiApiCount || 0,
       totalErrors24h: scoreResultsMetrics24h.errorCount || 0,
       costPerHour,
+      // Error detection for dashboard alerts
+      hasErrorsLast24h,
     };
     
+    console.log('🎯 Final metrics result hasErrorsLast24h:', result.hasErrorsLast24h);
     return result;
   } catch (error) {
     console.error('❌ Error in client-side metrics calculation:', error);
@@ -178,7 +246,7 @@ export function useItemsMetrics(): UseItemsMetricsResult {
     setError(null)
 
     try {
-      await calculateMetrics(
+      const finalMetrics = await calculateMetrics(
         selectedAccount.id,
         (partialMetrics) => {
           // Progressive update: merge partial metrics with existing data
@@ -199,8 +267,10 @@ export function useItemsMetrics(): UseItemsMetricsResult {
         }
       )
       
-      // Final result is already set through progressive updates
-      // No need to overwrite - the last progressive update contains the complete data
+      // Ensure final metrics (including hasErrorsLast24h) are set
+      console.log('🔥 Setting final metrics with hasErrorsLast24h:', finalMetrics.hasErrorsLast24h)
+      setMetrics(finalMetrics)
+      setIsLoading(false)
 
     } catch (err) {
       console.error('❌ useItemsMetrics: Error calculating metrics:', err)

@@ -4,7 +4,7 @@ import { useSearchParams, useParams } from 'next/navigation'
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import { Square, Columns2, X, ChevronDown, ChevronUp, Info, MessageCircleMore, Plus, ThumbsUp, ThumbsDown, Loader2, Search } from "lucide-react"
+import { Square, Columns2, X, ChevronDown, ChevronUp, Info, MessageCircleMore, Plus, ThumbsUp, ThumbsDown, Loader2, Search, AlertTriangle } from "lucide-react"
 import { format, formatDistanceToNow, parseISO } from "date-fns"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -587,6 +587,7 @@ function ItemsDashboardInner() {
   const [isMetadataExpanded, setIsMetadataExpanded] = useState(false)
   const [isDataExpanded, setIsDataExpanded] = useState(false)
   const [selectedScore, setSelectedScore] = useState<string | null>(null);
+  const [isErrorFilterActive, setIsErrorFilterActive] = useState(false);
   const [expandedExplanations, setExpandedExplanations] = useState<string[]>([]);
   const [truncatedExplanations, setTruncatedExplanations] = useState<{[key: string]: string}>({});
   const explanationRefs = useRef<{[key: string]: HTMLDivElement | null}>({});
@@ -1403,12 +1404,110 @@ function ItemsDashboardInner() {
       let nextTokenFromDirectQuery: string | null = null;
       
       try {
-        // Determine if we should filter by scorecard, score, or account
+        // Determine if we should filter by scorecard, score, account, or errors
         const useScorecard = selectedScorecard !== null && selectedScorecard !== undefined;
         const useScore = selectedScore !== null && selectedScore !== undefined;
         
-        
-        if (useScore) {
+        if (isErrorFilterActive) {
+          // Filter by items that have error ScoreResults - load more (client-side filtering)
+          const errorScoreResultsQuery = await graphqlRequest<{
+            listScoreResultByAccountIdAndUpdatedAt: {
+              items: Array<{
+                itemId: string;
+                item: any;
+                value?: string;
+                explanation?: string;
+              }>;
+              nextToken: string | null;
+            }
+          }>(`
+            query ListMoreErrorScoreResults($accountId: String!, $limit: Int!, $nextToken: String) {
+              listScoreResultByAccountIdAndUpdatedAt(
+                accountId: $accountId,
+                sortDirection: DESC,
+                limit: $limit,
+                nextToken: $nextToken
+              ) {
+                items {
+                  itemId
+                  value
+                  explanation
+                  item {
+                    id
+                    externalId
+                    description
+                    accountId
+                    evaluationId
+                    updatedAt
+                    createdAt
+                    isEvaluation
+                    identifiers
+                    metadata
+                    attachedFiles
+                    text
+                    itemIdentifiers {
+                      items {
+                        itemId
+                        name
+                        value
+                        url
+                        position
+                      }
+                    }
+                  }
+                }
+                nextToken
+              }
+            }
+          `, {
+            accountId: selectedAccount.id,
+            limit: 1000,
+            nextToken: nextToken
+          });
+          
+          console.debug('- LoadMore Error query response:', errorScoreResultsQuery);
+          console.debug('- LoadMore Raw error ScoreResults found:', errorScoreResultsQuery.data?.listScoreResultByAccountIdAndUpdatedAt?.items?.length || 0);
+          
+          if (errorScoreResultsQuery.data?.listScoreResultByAccountIdAndUpdatedAt?.items) {
+            // Filter for ScoreResults that indicate errors (client-side filtering)
+            const errorScoreResults = errorScoreResultsQuery.data.listScoreResultByAccountIdAndUpdatedAt.items.filter(result => {
+              // Look for error indicators in the value or explanation
+              const value = result.value?.toLowerCase() || '';
+              const explanation = result.explanation?.toLowerCase() || '';
+              
+              // Check for common error patterns
+              return value.includes('error') || 
+                     value.includes('fail') || 
+                     value.includes('exception') || 
+                     explanation.includes('error') || 
+                     explanation.includes('fail') || 
+                     explanation.includes('exception') ||
+                     explanation.includes('timeout') ||
+                     explanation.includes('not found') ||
+                     explanation.includes('invalid');
+            });
+            
+            console.debug('- LoadMore Filtered error ScoreResults:', errorScoreResults.length);
+            
+            // Get unique items from error score results
+            const itemsMap = new Map();
+            errorScoreResults.forEach(result => {
+              if (result.item && !itemsMap.has(result.item.id)) {
+                itemsMap.set(result.item.id, result.item);
+              }
+            });
+            
+            itemsFromDirectQuery = Array.from(itemsMap.values()).sort((a, b) => {
+              const dateA = new Date(a.createdAt || '').getTime();
+              const dateB = new Date(b.createdAt || '').getTime();
+              return dateB - dateA;
+            });
+            nextTokenFromDirectQuery = errorScoreResults.length >= 1000 ? errorScoreResultsQuery.data.listScoreResultByAccountIdAndUpdatedAt.nextToken : null;
+            console.debug('- ✅ LoadMore Unique error items found:', itemsFromDirectQuery.length);
+          } else {
+            console.debug('- ❌ LoadMore No error ScoreResults found or invalid response structure');
+          }
+        } else if (useScore) {
           // If a score is selected, filter by scoreId
           const directQuery = await graphqlRequest<{ listItemByScoreIdAndCreatedAt: { items: any[], nextToken: string | null } }>(`
             query ListItemsMoreDirect($scoreId: String!, $limit: Int!, $nextToken: String) {
@@ -1594,7 +1693,7 @@ function ItemsDashboardInner() {
     } finally {
       setIsLoadingMore(false);
     }
-  }, [isLoadingMore, nextToken, selectedAccount, selectedScorecard, selectedScore, setItems, setNextToken, setIsLoadingMore]);
+  }, [isLoadingMore, nextToken, selectedAccount, selectedScorecard, selectedScore, isErrorFilterActive, setItems, setNextToken, setIsLoadingMore]);
 
   // Fetch items from the API
   const fetchItems = useCallback(async () => {
@@ -1617,11 +1716,112 @@ function ItemsDashboardInner() {
       let nextTokenFromDirectQuery: string | null = null;
       
       try {
-        // Determine if we should filter by scorecard, score, or account
+        // Determine if we should filter by scorecard, score, account, or errors
         const useScorecard = selectedScorecard !== null && selectedScorecard !== undefined;
         const useScore = selectedScore !== null && selectedScore !== undefined;
         
-        if (useScore) {
+        if (isErrorFilterActive) {
+          // Filter by items that have error ScoreResults
+          console.debug('🔍 FILTERING BY ERROR SCORE RESULTS');
+          console.debug('- Account ID:', accountId);
+          
+          // Query all ScoreResults and filter for errors in code (temporary approach)
+          const errorScoreResultsQuery = await graphqlRequest<{
+            listScoreResultByAccountIdAndUpdatedAt: {
+              items: Array<{
+                itemId: string;
+                item: any;
+                value?: string;
+                explanation?: string;
+              }>;
+              nextToken: string | null;
+            }
+          }>(`
+            query ListErrorScoreResults($accountId: String!, $limit: Int!) {
+              listScoreResultByAccountIdAndUpdatedAt(
+                accountId: $accountId,
+                sortDirection: DESC,
+                limit: $limit
+              ) {
+                items {
+                  itemId
+                  value
+                  explanation
+                  item {
+                    id
+                    externalId
+                    description
+                    accountId
+                    evaluationId
+                    updatedAt
+                    createdAt
+                    isEvaluation
+                    identifiers
+                    metadata
+                    attachedFiles
+                    text
+                    itemIdentifiers {
+                      items {
+                        itemId
+                        name
+                        value
+                        url
+                        position
+                      }
+                    }
+                  }
+                }
+                nextToken
+              }
+            }
+          `, {
+            accountId: accountId,
+            limit: 1000
+          });
+          
+          console.debug('- Error query response:', errorScoreResultsQuery);
+          console.debug('- Raw error ScoreResults found:', errorScoreResultsQuery.data?.listScoreResultByAccountIdAndUpdatedAt?.items?.length || 0);
+          
+          if (errorScoreResultsQuery.data?.listScoreResultByAccountIdAndUpdatedAt?.items) {
+            // Filter for ScoreResults that indicate errors (client-side filtering)
+            const errorScoreResults = errorScoreResultsQuery.data.listScoreResultByAccountIdAndUpdatedAt.items.filter(result => {
+              // Look for error indicators in the value or explanation
+              const value = result.value?.toLowerCase() || '';
+              const explanation = result.explanation?.toLowerCase() || '';
+              
+              // Check for common error patterns
+              return value.includes('error') || 
+                     value.includes('fail') || 
+                     value.includes('exception') || 
+                     explanation.includes('error') || 
+                     explanation.includes('fail') || 
+                     explanation.includes('exception') ||
+                     explanation.includes('timeout') ||
+                     explanation.includes('not found') ||
+                     explanation.includes('invalid');
+            });
+            
+            console.debug('- Filtered error ScoreResults:', errorScoreResults.length);
+            
+            // Get unique items from error score results
+            const itemsMap = new Map();
+            errorScoreResults.forEach(result => {
+              if (result.item && !itemsMap.has(result.item.id)) {
+                itemsMap.set(result.item.id, result.item);
+              }
+            });
+            
+            itemsFromDirectQuery = Array.from(itemsMap.values()).sort((a, b) => {
+              const dateA = new Date(a.createdAt || '').getTime();
+              const dateB = new Date(b.createdAt || '').getTime();
+              return dateB - dateA;
+            });
+            nextTokenFromDirectQuery = errorScoreResults.length >= 1000 ? errorScoreResultsQuery.data.listScoreResultByAccountIdAndUpdatedAt.nextToken : null;
+            console.debug('- ✅ Unique error items found:', itemsFromDirectQuery.length);
+          } else {
+            console.debug('- ❌ No error ScoreResults found or invalid response structure');
+          }
+        } else if (useScore) {
           // If a score is selected, filter by scoreId
           console.debug('Filtering by scoreId:', selectedScore);
           const directQuery = await graphqlRequest<{ listItemByScoreIdAndCreatedAt: { items: any[], nextToken: string | null } }>(`
@@ -1891,7 +2091,7 @@ function ItemsDashboardInner() {
       console.error('Error fetching items:', error);
       setIsLoading(false);
     }
-  }, [user, selectedAccount, setIsLoading, setItems, setNextToken, selectedScorecard, selectedScore]);
+  }, [user, selectedAccount, setIsLoading, setItems, setNextToken, selectedScorecard, selectedScore, isErrorFilterActive]);
   
   // Throttled refetch function for when we get empty update notifications
   const throttledRefetch = useCallback(async () => {
@@ -2127,7 +2327,14 @@ function ItemsDashboardInner() {
     if (!isLoadingAccounts && selectedAccount) {
       shouldRefetchRef.current = true;
     }
-  }, [selectedAccount?.id, isLoadingAccounts, selectedScorecard, selectedScore]);
+  }, [selectedAccount?.id, isLoadingAccounts, selectedScorecard, selectedScore, isErrorFilterActive]);
+  
+  // Clear error filter when other filters change
+  useEffect(() => {
+    if (isErrorFilterActive && (selectedScorecard || selectedScore)) {
+      setIsErrorFilterActive(false);
+    }
+  }, [selectedScorecard, selectedScore]);
   
   // Fetch items when the selected account or other filters change
   useEffect(() => {
@@ -2858,6 +3065,18 @@ function ItemsDashboardInner() {
     );
   }
 
+  const handleErrorClick = () => {
+    // Clear other filters first
+    setSelectedScorecard(null);
+    setSelectedScore(null);
+    setIsErrorFilterActive(true);
+    // Clear other selections when switching to error mode
+    setSelectedItem(null);
+    setIsFullWidth(false);
+    // Navigate to items list without specific item
+    window.history.pushState({}, '', `/lab/items`);
+  };
+
   const handleItemClick = (itemId: string) => {
     // Use window.history.pushState for truly shallow navigation that won't cause remount
     window.history.pushState({}, '', `/lab/items/${itemId}`)
@@ -3003,6 +3222,25 @@ function ItemsDashboardInner() {
             />
           </div>
           
+          {/* Error Filter Indicator */}
+          {isErrorFilterActive && (
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 px-2 py-1 bg-destructive text-foreground rounded-md text-sm">
+                <AlertTriangle className="h-3 w-3" />
+                <span>Errors</span>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsErrorFilterActive(false)}
+                className="h-auto p-1 text-xs"
+                title="Clear error filter"
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            </div>
+          )}
+          
           {/* Search Component */}
           <div className="flex items-center relative @[600px]:w-auto w-full">
             <form onSubmit={handleSearchSubmit} className="relative @[600px]:w-auto w-full">
@@ -3073,6 +3311,25 @@ function ItemsDashboardInner() {
                   />
                 </div>
                 
+                {/* Error Filter Indicator */}
+                {isErrorFilterActive && (
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1 px-2 py-1 bg-destructive text-foreground rounded-md text-sm">
+                      <AlertTriangle className="h-3 w-3" />
+                      <span>Errors</span>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setIsErrorFilterActive(false)}
+                      className="h-auto p-1 text-xs"
+                      title="Clear error filter"
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                )}
+                
                 {/* Search Component */}
                 <div className="flex items-center relative @[600px]:w-auto w-full">
                   <form onSubmit={handleSearchSubmit} className="relative @[600px]:w-auto w-full">
@@ -3133,7 +3390,7 @@ function ItemsDashboardInner() {
                 // Grid view with gauges at top
                 <>
                   {/* ItemsGauges at the top - only show when not in mobile selected item view */}
-                  <ItemsGauges />
+                  <ItemsGauges onErrorClick={handleErrorClick} />
                   
                   {!hasInitiallyLoaded && isLoading ? (
                     <div className="grid grid-cols-2 @[500px]:grid-cols-3 @[700px]:grid-cols-4 @[900px]:grid-cols-5 @[1100px]:grid-cols-6 gap-3 animate-pulse">

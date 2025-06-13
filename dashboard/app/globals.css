@@ -245,6 +245,38 @@
   }
 }
 
+@keyframes destructive-throb {
+  0%, 100% {
+    background-color: hsl(var(--destructive)) !important;
+  }
+  50% {
+    background-color: hsl(var(--destructive) / 0.85) !important;
+  }
+}
+
+.steady-text {
+  animation: none !important;
+  opacity: 1 !important;
+}
+
+@keyframes bg-pulse {
+  0%, 100% { background-color: hsl(var(--destructive)); }
+  50% { background-color: hsl(var(--destructive) / 0.8); }
+}
+
+.error-throb {
+  animation: bg-pulse 2s infinite ease-in-out;
+}
+
+@keyframes glow {
+  0%, 100% { 
+    box-shadow: 0 0 5px hsl(var(--destructive));
+  }
+  50% { 
+    box-shadow: 0 0 15px hsl(var(--destructive)), 0 0 25px hsl(var(--destructive));
+  }
+}
+
 @import "hsl-radix-colors/mauve.css";
 @import "hsl-radix-colors/blue.css";
 @import "hsl-radix-colors/pink.css";

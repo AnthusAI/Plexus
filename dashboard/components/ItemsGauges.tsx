@@ -9,6 +9,8 @@ import { cn } from '@/lib/utils'
 import { useItemsMetrics } from '@/hooks/useItemsMetrics'
 import { Timestamp } from '@/components/ui/timestamp'
 import NumberFlowWrapper from '@/components/ui/number-flow'
+import { AlertTriangle } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 
 // Fallback data for the area chart when loading or no data
 const fallbackChartData = [
@@ -103,6 +105,9 @@ interface ItemsGaugesProps {
   useRealData?: boolean
   // Disable emergence animation (for drawer usage)
   disableEmergenceAnimation?: boolean
+  // Error handling
+  hasErrorsLast24h?: boolean
+  onErrorClick?: () => void
 }
 
 export function ItemsGauges({ 
@@ -117,7 +122,9 @@ export function ItemsGauges({
   scoreResultsTotal24h: overrideScoreResultsTotal24h,
   chartData: overrideChartData,
   useRealData = true,
-  disableEmergenceAnimation = false
+  disableEmergenceAnimation = false,
+  hasErrorsLast24h: overrideHasErrors,
+  onErrorClick
 }: ItemsGaugesProps) {
   const { metrics, isLoading, error } = useItemsMetrics()
   
@@ -140,6 +147,16 @@ export function ItemsGauges({
   const itemsTotal24h = useRealData ? (metrics?.itemsTotal24h ?? 0) : (overrideItemsTotal24h ?? itemsAveragePerHour * 24)
   const scoreResultsTotal24h = useRealData ? (metrics?.scoreResultsTotal24h ?? 0) : (overrideScoreResultsTotal24h ?? scoreResultsAveragePerHour * 24)
   const chartData = useRealData ? (metrics?.chartData ?? fallbackChartData) : (overrideChartData ?? fallbackChartData)
+  const hasErrorsLast24h = useRealData ? (metrics?.hasErrorsLast24h ?? false) : (overrideHasErrors ?? false)
+  
+  // Debug error indicator conditions
+  console.log('🔧 Error indicator conditions:', {
+    useRealData,
+    hasErrorsLast24h,
+    metricsHasErrors: metrics?.hasErrorsLast24h,
+    onErrorClick: !!onErrorClick,
+    shouldShow: useRealData && hasErrorsLast24h && onErrorClick
+  })
   
   // For real data usage, show error state if there's an error and no data at all
   if (useRealData && error && !hasHourlyData && !isLoading) {
@@ -418,8 +435,29 @@ Total score results over last 24 hours` : "Loading hourly metrics..."}
                 </div>
               </div>
               
-              {/* Last updated timestamp - centered - only show when chart is 2+ cells wide */}
-              {useRealData && metrics?.lastUpdated && (
+              {/* Error indicator or Last updated timestamp - centered - only show when chart is 2+ cells wide */}
+              {useRealData && hasErrorsLast24h && onErrorClick && (
+                <div className="absolute left-1/2 transform -translate-x-1/2 flex-col items-center hidden @[700px]:flex">
+                  <div className="relative">
+                    <div 
+                      className="absolute inset-0 bg-destructive rounded-md animate-pulse"
+                    />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={onErrorClick}
+                      className="h-auto p-1 relative z-10"
+                      title="Errors detected in last 24 hours - click to filter"
+                    >
+                      <div className="flex flex-col items-center gap-1 text-attention">
+                        <AlertTriangle className="h-3 w-3" />
+                        <span className="text-[10px] leading-tight">Errors</span>
+                      </div>
+                    </Button>
+                  </div>
+                </div>
+              )}
+              {useRealData && !hasErrorsLast24h && metrics?.lastUpdated && (
                 <div className="absolute left-1/2 transform -translate-x-1/2 flex-col items-center hidden @[700px]:flex">
                   <span className="text-[10px] text-muted-foreground leading-tight">Last updated</span>
                   <Timestamp 
