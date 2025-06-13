@@ -11,6 +11,7 @@ export interface ScoreResultWithDetails {
   accountId: string;
   scorecardId: string;
   scoreId: string;
+  code?: string; // HTTP response code (e.g., "200", "404", "500")
   updatedAt?: string;
   createdAt?: string;
   attachments?: string[] | null;
@@ -76,6 +77,7 @@ export function useItemScoreResults(itemId: string | null) {
                 accountId
                 scorecardId
                 scoreId
+                code
                 updatedAt
                 createdAt
                 attachments
