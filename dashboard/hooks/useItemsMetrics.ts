@@ -34,6 +34,168 @@ interface UseItemsMetricsResult {
 }
 
 /**
+ * Count ScoreResults with errors in the last 24 hours using the efficient GSI
+ */
+async function countErrorsLast24h(accountId: string): Promise<number> {
+  console.log('🔍 countErrorsLast24h called with accountId:', accountId)
+  const now = new Date()
+  const last24Hours = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+  console.log('🕐 Counting errors since:', last24Hours.toISOString())
+  
+  try {
+    // Log the exact query and variables being sent
+    const query = `
+      query CountErrors($accountId: String!) {
+        listScoreResultByAccountIdAndCodeAndUpdatedAt(
+          accountId: $accountId,
+          codeUpdatedAt: { beginsWith: { code: "5" } },
+          sortDirection: DESC,
+          limit: 1000
+        ) {
+          items {
+            id
+            updatedAt
+            code
+            value
+            explanation
+          }
+        }
+      }
+    `
+    const variables = { accountId }
+    
+    console.log('🔍 EXACT GraphQL Query:', query)
+    console.log('🔍 EXACT GraphQL Variables:', variables)
+    
+    // Log the complete GraphQL request as JSON for easy copy/paste
+    const completeRequest = {
+      query: query.trim(),
+      variables: variables
+    }
+    console.log('📝 COMPLETE GraphQL REQUEST (copy this):', JSON.stringify(completeRequest, null, 2))
+    
+    // Use the dedicated code GSI to efficiently find 5xx errors
+    const response = await graphqlRequest<{
+      listScoreResultByAccountIdAndCodeAndUpdatedAt: {
+        items: Array<{ id: string; updatedAt: string; code?: string; value?: string; explanation?: string }>
+      }
+    }>(query, variables)
+    
+    console.log('📊 Error count GSI query response (FULL):', JSON.stringify(response, null, 2))
+    console.log('📊 Number of items returned:', response.data?.listScoreResultByAccountIdAndCodeAndUpdatedAt?.items?.length || 0)
+    
+    // Log each item returned to see what codes/values they have
+    response.data?.listScoreResultByAccountIdAndCodeAndUpdatedAt?.items?.forEach((item, index) => {
+      console.log(`📋 Item ${index}:`, {
+        id: item.id,
+        updatedAt: item.updatedAt,
+        code: item.code,
+        value: item.value,
+        explanation: item.explanation?.substring(0, 100) + '...'
+      })
+    })
+    
+    // Filter results to only those in the last 24 hours (client-side filtering on small result set)
+    const recentErrors = response.data?.listScoreResultByAccountIdAndCodeAndUpdatedAt?.items?.filter(item => {
+      const itemDate = new Date(item.updatedAt)
+      const isRecent = itemDate >= last24Hours
+      console.log('📅 COUNT: Checking error item:', item.id, 'updatedAt:', item.updatedAt, 'itemDate:', itemDate.toISOString(), 'last24Hours:', last24Hours.toISOString(), 'isRecent:', isRecent)
+      return isRecent
+    }) || []
+    
+    console.log('🚨 COUNT: Found recent error ScoreResults:', recentErrors.length)
+    return recentErrors.length
+  } catch (error) {
+    console.error('❌ Error counting ScoreResult errors:', error)
+    
+    // Check if this is because the GSI doesn't exist yet
+    const errorMessage = (error as any)?.message || ''
+    if (errorMessage.includes('Field') && errorMessage.includes('undefined')) {
+      console.log('⚠️ Code GSI not yet deployed, falling back to keyword search method')
+      
+      // Fallback to the old keyword-based approach but with higher limit
+      return await countErrorsWithKeywordFallback(accountId, last24Hours)
+    }
+    
+    return 0
+  }
+}
+
+/**
+ * Comprehensive method for counting errors using keyword search to catch all error patterns
+ */
+async function countErrorsWithKeywordFallback(accountId: string, last24Hours: Date): Promise<number> {
+  try {
+    const response = await graphqlRequest<{
+      listScoreResultByAccountIdAndUpdatedAt: {
+        items: Array<{ 
+          id: string; 
+          updatedAt: string; 
+          value?: string; 
+          explanation?: string; 
+        }>;
+        nextToken: string | null;
+      }
+    }>(`
+      query CountErrorsFallback($accountId: String!) {
+        listScoreResultByAccountIdAndUpdatedAt(
+          accountId: $accountId,
+          sortDirection: DESC,
+          limit: 10000
+        ) {
+          items {
+            id
+            updatedAt
+            value
+            explanation
+          }
+          nextToken
+        }
+      }
+    `, {
+      accountId
+    })
+    
+    console.log('📊 Comprehensive error count query response (first 10000 results):', response)
+    
+    if (response.data?.listScoreResultByAccountIdAndUpdatedAt?.items) {
+      // Filter results to only those in the last 24 hours with error patterns
+      const recentErrorResults = response.data.listScoreResultByAccountIdAndUpdatedAt.items.filter(item => {
+        const itemDate = new Date(item.updatedAt)
+        const isRecent = itemDate >= last24Hours
+        
+        if (!isRecent) return false
+        
+        // Check for error patterns in value and explanation
+        const value = item.value?.toLowerCase() || ''
+        const explanation = item.explanation?.toLowerCase() || ''
+        
+        const hasError = value.includes('error') || 
+                        value.includes('fail') || 
+                        value.includes('exception') || 
+                        explanation.includes('error') || 
+                        explanation.includes('fail') || 
+                        explanation.includes('exception') ||
+                        explanation.includes('timeout') ||
+                        explanation.includes('not found') ||
+                        explanation.includes('invalid')
+        
+        return hasError
+      })
+      
+      console.log('🚨 Found recent error ScoreResults (comprehensive):', recentErrorResults.length)
+      return recentErrorResults.length
+    }
+    
+    console.log('🚫 No ScoreResults found in comprehensive response')
+    return 0
+  } catch (error) {
+    console.error('❌ Error in comprehensive counting method:', error)
+    return 0
+  }
+}
+
+/**
  * Check if there are any ScoreResults with error codes (5xx) in the last 24 hours
  */
 async function checkForErrorsLast24h(accountId: string): Promise<boolean> {
@@ -43,30 +205,57 @@ async function checkForErrorsLast24h(accountId: string): Promise<boolean> {
   console.log('🕐 Checking for errors since:', last24Hours.toISOString())
   
   try {
-    // Use the dedicated code GSI to efficiently find 5xx errors
-    const response = await graphqlRequest<{
-      listScoreResultByAccountIdAndCodeAndUpdatedAt: {
-        items: Array<{ id: string; updatedAt: string }>
-      }
-    }>(`
+    // Log the exact query and variables being sent
+    const query = `
       query CheckForErrors($accountId: String!) {
         listScoreResultByAccountIdAndCodeAndUpdatedAt(
           accountId: $accountId,
           codeUpdatedAt: { beginsWith: { code: "5" } },
           sortDirection: DESC,
-          limit: 10
+          limit: 1000
         ) {
           items {
             id
             updatedAt
+            code
+            value
+            explanation
           }
         }
       }
-    `, {
-      accountId
-    })
+    `
+    const variables = { accountId }
     
-    console.log('📊 GSI query response:', response)
+    console.log('🔍 CHECK: EXACT GraphQL Query:', query)
+    console.log('🔍 CHECK: EXACT GraphQL Variables:', variables)
+    
+    // Log the complete GraphQL request as JSON for easy copy/paste
+    const completeRequest = {
+      query: query.trim(),
+      variables: variables
+    }
+    console.log('📝 CHECK: COMPLETE GraphQL REQUEST (copy this):', JSON.stringify(completeRequest, null, 2))
+    
+    // Use the dedicated code GSI to efficiently find 5xx errors
+    const response = await graphqlRequest<{
+      listScoreResultByAccountIdAndCodeAndUpdatedAt: {
+        items: Array<{ id: string; updatedAt: string; code?: string; value?: string; explanation?: string }>
+      }
+    }>(query, variables)
+    
+    console.log('📊 CHECK: GSI query response (FULL):', JSON.stringify(response, null, 2))
+    console.log('📊 CHECK: Number of items returned:', response.data?.listScoreResultByAccountIdAndCodeAndUpdatedAt?.items?.length || 0)
+    
+    // Log each item returned to see what codes/values they have
+    response.data?.listScoreResultByAccountIdAndCodeAndUpdatedAt?.items?.forEach((item, index) => {
+      console.log(`📋 CHECK Item ${index}:`, {
+        id: item.id,
+        updatedAt: item.updatedAt,
+        code: item.code,
+        value: item.value,
+        explanation: item.explanation?.substring(0, 100) + '...'
+      })
+    })
     
     // Filter results to only those in the last 24 hours (client-side filtering on small result set)
     const recentErrors = response.data?.listScoreResultByAccountIdAndCodeAndUpdatedAt?.items?.filter(item => {
@@ -187,10 +376,11 @@ async function calculateMetrics(
     const chartData = await chartDataPromise
     
     // Get final 24-hour totals and check for errors in parallel (these should be mostly cached from chart generation)
-    const [itemsMetrics24h, scoreResultsMetrics24h, hasErrorsLast24h] = await Promise.all([
+    const [itemsMetrics24h, scoreResultsMetrics24h, hasErrorsLast24h, totalErrors24h] = await Promise.all([
       getAggregatedMetrics(accountId, 'items', last24Hours, now),
       getAggregatedMetrics(accountId, 'scoreResults', last24Hours, now),
-      checkForErrorsLast24h(accountId)
+      checkForErrorsLast24h(accountId),
+      countErrorsLast24h(accountId)
     ]);
     
     console.log('🎯 Final hasErrorsLast24h value:', hasErrorsLast24h);
@@ -215,7 +405,7 @@ async function calculateMetrics(
       totalDecisions24h: scoreResultsMetrics24h.decisionCount || 0,
       totalExternalApiCalls24h: scoreResultsMetrics24h.externalAiApiCount || 0,
       totalCachedApiCalls24h: scoreResultsMetrics24h.cachedAiApiCount || 0,
-      totalErrors24h: scoreResultsMetrics24h.errorCount || 0,
+      totalErrors24h: totalErrors24h,
       costPerHour,
       // Error detection for dashboard alerts
       hasErrorsLast24h,
