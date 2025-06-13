@@ -32,6 +32,7 @@ export interface ScoreResultData {
   accountId: string
   scorecardId: string
   scoreId: string
+  code?: string // HTTP response code (e.g., "200", "404", "500")
   trace?: any | null
   attachments?: string[] | null
   scorecard?: {
@@ -81,59 +82,20 @@ const ScoreResultCard = React.forwardRef<HTMLDivElement, ScoreResultCardProps>((
 
   // Extract error information from the score result - same logic as ItemScoreResults
   const errorInfo = React.useMemo(() => {
-    const value = scoreResult.value?.toLowerCase() || '';
-    const explanation = scoreResult.explanation?.toLowerCase() || '';
     
-    const hasError = value.includes('error') || 
-           value.includes('fail') || 
-           value.includes('exception') || 
-           explanation.includes('error') || 
-           explanation.includes('fail') || 
-           explanation.includes('exception') ||
-           explanation.includes('timeout') ||
-           explanation.includes('not found') ||
-           explanation.includes('invalid');
+    const hasError = scoreResult.code?.match(/\b([4-5]\d{2})\b/);
 
     if (!hasError) {
       return { hasError: false, errorCode: null, errorMessage: null };
     }
 
-    // Try to extract error code from value or explanation
-    let detectedErrorCode = null;
-    let detectedErrorMessage = null;
-
-    // Look for HTTP status codes
-    const statusCodeMatch = (scoreResult.value + ' ' + (scoreResult.explanation || '')).match(/\b([4-5]\d{2})\b/);
-    if (statusCodeMatch) {
-      detectedErrorCode = statusCodeMatch[1];
-    }
-
-    // Look for common error messages
-    const fullText = scoreResult.value + ' ' + (scoreResult.explanation || '');
-    if (fullText.toLowerCase().includes('timeout')) {
-      detectedErrorMessage = 'Request timeout';
-      detectedErrorCode = detectedErrorCode || '408';
-    } else if (fullText.toLowerCase().includes('not found')) {
-      detectedErrorMessage = 'Resource not found';
-      detectedErrorCode = detectedErrorCode || '404';
-    } else if (fullText.toLowerCase().includes('invalid')) {
-      detectedErrorMessage = 'Invalid request';
-      detectedErrorCode = detectedErrorCode || '400';
-    } else if (fullText.toLowerCase().includes('exception')) {
-      detectedErrorMessage = 'Internal exception';
-      detectedErrorCode = detectedErrorCode || '500';
-    } else {
-      detectedErrorMessage = 'Unknown error';
-      detectedErrorCode = detectedErrorCode || '500';
-    }
-
     // Use provided props if available, otherwise use detected values
     return { 
       hasError: true, 
-      errorCode: errorCode || detectedErrorCode, 
-      errorMessage: errorMessage || detectedErrorMessage 
+      errorCode: scoreResult.code, 
+      errorMessage: 'Oops!'
     };
-  }, [scoreResult.value, scoreResult.explanation, errorCode, errorMessage]);
+  }, [scoreResult.code, errorCode, errorMessage]);
 
   const [isNarrowViewport, setIsNarrowViewport] = React.useState(false)
   const [traceData, setTraceData] = React.useState<any>(null)

@@ -73,54 +73,15 @@ const ScoreResultCard: React.FC<{
 
   // Extract error information from the score result
   const errorInfo = React.useMemo(() => {
-    const value = result.value?.toLowerCase() || '';
-    const explanation = result.explanation?.toLowerCase() || '';
-    
-    const hasError = value.includes('error') || 
-           value.includes('fail') || 
-           value.includes('exception') || 
-           explanation.includes('error') || 
-           explanation.includes('fail') || 
-           explanation.includes('exception') ||
-           explanation.includes('timeout') ||
-           explanation.includes('not found') ||
-           explanation.includes('invalid');
+    // Only check the code field for errors - don't look at text content
+    const hasError = result.code && /^[4-5]\d{2}$/.test(result.code);
 
     if (!hasError) {
       return { hasError: false, errorCode: null, errorMessage: null };
     }
 
-    // Try to extract error code from value or explanation
-    let errorCode = null;
-    let errorMessage = null;
-
-    // Look for HTTP status codes
-    const statusCodeMatch = (result.value + ' ' + (result.explanation || '')).match(/\b([4-5]\d{2})\b/);
-    if (statusCodeMatch) {
-      errorCode = statusCodeMatch[1];
-    }
-
-    // Look for common error messages
-    const fullText = result.value + ' ' + (result.explanation || '');
-    if (fullText.toLowerCase().includes('timeout')) {
-      errorMessage = 'Request timeout';
-      errorCode = errorCode || '408';
-    } else if (fullText.toLowerCase().includes('not found')) {
-      errorMessage = 'Resource not found';
-      errorCode = errorCode || '404';
-    } else if (fullText.toLowerCase().includes('invalid')) {
-      errorMessage = 'Invalid request';
-      errorCode = errorCode || '400';
-    } else if (fullText.toLowerCase().includes('exception')) {
-      errorMessage = 'Internal exception';
-      errorCode = errorCode || '500';
-    } else {
-      errorMessage = 'Unknown error';
-      errorCode = errorCode || '500';
-    }
-
-    return { hasError: true, errorCode, errorMessage };
-  }, [result.value, result.explanation]);
+    return { hasError: true, errorCode: result.code, errorMessage: null };
+  }, [result.code]);
 
   const hasError = errorInfo.hasError;
   
