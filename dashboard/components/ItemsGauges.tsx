@@ -434,8 +434,8 @@ Total score results over last 24 hours` : "Loading hourly metrics..."}
                   <span className="text-muted-foreground text-xs leading-tight">Items / day</span>
                 </div>
               </div>
-              {/* Center: Error indicator or Last updated timestamp - always centered in the chart card */}
-              <div className="flex flex-col items-center flex-1 min-w-0">
+              {/* Center: Error indicator or Last updated timestamp - absolutely centered in the chart card */}
+              <div className="absolute left-1/2 bottom-0 transform -translate-x-1/2 mb-1 flex flex-col items-center z-10">
                 {useRealData && hasErrorsLast24h && onErrorClick && (
                   <div className="relative">
                     <div 
