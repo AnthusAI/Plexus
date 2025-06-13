@@ -93,7 +93,7 @@ const ScoreResultCard: React.FC<{
       className={`mb-3 bg-background rounded-lg p-4 relative overflow-visible cursor-pointer hover:bg-accent/50 transition-colors ${
         result.isNew ? 'new-score-result-glow' : ''
       } ${
-        isSelected ? 'bg-card-selected selected-border-rounded' : ''
+        isSelected ? 'selected-border-rounded' : ''
       } ${
         hasError ? 'error-border-rounded' : ''
       }`}
