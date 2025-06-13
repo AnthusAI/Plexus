@@ -36,7 +36,7 @@
   --accent-foreground: hsl(var(--mauve-11));
   --accent-selected-foreground: hsl(var(--mauve-11));
   --navigation-icon: hsl(var(--violet-11));
-  --destructive: hsl(var(--red-9));
+  --destructive: hsl(var(--red-6));
   --destructive-selected: hsl(var(--red-10));
   --destructive-foreground: hsl(var(--mauve-11));
   --destructive-selected-foreground: hsl(var(--mauve-11));
