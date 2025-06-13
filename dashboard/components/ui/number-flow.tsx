@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import NumberFlow from "@number-flow/react";
 import { type Format } from "@number-flow/react";
 
