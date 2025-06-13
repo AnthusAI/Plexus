@@ -3439,15 +3439,13 @@ function ItemsDashboardInner() {
                   <div className="h-full overflow-hidden flex-1">
                     {renderSelectedItem()}
                   </div>
-                  
                   {/* Divider between ItemCard and ScoreResultCard */}
                   <div
                     className="w-[12px] relative cursor-col-resize flex-shrink-0 group"
                   >
-                    <div className="absolute inset-0 rounded-full transition-colors duration-150 
+                    <div className="absolute inset-0 rounded-full transition-colors duration-150 \
                       group-hover:bg-accent" />
                   </div>
-
                   {/* Score result panel - takes equal space with ItemCard */}
                   <div className="h-full overflow-hidden flex-1">
                     <ScoreResultCard
@@ -3459,7 +3457,12 @@ function ItemsDashboardInner() {
                 </>
               ) : (
                 // When no score result is selected, show normal item view
-                <div 
+                <motion.div
+                  key={selectedItem}
+                  initial={{ x: '100%', opacity: 0 }}
+                  animate={{ x: 0, opacity: 1 }}
+                  exit={{ x: '100%', opacity: 0 }}
+                  transition={{ type: 'spring', stiffness: 300, damping: 30 }}
                   className="h-full overflow-hidden"
                   style={{ 
                     width: isFullWidth 
@@ -3468,7 +3471,7 @@ function ItemsDashboardInner() {
                   }}
                 >
                   {renderSelectedItem()}
-                </div>
+                </motion.div>
               )}
             </>
           )}
