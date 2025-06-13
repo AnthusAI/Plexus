@@ -48,7 +48,6 @@ class ExplainableClassifier(Score):
         self.val_input_ids = None
         self.val_attention_mask = None
 
-        # Convert the ngram_range string to a tuple
         if ',' in self.parameters.ngram_range:
             start, end = map(int, self.parameters.ngram_range.split(','))
             self.ngram_range = (start, end)
@@ -59,13 +58,11 @@ class ExplainableClassifier(Score):
     def train_model(self):
         logging.info("Vectorizing text data using TF-IDF...")
 
-        # Extract the text data and target labels from the sampled dataframe
         self.original_text_data = self.dataframe['text'].tolist()
-        text_data = self.original_text_data  # We'll use this for vectorization
+        text_data = self.original_text_data
         y = self.dataframe[self.parameters.score_name]
         logging.info(f"Number of examples: {len(text_data)}")
 
-        # Create a TF-IDF representation
         logging.info(f"Creating TF-IDF representation with ngram range: {self.parameters.ngram_range}")
         self.vectorizer = TfidfVectorizer(ngram_range=self.ngram_range)
         X = self.vectorizer.fit_transform(text_data)
@@ -74,7 +71,6 @@ class ExplainableClassifier(Score):
 
         logging.info(f"Number of features before selection: {X.shape[1]}")
 
-        # Select top N features based on ANOVA F-value with f_classif
         selection_function = mutual_info_classif
 
         logging.info(f"Selecting top {self.parameters.top_n_features} features...")
@@ -91,7 +87,6 @@ class ExplainableClassifier(Score):
 
         logging.info(f"Number of features after selection: {X_selected.shape[1]}")
 
-        # Split the data into training and testing sets using the selected features
         logging.info("Splitting data into training and testing sets...")
         test_size_proportion = 0.2
         indices = np.arange(X_selected.shape[0])
@@ -101,18 +96,15 @@ class ExplainableClassifier(Score):
         logging.info(f"Train indices: {self.train_indices[:5]} ... (showing first 5)")
         logging.info(f"Test indices: {self.test_indices[:5]} ... (showing first 5)")
 
-        # Log the shape and distribution of the training and testing sets
         logging.info(f"Training set shape: {self.X_train.shape}, Testing set shape: {self.X_test.shape}")
         logging.info(f"Training set class distribution: {self.y_train.value_counts(normalize=True)}")
         logging.info(f"Testing set class distribution: {self.y_test.value_counts(normalize=True)}")
 
-        # Calculate the negative and positive counts before applying SMOTE
         target_score_value = self.parameters.target_score_value
         self.y_train_binary = (self.y_train == target_score_value)
         negative_count = (~self.y_train_binary).sum()
         positive_count = self.y_train_binary.sum()
 
-        # Oversampling using SMOTE (Synthetic Minority Over-sampling Technique)
         smote = SMOTE(random_state=42)
         self.X_train, self.y_train = smote.fit_resample(self.X_train, self.y_train)
 
@@ -125,7 +117,6 @@ class ExplainableClassifier(Score):
         print(self.y_test.value_counts(normalize=True))
 
         print("Unique values before encoding:", np.unique(y))
-        # Encode the target variable if it's not already encoded
         if self.y_train.dtype == 'object':
             self.label_encoder = LabelEncoder()
             self.y_train_encoded = self.label_encoder.fit_transform(self.y_train)
@@ -134,26 +125,21 @@ class ExplainableClassifier(Score):
             self.y_train_encoded = self.y_train
             self.y_test_encoded = self.y_test
             self.label_encoder = LabelEncoder()
-            self.label_encoder.classes_ = np.array(['No', 'Yes'])  # Assuming 0 is 'No' and 1 is 'Yes'
+            self.label_encoder.classes_ = np.array(['No', 'Yes'])
 
-        # Set up the label map using the standardized method
         self.setup_label_map(self.label_encoder.classes_)
         logging.info(f"Label map in train_model(): {self.label_map}")
         
         print("Unique values after encoding:", np.unique(self.y_train_encoded), np.unique(self.y_test_encoded))
 
-        # Check if it's a binary or multi-class classification problem
         if len(np.unique(self.y_train_encoded)) == 2:
-            # Binary classification
             logging.info("Training XGBoost Classifier for binary classification...")
 
-            # Calculate the automatic scale_pos_weight value
             auto_scale_pos_weight = negative_count / positive_count
             logging.info(f"Negative count: {negative_count}")
             logging.info(f"Positive count: {positive_count}")
             logging.info(f"Auto scale pos weight: {auto_scale_pos_weight}")
             
-            # Calculate the final scale_pos_weight value based on the index
             scale_pos_weight = 1 + (auto_scale_pos_weight - 1) * self.parameters.scale_pos_weight_index
             logging.info(f"Scale pos weight: {scale_pos_weight}")
             
@@ -165,7 +151,6 @@ class ExplainableClassifier(Score):
                 scale_pos_weight=scale_pos_weight,
             )
         else:
-            # Multi-class classification
             logging.info("Training XGBoost Classifier for multi-class classification...")
             self.model = xgb.XGBClassifier(
                 n_estimators=100,
@@ -196,14 +181,11 @@ class ExplainableClassifier(Score):
         answer_index = list(self.label_encoder.classes_).index(self.parameters.target_score_value)
         logging.info(f"Index of the answer value '{self.parameters.target_score_value}' in label encoder's classes: {answer_index}")
 
-        # Extract the SHAP values for the desired answer index
         shap_values_answer = None
         if len(self.label_encoder.classes_) == 2:
-            # For binary classification, shap_values.values has shape (n_instances, n_features)
             shap_values_answer = shap_values.values
             logging.info("Binary classification detected. Using SHAP values for all instances.")
         else:
-            # For multi-class classification, shap_values.values has shape (n_instances, n_classes, n_features)
             shap_values_answer = shap_values.values[:, answer_index, :]
             logging.info(f"Multi-class classification detected. Extracting SHAP values for class index {answer_index}.")
 
@@ -214,7 +196,6 @@ class ExplainableClassifier(Score):
         logging.info(f"Selected {selected_feature_names_count} feature names: {selected_feature_names[:10]}")
         
         # Calculate the mean SHAP value for each feature
-        # Calculate the mean SHAP value for each feature
         shap_values_list = [
             (feature, np.mean(shap_values_answer[:, featureIndex]))
             for featureIndex, feature in enumerate(selected_feature_names)
@@ -223,8 +204,6 @@ class ExplainableClassifier(Score):
         logging.info("Mean SHAP values calculated for each feature.")
 
         ##########
-        # Rich table
-
         shapley_analysis_table = Table(
         title=f"[royal_blue1][b]{self.parameters.target_score_name}[/b][/royal_blue1]",
         header_style="sky_blue1",
@@ -260,9 +239,6 @@ class ExplainableClassifier(Score):
 
         rich.print(Panel(shapley_analysis_table, title="[b]SHAP Analysis[/b]", style="sky_blue1"))
 
-        # Rich table
-        ##########
-
         ##########
         # SHAP plots
         plt.clf()
@@ -272,10 +248,8 @@ class ExplainableClassifier(Score):
         top_positive_features = [feature for feature, _ in sorted_positive_shap_values[:self.parameters.leaderboard_n_features]]
         top_negative_features = [feature for feature, _ in sorted_negative_shap_values[:self.parameters.leaderboard_n_features]]
 
-        # Convert selected_feature_names to a list
         selected_feature_names_list = selected_feature_names.tolist()
 
-        # Plot SHAP summary for top positive features
         top_positive_indices = [selected_feature_names_list.index(feature) for feature in top_positive_features]
         shap_values_positive = shap_values_answer[:, top_positive_indices]
         shap_explanation_positive = shap.Explanation(
@@ -290,7 +264,6 @@ class ExplainableClassifier(Score):
         plt.savefig(os.path.join(report_directory_path, "shap_summary_top_positive.png"))
         plt.close()
 
-        # Plot SHAP summary for top negative features
         plt.clf()
         top_negative_indices = [selected_feature_names_list.index(feature) for feature in top_negative_features]
         shap_values_negative = shap_values_answer[:, top_negative_indices]
@@ -319,7 +292,6 @@ class ExplainableClassifier(Score):
             original_text = self.original_text_data[original_index]
             true_label = self.val_labels.iloc[i]
 
-            # Use the actual predict() function
             result = self.predict(None, original_text)[0]
 
             self.val_predictions.append(result.score)
@@ -328,7 +300,7 @@ class ExplainableClassifier(Score):
 
             if i == 0 or result.score != true_label:
                 logging.info(f"{'First sample' if i == 0 else 'Mismatch'} (index {i}):")
-                logging.info(f"Original text:\n{original_text[:500]}...")  # Log first 500 characters
+                logging.info(f"Original text:\n{original_text[:500]}...")
                 logging.info(f"True label: {true_label}")
                 logging.info(f"Prediction: {result.score}")
                 logging.info(f"Confidence: {result.confidence}")
@@ -353,21 +325,16 @@ class ExplainableClassifier(Score):
             logging.info(f"  Sample {i}: True: {self.val_labels.iloc[i]}, Predicted: {self.val_predictions[i]}, Confidence: {self.val_confidence_scores[i]:.4f}")
 
     def preprocess_text(self, text):
-        # Implement any necessary preprocessing steps here
-        # This should mimic the preprocessing done during training
-        return text  # For now, just return the text as-is
+        return text
 
     def evaluate_model(self):
-        # Set the necessary attributes before calling the parent's evaluate_model()
         self.val_input_ids = self.dataframe['text']
-        self.val_attention_mask = None  # Set this if applicable to your model
+        self.val_attention_mask = None
 
         super().evaluate_model()
 
-        # Perform any additional evaluation specific to ExplainableClassifier
         self.explain_model()
 
-    # This visualization doesn't work for fastText, so leave it out.
     def _plot_training_history(self):
         pass
 
@@ -390,9 +357,8 @@ class ExplainableClassifier(Score):
         confidence: float
         explanation: str
 
-    # New method to vectorize a single transcript
-    def vectorize_transcript(self, transcript: str):        
-        vectorized = self.vectorizer.transform([transcript])        
+    def vectorize_transcript(self, transcript: str):
+        vectorized = self.vectorizer.transform([transcript])
         selected = self.selector.transform(vectorized)
         return selected
 
@@ -400,13 +366,10 @@ class ExplainableClassifier(Score):
         if isinstance(model_input, str):
             preprocessed_input = self.preprocess_text(model_input)
             
-            # Check for keyword matches
             if self.parameters.keywords:
                 for keyword in self.parameters.keywords:
-                    # Use regex to find whole word matches
                     pattern = r'\b' + re.escape(keyword) + r'\b'
                     if re.search(pattern, preprocessed_input, re.IGNORECASE):
-                        # Find the sentence containing the keyword
                         sentences = preprocessed_input.split('.')
                         matching_sentence = next((s for s in sentences if re.search(pattern, s, re.IGNORECASE)), '')
                         
@@ -431,7 +394,6 @@ class ExplainableClassifier(Score):
         
         prediction_label = list(self.label_map.keys())[list(self.label_map.values()).index(prediction)]
         
-        # Generate a basic explanation
         feature_importance = self.model.feature_importances_
         feature_names = self.feature_names
         sorted_idx = feature_importance.argsort()
@@ -518,10 +480,8 @@ class ExplainableClassifier(Score):
 
         sample_features = [self.feature_names[i] for i in non_zero_indices]
         
-        # Handle multi-class SHAP values
         if shap_values.ndim == 3:  # Multi-class case
             logging.debug("Multi-class SHAP values detected")
-            # For multi-class, use the SHAP values for the predicted class
             sample_shap_values = shap_values[0, non_zero_indices, prediction]
         else:
             logging.debug("Binary classification SHAP values detected")
@@ -529,7 +489,6 @@ class ExplainableClassifier(Score):
 
         logging.debug(f"Shape of sample_shap_values: {sample_shap_values.shape}")
         
-        # Ensure sample_shap_values is 1-dimensional
         if sample_shap_values.ndim > 1:
             sample_shap_values = sample_shap_values.flatten()
 
@@ -567,7 +526,7 @@ class ExplainableClassifier(Score):
         shap_explanation = shap.Explanation(
             values=top_shap_values,
             base_values=self.explainer.expected_value[prediction] if isinstance(self.explainer.expected_value, list) else self.explainer.expected_value,
-            data=np.zeros(len(top_features)),  # Placeholder data
+            data=np.zeros(len(top_features)),
             feature_names=top_features
         )
 

@@ -49,7 +49,6 @@ class BatchProcessingPause(Exception):
         self.message = message or f"Execution paused for batch processing. Thread ID: {thread_id}"
         super().__init__(self.message)
 
-# Temporarily suppress specific Pydantic warnings
 warnings.filterwarnings(
     "ignore",
     message="Field \"model_.*\" .* has conflict with protected namespace \"model_\".*"
@@ -103,7 +102,7 @@ class LangGraphScore(Score, LangChainUser):
 
     2. Batch processing:
         async for result in score.batch_predict(texts):
-            # Process each result
+            ...
 
     3. Cost optimization:
         score.reset_token_usage()
