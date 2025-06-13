@@ -1643,7 +1643,8 @@ Total cost:       ${expenses['total_cost']:.6f}
                 'scorecardId': self.scorecard_id,
                 'scoreId': self.score_id,
                 'value': value,
-                'metadata': json.dumps(metadata_dict)  # Ensure metadata is a JSON string
+                'metadata': json.dumps(metadata_dict),  # Ensure metadata is a JSON string
+                'code': '200'  # HTTP response code for successful evaluation
             }
 
             # Add trace data if available
@@ -1661,7 +1662,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                 self.logging.info(f"{key}: {truncate_dict_strings_inner(value)}")
 
             # Validate all required fields are present and not None
-            required_fields = ['evaluationId', 'itemId', 'accountId', 'scorecardId', 'value', 'metadata']
+            required_fields = ['evaluationId', 'itemId', 'accountId', 'scorecardId', 'value', 'metadata', 'code']
             missing_fields = [field for field in required_fields if not data.get(field)]
             if missing_fields:
                 self.logging.error(f"Missing required fields: {', '.join(missing_fields)}")
@@ -1679,6 +1680,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                     value
                     metadata
                     trace
+                    code
                 }
             }
             """
