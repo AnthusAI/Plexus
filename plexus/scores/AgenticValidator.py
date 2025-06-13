@@ -25,9 +25,6 @@ from langchain.memory import SimpleMemory
 from langchain_community.chat_models import ChatOpenAI, AzureChatOpenAI
 from langchain.tools.render import render_text_description
 
-# from langchain.globals import set_debug
-# set_debug(True)
-
 class SchoolInfo(BaseModel):
     school_name: str = Field(description="Name of the school mentioned")
     modality: str = Field(description="Modality of the program (e.g., online, on-campus)")
@@ -114,7 +111,6 @@ class AgenticValidator(LangGraphScore):
         def parse(self, text: str) -> Union[AgentAction, AgentFinish]:
             try:
                 if "Action: Finish" in text:
-                    # Extract the final answer after "Action Input:"
                     final_answer = text.split("Action Input:")[-1].strip()
                     return AgentFinish(return_values={"output": final_answer}, log=text)
                 elif "Action:" in text and "Action Input:" in text:
@@ -180,10 +176,6 @@ class AgenticValidator(LangGraphScore):
         elif self.parameters.agent_type == "langgraph":
             self.workflow = self._create_langgraph_workflow()
 
-        # TODO: Only do this during development/evaluation/etc.  Not production.
-        # Generate and save the graph visualization
-        # self.generate_graph_visualization()
-
     def _create_react_workflow(self):
         """
         Create and return the LangGraph workflow for the validation process.
@@ -193,27 +185,18 @@ class AgenticValidator(LangGraphScore):
         """
         workflow = StateGraph(ValidationState)
 
-        # Define custom start node
         BEGIN_VALIDATION = self.parameters.name
 
-        # Define new "Has Dependency?" node
         HAS_DEPENDENCY = "Has Dependency?"
-
-        # Define dependency check node
         if self.parameters.dependency and 'name' in self.parameters.dependency:
             DEPENDENCY_CHECK = self.parameters.dependency['name']
         else:
             DEPENDENCY_CHECK = "Dependency Check"
-
-        # Add all nodes
         workflow.add_node(BEGIN_VALIDATION, self._initialize_memory)
         workflow.add_node(HAS_DEPENDENCY, self._has_dependency_prompt)
         workflow.add_node(DEPENDENCY_CHECK, self._check_dependency)
         workflow.add_node("Run Prediction", self._validate_step)
-
-        # Add conditional edges
         workflow.add_edge(BEGIN_VALIDATION, HAS_DEPENDENCY)
-        
         workflow.add_conditional_edges(
             HAS_DEPENDENCY,
             lambda x: x.has_dependency,
@@ -222,7 +205,6 @@ class AgenticValidator(LangGraphScore):
                 False: "Run Prediction"
             }
         )
-
         workflow.add_conditional_edges(
             DEPENDENCY_CHECK,
             self._should_continue_validation,
@@ -231,10 +213,7 @@ class AgenticValidator(LangGraphScore):
                 False: END
             }
         )
-
         workflow.add_edge("Run Prediction", END)
-
-        # Set the custom start node
         workflow.set_entry_point(BEGIN_VALIDATION)
 
         return workflow.compile()
@@ -281,8 +260,7 @@ class AgenticValidator(LangGraphScore):
             """
             
             response = self.model.invoke(full_prompt)
-            
-            # Use the inherited _parse_validation_result method
+
             validation_result, explanation = self._parse_validation_result(response.content)
             
             self.current_state.current_step = "dependency_check"
@@ -392,19 +370,16 @@ class AgenticValidator(LangGraphScore):
 
             label_values = []
             for label in self.parameters.labels:
-                # Find all keys that match the pattern school_\d+_{label}
-                matching_keys = [key for key in self.current_state.metadata.keys() 
+                matching_keys = [key for key in self.current_state.metadata.keys()
                                  if key.startswith("school_") and key.endswith(f"_{label}")]
 
                 if not matching_keys:
                     logging.warning(f"No values found for label '{label}' in the metadata")
                     continue
 
-                # Extract all values for the matching keys, remove duplicates, and filter out None and empty values
                 values = list(set(str(value) for key in matching_keys if (value := self.current_state.metadata.get(key)) not in (None, "", "nan")))
 
                 if values:
-                    # Join unique values if there's more than one, otherwise use the single value
                     label_values.append(f"{label}: {' and '.join(values)}")
 
             if not label_values:
@@ -412,15 +387,11 @@ class AgenticValidator(LangGraphScore):
 
             logging.info(f"Extracted label values: {label_values}")
             
-            # Join all label values into a single string
             label_value_string = ", ".join(label_values)
-            
-            # Use the custom prompt from the YAML file
             custom_prompt = self.parameters.prompt.format(label_value=label_value_string)
             
             input_string = f"Answer the following: {custom_prompt}"
             
-            # Log the agent's memory before execution
             logging.info("Agent's memory before execution:")
             for key, value in self.agent_executor.memory.memories.items():
                 logging.info(f"{key}: {value}")
@@ -434,10 +405,8 @@ class AgenticValidator(LangGraphScore):
             logging.info(f"Agent executor result: {result}")
             logging.info(f"Token usage after agent execution: Prompt: {self.token_counter.prompt_tokens}, Completion: {self.token_counter.completion_tokens}, Total: {self.token_counter.total_tokens}")
             
-            # Get the full output including all steps and observations
             full_output = result['output']
             
-            # Parse the result
             validation_result, explanation = self._parse_validation_result(full_output)
             
             self.current_state.current_step = "main_validation"
@@ -530,7 +499,6 @@ class AgenticValidator(LangGraphScore):
         self.current_state = initial_state
         logging.info(f"Initial state: {initial_state}")
 
-        # Reset token usage before each prediction
         self.reset_token_usage()
 
         logging.info("Starting workflow invocation")
@@ -540,15 +508,12 @@ class AgenticValidator(LangGraphScore):
         logging.info(f"Final state: {final_state}")
 
         if self.parameters.agent_type == "react":
-            # Handle the case where final_state is an AddableValuesDict
             if isinstance(final_state, dict):
                 validation_result = final_state.get('validation_result', 'Unknown')
                 explanation = final_state.get('explanation', '')
             else:
                 validation_result = final_state.validation_result
                 explanation = final_state.explanation
-
-            # Get the current step
             current_step = final_state.get('current_step', '') if isinstance(final_state, dict) else final_state.current_step
 
             logging.info(f"{current_step.capitalize()}: {validation_result}")
@@ -557,8 +522,6 @@ class AgenticValidator(LangGraphScore):
         elif self.parameters.agent_type == "langgraph":
             validation_result = "Yes" if final_state['all_information_provided'] else "No"
             explanation = "All required information was provided." if final_state['all_information_provided'] else "Some information was missing or unclear."
-            
-            # Create a formatted string of school information for multiple schools
             school_info = "\n\n".join([
                 f"School: {school.school_name}\n"
                 f"Modality: {school.modality}\n"
@@ -570,8 +533,6 @@ class AgenticValidator(LangGraphScore):
             num_schools = len(final_state['parsed_schools'])
             explanation += f"\n\nNumber of schools found: {num_schools}"
             explanation += f"\n\nExtracted school information:\n{school_info}"
-
-        # Get token usage
         token_usage = self.get_token_usage()
         
         logging.info(f"Final token usage - Total LLM calls: {token_usage['successful_requests']}")
@@ -579,8 +540,6 @@ class AgenticValidator(LangGraphScore):
         logging.info(f"Final token usage - Prompt tokens: {token_usage['prompt_tokens']}")
         logging.info(f"Final token usage - Completion tokens: {token_usage['completion_tokens']}")
         logging.info(f"Parameters: {self.parameters}")
-
-        # Calculate cost for all model types
         try:
             cost_info = calculate_cost(
                 model_name=self.parameters.model_name,

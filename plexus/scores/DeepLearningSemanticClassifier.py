@@ -25,7 +25,6 @@ if tf.test.is_gpu_available():
     policy = mixed_precision.Policy('mixed_float16')
     mixed_precision.set_global_policy(policy)
 else:
-    # Use default float32 policy for CPU
     mixed_precision.set_global_policy('float32')
 
 class DeepLearningSemanticClassifier(Score):
@@ -63,7 +62,6 @@ class DeepLearningSemanticClassifier(Score):
         if cls is DeepLearningSemanticClassifier:
             from plexus.scores.DeepLearningSlidingWindowSemanticClassifier import DeepLearningSlidingWindowSemanticClassifier
             
-            # Validate parameters
             try:
                 validated_parameters = cls.Parameters(**parameters).dict()
             except ValidationError as e:
@@ -147,8 +145,6 @@ class DeepLearningSemanticClassifier(Score):
         With naive truncation, the training and validation data will be 2D tensors.
         """
 
-        # Call the parent process_data method first, which will iterate over any processor classes
-        # configured in the scorecard YAML file.
         super().process_data()
 
         #############
@@ -165,19 +161,15 @@ class DeepLearningSemanticClassifier(Score):
         label_map = {}
 
         def split_into_sentences(text):
-            # Download the punkt tokenizer if not already available
             try:
                 nltk.data.find('tokenizers/punkt')
             except LookupError:
                 nltk.download('punkt')
 
-            # Create a PunktSentenceTokenizer instance
             tokenizer = PunktSentenceTokenizer()
 
-            # Tokenize the text into sentences
             sentences = tokenizer.tokenize(text)
 
-            # Post-process sentences (remove empty ones and strip whitespace)
             processed_sentences = [sentence.strip() for sentence in sentences if sentence.strip()]
 
             return processed_sentences
@@ -208,7 +200,6 @@ class DeepLearningSemanticClassifier(Score):
             current_window = []
             current_window_tokens = []
 
-            # Use the split_into_sentences function
             sentences = split_into_sentences(text)
 
             if start_from_end:
@@ -230,7 +221,6 @@ class DeepLearningSemanticClassifier(Score):
                     current_window = [sentence]
                     current_window_tokens = sentence_tokens
 
-                # Truncate to the maximum number of windows, but only if that is specified.
                 if max_windows and len(windows) >= max_windows:
                     break
 
@@ -269,13 +259,10 @@ class DeepLearningSemanticClassifier(Score):
             window_lengths = [len(window) for window in windows]
             encoded_windows_ragged = tf.RaggedTensor.from_row_lengths(encoded_flat_windows, window_lengths)
             
-            # Create attention masks for the flattened windows
             attention_masks_flat = tf.where(encoded_flat_windows != 0, 1, 0)
             
-            # Create ragged attention masks using the same window lengths
             attention_masks_ragged = tf.RaggedTensor.from_row_lengths(attention_masks_flat, window_lengths)
-
-            # Log detailed information for the first window only
+            
             if len(windows) > 0:
                 logging.info(f"First window encoded ragged tensor: {encoded_windows_ragged[0]}")
                 logging.info(f"First window attention mask ragged tensor: {attention_masks_ragged[0]}")
@@ -287,7 +274,6 @@ class DeepLearningSemanticClassifier(Score):
         labels = self.dataframe[score_name].tolist()
         unique_labels = self.dataframe[score_name].unique()
 
-        # Split the data into training and validation sets
         train_texts, val_texts, train_labels, val_labels = train_test_split(texts, labels, test_size=0.2, random_state=42)
 
         logging.info(f"Unique labels: {unique_labels}")
@@ -299,23 +285,19 @@ class DeepLearningSemanticClassifier(Score):
         logging.info(f"Original shape of train_labels: {np.shape(train_labels)}")
         logging.info(f"Original shape of val_labels: {np.shape(val_labels)}")
 
-        # Handle nan values in labels
         train_labels = [str(label) if pd.notna(label) else 'Unknown' for label in train_labels]
         val_labels = [str(label) if pd.notna(label) else 'Unknown' for label in val_labels]
 
-        # Create label_map and inverse_label_map
         unique_labels = sorted(set(train_labels + val_labels))
         self.label_map = {label: i for i, label in enumerate(unique_labels)}
         self.inverse_label_map = {i: label for label, i in self.label_map.items()}
 
-        # Convert labels to integers
         train_labels_int = np.array([self.label_map[label] for label in train_labels])
         val_labels_int = np.array([self.label_map[label] for label in val_labels])
 
         logging.info(f"Label map: {self.label_map}")
         logging.info(f"Inverse label map: {self.inverse_label_map}")
 
-        # Store both integer and string versions of labels
         self.train_labels = train_labels_int
         self.val_labels = val_labels_int
         self.train_labels_str = np.array(train_labels)

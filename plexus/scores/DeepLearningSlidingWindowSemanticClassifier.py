@@ -22,10 +22,7 @@ import matplotlib.pyplot as plt
 from tensorflow.keras import backend as keras_backend
 keras_backend.clear_session()
 
-# Set the environment variable to allow GPU memory growth
 os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
-
-# Use the CUDA asynchronous memory allocator to reduce memory fragmentation.
 os.environ['TF_GPU_ALLOCATOR'] = 'cuda_malloc_async'
 
 class DeepLearningSlidingWindowSemanticClassifier(DeepLearningSemanticClassifier):
@@ -93,35 +90,22 @@ class DeepLearningSlidingWindowSemanticClassifier(DeepLearningSemanticClassifier
         
         self.embeddings_model = TFAutoModel.from_pretrained(self.parameters.embeddings_model)
 
-        # Set all layers of the embeddings model to non-trainable first
         for layer in self.embeddings_model.layers:
             layer.trainable = False
 
-        # Set only the top few layers to trainable, for fine-tuning
         trainable_layers = self.embeddings_model.layers[-self.parameters.embeddings_model_trainable_layers:]
         for layer in trainable_layers:
             layer.trainable = True
-
-        # Create an instance of the custom layer
         ragged_embeddings_layer = self.RaggedEmbeddingsLayer(self.embeddings_model, aggregation=self.parameters.multiple_windows_aggregation)
-
-        # Pass the ragged tensors directly to the custom layer
         last_hidden_state = ragged_embeddings_layer([input_ids, attention_mask])
-
-        # Get the hidden size from the pre-loaded model
         hidden_size = self.embeddings_model.config.hidden_size
-
-        # Use the TimeDistributed layer to apply the dense layer to each window embedding
         window_level_output = tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(hidden_size, activation='relu', dtype=dtype))(last_hidden_state)
-
-        # Perform max pooling over the window dimension
         aggregated_output = tf.reduce_max(window_level_output, axis=-2)
 
         tanh_output = tf.keras.layers.Dense(hidden_size, activation='tanh', name="tanh_amplifier_1", dtype=dtype)(aggregated_output)
 
         dropout = tf.keras.layers.Dropout(rate=self.parameters.dropout_rate, name="dropout")(tanh_output)
 
-        # Add the final output layer
         if self.parameters.number_of_classes > 2:
             out = tf.keras.layers.Dense(
                 self.parameters.number_of_classes,
@@ -151,10 +135,8 @@ class DeepLearningSlidingWindowSemanticClassifier(DeepLearningSemanticClassifier
         :return: The trained model.
         """
 
-        # Determine if it's a binary or multi-class classification task
         logging.info(f"Is multi-class: [purple][bold]{self.is_multi_class}[/purple][/bold]")
 
-        # Check the number of classes
         actual_number_of_classes = self.number_of_classes
         
         if self.parameters.number_of_classes != actual_number_of_classes:
@@ -164,10 +146,8 @@ class DeepLearningSlidingWindowSemanticClassifier(DeepLearningSemanticClassifier
         else:
             logging.info(f"Number of classes matches configuration: {self.parameters.number_of_classes}")
 
-        # Create the model
         self.model = self.create_model()
 
-        # Compile the model with the appropriate loss function
         if self.is_multi_class:
             loss_function = tf.keras.losses.CategoricalCrossentropy(reduction='auto')
         else:
@@ -179,7 +159,6 @@ class DeepLearningSlidingWindowSemanticClassifier(DeepLearningSemanticClassifier
             metrics=['accuracy', Precision(name='precision'), Recall(name='recall'), AUC(name='auc')]
         )
 
-        # During training, after the model is defined
         self.model.summary(print_fn=lambda x: logging.info(x))
 
         self._generate_model_diagram()
@@ -191,15 +170,13 @@ class DeepLearningSlidingWindowSemanticClassifier(DeepLearningSemanticClassifier
             lambda epoch, lr: self.custom_lr_scheduler(epoch, lr)
         )
 
-        # Stop training if the validation loss doesn't improve after a certain number of number_of_epochs.
         early_stop = tf.keras.callbacks.EarlyStopping(
             monitor='val_loss',
-            patience=5,  # Increase patience to allow more number_of_epochs for improvement
+            patience=5,
             verbose=1,
-            restore_best_weights=True  # Restore the best model weights
+            restore_best_weights=True
         )
 
-        # Save the best model weights
         checkpoint = tf.keras.callbacks.ModelCheckpoint(
             os.path.join(self.model_directory_path(), 'best_model_weights.h5'),
             monitor='val_loss',
@@ -214,7 +191,6 @@ class DeepLearningSlidingWindowSemanticClassifier(DeepLearningSemanticClassifier
         logging.info(f"train_attention_mask shape: {self.train_attention_mask.shape}")
         logging.info(f"train_labels shape: {self.train_labels.shape}")
 
-        # Ensure the shapes are compatible
         # assert self.train_input_ids.shape[0] == self.train_attention_mask.shape[0] == self.train_labels.shape[0], "Incompatible shapes"
 
         self.history = self.model.fit(
@@ -228,7 +204,6 @@ class DeepLearningSlidingWindowSemanticClassifier(DeepLearningSemanticClassifier
 
         print("Logging metrics and artifacts...")
 
-        # Log metrics to MLflow
         mlflow.log_metric("training_loss", self.model.history.history['loss'][-1])
         mlflow.log_metric("training_accuracy", self.model.history.history['accuracy'][-1])
         mlflow.log_metric("validation_loss", self.model.history.history['val_loss'][-1])

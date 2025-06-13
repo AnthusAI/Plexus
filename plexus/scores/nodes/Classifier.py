@@ -19,7 +19,7 @@ class Classifier(BaseNode):
     LLM calls from parsing and retry logic.
     """
     
-    batch: bool = False  # Class-level attribute for batch configuration
+    batch: bool = False
     
     class Parameters(BaseNode.Parameters):
         valid_classes: List[str] = Field(description="List of valid classification labels")
@@ -34,7 +34,6 @@ class Classifier(BaseNode):
         pass
 
     def __init__(self, **parameters):
-        # Extract batch parameter before passing to super
         self.batch = parameters.pop('batch', False)
         super().__init__(**parameters)
         self.parameters = Classifier.Parameters(**parameters)
@@ -52,10 +51,8 @@ class Classifier(BaseNode):
 
         def normalize_text(self, text: str) -> str:
             """Normalize text by converting to lowercase and handling special characters."""
-            # Replace underscores and multiple spaces with a single space
             text = text.replace("_", " ")
             text = " ".join(text.split())
-            # Remove all non-alphanumeric characters except spaces
             return ''.join(c.lower() for c in text if c.isalnum() or c.isspace())
 
         def find_matches_in_text(self, text: str) -> List[Tuple[str, int, int, int]]:
@@ -65,25 +62,15 @@ class Classifier(BaseNode):
             matches = []
             lines = text.strip().split('\n')
             
-            # First normalize all valid classes (do this once)
             normalized_classes = [(vc, self.normalize_text(vc), i) for i, vc in enumerate(self.valid_classes)]
-            
-            # Sort by appropriate strategy:
-            # 1. For parse_from_start=True: use original order, but handle exact same match text
-            # 2. For parse_from_start=False: sort by length (descending) to prioritize specific classes
             if self.parse_from_start:
-                # When parsing from start, maintain original order
-                # (Already in original order, so no sorting needed)
                 pass
             else:
-                # When parsing from end, sort by length to handle overlapping terms
                 normalized_classes.sort(key=lambda x: len(x[1]), reverse=True)
             
-            # Process each line
             for line_idx, line in enumerate(lines):
                 normalized_line = self.normalize_text(line)
                 
-                # Find all matches in this line
                 for original_class, normalized_class, original_idx in normalized_classes:
                     pos = 0
                     while True:
@@ -91,37 +78,29 @@ class Classifier(BaseNode):
                         if pos == -1:
                             break
                             
-                        # Check word boundaries
                         before = pos == 0 or normalized_line[pos - 1].isspace()
-                        after = (pos + len(normalized_class) == len(normalized_line) or 
+                        after = (pos + len(normalized_class) == len(normalized_line) or
                                 normalized_line[pos + len(normalized_class)].isspace())
                         
                         if before and after:
-                            # Check for already matched terms that completely contain this match
                             conflict = False
                             if not self.parse_from_start:
                                 for m_class, m_line, m_pos, m_idx in matches:
                                     m_norm = self.normalize_text(m_class)
-                                    # If they're on the same line and there's an overlap
-                                    if (m_line == line_idx and 
-                                        m_pos <= pos < m_pos + len(m_norm) and 
+                                    if (m_line == line_idx and
+                                        m_pos <= pos < m_pos + len(m_norm) and
                                         len(m_norm) > len(normalized_class)):
-                                        # Longer match takes precedence
                                         conflict = True
                                         break
                             
                             if not conflict:
-                                # Store match
                                 matches.append((original_class, line_idx, pos, original_idx))
                                 
-                                # When parsing from start, return first match immediately
                                 if self.parse_from_start:
                                     return [(original_class, line_idx, pos, original_idx)]
                             
-                            # Skip past this match
                             pos += len(normalized_class)
                         else:
-                            # Move past this position
                             pos += 1
             
             return matches
@@ -132,13 +111,10 @@ class Classifier(BaseNode):
                 return None
                 
             if self.parse_from_start:
-                # When parsing from start, we already have the first match
                 return matches[0][0]
             else:
-                # When parsing from end, sort by position (line and column) in reverse
-                # For substring conflicts, we already handled this in find_matches_in_text
                 matches.sort(key=lambda x: (x[1], x[2]), reverse=True)
-                return matches[0][0]  # Return the original class name
+                return matches[0][0]
 
         def strip_classification_from_explanation(self, output: str, classification: str) -> str:
             """Remove the classification from the explanation text."""
@@ -149,23 +125,20 @@ class Classifier(BaseNode):
             result_lines = []
             classification_removed = False
 
-            # Normalize the classification for comparison
             normalized_classification = self.normalize_text(classification)
             
             for line in lines:
                 normalized_line = self.normalize_text(line)
                 
-                # Skip lines that ONLY contain the classification or very short lines with the classification
-                if (normalized_line == normalized_classification or 
-                    (len(normalized_line) < len(normalized_classification) + 5 and 
+                if (normalized_line == normalized_classification or
+                    (len(normalized_line) < len(normalized_classification) + 5 and
                      normalized_classification in normalized_line)):
                     classification_removed = True
                     continue
                 
                 result_lines.append(line)
             
-            # If we didn't filter any lines and there are at least 2 lines,
-            # try to remove classification from the beginning of the first line
+            if not classification_removed and len(lines) >= 1:
             if not classification_removed and len(lines) >= 1:
                 first_line = lines[0]
                 normalized_first = self.normalize_text(first_line)
@@ -197,13 +170,8 @@ class Classifier(BaseNode):
             return '\n'.join(result_lines).strip()
 
         def parse(self, output: str) -> Dict[str, Any]:
-            # Find all matches in the text
             matches = self.find_matches_in_text(output)
-            
-            # Select the appropriate match
             selected_class = self.select_match(matches, output)
-            
-            # Remove the classification from the explanation
             clean_explanation = self.strip_classification_from_explanation(output, selected_class)
             
             return {
@@ -613,8 +581,6 @@ class Classifier(BaseNode):
         workflow.add_node("max_retries", self.get_max_retries_node())
         logging.info("Added max_retries node")
 
-        # Add conditional edges for parse
-        logging.info("Adding conditional edges for parse...")
         workflow.add_conditional_edges(
             "parse",
             self.should_retry,
@@ -625,15 +591,11 @@ class Classifier(BaseNode):
             }
         )
         logging.info("Added parse edges")
-        
-        # Add regular edges
         workflow.add_edge("llm_prompt", "llm_call")
         workflow.add_edge("llm_call", "parse")
         workflow.add_edge("retry", "llm_prompt")
         workflow.add_edge("max_retries", END)
         logging.info("Added regular edges")
-        
-        # Set entry point
         workflow.set_entry_point("llm_prompt")
         logging.info("Set entry point to llm_prompt")
         
@@ -647,7 +609,6 @@ class Classifier(BaseNode):
         initial_prompt = prompt_templates[0]
         messages = initial_prompt.format_prompt().to_messages()
         
-        # Convert LangChain messages to dictionaries for state storage
         message_dicts = [{
             'type': msg.__class__.__name__.lower().replace('message', ''),
             'content': msg.content,
