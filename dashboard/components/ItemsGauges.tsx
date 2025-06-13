@@ -414,7 +414,7 @@ Total score results over last 24 hours` : "Loading hourly metrics..."}
             {/* 24-hour totals at the bottom - responsive layout */}
             <div className="flex justify-between items-end text-sm flex-shrink-0 relative">
               {/* Items metric - left-justified with color on the left */}
-              <div className="flex items-center gap-2 @[500px]:flex-col @[500px]:gap-1 @[500px]:items-center @[700px]:flex-row @[700px]:gap-2 @[700px]:items-start">
+              <div className="flex items-center gap-2 @[500px]:flex-col @[500px]:gap-1 @[500px]:items-center @[700px]:flex-row @[700px]:gap-2 @[700px]:items-start flex-1 min-w-0">
                 <div className="flex flex-col items-start @[500px]:items-center">
                   <div className="flex items-center gap-1">
                     <div 
@@ -434,10 +434,9 @@ Total score results over last 24 hours` : "Loading hourly metrics..."}
                   <span className="text-muted-foreground text-xs leading-tight">Items / day</span>
                 </div>
               </div>
-              
-              {/* Error indicator or Last updated timestamp - centered - only show when chart is 2+ cells wide */}
-              {useRealData && hasErrorsLast24h && onErrorClick && (
-                <div className="absolute left-1/2 transform -translate-x-1/2 flex-col items-center hidden @[700px]:flex">
+              {/* Center: Error indicator or Last updated timestamp - always centered in the chart card */}
+              <div className="flex flex-col items-center flex-1 min-w-0">
+                {useRealData && hasErrorsLast24h && onErrorClick && (
                   <div className="relative">
                     <div 
                       className="absolute inset-0 bg-destructive rounded-md animate-pulse"
@@ -455,22 +454,21 @@ Total score results over last 24 hours` : "Loading hourly metrics..."}
                       </div>
                     </Button>
                   </div>
-                </div>
-              )}
-              {useRealData && !hasErrorsLast24h && metrics?.lastUpdated && (
-                <div className="absolute left-1/2 transform -translate-x-1/2 flex-col items-center hidden @[700px]:flex">
-                  <span className="text-[10px] text-muted-foreground leading-tight">Last updated</span>
-                  <Timestamp 
-                    time={metrics.lastUpdated} 
-                    variant="relative" 
-                    showIcon={false}
-                    className="text-[10px] text-muted-foreground"
-                  />
-                </div>
-              )}
-              
+                )}
+                {useRealData && !hasErrorsLast24h && metrics?.lastUpdated && (
+                  <>
+                    <span className="text-[10px] text-muted-foreground leading-tight">Last updated</span>
+                    <Timestamp 
+                      time={metrics.lastUpdated} 
+                      variant="relative" 
+                      showIcon={false}
+                      className="text-[10px] text-muted-foreground"
+                    />
+                  </>
+                )}
+              </div>
               {/* Score Results metric - right-justified with color on the right */}
-              <div className="flex items-center gap-2 @[500px]:flex-col @[500px]:gap-1 @[500px]:items-end @[700px]:flex-row-reverse @[700px]:gap-2 @[700px]:items-end">
+              <div className="flex items-center gap-2 @[500px]:flex-col @[500px]:gap-1 @[500px]:items-end @[700px]:flex-row-reverse @[700px]:gap-2 @[700px]:items-end flex-1 min-w-0 justify-end">
                 <div className="flex flex-col items-end">
                   <div className="flex items-center gap-1">
                     <span className="font-medium text-foreground text-base leading-tight">
