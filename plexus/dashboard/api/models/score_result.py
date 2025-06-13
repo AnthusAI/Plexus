@@ -78,6 +78,7 @@ class ScoreResult(BaseModel):
     scoringJobId: Optional[str] = None
     evaluationId: Optional[str] = None
     correct: Optional[bool] = None
+    code: Optional[str] = None
 
     def __init__(
         self,
@@ -96,6 +97,7 @@ class ScoreResult(BaseModel):
         scoringJobId: Optional[str] = None,
         evaluationId: Optional[str] = None,
         correct: Optional[bool] = None,
+        code: Optional[str] = None,
         client: Optional[_BaseAPIClient] = None
     ):
         super().__init__(id, client)
@@ -113,6 +115,7 @@ class ScoreResult(BaseModel):
         self.scoringJobId = scoringJobId
         self.evaluationId = evaluationId
         self.correct = correct
+        self.code = code
     
     @property
     def scoreName(self) -> Optional[str]:
@@ -151,6 +154,7 @@ class ScoreResult(BaseModel):
             scoringJobId
             evaluationId
             correct
+            code
         """
 
     @classmethod
@@ -188,6 +192,7 @@ class ScoreResult(BaseModel):
             scoringJobId=data.get('scoringJobId'),
             evaluationId=data.get('evaluationId'),
             correct=data.get('correct'),
+            code=data.get('code'),
             client=client
         )
 
@@ -266,9 +271,14 @@ class ScoreResult(BaseModel):
         }
         """ % self.fields()
         
+        # When updating any field, DynamoDB automatically updates 'updatedAt', which triggers
+        # GSI composite key requirements. Must include all fields for affected GSIs:
+        # - byAccountCodeAndUpdatedAt: accountId + code + updatedAt
         variables = {
             'input': {
                 'id': self.id,
+                'accountId': self.accountId,  # Required for byAccountCodeAndUpdatedAt GSI
+                'code': getattr(self, 'code', '200'),  # Required for byAccountCodeAndUpdatedAt GSI, default to '200'
                 **kwargs
             }
         }
