@@ -201,6 +201,7 @@ class ScoreResult(BaseModel):
         scorecardId: str,
         scoringJobId: Optional[str] = None,
         evaluationId: Optional[str] = None,
+        code: str = '200',
         **kwargs
     ) -> 'ScoreResult':
         """Create a new score result.
@@ -213,6 +214,7 @@ class ScoreResult(BaseModel):
             scorecardId: ID of scorecard used (required)
             scoringJobId: ID of scoring job (optional)
             evaluationId: ID of evaluation (optional)
+            code: HTTP response code (defaults to '200' for success)
             **kwargs: Optional fields:
                      - confidence: float
                      - metadata: dict (will be JSON serialized)
@@ -230,6 +232,7 @@ class ScoreResult(BaseModel):
             'itemId': itemId,
             'accountId': accountId,
             'scorecardId': scorecardId,
+            'code': code,
             **kwargs
         }
         
@@ -283,6 +286,10 @@ class ScoreResult(BaseModel):
         for item in items:
             if 'metadata' in item:
                 item['metadata'] = json.dumps(item['metadata'])
+                
+            # Add default code if not provided
+            if 'code' not in item:
+                item['code'] = '200'
                 
             # Verify required fields
             missing = required_fields - set(item.keys())
