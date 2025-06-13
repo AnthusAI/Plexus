@@ -414,7 +414,7 @@ Total score results over last 24 hours` : "Loading hourly metrics..."}
             {/* 24-hour totals at the bottom - responsive layout */}
             <div className="flex justify-between items-end text-sm flex-shrink-0 relative">
               {/* Items metric - left-justified with color on the left */}
-              <div className="flex items-center gap-2 @[500px]:flex-col @[500px]:gap-1 @[500px]:items-center @[700px]:flex-row @[700px]:gap-2 @[700px]:items-start flex-1 min-w-0">
+              <div className="flex items-center gap-2 @[500px]:flex-col @[500px]:gap-1 @[500px]:items-center @[700px]:flex-row @[700px]:gap-2 @[700px]:items-start">
                 <div className="flex flex-col items-start @[500px]:items-center">
                   <div className="flex items-center gap-1">
                     <div 
@@ -468,7 +468,7 @@ Total score results over last 24 hours` : "Loading hourly metrics..."}
                 )}
               </div>
               {/* Score Results metric - right-justified with color on the right */}
-              <div className="flex items-center gap-2 @[500px]:flex-col @[500px]:gap-1 @[500px]:items-end @[700px]:flex-row-reverse @[700px]:gap-2 @[700px]:items-end flex-1 min-w-0 justify-end">
+              <div className="flex items-center gap-2 @[500px]:flex-col @[500px]:gap-1 @[500px]:items-end @[700px]:flex-row-reverse @[700px]:gap-2 @[700px]:items-end text-right">
                 <div className="flex flex-col items-end">
                   <div className="flex items-center gap-1">
                     <span className="font-medium text-foreground text-base leading-tight">
