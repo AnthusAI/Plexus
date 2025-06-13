@@ -30,7 +30,7 @@ type ItemIndexFields = "name" | "description" | "accountId" | "evaluationId" | "
 type ScoringJobIndexFields = "accountId" | "scorecardId" | "itemId" | "status" | 
     "scoreId" | "evaluationId" | "startedAt" | "completedAt" | "errorMessage" | "updatedAt" | "createdAt";
 type ScoreResultIndexFields = "accountId" | "scorecardId" | "itemId" | 
-    "scoringJobId" | "evaluationId" | "scoreVersionId" | "updatedAt" | "createdAt" | "scoreId" | "isError";
+    "scoringJobId" | "evaluationId" | "scoreVersionId" | "updatedAt" | "createdAt" | "scoreId" | "code";
 type BatchJobScoringJobIndexFields = "batchJobId" | "scoringJobId";
 type TaskIndexFields = "accountId" | "type" | "status" | "target" | 
     "currentStageId" | "updatedAt" | "scorecardId" | "scoreId";
@@ -419,7 +419,7 @@ const schema = a.schema({
             scoreVersion: a.belongsTo('ScoreVersion', 'scoreVersionId'),
             scoreId: a.string(),
             score: a.belongsTo('Score', 'scoreId'),
-            isError: a.boolean(),
+            code: a.string(), // HTTP response code (e.g., "200", "404", "500")
             updatedAt: a.datetime(),
             createdAt: a.datetime(),
         })
@@ -427,18 +427,19 @@ const schema = a.schema({
             allow.publicApiKey(),
             allow.authenticated()
         ])
-        .secondaryIndexes((idx) => [
-            idx("accountId").sortKeys(["updatedAt"]),
-            idx("itemId"),
-            idx("scoringJobId"),
-            idx("scorecardId").sortKeys(["updatedAt"]),
-            idx("scorecardId").sortKeys(["itemId", "createdAt"]).name("byScorecardItemAndCreatedAt"),
-            idx("evaluationId"),
-            idx("scoreVersionId"),
-            idx("scoreId"),
-            idx("scorecardId").sortKeys(["scoreId", "itemId"]).name("byScorecardScoreItem"),
-            idx("itemId").sortKeys(["scorecardId", "scoreId"]).name("byItemScorecardScore"),
-            idx("itemId").sortKeys(["scorecardId", "scoreId", "updatedAt"]).name("byItemScorecardScoreUpdated")
+        .secondaryIndexes((index) => [
+            index("accountId").sortKeys(["updatedAt"]),
+            index("itemId"),
+            index("scoringJobId"),
+            index("scorecardId").sortKeys(["updatedAt"]),
+            index("scorecardId").sortKeys(["itemId", "createdAt"]).name("byScorecardItemAndCreatedAt"),
+            index("evaluationId"),
+            index("scoreVersionId"),
+            index("scoreId"),
+            index("scorecardId").sortKeys(["scoreId", "itemId"]).name("byScorecardScoreItem"),
+            index("itemId").sortKeys(["scorecardId", "scoreId"]).name("byItemScorecardScore"),
+            index("itemId").sortKeys(["scorecardId", "scoreId", "updatedAt"]).name("byItemScorecardScoreUpdated"),
+            index("accountId").sortKeys(["code", "updatedAt"]).name("byAccountCodeAndUpdatedAt")
         ]),
 
     BatchJobScoringJob: a
