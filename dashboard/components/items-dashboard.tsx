@@ -151,7 +151,8 @@ const GridContent = ({
   isLoadingMore,
   loadMoreRef,
   isLoading,
-  hasInitiallyLoaded
+  hasInitiallyLoaded,
+  itemsWithErrors
 }: {
   filteredItems: Item[];
   selectedItem: string | null;
@@ -165,6 +166,7 @@ const GridContent = ({
   loadMoreRef: React.MutableRefObject<HTMLDivElement | null>;
   isLoading: boolean;
   hasInitiallyLoaded: boolean;
+  itemsWithErrors: Set<string>;
 }) => {
   // Only show "No items found" if we're not loading and have actually finished the initial load
   if (filteredItems.length === 0 && !isLoading && hasInitiallyLoaded) {
@@ -194,6 +196,7 @@ const GridContent = ({
                 getBadgeVariant={getBadgeVariant}
                 scoreCountManagerRef={scoreCountManagerRef}
                 itemRefsMap={itemRefsMap}
+                itemsWithErrors={itemsWithErrors}
               />
             );
           })}
@@ -225,7 +228,8 @@ const GridItemCard = ({
   handleItemClick, 
   getBadgeVariant, 
   scoreCountManagerRef,
-  itemRefsMap
+  itemRefsMap,
+  itemsWithErrors
 }: {
   item: Item;
   scoreCount: ScoreResultCount | undefined;
@@ -234,6 +238,7 @@ const GridItemCard = ({
   getBadgeVariant: (status: string) => string;
   scoreCountManagerRef: React.MutableRefObject<ScoreResultCountManager | null>;
   itemRefsMap: React.MutableRefObject<Map<string, HTMLDivElement | null>>;
+  itemsWithErrors: Set<string>;
 }) => {
   const itemWithCount = useMemo(() => ({
     ...item,
@@ -294,6 +299,7 @@ const GridItemCard = ({
         onClick={handleClick}
         getBadgeVariant={getBadgeVariant}
         readOnly={true}
+        hasErrors={itemsWithErrors.has(item.id)}
         ref={combinedRef}
       />
     </motion.div>
@@ -588,6 +594,7 @@ function ItemsDashboardInner() {
   const [isDataExpanded, setIsDataExpanded] = useState(false)
   const [selectedScore, setSelectedScore] = useState<string | null>(null);
   const [isErrorFilterActive, setIsErrorFilterActive] = useState(false);
+  const [itemsWithErrors, setItemsWithErrors] = useState<Set<string>>(new Set());
   const [expandedExplanations, setExpandedExplanations] = useState<string[]>([]);
   const [truncatedExplanations, setTruncatedExplanations] = useState<{[key: string]: string}>({});
   const explanationRefs = useRef<{[key: string]: HTMLDivElement | null}>({});
@@ -613,7 +620,16 @@ function ItemsDashboardInner() {
   const textRef = useRef<Record<string, HTMLDivElement | null>>({})
   const [thumbedUpScores, setThumbedUpScores] = useState<Set<string>>(new Set());
   const [feedbackItems, setFeedbackItems] = useState<Record<string, any[]>>({});
-  const [items, setItems] = useState<Item[]>([]);
+  const [items, setItemsState] = useState<Item[]>([]);
+  
+  // Simplified setItems wrapper
+  const setItems = useCallback((itemsOrUpdater: Item[] | ((prevItems: Item[]) => Item[])) => {
+    if (typeof itemsOrUpdater === 'function') {
+      setItemsState(itemsOrUpdater);
+    } else {
+      setItemsState(itemsOrUpdater);
+    }
+  }, []);
   const [sampleMethod, setSampleMethod] = useState("All");
   const [sampleCount, setSampleCount] = useState(100);
   const [scoreResults, setScoreResults] = useState(sampleScoreResults);
@@ -1111,7 +1127,7 @@ function ItemsDashboardInner() {
     } catch (error) {
       console.error('Error during silent refresh:', error);
     }
-  }, [selectedAccount, selectedScorecard, selectedScore]);
+  }, [selectedAccount, selectedScorecard, selectedScore, isErrorFilterActive]);
 
   // Enhanced throttled refresh that handles selected item immediately
   const throttledRefreshScoreCounts = useCallback((priorityItemId?: string) => {
@@ -1131,6 +1147,68 @@ function ItemsDashboardInner() {
       }
     }, 2000); // 2-second debounce for bulk updates
   }, []);
+
+  // Helper function to check if an item should be shown based on current filters
+  const shouldShowItemInCurrentFilter = useCallback(async (item: any): Promise<boolean> => {
+    // If no error filter is active, show all items
+    if (!isErrorFilterActive) {
+      return true;
+    }
+    
+    // If error filter is active, check if this item has error ScoreResults
+    try {
+      const errorScoreResultsQuery = await graphqlRequest<{
+        listScoreResultByItemIdAndUpdatedAt: {
+          items: Array<{
+            id: string;
+            value?: string;
+            explanation?: string;
+          }>;
+        }
+      }>(`
+        query CheckItemForErrors($itemId: String!) {
+          listScoreResultByItemIdAndUpdatedAt(
+            itemId: $itemId,
+            sortDirection: DESC,
+            limit: 50
+          ) {
+            items {
+              id
+              value
+              explanation
+            }
+          }
+        }
+      `, {
+        itemId: item.id
+      });
+      
+      if (errorScoreResultsQuery.data?.listScoreResultByItemIdAndUpdatedAt?.items) {
+        // Check if any of this item's ScoreResults have errors
+        const hasErrors = errorScoreResultsQuery.data.listScoreResultByItemIdAndUpdatedAt.items.some(result => {
+          const value = result.value?.toLowerCase() || '';
+          const explanation = result.explanation?.toLowerCase() || '';
+          
+          return value.includes('error') || 
+                 value.includes('fail') || 
+                 value.includes('exception') || 
+                 explanation.includes('error') || 
+                 explanation.includes('fail') || 
+                 explanation.includes('exception') ||
+                 explanation.includes('timeout') ||
+                 explanation.includes('not found') ||
+                 explanation.includes('invalid');
+        });
+        
+        return hasErrors;
+      }
+      
+      return false; // No ScoreResults found, so no errors
+    } catch (error) {
+      console.error('Error checking if item should be shown:', error);
+      return false; // On error, don't show the item when error filter is active
+    }
+  }, [isErrorFilterActive]);
 
   // Restart subscriptions function
   const restartSubscriptions = useCallback(() => {
@@ -1160,22 +1238,32 @@ function ItemsDashboardInner() {
           }
           
           if (newItem.accountId === selectedAccount.id) {
-            const transformedNewItem = transformItem(newItem, { isNew: true });
-            setItems(prevItems => [transformedNewItem, ...prevItems]);
-            
-            toast.success('🎉 New item detected! Refreshing...', {
-              duration: 3000,
-            });
-            
-            setTimeout(() => {
-              setItems(prevItems => 
-                prevItems.map(item => 
-                  item.id === newItem.id 
-                    ? { ...item, status: "Done", isNew: false }
-                    : item
-                )
-              );
-            }, 3000);
+            try {
+              // Check if this item should be shown based on current filters
+              const shouldShow = await shouldShowItemInCurrentFilter(newItem);
+              
+              if (shouldShow) {
+                const transformedNewItem = transformItem(newItem, { isNew: true });
+                setItems(prevItems => [transformedNewItem, ...prevItems]);
+                
+                toast.success('🎉 New item detected! Refreshing...', {
+                  duration: 3000,
+                });
+                
+                setTimeout(() => {
+                  setItems(prevItems => 
+                    prevItems.map(item => 
+                      item.id === newItem.id 
+                        ? { ...item, status: "Done", isNew: false }
+                        : item
+                    )
+                  );
+                }, 3000);
+              }
+            } catch (error) {
+              console.error('Error checking if new item should be shown in restart subscription:', error);
+              // On error during filter check, don't add the item to avoid showing unfiltered content
+            }
           }
         },
         error: (error) => {
@@ -1197,26 +1285,63 @@ function ItemsDashboardInner() {
           }
           
           if (updatedItem.accountId === selectedAccount.id) {
-            setItems(prevItems => {
-              const updatedItems = prevItems.map(item => 
-                item.id === updatedItem.id 
-                  ? {
-                      ...item,
+            try {
+              // Check if this item should be shown based on current filters
+              const shouldShow = await shouldShowItemInCurrentFilter(updatedItem);
+              
+              setItems(prevItems => {
+                const existingItemIndex = prevItems.findIndex(item => item.id === updatedItem.id);
+                const itemExists = existingItemIndex !== -1;
+                
+                if (shouldShow) {
+                  if (itemExists) {
+                    // Update existing item
+                    const updatedItems = [...prevItems];
+                    updatedItems[existingItemIndex] = {
+                      // Start with the existing item to preserve all existing data
+                      ...prevItems[existingItemIndex],
+                      // Only update fields that are actually present in the subscription data
                       ...(updatedItem.externalId !== undefined && { externalId: updatedItem.externalId }),
                       ...(updatedItem.description !== undefined && { description: updatedItem.description }),
                       ...(updatedItem.updatedAt !== undefined && { updatedAt: updatedItem.updatedAt }),
                       ...(updatedItem.identifiers !== undefined && { identifiers: transformIdentifiers(updatedItem) }),
+                      // Only update metadata if it's actually present in the update
                       ...(updatedItem.metadata !== undefined && { 
                         metadata: typeof updatedItem.metadata === 'string' ? JSON.parse(updatedItem.metadata) : updatedItem.metadata 
                       }),
+                      // Only update attachedFiles if it's actually present in the update  
                       ...(updatedItem.attachedFiles !== undefined && { attachedFiles: updatedItem.attachedFiles }),
+                      // Only update text if it's actually present in the update
                       ...(updatedItem.text !== undefined && { text: updatedItem.text }),
+                    };
+                    return updatedItems;
+                  } else {
+                    // CRITICAL FIX: Only add items that weren't previously visible if we're NOT in error filter mode
+                    // This prevents existing items from suddenly appearing when they get new score results
+                    if (!isErrorFilterActive) {
+                      // Not in error filter mode - safe to add items that now match other filters
+                      const transformedItem = transformItem(updatedItem, { isNew: false });
+                      return [transformedItem, ...prevItems];
+                    } else {
+                      // In error filter mode - don't add existing items that just got score results
+                      // Only new items (handled by item creation subscription) should appear
+                      return prevItems;
                     }
-                  : item
-              );
-              
-              return updatedItems;
-            });
+                  }
+                } else {
+                  if (itemExists) {
+                    // Remove item that should no longer be shown
+                    return prevItems.filter(item => item.id !== updatedItem.id);
+                  } else {
+                    // Item doesn't exist and shouldn't be shown - no change
+                    return prevItems;
+                  }
+                }
+              });
+            } catch (error) {
+              console.error('Error checking if updated item should be shown in restart subscription:', error);
+              // On error during filter check, don't modify the items list to avoid inconsistent state
+            }
             
             if (scoreCountManagerRef.current) {
               scoreCountManagerRef.current.clearCount(updatedItem.id);
@@ -1260,7 +1385,7 @@ function ItemsDashboardInner() {
       itemUpdateSubscriptionRef.current = updateSubscription;
       scoreResultSubscriptionRef.current = scoreResultSubscription;
     }, 100);
-  }, [selectedAccount, isLoadingAccounts, silentRefresh, throttledRefreshScoreCounts, selectedItem]);
+  }, [selectedAccount, isLoadingAccounts, silentRefresh, throttledRefreshScoreCounts, selectedItem, shouldShowItemInCurrentFilter]);
 
   // Page Visibility API - detect wake from sleep
   useEffect(() => {
@@ -1497,6 +1622,8 @@ function ItemsDashboardInner() {
               }
             });
             
+            console.debug('- LoadMore Items map size after deduplication:', itemsMap.size);
+            
             itemsFromDirectQuery = Array.from(itemsMap.values()).sort((a, b) => {
               const dateA = new Date(a.createdAt || '').getTime();
               const dateB = new Date(b.createdAt || '').getTime();
@@ -1504,6 +1631,10 @@ function ItemsDashboardInner() {
             });
             nextTokenFromDirectQuery = errorScoreResults.length >= 1000 ? errorScoreResultsQuery.data.listScoreResultByAccountIdAndUpdatedAt.nextToken : null;
             console.debug('- ✅ LoadMore Unique error items found:', itemsFromDirectQuery.length);
+            
+            // Update the set of items with errors (append to existing)
+            const newErrorItemIds = new Set(Array.from(itemsMap.keys()));
+            setItemsWithErrors(prev => new Set([...prev, ...newErrorItemIds]));
           } else {
             console.debug('- ❌ LoadMore No error ScoreResults found or invalid response structure');
           }
@@ -1721,30 +1852,37 @@ function ItemsDashboardInner() {
         const useScore = selectedScore !== null && selectedScore !== undefined;
         
         if (isErrorFilterActive) {
-          // Filter by items that have error ScoreResults
-          console.debug('🔍 FILTERING BY ERROR SCORE RESULTS');
+          // Filter by items that have error ScoreResults using the same GSI as error counting
+          console.debug('🔍 FILTERING BY ERROR SCORE RESULTS (using GSI)');
           console.debug('- Account ID:', accountId);
           
-          // Query all ScoreResults and filter for errors in code (temporary approach)
+          // Use the same GSI as the error counting to maintain consistency
           const errorScoreResultsQuery = await graphqlRequest<{
-            listScoreResultByAccountIdAndUpdatedAt: {
+            listScoreResultByAccountIdAndCodeAndUpdatedAt: {
               items: Array<{
+                id: string;
                 itemId: string;
-                item: any;
+                updatedAt: string;
+                code?: string;
                 value?: string;
                 explanation?: string;
+                item: any;
               }>;
               nextToken: string | null;
             }
           }>(`
-            query ListErrorScoreResults($accountId: String!, $limit: Int!) {
-              listScoreResultByAccountIdAndUpdatedAt(
+            query ListErrorScoreResultsGSI($accountId: String!, $limit: Int!) {
+              listScoreResultByAccountIdAndCodeAndUpdatedAt(
                 accountId: $accountId,
+                codeUpdatedAt: { beginsWith: { code: "5" } },
                 sortDirection: DESC,
                 limit: $limit
               ) {
                 items {
+                  id
                   itemId
+                  updatedAt
+                  code
                   value
                   explanation
                   item {
@@ -1779,45 +1917,43 @@ function ItemsDashboardInner() {
             limit: 1000
           });
           
-          console.debug('- Error query response:', errorScoreResultsQuery);
-          console.debug('- Raw error ScoreResults found:', errorScoreResultsQuery.data?.listScoreResultByAccountIdAndUpdatedAt?.items?.length || 0);
+          console.debug('- GSI Error query response:', errorScoreResultsQuery);
+          console.debug('- Raw error ScoreResults found from GSI:', errorScoreResultsQuery.data?.listScoreResultByAccountIdAndCodeAndUpdatedAt?.items?.length || 0);
           
-          if (errorScoreResultsQuery.data?.listScoreResultByAccountIdAndUpdatedAt?.items) {
-            // Filter for ScoreResults that indicate errors (client-side filtering)
-            const errorScoreResults = errorScoreResultsQuery.data.listScoreResultByAccountIdAndUpdatedAt.items.filter(result => {
-              // Look for error indicators in the value or explanation
-              const value = result.value?.toLowerCase() || '';
-              const explanation = result.explanation?.toLowerCase() || '';
-              
-              // Check for common error patterns
-              return value.includes('error') || 
-                     value.includes('fail') || 
-                     value.includes('exception') || 
-                     explanation.includes('error') || 
-                     explanation.includes('fail') || 
-                     explanation.includes('exception') ||
-                     explanation.includes('timeout') ||
-                     explanation.includes('not found') ||
-                     explanation.includes('invalid');
-            });
+          if (errorScoreResultsQuery.data?.listScoreResultByAccountIdAndCodeAndUpdatedAt?.items) {
+            const errorScoreResults = errorScoreResultsQuery.data.listScoreResultByAccountIdAndCodeAndUpdatedAt.items;
             
-            console.debug('- Filtered error ScoreResults:', errorScoreResults.length);
+            console.debug('- GSI returned error ScoreResults:', errorScoreResults.length);
             
             // Get unique items from error score results
             const itemsMap = new Map();
-            errorScoreResults.forEach(result => {
+            errorScoreResults.forEach((result, index) => {
               if (result.item && !itemsMap.has(result.item.id)) {
                 itemsMap.set(result.item.id, result.item);
+              } else if (!result.item) {
+                console.debug(`- Warning: ScoreResult ${index} has no item data:`, {
+                  itemId: result.itemId,
+                  value: result.value,
+                  explanation: result.explanation?.substring(0, 50) + '...'
+                });
               }
             });
+            
+            console.debug('- Items map size after deduplication:', itemsMap.size);
+            console.debug('- Sample item IDs from map:', Array.from(itemsMap.keys()).slice(0, 5));
             
             itemsFromDirectQuery = Array.from(itemsMap.values()).sort((a, b) => {
               const dateA = new Date(a.createdAt || '').getTime();
               const dateB = new Date(b.createdAt || '').getTime();
               return dateB - dateA;
             });
-            nextTokenFromDirectQuery = errorScoreResults.length >= 1000 ? errorScoreResultsQuery.data.listScoreResultByAccountIdAndUpdatedAt.nextToken : null;
+            nextTokenFromDirectQuery = errorScoreResults.length >= 1000 ? errorScoreResultsQuery.data.listScoreResultByAccountIdAndCodeAndUpdatedAt.nextToken : null;
             console.debug('- ✅ Unique error items found:', itemsFromDirectQuery.length);
+            console.debug('- Sample error items (first 3):', itemsFromDirectQuery.slice(0, 3).map(item => ({ id: item.id, externalId: item.externalId })));
+            
+            // Update the set of items with errors
+            const errorItemIds = new Set(Array.from(itemsMap.keys()));
+            setItemsWithErrors(errorItemIds);
           } else {
             console.debug('- ❌ No error ScoreResults found or invalid response structure');
           }
@@ -2072,6 +2208,9 @@ function ItemsDashboardInner() {
             itemsFromDirectQuery = directQuery.data.listItemByAccountIdAndCreatedAt.items;
             nextTokenFromDirectQuery = directQuery.data.listItemByAccountIdAndCreatedAt.nextToken;
           }
+          
+          // Clear items with errors when not filtering by errors
+          setItemsWithErrors(new Set());
         }
       } catch (error) {
         console.error('Error in GraphQL query:', error);
@@ -2317,7 +2456,7 @@ function ItemsDashboardInner() {
         console.error('Error during throttled refetch:', error);
       }
     }, 2000); // 2 second debounce
-  }, [selectedAccount, selectedScorecard, selectedScore]);
+  }, [selectedAccount, selectedScorecard, selectedScore, isErrorFilterActive]);
   
   // Ref to track when we need to refetch items
   const shouldRefetchRef = useRef(false);
@@ -2389,27 +2528,37 @@ function ItemsDashboardInner() {
         }
         
         if (newItem.accountId === selectedAccount.id) {
-          // Transform the new item to match our expected format
-          const transformedNewItem = transformItem(newItem, { isNew: true });
+          try {
+            // Check if this item should be shown based on current filters
+            const shouldShow = await shouldShowItemInCurrentFilter(newItem);
+            
+            if (shouldShow) {
+              // Transform the new item to match our expected format
+              const transformedNewItem = transformItem(newItem, { isNew: true });
 
-          // Add the new item to the TOP of the list
-          setItems(prevItems => [transformedNewItem, ...prevItems]);
-          
-          // Show a toast notification that new items are being loaded
-          toast.success('🎉 New item detected! Refreshing...', {
-            duration: 3000,
-          });
-          
-          // After 3 seconds, remove the "New" status and make it look normal
-          setTimeout(() => {
-            setItems(prevItems => 
-              prevItems.map(item => 
-                item.id === newItem.id 
-                  ? { ...item, status: "Done", isNew: false }
-                  : item
-              )
-            );
-          }, 3000);
+              // Add the new item to the TOP of the list
+              setItems(prevItems => [transformedNewItem, ...prevItems]);
+              
+              // Show a toast notification that new items are being loaded
+              toast.success('🎉 New item detected! Refreshing...', {
+                duration: 3000,
+              });
+              
+              // After 3 seconds, remove the "New" status and make it look normal
+              setTimeout(() => {
+                setItems(prevItems => 
+                  prevItems.map(item => 
+                    item.id === newItem.id 
+                      ? { ...item, status: "Done", isNew: false }
+                      : item
+                  )
+                );
+              }, 3000);
+            }
+          } catch (error) {
+            console.error('Error checking if new item should be shown:', error);
+            // On error during filter check, don't add the item to avoid showing unfiltered content
+          }
         }
       },
       error: (error) => {
@@ -2432,13 +2581,21 @@ function ItemsDashboardInner() {
         }
         
         if (updatedItem.accountId === selectedAccount.id) {
-          // Update the item in the list if it exists
-          setItems(prevItems => {
-            const updatedItems = prevItems.map(item => 
-              item.id === updatedItem.id 
-                ? {
+          try {
+            // Check if this item should be shown based on current filters
+            const shouldShow = await shouldShowItemInCurrentFilter(updatedItem);
+            
+            setItems(prevItems => {
+              const existingItemIndex = prevItems.findIndex(item => item.id === updatedItem.id);
+              const itemExists = existingItemIndex !== -1;
+              
+              if (shouldShow) {
+                if (itemExists) {
+                  // Update existing item
+                  const updatedItems = [...prevItems];
+                  updatedItems[existingItemIndex] = {
                     // Start with the existing item to preserve all existing data
-                    ...item,
+                    ...prevItems[existingItemIndex],
                     // Only update fields that are actually present in the subscription data
                     ...(updatedItem.externalId !== undefined && { externalId: updatedItem.externalId }),
                     ...(updatedItem.description !== undefined && { description: updatedItem.description }),
@@ -2448,16 +2605,40 @@ function ItemsDashboardInner() {
                     ...(updatedItem.metadata !== undefined && { 
                       metadata: typeof updatedItem.metadata === 'string' ? JSON.parse(updatedItem.metadata) : updatedItem.metadata 
                     }),
-                                          // Only update attachedFiles if it's actually present in the update  
-                      ...(updatedItem.attachedFiles !== undefined && { attachedFiles: updatedItem.attachedFiles }),
-                      // Only update text if it's actually present in the update
-                      ...(updatedItem.text !== undefined && { text: updatedItem.text }),
+                    // Only update attachedFiles if it's actually present in the update  
+                    ...(updatedItem.attachedFiles !== undefined && { attachedFiles: updatedItem.attachedFiles }),
+                    // Only update text if it's actually present in the update
+                    ...(updatedItem.text !== undefined && { text: updatedItem.text }),
+                  };
+                  return updatedItems;
+                } else {
+                  // CRITICAL FIX: Only add items that weren't previously visible if we're NOT in error filter mode
+                  // This prevents existing items from suddenly appearing when they get new score results
+                  if (!isErrorFilterActive) {
+                    // Not in error filter mode - safe to add items that now match other filters
+                    const transformedItem = transformItem(updatedItem, { isNew: false });
+                    return [transformedItem, ...prevItems];
+                  } else {
+                    // In error filter mode - don't add existing items that just got score results
+                    // Only new items (handled by item creation subscription) should appear
+                    console.log('🚫 Preventing existing item from appearing in error filter due to score result update:', updatedItem.id);
+                    return prevItems;
                   }
-                : item
-            );
-            
-            return updatedItems;
-          });
+                }
+              } else {
+                if (itemExists) {
+                  // Remove item that should no longer be shown
+                  return prevItems.filter(item => item.id !== updatedItem.id);
+                } else {
+                  // Item doesn't exist and shouldn't be shown - no change
+                  return prevItems;
+                }
+              }
+            });
+          } catch (error) {
+            console.error('Error checking if updated item should be shown:', error);
+            // On error during filter check, don't modify the items list to avoid inconsistent state
+          }
           
           // Trigger a re-count of score results for this item
           if (scoreCountManagerRef.current) {
@@ -2526,7 +2707,7 @@ function ItemsDashboardInner() {
         scoreCountRefetchTimeoutRef.current = null;
       }
     };
-  }, [selectedAccount, isLoadingAccounts, silentRefresh, throttledRefreshScoreCounts, selectedItem]); // Added selectedItem to ensure subscriptions capture current selection
+  }, [selectedAccount, isLoadingAccounts, silentRefresh, throttledRefreshScoreCounts, selectedItem, shouldShowItemInCurrentFilter]); // Added selectedItem to ensure subscriptions capture current selection
 
   useEffect(() => {
     const checkViewportWidth = () => {
@@ -3392,7 +3573,7 @@ function ItemsDashboardInner() {
                   {/* ItemsGauges at the top - only show when not in mobile selected item view */}
                   <ItemsGauges onErrorClick={handleErrorClick} />
                   
-                  {!hasInitiallyLoaded && isLoading ? (
+                  {isLoading ? (
                     <div className="grid grid-cols-2 @[500px]:grid-cols-3 @[700px]:grid-cols-4 @[900px]:grid-cols-5 @[1100px]:grid-cols-6 gap-3 animate-pulse">
                       {[...Array(12)].map((_, i) => (
                         <ItemCardSkeleton key={i} />
@@ -3412,6 +3593,7 @@ function ItemsDashboardInner() {
                       loadMoreRef={loadMoreRef}
                       isLoading={isLoading}
                       hasInitiallyLoaded={hasInitiallyLoaded}
+                      itemsWithErrors={itemsWithErrors}
                     />
                   )}
                 </>

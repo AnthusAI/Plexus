@@ -1,7 +1,7 @@
 import * as React from 'react'
 import Link from 'next/link';
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
-import { MoreHorizontal, X, Square, Columns2, Box, ListChecks, ListCheck, FileText, Target, MessageSquareMore, View, Files } from 'lucide-react'
+import { MoreHorizontal, X, Square, Columns2, Box, ListChecks, ListCheck, FileText, Target, MessageSquareMore, View, Files, AlertTriangle } from 'lucide-react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { cn } from '@/lib/utils'
 import { CardButton } from '@/components/CardButton'
@@ -55,6 +55,8 @@ interface ScoreResultCardProps extends React.HTMLAttributes<HTMLDivElement> {
   onClose?: () => void
   skeletonMode?: boolean
   naturalHeight?: boolean
+  errorCode?: string | null
+  errorMessage?: string | null
 }
 
 const ScoreResultCard = React.forwardRef<HTMLDivElement, ScoreResultCardProps>(({ 
@@ -64,6 +66,8 @@ const ScoreResultCard = React.forwardRef<HTMLDivElement, ScoreResultCardProps>((
   onClose,
   skeletonMode = false,
   naturalHeight = false,
+  errorCode = null,
+  errorMessage = null,
   className, 
   ...props 
 }, ref) => {
@@ -74,6 +78,62 @@ const ScoreResultCard = React.forwardRef<HTMLDivElement, ScoreResultCardProps>((
       console.log('[ScoreResultCard] scoreResult.trace:', scoreResult.trace);
     }
   }, [scoreResult]);
+
+  // Extract error information from the score result - same logic as ItemScoreResults
+  const errorInfo = React.useMemo(() => {
+    const value = scoreResult.value?.toLowerCase() || '';
+    const explanation = scoreResult.explanation?.toLowerCase() || '';
+    
+    const hasError = value.includes('error') || 
+           value.includes('fail') || 
+           value.includes('exception') || 
+           explanation.includes('error') || 
+           explanation.includes('fail') || 
+           explanation.includes('exception') ||
+           explanation.includes('timeout') ||
+           explanation.includes('not found') ||
+           explanation.includes('invalid');
+
+    if (!hasError) {
+      return { hasError: false, errorCode: null, errorMessage: null };
+    }
+
+    // Try to extract error code from value or explanation
+    let detectedErrorCode = null;
+    let detectedErrorMessage = null;
+
+    // Look for HTTP status codes
+    const statusCodeMatch = (scoreResult.value + ' ' + (scoreResult.explanation || '')).match(/\b([4-5]\d{2})\b/);
+    if (statusCodeMatch) {
+      detectedErrorCode = statusCodeMatch[1];
+    }
+
+    // Look for common error messages
+    const fullText = scoreResult.value + ' ' + (scoreResult.explanation || '');
+    if (fullText.toLowerCase().includes('timeout')) {
+      detectedErrorMessage = 'Request timeout';
+      detectedErrorCode = detectedErrorCode || '408';
+    } else if (fullText.toLowerCase().includes('not found')) {
+      detectedErrorMessage = 'Resource not found';
+      detectedErrorCode = detectedErrorCode || '404';
+    } else if (fullText.toLowerCase().includes('invalid')) {
+      detectedErrorMessage = 'Invalid request';
+      detectedErrorCode = detectedErrorCode || '400';
+    } else if (fullText.toLowerCase().includes('exception')) {
+      detectedErrorMessage = 'Internal exception';
+      detectedErrorCode = detectedErrorCode || '500';
+    } else {
+      detectedErrorMessage = 'Unknown error';
+      detectedErrorCode = detectedErrorCode || '500';
+    }
+
+    // Use provided props if available, otherwise use detected values
+    return { 
+      hasError: true, 
+      errorCode: errorCode || detectedErrorCode, 
+      errorMessage: errorMessage || detectedErrorMessage 
+    };
+  }, [scoreResult.value, scoreResult.explanation, errorCode, errorMessage]);
 
   const [isNarrowViewport, setIsNarrowViewport] = React.useState(false)
   const [traceData, setTraceData] = React.useState<any>(null)
@@ -270,6 +330,21 @@ const ScoreResultCard = React.forwardRef<HTMLDivElement, ScoreResultCardProps>((
               )}
             </div>
           </div>
+          
+          {/* Error Indicator */}
+          {errorInfo.hasError && (
+            <div className="p-4 rounded-md bg-destructive">
+              <div className="flex items-center gap-2 mb-2">
+                <AlertTriangle className="h-4 w-4 text-attention" />
+                <h3 className="text-sm font-medium text-attention">Error {errorInfo.errorCode}</h3>
+              </div>
+              {errorInfo.errorMessage && (
+                <div className="text-sm text-attention">
+                  {errorInfo.errorMessage}
+                </div>
+              )}
+            </div>
+          )}
           
           {/* Explanation */}
           {scoreResult.explanation && (

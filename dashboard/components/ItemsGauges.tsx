@@ -107,6 +107,7 @@ interface ItemsGaugesProps {
   disableEmergenceAnimation?: boolean
   // Error handling
   hasErrorsLast24h?: boolean
+  errorsCount24h?: number
   onErrorClick?: () => void
 }
 
@@ -124,6 +125,7 @@ export function ItemsGauges({
   useRealData = true,
   disableEmergenceAnimation = false,
   hasErrorsLast24h: overrideHasErrors,
+  errorsCount24h: overrideErrorsCount,
   onErrorClick
 }: ItemsGaugesProps) {
   const { metrics, isLoading, error } = useItemsMetrics()
@@ -148,6 +150,7 @@ export function ItemsGauges({
   const scoreResultsTotal24h = useRealData ? (metrics?.scoreResultsTotal24h ?? 0) : (overrideScoreResultsTotal24h ?? scoreResultsAveragePerHour * 24)
   const chartData = useRealData ? (metrics?.chartData ?? fallbackChartData) : (overrideChartData ?? fallbackChartData)
   const hasErrorsLast24h = useRealData ? (metrics?.hasErrorsLast24h ?? false) : (overrideHasErrors ?? false)
+  const errorsCount24h = useRealData ? (metrics?.totalErrors24h ?? 0) : (overrideErrorsCount ?? 0)
   
   // Debug error indicator conditions
   console.log('🔧 Error indicator conditions:', {
@@ -471,7 +474,7 @@ Total score results over last 24 hours` : "Loading hourly metrics..."}
                     >
                       <div className="flex flex-col items-center gap-1 text-attention">
                         <AlertTriangle className="h-3 w-3" />
-                        <span className="text-[10px] leading-tight">Errors</span>
+                        <span className="text-[10px] leading-tight">{errorsCount24h} Error{errorsCount24h !== 1 ? 's' : ''}</span>
                       </div>
                     </Button>
                   </div>

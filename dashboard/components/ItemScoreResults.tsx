@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, ExternalLink, ChevronDown, ChevronUp, ListChecks, IdCard, Box } from 'lucide-react';
+import { Loader2, ExternalLink, ChevronDown, ChevronUp, ListChecks, IdCard, Box, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { motion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
@@ -70,6 +70,59 @@ const ScoreResultCard: React.FC<{
   const displayExplanation = needsExpansion && !isExpanded 
     ? result.explanation!.substring(0, 200) + '...' 
     : result.explanation;
+
+  // Extract error information from the score result
+  const errorInfo = React.useMemo(() => {
+    const value = result.value?.toLowerCase() || '';
+    const explanation = result.explanation?.toLowerCase() || '';
+    
+    const hasError = value.includes('error') || 
+           value.includes('fail') || 
+           value.includes('exception') || 
+           explanation.includes('error') || 
+           explanation.includes('fail') || 
+           explanation.includes('exception') ||
+           explanation.includes('timeout') ||
+           explanation.includes('not found') ||
+           explanation.includes('invalid');
+
+    if (!hasError) {
+      return { hasError: false, errorCode: null, errorMessage: null };
+    }
+
+    // Try to extract error code from value or explanation
+    let errorCode = null;
+    let errorMessage = null;
+
+    // Look for HTTP status codes
+    const statusCodeMatch = (result.value + ' ' + (result.explanation || '')).match(/\b([4-5]\d{2})\b/);
+    if (statusCodeMatch) {
+      errorCode = statusCodeMatch[1];
+    }
+
+    // Look for common error messages
+    const fullText = result.value + ' ' + (result.explanation || '');
+    if (fullText.toLowerCase().includes('timeout')) {
+      errorMessage = 'Request timeout';
+      errorCode = errorCode || '408';
+    } else if (fullText.toLowerCase().includes('not found')) {
+      errorMessage = 'Resource not found';
+      errorCode = errorCode || '404';
+    } else if (fullText.toLowerCase().includes('invalid')) {
+      errorMessage = 'Invalid request';
+      errorCode = errorCode || '400';
+    } else if (fullText.toLowerCase().includes('exception')) {
+      errorMessage = 'Internal exception';
+      errorCode = errorCode || '500';
+    } else {
+      errorMessage = 'Unknown error';
+      errorCode = errorCode || '500';
+    }
+
+    return { hasError: true, errorCode, errorMessage };
+  }, [result.value, result.explanation]);
+
+  const hasError = errorInfo.hasError;
   
   return (
     <motion.div
@@ -80,6 +133,8 @@ const ScoreResultCard: React.FC<{
         result.isNew ? 'new-score-result-glow' : ''
       } ${
         isSelected ? 'bg-card-selected selected-border-rounded' : ''
+      } ${
+        hasError ? 'error-border-rounded' : ''
       }`}
       onClick={onClick}
       role="button"
@@ -126,6 +181,19 @@ const ScoreResultCard: React.FC<{
           )}
         </div>
       </div>
+      {hasError && (
+        <div className="mt-3 p-3 rounded-md bg-card border border-destructive">
+          <div className="flex items-center gap-2 mb-1">
+            <AlertTriangle className="h-4 w-4 text-attention" />
+            <span className="text-sm font-medium text-attention">Error {errorInfo.errorCode}</span>
+          </div>
+          {errorInfo.errorMessage && (
+            <div className="text-sm text-attention">
+              {errorInfo.errorMessage}
+            </div>
+          )}
+        </div>
+      )}
       {result.explanation && (
         <div className="mt-3 text-sm text-muted-foreground relative z-10">
           <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-muted-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:bg-muted prose-pre:text-foreground">

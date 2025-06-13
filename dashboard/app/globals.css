@@ -206,6 +206,21 @@
   z-index: 0;
 }
 
+/* Error items get destructive background */
+.error-border-rounded {
+  background: var(--destructive) !important;
+}
+
+/* Selected error items should still show destructive background, not selected background */
+.selected-border-rounded.error-border-rounded {
+  background: var(--destructive) !important;
+}
+
+/* Content area for selected error items should also have destructive background */
+.selected-border-rounded.error-border-rounded::after {
+  background: var(--destructive);
+}
+
 @keyframes fadeInSmooth {
   from {
     opacity: 0;
