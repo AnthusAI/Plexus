@@ -415,8 +415,29 @@ Total score results over last 24 hours` : "Loading hourly metrics..."}
             <div className="flex justify-between items-end text-sm flex-shrink-0 relative">
               {/* Items metric - left-justified with color on the left */}
               <div className="flex items-center gap-2 @[500px]:flex-col @[500px]:gap-1 @[500px]:items-center @[700px]:flex-row @[700px]:gap-2 @[700px]:items-start">
-                <div className="flex flex-col items-start @[500px]:items-center">
-                  <div className="flex items-center gap-1">
+                <div className="flex flex-col items-start">
+                  {/* Single-cell layout: dot on text line, two-line labels, left-justified */}
+                  <div className="hidden @[500px]:flex @[700px]:hidden flex-col items-start gap-1">
+                    <div className="flex items-center gap-1">
+                      <div 
+                        className="w-3 h-3 rounded-sm" 
+                        style={{ 
+                          backgroundColor: '#3b82f6',
+                          filter: 'drop-shadow(0 0 8px rgba(59, 130, 246, 0.2))'
+                        }}
+                      />
+                      <span className="text-muted-foreground text-xs leading-tight">Items</span>
+                    </div>
+                    <span className="font-medium text-foreground text-base leading-tight">
+                      <NumberFlowWrapper 
+                        value={hasChartData ? itemsTotal24h : (hasHourlyData ? itemsTotal24h : 0)} 
+                        format={{ useGrouping: false }}
+                      />
+                    </span>
+                    <span className="text-muted-foreground text-xs leading-tight">per day</span>
+                  </div>
+                  {/* Default layout: dot beside number, single-line label */}
+                  <div className="flex @[500px]:hidden @[700px]:flex items-center gap-1">
                     <div 
                       className="w-3 h-3 rounded-sm" 
                       style={{ 
@@ -431,7 +452,7 @@ Total score results over last 24 hours` : "Loading hourly metrics..."}
                       />
                     </span>
                   </div>
-                  <span className="text-muted-foreground text-xs leading-tight">Items / day</span>
+                  <span className="text-muted-foreground text-xs leading-tight @[500px]:hidden @[700px]:block">Items / day</span>
                 </div>
               </div>
               {/* Center: Error indicator or Last updated timestamp - absolutely centered in the chart card */}
@@ -470,7 +491,28 @@ Total score results over last 24 hours` : "Loading hourly metrics..."}
               {/* Score Results metric - right-justified with color on the right */}
               <div className="flex items-center gap-2 @[500px]:flex-col @[500px]:gap-1 @[500px]:items-end @[700px]:flex-row-reverse @[700px]:gap-2 @[700px]:items-end text-right">
                 <div className="flex flex-col items-end">
-                  <div className="flex items-center gap-1">
+                  {/* Single-cell layout: dot on text line, two-line labels, right-justified */}
+                  <div className="hidden @[500px]:flex @[700px]:hidden flex-col items-end gap-1">
+                    <div className="flex items-center gap-1">
+                      <span className="text-muted-foreground text-xs leading-tight">Results</span>
+                      <div 
+                        className="w-3 h-3 rounded-sm" 
+                        style={{ 
+                          backgroundColor: '#a855f7',
+                          filter: 'drop-shadow(0 0 8px rgba(168, 85, 247, 0.2))'
+                        }}
+                      />
+                    </div>
+                    <span className="font-medium text-foreground text-base leading-tight">
+                      <NumberFlowWrapper 
+                        value={hasChartData ? scoreResultsTotal24h : (hasHourlyData ? scoreResultsTotal24h : 0)} 
+                        format={{ useGrouping: false }}
+                      />
+                    </span>
+                    <span className="text-muted-foreground text-xs leading-tight">per day</span>
+                  </div>
+                  {/* Default layout: dot beside number, single-line label */}
+                  <div className="flex @[500px]:hidden @[700px]:flex items-center gap-1">
                     <span className="font-medium text-foreground text-base leading-tight">
                       <NumberFlowWrapper 
                         value={hasChartData ? scoreResultsTotal24h : (hasHourlyData ? scoreResultsTotal24h : 0)} 
@@ -485,7 +527,7 @@ Total score results over last 24 hours` : "Loading hourly metrics..."}
                       }}
                     />
                   </div>
-                  <span className="text-muted-foreground text-xs leading-tight">Score Results / day</span>
+                  <span className="text-muted-foreground text-xs leading-tight @[500px]:hidden @[700px]:block">Score Results / day</span>
                 </div>
               </div>
             </div>
