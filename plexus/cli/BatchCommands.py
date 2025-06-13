@@ -1016,7 +1016,8 @@ async def _complete_batches(account_key):
                                 'scorecardId': job['scorecardId'],
                                 'itemId': content_id,
                                 'scoringJobId': scoring_job['id'],
-                                'value': result['value']
+                                'value': result['value'],
+                                'code': '200'
                             }
                             
                             client.execute(create_result_mutation, {'input': result_input})
