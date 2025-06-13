@@ -182,6 +182,14 @@ const GridContent = ({
       <motion.div 
         className="grid grid-cols-2 @[500px]:grid-cols-3 @[700px]:grid-cols-4 @[900px]:grid-cols-5 @[1100px]:grid-cols-6 gap-3"
         layout
+        transition={{
+          layout: {
+            type: "spring",
+            stiffness: 300,
+            damping: 30,
+            duration: 0.6
+          }
+        }}
       >
         <AnimatePresence mode="popLayout">
           {filteredItems.map((item) => {
@@ -285,8 +293,9 @@ const GridItemCard = ({
       }}
       transition={{
         layout: {
-          duration: 1.0,
-          ease: "easeInOut"
+          type: "spring",
+          stiffness: 300,
+          damping: 30
         },
         opacity: { duration: 0.4 }
       }}
@@ -671,6 +680,7 @@ function ItemsDashboardInner() {
   
   // Score result selection state
   const [selectedScoreResult, setSelectedScoreResult] = useState<ScoreResultData | null>(null);
+  const previouslyHadScoreResult = useRef<boolean>(false);
   
   // Handler for score result selection
   const handleScoreResultSelect = useCallback((scoreResult: any) => {
@@ -680,7 +690,15 @@ function ItemsDashboardInner() {
   // Clear selected score result when item changes
   useEffect(() => {
     setSelectedScoreResult(null);
+    previouslyHadScoreResult.current = false;
   }, [selectedItem]);
+  
+  // Track when we have a score result
+  useEffect(() => {
+    if (selectedScoreResult) {
+      previouslyHadScoreResult.current = true;
+    }
+  }, [selectedScoreResult]);
   
   // Enhanced scroll-to-item function for deep-linking with retry logic
   const scrollToSelectedItem = useCallback((itemId: string, maxRetries = 10, retryDelay = 100) => {
@@ -3471,11 +3489,20 @@ function ItemsDashboardInner() {
         {/* Content area - always uses the same base structure */}
         <div className="flex flex-1 min-h-0">
           {/* Left panel - grid content */}
-          <div 
-            className={`${selectedItem && !isNarrowViewport && (isFullWidth || selectedScoreResult) ? 'hidden' : 'flex-1'} h-full overflow-auto overflow-x-visible`}
-            style={selectedItem && !isNarrowViewport && !isFullWidth && !selectedScoreResult ? {
-              width: `${leftPanelWidth}%`
-            } : undefined}
+          <motion.div 
+            className="h-full overflow-auto overflow-x-visible"
+            animate={{
+              width: selectedItem && !isNarrowViewport && (isFullWidth || selectedScoreResult) 
+                ? 0 
+                : selectedItem && !isNarrowViewport && !isFullWidth && !selectedScoreResult 
+                  ? `${leftPanelWidth}%`
+                  : '100%'
+            }}
+            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+            style={{
+              flexShrink: 0,
+              overflow: selectedItem && !isNarrowViewport && (isFullWidth || selectedScoreResult) ? 'hidden' : 'auto'
+            }}
           >
             {/* Header for narrow viewports only */}
             {isNarrowViewport && (
@@ -3599,7 +3626,7 @@ function ItemsDashboardInner() {
                 </>
               )}
             </div>
-          </div>
+          </motion.div>
 
           {/* Divider for split view */}
           {selectedItem && !isNarrowViewport && !isFullWidth && !selectedScoreResult && (
@@ -3613,50 +3640,85 @@ function ItemsDashboardInner() {
           )}
 
           {/* Right panel - item detail view */}
-          {selectedItem && !isNarrowViewport && (
-            <>
-              {selectedScoreResult ? (
-                // When score result is selected, show ItemCard and ScoreResultCard side by side, full-width
-                <>
-                  <div className="h-full overflow-hidden flex-1">
-                    {renderSelectedItem()}
-                  </div>
-                  {/* Divider between ItemCard and ScoreResultCard */}
-                  <div
-                    className="w-[12px] relative cursor-col-resize flex-shrink-0 group"
+          <AnimatePresence>
+            {selectedItem && !isNarrowViewport && (
+              <>
+                {selectedScoreResult ? (
+                  // When score result is selected, show ItemCard and ScoreResultCard side by side, full-width
+                  <motion.div
+                    key="split-view"
+                    initial={{ x: 0 }}
+                    animate={{ x: 0 }}
+                    exit={{ x: 0 }}
+                    className="flex h-full overflow-hidden w-full"
                   >
-                    <div className="absolute inset-0 rounded-full transition-colors duration-150 \
-                      group-hover:bg-accent" />
-                  </div>
-                  {/* Score result panel - takes equal space with ItemCard */}
-                  <div className="h-full overflow-hidden flex-1">
-                    <ScoreResultCard
-                      scoreResult={selectedScoreResult}
-                      onClose={() => setSelectedScoreResult(null)}
-                      naturalHeight={false}
-                    />
-                  </div>
-                </>
-              ) : (
-                // When no score result is selected, show normal item view
-                <motion.div
-                  key={selectedItem}
-                  initial={{ x: '100%', opacity: 0 }}
-                  animate={{ x: 0, opacity: 1 }}
-                  exit={{ x: '100%', opacity: 0 }}
-                  transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-                  className="h-full overflow-hidden"
-                  style={{ 
-                    width: isFullWidth 
-                      ? '100%' 
-                      : `${100 - leftPanelWidth}%` 
-                  }}
-                >
-                  {renderSelectedItem()}
-                </motion.div>
-              )}
-            </>
-          )}
+                    {/* Item card - slides from right to left, keeps same width */}
+                    <motion.div 
+                      key="item-in-split"
+                      initial={{ x: isFullWidth ? 0 : `${100 - leftPanelWidth}%` }}
+                      animate={{ x: 0 }}
+                      transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                      className="h-full overflow-hidden flex-1"
+                    >
+                      {renderSelectedItem()}
+                    </motion.div>
+                    {/* Divider between ItemCard and ScoreResultCard */}
+                    <motion.div
+                      initial={{ opacity: 0, width: 0 }}
+                      animate={{ opacity: 1, width: 12 }}
+                      exit={{ opacity: 0, width: 0 }}
+                      transition={{ duration: 0.3 }}
+                      className="relative cursor-col-resize flex-shrink-0 group"
+                    >
+                      <div className="absolute inset-0 rounded-full transition-colors duration-150 \
+                        group-hover:bg-accent" />
+                    </motion.div>
+                    {/* Score result panel - slides in from right */}
+                    <motion.div 
+                      key={`score-result-${selectedScoreResult.id}`}
+                      initial={{ x: '100%', opacity: 0 }}
+                      animate={{ x: 0, opacity: 1 }}
+                      exit={{ x: '100%', opacity: 0 }}
+                      transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                      className="h-full overflow-hidden flex-1"
+                    >
+                      <ScoreResultCard
+                        scoreResult={selectedScoreResult}
+                        onClose={() => setSelectedScoreResult(null)}
+                        naturalHeight={false}
+                      />
+                    </motion.div>
+                  </motion.div>
+                ) : (
+                  // When no score result is selected, show normal item view
+                  <motion.div
+                    key={`item-${selectedItem}-solo`}
+                    initial={{ 
+                      x: previouslyHadScoreResult.current ? '-50%' : '100%', 
+                      opacity: previouslyHadScoreResult.current ? 1 : 0 
+                    }}
+                    animate={{ x: 0, opacity: 1 }}
+                    exit={{ x: '100%', opacity: 0 }}
+                    transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                    onAnimationComplete={() => {
+                      // Reset the flag after animation completes
+                      if (previouslyHadScoreResult.current) {
+                        previouslyHadScoreResult.current = false;
+                      }
+                    }}
+                    className="h-full overflow-hidden"
+                    style={{ 
+                      width: isFullWidth 
+                        ? '100%' 
+                        : `${100 - leftPanelWidth}%` 
+                    }}
+                  >
+                    {renderSelectedItem()}
+                  </motion.div>
+                )}
+              </>
+            )}
+          </AnimatePresence>
         </div>
       </div>
     </div>
