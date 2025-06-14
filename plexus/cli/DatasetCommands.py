@@ -144,30 +144,71 @@ def load(source_identifier: str, fresh: bool):
         buffer.seek(0)
         logging.info("Parquet file generated successfully.")
 
-        # 6. Create a new DataSet record
+        # 6. Get the current DataSource version and resolve score version
         logging.info("Creating new DataSet record...")
         
-        if not hasattr(data_source, 'owner') or not data_source.owner:
-            logging.error("DataSource is missing owner information (accountId). Cannot proceed.")
+        if not hasattr(data_source, 'accountId') or not data_source.accountId:
+            logging.error("DataSource is missing accountId. Cannot proceed.")
             return
-        account_id = data_source.owner
+        account_id = data_source.accountId
 
+        # Get the current version of the DataSource
+        if not data_source.currentVersionId:
+            logging.error("DataSource has no currentVersionId. Cannot create DataSet without a version.")
+            return
+        
+        data_source_version_id = data_source.currentVersionId
+        logging.info(f"Using DataSource version ID: {data_source_version_id}")
+
+        # Get the score version - use the score linked to the DataSource if available
+        score_version_id = None
+        if hasattr(data_source, 'scoreId') and data_source.scoreId:
+            logging.info(f"DataSource is linked to score ID: {data_source.scoreId}")
+            # Get the champion version of this score
+            score_query = await client.execute(
+                """
+                query GetScore($id: ID!) {
+                    getScore(id: $id) {
+                        id
+                        name
+                        championVersionId
+                    }
+                }
+                """,
+                {"id": data_source.scoreId}
+            )
+            
+            if score_query and score_query.get('getScore') and score_query['getScore'].get('championVersionId'):
+                score_version_id = score_query['getScore']['championVersionId']
+                logging.info(f"Using champion version ID: {score_version_id}")
+            else:
+                logging.error(f"Score {data_source.scoreId} has no champion version. Cannot create DataSet.")
+                return
+        else:
+            logging.error("DataSource is not linked to a specific score. Cannot create DataSet without a score version.")
+            logging.error("Please link the DataSource to a score first, or specify a score in the command.")
+            return
+
+        # Create a DataSet linked to both the DataSource version and score version
         new_dataset_record = await client.execute(
             """
             mutation CreateDataSet($input: CreateDataSetInput!) {
                 createDataSet(input: $input) {
                     id
                     name
-                    dataSourceId
+                    dataSourceVersionId
+                    scoreVersionId
                 }
             }
             """,
             {
                 "input": {
                     "name": f"{data_source.name} - {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}",
-                    "dataSourceId": data_source.id,
-                    "status": "GENERATING",
-                    "source": "CLI",
+                    "accountId": account_id,
+                    "dataSourceVersionId": data_source_version_id,
+                    "scoreVersionId": score_version_id,
+                    "scorecardId": data_source.scorecardId if hasattr(data_source, 'scorecardId') else None,
+                    "scoreId": data_source.scoreId if hasattr(data_source, 'scoreId') else None,
                 }
             }
         )
@@ -190,7 +231,7 @@ def load(source_identifier: str, fresh: bool):
                 mutation UpdateDataSet($input: UpdateDataSetInput!) {
                     updateDataSet(input: $input) { id }
                 }
-             """, {"input": {"id": new_dataset_id, "status": "FAILED", "errorMessage": "S3 bucket not configured."}})
+             """, {"input": {"id": new_dataset_id, "description": "FAILED: S3 bucket not configured."}})
              return
 
         try:
@@ -206,7 +247,7 @@ def load(source_identifier: str, fresh: bool):
                mutation UpdateDataSet($input: UpdateDataSetInput!) {
                    updateDataSet(input: $input) { id }
                }
-            """, {"input": {"id": new_dataset_id, "status": "FAILED", "errorMessage": f"S3 upload failed: {e}"}})
+            """, {"input": {"id": new_dataset_id, "description": f"FAILED: S3 upload failed: {e}"}})
             return
 
         # 8. Update DataSet with file path
@@ -216,16 +257,14 @@ def load(source_identifier: str, fresh: bool):
             mutation UpdateDataSet($input: UpdateDataSetInput!) {
                 updateDataSet(input: $input) {
                     id
-                    status
-                    filePath
+                    file
                 }
             }
             """,
             {
                 "input": {
                     "id": new_dataset_id,
-                    "status": "COMPLETED",
-                    "filePath": s3_key,
+                    "file": s3_key,
                 }
             }
         )
