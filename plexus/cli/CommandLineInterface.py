@@ -21,6 +21,7 @@ from plexus.cli.TrainingCommands import train
 from plexus.cli.ResultCommands import score_results, score_result, result, results
 from plexus.cli.ReportCommands import report
 from plexus.cli.DataCommands import data
+from plexus.cli.DatasetCommands import dataset
 from plexus.cli.ScoreChatCommands import score_chat
 from plexus.cli.DataLakeCommands import lake_group
 from plexus.cli.FeedbackCommands import feedback
@@ -79,6 +80,7 @@ cli.add_command(lake_group)
 cli.add_command(feedback)
 cli.add_command(scorecards)
 cli.add_command(count)
+cli.add_command(dataset)
 
 def main():
     """
