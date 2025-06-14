@@ -109,12 +109,37 @@ export const menuItems = [
 const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; signOut: () => Promise<void> }) => {
   const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState(true)
   const [isDashboardDrawerOpen, setIsDashboardDrawerOpen] = useState(false)
+  const [isNavigating, setIsNavigating] = useState(false)
+  const [loadingRoute, setLoadingRoute] = useState<string | null>(null)
   const { rightSidebarState, setRightSidebarState } = useSidebar()
   const { theme, setTheme } = useTheme()
   const isDesktop = useMediaQuery("(min-width: 1024px)")
   const isMobile = useMediaQuery("(max-width: 1023px)")
   const { accounts, selectedAccount, isLoadingAccounts, visibleMenuItems, setSelectedAccount } = useAccount()
   const pathname = usePathname()
+
+  // Handle navigation loading states
+  useEffect(() => {
+    const handleRouteChangeStart = () => {
+      setIsNavigating(true)
+    }
+    
+    const handleRouteChangeComplete = () => {
+      setIsNavigating(false)
+      setLoadingRoute(null)
+    }
+
+    // Reset loading state when pathname changes (navigation complete)
+    setIsNavigating(false)
+    setLoadingRoute(null)
+  }, [pathname])
+
+  const handleNavClick = (path: string) => {
+    if (path !== pathname) {
+      setLoadingRoute(path)
+      setIsNavigating(true)
+    }
+  }
 
   useEffect(() => {    
     if (isDesktop) {
@@ -210,40 +235,59 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
 
         <ScrollArea className="flex-grow overflow-y-auto">
           <div className={`${isLeftSidebarOpen ? 'pl-2' : 'px-3'} ${isMobile ? 'space-y-2' : 'space-y-1'}`}>
-            {visibleMenuItems.map((item) => (
-              <Link 
-                key={item.name}
-                href={item.path}
-                className={`flex items-center w-full px-3 py-2 group !rounded-[4px] ${
-                  (pathname === item.path ||
-                  (item.name === "Feedback" && (pathname === "/feedback-queues" || pathname.startsWith("/feedback"))) ||
-                  (item.name === "Items" && pathname.startsWith(item.path)) ||
-                  (item.name === "Evaluations" && pathname.startsWith(item.path)) ||
-                  (item.name === "Scorecards" && pathname.startsWith(item.path)) ||
-                  (item.name === "Reports" && pathname.startsWith(item.path)) ||
-                  (item.name === "Activity" && isActivityRoute))
-                    ? "bg-selected text-selected-foreground"
-                    : "hover:bg-accent hover:text-accent-foreground"
-                } ${isLeftSidebarOpen ? '' : 'px-2'} ${
-                  isMobile ? 'py-3' : ''
-                }`}
-              >
-                <item.icon className={`h-4 w-4 flex-shrink-0 ${
-                  (pathname === item.path ||
-                  (item.name === "Feedback" && (pathname === "/feedback-queues" || pathname.startsWith("/feedback"))) ||
-                  (item.name === "Items" && pathname.startsWith(item.path)) ||
-                  (item.name === "Evaluations" && pathname.startsWith(item.path)) ||
-                  (item.name === "Scorecards" && pathname.startsWith(item.path)) ||
-                  (item.name === "Reports" && pathname.startsWith(item.path)) ||
-                  (item.name === "Activity" && isActivityRoute))
-                    ? "text-selected-foreground"
-                    : "text-navigation-icon"
-                }`} />
-                {isLeftSidebarOpen && (
-                  <span className="ml-3">{item.name}</span>
-                )}
-              </Link>
-            ))}
+            {visibleMenuItems.map((item) => {
+              const isCurrentPage = (pathname === item.path ||
+                (item.name === "Feedback" && (pathname === "/feedback-queues" || pathname.startsWith("/feedback"))) ||
+                (item.name === "Items" && pathname.startsWith(item.path)) ||
+                (item.name === "Evaluations" && pathname.startsWith(item.path)) ||
+                (item.name === "Scorecards" && pathname.startsWith(item.path)) ||
+                (item.name === "Reports" && pathname.startsWith(item.path)) ||
+                (item.name === "Activity" && isActivityRoute))
+              
+              const isLoading = loadingRoute === item.path
+              
+              return (
+                <Link 
+                  key={item.name}
+                  href={item.path}
+                  onClick={() => handleNavClick(item.path)}
+                  className={`flex items-center w-full px-3 py-2 group !rounded-[4px] relative transition-all duration-200 ${
+                    isCurrentPage
+                      ? "bg-selected text-selected-foreground"
+                      : "hover:bg-accent hover:text-accent-foreground"
+                  } ${isLeftSidebarOpen ? '' : 'px-2'} ${
+                    isMobile ? 'py-3' : ''
+                  } ${isLoading ? 'opacity-75' : ''}`}
+                >
+                  <div className={`relative ${isLoading ? 'animate-pulse' : ''}`}>
+                    <item.icon className={`h-4 w-4 flex-shrink-0 transition-all duration-200 ${
+                      isCurrentPage
+                        ? "text-selected-foreground"
+                        : "text-navigation-icon"
+                    } ${isLoading ? 'opacity-50' : ''}`} />
+                    {isLoading && (
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="w-2 h-2 bg-primary rounded-full animate-ping" />
+                      </div>
+                    )}
+                  </div>
+                  {isLeftSidebarOpen && (
+                    <span className={`ml-3 transition-all duration-200 ${isLoading ? 'opacity-75' : ''}`}>
+                      {item.name}
+                      {isLoading && (
+                        <span className="ml-2 text-xs opacity-50">Loading...</span>
+                      )}
+                    </span>
+                  )}
+                  {/* Loading progress bar */}
+                  {isLoading && (
+                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary/20 overflow-hidden">
+                      <div className="h-full bg-primary animate-loading-bar" />
+                    </div>
+                  )}
+                </Link>
+              )
+            })}
           </div>
         </ScrollArea>
 
@@ -621,7 +665,18 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
             ${isMobile ? 'p-1' : 'p-2'}
           `}
         >
-          <div className="flex-1 flex flex-col bg-background rounded-lg min-h-0 overflow-visible">
+          <div className="flex-1 flex flex-col bg-background rounded-lg min-h-0 overflow-visible relative">
+            {/* Global loading overlay */}
+            {isNavigating && (
+              <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center rounded-lg">
+                <div className="flex flex-col items-center space-y-4">
+                  <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+                  <div className="text-sm text-muted-foreground">
+                    Loading {loadingRoute && visibleMenuItems.find(item => item.path === loadingRoute)?.name}...
+                  </div>
+                </div>
+              </div>
+            )}
             <div className="flex-1 min-h-0">
               {children}
             </div>
