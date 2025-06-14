@@ -49,9 +49,10 @@ Here is the step-by-step plan to implement the solution.
 ### Phase 3: Parquet Preview Integration
 
 *   [⚪️] **Create Test Data Generator:** Develop a CLI script in a client project to generate a sample `.parquet` file for testing the viewer.
-*   [⚪️] **Install `@hyparquet`:** Add `@hyparquet` and `hyparquet-compressors` to the dashboard's `package.json`.
-*   [⚪️] **Create Parquet Viewer Component:** Develop a React component that takes a file URL and uses `@hyparquet` to render a preview of the data.
-*   [⚪️] **Integrate Viewer:** Integrate the Parquet Viewer component into the `DataSource` detail view, allowing previews of any associated `.parquet` files.
+*   [🟢] **Install `hyparquet`:** Added `hyparquet` and `hyparquet-compressors` to the dashboard's `package.json`.
+*   [🟢] **Create Parquet Viewer Component:** Developed a React component (`ParquetViewer.tsx`) that takes a file URL and uses `hyparquet` to render a preview of the data.
+*   [🟢] **Integrate Viewer:** Enhanced the `FileAttachments` component with view functionality for Parquet files and other text-based files, integrated into the data source dashboard.
+*   [🟢] **Dataset Parquet Preview:** Added automatic Parquet file preview to the `DataSetComponent` detail view, taking up the full available space when a Parquet file is present.
 
 ### Phase 4: Versioning Logic & Finalization
 

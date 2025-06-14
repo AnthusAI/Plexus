@@ -476,7 +476,7 @@ export function useItemsMetrics(): UseItemsMetricsResult {
     fetchMetrics()
   }, [fetchMetrics])
 
-  // Lightweight refresh for hourly metrics (gauges)
+  // Lightweight refresh for hourly metrics (gauges) and error checking
   const refreshHourlyMetrics = useCallback(async () => {
     if (!selectedAccount || !metrics) return;
 
@@ -488,9 +488,12 @@ export function useItemsMetrics(): UseItemsMetricsResult {
     const lastHour = new Date(nowAligned.getTime() - windowMinutes * 60 * 1000);
 
     try {
-      const [itemsMetricsLastHour, scoreResultsMetricsLastHour] = await Promise.all([
+      // Include error checking in the 30-second refresh cycle
+      const [itemsMetricsLastHour, scoreResultsMetricsLastHour, hasErrorsLast24h, totalErrors24h] = await Promise.all([
         getAggregatedMetrics(selectedAccount.id, 'items', lastHour, now),
-        getAggregatedMetrics(selectedAccount.id, 'scoreResults', lastHour, now)
+        getAggregatedMetrics(selectedAccount.id, 'scoreResults', lastHour, now),
+        checkForErrorsLast24h(selectedAccount.id),
+        countErrorsLast24h(selectedAccount.id)
       ]);
 
       const actualWindowMinutes = (now.getTime() - lastHour.getTime()) / (60 * 1000);
@@ -504,13 +507,16 @@ export function useItemsMetrics(): UseItemsMetricsResult {
         if (!prevMetrics) return null
         
         // Preserve existing chart data, totals, averages, peaks
-        // Only update the rolling 60-min window metrics for a smooth refresh
+        // Update the rolling 60-min window metrics and error status for a smooth refresh
         return {
           ...prevMetrics,
           itemsPerHour,
           scoreResultsPerHour,
           costPerHour,
           lastUpdated: now,
+          // Update error status silently without showing loading indicators
+          hasErrorsLast24h,
+          totalErrors24h,
         }
       })
     } catch (error) {
