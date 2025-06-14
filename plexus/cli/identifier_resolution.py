@@ -1,6 +1,7 @@
 """Shared functions for resolving identifiers to IDs."""
 from plexus.cli.console import console
 from functools import lru_cache
+import logging
 
 @lru_cache(maxsize=100)
 def resolve_scorecard_identifier(client, identifier):
@@ -228,4 +229,59 @@ def resolve_score_identifier(client, scorecard_id: str, identifier: str):
     except:
         pass
     
+    return None 
+
+async def resolve_data_source(client, identifier: str):
+    """Resolve a DataSource identifier to a DataSource object.
+    
+    Args:
+        client: The API client
+        identifier: The identifier to resolve (ID, key, or name)
+        
+    Returns:
+        The DataSource object if found, None otherwise
+    """
+    from plexus.dashboard.api.models.data_source import DataSource
+
+    logging.debug(f"resolve_data_source called with identifier: {identifier}")
+
+    # 1. Try to get by ID
+    try:
+        logging.debug("Attempting to resolve by ID...")
+        data_source = await DataSource.get(client, identifier)
+        if data_source:
+            logging.info(f"Found DataSource by ID: {identifier}")
+            return data_source
+        else:
+            logging.debug(f"No DataSource found with ID: {identifier}")
+    except Exception as e:
+        logging.debug(f"Could not find DataSource by ID {identifier}: {e}")
+
+    # 2. Try to get by key
+    try:
+        logging.debug("Attempting to resolve by key...")
+        data_sources = await DataSource.list_by_key(client, identifier)
+        if data_sources:
+            data_source = data_sources[0]  # Take the first match
+            logging.info(f"Found DataSource by key '{identifier}': {data_source.id}")
+            return data_source
+        else:
+            logging.debug(f"No DataSource found with key: {identifier}")
+    except Exception as e:
+        logging.debug(f"Could not find DataSource by key {identifier}: {e}")
+
+    # 3. Try to get by name
+    try:
+        logging.debug("Attempting to resolve by name...")
+        data_sources = await DataSource.list_by_name(client, identifier)
+        if data_sources:
+            data_source = data_sources[0]  # Take the first match
+            logging.info(f"Found DataSource by name '{identifier}': {data_source.id}")
+            return data_source
+        else:
+            logging.debug(f"No DataSource found with name: {identifier}")
+    except Exception as e:
+        logging.debug(f"Could not find DataSource by name {identifier}: {e}")
+
+    logging.error(f"Could not resolve DataSource identifier: {identifier}")
     return None 

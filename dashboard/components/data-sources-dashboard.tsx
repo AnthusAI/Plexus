@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect, useRef } from "react"
 import { Button } from "./ui/button"
 import { amplifyClient } from "@/utils/amplify-client"
 import type { Schema } from "@/amplify/data/resource"
@@ -11,6 +11,7 @@ import DataSetComponent from "./data-sets/DataSetComponent"
 import { cn } from "@/lib/utils"
 import { useAccount } from "@/app/contexts/AccountContext"
 import { ScorecardDashboardSkeleton } from "./loading-skeleton"
+import { motion, AnimatePresence } from 'framer-motion'
 
 
 export default function DataSourcesDashboard() {
@@ -24,6 +25,33 @@ export default function DataSourcesDashboard() {
   const [leftPanelWidth, setLeftPanelWidth] = useState(40)
   const [dataSourcePanelWidth, setDataSourcePanelWidth] = useState(50)
   const [isFullWidth, setIsFullWidth] = useState(false)
+  const [isDataSetFullWidth, setIsDataSetFullWidth] = useState(false)
+  const [isNarrowViewport, setIsNarrowViewport] = useState(false)
+  const [dataSetAnimationComplete, setDataSetAnimationComplete] = useState(false)
+  
+  // Track when we previously had a dataset to handle proper close animations
+  const previouslyHadDataSet = useRef<boolean>(false)
+
+  // Monitor viewport width for responsive layout
+  useEffect(() => {
+    const checkViewportWidth = () => {
+      setIsNarrowViewport(window.innerWidth < 768) // md breakpoint
+    }
+    
+    checkViewportWidth() // Initial check
+    window.addEventListener('resize', checkViewportWidth)
+    
+    return () => window.removeEventListener('resize', checkViewportWidth)
+  }, [])
+
+  // Auto-set full width on narrow viewports when data source is selected
+  useEffect(() => {
+    if (isNarrowViewport && selectedDataSource) {
+      setIsFullWidth(true)
+    } else if (!isNarrowViewport && selectedDataSource) {
+      setIsFullWidth(false)
+    }
+  }, [isNarrowViewport, selectedDataSource])
 
   // Fetch data sources
   const fetchDataSources = async () => {
@@ -108,7 +136,23 @@ export default function DataSourcesDashboard() {
   // Handle dataset selection
   const handleSelectDataSet = (dataSet: Schema['DataSet']['type'] | null) => {
     setSelectedDataSet(dataSet)
+    // Reset animation state when selecting a new dataset
+    setDataSetAnimationComplete(false)
   }
+  
+  // Track when we have a dataset
+  useEffect(() => {
+    if (selectedDataSet) {
+      previouslyHadDataSet.current = true
+    }
+  }, [selectedDataSet])
+  
+  // Clear the flag when data source changes
+  useEffect(() => {
+    return () => {
+      previouslyHadDataSet.current = false
+    }
+  }, [selectedDataSource])
 
   // Handle data source deletion
   const handleDeleteDataSource = async (dataSource: Schema['DataSource']['type']) => {
@@ -239,6 +283,8 @@ export default function DataSourcesDashboard() {
   // Handle closing the selected dataset
   const handleCloseDataSet = () => {
     setSelectedDataSet(null)
+    setIsDataSetFullWidth(false)
+    setDataSetAnimationComplete(false)
   }
 
   // Handle drag for resizing panels (grid/data source)
@@ -302,46 +348,92 @@ export default function DataSourcesDashboard() {
 
 
       <div className="flex flex-1 min-h-0">
-        {/* Grid Panel */}
-        <div 
-          className={cn(
-            "h-full overflow-auto",
-            (selectedDataSource && isFullWidth) || selectedDataSet ? "hidden" : selectedDataSource ? "flex" : "w-full",
-            "transition-all duration-200"
-          )}
-          style={selectedDataSource && !selectedDataSet && !isFullWidth ? {
-            width: `${leftPanelWidth}%`
-          } : undefined}
+        {/* Left panel - grid content */}
+        <motion.div 
+          className="h-full overflow-auto overflow-x-visible"
+          animate={{
+            width: selectedDataSource && !isNarrowViewport && (isFullWidth || selectedDataSet) 
+              ? 0 
+              : selectedDataSource && !isNarrowViewport && !isFullWidth && !selectedDataSet 
+                ? `${leftPanelWidth}%`
+                : '100%'
+          }}
+          transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+          style={{
+            flexShrink: 0,
+            overflow: selectedDataSource && !isNarrowViewport && (isFullWidth || selectedDataSet) ? 'hidden' : 'auto'
+          }}
         >
-          <div className="space-y-3 w-full">
-            <div className="flex justify-end">
-              <Button 
-                onClick={handleCreate} 
-                variant="ghost" 
-                className="bg-card hover:bg-accent text-muted-foreground"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                New Data Source
-              </Button>
-            </div>
-            <div className="@container">
-              <div className="grid grid-cols-1 @[400px]:grid-cols-1 @[600px]:grid-cols-2 @[900px]:grid-cols-3 gap-3">
-                {dataSources.map(dataSource => (
-                  <DataSourceComponent
-                    key={dataSource.id}
-                    variant="grid"
-                    dataSource={dataSource}
-                    isSelected={selectedDataSource?.id === dataSource.id}
-                    onClick={() => handleSelectDataSource(dataSource)}
+          {/* Grid content or selected content for mobile */}
+          <div className="@container space-y-3 overflow-visible">
+            {isNarrowViewport && (selectedDataSource || selectedDataSet) ? (
+              // Mobile full-screen view
+              <div className="h-full">
+                {selectedDataSet ? (
+                  // For mobile, render immediately since there's no sliding animation
+                  <DataSetComponent
+                    variant="detail"
+                    dataSet={selectedDataSet}
+                    onClose={handleCloseDataSet}
+                    isFullWidth={isDataSetFullWidth}
+                    onToggleFullWidth={() => setIsDataSetFullWidth(!isDataSetFullWidth)}
                   />
-                ))}
+                ) : selectedDataSource ? (
+                  <DataSourceComponent
+                    variant="detail"
+                    dataSource={selectedDataSource}
+                    isFullWidth={isFullWidth}
+                    onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
+                    onClose={handleCloseDataSource}
+                    onSave={async (savedDataSource?: Schema['DataSource']['type']) => {
+                      await fetchDataSources()
+                      if (savedDataSource && selectedDataSource?.id === '') {
+                        handleCloseDataSource()
+                      }
+                    }}
+                    onDelete={handleDeleteDataSource}
+                    onLoad={handleLoadDataSource}
+                    onDuplicate={handleDuplicateDataSource}
+                    dataSets={dataSets}
+                    onDataSetSelect={handleSelectDataSet}
+                    selectedDataSetId={undefined}
+                    accountId={selectedAccount?.id}
+                  />
+                ) : null}
               </div>
-            </div>
+            ) : (
+              // Grid view
+              <>
+                <div className="flex justify-end">
+                  <Button 
+                    onClick={handleCreate} 
+                    variant="ghost" 
+                    className="bg-card hover:bg-accent text-muted-foreground"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    New Data Source
+                  </Button>
+                </div>
+                <div className="@container">
+                  <div className="grid grid-cols-1 @[400px]:grid-cols-1 @[600px]:grid-cols-2 @[900px]:grid-cols-3 gap-3">
+                    {dataSources.map(dataSource => (
+                      <DataSourceComponent
+                        key={dataSource.id}
+                        variant="grid"
+                        dataSource={dataSource}
+                        isSelected={selectedDataSource?.id === dataSource.id}
+                        onClick={() => handleSelectDataSource(dataSource)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
-        </div>
+        </motion.div>
 
-        {/* Resize Handle between Grid and Detail */}
-        {selectedDataSource && !selectedDataSet && !isFullWidth && (
+        {/* Divider for split view */}
+        {selectedDataSource && !isNarrowViewport && !isFullWidth && !selectedDataSet && (
           <div
             className="w-[12px] relative cursor-col-resize flex-shrink-0 group"
             onMouseDown={handleDragStart}
@@ -351,83 +443,148 @@ export default function DataSourcesDashboard() {
           </div>
         )}
 
-        {/* Detail Panel */}
-        <div className="flex-1 flex overflow-hidden">
-          {selectedDataSource && !selectedDataSet && (
-            /* Single column: Data Source only */
-            <div className="h-full overflow-y-auto overflow-x-hidden w-full">
-              <DataSourceComponent
-                variant="detail"
-                dataSource={selectedDataSource}
-                isFullWidth={isFullWidth}
-                onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
-                onClose={handleCloseDataSource}
-                onSave={async (savedDataSource?: Schema['DataSource']['type']) => {
-                  await fetchDataSources()
-                  // If this was a new data source creation, navigate to show it in the list
-                  if (savedDataSource && selectedDataSource?.id === '') {
-                    handleCloseDataSource() // Close the detail view to show the grid
-                  }
-                }}
-                onDelete={handleDeleteDataSource}
-                onLoad={handleLoadDataSource}
-                onDuplicate={handleDuplicateDataSource}
-                dataSets={dataSets}
-                onDataSetSelect={handleSelectDataSet}
-                selectedDataSetId={undefined}
-                accountId={selectedAccount?.id}
-              />
-            </div>
-          )}
-          
-          {selectedDataSource && selectedDataSet && (
-            /* Two columns: Data Source + Dataset */
+        {/* Right panel - data source and dataset detail views */}
+        <AnimatePresence>
+          {selectedDataSource && !isNarrowViewport && (
             <>
-              <div 
-                className="h-full overflow-y-auto overflow-x-hidden"
-                style={{ width: `${dataSourcePanelWidth}%` }}
-              >
-                <DataSourceComponent
-                  variant="detail"
-                  dataSource={selectedDataSource}
-                  isFullWidth={false}
-                  onClose={handleCloseDataSource}
-                  onSave={async (savedDataSource?: Schema['DataSource']['type']) => {
-                    await fetchDataSources()
-                    // If this was a new data source creation, navigate to show it in the list
-                    if (savedDataSource && selectedDataSource?.id === '') {
-                      handleCloseDataSource() // Close the detail view to show the grid
+              {selectedDataSet ? (
+                // When dataset is selected, show DataSource and DataSet side by side
+                <motion.div
+                  key="split-view"
+                  initial={{ x: 0 }}
+                  animate={{ x: 0 }}
+                  exit={{ x: 0 }}
+                  className="flex h-full overflow-hidden w-full"
+                >
+                  {/* Data source panel - slides from right to left, keeps same width */}
+                  <motion.div 
+                    key="datasource-in-split"
+                    initial={{ x: isFullWidth ? 0 : `${100 - leftPanelWidth}%` }}
+                    animate={{ 
+                      x: isDataSetFullWidth ? '-100%' : 0,
+                      width: isDataSetFullWidth ? '0%' : `${dataSourcePanelWidth}%`,
+                      opacity: isDataSetFullWidth ? 0 : 1
+                    }}
+                    transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                    className="h-full overflow-hidden flex-1"
+                  >
+                    <DataSourceComponent
+                      variant="detail"
+                      dataSource={selectedDataSource}
+                      isFullWidth={false}
+                      onClose={handleCloseDataSource}
+                      onSave={async (savedDataSource?: Schema['DataSource']['type']) => {
+                        await fetchDataSources()
+                        if (savedDataSource && selectedDataSource?.id === '') {
+                          handleCloseDataSource()
+                        }
+                      }}
+                      onDelete={handleDeleteDataSource}
+                      onLoad={handleLoadDataSource}
+                      onDuplicate={handleDuplicateDataSource}
+                      dataSets={dataSets}
+                      onDataSetSelect={handleSelectDataSet}
+                      selectedDataSetId={selectedDataSet.id}
+                      accountId={selectedAccount?.id}
+                    />
+                  </motion.div>
+                  
+                  {/* Divider between DataSource and DataSet */}
+                  {!isNarrowViewport && (
+                    <motion.div
+                      initial={{ opacity: 0, width: 0 }}
+                      animate={{ 
+                        opacity: isDataSetFullWidth ? 0 : 1, 
+                        width: isDataSetFullWidth ? 0 : 12 
+                      }}
+                      exit={{ opacity: 0, width: 0 }}
+                      transition={{ duration: 0.3 }}
+                      className="relative cursor-col-resize flex-shrink-0 group"
+                      onMouseDown={handleDataSourceDragStart}
+                    >
+                      <div className="absolute inset-0 rounded-full transition-colors duration-150 
+                        group-hover:bg-accent" />
+                    </motion.div>
+                  )}
+                  
+                  {/* Dataset panel - slides in from right */}
+                  <motion.div 
+                    key={`dataset-${selectedDataSet.id}`}
+                    initial={{ x: '100%', opacity: 0 }}
+                    animate={{ 
+                      x: 0, 
+                      opacity: 1,
+                      width: isDataSetFullWidth ? '100%' : `${100 - dataSourcePanelWidth}%`
+                    }}
+                    exit={{ x: '100%', opacity: 0 }}
+                    transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                    onAnimationComplete={() => setDataSetAnimationComplete(true)}
+                    className="h-full overflow-hidden"
+                  >
+                    {dataSetAnimationComplete ? (
+                      <DataSetComponent
+                        variant="detail"
+                        dataSet={selectedDataSet}
+                        onClose={handleCloseDataSet}
+                        isFullWidth={isDataSetFullWidth}
+                        onToggleFullWidth={() => setIsDataSetFullWidth(!isDataSetFullWidth)}
+                      />
+                    ) : (
+                      <div className="h-full w-full bg-card flex items-center justify-center">
+                        <div className="text-muted-foreground">Loading dataset...</div>
+                      </div>
+                    )}
+                  </motion.div>
+                </motion.div>
+              ) : (
+                // When no dataset is selected, show normal data source view
+                <motion.div
+                  key={`datasource-${selectedDataSource.id}-solo`}
+                  initial={{ 
+                    x: previouslyHadDataSet.current ? '-50%' : '100%', 
+                    opacity: previouslyHadDataSet.current ? 1 : 0,
+                    width: isFullWidth ? '100%' : `${100 - leftPanelWidth}%`
+                  }}
+                  animate={{ 
+                    x: 0, 
+                    opacity: 1,
+                    width: isFullWidth ? '100%' : `${100 - leftPanelWidth}%`
+                  }}
+                  exit={{ x: '100%', opacity: 0 }}
+                  transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                  onAnimationComplete={() => {
+                    // Reset the flag after animation completes
+                    if (previouslyHadDataSet.current) {
+                      previouslyHadDataSet.current = false
                     }
                   }}
-                  onDelete={handleDeleteDataSource}
-                  onLoad={handleLoadDataSource}
-                  onDuplicate={handleDuplicateDataSource}
-                  dataSets={dataSets}
-                  onDataSetSelect={handleSelectDataSet}
-                  selectedDataSetId={selectedDataSet.id}
-                  accountId={selectedAccount?.id}
-                />
-              </div>
-              
-              {/* Resize Handle between Data Source and Dataset */}
-              <div
-                className="w-[12px] relative cursor-col-resize flex-shrink-0 group"
-                onMouseDown={handleDataSourceDragStart}
-              >
-                <div className="absolute inset-0 rounded-full transition-colors duration-150 
-                  group-hover:bg-accent" />
-              </div>
-              
-              <div className="flex-1 h-full overflow-y-auto overflow-x-hidden">
-                <DataSetComponent
-                  variant="detail"
-                  dataSet={selectedDataSet}
-                  onClose={handleCloseDataSet}
-                />
-              </div>
+                  className="h-full overflow-hidden"
+                >
+                  <DataSourceComponent
+                    variant="detail"
+                    dataSource={selectedDataSource}
+                    isFullWidth={isFullWidth}
+                    onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
+                    onClose={handleCloseDataSource}
+                    onSave={async (savedDataSource?: Schema['DataSource']['type']) => {
+                      await fetchDataSources()
+                      if (savedDataSource && selectedDataSource?.id === '') {
+                        handleCloseDataSource()
+                      }
+                    }}
+                    onDelete={handleDeleteDataSource}
+                    onLoad={handleLoadDataSource}
+                    onDuplicate={handleDuplicateDataSource}
+                    dataSets={dataSets}
+                    onDataSetSelect={handleSelectDataSet}
+                    selectedDataSetId={undefined}
+                    accountId={selectedAccount?.id}
+                  />
+                </motion.div>
+              )}
             </>
           )}
-        </div>
+        </AnimatePresence>
       </div>
     </div>
   )

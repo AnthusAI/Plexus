@@ -5,6 +5,9 @@ import { cn } from '@/lib/utils'
 import { Popover, PopoverContent, PopoverTrigger, PopoverAnchor } from '@/components/ui/popover'
 import { CircleHelp } from 'lucide-react'
 import NumberFlowWrapper from '@/components/ui/number-flow'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import remarkBreaks from 'remark-breaks'
 
 export interface Segment {
   start: number
@@ -22,6 +25,16 @@ interface GaugeProps {
   title?: React.ReactNode
   backgroundColor?: string
   showTicks?: boolean
+  /** 
+   * Information text displayed in a popover when the help icon is clicked.
+   * Supports full Markdown formatting including:
+   * - **bold** and *italic* text
+   * - [links](https://example.com)
+   * - Lists (bulleted and numbered)
+   * - `code` blocks
+   * - > blockquotes
+   * - Line breaks (use two spaces at end of line)
+   */
   information?: string
   informationUrl?: string
   priority?: boolean
@@ -630,7 +643,28 @@ const GaugeComponent: React.FC<GaugeProps> = ({
         {information && (
           <PopoverContent className="w-80 text-sm" side="top" align="center">
             <div className="space-y-2">
-              <p>{information}</p>
+              <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:bg-muted prose-pre:text-foreground">
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm, remarkBreaks]}
+                  components={{
+                    p: ({ children }) => <p className="mb-2 last:mb-0 text-sm">{children}</p>,
+                    ul: ({ children }) => <ul className="mb-2 ml-4 list-disc">{children}</ul>,
+                    ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal">{children}</ol>,
+                    li: ({ children }) => <li className="mb-1">{children}</li>,
+                    strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+                    em: ({ children }) => <em className="italic">{children}</em>,
+                    code: ({ children }) => <code className="bg-muted px-1 py-0.5 rounded text-xs font-mono">{children}</code>,
+                    pre: ({ children }) => <pre className="bg-muted p-2 rounded overflow-x-auto text-xs">{children}</pre>,
+                    h1: ({ children }) => <h1 className="text-base font-semibold mb-2 text-foreground">{children}</h1>,
+                    h2: ({ children }) => <h2 className="text-sm font-semibold mb-2 text-foreground">{children}</h2>,
+                    h3: ({ children }) => <h3 className="text-sm font-medium mb-1 text-foreground">{children}</h3>,
+                    blockquote: ({ children }) => <blockquote className="border-l-4 border-muted-foreground/20 pl-3 italic text-muted-foreground">{children}</blockquote>,
+                    a: ({ children, href }) => <a href={href} className="text-primary hover:underline" target="_blank" rel="noopener noreferrer">{children}</a>,
+                  }}
+                >
+                  {information}
+                </ReactMarkdown>
+              </div>
               {informationUrl && (
                 <p>
                   <a
