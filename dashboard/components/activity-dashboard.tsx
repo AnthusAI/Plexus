@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useInView } from 'react-intersection-observer'
+import { motion, AnimatePresence } from "framer-motion"
 import { formatTimeAgo } from '@/utils/format-time'
 import { formatDuration } from '@/utils/format-duration'
 import { TaskStageConfig } from '@/components/ui/task-status'
@@ -776,14 +777,34 @@ export default function ActivityDashboard({
       </div>
       
       <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-        <div className="flex flex-1 min-h-0">
-          {/* Left panel - grid content */}
-          <div 
-            className={`${selectedTask && !isNarrowViewport && isFullWidth ? 'hidden' : 'flex-1'} h-full overflow-auto`}
-            style={selectedTask && !isNarrowViewport && !isFullWidth ? {
-              width: `${leftPanelWidth}%`
-            } : undefined}
+        <AnimatePresence mode="popLayout">
+          <motion.div 
+            key="activity-layout"
+            className="flex flex-1 min-h-0"
+            layout
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ 
+              type: "spring", 
+              stiffness: 300, 
+              damping: 30,
+              opacity: { duration: 0.2 }
+            }}
           >
+            {/* Left panel - grid content */}
+            <motion.div 
+              className={`${selectedTask && !isNarrowViewport && isFullWidth ? 'hidden' : 'flex-1'} h-full overflow-auto`}
+              style={selectedTask && !isNarrowViewport && !isFullWidth ? {
+                width: `${leftPanelWidth}%`
+              } : undefined}
+              layout
+              transition={{ 
+                type: "spring", 
+                stiffness: 300, 
+                damping: 30 
+              }}
+            >
             <div className="@container">
               <div className={`
                 grid gap-3
@@ -822,36 +843,55 @@ export default function ActivityDashboard({
                 <div ref={ref} />
               </div>
             </div>
+            </motion.div>
+
+            {/* Divider for split view */}
+            {selectedTask && !isNarrowViewport && !isFullWidth && (
+              <div
+                className="w-[12px] relative cursor-col-resize flex-shrink-0 group"
+                onMouseDown={handleDragStart}
+              >
+                <div className="absolute inset-0 rounded-full transition-colors duration-150 
+                  group-hover:bg-accent" />
+              </div>
+            )}
+
+            {/* Right panel - task detail view */}
+            <AnimatePresence>
+              {selectedTask && !isNarrowViewport && !isFullWidth && (
+                <motion.div 
+                  key={`task-detail-${selectedTask}`}
+                  className="h-full overflow-hidden flex-shrink-0"
+                  style={{ width: `${100 - leftPanelWidth}%` }}
+                  initial={{ width: 0, opacity: 0 }}
+                  animate={{ 
+                    width: `${100 - leftPanelWidth}%`, 
+                    opacity: 1 
+                  }}
+                  exit={{ 
+                    width: 0, 
+                    opacity: 0 
+                  }}
+                  transition={{ 
+                    type: "spring", 
+                    stiffness: 300, 
+                    damping: 30 
+                  }}
+                >
+                  {renderSelectedTask()}
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+          </motion.div>
+        </AnimatePresence>
+        
+        {/* Full-screen view for mobile or full-width mode */}
+        {selectedTask && (isNarrowViewport || isFullWidth) && (
+          <div className="fixed inset-0 z-50 overflow-y-auto">
+            {renderSelectedTask()}
           </div>
-
-          {/* Divider for split view */}
-          {selectedTask && !isNarrowViewport && !isFullWidth && (
-            <div
-              className="w-[12px] relative cursor-col-resize flex-shrink-0 group"
-              onMouseDown={handleDragStart}
-            >
-              <div className="absolute inset-0 rounded-full transition-colors duration-150 
-                group-hover:bg-accent" />
-            </div>
-          )}
-
-          {/* Right panel - task detail view */}
-          {selectedTask && !isNarrowViewport && !isFullWidth && (
-            <div 
-              className="h-full overflow-hidden flex-shrink-0"
-              style={{ width: `${100 - leftPanelWidth}%` }}
-            >
-              {renderSelectedTask()}
-            </div>
-          )}
-
-          {/* Full-screen view for mobile or full-width mode */}
-          {selectedTask && (isNarrowViewport || isFullWidth) && (
-            <div className="fixed inset-0 z-50 overflow-y-auto">
-              {renderSelectedTask()}
-            </div>
-          )}
-        </div>
+        )}
       </div>
     </div>
   )
