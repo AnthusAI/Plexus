@@ -1,0 +1,276 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.cli.DataCommands module &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.cli.DataLakeCommands module" href="plexus.cli.DataLakeCommands.html" />
+    <link rel="prev" title="plexus.cli.CommandTasks module" href="plexus.cli.CommandTasks.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.html">plexus.analysis package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="plexus.cli.html#subpackages">Subpackages</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.cli.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.metrics.html">plexus.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.reports.html">plexus.reports package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.html">plexus.utils package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.html#subpackages">Subpackages</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.cli.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.AnalyzeCommands.html">plexus.cli.AnalyzeCommands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.BatchCommands.html">plexus.cli.BatchCommands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.CommandDispatch.html">plexus.cli.CommandDispatch module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.CommandLineInterface.html">plexus.cli.CommandLineInterface module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.CommandProgress.html">plexus.cli.CommandProgress module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.CommandTasks.html">plexus.cli.CommandTasks module</a></li>
+<li class="toctree-l3 current"><a class="current reference internal" href="#">plexus.cli.DataCommands module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.cli.DataCommands.NumpyEncoder"><code class="docutils literal notranslate"><span class="pre">NumpyEncoder</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.cli.DataCommands.VectorizerLogger"><code class="docutils literal notranslate"><span class="pre">VectorizerLogger</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.cli.DataCommands.analyze_question"><code class="docutils literal notranslate"><span class="pre">analyze_question()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.cli.DataCommands.analyze_scorecard"><code class="docutils literal notranslate"><span class="pre">analyze_scorecard()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.cli.DataCommands.compute_shap_feature_importances"><code class="docutils literal notranslate"><span class="pre">compute_shap_feature_importances()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.cli.DataCommands.preprocess_text"><code class="docutils literal notranslate"><span class="pre">preprocess_text()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.DataLakeCommands.html">plexus.cli.DataLakeCommands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.EvaluationCommands.html">plexus.cli.EvaluationCommands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.FeedbackCommands.html">plexus.cli.FeedbackCommands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.ItemCommands.html">plexus.cli.ItemCommands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.PredictionCommands.html">plexus.cli.PredictionCommands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.RecordCountCommands.html">plexus.cli.RecordCountCommands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.ReportCommands.html">plexus.cli.ReportCommands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.ResultCommands.html">plexus.cli.ResultCommands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.ScoreChatCommands.html">plexus.cli.ScoreChatCommands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.ScoreCommands.html">plexus.cli.ScoreCommands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.ScorecardCommands.html">plexus.cli.ScorecardCommands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.TaskCommands.html">plexus.cli.TaskCommands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.TaskTargeting.html">plexus.cli.TaskTargeting module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.TrainingCommands.html">plexus.cli.TrainingCommands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.TuningCommands.html">plexus.cli.TuningCommands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.cli_wrapper.html">plexus.cli.cli_wrapper module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.client_utils.html">plexus.cli.client_utils module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.console.html">plexus.cli.console module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.file_editor.html">plexus.cli.file_editor module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.identifier_resolution.html">plexus.cli.identifier_resolution module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.main.html">plexus.cli.main module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.memoized_resolvers.html">plexus.cli.memoized_resolvers module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.plexus_tool.html">plexus.cli.plexus_tool module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.score_chat_celery.html">plexus.cli.score_chat_celery module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.score_chat_repl.html">plexus.cli.score_chat_repl module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.score_chat_service.html">plexus.cli.score_chat_service module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.html">plexus.cli.shared module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.task_progress_tracker.html">plexus.cli.task_progress_tracker module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.test_record_count_commands.html">plexus.cli.test_record_count_commands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.utils.html">plexus.cli.utils module</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.cli.html">plexus.cli package</a></li>
+      <li class="breadcrumb-item active">plexus.cli.DataCommands module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.cli.DataCommands.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.cli.DataCommands">
+<span id="plexus-cli-datacommands-module"></span><h1>plexus.cli.DataCommands module<a class="headerlink" href="#module-plexus.cli.DataCommands" title="Link to this heading"></a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.cli.DataCommands.NumpyEncoder">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">plexus.cli.DataCommands.</span></span><span class="sig-name descname"><span class="pre">NumpyEncoder</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">skipkeys</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ensure_ascii</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">check_circular</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">allow_nan</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sort_keys</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">indent</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">separators</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">default</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.DataCommands.NumpyEncoder" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">JSONEncoder</span></code></p>
+<p>Constructor for JSONEncoder, with sensible defaults.</p>
+<p>If skipkeys is false, then it is a TypeError to attempt
+encoding of keys that are not str, int, float or None.  If
+skipkeys is True, such items are simply skipped.</p>
+<p>If ensure_ascii is true, the output is guaranteed to be str
+objects with all incoming non-ASCII characters escaped.  If
+ensure_ascii is false, the output can contain non-ASCII characters.</p>
+<p>If check_circular is true, then lists, dicts, and custom encoded
+objects will be checked for circular references during encoding to
+prevent an infinite recursion (which would cause an RecursionError).
+Otherwise, no such check takes place.</p>
+<p>If allow_nan is true, then NaN, Infinity, and -Infinity will be
+encoded as such.  This behavior is not JSON specification compliant,
+but is consistent with most JavaScript based encoders and decoders.
+Otherwise, it will be a ValueError to encode such floats.</p>
+<p>If sort_keys is true, then the output of dictionaries will be
+sorted by key; this is useful for regression tests to ensure
+that JSON serializations can be compared on a day-to-day basis.</p>
+<p>If indent is a non-negative integer, then JSON array
+elements and object members will be pretty-printed with that
+indent level.  An indent level of 0 will only insert newlines.
+None is the most compact representation.</p>
+<p>If specified, separators should be an (item_separator, key_separator)
+tuple.  The default is (’, ‘, ‘: ‘) if <em>indent</em> is <code class="docutils literal notranslate"><span class="pre">None</span></code> and
+(‘,’, ‘: ‘) otherwise.  To get the most compact JSON representation,
+you should specify (‘,’, ‘:’) to eliminate whitespace.</p>
+<p>If specified, default is a function that gets called for objects
+that can’t otherwise be serialized.  It should return a JSON encodable
+version of the object or raise a <code class="docutils literal notranslate"><span class="pre">TypeError</span></code>.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.DataCommands.NumpyEncoder.default">
+<span class="sig-name descname"><span class="pre">default</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">obj</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.DataCommands.NumpyEncoder.default" title="Link to this definition"></a></dt>
+<dd><p>Implement this method in a subclass such that it returns
+a serializable object for <code class="docutils literal notranslate"><span class="pre">o</span></code>, or calls the base implementation
+(to raise a <code class="docutils literal notranslate"><span class="pre">TypeError</span></code>).</p>
+<p>For example, to support arbitrary iterators, you could
+implement default like this:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">default</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">o</span><span class="p">):</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">iterable</span> <span class="o">=</span> <span class="nb">iter</span><span class="p">(</span><span class="n">o</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">TypeError</span><span class="p">:</span>
+        <span class="k">pass</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="n">iterable</span><span class="p">)</span>
+    <span class="c1"># Let the base class default method raise the TypeError</span>
+    <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">default</span><span class="p">(</span><span class="n">o</span><span class="p">)</span>
+</pre></div>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.cli.DataCommands.VectorizerLogger">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">plexus.cli.DataCommands.</span></span><span class="sig-name descname"><span class="pre">VectorizerLogger</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">analyzer</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.DataCommands.VectorizerLogger" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.DataCommands.VectorizerLogger.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">analyzer</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.DataCommands.VectorizerLogger.__init__" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.DataCommands.analyze_question">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.DataCommands.</span></span><span class="sig-name descname"><span class="pre">analyze_question</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scorecard_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataframe</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">report_folder</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">top_n_features</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">leaderboard_n_features</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">14</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ngram_range</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(2,</span> <span class="pre">3)</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.DataCommands.analyze_question" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.DataCommands.analyze_scorecard">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.DataCommands.</span></span><span class="sig-name descname"><span class="pre">analyze_scorecard</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scorecard_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">excel</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">all_questions</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">top_n_features</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">leaderboard_n_features</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_size</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ngram_range</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.DataCommands.analyze_scorecard" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.DataCommands.compute_shap_feature_importances">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.DataCommands.</span></span><span class="sig-name descname"><span class="pre">compute_shap_feature_importances</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scorecard_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">answer_value</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataframe</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">top_n_features</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ngram_range</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(2,</span> <span class="pre">3)</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.DataCommands.compute_shap_feature_importances" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.DataCommands.preprocess_text">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.DataCommands.</span></span><span class="sig-name descname"><span class="pre">preprocess_text</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">text</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stop_words</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.DataCommands.preprocess_text" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.cli.CommandTasks.html" class="btn btn-neutral float-left" title="plexus.cli.CommandTasks module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.cli.DataLakeCommands.html" class="btn btn-neutral float-right" title="plexus.cli.DataLakeCommands module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
