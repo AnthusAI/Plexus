@@ -793,6 +793,7 @@ const schema = a.schema({
             idx("scorecardId").sortKeys(["updatedAt"]),
             idx("scoreId").sortKeys(["updatedAt"]),
             idx("key"),
+            idx("name")
         ]),
 
     DataSourceVersion: a
