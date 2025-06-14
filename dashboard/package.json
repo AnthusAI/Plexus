@@ -86,6 +86,8 @@
     "date-fns": "^3.6.0",
     "framer-motion": "^12.16.0",
     "hsl-radix-colors": "^1.0.2",
+    "hyparquet": "^1.16.1",
+    "hyparquet-compressors": "^1.1.1",
     "js-yaml": "^4.1.0",
     "lucide-react": "^0.447.0",
     "monaco-editor": "^0.52.2",
