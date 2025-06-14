@@ -789,10 +789,10 @@ const schema = a.schema({
         .secondaryIndexes((idx: (field: DataSourceIndexFields) => any) => [
             idx("accountId").sortKeys(["updatedAt"]),
             idx("accountId").sortKeys(["name"]),
+            idx("accountId").sortKeys(["key"]),
             idx("scorecardId").sortKeys(["updatedAt"]),
             idx("scoreId").sortKeys(["updatedAt"]),
             idx("key"),
-            idx("name")
         ]),
 
     DataSourceVersion: a
