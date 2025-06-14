@@ -165,6 +165,23 @@
   }
 }
 
+/* Navigation loading animations */
+@keyframes loading-bar {
+  0% {
+    transform: translateX(-100%);
+  }
+  50% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.animate-loading-bar {
+  animation: loading-bar 2s ease-in-out infinite;
+}
+
 .new-item-shadow {
   box-shadow: 0 4px 12px hsl(var(--secondary) / 0.4);
   animation: fadeInSmooth 2s ease-out;

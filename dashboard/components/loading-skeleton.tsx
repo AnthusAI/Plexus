@@ -2,22 +2,22 @@ import ScorecardContext from './ScorecardContext'
 
 export function EvaluationDashboardSkeleton() {
   return (
-    <div className="flex flex-col h-full p-1.5 animate-pulse">
+    <div className="flex flex-col h-full p-1.5">
       {/* Header with Filter Controls Skeleton */}
       <div className="flex items-center justify-between pb-3">
         <div className="flex items-center space-x-4 flex-1">
           {/* ScorecardContext filter controls skeleton */}
           <div className="flex items-center space-x-3">
             {/* Scorecard filter */}
-            <div className="h-10 bg-muted rounded w-48" />
+            <div className="h-10 bg-muted rounded w-48 animate-pulse" />
             {/* Score filter */}
-            <div className="h-10 bg-muted rounded w-40" />
+            <div className="h-10 bg-muted rounded w-40 animate-pulse" style={{ animationDelay: '0.1s' }} />
             {/* Time range filter */}
-            <div className="h-10 bg-muted rounded w-36" />
+            <div className="h-10 bg-muted rounded w-36 animate-pulse" style={{ animationDelay: '0.2s' }} />
           </div>
         </div>
         {/* Run button skeleton */}
-        <div className="h-10 bg-muted rounded w-20" />
+        <div className="h-10 bg-muted rounded w-20 animate-pulse" style={{ animationDelay: '0.3s' }} />
       </div>
       
       {/* Main Content Area */}
@@ -27,7 +27,13 @@ export function EvaluationDashboardSkeleton() {
             {/* Evaluations Grid Skeleton */}
             <div className="grid gap-3 grid-cols-1 @[640px]:grid-cols-2">
               {[...Array(4)].map((_, i) => (
-                <EvaluationTaskSkeleton key={i} />
+                <div 
+                  key={i}
+                  style={{ animationDelay: `${i * 0.1}s` }}
+                  className="animate-pulse"
+                >
+                  <EvaluationTaskSkeleton />
+                </div>
               ))}
             </div>
           </div>
@@ -111,10 +117,16 @@ export function ReportsDashboardSkeleton() {
       <div className="flex-grow flex flex-col overflow-hidden">
         <div className="flex-1 overflow-auto">
           <div className="@container h-full">
-            {/* Reports Grid Skeleton */}
-            <div className="grid gap-3 grid-cols-1 @[640px]:grid-cols-2">
+            {/* Reports Grid Skeleton - Single column layout */}
+            <div className="grid gap-3 grid-cols-1">
               {[...Array(4)].map((_, i) => (
-                <ReportTaskSkeleton key={i} />
+                <div 
+                  key={i}
+                  style={{ animationDelay: `${i * 0.1}s` }}
+                  className="animate-pulse"
+                >
+                  <ReportTaskSkeleton />
+                </div>
               ))}
             </div>
           </div>
