@@ -24,6 +24,28 @@ export default function DataSourcesDashboard() {
   const [leftPanelWidth, setLeftPanelWidth] = useState(40)
   const [dataSourcePanelWidth, setDataSourcePanelWidth] = useState(50)
   const [isFullWidth, setIsFullWidth] = useState(false)
+  const [isNarrowViewport, setIsNarrowViewport] = useState(false)
+
+  // Monitor viewport width for responsive layout
+  useEffect(() => {
+    const checkViewportWidth = () => {
+      setIsNarrowViewport(window.innerWidth < 768) // md breakpoint
+    }
+    
+    checkViewportWidth() // Initial check
+    window.addEventListener('resize', checkViewportWidth)
+    
+    return () => window.removeEventListener('resize', checkViewportWidth)
+  }, [])
+
+  // Auto-set full width on narrow viewports when data source is selected
+  useEffect(() => {
+    if (isNarrowViewport && selectedDataSource) {
+      setIsFullWidth(true)
+    } else if (!isNarrowViewport && selectedDataSource) {
+      setIsFullWidth(false)
+    }
+  }, [isNarrowViewport, selectedDataSource])
 
   // Fetch data sources
   const fetchDataSources = async () => {
@@ -306,10 +328,14 @@ export default function DataSourcesDashboard() {
         <div 
           className={cn(
             "h-full overflow-auto",
-            (selectedDataSource && isFullWidth) || selectedDataSet ? "hidden" : selectedDataSource ? "flex" : "w-full",
+            // On narrow viewports: hide grid when any item is selected
+            // On wide viewports: hide grid only when full width is enabled OR dataset is selected
+            isNarrowViewport 
+              ? (selectedDataSource || selectedDataSet ? "hidden" : "w-full")
+              : ((selectedDataSource && isFullWidth) || selectedDataSet ? "hidden" : selectedDataSource ? "flex" : "w-full"),
             "transition-all duration-200"
           )}
-          style={selectedDataSource && !selectedDataSet && !isFullWidth ? {
+          style={selectedDataSource && !selectedDataSet && !isFullWidth && !isNarrowViewport ? {
             width: `${leftPanelWidth}%`
           } : undefined}
         >
@@ -341,7 +367,7 @@ export default function DataSourcesDashboard() {
         </div>
 
         {/* Resize Handle between Grid and Detail */}
-        {selectedDataSource && !selectedDataSet && !isFullWidth && (
+        {selectedDataSource && !selectedDataSet && !isFullWidth && !isNarrowViewport && (
           <div
             className="w-[12px] relative cursor-col-resize flex-shrink-0 group"
             onMouseDown={handleDragStart}
@@ -410,13 +436,15 @@ export default function DataSourcesDashboard() {
               </div>
               
               {/* Resize Handle between Data Source and Dataset */}
-              <div
-                className="w-[12px] relative cursor-col-resize flex-shrink-0 group"
-                onMouseDown={handleDataSourceDragStart}
-              >
-                <div className="absolute inset-0 rounded-full transition-colors duration-150 
-                  group-hover:bg-accent" />
-              </div>
+              {!isNarrowViewport && (
+                <div
+                  className="w-[12px] relative cursor-col-resize flex-shrink-0 group"
+                  onMouseDown={handleDataSourceDragStart}
+                >
+                  <div className="absolute inset-0 rounded-full transition-colors duration-150 
+                    group-hover:bg-accent" />
+                </div>
+              )}
               
               <div className="flex-1 h-full overflow-y-auto overflow-x-hidden">
                 <DataSetComponent
