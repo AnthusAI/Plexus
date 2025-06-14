@@ -31,6 +31,7 @@ import SquareLogo, { LogoVariant } from './logo-square'
 import { useSidebar } from "@/app/contexts/SidebarContext"
 import { useAccount } from "@/app/contexts/AccountContext"
 import { DashboardDrawer } from "@/components/DashboardDrawer"
+import { Spinner } from "@/components/ui/spinner"
 
 const useMediaQuery = (query: string): boolean => {
   const [matches, setMatches] = useState(false)
@@ -64,27 +65,29 @@ const MobileHeader = ({
   toggleRightSidebar: () => void;
   rightSidebarState: 'collapsed' | 'normal' | 'expanded';
 }) => (
-  <div className="hidden max-lg:flex items-center justify-between p-1 px-4 bg-background">
+  <div className="hidden max-lg:flex items-center justify-between p-0.5 px-2 bg-background min-h-[3rem] mobile-header">
     <DashboardButton
       variant="ghost"
-      size="icon"
+      size="sm"
       onClick={toggleLeftSidebar}
-      className="lg:hidden"
+      className="h-8 w-8 p-0"
     >
-      <Menu className="h-5 w-5" />
+      <Menu className="h-4 w-4" />
     </DashboardButton>
     
-    <Link href="/" className="flex items-center">
-      <SquareLogo variant={LogoVariant.Narrow} />
+    <Link href="/" className="flex items-center flex-1 justify-center">
+      <div className="scale-75">
+        <SquareLogo variant={LogoVariant.Narrow} />
+      </div>
     </Link>
 
     <DashboardButton
       variant="ghost"
-      size="icon"
+      size="sm"
       onClick={toggleRightSidebar}
-      className="lg:hidden"
+      className="h-8 w-8 p-0 hidden xs:block"
     >
-      <MessageSquare className="h-5 w-5" />
+      <MessageSquare className="h-4 w-4" />
     </DashboardButton>
   </div>
 )
@@ -113,8 +116,8 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
   const [loadingRoute, setLoadingRoute] = useState<string | null>(null)
   const { rightSidebarState, setRightSidebarState } = useSidebar()
   const { theme, setTheme } = useTheme()
-  const isDesktop = useMediaQuery("(min-width: 1024px)")
-  const isMobile = useMediaQuery("(max-width: 1023px)")
+  const isDesktop = useMediaQuery("(min-width: 768px)")
+  const isMobile = useMediaQuery("(max-width: 767px)")
   const { accounts, selectedAccount, isLoadingAccounts, visibleMenuItems, setSelectedAccount } = useAccount()
   const pathname = usePathname()
 
@@ -138,6 +141,11 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
     if (path !== pathname) {
       setLoadingRoute(path)
       setIsNavigating(true)
+      
+      // Auto-hide left sidebar on mobile after navigation
+      if (isMobile && isLeftSidebarOpen) {
+        setIsLeftSidebarOpen(false)
+      }
     }
   }
 
@@ -219,7 +227,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
 
   const LeftSidebar = () => {
     return (
-      <div className={`flex flex-col h-full py-2 bg-frame ${isMobile ? 'pr-3' : ''}`}>
+      <div className={`flex flex-col h-full py-2 bg-frame ${isMobile ? 'pr-2 mobile-compact' : ''}`}>
         <div className={`mb-4 ${isLeftSidebarOpen ? 'pl-2' : ''}`}>
           <Link href="/" className={`block relative ${isLeftSidebarOpen ? 'w-full max-w-md' : 'w-12 pl-2'}`}>
             <div className="absolute -inset-1 bg-gradient-to-r from-secondary to-primary rounded-md blur-sm opacity-50"></div>
@@ -310,7 +318,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                 {isLeftSidebarOpen && <span className="text-muted-foreground">{selectedAccount?.name || 'Select Account'}</span>}
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-[200px]">
+            <DropdownMenuContent align="start" className="w-[200px] z-[9999]">
               <DropdownMenuItem 
                 className={`cursor-pointer ${!pathname.startsWith('/lab/') ? 'opacity-50' : ''}`} 
                 onClick={pathname.startsWith('/lab/') ? toggleDashboardDrawer : undefined}
@@ -333,7 +341,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                     Select Account
                   </DropdownMenuItem>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent side="right" align="start" className="w-[200px]">
+                <DropdownMenuContent side="right" align="start" className="w-[200px] z-[9999]">
                   {isLoadingAccounts ? (
                     <DropdownMenuItem>Loading accounts...</DropdownMenuItem>
                   ) : accounts.length === 0 ? (
@@ -376,7 +384,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                 {isLeftSidebarOpen && <span className="text-muted-foreground">Ryan Porter</span>}
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-[200px]">
+            <DropdownMenuContent align="end" className="w-[200px] z-[9999]">
               <DropdownMenuLabel>My Account</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <Link href="/settings">
@@ -630,51 +638,45 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
   }, [])
 
   return (
-    <div className="flex flex-col h-screen bg-frame">
+    <div className="flex flex-col h-screen bg-frame dashboard-container">
       <MobileHeader 
         toggleLeftSidebar={toggleLeftSidebar}
         toggleRightSidebar={toggleRightSidebar}
         rightSidebarState={rightSidebarState}
       />
       
-      <div className="flex flex-1 bg-frame min-h-0">
+      <div className="flex flex-1 bg-frame min-h-0 relative">
         <aside
           className={`
-            ${isMobile ? 'fixed top-0 bottom-0 left-0 z-50 bg-background/80 backdrop-blur-sm' : 
-              'fixed top-0 bottom-0 left-0 h-full'}
-            ${isLeftSidebarOpen ? 'w-40' : 'w-14'}
+            ${isMobile ? 'fixed top-0 bottom-0 left-0 z-40 bg-background/80 backdrop-blur-sm' : 
+              'fixed top-0 bottom-0 left-0 h-full z-10'}
+            ${isLeftSidebarOpen ? (isMobile ? 'w-[min(75vw,12rem)]' : 'w-40') : (isMobile ? 'w-12' : 'w-14')}
             transition-all duration-300 ease-in-out overflow-hidden
             ${isMobile && !isLeftSidebarOpen ? 'hidden' : ''}
           `}
         >
           <div className={`
-            ${isMobile ? 'h-full w-40 bg-frame' : 'h-full'}
+            ${isMobile ? 'h-full w-full bg-frame mobile-sidebar' : 'h-full'}
           `}>
             <LeftSidebar />
           </div>
         </aside>
 
         <main 
-          className={`flex-1 flex flex-col transition-all duration-300 ease-in-out min-h-0
-            ${isMobile ? 'ml-0' : (isLeftSidebarOpen ? 'ml-40' : 'ml-14')}
-            ${isMobile && rightSidebarState === 'collapsed' ? 'mr-0' : 
-              rightSidebarState === 'normal' ? (isMobile ? 'mr-0' : 'mr-80') : 
-              rightSidebarState === 'expanded' ? (isMobile ? 'mr-0' : 'mr-[40%]') : 
-              (isMobile ? 'mr-0' : 'mr-14')}
-            ${rightSidebarState !== 'collapsed' ? 'pr-2' : 'pr-0'}
+          className={`flex-1 flex flex-col transition-all duration-300 ease-in-out min-h-0 ${isMobile ? 'mobile-main' : ''}
+            ${isMobile ? 'ml-0 mr-0' : (isLeftSidebarOpen ? 'ml-40' : 'ml-14')}
+            ${!isMobile && rightSidebarState === 'collapsed' ? 'mr-14' : 
+              !isMobile && rightSidebarState === 'normal' ? 'mr-80' : 
+              !isMobile && rightSidebarState === 'expanded' ? 'mr-[40%]' : 'mr-0'}
+            ${rightSidebarState !== 'collapsed' ? (isMobile ? 'pr-0' : 'pr-2') : 'pr-0'}
             ${isMobile ? 'p-1' : 'p-2'}
           `}
         >
-          <div className="flex-1 flex flex-col bg-background rounded-lg min-h-0 overflow-visible relative">
+          <div className={`flex-1 flex flex-col bg-background min-h-0 overflow-visible relative ${isMobile ? 'mobile-compact rounded-sm' : 'rounded-lg'}`}>
             {/* Global loading overlay */}
             {isNavigating && (
               <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center rounded-lg">
-                <div className="flex flex-col items-center space-y-4">
-                  <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
-                  <div className="text-sm text-muted-foreground">
-                    Loading {loadingRoute && visibleMenuItems.find(item => item.path === loadingRoute)?.name}...
-                  </div>
-                </div>
+                <Spinner size="xl" variant="secondary" />
               </div>
             )}
             <div className="flex-1 min-h-0">
@@ -685,11 +687,11 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
 
         <aside
           className={`
-            ${isMobile ? 'fixed top-0 bottom-0 right-0 z-50 bg-background/80 backdrop-blur-sm' : 
-              'fixed top-0 bottom-0 right-0 h-full'}
+            ${isMobile ? 'fixed top-0 bottom-0 right-0 z-40 bg-background/80 backdrop-blur-sm mobile-hide-right-sidebar' : 
+              'fixed top-0 bottom-0 right-0 h-full z-10'}
             ${rightSidebarState === 'collapsed' ? (isMobile ? 'w-0' : 'w-14') :
-              rightSidebarState === 'normal' ? 'w-80' :
-              (isMobile ? 'w-full' : 'w-[40%]')}
+              rightSidebarState === 'normal' ? (isMobile ? 'w-0' : 'w-80') :
+              (isMobile ? 'w-0' : 'w-[40%]')}
             transition-all duration-300 ease-in-out overflow-hidden
           `}
         >

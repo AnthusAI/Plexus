@@ -608,12 +608,44 @@ const GaugeComponent: React.FC<GaugeProps> = ({
                     textAlign: 'center'
                   }}
                 >
-                  <span className="relative">{title}</span>
+                  <span className="relative flex items-center gap-1">
+                    {title}
+                    {information && (
+                      <PopoverTrigger asChild>
+                        <button
+                          className="inline-flex items-center justify-center opacity-70 hover:opacity-100"
+                          aria-label="More information"
+                          style={{ fontSize: `${titleFontSizePx * 0.8}px` }}
+                        >
+                          <CircleHelp className="h-[1em] w-[1em]" />
+                        </button>
+                      </PopoverTrigger>
+                    )}
+                  </span>
                 </div>
               )}
             </div>
           </div>
         </PopoverAnchor>
+        {information && (
+          <PopoverContent className="w-80 text-sm" side="top" align="center">
+            <div className="space-y-2">
+              <p>{information}</p>
+              {informationUrl && (
+                <p>
+                  <a
+                    href={informationUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline text-xs"
+                  >
+                    Learn more →
+                  </a>
+                </p>
+              )}
+            </div>
+          </PopoverContent>
+        )}
       </Popover>
     </div>
   )
