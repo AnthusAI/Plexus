@@ -46,7 +46,7 @@ type ScorecardProcessedItemIndexFields = "scorecardId" | "itemId" | "processedAt
 type IdentifierIndexFields = "accountId" | "value" | "name" | "itemId" | "position";
 type AggregatedMetricsIndexFields = "accountId" | "scorecardId" | "scoreId" | "recordType" | "timeRangeStart" | "timeRangeEnd" | "numberOfMinutes" | "count" | "cost" | "decisionCount" | "externalAiApiCount" | "cachedAiApiCount" | "errorCount" | "createdAt" | "updatedAt";
 type DataSourceIndexFields = "accountId" | "scorecardId" | "scoreId" | "name" | "key" | "createdAt" | "updatedAt";
-type DataSourceVersionIndexFields = "dataSourceId" | "versionNumber" | "createdAt" | "updatedAt";
+type DataSourceVersionIndexFields = "dataSourceId" | "createdAt" | "updatedAt";
 type DataSetIndexFields = "accountId" | "scorecardId" | "scoreId" | "scoreVersionId" | "dataSourceVersionId" | "createdAt" | "updatedAt";
 
 // New index types for Feedback Analysis
@@ -799,7 +799,6 @@ const schema = a.schema({
         .model({
             dataSourceId: a.string().required(),
             dataSource: a.belongsTo('DataSource', 'dataSourceId'),
-            versionNumber: a.integer().required(),
             yamlConfiguration: a.string().required(),
             isFeatured: a.boolean().required(),
             note: a.string(),
@@ -817,7 +816,6 @@ const schema = a.schema({
         ])
         .secondaryIndexes((idx: (field: DataSourceVersionIndexFields) => any) => [
             idx("dataSourceId").sortKeys(["createdAt"]),
-            idx("dataSourceId").sortKeys(["versionNumber"]),
             idx("updatedAt")
         ]),
 
@@ -833,7 +831,7 @@ const schema = a.schema({
             scorecard: a.belongsTo('Scorecard', 'scorecardId'),
             scoreId: a.string(),
             score: a.belongsTo('Score', 'scoreId'),
-            scoreVersionId: a.string().required(),
+            scoreVersionId: a.string(),
             scoreVersion: a.belongsTo('ScoreVersion', 'scoreVersionId'),
             dataSourceVersionId: a.string().required(),
             dataSourceVersion: a.belongsTo('DataSourceVersion', 'dataSourceVersionId'),
