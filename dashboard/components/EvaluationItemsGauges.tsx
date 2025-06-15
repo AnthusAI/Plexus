@@ -2,66 +2,54 @@
 
 import React from 'react'
 import { BaseGauges, BaseGaugesConfig, BaseGaugesData } from './BaseGauges'
-import { useItemsMetricsWithType } from '@/hooks/useItemsMetricsWithType'
+import { useEvaluationMetrics, UnifiedMetricsData } from '@/hooks/useUnifiedMetrics'
 
 // Configuration for evaluation-specific gauges
 const evaluationGaugesConfig: BaseGaugesConfig = {
   gauges: [
     {
-      key: 'evaluationItems',
+      key: 'items',
       title: 'Evaluation Items / hour',
-      valueKey: 'evaluationItemsPerHour',
-      averageKey: 'evaluationItemsAveragePerHour',
-      peakKey: 'evaluationItemsPeakHourly',
-      totalKey: 'evaluationItemsTotal24h',
+      valueKey: 'itemsPerHour',
+      averageKey: 'itemsAveragePerHour',
+      peakKey: 'itemsPeakHourly',
+      totalKey: 'itemsTotal24h',
       color: 'hsl(var(--primary))',
       unit: '',
       decimalPlaces: 0,
-      segments: [
-        { start: 0, end: 10, color: 'var(--false)' },
-        { start: 10, end: 90, color: 'var(--neutral)' },
-        { start: 90, end: 100, color: 'var(--true)' }
-      ]
     },
     {
-      key: 'evaluationScoreResults',
+      key: 'scoreResults',
       title: 'Evaluation Score Results / hour',
-      valueKey: 'evaluationScoreResultsPerHour',
-      averageKey: 'evaluationScoreResultsAveragePerHour',
-      peakKey: 'evaluationScoreResultsPeakHourly',
-      totalKey: 'evaluationScoreResultsTotal24h',
+      valueKey: 'scoreResultsPerHour',
+      averageKey: 'scoreResultsAveragePerHour',
+      peakKey: 'scoreResultsPeakHourly',
+      totalKey: 'scoreResultsTotal24h',
       color: 'hsl(var(--secondary))',
       unit: '',
       decimalPlaces: 0,
-      segments: [
-        { start: 0, end: 10, color: 'var(--false)' },
-        { start: 10, end: 90, color: 'var(--neutral)' },
-        { start: 90, end: 100, color: 'var(--true)' }
-      ]
     }
   ],
   chartAreas: [
     {
       dataKey: 'items',
       label: 'Evaluation Items',
-      color: '#3b82f6',
-      fillOpacity: 0.8
+      color: 'hsl(var(--chart-1))',
     },
     {
       dataKey: 'scoreResults',
       label: 'Evaluation Score Results',
-      color: '#a855f7',
-      fillOpacity: 0.6
+      color: 'hsl(var(--chart-2))',
     }
   ],
   chartConfig: {
     items: {
       label: 'Evaluation Items',
-      color: 'hsl(var(--primary))',
+      color: 'hsl(var(--chart-1))',
     },
     scoreResults: {
       label: 'Evaluation Score Results', 
-      color: 'hsl(var(--secondary))',
+      color: 'hsl(var(--chart-2))',
     },
   },
   gridCols: {
@@ -99,27 +87,24 @@ export function EvaluationItemsGauges({
   disableEmergenceAnimation = false,
   onErrorClick
 }: EvaluationItemsGaugesProps) {
-  const { metrics, isLoading, error } = useItemsMetricsWithType()
+  const { metrics, isLoading, error } = useEvaluationMetrics()
   
   // Transform the metrics data to match BaseGaugesData interface
   const transformedData: BaseGaugesData | null = metrics ? {
-    // Evaluation items metrics (we'll need to add these to the hook)
-    evaluationItemsPerHour: 0, // TODO: Add to useItemsMetricsWithType
-    evaluationItemsAveragePerHour: 0, // TODO: Add to useItemsMetricsWithType
-    evaluationItemsPeakHourly: 50, // TODO: Add to useItemsMetricsWithType
-    evaluationItemsTotal24h: 0, // TODO: Add to useItemsMetricsWithType
+    itemsPerHour: metrics.itemsPerHour,
+    itemsAveragePerHour: metrics.itemsAveragePerHour,
+    itemsPeakHourly: metrics.itemsPeakHourly,
+    itemsTotal24h: metrics.itemsTotal24h,
     
-    // Evaluation score results metrics
-    evaluationScoreResultsPerHour: metrics.evaluations.scoreResultsPerHour,
-    evaluationScoreResultsAveragePerHour: metrics.evaluations.scoreResultsAveragePerHour,
-    evaluationScoreResultsPeakHourly: Math.max(metrics.evaluations.scoreResultsPerHour, metrics.evaluations.scoreResultsAveragePerHour, 300),
-    evaluationScoreResultsTotal24h: metrics.evaluations.scoreResultsTotal24h,
+    scoreResultsPerHour: metrics.scoreResultsPerHour,
+    scoreResultsAveragePerHour: metrics.scoreResultsAveragePerHour,
+    scoreResultsPeakHourly: metrics.scoreResultsPeakHourly,
+    scoreResultsTotal24h: metrics.scoreResultsTotal24h,
     
-    // Chart data (use evaluation-specific chart data)
-    chartData: metrics.evaluations.chartData,
+    chartData: metrics.chartData,
     lastUpdated: metrics.lastUpdated,
-    hasErrorsLast24h: false, // TODO: Add evaluation-specific error tracking
-    totalErrors24h: 0 // TODO: Add evaluation-specific error tracking
+    hasErrorsLast24h: metrics.hasErrorsLast24h,
+    totalErrors24h: metrics.totalErrors24h,
   } : null
 
   return (
