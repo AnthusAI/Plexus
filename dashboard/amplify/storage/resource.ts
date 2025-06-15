@@ -18,9 +18,9 @@ export const reportBlockDetails = defineStorage({
   })
 });
 
-// Define a storage bucket for item attachments
-export const attachments = defineStorage({
-  name: 'attachments',
+// Define a storage bucket for data sources and datasets
+export const dataSources = defineStorage({
+  name: 'dataSources',
   isDefault: true,
   access: (allow) => ({
     'datasources/*': [
@@ -41,17 +41,6 @@ export const scoreResultAttachments = defineStorage({
   name: 'scoreResultAttachments',
   access: (allow) => ({
     'scoreresults/*': [
-      allow.guest.to(['read']),
-      allow.authenticated.to(['read', 'write', 'delete'])
-    ]
-  })
-});
-
-// Define a storage bucket for dataset files
-export const datasets = defineStorage({
-  name: 'datasets',
-  access: (allow) => ({
-    'datasets/*': [
       allow.guest.to(['read']),
       allow.authenticated.to(['read', 'write', 'delete'])
     ]
