@@ -255,7 +255,7 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
   const hasConfusionMatrixData = score.confusion_matrix && score.confusion_matrix.matrix && score.confusion_matrix.labels && score.confusion_matrix.matrix.length > 0;
   const hasVisualizationData = hasClassDistribution || hasPredictedDistribution || hasConfusionMatrixData;
   
-  const hasExtendedData = hasClassDistribution || hasPredictedDistribution || hasConfusionMatrixData || hasDiscussion || hasItems;
+  const hasExtendedData = hasClassDistribution || hasPredictedDistribution || hasConfusionMatrixData || hasDiscussion;
   
   const parsedIdentifiers = useMemo(() => {
     if (score.item?.identifiers) {
@@ -308,118 +308,114 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
               </div>
             )}
             
-            {/* Gauges - floated to the right */}
+            {/* Gauges and RawAgreementBar - Always one row layout */}
             <div className="@[30rem]:float-right @[30rem]:w-2/3 @[30rem]:pl-4">
-              <div className="@container">
-                <div className="grid grid-cols-1 @[20rem]:grid-cols-2 @[40rem]:grid-cols-4 gap-3">
-                  {score.ac1 !== undefined && score.ac1 !== null && (
-                    <div className="flex flex-col items-center px-2">
-                      <div className="w-full min-w-[100px] max-w-[140px] mx-auto">
-                        <Gauge 
-                          value={score.ac1} 
-                          title="Agreement"
-                          valueUnit=""
-                          min={-1}
-                          max={1}
-                          decimalPlaces={2}
-                          segments={ac1GaugeSegments}
-                          showTicks={true}
-                        />
+              <div className="flex items-center gap-3">
+                {/* Gauges - Fixed width containers matching ItemsGauges */}
+                {(score.ac1 !== undefined || score.accuracy !== undefined || (showPrecisionRecall && (score.precision !== undefined || score.recall !== undefined))) && (
+                  <div className="flex items-center gap-3 flex-shrink-0">
+                    {/* Agreement Gauge */}
+                    {score.ac1 !== undefined && (
+                      <div className="w-[100px] h-[140px] flex items-center justify-center">
+                        {score.ac1 !== null ? (
+                          <Gauge 
+                            value={score.ac1} 
+                            title="Agreement"
+                            valueUnit=""
+                            min={-1}
+                            max={1}
+                            decimalPlaces={2}
+                            segments={ac1GaugeSegments}
+                            showTicks={true}
+                          />
+                        ) : (
+                          <Gauge 
+                            title="Agreement"
+                            valueUnit=""
+                            min={-1}
+                            max={1}
+                            decimalPlaces={2}
+                            segments={ac1GaugeSegments}
+                            showTicks={true}
+                          />
+                        )}
                       </div>
-                    </div>
-                  )}
-                  
-                  {score.ac1 === null && (
-                    <div className="flex flex-col items-center px-2">
-                      <div className="w-full min-w-[100px] max-w-[140px] mx-auto">
-                        <Gauge 
-                          title="Agreement"
-                          valueUnit=""
-                          min={-1}
-                          max={1}
-                          decimalPlaces={2}
-                          segments={ac1GaugeSegments}
-                          showTicks={true}
-                        />
+                    )}
+                    
+                    {/* Accuracy Gauge */}
+                    {score.accuracy !== undefined && (
+                      <div className="w-[100px] h-[140px] flex items-center justify-center">
+                        {score.accuracy !== null ? (
+                          <Gauge 
+                            value={score.accuracy} 
+                            title="Accuracy"
+                            segments={accuracySegments}
+                            showTicks={true}
+                          />
+                        ) : (
+                          <Gauge 
+                            title="Accuracy"
+                            segments={accuracySegments}
+                            showTicks={true}
+                          />
+                        )}
                       </div>
-                    </div>
-                  )}
-                  
-                  {score.accuracy !== undefined && score.accuracy !== null && (
-                    <div className="flex flex-col items-center px-2">
-                      <div className="w-full min-w-[100px] max-w-[140px] mx-auto">
-                        <Gauge 
-                          value={score.accuracy} 
-                          title="Accuracy"
-                          segments={accuracySegments}
-                          showTicks={true}
-                        />
+                    )}
+                    
+                    {/* Precision Gauge */}
+                    {showPrecisionRecall && score.precision !== undefined && (
+                      <div className="w-[100px] h-[140px] flex items-center justify-center">
+                        {score.precision !== null ? (
+                          <Gauge 
+                            value={score.precision} 
+                            title="Precision"
+                            segments={accuracySegments}
+                            showTicks={true}
+                          />
+                        ) : (
+                          <Gauge 
+                            title="Precision"
+                            segments={accuracySegments}
+                            showTicks={true}
+                          />
+                        )}
                       </div>
-                    </div>
-                  )}
-                  
-                  {score.accuracy === null && (
-                    <div className="flex flex-col items-center px-2">
-                      <div className="w-full min-w-[100px] max-w-[140px] mx-auto">
-                        <Gauge 
-                          title="Accuracy"
-                          segments={accuracySegments}
-                          showTicks={true}
-                        />
+                    )}
+                    
+                    {/* Recall Gauge */}
+                    {showPrecisionRecall && score.recall !== undefined && (
+                      <div className="w-[100px] h-[140px] flex items-center justify-center">
+                        {score.recall !== null ? (
+                          <Gauge 
+                            value={score.recall} 
+                            title="Recall"
+                            segments={accuracySegments}
+                            showTicks={true}
+                          />
+                        ) : (
+                          <Gauge 
+                            title="Recall"
+                            segments={accuracySegments}
+                            showTicks={true}
+                          />
+                        )}
                       </div>
+                    )}
+                  </div>
+                )}
+                
+                {/* RawAgreementBar - Takes up all remaining space */}
+                {hasItems && (
+                  <div className="flex-1 min-w-0">
+                    <div className="mb-2">
+                      <h5 className="text-sm font-medium">Raw Agreement</h5>
                     </div>
-                  )}
-                  
-                  {showPrecisionRecall && score.precision !== undefined && score.precision !== null && (
-                    <div className="flex flex-col items-center px-2">
-                      <div className="w-full min-w-[100px] max-w-[140px] mx-auto">
-                        <Gauge 
-                          value={score.precision} 
-                          title="Precision"
-                          segments={accuracySegments}
-                          showTicks={true}
-                        />
-                      </div>
-                    </div>
-                  )}
-                  
-                  {showPrecisionRecall && score.precision === null && (
-                    <div className="flex flex-col items-center px-2">
-                      <div className="w-full min-w-[100px] max-w-[140px] mx-auto">
-                        <Gauge 
-                          title="Precision"
-                          segments={accuracySegments}
-                          showTicks={true}
-                        />
-                      </div>
-                    </div>
-                  )}
-                  
-                  {showPrecisionRecall && score.recall !== undefined && score.recall !== null && (
-                    <div className="flex flex-col items-center px-2">
-                      <div className="w-full min-w-[100px] max-w-[140px] mx-auto">
-                        <Gauge 
-                          value={score.recall} 
-                          title="Recall"
-                          segments={accuracySegments}
-                          showTicks={true}
-                        />
-                      </div>
-                    </div>
-                  )}
-                  
-                  {showPrecisionRecall && score.recall === null && (
-                    <div className="flex flex-col items-center px-2">
-                      <div className="w-full min-w-[100px] max-w-[140px] mx-auto">
-                        <Gauge 
-                          title="Recall"
-                          segments={accuracySegments}
-                          showTicks={true}
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
+                    <RawAgreementBar 
+                      agreements={agreements}
+                      totalItems={itemCount}
+                    />
+                  </div>
+                )}
               </div>
             </div>
             
