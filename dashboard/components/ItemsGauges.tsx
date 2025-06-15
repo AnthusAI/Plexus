@@ -1,12 +1,11 @@
 'use client'
 
 import React from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
 import { Gauge } from '@/components/gauge'
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
 import { AreaChart, Area, XAxis, CartesianGrid, ResponsiveContainer } from 'recharts'
 import { cn } from '@/lib/utils'
-import { useItemsMetrics } from '@/hooks/useItemsMetrics'
+import { useAllItemsMetrics, UnifiedMetricsData } from '@/hooks/useUnifiedMetrics'
 import { Timestamp } from '@/components/ui/timestamp'
 import NumberFlowWrapper from '@/components/ui/number-flow'
 import { AlertTriangle } from 'lucide-react'
@@ -100,7 +99,7 @@ interface ItemsGaugesProps {
   scoreResultsPeakHourly?: number
   itemsTotal24h?: number
   scoreResultsTotal24h?: number
-  chartData?: Array<{ time: string; items: number; scoreResults: number; bucketStart?: string; bucketEnd?: string }>
+  chartData?: UnifiedMetricsData['chartData']
   // Control whether to use real data or override props
   useRealData?: boolean
   // Disable emergence animation (for drawer usage)
@@ -128,7 +127,9 @@ export function ItemsGauges({
   errorsCount24h: overrideErrorsCount,
   onErrorClick
 }: ItemsGaugesProps) {
-  const { metrics, isLoading, error } = useItemsMetrics()
+  const { metrics, isLoading, error } = useAllItemsMetrics()
+  
+  // Removed skeleton loader - component handles its own loading state
   
   // Progressive data availability states
   const hasHourlyData = !!metrics && metrics.itemsPerHour !== undefined && metrics.scoreResultsPerHour !== undefined
@@ -173,74 +174,13 @@ export function ItemsGauges({
     )
   }
 
-  // Animation variants for progressive disclosure (faster, 1 second total)
-  const containerVariants = {
-    hidden: { 
-      height: 0,
-      opacity: 0,
-      scale: 0.95
-    },
-    visible: { 
-      height: 'auto',
-      opacity: 1,
-      scale: 1,
-      transition: {
-        height: { duration: 1, ease: 'easeOut' },
-        opacity: { duration: 0.6, ease: 'easeOut', delay: 0.1 },
-        scale: { duration: 0.6, ease: 'easeOut', delay: 0.1 }
-      }
-    },
-    exit: {
-      height: 0,
-      opacity: 0,
-      scale: 0.95,
-      transition: {
-        height: { duration: 0.4, ease: 'easeIn' },
-        opacity: { duration: 0.3, ease: 'easeIn' },
-        scale: { duration: 0.3, ease: 'easeIn' }
-      }
-    }
-  }
-  
-  const contentVariants = {
-    hidden: { y: 20, opacity: 0 },
-    visible: { 
-      y: 0, 
-      opacity: 1,
-      transition: {
-        duration: 0.4,
-        ease: 'easeOut',
-        delay: 0.5 // Delay content animation until height animation is well underway
-      }
-    }
-  }
-  
-  // Instant variants for drawer usage (no emergence animation)
-  const instantVariants = {
-    visible: { 
-      height: 'auto',
-      opacity: 1,
-      scale: 1,
-      y: 0,
-      transition: { duration: 0 }
-    }
-  }
+  // Removed all animation variants - component now appears normally
 
   return (
-    <AnimatePresence>
+    <>
       {shouldShowComponent && (
-        <motion.div 
-          className={cn("w-full overflow-visible", className)}
-          variants={disableEmergenceAnimation ? instantVariants : containerVariants}
-          initial={useRealData && !disableEmergenceAnimation ? "hidden" : "visible"}
-          animate="visible"
-          exit={disableEmergenceAnimation ? undefined : "exit"}
-        >
-          <motion.div 
-            variants={disableEmergenceAnimation ? instantVariants : contentVariants}
-            initial={useRealData && !disableEmergenceAnimation ? "hidden" : "visible"}
-            animate="visible"
-          >
+        <div className={cn("w-full overflow-visible", className)}>
+          <div>
             {/* 
               Complex responsive grid layout - MUST match ItemCards grid breakpoints exactly:
               - grid-cols-2 (base, < 500px): gauges stack vertically, chart below full width  
@@ -340,15 +280,10 @@ export function ItemsGauges({
                   </div>
                 </div>
               ) : (
-                <motion.div
-                  key={chartData.length} // Re-trigger animation when data changes
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 4, ease: 'easeOut' }}
+                <div
                   className="w-full h-full"
                   style={{
                     filter: 'drop-shadow(0 0 8px rgba(59, 130, 246, 0.2)) drop-shadow(0 0 8px rgba(168, 85, 247, 0.2))',
-                    willChange: 'filter'
                   }}
                 >
                   <ChartContainer config={chartConfig} className="w-full h-full">
@@ -410,7 +345,7 @@ export function ItemsGauges({
                       />
                     </AreaChart>
                   </ChartContainer>
-                </motion.div>
+                </div>
               )}
             </div>
             
@@ -537,9 +472,9 @@ export function ItemsGauges({
           </div>
         </div>
       </div>
-          </motion.div>
-        </motion.div>
+          </div>
+        </div>
       )}
-    </AnimatePresence>
+    </>
   )
 }

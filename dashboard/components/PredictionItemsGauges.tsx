@@ -2,56 +2,44 @@
 
 import React from 'react'
 import { BaseGauges, BaseGaugesConfig, BaseGaugesData } from './BaseGauges'
-import { useItemsMetricsWithType } from '@/hooks/useItemsMetricsWithType'
+import { usePredictionMetrics, UnifiedMetricsData } from '@/hooks/useUnifiedMetrics'
 
 // Configuration for prediction-specific gauges
 const predictionGaugesConfig: BaseGaugesConfig = {
   gauges: [
     {
-      key: 'predictionItems',
+      key: 'items',
       title: 'Prediction Items / hour',
-      valueKey: 'predictionItemsPerHour',
-      averageKey: 'predictionItemsAveragePerHour',
-      peakKey: 'predictionItemsPeakHourly',
-      totalKey: 'predictionItemsTotal24h',
+      valueKey: 'itemsPerHour',
+      averageKey: 'itemsAveragePerHour',
+      peakKey: 'itemsPeakHourly',
+      totalKey: 'itemsTotal24h',
       color: 'hsl(var(--primary))',
       unit: '',
       decimalPlaces: 0,
-      segments: [
-        { start: 0, end: 10, color: 'var(--false)' },
-        { start: 10, end: 90, color: 'var(--neutral)' },
-        { start: 90, end: 100, color: 'var(--true)' }
-      ]
     },
     {
-      key: 'predictionScoreResults',
+      key: 'scoreResults',
       title: 'Prediction Score Results / hour',
-      valueKey: 'predictionScoreResultsPerHour',
-      averageKey: 'predictionScoreResultsAveragePerHour',
-      peakKey: 'predictionScoreResultsPeakHourly',
-      totalKey: 'predictionScoreResultsTotal24h',
+      valueKey: 'scoreResultsPerHour',
+      averageKey: 'scoreResultsAveragePerHour',
+      peakKey: 'scoreResultsPeakHourly',
+      totalKey: 'scoreResultsTotal24h',
       color: 'hsl(var(--secondary))',
       unit: '',
       decimalPlaces: 0,
-      segments: [
-        { start: 0, end: 10, color: 'var(--false)' },
-        { start: 10, end: 90, color: 'var(--neutral)' },
-        { start: 90, end: 100, color: 'var(--true)' }
-      ]
     }
   ],
   chartAreas: [
     {
       dataKey: 'items',
       label: 'Prediction Items',
-      color: '#10b981',
-      fillOpacity: 0.8
+      color: 'hsl(var(--chart-1))',
     },
     {
       dataKey: 'scoreResults',
       label: 'Prediction Score Results',
-      color: '#f59e0b',
-      fillOpacity: 0.6
+      color: 'hsl(var(--chart-2))',
     }
   ],
   chartConfig: {
@@ -99,27 +87,24 @@ export function PredictionItemsGauges({
   disableEmergenceAnimation = false,
   onErrorClick
 }: PredictionItemsGaugesProps) {
-  const { metrics, isLoading, error } = useItemsMetricsWithType()
+  const { metrics, isLoading, error } = usePredictionMetrics()
   
   // Transform the metrics data to match BaseGaugesData interface
   const transformedData: BaseGaugesData | null = metrics ? {
-    // Prediction items metrics (we'll need to add these to the hook)
-    predictionItemsPerHour: 0, // TODO: Add to useItemsMetricsWithType
-    predictionItemsAveragePerHour: 0, // TODO: Add to useItemsMetricsWithType
-    predictionItemsPeakHourly: 50, // TODO: Add to useItemsMetricsWithType
-    predictionItemsTotal24h: 0, // TODO: Add to useItemsMetricsWithType
+    itemsPerHour: metrics.itemsPerHour,
+    itemsAveragePerHour: metrics.itemsAveragePerHour,
+    itemsPeakHourly: metrics.itemsPeakHourly,
+    itemsTotal24h: metrics.itemsTotal24h,
     
-    // Prediction score results metrics
-    predictionScoreResultsPerHour: metrics.predictions.scoreResultsPerHour,
-    predictionScoreResultsAveragePerHour: metrics.predictions.scoreResultsAveragePerHour,
-    predictionScoreResultsPeakHourly: Math.max(metrics.predictions.scoreResultsPerHour, metrics.predictions.scoreResultsAveragePerHour, 300),
-    predictionScoreResultsTotal24h: metrics.predictions.scoreResultsTotal24h,
+    scoreResultsPerHour: metrics.scoreResultsPerHour,
+    scoreResultsAveragePerHour: metrics.scoreResultsAveragePerHour,
+    scoreResultsPeakHourly: metrics.scoreResultsPeakHourly,
+    scoreResultsTotal24h: metrics.scoreResultsTotal24h,
     
-    // Chart data (use prediction-specific chart data)
-    chartData: metrics.predictions.chartData,
+    chartData: metrics.chartData,
     lastUpdated: metrics.lastUpdated,
-    hasErrorsLast24h: false, // TODO: Add prediction-specific error tracking
-    totalErrors24h: 0 // TODO: Add prediction-specific error tracking
+    hasErrorsLast24h: metrics.hasErrorsLast24h,
+    totalErrors24h: metrics.totalErrors24h,
   } : null
 
   return (
