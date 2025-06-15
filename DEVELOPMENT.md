@@ -26,53 +26,46 @@ pyenv local 3.11.13
 
 #### Verify Python Version
 ```bash
-python --version
-# Should output: Python 3.11.13
+npm run python:check
+# Should show: Python 3.11.13 ✅
 ```
 
 ### 2. Set Up Development Environment
 
 ```bash
-# Create virtual environment
-python -m venv plexus_env
-
-# Activate virtual environment
-source plexus_env/bin/activate  # On Linux/macOS
-# or
-plexus_env\Scripts\activate     # On Windows
-
-# Install project dependencies
-pip install --upgrade pip
-pip install -e .
+# Check Python version and install dependencies (all-in-one)
+npm run python:setup
 ```
+
+This will:
+- Verify you're using Python 3.11
+- Upgrade pip
+- Install all project dependencies
 
 ### 3. Run Tests
 
 ```bash
+# Check Python version only
+npm run python:check
+
 # Run all tests
-python -m pytest -v
+npm run test:python
 
-# Run tests with coverage
-python -m pytest --cov=. --cov-report=term --cov-report=html -v
-
-# Run specific test file
-python -m pytest plexus/PromptTemplateLoader_test.py -v
+# Run tests with coverage (recommended)
+npm run test:python:coverage
 
 # Run MCP server tests specifically
-cd MCP
-python -m pytest plexus_fastmcp_server_test.py --cov=plexus_fastmcp_server --cov-report=term -v
+npm run test:mcp
+
+# Serve coverage report at http://localhost:8000
+npm run coverage:serve
 ```
 
-### 4. View Coverage Reports
-
-After running tests with coverage, you can view the HTML report:
+### 4. Clean Up
 
 ```bash
-# Coverage report will be in htmlcov/index.html
-# Open it in your browser or serve it locally:
-cd htmlcov
-python -m http.server 8000
-# Then visit http://localhost:8000
+# Clean Python cache files and coverage reports
+npm run clean:python
 ```
 
 ## Test Results Overview
@@ -86,20 +79,43 @@ python -m http.server 8000
 
 ### Issue: Tests fail with import errors
 **Solution:** Make sure you're using Python 3.11, not 3.13 or other versions.
+```bash
+npm run python:check  # This will tell you if version is wrong
+```
 
 ### Issue: `pandas` installation fails
 **Solution:** This happens when using Python 3.13. Switch to Python 3.11.
+```bash
+pyenv local 3.11.13
+npm run python:setup
+```
 
 ### Issue: Tests can't find modules
-**Solution:** Make sure you installed the project in editable mode with `pip install -e .`
+**Solution:** Make sure dependencies are installed properly.
+```bash
+npm run python:setup
+```
 
 ## Development Workflow
 
-1. **Always check Python version first:** `python --version`
-2. **Activate virtual environment:** `source plexus_env/bin/activate`
-3. **Run tests before making changes:** `python -m pytest`
-4. **Run tests after making changes:** `python -m pytest --cov=.`
-5. **Check coverage reports** for areas needing more tests
+1. **Check Python version:** `npm run python:check`
+2. **Set up environment:** `npm run python:setup` (first time only)
+3. **Run tests before changes:** `npm run test:python`
+4. **Run tests after changes:** `npm run test:python:coverage`
+5. **View coverage reports:** `npm run coverage:serve`
+6. **Clean up when needed:** `npm run clean:python`
+
+## Available npm Scripts
+
+| Command | Description |
+|---------|-------------|
+| `npm run python:check` | Verify Python 3.11 is being used |
+| `npm run python:setup` | Install all dependencies (includes version check) |
+| `npm run test:python` | Run all tests |
+| `npm run test:python:coverage` | Run tests with coverage report |
+| `npm run test:mcp` | Run MCP server tests specifically |
+| `npm run coverage:serve` | Serve coverage report at localhost:8000 |
+| `npm run clean:python` | Clean up cache files and reports |
 
 ## Priority Testing Areas
 
@@ -131,16 +147,17 @@ If you're using pyenv, it will automatically switch to Python 3.11.13 when you e
 
 If you encounter issues:
 
-1. Check you're using Python 3.11: `python --version`
-2. Try recreating your virtual environment
-3. Make sure all dependencies installed: `pip install -e .`
+1. Check Python version: `npm run python:check`
+2. Try reinstalling: `npm run python:setup`
+3. Clean and retry: `npm run clean:python && npm run python:setup`
 4. Check the main [README.md](README.md) for additional information
 
 ## Contributing
 
 When contributing:
 
-1. **Always run tests** before submitting PRs
-2. **Add tests** for new functionality  
-3. **Maintain or improve** test coverage
-4. **Use Python 3.11** for development and testing
+1. **Always check Python version:** `npm run python:check`
+2. **Run tests before submitting PRs:** `npm run test:python:coverage`
+3. **Add tests** for new functionality  
+4. **Maintain or improve** test coverage
+5. **Use Python 3.11** for development and testing
