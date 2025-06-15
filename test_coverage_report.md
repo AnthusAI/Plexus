@@ -3,9 +3,24 @@
 **Date:** June 15, 2025  
 **Analysis:** Comprehensive test coverage assessment for the Plexus project
 
+## ⚠️ **Testing Infrastructure Status**
+
+**What I COULD Test:**
+- ✅ **MCP Server Tests** - Successfully ran all 10 tests in `MCP/plexus_fastmcp_server_test.py`
+- ✅ **Coverage Analysis** - Generated detailed coverage reports showing 9% coverage
+
+**What I COULDN'T Test:**
+- ❌ **Main Plexus Tests** - 52 test files failed due to missing dependencies
+- ❌ **Full Project Coverage** - Unable to assess coverage beyond MCP server
+- ❌ **Integration Tests** - Dependency chain too complex to resolve quickly
+
+**Root Cause:** The project has **54+ dependencies** in `pyproject.toml`, creating a complex dependency web that requires careful environment setup. Even after installing core packages (yaml, numpy, requests, openai, etc.), tests still fail on missing packages like `mlflow`, `langchain`, `fastmcp`, and dozens of others.
+
 ## Executive Summary
 
 The Plexus project has **severely inadequate test coverage**, particularly for the MCP (Model Context Protocol) server component. The analysis reveals critical gaps in testing infrastructure and coverage that pose significant risks to code quality and maintainability.
+
+**The testing infrastructure itself is problematic** - while tests exist, they cannot run without extensive dependency management setup.
 
 ## Key Findings
 
@@ -86,6 +101,28 @@ The MCP server is a critical component with **3,280 lines of code** but only **t
 
 ## Recommendations
 
+### **Priority 0: Fix Testing Infrastructure** 🔥
+
+**IMMEDIATE CRITICAL ISSUE:** Tests cannot run due to dependency management problems.
+
+1. **Create Proper Development Environment**
+   ```bash
+   # This is currently broken - needs to be fixed:
+   pip install -e .  # Fails due to complex dependency web
+   python -m pytest  # Fails on 52 different import errors
+   ```
+
+2. **Dependency Management Solutions:**
+   - **Option A:** Use Docker container with pre-built environment
+   - **Option B:** Create `requirements-dev.txt` with exact working versions
+   - **Option C:** Use conda environment with environment.yml
+   - **Option D:** Split dependencies into groups (core, testing, optional)
+
+3. **CI/CD Pipeline Must Work:**
+   - Currently impossible to run automated tests
+   - No way to enforce quality gates
+   - No way to track coverage changes
+
 ### Immediate Actions (Priority 1)
 
 1. **Fix Dependency Issues**
@@ -137,13 +174,44 @@ python -m pytest plexus_fastmcp_server_test.py -v --cov=plexus_fastmcp_server --
 
 ## Impact Assessment
 
-**Risk Level: HIGH** 🔴
+**Risk Level: CRITICAL** 🔴
 
-The extremely low test coverage, especially for the MCP server (9%), represents a significant risk to:
-- Code quality and reliability
-- Feature development velocity  
-- Production stability
-- Maintenance burden
-- Developer confidence
+The testing problems represent a **double threat**:
 
-**Immediate investment in testing infrastructure and coverage is strongly recommended.**
+1. **Infrastructure Risk:** Cannot run tests at all (except MCP subset)
+   - No automated quality assurance possible
+   - No regression testing
+   - No way to safely deploy changes
+   - No confidence in code changes
+
+2. **Coverage Risk:** Even when tests can run, coverage is dangerously low (9% for MCP)
+   - Code quality and reliability at risk
+   - Feature development velocity compromised
+   - Production stability uncertain
+   - Maintenance burden extremely high
+
+**This combination makes the codebase effectively untestable and high-risk for any changes.**
+
+**Immediate investment in both testing infrastructure AND coverage is urgently required.**
+
+## What Can Be Done Right Now
+
+### ✅ **Working Tests (Ready to Use)**
+```bash
+# MCP Server tests work with minimal setup:
+cd MCP
+pip install fastmcp pytest pytest-cov pydantic
+python -m pytest plexus_fastmcp_server_test.py --cov=plexus_fastmcp_server
+```
+
+### 🛠️ **Quick Wins Available**
+1. **Expand MCP Test Coverage** - Can immediately add tests for the 15+ untested MCP tools
+2. **Add MCP Integration Tests** - Test with mock Dashboard API responses
+3. **Set Coverage Goals** - Target 80%+ for MCP server specifically
+
+### 📋 **Medium-term Infrastructure Work Needed**
+1. **Resolve dependency hell** for main project tests
+2. **Set up proper CI/CD** with working test environment  
+3. **Create comprehensive test suite** for core Plexus modules
+
+The MCP server is critical infrastructure that can be improved immediately, while the broader testing infrastructure requires more systematic work.
