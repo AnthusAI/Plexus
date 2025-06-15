@@ -10,11 +10,57 @@
 - ✅ **Coverage Analysis** - Generated detailed coverage reports showing 9% coverage
 
 **What I COULDN'T Test:**
-- ❌ **Main Plexus Tests** - 52 test files failed due to missing dependencies
-- ❌ **Full Project Coverage** - Unable to assess coverage beyond MCP server
-- ❌ **Integration Tests** - Dependency chain too complex to resolve quickly
+- ❌ **Main Plexus Tests** - 52 test files failed due to Python 3.13 compatibility issues
+- ❌ **Full Project Coverage** - Unable to assess coverage beyond MCP server  
+- ❌ **Integration Tests** - Dependencies won't install due to version conflicts
 
-**Root Cause:** The project has **54+ dependencies** in `pyproject.toml`, creating a complex dependency web that requires careful environment setup. Even after installing core packages (yaml, numpy, requests, openai, etc.), tests still fail on missing packages like `mlflow`, `langchain`, `fastmcp`, and dozens of others.
+**Root Cause:** The project dependencies are pinned to versions incompatible with Python 3.13. Specifically, `pandas==2.1.4` fails to compile due to C API changes, preventing full project installation.
+
+## 🔍 **Actual Dependency Problem Found**
+
+**NOT "Missing Dependencies" - VERSION INCOMPATIBILITY**
+
+When I tried to install the project with `pip install -e .`, here's what actually failed:
+
+### ❌ **Python 3.13 Compatibility Issues**
+- **Current Python:** 3.13.3  
+- **pandas==2.1.4** fails to compile - C API incompatibility  
+- Error: `_PyLong_AsByteArray` function signature changed in Python 3.13
+
+### 📋 **Complete Dependency List from pyproject.toml** 
+The project declares **59 dependencies** (not "missing" - they're all listed):
+
+**Testing & Development:**
+- pytest==8.2.2, pytest-cov==5.0.0, pytest-watch==4.2.0, pytest-asyncio==0.23.5
+- flake8==7.1.1, sphinx, sphinx-rtd-theme
+
+**Data Science:**  
+- pandas==2.1.4 ❌ (fails on Python 3.13)
+- numpy, scipy, scikit-learn==1.5.1, seaborn
+- tables, xgboost==2.0.3, imbalanced-learn==0.12.3, shap==0.45.1
+
+**LLM/AI:**
+- openai>=1.35.10, tiktoken==0.7.0, transformers
+- langchain>=0.2.11, langchain-core, langchain-community, langgraph==0.2.60  
+- langchain-aws, langchain-openai, langchain-google-vertexai, langchain-anthropic
+- ollama>=0.1.6, bertopic>=0.16.2
+
+**Infrastructure:**
+- fastmcp>=2.3.5, celery>=5.4.0, boto3, azure-identity>=1.15.0
+- SQLAlchemy[asyncio]==1.4.15, gql[requests]>=3.0.0
+- rich>=13.9.4, python-dotenv>=1.1.0, pycurl>=7.45.4
+
+**Document Processing:**
+- openpyxl==3.1.5, mistune==3.0.2, pyyaml, ruamel.yaml>=0.18.10
+
+**Other:**
+- datasets, gensim, watchtower, pyairtable, contractions==0.1.73
+- rapidfuzz==3.9.4, nltk==3.9.1, pybind11, graphviz==0.20.3
+- pydot==2.0.0, pydotplus==2.0.2, invoke>=2.2.0, kaleido>=0.2.1
+- openai-cost-calculator (from private GitHub repo)
+
+### 🎯 **Real Problem**
+Not "missing" dependencies, but **version compatibility**: The pinned versions don't support Python 3.13.
 
 ## Executive Summary
 
@@ -67,16 +113,16 @@ The Plexus project has **severely inadequate test coverage**, particularly for t
 
 ### 2. Overall Project Test Infrastructure: **BROKEN**
 
-Attempted to run full project tests but encountered **52 import errors** due to missing dependencies:
+Attempted to run full project tests but encountered **52 import errors** due to Python 3.13 compatibility issues:
 
-#### Missing Core Dependencies:
-- `yaml` - YAML processing (required by core Evaluation module)
-- `numpy` - Numerical computing
-- Many other packages from `pyproject.toml`
+#### Version Compatibility Problems:
+- `pandas==2.1.4` - Fails to compile on Python 3.13 (C API changes)
+- Many other pinned versions likely have similar issues
+- Dependencies are declared but can't be installed
 
 #### Test Files Present But Failing:
-- **49 test files** found across the project
-- **Zero tests successfully running** due to dependency issues
+- **49 test files** found across the project  
+- **Zero tests successfully running** due to installation failures
 - Test files exist in multiple areas but infrastructure is broken
 
 ## Detailed Analysis
@@ -122,6 +168,32 @@ The MCP server is a critical component with **3,280 lines of code** but only **t
    - Currently impossible to run automated tests
    - No way to enforce quality gates
    - No way to track coverage changes
+
+### **Priority 0: Fix Python 3.13 Compatibility** 🔥
+
+**ACTUAL ISSUE:** Dependencies fail to install due to version incompatibility, not missing packages.
+
+1. **Immediate Solutions:**
+   ```bash
+   # Option A: Use Python 3.11 or 3.12
+   pyenv install 3.11.10
+   pyenv local 3.11.10
+   pip install -e .
+   
+   # Option B: Update pinned versions for Python 3.13
+   # pandas==2.1.4 → pandas>=2.2.0 (supports Python 3.13)
+   # scikit-learn==1.5.1 → scikit-learn>=1.6.0 
+   ```
+
+2. **Root Cause:**
+   - **pandas==2.1.4** fails to compile on Python 3.13 (C API changes)
+   - Several other pinned versions may have similar issues
+   - 59 dependencies creates complex version resolution
+
+3. **Testing Infrastructure Currently Impossible:**
+   - Can't install dependencies = can't run tests  
+   - No way to run CI/CD pipeline
+   - No automated quality gates possible
 
 ### Immediate Actions (Priority 1)
 
@@ -198,11 +270,13 @@ The testing problems represent a **double threat**:
 
 ### ✅ **Working Tests (Ready to Use)**
 ```bash
-# MCP Server tests work with minimal setup:
-cd MCP
+# MCP Server tests work because they import directly (not via main plexus package):
+cd MCP  
 pip install fastmcp pytest pytest-cov pydantic
 python -m pytest plexus_fastmcp_server_test.py --cov=plexus_fastmcp_server
 ```
+
+**Why MCP tests work:** They import from `plexus_fastmcp_server.py` directly, avoiding the broken `plexus` package dependencies.
 
 ### 🛠️ **Quick Wins Available**
 1. **Expand MCP Test Coverage** - Can immediately add tests for the 15+ untested MCP tools
@@ -210,7 +284,7 @@ python -m pytest plexus_fastmcp_server_test.py --cov=plexus_fastmcp_server
 3. **Set Coverage Goals** - Target 80%+ for MCP server specifically
 
 ### 📋 **Medium-term Infrastructure Work Needed**
-1. **Resolve dependency hell** for main project tests
+1. **Resolve Python 3.13 compatibility issues** for main project tests
 2. **Set up proper CI/CD** with working test environment  
 3. **Create comprehensive test suite** for core Plexus modules
 
