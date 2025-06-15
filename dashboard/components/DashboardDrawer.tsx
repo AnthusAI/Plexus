@@ -12,7 +12,9 @@ import {
   DrawerClose,
 } from '@/components/ui/drawer'
 import { Button } from '@/components/ui/button'
-import { ItemsGauges } from '@/components/ItemsGauges'
+import { PredictionItemsGauges } from '@/components/PredictionItemsGauges'
+import { EvaluationItemsGauges } from '@/components/EvaluationItemsGauges'
+import { FeedbackItemsGauges } from '@/components/FeedbackItemsGauges'
 import { X } from 'lucide-react'
 
 interface DashboardDrawerProps {
@@ -48,9 +50,20 @@ export function DashboardDrawer({
             </DrawerClose>
           </DrawerHeader>
           
-          <div className="px-4 pb-6 overflow-visible">
+          <div className="px-4 pb-6 overflow-visible space-y-6">
+            {/* Prediction Items Gauges */}
             <div className="@container overflow-visible">
-              <ItemsGauges disableEmergenceAnimation={true} />
+              <PredictionItemsGauges disableEmergenceAnimation={true} />
+            </div>
+            
+            {/* Evaluation Items Gauges */}
+            <div className="@container overflow-visible">
+              <EvaluationItemsGauges disableEmergenceAnimation={true} />
+            </div>
+            
+            {/* Feedback Items Gauges */}
+            <div className="@container overflow-visible">
+              <FeedbackItemsGauges disableEmergenceAnimation={true} />
             </div>
           </div>
         </div>
