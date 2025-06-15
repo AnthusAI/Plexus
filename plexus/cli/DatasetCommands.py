@@ -26,15 +26,87 @@ def create_client() -> PlexusDashboardClient:
     return client
 
 def get_amplify_bucket():
-    """Reads the Amplify configuration to get the S3 bucket name."""
+    """Get the S3 bucket name from environment variables or fall back to reading amplify_outputs.json."""
+    # First try environment variable (consistent with reporting commands)
+    bucket_name = os.environ.get("AMPLIFY_STORAGE_DATASETS_BUCKET_NAME")
+    if bucket_name:
+        logging.debug(f"Using S3 bucket from environment variable: {bucket_name}")
+        return bucket_name
+    
+    # Fall back to reading from amplify_outputs.json
     try:
         with open('dashboard/amplify_outputs.json', 'r') as f:
             amplify_outputs = yaml.safe_load(f)
-        # It's not region, it's bucket name. Let's find the right key.
         # Assuming a structure like "storage": {"plugins": {"awsS3StoragePlugin": {"bucket": "..."}}}
-        return amplify_outputs['storage']['plugins']['awsS3StoragePlugin']['bucket']
+        bucket_name = amplify_outputs['storage']['plugins']['awsS3StoragePlugin']['bucket']
+        logging.debug(f"Using S3 bucket from amplify_outputs.json: {bucket_name}")
+        return bucket_name
     except (IOError, KeyError, TypeError) as e:
-        logging.error(f"Could not read S3 bucket from amplify_outputs.json: {e}")
+        logging.error(f"Could not read S3 bucket from environment variable AMPLIFY_STORAGE_DATASETS_BUCKET_NAME or amplify_outputs.json: {e}")
+        return None
+
+async def create_initial_data_source_version(client, data_source):
+    """Create the initial version for a DataSource that doesn't have one yet."""
+    try:
+        # Create the first DataSourceVersion
+        logging.info(f"Creating initial version for DataSource: {data_source.name}")
+        
+        create_version_result = client.execute(
+            """
+            mutation CreateDataSourceVersion($input: CreateDataSourceVersionInput!) {
+                createDataSourceVersion(input: $input) {
+                    id
+                }
+            }
+            """,
+            {
+                "input": {
+                    "dataSourceId": data_source.id,
+                    "yamlConfiguration": data_source.yamlConfiguration or "",
+                    "isFeatured": True,
+                    "note": "Initial version created automatically",
+                    "createdAt": datetime.now(timezone.utc).isoformat(),
+                    "updatedAt": datetime.now(timezone.utc).isoformat()
+                }
+            }
+        )
+        
+        if not create_version_result or not create_version_result.get('createDataSourceVersion'):
+            logging.error("Failed to create DataSourceVersion record")
+            return None
+            
+        version_id = create_version_result['createDataSourceVersion']['id']
+        logging.info(f"Created DataSourceVersion with ID: {version_id}")
+        
+        # Update the DataSource to point to this version as the current version
+        update_result = client.execute(
+            """
+            mutation UpdateDataSource($input: UpdateDataSourceInput!) {
+                updateDataSource(input: $input) {
+                    id
+                    currentVersionId
+                }
+            }
+            """,
+            {
+                "input": {
+                    "id": data_source.id,
+                    "currentVersionId": version_id
+                }
+            }
+        )
+        
+        if not update_result or not update_result.get('updateDataSource'):
+            logging.error("Failed to update DataSource with currentVersionId")
+            return None
+            
+        logging.info(f"Updated DataSource {data_source.id} to use version {version_id} as current version")
+        return version_id
+        
+    except Exception as e:
+        logging.error(f"Error creating initial DataSource version: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 @click.group()
@@ -152,20 +224,23 @@ def load(source_identifier: str, fresh: bool):
             return
         account_id = data_source.accountId
 
-        # Get the current version of the DataSource
+        # Get the current version of the DataSource, creating one if it doesn't exist
         if not data_source.currentVersionId:
-            logging.error("DataSource has no currentVersionId. Cannot create DataSet without a version.")
-            return
-        
-        data_source_version_id = data_source.currentVersionId
-        logging.info(f"Using DataSource version ID: {data_source_version_id}")
+            logging.info("DataSource has no currentVersionId. Creating initial version...")
+            data_source_version_id = await create_initial_data_source_version(client, data_source)
+            if not data_source_version_id:
+                logging.error("Failed to create initial DataSource version.")
+                return
+        else:
+            data_source_version_id = data_source.currentVersionId
+            logging.info(f"Using existing DataSource version ID: {data_source_version_id}")
 
-        # Get the score version - use the score linked to the DataSource if available
+        # Get the score version - use the score linked to the DataSource if available (optional)
         score_version_id = None
         if hasattr(data_source, 'scoreId') and data_source.scoreId:
             logging.info(f"DataSource is linked to score ID: {data_source.scoreId}")
             # Get the champion version of this score
-            score_query = await client.execute(
+            score_query = client.execute(
                 """
                 query GetScore($id: ID!) {
                     getScore(id: $id) {
@@ -182,15 +257,26 @@ def load(source_identifier: str, fresh: bool):
                 score_version_id = score_query['getScore']['championVersionId']
                 logging.info(f"Using champion version ID: {score_version_id}")
             else:
-                logging.error(f"Score {data_source.scoreId} has no champion version. Cannot create DataSet.")
-                return
+                logging.warning(f"Score {data_source.scoreId} has no champion version. Creating DataSet without score version.")
         else:
-            logging.error("DataSource is not linked to a specific score. Cannot create DataSet without a score version.")
-            logging.error("Please link the DataSource to a score first, or specify a score in the command.")
-            return
+            logging.info("DataSource is not linked to a specific score. Creating DataSet without score version.")
 
-        # Create a DataSet linked to both the DataSource version and score version
-        new_dataset_record = await client.execute(
+        # Create a DataSet linked to the DataSource version and optionally to a score version
+        dataset_input = {
+            "name": f"{data_source.name} - {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}",
+            "accountId": account_id,
+            "dataSourceVersionId": data_source_version_id,
+        }
+        
+        # Add optional fields only if they have values
+        if score_version_id:
+            dataset_input["scoreVersionId"] = score_version_id
+        if hasattr(data_source, 'scorecardId') and data_source.scorecardId:
+            dataset_input["scorecardId"] = data_source.scorecardId
+        if hasattr(data_source, 'scoreId') and data_source.scoreId:
+            dataset_input["scoreId"] = data_source.scoreId
+            
+        new_dataset_record = client.execute(
             """
             mutation CreateDataSet($input: CreateDataSetInput!) {
                 createDataSet(input: $input) {
@@ -202,14 +288,7 @@ def load(source_identifier: str, fresh: bool):
             }
             """,
             {
-                "input": {
-                    "name": f"{data_source.name} - {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}",
-                    "accountId": account_id,
-                    "dataSourceVersionId": data_source_version_id,
-                    "scoreVersionId": score_version_id,
-                    "scorecardId": data_source.scorecardId if hasattr(data_source, 'scorecardId') else None,
-                    "scoreId": data_source.scoreId if hasattr(data_source, 'scoreId') else None,
-                }
+                "input": dataset_input
             }
         )
         new_dataset = new_dataset_record['createDataSet']
@@ -218,16 +297,15 @@ def load(source_identifier: str, fresh: bool):
         logging.info(f"Created DataSet record with ID: {new_dataset_id}")
 
         # 7. Upload Parquet to S3
-        timestamp = datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')
-        file_name = f"{timestamp}-{new_dataset_id}.parquet"
-        s3_key = f"datasets/{account_id}/{data_source.id}/{new_dataset_id}/{file_name}"
+        file_name = "dataset.parquet"
+        s3_key = f"datasets/{account_id}/{new_dataset_id}/{file_name}"
         
         logging.info(f"Uploading Parquet file to S3 at: {s3_key}")
         
         bucket_name = get_amplify_bucket()
         if not bucket_name:
              logging.error("S3 bucket name not found. Cannot upload file.")
-             await client.execute("""
+             client.execute("""
                 mutation UpdateDataSet($input: UpdateDataSetInput!) {
                     updateDataSet(input: $input) { id }
                 }
@@ -236,14 +314,14 @@ def load(source_identifier: str, fresh: bool):
 
         try:
             s3_client = boto3.client('s3')
-            s3_client.upload_fileobj(buffer, bucket_name, f"public/{s3_key}")
+            s3_client.upload_fileobj(buffer, bucket_name, s3_key)
             logging.info("File uploaded successfully to S3.")
         except NoCredentialsError:
             logging.error("Boto3: AWS credentials not found.")
             return
         except Exception as e:
             logging.error(f"Failed to upload file to S3: {e}")
-            await client.execute("""
+            client.execute("""
                mutation UpdateDataSet($input: UpdateDataSetInput!) {
                    updateDataSet(input: $input) { id }
                }
@@ -252,7 +330,7 @@ def load(source_identifier: str, fresh: bool):
 
         # 8. Update DataSet with file path
         logging.info(f"Updating DataSet record with file path...")
-        await client.execute(
+        client.execute(
             """
             mutation UpdateDataSet($input: UpdateDataSetInput!) {
                 updateDataSet(input: $input) {
