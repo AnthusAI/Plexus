@@ -107,12 +107,12 @@ const DatasetInfo = React.memo(function DatasetInfo({ filePath }: { filePath: st
   return (
     <div className="text-sm text-muted-foreground space-y-1">
       <div className="flex items-center gap-2">
-        <Rows3 className="h-3 w-3" />
-        <span>Showing {Math.min(100, info.totalRows).toLocaleString()} of {info.totalRows.toLocaleString()} total rows</span>
+        <Columns3 className="h-3 w-3" />
+        <span>{info.columns} columns</span>
       </div>
       <div className="flex items-center gap-2">
-        <Columns3 className="h-3 w-3" />
-        <span>Columns: {info.columns}</span>
+        <Rows3 className="h-3 w-3" />
+        <span>Showing {Math.min(100, info.totalRows).toLocaleString()} of {info.totalRows.toLocaleString()} total rows</span>
       </div>
     </div>
   )
@@ -276,7 +276,7 @@ const DetailContent = React.memo(function DetailContent({
       {/* Parquet File Preview - Takes up most of the available space */}
       {hasParquetFile && (
         <div className="flex-1 min-h-0 mb-4">
-          <div className="h-full border rounded-lg overflow-hidden">
+          <div className="h-full overflow-hidden">
             <ParquetViewer 
               filePath={dataSet.file!} 
               fileName={dataSet.file!.split('/').pop() || 'dataset.parquet'}
