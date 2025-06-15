@@ -303,8 +303,10 @@ async def _process_transcript_async(
     logger.debug(f"Processing transcript {i+1}/{total_count} for LLM transformation (non-itemize)")
     
     start_time = time.perf_counter()
-    # Run LLM on transcript
-    response = await llm.ainvoke(prompt.format(text=text))
+    # Run LLM on transcript - always use Jinja2 template formatting
+    formatted_prompt_obj = prompt.format_prompt(text=text)
+    formatted_prompt = formatted_prompt_obj.to_string()
+    response = await llm.ainvoke(formatted_prompt)
     end_time = time.perf_counter()
     duration = end_time - start_time
     
@@ -552,39 +554,27 @@ async def _transform_transcripts_llm_async(
     if inspect:
         inspect_data(df, content_column)
     
-    # Determine template: inline prompt takes precedence over file
+    # Use the template from configuration
     if prompt_template:
-        # Convert Jinja2 template syntax to Python format string syntax
-        template = prompt_template.replace('{{text}}', '{text}').replace('{{format_instructions}}', '{format_instructions}')
-        logging.info("Using inline prompt template (converted from Jinja2 to Python format)")
+        template = prompt_template
+        logging.info("Using inline prompt template from configuration")
     elif prompt_template_file:
         try:
             with open(prompt_template_file, 'r') as f:
                 template_data = json.load(f)
-                template = template_data.get('template', 
-                    """Summarize the key topics in this transcript in 3-5 concise bullet points:
-                    
-                    {text}
-                    
-                    Key topics:"""
-                )
+                template = template_data.get('template')
+                if not template:
+                    raise ValueError("Template file must contain a 'template' key")
             logging.info(f"Using prompt template from file: {prompt_template_file}")
         except Exception as e:
-            logging.error(f"Error loading prompt template: {e}. Using default template.")
-            template = """Summarize the key topics in this transcript in 3-5 concise bullet points:
-            
-            {text}
-            
-            Key topics:"""
+            logging.error(f"Error loading prompt template: {e}")
+            raise
     else:
-        template = """Summarize the key topics in this transcript in 3-5 concise bullet points:
-        
-        {text}
-        
-        Key topics:"""
-        logging.info("Using default prompt template")
+        raise ValueError("No prompt template provided. Must specify either prompt_template or prompt_template_file")
     
-    prompt = ChatPromptTemplate.from_template(template)
+    # Always use Jinja2 templates
+    logging.info("Using Jinja2 template format")
+    prompt = ChatPromptTemplate.from_template(template, template_format="jinja2")
     
     if provider.lower() == 'ollama':
         try:
@@ -1097,13 +1087,26 @@ async def _process_itemize_batch_async(
             logger.error(f"Error getting format instructions: {type(e).__name__}: {e}")
             raise
             
-        formatted_prompt = prompt.format(
-            text=text, 
-            format_instructions=format_instructions
-        )
+        # Format the prompt - always use Jinja2 template formatting
+        try:
+            formatted_prompt_obj = prompt.format_prompt(text=text, format_instructions=format_instructions)
+            formatted_prompt = formatted_prompt_obj.to_string()
+        except Exception as e:
+            logger.error(f"Error formatting prompt: {type(e).__name__}: {e}")
+            raise
         
         # Enhanced debugging: Log the formatted prompt to see if transcript is included
         logger.debug(f"Formatted prompt for transcript {idx+1}: {len(formatted_prompt)} chars")
+        
+        # CRITICAL DEBUG: Check if text was actually interpolated
+        if "{{text}}" in formatted_prompt:
+            logger.error(f"🚨 INTERPOLATION FAILURE: {{{{text}}}} still present in formatted prompt for transcript {idx+1}")
+        elif len(text) > 50 and text[:50] not in formatted_prompt:
+            logger.error(f"🚨 INTERPOLATION FAILURE: Transcript text not found in formatted prompt for transcript {idx+1}")
+            logger.error(f"Expected text start: {text[:50]}...")
+            logger.error(f"Formatted prompt preview: {formatted_prompt[:500]}...")
+        else:
+            logger.debug(f"✅ Transcript {idx+1} text appears to be properly interpolated")
         
         task = _process_itemize_transcript_async(
             llm, prompt, formatted_prompt, text, parser, retry_parser, 
@@ -1319,39 +1322,28 @@ async def _transform_transcripts_itemize_async(
         max_retries=max_retries
     )
 
-    # Determine template: inline prompt takes precedence over file
+    # Use the template from configuration
     if prompt_template:
-        # Convert Jinja2 template syntax to Python format string syntax
-        template = prompt_template.replace('{{text}}', '{text}').replace('{{format_instructions}}', '{format_instructions}')
-        logging.info("Using inline prompt template for itemization (converted from Jinja2 to Python format)")
+        template = prompt_template
+        logging.info("Using inline prompt template from configuration")
     elif prompt_template_file:
         try:
             with open(prompt_template_file, 'r') as f:
                 template_data = json.load(f)
-                template = template_data.get('template', 
-                    """Extract the main topics from this transcript. For each topic, provide a concise description.
-
-{text}
-
-{format_instructions}"""
-                )
+                template = template_data.get('template')
+                if not template:
+                    raise ValueError("Template file must contain a 'template' key")
             logging.info(f"Using prompt template from file: {prompt_template_file}")
         except Exception as e:
-            logging.error(f"Error loading prompt template: {e}. Using default template.")
-            template = """Extract the main topics from this transcript. For each topic, provide a concise description.
-
-{text}
-
-{format_instructions}"""
+            logging.error(f"Error loading prompt template: {e}")
+            raise
     else:
-        template = """Extract the main topics from this transcript. For each topic, provide a concise description.
-
-{text}
-
-{format_instructions}"""
-        logging.info("Using default prompt template for itemization")
+        raise ValueError("No prompt template provided. Must specify either prompt_template or prompt_template_file")
     
-    prompt = ChatPromptTemplate.from_template(template)
+    # Always use Jinja2 templates
+    logging.info("Using Jinja2 template format")
+    prompt = ChatPromptTemplate.from_template(template, template_format="jinja2")
+    
     logging.info(f"Using prompt template:\n{template}")
 
     valid_rows = []
