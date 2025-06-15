@@ -768,6 +768,7 @@ def create_error(account: Optional[str], scorecard: Optional[str], score_id: Opt
                 'explanation': f"Test error score result created by CLI command for testing error detection feature",
                 'confidence': 0.0,
                 'correct': False,
+                'type': 'test',  # CLI-created test error results
                 'createdAt': now,
                 'updatedAt': now
             }

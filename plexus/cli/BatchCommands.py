@@ -1017,7 +1017,8 @@ async def _complete_batches(account_key):
                                 'itemId': content_id,
                                 'scoringJobId': scoring_job['id'],
                                 'value': result['value'],
-                                'code': '200'
+                                'code': '200',
+                                'type': 'prediction'  # Batch processing creates prediction results
                             }
                             
                             client.execute(create_result_mutation, {'input': result_input})
