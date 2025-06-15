@@ -79,6 +79,7 @@ class ScoreResult(BaseModel):
     evaluationId: Optional[str] = None
     correct: Optional[bool] = None
     code: Optional[str] = None
+    type: Optional[str] = None  # Type of score result: "prediction", "evaluation", etc.
 
     def __init__(
         self,
@@ -98,6 +99,7 @@ class ScoreResult(BaseModel):
         evaluationId: Optional[str] = None,
         correct: Optional[bool] = None,
         code: Optional[str] = None,
+        type: Optional[str] = None,
         client: Optional[_BaseAPIClient] = None
     ):
         super().__init__(id, client)
@@ -116,6 +118,7 @@ class ScoreResult(BaseModel):
         self.evaluationId = evaluationId
         self.correct = correct
         self.code = code
+        self.type = type
     
     @property
     def scoreName(self) -> Optional[str]:
@@ -155,6 +158,7 @@ class ScoreResult(BaseModel):
             evaluationId
             correct
             code
+            type
         """
 
     @classmethod
@@ -193,6 +197,7 @@ class ScoreResult(BaseModel):
             evaluationId=data.get('evaluationId'),
             correct=data.get('correct'),
             code=data.get('code'),
+            type=data.get('type'),
             client=client
         )
 
@@ -207,6 +212,7 @@ class ScoreResult(BaseModel):
         scoringJobId: Optional[str] = None,
         evaluationId: Optional[str] = None,
         code: str = '200',
+        type: Optional[str] = None,
         **kwargs
     ) -> 'ScoreResult':
         """Create a new score result.
@@ -220,6 +226,7 @@ class ScoreResult(BaseModel):
             scoringJobId: ID of scoring job (optional)
             evaluationId: ID of evaluation (optional)
             code: HTTP response code (defaults to '200' for success)
+            type: Type of score result - "prediction", "evaluation", etc. (optional)
             **kwargs: Optional fields:
                      - confidence: float
                      - metadata: dict (will be JSON serialized)
@@ -245,6 +252,8 @@ class ScoreResult(BaseModel):
             input_data['scoringJobId'] = scoringJobId
         if evaluationId is not None:
             input_data['evaluationId'] = evaluationId
+        if type is not None:
+            input_data['type'] = type
         
         mutation = """
         mutation CreateScoreResult($input: CreateScoreResultInput!) {

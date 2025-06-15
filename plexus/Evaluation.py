@@ -1644,7 +1644,8 @@ Total cost:       ${expenses['total_cost']:.6f}
                 'scoreId': self.score_id,
                 'value': value,
                 'metadata': json.dumps(metadata_dict),  # Ensure metadata is a JSON string
-                'code': '200'  # HTTP response code for successful evaluation
+                'code': '200',  # HTTP response code for successful evaluation
+                'type': 'evaluation'  # Mark this as an evaluation score result
             }
 
             # Add trace data if available
@@ -1681,6 +1682,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                     metadata
                     trace
                     code
+                    type
                 }
             }
             """
