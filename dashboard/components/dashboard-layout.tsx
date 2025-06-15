@@ -70,7 +70,7 @@ const MobileHeader = ({
       variant="ghost"
       size="sm"
       onClick={toggleLeftSidebar}
-      className="h-8 w-8 p-0"
+      className="h-8 w-8 p-0 ml-3"
     >
       <Menu className="h-4 w-4" />
     </DashboardButton>
@@ -85,7 +85,7 @@ const MobileHeader = ({
       variant="ghost"
       size="sm"
       onClick={toggleRightSidebar}
-      className="h-8 w-8 p-0 hidden xs:block"
+      className="h-8 w-8 p-0 mr-3 hidden xs:block"
     >
       <MessageSquare className="h-4 w-4" />
     </DashboardButton>
