@@ -34,11 +34,9 @@ class CompositeScore(Score):
         """
         super().__init__(**parameters)
 
-        # Aggregate explanation and quote, computed at the end after computing all other elements.
         self.explanation = []
         self.quote = []
 
-        # Accumulators for tracking the total expenses.
         self.input_cost =  Decimal('0.0')
         self.output_cost = Decimal('0.0')
         self.total_cost =  Decimal('0.0')    
@@ -49,7 +47,6 @@ class CompositeScore(Score):
 
         self.element_results = []
 
-        # Initialize the chat history with the system prompt.
         self.chat_history = []
 
     def to_dict(self):
@@ -69,29 +66,19 @@ class CompositeScore(Score):
         }
 
     def save_results_to_json(self, session_id, output_directory_path):
-        # Create the output directory if it doesn't exist
         os.makedirs(output_directory_path, exist_ok=True)
-
-        # Define the output file path
         output_file_path = os.path.join(output_directory_path, f"{session_id}.json")
-
-        # Save the data to a JSON file
         with open(output_file_path, 'w') as file:
             json.dump(self.to_dict(), file)
 
     @classmethod
     def load_results_from_json(cls, session_id, input_directory_path):
-        # Define the input file path
         input_file_path = os.path.join(input_directory_path, f"{session_id}.json")
 
-        # Load the data from the JSON file
         with open(input_file_path, 'r') as file:
             data = json.load(file)
 
-        # Create a new instance of the class
         instance = cls(scorecard_name=data['scorecard_name'], score_name=data['score_name'])
-
-        # Set the instance attributes from the data
         instance.explanation = data['explanation']
         instance.quote = data['quote']
         instance.llm_request_count = data['llm_request_count']
@@ -134,7 +121,6 @@ class CompositeScore(Score):
             except re.error as exc:
                 raise yaml.constructor.ConstructorError(f"Could not compile regex: {value}") from exc
 
-        # Add the custom constructor to the PyYAML loader
         yaml.SafeLoader.add_constructor('!regex', regex_constructor)
 
         return yaml.safe_load(yaml_content)
@@ -147,17 +133,14 @@ class CompositeScore(Score):
         with open(markdown_file_path, 'r') as file:
             markdown_content = file.read()
 
-        # Parse the Markdown content and extract the YAML sections
         config = cls.extract_yaml_section(markdown_content, 'Configuration') or {}
         preprocessing_config = cls.extract_yaml_section(markdown_content, 'Preprocessing')
         decision_tree_config = cls.extract_yaml_section(markdown_content, 'Decision Tree')
 
-        # Get the base class name from the config, default to OpenAICompositeScore
         llm_model_name = config.get('model', 'gpt-3.5-turbo-16k-0613')
         completion_name = config.get('completion', 'azure/CallCriteriaGPT35Turbo16k')
         chunking = config.get('chunking', True)
 
-        # Hard-code the base module path
         base_module_path = 'plexus.scores'
 
         try:
@@ -179,7 +162,6 @@ class CompositeScore(Score):
                 self.prompt_template_loader = PromptTemplateLoader(markdown_content=markdown_content)
                 self.name = score_name
 
-                # Dynamically generate the elements array from the Markdown content
                 self.elements = self.generate_elements_from_markdown()
                 self.overall_questions = self.elements[0]['prompt'].strip().split('\n')
             
@@ -187,7 +169,6 @@ class CompositeScore(Score):
                 """
                 Load any necessary artifacts or models based on the context.
                 """
-                # Implement the method
                 pass
 
             class Result(Score.Result):
@@ -214,7 +195,6 @@ class CompositeScore(Score):
                 return self.compute_result()
 
             def process_text(self, *, text):
-                # Initialize an empty list to hold both strings and compiled regex patterns
                 if not self.chunking:
                     return text
 
@@ -226,17 +206,13 @@ class CompositeScore(Score):
                         for keyword in keywords:
                             if isinstance(keyword, str):
                                 if keyword.startswith('!regex '):
-                                    # Compile regex pattern and add
-                                    pattern = keyword[7:]  # Remove '!regex ' prefix
+                                    pattern = keyword[7:]
                                     keyword_patterns.append(re.compile(pattern))
                                 else:
-                                    # Add string directly
                                     keyword_patterns.append(keyword)
                             elif isinstance(keyword, re.Pattern):
-                                # If keyword is already a compiled regex, add it directly
                                 keyword_patterns.append(keyword)
 
-                # Convert the text string into a DataFrame
                 text_df = pd.DataFrame({'text': [text]})
 
                 # Use the KeywordClassifier with the combined list of strings and regex patterns
@@ -244,20 +220,18 @@ class CompositeScore(Score):
                     classifier=KeywordClassifier(keyword_patterns, self.parameters.scorecard_name, self.parameters.score_name)
                 ).process(text_df)
 
-                # Extract the filtered text from the DataFrame
                 filtered_text = filtered_text_df['text'].iloc[0]
 
                 return filtered_text
 
             def generate_elements_from_markdown(self):
                 elements = []
-                # Assuming each element is defined in its own section in the Markdown
                 for section_name in self.prompt_template_loader.sections:
                     prompt = self.prompt_template_loader.get_template(section_name=section_name, content_type='prompt')
                     try:
                         rules = self.prompt_template_loader.get_template(section_name=section_name, content_type='rules')
                     except ValueError:
-                        rules = None  # Rules are optional
+                        rules = None
 
                     element = {
                         'name': CompositeScore.normalize_element_name(section_name),
@@ -274,7 +248,6 @@ class CompositeScore(Score):
             def save_model(self):
                 pass
 
-        # Register the created class with the score_registry
         scorecard.score_registry.register(
             cls=CompositeScoreFromMarkdown,
             properties=config,
@@ -453,7 +426,6 @@ class CompositeScore(Score):
                 name=name,
                 element_type='clarification',
                 
-                # Add the previous response content to the chat history.
                 previous_messages=previous_messages,
                 prompt=rules,
                 chunk=text_chunk
@@ -461,7 +433,6 @@ class CompositeScore(Score):
 
             logging.debug(f'Clarification result for {name} rules: {score_result}')
 
-            # If the clarification result is no then it overrides the yes result.
             if clarification_result.is_no():
                 clarification_result.explanation = clarification_result.explanation
                 clarification_result.quote = clarification_result.quote
@@ -500,7 +471,6 @@ class CompositeScore(Score):
         if not self.chunking:
             chunks = [self.filtered_text]
         else:
-            # Break the text into chunks to process them in parallel.
             chunks = self.break_text_into_chunks(self.filtered_text)
 
         logging.debug(f"Filtered text:\n{self.filtered_text}")
@@ -514,14 +484,10 @@ class CompositeScore(Score):
         chunk_results = []
         futures = []
 
-        # Process the chunks in parallel.
-        
-        # Set this to 1 to process them in sequence.  Slower but cheaper since it will short-circut
-        # in the decision tree and potentially not run a lot of the elements.
+        # Process the chunks in parallel. Set to 1 for sequential processing that short-circuits
         max_threads = 20
 
         if max_threads > 1:
-            # Parallel processing with ThreadPoolExecutor
             with ThreadPoolExecutor(max_workers=max_threads) as executor:
                 futures = [executor.submit(self._process_text_chunk, name, chunk) for chunk in chunks]
                 for future in as_completed(futures):
@@ -530,19 +496,16 @@ class CompositeScore(Score):
                     if result.is_yes():
                         return True
         else:
-            # Sequential processing with immediate short-circuiting
             for chunk in chunks:
                 result = self._process_text_chunk(name, chunk)
                 chunk_results.append(result)
                 if result.is_yes():
                     return True
 
-        # The most interesting chunks will be the ones that had clarification, so return the result of the first chunk that had clarification.
         for chunk_result in chunk_results:
             if "completion_explanation" in chunk_result.metadata:
                 return chunk_result.is_yes()
 
-        # This fallback happens when there are no clarifications.  Just pick the first no.
         return chunk_results[0].is_yes()
 
     @staticmethod
@@ -550,18 +513,13 @@ class CompositeScore(Score):
         return re.sub(r"\W+", "_", name).lower().strip("_")
 
     def compute_result(self, *, tree=None):
-        # Initialize to the score's decision tree at the start.
-        # After that, each iteration's tree is a sub-tree, as we make decisions.
         tree = tree if tree is not None else self.decision_tree
 
         if isinstance(tree, list) and all(isinstance(item, dict) and 'score' in item and 'value' in item for item in tree):
             ordered_results = {item['score']: item['value'] for item in tree}
             return self.multiple(ordered_results)
         elif isinstance(tree, str):
-            # Call the method dynamically and store the result
             method_result = getattr(self, tree)()
-
-            # Wrap the result in a list containing a single dictionary.
             return [method_result]
 
         element_name = CompositeScore.normalize_element_name(tree["element"])
@@ -583,16 +541,12 @@ class CompositeScore(Score):
         """
         allowed_function_names = ['filtered_text_is_empty']
         
-        # First, try to find a matching element
         for element in self.elements:
             if element['name'] == name:
                 return element
-        
-        # If no element is found, check if the name is an allowed function name
+
         if name in allowed_function_names:
             return getattr(self, name, None)
-        
-        # Return None if no element or allowed function name matches
         return None
 
     def filtered_text_is_empty(self):
@@ -666,7 +620,6 @@ class CompositeScore(Score):
         """
 
         chat_history_pretty_format = json.dumps(self.chat_history, indent=4)
-        # logging.info(f"Final chat history:\n{chat_history_pretty_format}")
 
         return self.return_result_with_context(value='Yes')
     
@@ -678,7 +631,6 @@ class CompositeScore(Score):
         """
 
         chat_history_pretty_format = json.dumps(self.chat_history, indent=4)
-        # logging.info(f"Final chat history:\n{chat_history_pretty_format}")
 
         return self.return_result_with_context(value='No')
 
@@ -690,7 +642,6 @@ class CompositeScore(Score):
         """
 
         chat_history_pretty_format = json.dumps(self.chat_history, indent=4)
-        # logging.info(f"Final chat history:\n{chat_history_pretty_format}")
 
         return self.return_result_with_context(value='NA')
 
@@ -706,6 +657,5 @@ class CompositeScore(Score):
             )
         
         chat_history_pretty_format = json.dumps(self.chat_history, indent=4)
-        # logging.info(f"Final chat history:\n{chat_history_pretty_format}")
 
         return results

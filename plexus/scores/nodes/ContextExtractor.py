@@ -81,7 +81,6 @@ class ContextExtractor(BaseNode, LangChainUser):
             return self.__tokenizer.tokenize(text)
 
         def parse(self, output: str) -> Dict[str, Any]:
-            # Clean the output
             output = output.strip().strip('"')
             if output.startswith("Quote:"):
                 output = output[len("Quote:"):].strip()
@@ -89,7 +88,6 @@ class ContextExtractor(BaseNode, LangChainUser):
             
             logging.info(f"Searching for sequence: {output}")
             
-            # Handle "No clear example found" case
             if "no clear example" in output.lower():
                 return {
                     "matched_sequence": None,
@@ -98,18 +96,14 @@ class ContextExtractor(BaseNode, LangChainUser):
                     "match_end_index": None
                 }
             
-            # Use fuzzy matching to find the best match in the text
-            # Create overlapping chunks for better matching
             chunk_size = len(output)
             overlap = chunk_size // 2
             text_chunks = []
             for i in range(0, len(self.text) - chunk_size + 1, overlap):
                 text_chunks.append(self.text[i:i + chunk_size])
 
-            # Normalize the output for comparison
             normalized_output = ' '.join(output.lower().split())
             
-            # Find best matching chunk
             result = process.extractOne(
                 normalized_output,
                 text_chunks,
@@ -126,36 +120,26 @@ class ContextExtractor(BaseNode, LangChainUser):
                     "match_end_index": None
                 }
             
-            # Get the matched chunk and its index
             matched_chunk, match_score, chunk_index = result
             chunk_start = chunk_index * overlap
             
-            # Use the chunk start position directly
             match_start = chunk_start
             matched_sequence = matched_chunk
             
-            # Calculate the end position
             match_end = match_start + len(matched_sequence)
             
-            # Calculate initial context boundaries
             context_start = max(0, match_start - self.context_before)
             context_end = min(len(self.text), match_end + self.context_after)
             
             if self.use_sentence_boundaries:
-                # Tokenize the relevant portion of text into sentences
                 sentences = self.tokenize(self.text)
-                
-                # Find sentences that contain our boundaries
+                sentences = self.tokenize(self.text)
                 current_pos = 0
                 for i, sentence in enumerate(sentences):
                     sentence_start = current_pos
                     sentence_end = current_pos + len(sentence)
-                    
-                    # Expand context_start to sentence boundary
                     if sentence_start <= context_start <= sentence_end:
                         context_start = sentence_start
-                    
-                    # Expand context_end to sentence boundary
                     if sentence_start <= context_end <= sentence_end:
                         context_end = sentence_end
                     
@@ -166,7 +150,6 @@ class ContextExtractor(BaseNode, LangChainUser):
             logging.info(f"Extracted context chunk of length {len(context_chunk)}")
             logging.info(f"Match found at positions {match_start}:{match_end}")
             
-            # Ensure the context chunk contains the matched sequence
             if matched_sequence not in context_chunk:
                 logging.warning("Matched sequence not found in context chunk, adjusting boundaries")
                 context_start = max(0, match_start - self.context_before)
@@ -190,7 +173,6 @@ class ContextExtractor(BaseNode, LangChainUser):
                 logging.warning("Text is empty in extractor node")
                 return state
 
-            # Convert state to dict if it isn't already
             if not isinstance(state, dict):
                 state = state.dict()
 

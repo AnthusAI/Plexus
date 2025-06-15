@@ -20,7 +20,6 @@ def list_plexus_report_configurations(accountId: str = None) -> str:
     logger = logging.getLogger(__name__)
     
     try:
-        # Get the client and account ID from context if not provided
         if accountId is None:
             from plexus.mcp.context import get_context
             context = get_context()
@@ -34,12 +33,11 @@ def list_plexus_report_configurations(accountId: str = None) -> str:
         
         logger.info(f"Listing report configurations for account {accountId}")
         
-        # List report configurations using the existing model method
         try:
             result = ReportConfiguration.list_by_account_id(
                 account_id=accountId,
                 client=client,
-                limit=50  # Adjust limit as needed
+                limit=50
             )
             logger.debug(f"Retrieved {len(result.get('items', []))} report configurations")
         except Exception as e:
@@ -47,7 +45,6 @@ def list_plexus_report_configurations(accountId: str = None) -> str:
             logger.error(traceback.format_exc())
             return json.dumps({"error": f"GraphQL query failed: {str(e)}"})
         
-        # Extract just the name and updatedAt for each configuration
         configs = []
         for config in result.get('items', []):
             try:
@@ -60,9 +57,7 @@ def list_plexus_report_configurations(accountId: str = None) -> str:
                 logger.debug(f"Added configuration: {config.name}")
             except Exception as e:
                 logger.error(f"Error processing configuration: {e}")
-                # Continue with other configurations even if one fails
-        
-        # They're already sorted by updatedAt DESC from the API query
+                
         logger.info(f"Successfully processed {len(configs)} report configurations")
         return json.dumps(configs, ensure_ascii=True)
     
