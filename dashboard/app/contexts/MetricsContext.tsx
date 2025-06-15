@@ -34,7 +34,6 @@ interface MetricsContextType {
 
 const MetricsContext = createContext<MetricsContextType | undefined>(undefined)
 
-// GraphQL response type matching the schema
 interface ItemsMetricsResponse {
   accountId: string;
   hours: number;
@@ -82,15 +81,13 @@ async function fetchMetricsFromAPI(accountId: string): Promise<MetricsData> {
     if (response.data?.getItemsMetrics) {
       const metricsResponse: ItemsMetricsResponse = response.data.getItemsMetrics;
       
-      // Transform the response to match the expected UI format
-      const itemsChartData = typeof metricsResponse.itemsHourlyBreakdown === 'string' 
-        ? JSON.parse(metricsResponse.itemsHourlyBreakdown) 
+      const itemsChartData = typeof metricsResponse.itemsHourlyBreakdown === 'string'
+        ? JSON.parse(metricsResponse.itemsHourlyBreakdown)
         : (metricsResponse.itemsHourlyBreakdown || []);
       const scoreResultsChartData = typeof metricsResponse.scoreResultsHourlyBreakdown === 'string'
         ? JSON.parse(metricsResponse.scoreResultsHourlyBreakdown)
         : (metricsResponse.scoreResultsHourlyBreakdown || []);
       
-      // Calculate averages and peaks from chart data
       const itemsValues = itemsChartData.map((d: any) => d.items || 0);
       const scoreResultsValues = scoreResultsChartData.map((d: any) => d.scoreResults || 0);
       
@@ -99,7 +96,6 @@ async function fetchMetricsFromAPI(accountId: string): Promise<MetricsData> {
       const itemsPeakHourly = itemsValues.length > 0 ? Math.max(...itemsValues) : 0;
       const scoreResultsPeakHourly = scoreResultsValues.length > 0 ? Math.max(...scoreResultsValues) : 0;
       
-      // Combine chart data from both sources
       const combinedChartData = itemsChartData.map((itemData: any, index: number) => {
         const scoreData = scoreResultsChartData[index] || {};
         return {
@@ -124,7 +120,6 @@ async function fetchMetricsFromAPI(accountId: string): Promise<MetricsData> {
         lastUpdated: new Date(metricsResponse.timestamp)
       };
     } else {
-      // Check for GraphQL errors
       if (response.errors) {
         console.error('📊 MetricsContext: GraphQL errors:', response.errors);
         throw new Error(response.errors.map((e: any) => e.message).join(', '));
@@ -229,7 +224,7 @@ export function MetricsProvider({ children }: { children: React.ReactNode }) {
       
       refreshIntervalRef.current = setInterval(() => {
         console.log('📊 MetricsContext: Auto-refreshing metrics...')
-        fetchMetrics(true) // Background refresh
+        fetchMetrics(true)
       }, 60000)
       
       return () => {

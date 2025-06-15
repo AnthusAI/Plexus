@@ -203,7 +203,7 @@ export function ItemsGauges({
       transition: {
         duration: 0.4,
         ease: 'easeOut',
-        delay: 0.5 // Delay content animation until height animation is well underway
+        delay: 0.5
       }
     }
   }
@@ -340,10 +340,8 @@ Total score results over last 24 hours`}
                       const totalPoints = chartData.length
                       if (index === 0) return "24h ago"
                       if (index === totalPoints - 1) return "now"
-                      // Show middle label only if chart is wide enough (2+ grid cells)
-                      // We can approximate this by checking if we have enough data points
                       if (totalPoints >= 12 && index === Math.floor(totalPoints / 2)) return "12h ago"
-                      return "" // Hide other ticks
+                      return ""
                     }}
                   />
                   <ChartTooltip
