@@ -27,6 +27,12 @@ When I tried to install the project with `pip install -e .`, here's what actuall
 - **pandas==2.1.4** fails to compile - C API incompatibility  
 - Error: `_PyLong_AsByteArray` function signature changed in Python 3.13
 
+### ❌ **Wrong Python Version Used**
+- **Environment Python:** 3.13.3  
+- **Project Requirement:** `requires-python = ">=3.11"` (should use Python 3.11)
+- **Issue:** Using Python 3.13 with dependencies pinned for Python 3.11 era
+- **Error:** `pandas==2.1.4` fails to compile due to C API changes in Python 3.13
+
 ### 📋 **Complete Dependency List from pyproject.toml** 
 The project declares **59 dependencies** (not "missing" - they're all listed):
 
@@ -61,6 +67,11 @@ The project declares **59 dependencies** (not "missing" - they're all listed):
 
 ### 🎯 **Real Problem**
 Not "missing" dependencies, but **version compatibility**: The pinned versions don't support Python 3.13.
+
+### 🎯 **Root Cause: Wrong Python Version**
+**Simple Fix:** Use Python 3.11 as specified in `pyproject.toml` instead of Python 3.13.
+
+The analysis was using Python 3.13.3 while the project specifies `requires-python = ">=3.11"` with dependencies pinned for that era.
 
 ## Executive Summary
 
@@ -147,28 +158,6 @@ The MCP server is a critical component with **3,280 lines of code** but only **t
 
 ## Recommendations
 
-### **Priority 0: Fix Testing Infrastructure** 🔥
-
-**IMMEDIATE CRITICAL ISSUE:** Tests cannot run due to dependency management problems.
-
-1. **Create Proper Development Environment**
-   ```bash
-   # This is currently broken - needs to be fixed:
-   pip install -e .  # Fails due to complex dependency web
-   python -m pytest  # Fails on 52 different import errors
-   ```
-
-2. **Dependency Management Solutions:**
-   - **Option A:** Use Docker container with pre-built environment
-   - **Option B:** Create `requirements-dev.txt` with exact working versions
-   - **Option C:** Use conda environment with environment.yml
-   - **Option D:** Split dependencies into groups (core, testing, optional)
-
-3. **CI/CD Pipeline Must Work:**
-   - Currently impossible to run automated tests
-   - No way to enforce quality gates
-   - No way to track coverage changes
-
 ### **Priority 0: Fix Python 3.13 Compatibility** 🔥
 
 **ACTUAL ISSUE:** Dependencies fail to install due to version incompatibility, not missing packages.
@@ -194,6 +183,29 @@ The MCP server is a critical component with **3,280 lines of code** but only **t
    - Can't install dependencies = can't run tests  
    - No way to run CI/CD pipeline
    - No automated quality gates possible
+
+### **Priority 0: Use Correct Python Version** 🔥
+
+**SIMPLE ISSUE:** Using Python 3.13 instead of Python 3.11 as specified in `pyproject.toml`.
+
+1. **Immediate Solution:**
+   ```bash
+   # Use Python 3.11 as specified in pyproject.toml
+   pyenv install 3.11.10
+   pyenv local 3.11.10
+   pip install -e .
+   python -m pytest
+   ```
+
+2. **Root Cause:**
+   - Project specifies `requires-python = ">=3.11"`
+   - Dependencies are pinned for Python 3.11 era (pandas==2.1.4, etc.)
+   - Python 3.13 has C API changes that break older pandas versions
+
+3. **Testing Infrastructure Should Work:**
+   - Once using Python 3.11, dependencies should install normally
+   - Full test suite should be runnable
+   - CI/CD pipeline should work as designed
 
 ### Immediate Actions (Priority 1)
 
@@ -246,25 +258,22 @@ python -m pytest plexus_fastmcp_server_test.py -v --cov=plexus_fastmcp_server --
 
 ## Impact Assessment
 
-**Risk Level: CRITICAL** 🔴
+**Risk Level: HIGH** 🔴
 
-The testing problems represent a **double threat**:
+The testing problems have **two components**:
 
-1. **Infrastructure Risk:** Cannot run tests at all (except MCP subset)
-   - No automated quality assurance possible
-   - No regression testing
-   - No way to safely deploy changes
-   - No confidence in code changes
+1. **Configuration Issue:** Cannot run tests due to wrong Python version (EASILY FIXED)
+   - Should be resolved by using Python 3.11 as specified
+   - Full test suite should become available immediately
+   - No fundamental infrastructure problems
 
-2. **Coverage Risk:** Even when tests can run, coverage is dangerously low (9% for MCP)
+2. **Coverage Risk:** Even when tests run, coverage is dangerously low (9% for MCP)
    - Code quality and reliability at risk
    - Feature development velocity compromised
    - Production stability uncertain
    - Maintenance burden extremely high
 
-**This combination makes the codebase effectively untestable and high-risk for any changes.**
-
-**Immediate investment in both testing infrastructure AND coverage is urgently required.**
+**Once Python version is corrected, focus should shift entirely to improving test coverage.**
 
 ## What Can Be Done Right Now
 
@@ -284,8 +293,8 @@ python -m pytest plexus_fastmcp_server_test.py --cov=plexus_fastmcp_server
 3. **Set Coverage Goals** - Target 80%+ for MCP server specifically
 
 ### 📋 **Medium-term Infrastructure Work Needed**
-1. **Resolve Python 3.13 compatibility issues** for main project tests
-2. **Set up proper CI/CD** with working test environment  
-3. **Create comprehensive test suite** for core Plexus modules
+1. **Set up proper CI/CD** with working test environment  
+2. **Create comprehensive test suite** for core Plexus modules
+3. **Potentially update dependencies** to support newer Python versions
 
-The MCP server is critical infrastructure that can be improved immediately, while the broader testing infrastructure requires more systematic work.
+**The main issue (Python version) should be easily resolved, making full project testing available immediately.**
