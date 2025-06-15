@@ -255,8 +255,8 @@ export function ItemsGauges({
         <div className="bg-card rounded-lg h-48 overflow-visible flex items-center justify-center">
           <div className="w-full h-full flex items-center justify-center">
             <Gauge
-              value={scoreResultsPerHour > 0 || itemsPerHour > 0 ? itemsPerHour : undefined}
-              beforeValue={scoreResultsAveragePerHour > 0 || itemsAveragePerHour > 0 ? itemsAveragePerHour : undefined}
+              value={itemsPerHour}
+              beforeValue={itemsAveragePerHour}
               title="Items / hour"
               information={hasHourlyData ? `**Current:** ${itemsPerHour}  
 *Current hourly rate (rolling 60-min window)*
@@ -289,8 +289,8 @@ export function ItemsGauges({
         <div className="bg-card rounded-lg h-48 overflow-visible flex items-center justify-center">
           <div className="w-full h-full flex items-center justify-center">
             <Gauge
-              value={scoreResultsPerHour > 0 || itemsPerHour > 0 ? scoreResultsPerHour : undefined}
-              beforeValue={scoreResultsAveragePerHour > 0 || itemsAveragePerHour > 0 ? scoreResultsAveragePerHour : undefined}
+              value={scoreResultsPerHour}
+              beforeValue={scoreResultsAveragePerHour}
               title="Score Results / hour"
               information={hasHourlyData ? `**Current:** ${scoreResultsPerHour}  
 *Current hourly rate (rolling 60-min window)*
