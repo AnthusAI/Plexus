@@ -146,13 +146,13 @@ const ParquetViewer: React.FC<ParquetViewerProps> = ({ filePath, fileName, hideF
       )}
 
       {/* Data table - scrollable */}
-      <div className={`flex-1 mx-4 border rounded-md overflow-hidden min-h-0 ${hideFileInfo ? 'mt-4 mb-4' : 'my-4'}`}>
+      <div className={`flex-1 mx-4 overflow-hidden min-h-0 ${hideFileInfo ? 'mt-4 mb-4' : 'my-4'}`}>
         <div className="h-full overflow-auto">
           <table className="w-full text-sm">
             <thead className="bg-muted/50">
               <tr>
                 {data.columns.map((column, index) => (
-                  <th key={index} className="px-3 text-left font-medium text-muted-foreground border-r last:border-r-0">
+                  <th key={index} className="px-3 text-left font-medium text-muted-foreground border-r-2 border-muted last:border-r-0">
                     {column}
                   </th>
                 ))}
@@ -160,9 +160,9 @@ const ParquetViewer: React.FC<ParquetViewerProps> = ({ filePath, fileName, hideF
             </thead>
             <tbody className="bg-background">
               {data.rows.map((row, rowIndex) => (
-                <tr key={rowIndex} className="border-t hover:bg-muted/25">
+                <tr key={rowIndex} className="border-t-2 border-muted hover:bg-muted/25">
                   {data.columns.map((column, colIndex) => (
-                    <td key={colIndex} className="px-3 py-2 border-r last:border-r-0 max-w-[200px] truncate">
+                    <td key={colIndex} className="px-3 py-2 border-r-2 border-muted last:border-r-0 max-w-[200px] truncate">
                       {row[column] !== null && row[column] !== undefined 
                         ? String(row[column]) 
                         : <span className="text-muted-foreground italic">null</span>
