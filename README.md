@@ -130,6 +130,10 @@ Run all the tests:
 
     pytest
 
+Or using npm scripts (includes Python version checking):
+
+    npm run test:python
+
 Run a single test:
 
     pytest plexus/processors/RelevantWindowsTranscriptFilter_test.py -k test_multiple_keywords
@@ -144,9 +148,18 @@ Run tests with coverage:
 
     pytest --cov=plexus
 
+Or using npm scripts:
+
+    npm run test:python:coverage
+
 Generate an HTML coverage report:
 
     pytest --cov=plexus --cov-report=html
+
+Or using npm scripts:
+
+    npm run test:python:coverage
+    npm run coverage:serve  # Serves at http://localhost:8000
 
 That will generate a folder called `htmlcov` with an HTML coverage report. One way to view that is to run:
 

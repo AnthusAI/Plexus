@@ -1,4 +1,14 @@
 {
+  "name": "plexus",
+  "scripts": {
+    "python:check": "python --version && python -c \"import sys; exit(0 if sys.version_info >= (3, 11) and sys.version_info < (3, 12) else 1)\" || (echo '❌ ERROR: This project requires Python 3.11' && echo 'To fix: pyenv install 3.11.13 && pyenv local 3.11.13' && exit 1)",
+    "python:setup": "npm run python:check && pip install --upgrade pip && pip install -e .",
+    "test:python": "npm run python:check && python -m pytest -v",
+    "test:python:coverage": "npm run python:check && python -m pytest --cov=. --cov-report=term --cov-report=html -v",
+    "test:mcp": "npm run python:check && cd MCP && python -m pytest plexus_fastmcp_server_test.py --cov=plexus_fastmcp_server --cov-report=term -v",
+    "coverage:serve": "cd htmlcov && python -m http.server 8000",
+    "clean:python": "find . -type d -name '__pycache__' -exec rm -rf {} + 2>/dev/null || true && find . -type f -name '*.pyc' -delete 2>/dev/null || true && rm -rf htmlcov/ .coverage .pytest_cache/ 2>/dev/null || true"
+  },
   "dependencies": {
     "@radix-ui/react-tabs": "^1.1.11",
     "framer-motion": "^12.4.12"
