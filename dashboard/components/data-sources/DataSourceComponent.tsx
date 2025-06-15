@@ -22,6 +22,7 @@ import type { editor } from 'monaco-editor'
 import { defineCustomMonacoThemes, applyMonacoTheme, setupMonacoThemeWatcher, getCommonMonacoOptions } from '@/lib/monaco-theme'
 import { amplifyClient } from "@/utils/amplify-client"
 import { FileAttachments } from "@/components/items/FileAttachments"
+import { DataSourceVersionSelector } from "./DataSourceVersionSelector"
 import { uploadData } from 'aws-amplify/storage'
 import { toast } from 'sonner'
 
@@ -42,6 +43,7 @@ interface DataSourceComponentProps {
   onDataSetSelect?: (dataSet: Schema['DataSet']['type']) => void
   selectedDataSetId?: string
   accountId?: string
+  onVersionSelect?: (version: Schema['DataSourceVersion']['type']) => void
 }
 
 // Grid content component
@@ -105,7 +107,8 @@ const DetailContent = React.memo(function DetailContent({
   dataSets,
   onDataSetSelect,
   selectedDataSetId,
-  accountId
+  accountId,
+  onVersionSelect
 }: {
   dataSource: Schema['DataSource']['type']
   isFullWidth?: boolean
@@ -122,6 +125,7 @@ const DetailContent = React.memo(function DetailContent({
   onDataSetSelect?: (dataSet: Schema['DataSet']['type']) => void
   selectedDataSetId?: string
   accountId?: string
+  onVersionSelect?: (version: Schema['DataSourceVersion']['type']) => void
 }) {
   // Create a ref to store the Monaco instance
   const monacoRef = useRef<Monaco | null>(null)
@@ -250,6 +254,14 @@ const DetailContent = React.memo(function DetailContent({
                      placeholder:text-muted-foreground rounded-md"
             placeholder="Description"
           />
+          {dataSource.id && (
+            <DataSourceVersionSelector
+              dataSourceId={dataSource.id}
+              currentVersionId={dataSource.currentVersionId || undefined}
+              onVersionSelect={onVersionSelect}
+              className="mt-4"
+            />
+          )}
           <FileAttachments
             attachedFiles={dataSource.attachedFiles?.filter((file): file is string => file !== null) || []}
             onChange={(files) => {
@@ -446,6 +458,7 @@ export default function DataSourceComponent({
   onDataSetSelect,
   selectedDataSetId,
   accountId,
+  onVersionSelect,
   ...props 
 }: DataSourceComponentProps) {
   const [editedDataSource, setEditedDataSource] = React.useState<Schema['DataSource']['type']>(dataSource)
@@ -609,6 +622,7 @@ export default function DataSourceComponent({
               onDataSetSelect={onDataSetSelect}
               selectedDataSetId={selectedDataSetId}
               accountId={accountId}
+              onVersionSelect={onVersionSelect}
             />
           )}
         </div>
