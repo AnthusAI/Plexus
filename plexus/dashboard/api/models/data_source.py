@@ -23,6 +23,10 @@ class DataSource(BaseModel):
         createdAt: Optional[str] = None,
         updatedAt: Optional[str] = None,
         owner: Optional[str] = None,
+        accountId: Optional[str] = None,
+        currentVersionId: Optional[str] = None,
+        scoreId: Optional[str] = None,
+        scorecardId: Optional[str] = None,
         dataSets: Optional[List[DataSet]] = None,
         client: Optional[PlexusDashboardClient] = None
     ):
@@ -35,6 +39,10 @@ class DataSource(BaseModel):
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.owner = owner
+        self.accountId = accountId
+        self.currentVersionId = currentVersionId
+        self.scoreId = scoreId
+        self.scorecardId = scorecardId
         self.dataSets = dataSets
 
     @classmethod
@@ -50,6 +58,9 @@ class DataSource(BaseModel):
             createdAt
             updatedAt
             accountId
+            currentVersionId
+            scoreId
+            scorecardId
         """
 
     @classmethod
@@ -64,7 +75,11 @@ class DataSource(BaseModel):
             attachedFiles=data.get('attachedFiles'),
             createdAt=data.get('createdAt'),
             updatedAt=data.get('updatedAt'),
-            owner=data.get('accountId'),  # Map accountId to owner
+            owner=data.get('accountId'),  # Map accountId to owner for backward compatibility
+            accountId=data.get('accountId'),  # Also store as accountId
+            currentVersionId=data.get('currentVersionId'),
+            scoreId=data.get('scoreId'),
+            scorecardId=data.get('scorecardId'),
             client=client
         )
 

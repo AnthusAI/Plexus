@@ -557,6 +557,40 @@ export const amplifyClient = {
       return { data: response.data as Schema['DataSource']['type'] }
     }
   },
+  DataSourceVersion: {
+    list: async (params?: any) => {
+      const response = await (getClient().models.DataSourceVersion as any).list(params)
+      return response as AmplifyResponse<Schema['DataSourceVersion']['type'][]>
+    },
+    get: async (params: any) => {
+      const response = await (getClient().models.DataSourceVersion as any).get(params)
+      return { data: response.data as Schema['DataSourceVersion']['type'] | null }
+    },
+    create: async (data: {
+      dataSourceId: string;
+      yamlConfiguration: string;
+      isFeatured: boolean;
+      note?: string;
+      parentVersionId?: string;
+    }) => {
+      const response = await (getClient().models.DataSourceVersion as any).create(data)
+      return { data: response.data as Schema['DataSourceVersion']['type'] }
+    },
+    update: async (data: {
+      id: string;
+      yamlConfiguration?: string;
+      isFeatured?: boolean;
+      note?: string;
+      parentVersionId?: string;
+    }) => {
+      const response = await (getClient().models.DataSourceVersion as any).update(data)
+      return { data: response.data as Schema['DataSourceVersion']['type'] }
+    },
+    delete: async (params: { id: string }) => {
+      const response = await (getClient().models.DataSourceVersion as any).delete(params)
+      return { data: response.data as Schema['DataSourceVersion']['type'] }
+    }
+  },
   DataSet: {
     list: async (params?: any) => {
       const response = await (getClient().models.DataSet as any).list(params)
