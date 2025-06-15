@@ -220,7 +220,7 @@ const DetailContent = React.memo(function DetailContent({
   }, [])
 
   return (
-    <div className="w-full flex flex-col min-h-0 h-full">
+    <div className="w-full flex flex-col min-h-0 h-full overflow-hidden">
       {/* Header section - fixed size */}
       <div className="flex justify-between items-start w-full flex-shrink-0">
         <div className="space-y-2 flex-1">
@@ -316,8 +316,8 @@ const DetailContent = React.memo(function DetailContent({
         </div>
       </div>
 
-      {/* Main content area - flexible */}
-      <div className="flex-1 flex flex-col min-h-0 mt-2">
+      {/* Main content area - flexible and scrollable */}
+      <div className="flex-1 flex flex-col min-h-0 mt-2 overflow-y-auto">
         {/* YAML Editor - takes remaining space before datasets */}
         <div className={cn(
           "bg-background rounded-lg overflow-hidden relative min-h-[300px]",

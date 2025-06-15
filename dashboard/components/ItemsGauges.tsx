@@ -258,17 +258,17 @@ export function ItemsGauges({
               value={scoreResultsPerHour > 0 || itemsPerHour > 0 ? itemsPerHour : undefined}
               beforeValue={scoreResultsAveragePerHour > 0 || itemsAveragePerHour > 0 ? itemsAveragePerHour : undefined}
               title="Items / hour"
-              information={hasHourlyData ? `Current: ${itemsPerHour}
-Current hourly rate (rolling 60-min window)
+              information={hasHourlyData ? `**Current:** ${itemsPerHour}  
+*Current hourly rate (rolling 60-min window)*
 
-Average: ${itemsAveragePerHour}
-24-hour average hourly rate
+**Average:** ${itemsAveragePerHour}  
+*24-hour average hourly rate*
 
-Peak: ${itemsPeakHourly}
-Peak hourly rate over last 24 hours
+**Peak:** ${itemsPeakHourly}  
+*Peak hourly rate over last 24 hours*
 
-Total: ${itemsTotal24h}
-Total items over last 24 hours` : "Loading hourly metrics..."}
+**Total:** ${itemsTotal24h}  
+*Total items over last 24 hours*` : "Loading hourly metrics..."}
               valueUnit=""
               min={0}
               max={itemsPeakHourly}
@@ -292,17 +292,17 @@ Total items over last 24 hours` : "Loading hourly metrics..."}
               value={scoreResultsPerHour > 0 || itemsPerHour > 0 ? scoreResultsPerHour : undefined}
               beforeValue={scoreResultsAveragePerHour > 0 || itemsAveragePerHour > 0 ? scoreResultsAveragePerHour : undefined}
               title="Score Results / hour"
-              information={hasHourlyData ? `Current: ${scoreResultsPerHour}
-Current hourly rate (rolling 60-min window)
+              information={hasHourlyData ? `**Current:** ${scoreResultsPerHour}  
+*Current hourly rate (rolling 60-min window)*
 
-Average: ${scoreResultsAveragePerHour}
-24-hour average hourly rate
+**Average:** ${scoreResultsAveragePerHour}  
+*24-hour average hourly rate*
 
-Peak: ${scoreResultsPeakHourly}
-Peak hourly rate over last 24 hours
+**Peak:** ${scoreResultsPeakHourly}  
+*Peak hourly rate over last 24 hours*
 
-Total: ${scoreResultsTotal24h}
-Total score results over last 24 hours` : "Loading hourly metrics..."}
+**Total:** ${scoreResultsTotal24h}  
+*Total score results over last 24 hours*` : "Loading hourly metrics..."}
               valueUnit=""
               min={0}
               max={scoreResultsPeakHourly}
