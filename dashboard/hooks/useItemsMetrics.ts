@@ -24,6 +24,15 @@ interface MetricsData {
   costPerHour: number
   // Error detection for dashboard alerts
   hasErrorsLast24h: boolean
+  // Type-specific metrics
+  predictionMetrics?: TypeSpecificMetrics
+  evaluationMetrics?: TypeSpecificMetrics
+}
+
+interface TypeSpecificMetrics {
+  scoreResultsPerHour: number
+  scoreResultsTotal24h: number
+  scoreResultsAveragePerHour: number
 }
 
 interface UseItemsMetricsResult {
@@ -349,6 +358,7 @@ async function calculateMetrics(
       now,
       undefined, // scorecardId
       undefined, // scoreId
+      undefined, // type
       (progressChartData) => {
         // PROGRESSIVE CHART UPDATES: Update chart as buckets are computed
         const { itemsAverage, scoreResultsAverage } = calculateAverageValues(progressChartData)
@@ -389,6 +399,30 @@ async function calculateMetrics(
     const { itemsAverage, scoreResultsAverage } = calculateAverageValues(chartData);
     const { itemsPeak, scoreResultsPeak } = calculatePeakValues(chartData);
     
+    // Calculate type-specific metrics in parallel
+    const [predictionMetricsHour, evaluationMetricsHour, predictionMetrics24h, evaluationMetrics24h] = await Promise.all([
+      getAggregatedMetrics(accountId, 'scoreResults', lastHour, now, undefined, undefined, 'prediction'),
+      getAggregatedMetrics(accountId, 'scoreResults', lastHour, now, undefined, undefined, 'evaluation'),
+      getAggregatedMetrics(accountId, 'scoreResults', last24Hours, now, undefined, undefined, 'prediction'),
+      getAggregatedMetrics(accountId, 'scoreResults', last24Hours, now, undefined, undefined, 'evaluation')
+    ]);
+    
+    // Normalize hourly metrics for type-specific data
+    const actualWindowMinutes = (now.getTime() - lastHour.getTime()) / (60 * 1000);
+    const normalizationFactor = actualWindowMinutes > 0 ? 60 / actualWindowMinutes : 1;
+    
+    const predictionMetrics: TypeSpecificMetrics = {
+      scoreResultsPerHour: Math.round(predictionMetricsHour.count * normalizationFactor),
+      scoreResultsTotal24h: predictionMetrics24h.count,
+      scoreResultsAveragePerHour: Math.round(predictionMetrics24h.count / 24)
+    };
+    
+    const evaluationMetrics: TypeSpecificMetrics = {
+      scoreResultsPerHour: Math.round(evaluationMetricsHour.count * normalizationFactor),
+      scoreResultsTotal24h: evaluationMetrics24h.count,
+      scoreResultsAveragePerHour: Math.round(evaluationMetrics24h.count / 24)
+    };
+    
     const result: MetricsData = {
       itemsPerHour,
       scoreResultsPerHour,
@@ -409,6 +443,9 @@ async function calculateMetrics(
       costPerHour,
       // Error detection for dashboard alerts
       hasErrorsLast24h,
+      // Type-specific metrics
+      predictionMetrics,
+      evaluationMetrics,
     };
     
     console.log('🎯 Final metrics result hasErrorsLast24h:', result.hasErrorsLast24h);

@@ -24,6 +24,7 @@ export async function generateChartData(
   endTime: Date,
   scorecardId?: string,
   scoreId?: string,
+  type?: string,
   onProgress?: (chartData: ChartDataPoint[]) => void
 ): Promise<ChartDataPoint[]> {
   const requestHours = Math.ceil((endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60))
@@ -86,8 +87,8 @@ export async function generateChartData(
     
     // Get aggregated metrics for the appropriate time range
     const [itemsMetrics, scoreResultsMetrics] = await Promise.all([
-      getAggregatedMetrics(accountId, 'items', aggregationStart, aggregationEnd, scorecardId, scoreId),
-      getAggregatedMetrics(accountId, 'scoreResults', aggregationStart, aggregationEnd, scorecardId, scoreId)
+      getAggregatedMetrics(accountId, 'items', aggregationStart, aggregationEnd, scorecardId, scoreId, type),
+      getAggregatedMetrics(accountId, 'scoreResults', aggregationStart, aggregationEnd, scorecardId, scoreId, type)
     ])
 
     return {
