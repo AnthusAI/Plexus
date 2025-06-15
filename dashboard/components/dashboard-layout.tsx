@@ -638,14 +638,14 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
   }, [])
 
   return (
-    <div className="flex flex-col h-screen bg-frame dashboard-container">
+    <div className={`flex flex-col h-screen dashboard-container ${isMobile ? 'bg-background' : 'bg-frame'}`}>
       <MobileHeader 
         toggleLeftSidebar={toggleLeftSidebar}
         toggleRightSidebar={toggleRightSidebar}
         rightSidebarState={rightSidebarState}
       />
       
-      <div className="flex flex-1 bg-frame min-h-0 relative">
+      <div className={`flex flex-1 min-h-0 relative ${isMobile ? 'bg-background' : 'bg-frame'}`}>
         <aside
           className={`
             ${isMobile ? 'fixed top-0 bottom-0 left-0 z-40 bg-background/80 backdrop-blur-sm' : 
@@ -663,19 +663,19 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
         </aside>
 
         <main 
-          className={`flex-1 flex flex-col transition-all duration-300 ease-in-out min-h-0 ${isMobile ? 'mobile-main' : ''}
+          className={`flex-1 flex flex-col transition-all duration-300 ease-in-out min-h-0 ${isMobile ? 'mobile-main bg-background' : ''}
             ${isMobile ? 'ml-0 mr-0' : (isLeftSidebarOpen ? 'ml-40' : 'ml-14')}
             ${!isMobile && rightSidebarState === 'collapsed' ? 'mr-14' : 
               !isMobile && rightSidebarState === 'normal' ? 'mr-80' : 
               !isMobile && rightSidebarState === 'expanded' ? 'mr-[40%]' : 'mr-0'}
             ${rightSidebarState !== 'collapsed' ? (isMobile ? 'pr-0' : 'pr-2') : 'pr-0'}
-            ${isMobile ? 'p-1' : 'p-2'}
+            ${isMobile ? 'p-0' : 'p-2'}
           `}
         >
-          <div className={`flex-1 flex flex-col bg-background min-h-0 overflow-visible relative ${isMobile ? 'mobile-compact rounded-sm' : 'rounded-lg'}`}>
+          <div className={`flex-1 flex flex-col bg-background min-h-0 overflow-visible relative ${isMobile ? 'mobile-compact' : 'rounded-lg'}`}>
             {/* Global loading overlay */}
             {isNavigating && (
-              <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center rounded-lg">
+              <div className={`absolute inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center ${isMobile ? '' : 'rounded-lg'}`}>
                 <Spinner size="xl" variant="secondary" />
               </div>
             )}
