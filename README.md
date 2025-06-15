@@ -87,13 +87,42 @@ Plexus is a work in progress, with gaps in test coverage and documentation, and 
 
 Plexus is developed and maintained by [Anthus AI Solutions](https://www.anth.us). Please [contact us](https://forms.gle/KqpKt8ERsr2QcaP1A) if you need help using Plexus for your classification needs.
 
+## Python Requirements
+
+**⚠️ IMPORTANT: This project requires Python 3.11**
+
+Plexus is designed to work with Python 3.11. Using other Python versions (like 3.13) will cause dependency installation failures.
+
+### Quick Setup
+If you have `pyenv` installed:
+```bash
+pyenv install 3.11.13
+pyenv local 3.11.13  # This will automatically use Python 3.11 in this directory
+```
+
+### Verification
+Check your Python version:
+```bash
+python --version  # Should show Python 3.11.x
+```
+
+The project includes a `.python-version` file that will automatically set the correct Python version when using `pyenv` or other compatible version managers.
+
 ## Getting Started
 
 ### Installation
 
+**Prerequisites:** Python 3.11 (see Python Requirements section above)
+
 Clone this repository. We're not in PyPi yet, so you'll have to install it locally.
 
-`pip install -e .`
+```bash
+# Ensure you're using Python 3.11
+python --version
+
+# Install the project
+pip install -e .
+```
 
 ### Testing
 
