@@ -1,0 +1,24 @@
+plexus.reports package
+======================
+
+.. automodule:: plexus.reports
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+Subpackages
+-----------
+
+.. toctree::
+   :maxdepth: 4
+
+   plexus.reports.blocks
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 4
+
+   plexus.reports.s3_utils
+   plexus.reports.service
