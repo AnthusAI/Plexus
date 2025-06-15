@@ -12,13 +12,45 @@ import { cn } from "@/lib/utils"
 import { useAccount } from "@/app/contexts/AccountContext"
 import { ScorecardDashboardSkeleton } from "./loading-skeleton"
 import { motion, AnimatePresence } from 'framer-motion'
+import { useRouter } from 'next/navigation'
 
 
-export default function DataSourcesDashboard() {
+interface DataSourcesDashboardProps {
+  selectedSourceId?: string
+  selectedDatasetId?: string
+  selectedVersionId?: string
+}
+
+export default function DataSourcesDashboard({ 
+  selectedSourceId, 
+  selectedDatasetId, 
+  selectedVersionId 
+}: DataSourcesDashboardProps = {}) {
   const { selectedAccount } = useAccount()
+  const router = useRouter()
   const [dataSources, setDataSources] = useState<Schema['DataSource']['type'][]>([])
   const [dataSets, setDataSets] = useState<Schema['DataSet']['type'][]>([])
   const [isLoading, setIsLoading] = useState(true)
+
+  // Function to update URL with RESTful paths without navigation
+  const updateUrlPath = (params: { sourceId?: string | null; datasetId?: string | null; versionId?: string | null }) => {
+    let newPath = '/lab/sources'
+    
+    if (params.versionId) {
+      // Version-specific route
+      newPath = `/lab/sources/versions/${params.versionId}`
+    } else if (params.sourceId) {
+      // Source-specific route
+      newPath = `/lab/sources/${params.sourceId}`
+      if (params.datasetId) {
+        // Dataset-specific route
+        newPath += `/datasets/${params.datasetId}`
+      }
+    }
+    
+    // Use History API to update URL without triggering navigation/re-render
+    window.history.replaceState(null, '', newPath)
+  }
   const [selectedDataSource, setSelectedDataSource] = useState<Schema['DataSource']['type'] | null>(null)
   const [selectedDataSet, setSelectedDataSet] = useState<Schema['DataSet']['type'] | null>(null)
   const [error, setError] = useState<Error | null>(null)
@@ -93,6 +125,38 @@ export default function DataSourcesDashboard() {
     fetchDataSources()
   }, [selectedAccount])
 
+  // Handle initial selection based on route parameters
+  useEffect(() => {
+    if (!dataSources.length || isLoading) return
+
+    // Handle selectedSourceId from route params
+    if (selectedSourceId && !selectedDataSource) {
+      const dataSource = dataSources.find(ds => ds.id === selectedSourceId)
+      if (dataSource) {
+        handleSelectDataSource(dataSource)
+      }
+    }
+
+    // Handle selectedVersionId from route (for version-specific views)
+    if (selectedVersionId && !selectedDataSource) {
+      // Find data source by currentVersionId or by version relationship
+      const dataSource = dataSources.find(ds => ds.currentVersionId === selectedVersionId)
+      if (dataSource) {
+        handleSelectDataSource(dataSource)
+      }
+    }
+  }, [dataSources, selectedSourceId, selectedVersionId, selectedDataSource, isLoading])
+
+  // Handle dataset selection after data source datasets are loaded
+  useEffect(() => {
+    if (selectedDatasetId && dataSets.length && !selectedDataSet) {
+      const dataset = dataSets.find(ds => ds.id === selectedDatasetId)
+      if (dataset) {
+        handleSelectDataSet(dataset)
+      }
+    }
+  }, [dataSets, selectedDatasetId, selectedDataSet])
+
   // Fetch datasets for a specific data source
   const fetchDataSets = async (dataSourceId: string) => {
     try {
@@ -125,6 +189,15 @@ export default function DataSourcesDashboard() {
     setSelectedDataSource(dataSource)
     setSelectedDataSet(null) // Clear any selected dataset when switching data sources
     
+    // Update URL with RESTful path if we're not on a specific route
+    if (!selectedSourceId && !selectedVersionId) {
+      updateUrlPath({ 
+        sourceId: dataSource?.id || null,
+        datasetId: null,  // Clear dataset when switching sources
+        versionId: null 
+      })
+    }
+    
     // Load datasets for the selected data source
     if (dataSource && selectedAccount?.id) {
       fetchDataSets(dataSource.id)
@@ -138,6 +211,30 @@ export default function DataSourcesDashboard() {
     setSelectedDataSet(dataSet)
     // Reset animation state when selecting a new dataset
     setDataSetAnimationComplete(false)
+    
+    // Update URL with RESTful path if we're not on a specific route
+    if (!selectedDatasetId && !selectedVersionId && selectedDataSource?.id) {
+      updateUrlPath({ 
+        sourceId: selectedDataSource.id,
+        datasetId: dataSet?.id || null,
+        versionId: null
+      })
+    }
+  }
+
+  // Handle version selection
+  const handleSelectVersion = (version: Schema['DataSourceVersion']['type']) => {
+    // Update URL with RESTful path
+    if (!selectedVersionId) {
+      updateUrlPath({ 
+        sourceId: null,
+        datasetId: null,
+        versionId: version.id
+      })
+    } else {
+      // Only navigate if we're already on a version-specific route
+      router.push(`/lab/sources/versions/${version.id}`)
+    }
   }
   
   // Track when we have a dataset
@@ -278,6 +375,17 @@ export default function DataSourcesDashboard() {
     setSelectedDataSet(null)
     setDataSets([])
     setIsFullWidth(false)
+    
+    // Navigate back to sources list or update URL based on route type
+    if (selectedSourceId || selectedVersionId) {
+      router.push('/lab/sources')
+    } else {
+      updateUrlPath({ 
+        sourceId: null, 
+        datasetId: null, 
+        versionId: null 
+      })
+    }
   }
 
   // Handle closing the selected dataset
@@ -285,6 +393,17 @@ export default function DataSourcesDashboard() {
     setSelectedDataSet(null)
     setIsDataSetFullWidth(false)
     setDataSetAnimationComplete(false)
+    
+    // Navigate back to source or update URL based on route type
+    if (selectedDatasetId && selectedDataSource?.id) {
+      router.push(`/lab/sources/${selectedDataSource.id}`)
+    } else if (selectedDataSource?.id) {
+      updateUrlPath({ 
+        sourceId: selectedDataSource.id,
+        datasetId: null,
+        versionId: null
+      })
+    }
   }
 
   // Handle drag for resizing panels (grid/data source)
@@ -398,6 +517,7 @@ export default function DataSourcesDashboard() {
                     onDataSetSelect={handleSelectDataSet}
                     selectedDataSetId={undefined}
                     accountId={selectedAccount?.id}
+                    onVersionSelect={handleSelectVersion}
                   />
                 ) : null}
               </div>
@@ -423,6 +543,7 @@ export default function DataSourcesDashboard() {
                         dataSource={dataSource}
                         isSelected={selectedDataSource?.id === dataSource.id}
                         onClick={() => handleSelectDataSource(dataSource)}
+                        onVersionSelect={handleSelectVersion}
                       />
                     ))}
                   </div>
@@ -486,6 +607,7 @@ export default function DataSourcesDashboard() {
                       onDataSetSelect={handleSelectDataSet}
                       selectedDataSetId={selectedDataSet.id}
                       accountId={selectedAccount?.id}
+                      onVersionSelect={handleSelectVersion}
                     />
                   </motion.div>
                   
@@ -579,6 +701,7 @@ export default function DataSourcesDashboard() {
                     onDataSetSelect={handleSelectDataSet}
                     selectedDataSetId={undefined}
                     accountId={selectedAccount?.id}
+                    onVersionSelect={handleSelectVersion}
                   />
                 </motion.div>
               )}
