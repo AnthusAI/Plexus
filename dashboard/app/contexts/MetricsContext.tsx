@@ -24,20 +24,11 @@ interface MetricsData {
 }
 
 interface MetricsContextType {
-  // Current metrics data (null when no data available)
   metrics: MetricsData | null
-  
-  // Loading states
-  isInitialLoading: boolean  // True only on first load
-  isRefreshing: boolean      // True during background refreshes
-  
-  // Error state
+  isInitialLoading: boolean
+  isRefreshing: boolean
   error: string | null
-  
-  // Manual refresh function
   refetch: () => void
-  
-  // Helper to check if data exists (for progressive disclosure)
   hasData: boolean
 }
 
@@ -154,7 +145,6 @@ export function MetricsProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null)
   const { selectedAccount } = useAccount()
   
-  // Ref to track the auto-refresh interval
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const lastAccountIdRef = useRef<string | null>(null)
 
@@ -173,14 +163,12 @@ export function MetricsProvider({ children }: { children: React.ReactNode }) {
       accountId: selectedAccount.id 
     })
     
-    // Set appropriate loading state
     if (!metrics && !isBackgroundRefresh) {
       setIsInitialLoading(true)
     } else if (isBackgroundRefresh) {
       setIsRefreshing(true)
     }
     
-    // Clear error on new fetch
     setError(null)
 
     try {
@@ -197,7 +185,6 @@ export function MetricsProvider({ children }: { children: React.ReactNode }) {
       console.error('📊 MetricsContext: Error fetching metrics:', err)
       setError(err instanceof Error ? err.message : 'Failed to fetch metrics')
       
-      // On error, don't clear existing data - keep showing previous values
       if (!metrics) {
         setMetrics(null)
       }
@@ -208,21 +195,18 @@ export function MetricsProvider({ children }: { children: React.ReactNode }) {
   }, [selectedAccount, metrics])
 
   const refetch = useCallback(() => {
-    fetchMetrics(false) // Manual refetch is not a background refresh
+    fetchMetrics(false)
   }, [fetchMetrics])
 
-  // Initial fetch when account changes
   useEffect(() => {
     const currentAccountId = selectedAccount?.id || null
     const accountChanged = lastAccountIdRef.current !== currentAccountId
     lastAccountIdRef.current = currentAccountId
     
     if (accountChanged) {
-      // Clear existing data when account changes
       setMetrics(null)
       setError(null)
       
-      // Clear any existing interval
       if (refreshIntervalRef.current) {
         clearInterval(refreshIntervalRef.current)
         refreshIntervalRef.current = null
@@ -235,21 +219,18 @@ export function MetricsProvider({ children }: { children: React.ReactNode }) {
     }
   }, [selectedAccount, fetchMetrics])
 
-  // Set up auto-refresh interval (every minute) when we have data
   useEffect(() => {
     if (metrics && selectedAccount) {
       console.log('📊 MetricsContext: Setting up auto-refresh interval')
       
-      // Clear any existing interval
       if (refreshIntervalRef.current) {
         clearInterval(refreshIntervalRef.current)
       }
       
-      // Set up new interval for background refresh every minute
       refreshIntervalRef.current = setInterval(() => {
         console.log('📊 MetricsContext: Auto-refreshing metrics...')
         fetchMetrics(true) // Background refresh
-      }, 60000) // 60 seconds = 1 minute
+      }, 60000)
       
       return () => {
         if (refreshIntervalRef.current) {
@@ -260,7 +241,6 @@ export function MetricsProvider({ children }: { children: React.ReactNode }) {
     }
   }, [metrics, selectedAccount, fetchMetrics])
 
-  // Cleanup interval on unmount
   useEffect(() => {
     return () => {
       if (refreshIntervalRef.current) {

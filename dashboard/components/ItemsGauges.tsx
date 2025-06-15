@@ -9,7 +9,6 @@ import { cn } from '@/lib/utils'
 import { useMetrics } from '@/app/contexts/MetricsContext'
 import { Timestamp } from '@/components/ui/timestamp'
 
-// Fallback data for the area chart when loading or no data
 const fallbackChartData = [
   { time: '00:00', items: 0, scoreResults: 0 },
   { time: '04:00', items: 0, scoreResults: 0 },
@@ -30,16 +29,13 @@ const chartConfig = {
   },
 }
 
-// Helper function to calculate percentage for debugging
 const toPercentage = (value: number, max: number): number => {
   if (max === 0) return 0
   return Math.round((value / max) * 100)
 }
 
-// Custom tooltip component for the chart
 const CustomChartTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
-    // Get the bucket times from the payload data
     const dataPoint = payload[0]?.payload
     const bucketStart = dataPoint?.bucketStart ? new Date(dataPoint.bucketStart) : null
     const bucketEnd = dataPoint?.bucketEnd ? new Date(dataPoint.bucketEnd) : null
@@ -48,7 +44,6 @@ const CustomChartTooltip = ({ active, payload, label }: any) => {
       <div className="bg-background rounded-lg shadow-lg p-3 text-sm">
         <div className="space-y-2">
           {payload.map((entry: any, index: number) => {
-            // Use proper labels from chartConfig
             const displayName = chartConfig[entry.dataKey as keyof typeof chartConfig]?.label || entry.name
             return (
               <div key={index} className="flex items-center justify-between">
@@ -86,7 +81,6 @@ const CustomChartTooltip = ({ active, payload, label }: any) => {
 
 interface ItemsGaugesProps {
   className?: string
-  // Override props for Storybook/testing
   scoreResultsPerHour?: number
   itemsPerHour?: number
   scoreResultsAveragePerHour?: number
@@ -96,9 +90,7 @@ interface ItemsGaugesProps {
   itemsTotal24h?: number
   scoreResultsTotal24h?: number
   chartData?: Array<{ time: string; items: number; scoreResults: number; bucketStart?: string; bucketEnd?: string }>
-  // Control whether to use real data or override props
   useRealData?: boolean
-  // Disable emergence animation (for drawer usage)
   disableEmergenceAnimation?: boolean
 }
 
@@ -118,7 +110,6 @@ export function ItemsGauges({
 }: ItemsGaugesProps) {
   const { metrics, isInitialLoading, isRefreshing, error, hasData } = useMetrics()
 
-  // Determine which data to use
   const scoreResultsPerHour = useRealData && metrics ? metrics.scoreResultsPerHour : (overrideScoreResults ?? 0)
   const itemsPerHour = useRealData && metrics ? metrics.itemsPerHour : (overrideItems ?? 0)
   const scoreResultsAveragePerHour = useRealData && metrics ? metrics.scoreResultsAveragePerHour : (overrideScoreResultsAverage ?? 0)
@@ -130,8 +121,7 @@ export function ItemsGauges({
   const chartData = useRealData && metrics ? metrics.chartData : (overrideChartData ?? fallbackChartData)
   
   
-  // Debug chart data in component
-  console.log('📊 ItemsGauges: Chart data received:', { 
+  console.log('📊 ItemsGauges: Chart data received:', {
     useRealData, 
     hasMetrics: !!metrics, 
     hasData,
@@ -160,8 +150,6 @@ export function ItemsGauges({
     hasNonZeroValues: chartData.some(point => point.items > 0 || point.scoreResults > 0)
   })
   
-  // For real data usage, hide component when no data (progressive disclosure)
-  // Show error state if there's an error and no existing data
   if (useRealData) {
     if (error && !hasData) {
       return (
@@ -174,13 +162,11 @@ export function ItemsGauges({
       )
     }
     
-    // Return null (hidden) when no data is available yet
     if (!hasData) {
       return null
     }
   }
 
-  // Animation variants for progressive disclosure (faster, 1 second total)
   const containerVariants = {
     hidden: { 
       height: 0,
@@ -222,7 +208,6 @@ export function ItemsGauges({
     }
   }
   
-  // Instant variants for drawer usage (no emergence animation)
   const instantVariants = {
     visible: { 
       height: 'auto',
@@ -280,7 +265,7 @@ Total items over last 24 hours`}
             max={itemsPeakHourly}
             showTicks={true}
             decimalPlaces={0}
-            tickSpacingThreshold={85}  // Large threshold to only show min and max ticks
+            tickSpacingThreshold={85}
             segments={[
               { start: 0, end: 10, color: 'var(--false)' },
               { start: 10, end: 90, color: 'var(--neutral)' },
@@ -311,7 +296,7 @@ Total score results over last 24 hours`}
             max={scoreResultsPeakHourly}
             showTicks={true}
             decimalPlaces={0}
-            tickSpacingThreshold={85}  // Large threshold to only show min and max ticks
+            tickSpacingThreshold={85}
             segments={[
               { start: 0, end: 10, color: 'var(--false)' },
               { start: 10, end: 90, color: 'var(--neutral)' },
