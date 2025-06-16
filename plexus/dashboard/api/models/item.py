@@ -19,7 +19,6 @@ class Item(BaseModel):
     description: Optional[str] = None
     scoreId: Optional[str] = None
     attachedFiles: Optional[list] = None
-    createdByType: Optional[str] = None
 
     def __init__(
         self,
@@ -37,7 +36,6 @@ class Item(BaseModel):
         description: Optional[str] = None,
         scoreId: Optional[str] = None,
         attachedFiles: Optional[list] = None,
-        createdByType: Optional[str] = None,
         client: Optional[_BaseAPIClient] = None
     ):
         super().__init__(id, client)
@@ -54,7 +52,6 @@ class Item(BaseModel):
         self.scoreId = scoreId
         self.isEvaluation = isEvaluation
         self.attachedFiles = attachedFiles
-        self.createdByType = createdByType
 
     @classmethod
     def fields(cls) -> str:
@@ -72,7 +69,6 @@ class Item(BaseModel):
             identifiers
             metadata
             attachedFiles
-            createdByType
         """
 
     @classmethod
@@ -144,7 +140,6 @@ class Item(BaseModel):
             description=data.get('description'),
             scoreId=data.get('scoreId'),
             attachedFiles=data.get('attachedFiles'),
-            createdByType=data.get('createdByType'),
             client=client
         )
 
