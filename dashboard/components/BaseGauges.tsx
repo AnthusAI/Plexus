@@ -1,10 +1,9 @@
 'use client'
 
 import React from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
 import { Gauge } from '@/components/gauge'
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
-import { AreaChart, Area, XAxis, CartesianGrid, ResponsiveContainer } from 'recharts'
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from 'recharts'
 import { cn } from '@/lib/utils'
 import { Timestamp } from '@/components/ui/timestamp'
 import NumberFlowWrapper from '@/components/ui/number-flow'
@@ -86,11 +85,33 @@ export interface BaseGaugesConfig {
 
 // Data structure that components must provide
 export interface BaseGaugesData {
-  [key: string]: number | Array<any> | Date | boolean | undefined
+  [key: string]: number | string | Array<any> | Date | boolean | undefined
   chartData?: Array<{ time: string; [key: string]: any }>
   lastUpdated?: Date
   hasErrorsLast24h?: boolean
   totalErrors24h?: number
+}
+
+// Helper function to render a value that might be a number or string (like "?")
+const renderValue = (value: number | string | boolean | Array<any> | Date | undefined, format?: any) => {
+  if (typeof value === 'string') {
+    return value
+  }
+  if (typeof value === 'number') {
+    return (
+      <NumberFlowWrapper 
+        value={value} 
+        format={format}
+      />
+    )
+  }
+  // For other types, return 0
+  return (
+    <NumberFlowWrapper 
+      value={0} 
+      format={format}
+    />
+  )
 }
 
 // Custom tooltip component for the chart
@@ -185,8 +206,29 @@ export function BaseGauges({
   const hasErrorsLast24h = effectiveData?.hasErrorsLast24h ?? false
   const errorsCount24h = effectiveData?.totalErrors24h ?? 0
   
-  // For real data usage, show error state if there's an error and no data at all
-  if (useRealData && error && !hasGaugeData && !isLoading) {
+  // Calculate maximum value across all chart areas for consistent Y scale
+  const maxChartValue = React.useMemo(() => {
+    if (!chartData || chartData.length === 0) return 100
+    
+    let max = 0
+    chartData.forEach(point => {
+      config.chartAreas.forEach(area => {
+        const value = point[area.dataKey] || 0
+        if (value > max) max = value
+      })
+    })
+    
+    // For score results, use a higher baseline to ensure both prediction and evaluation charts have similar scales
+    // This helps when one chart has much lower values than the other
+    const baselineMax = config.chartAreas.some(area => area.label.toLowerCase().includes('score')) ? 200 : 50
+    
+    // Add some padding (20%) and ensure reasonable minimum
+    return Math.max(Math.ceil(max * 1.2), baselineMax)
+  }, [chartData, config.chartAreas])
+  
+  // For real data usage, show error state only if there's a persistent error with no data after loading
+  // This prevents flickering during the loading process
+  if (useRealData && error && !hasGaugeData && !isLoading && !data) {
     return (
       <div className={cn("w-full", className)}>
         <div className="text-center p-8">
@@ -197,58 +239,7 @@ export function BaseGauges({
     )
   }
 
-  // Animation variants for progressive disclosure
-  const containerVariants = {
-    hidden: { 
-      height: 0,
-      opacity: 0,
-      scale: 0.95
-    },
-    visible: { 
-      height: 'auto',
-      opacity: 1,
-      scale: 1,
-      transition: {
-        height: { duration: 1, ease: 'easeOut' },
-        opacity: { duration: 0.6, ease: 'easeOut', delay: 0.1 },
-        scale: { duration: 0.6, ease: 'easeOut', delay: 0.1 }
-      }
-    },
-    exit: {
-      height: 0,
-      opacity: 0,
-      scale: 0.95,
-      transition: {
-        height: { duration: 0.4, ease: 'easeIn' },
-        opacity: { duration: 0.3, ease: 'easeIn' },
-        scale: { duration: 0.3, ease: 'easeIn' }
-      }
-    }
-  }
-  
-  const contentVariants = {
-    hidden: { y: 20, opacity: 0 },
-    visible: { 
-      y: 0, 
-      opacity: 1,
-      transition: {
-        duration: 0.4,
-        ease: 'easeOut',
-        delay: 0.5
-      }
-    }
-  }
-  
-  // Instant variants for drawer usage (no emergence animation)
-  const instantVariants = {
-    visible: { 
-      height: 'auto',
-      opacity: 1,
-      scale: 1,
-      y: 0,
-      transition: { duration: 0 }
-    }
-  }
+  // Removed animation variants - component handles its own loading state
 
   // Determine layout type
   const isFlexLayout = config.layout === 'flex'
@@ -311,21 +302,12 @@ export function BaseGauges({
         `}</style>
       )}
       
-      <AnimatePresence>
-        {shouldShowComponent && (
-        <motion.div 
+      {shouldShowComponent && (
+        <div 
           className={cn("w-full overflow-visible", className)}
-          variants={disableEmergenceAnimation ? instantVariants : containerVariants}
-          initial={useRealData && !disableEmergenceAnimation ? "hidden" : "visible"}
-          animate="visible"
-          exit={disableEmergenceAnimation ? undefined : "exit"}
           style={gaugeWidthStyles}
         >
-          <motion.div 
-            variants={disableEmergenceAnimation ? instantVariants : contentVariants}
-            initial={useRealData && !disableEmergenceAnimation ? "hidden" : "visible"}
-            animate="visible"
-          >
+          <div>
             {isFlexLayout ? (
               // Flex layout: gauge fixed width, chart greedy
               <div className="@container flex gap-3 items-start">
@@ -388,15 +370,10 @@ export function BaseGauges({
                           </div>
                         </div>
                       ) : (
-                        <motion.div
-                          key={chartData.length}
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          transition={{ duration: 4, ease: 'easeOut' }}
+                        <div
                           className="w-full h-full"
                           style={{
                             filter: 'drop-shadow(0 0 8px rgba(59, 130, 246, 0.2)) drop-shadow(0 0 8px rgba(168, 85, 247, 0.2))',
-                            willChange: 'filter'
                           }}
                         >
                           <ChartContainer config={config.chartConfig} className="w-full h-full">
@@ -406,7 +383,7 @@ export function BaseGauges({
                               margin={{
                                 top: 12,
                                 right: 8,
-                                left: 20,
+                                left: 0,
                                 bottom: 8,
                               }}
                             >
@@ -425,6 +402,14 @@ export function BaseGauges({
                                   if (totalPoints >= 12 && index === Math.floor(totalPoints / 2)) return "12h ago"
                                   return ""
                                 }}
+                              />
+                              <YAxis
+                                tickLine={false}
+                                axisLine={false}
+                                tick={{ fontSize: 9 }}
+                                tickMargin={2}
+                                width={35}
+                                domain={[0, maxChartValue]}
                               />
                               <ChartTooltip
                                 cursor={false}
@@ -447,7 +432,7 @@ export function BaseGauges({
                               ))}
                             </AreaChart>
                           </ChartContainer>
-                        </motion.div>
+                        </div>
                       )}
                     </div>
 
@@ -465,6 +450,102 @@ export function BaseGauges({
                         </Button>
                       </div>
                     )}
+                    
+                    {/* 24-hour totals at the bottom - responsive layout */}
+                    <div className="flex justify-between items-end text-sm flex-shrink-0 relative">
+                      {/* First metric - left-justified with color on the left */}
+                      {config.gauges.length > 0 && (
+                        <div className="flex items-center gap-2 @[500px]:flex-col @[500px]:gap-1 @[500px]:items-center @[700px]:flex-row @[700px]:gap-2 @[700px]:items-start">
+                          <div className="flex flex-col items-start">
+                            {/* Single-cell layout: dot on text line, two-line labels, left-justified */}
+                            <div className="hidden @[500px]:flex @[700px]:hidden flex-col items-start gap-1">
+                              <div className="flex items-center gap-1">
+                                <div 
+                                  className="w-3 h-3 rounded-sm" 
+                                  style={{ 
+                                    backgroundColor: config.chartAreas[0]?.color || '#3b82f6',
+                                    filter: `drop-shadow(0 0 8px ${config.chartAreas[0]?.color || '#3b82f6'}20)`
+                                  }}
+                                />
+                                <span className="text-muted-foreground text-xs leading-tight">{config.chartAreas[0]?.label || 'Items'}</span>
+                              </div>
+                              <span className="font-medium text-foreground text-base leading-tight">
+                                {renderValue(effectiveData?.[config.gauges[0].totalKey], { useGrouping: false })}
+                              </span>
+                              <span className="text-muted-foreground text-xs leading-tight">per day</span>
+                            </div>
+                            {/* Default layout: dot beside number, single-line label */}
+                            <div className="flex @[500px]:hidden @[700px]:flex items-center gap-1">
+                              <div 
+                                className="w-3 h-3 rounded-sm" 
+                                style={{ 
+                                  backgroundColor: config.chartAreas[0]?.color || '#3b82f6',
+                                  filter: `drop-shadow(0 0 8px ${config.chartAreas[0]?.color || '#3b82f6'}20)`
+                                }}
+                              />
+                              <span className="font-medium text-foreground text-base leading-tight">
+                                {renderValue(effectiveData?.[config.gauges[0].totalKey], { useGrouping: false })}
+                              </span>
+                            </div>
+                            <span className="text-muted-foreground text-xs leading-tight @[500px]:hidden @[700px]:block">{config.chartAreas[0]?.label || 'Items'} / day</span>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Center: Last updated timestamp - absolutely centered in the chart card */}
+                      <div className="absolute left-1/2 bottom-0 transform -translate-x-1/2 mb-1 flex flex-col items-center z-10">
+                        {useRealData && effectiveData?.lastUpdated && (
+                          <>
+                            <span className="text-[10px] text-muted-foreground leading-tight">Last updated</span>
+                            <Timestamp 
+                              time={effectiveData.lastUpdated as Date} 
+                              variant="relative" 
+                              showIcon={false}
+                              className="text-[10px] text-muted-foreground"
+                            />
+                          </>
+                        )}
+                      </div>
+                      
+                      {/* Second metric - right-justified with color on the right */}
+                      {config.gauges.length > 1 && (
+                        <div className="flex items-center gap-2 @[500px]:flex-col @[500px]:gap-1 @[500px]:items-end @[700px]:flex-row-reverse @[700px]:gap-2 @[700px]:items-end text-right">
+                          <div className="flex flex-col items-end">
+                            {/* Single-cell layout: dot on text line, two-line labels, right-justified */}
+                            <div className="hidden @[500px]:flex @[700px]:hidden flex-col items-end gap-1">
+                              <div className="flex items-center gap-1">
+                                <span className="text-muted-foreground text-xs leading-tight">{config.chartAreas[1]?.label || 'Results'}</span>
+                                <div 
+                                  className="w-3 h-3 rounded-sm" 
+                                  style={{ 
+                                    backgroundColor: config.chartAreas[1]?.color || '#a855f7',
+                                    filter: `drop-shadow(0 0 8px ${config.chartAreas[1]?.color || '#a855f7'}20)`
+                                  }}
+                                />
+                              </div>
+                              <span className="font-medium text-foreground text-base leading-tight">
+                                {renderValue(effectiveData?.[config.gauges[1].totalKey], { useGrouping: false })}
+                              </span>
+                              <span className="text-muted-foreground text-xs leading-tight">per day</span>
+                            </div>
+                            {/* Default layout: dot beside number, single-line label */}
+                            <div className="flex @[500px]:hidden @[700px]:flex items-center gap-1">
+                              <span className="font-medium text-foreground text-base leading-tight">
+                                {renderValue(effectiveData?.[config.gauges[1].totalKey], { useGrouping: false })}
+                              </span>
+                              <div 
+                                className="w-3 h-3 rounded-sm" 
+                                style={{ 
+                                  backgroundColor: config.chartAreas[1]?.color || '#a855f7',
+                                  filter: `drop-shadow(0 0 8px ${config.chartAreas[1]?.color || '#a855f7'}20)`
+                                }}
+                              />
+                            </div>
+                            <span className="text-muted-foreground text-xs leading-tight @[500px]:hidden @[700px]:block">{config.chartAreas[1]?.label || 'Results'} / day</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -474,10 +555,17 @@ export function BaseGauges({
                 
                 {/* Render gauges */}
                 {config.gauges.map((gaugeConfig) => {
-                const value = effectiveData?.[gaugeConfig.valueKey] as number ?? 0
-                const average = effectiveData?.[gaugeConfig.averageKey] as number ?? 0
-                const peak = effectiveData?.[gaugeConfig.peakKey] as number ?? 50
-                const total = effectiveData?.[gaugeConfig.totalKey] as number ?? 0
+                const rawValue = effectiveData?.[gaugeConfig.valueKey]
+                const rawAverage = effectiveData?.[gaugeConfig.averageKey]
+                const rawPeak = effectiveData?.[gaugeConfig.peakKey]
+                const rawTotal = effectiveData?.[gaugeConfig.totalKey]
+                
+                const value = typeof rawValue === 'string' ? 0 : (rawValue as number ?? 0)
+                const average = typeof rawAverage === 'string' ? 0 : (rawAverage as number ?? 0)
+                const peak = typeof rawPeak === 'string' ? 50 : (rawPeak as number ?? 50)
+                const total = typeof rawTotal === 'string' ? 0 : (rawTotal as number ?? 0)
+                
+                const isQuestionMark = typeof rawValue === 'string' || typeof rawAverage === 'string' || typeof rawPeak === 'string' || typeof rawTotal === 'string'
 
                 // Generate gauge column span classes if specified
                 const gaugeSpanClasses = gaugeConfig.colSpan ? [
@@ -495,16 +583,16 @@ export function BaseGauges({
                         value={value}
                         beforeValue={average}
                         title={gaugeConfig.title}
-                        information={hasGaugeData ? `**Current:** ${value}  
+                        information={hasGaugeData ? `**Current:** ${isQuestionMark ? '?' : value}  
 *Current hourly rate (rolling 60-min window)*
 
-**Average:** ${average}  
+**Average:** ${isQuestionMark ? '?' : average}  
 *24-hour average hourly rate*
 
-**Peak:** ${peak}  
+**Peak:** ${isQuestionMark ? '?' : peak}  
 *Peak hourly rate over last 24 hours*
 
-**Total:** ${total}  
+**Total:** ${isQuestionMark ? '?' : total}  
 *Total over last 24 hours*` : "Loading metrics..."}
                         valueUnit={gaugeConfig.unit ?? ""}
                         min={0}
@@ -537,15 +625,10 @@ export function BaseGauges({
                         </div>
                       </div>
                     ) : (
-                      <motion.div
-                        key={chartData.length}
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ duration: 4, ease: 'easeOut' }}
+                      <div
                         className="w-full h-full"
                         style={{
                           filter: 'drop-shadow(0 0 8px rgba(59, 130, 246, 0.2)) drop-shadow(0 0 8px rgba(168, 85, 247, 0.2))',
-                          willChange: 'filter'
                         }}
                       >
                         <ChartContainer config={config.chartConfig} className="w-full h-full">
@@ -555,7 +638,7 @@ export function BaseGauges({
                             margin={{
                               top: 12,
                               right: 8,
-                              left: 20,
+                              left: 0,
                               bottom: 8,
                             }}
                           >
@@ -574,6 +657,14 @@ export function BaseGauges({
                                 if (totalPoints >= 12 && index === Math.floor(totalPoints / 2)) return "12h ago"
                                 return ""
                               }}
+                            />
+                            <YAxis
+                              tickLine={false}
+                              axisLine={false}
+                              tick={{ fontSize: 9 }}
+                              tickMargin={2}
+                              width={35}
+                              domain={[0, maxChartValue]}
                             />
                             <ChartTooltip
                               cursor={false}
@@ -596,7 +687,7 @@ export function BaseGauges({
                             ))}
                           </AreaChart>
                         </ChartContainer>
-                      </motion.div>
+                      </div>
                     )}
                   </div>
 
@@ -614,14 +705,109 @@ export function BaseGauges({
                       </Button>
                     </div>
                   )}
+                  
+                  {/* 24-hour totals at the bottom - responsive layout */}
+                  <div className="flex justify-between items-end text-sm flex-shrink-0 relative">
+                    {/* First metric - left-justified with color on the left */}
+                    {config.gauges.length > 0 && (
+                      <div className="flex items-center gap-2 @[500px]:flex-col @[500px]:gap-1 @[500px]:items-center @[700px]:flex-row @[700px]:gap-2 @[700px]:items-start">
+                        <div className="flex flex-col items-start">
+                          {/* Single-cell layout: dot on text line, two-line labels, left-justified */}
+                          <div className="hidden @[500px]:flex @[700px]:hidden flex-col items-start gap-1">
+                            <div className="flex items-center gap-1">
+                              <div 
+                                className="w-3 h-3 rounded-sm" 
+                                style={{ 
+                                  backgroundColor: config.chartAreas[0]?.color || '#3b82f6',
+                                  filter: `drop-shadow(0 0 8px ${config.chartAreas[0]?.color || '#3b82f6'}20)`
+                                }}
+                              />
+                              <span className="text-muted-foreground text-xs leading-tight">{config.chartAreas[0]?.label || 'Items'}</span>
+                            </div>
+                            <span className="font-medium text-foreground text-base leading-tight">
+                              {renderValue(effectiveData?.[config.gauges[0].totalKey], { useGrouping: false })}
+                            </span>
+                            <span className="text-muted-foreground text-xs leading-tight">per day</span>
+                          </div>
+                          {/* Default layout: dot beside number, single-line label */}
+                          <div className="flex @[500px]:hidden @[700px]:flex items-center gap-1">
+                            <div 
+                              className="w-3 h-3 rounded-sm" 
+                              style={{ 
+                                backgroundColor: config.chartAreas[0]?.color || '#3b82f6',
+                                filter: `drop-shadow(0 0 8px ${config.chartAreas[0]?.color || '#3b82f6'}20)`
+                              }}
+                            />
+                            <span className="font-medium text-foreground text-base leading-tight">
+                              {renderValue(effectiveData?.[config.gauges[0].totalKey], { useGrouping: false })}
+                            </span>
+                          </div>
+                          <span className="text-muted-foreground text-xs leading-tight @[500px]:hidden @[700px]:block">{config.chartAreas[0]?.label || 'Items'} / day</span>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Center: Last updated timestamp - absolutely centered in the chart card */}
+                    <div className="absolute left-1/2 bottom-0 transform -translate-x-1/2 mb-1 flex flex-col items-center z-10">
+                      {useRealData && effectiveData?.lastUpdated && (
+                        <>
+                          <span className="text-[10px] text-muted-foreground leading-tight">Last updated</span>
+                          <Timestamp 
+                            time={effectiveData.lastUpdated as Date} 
+                            variant="relative" 
+                            showIcon={false}
+                            className="text-[10px] text-muted-foreground"
+                          />
+                        </>
+                      )}
+                    </div>
+                    
+                    {/* Second metric - right-justified with color on the right */}
+                    {config.gauges.length > 1 && (
+                      <div className="flex items-center gap-2 @[500px]:flex-col @[500px]:gap-1 @[500px]:items-end @[700px]:flex-row-reverse @[700px]:gap-2 @[700px]:items-end text-right">
+                        <div className="flex flex-col items-end">
+                          {/* Single-cell layout: dot on text line, two-line labels, right-justified */}
+                          <div className="hidden @[500px]:flex @[700px]:hidden flex-col items-end gap-1">
+                            <div className="flex items-center gap-1">
+                              <span className="text-muted-foreground text-xs leading-tight">{config.chartAreas[1]?.label || 'Results'}</span>
+                              <div 
+                                className="w-3 h-3 rounded-sm" 
+                                style={{ 
+                                  backgroundColor: config.chartAreas[1]?.color || '#a855f7',
+                                  filter: `drop-shadow(0 0 8px ${config.chartAreas[1]?.color || '#a855f7'}20)`
+                                }}
+                              />
+                            </div>
+                            <span className="font-medium text-foreground text-base leading-tight">
+                              {renderValue(effectiveData?.[config.gauges[1].totalKey], { useGrouping: false })}
+                            </span>
+                            <span className="text-muted-foreground text-xs leading-tight">per day</span>
+                          </div>
+                          {/* Default layout: dot beside number, single-line label */}
+                          <div className="flex @[500px]:hidden @[700px]:flex items-center gap-1">
+                            <span className="font-medium text-foreground text-base leading-tight">
+                              {renderValue(effectiveData?.[config.gauges[1].totalKey], { useGrouping: false })}
+                            </span>
+                            <div 
+                              className="w-3 h-3 rounded-sm" 
+                              style={{ 
+                                backgroundColor: config.chartAreas[1]?.color || '#a855f7',
+                                filter: `drop-shadow(0 0 8px ${config.chartAreas[1]?.color || '#a855f7'}20)`
+                              }}
+                            />
+                          </div>
+                          <span className="text-muted-foreground text-xs leading-tight @[500px]:hidden @[700px]:block">{config.chartAreas[1]?.label || 'Results'} / day</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
             )}
-          </motion.div>
-        </motion.div>
+          </div>
+        </div>
       )}
-    </AnimatePresence>
     </>
   )
 } 

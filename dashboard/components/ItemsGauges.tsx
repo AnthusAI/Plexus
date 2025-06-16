@@ -3,7 +3,7 @@
 import React from 'react'
 import { Gauge } from '@/components/gauge'
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
-import { AreaChart, Area, XAxis, CartesianGrid, ResponsiveContainer } from 'recharts'
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from 'recharts'
 import { cn } from '@/lib/utils'
 import { useAllItemsMetrics, UnifiedMetricsData } from '@/hooks/useUnifiedMetrics'
 import { Timestamp } from '@/components/ui/timestamp'
@@ -153,6 +153,25 @@ export function ItemsGauges({
   const hasErrorsLast24h = useRealData ? (metrics?.hasErrorsLast24h ?? false) : (overrideHasErrors ?? false)
   const errorsCount24h = useRealData ? (metrics?.totalErrors24h ?? 0) : (overrideErrorsCount ?? 0)
   
+  // Calculate maximum value across all chart areas for consistent Y scale
+  const maxChartValue = React.useMemo(() => {
+    if (!chartData || chartData.length === 0) return 100
+    
+    let max = 0
+    chartData.forEach(point => {
+      const itemsValue = point.items || 0
+      const scoreResultsValue = point.scoreResults || 0
+      if (itemsValue > max) max = itemsValue
+      if (scoreResultsValue > max) max = scoreResultsValue
+    })
+    
+    // Use a baseline of 50 for items charts
+    const baselineMax = 50
+    
+    // Add some padding (20%) and ensure reasonable minimum
+    return Math.max(Math.ceil(max * 1.2), baselineMax)
+  }, [chartData])
+  
   // Debug error indicator conditions
   console.log('🔧 Error indicator conditions:', {
     useRealData,
@@ -293,7 +312,7 @@ export function ItemsGauges({
                       margin={{
                         top: 12,
                         right: 8,
-                        left: 20,
+                        left: 0,
                         bottom: 8,
                       }}
                     >
@@ -314,6 +333,14 @@ export function ItemsGauges({
                           if (totalPoints >= 12 && index === Math.floor(totalPoints / 2)) return "12h ago"
                           return "" // Hide other ticks
                         }}
+                      />
+                      <YAxis
+                        tickLine={false}
+                        axisLine={false}
+                        tick={{ fontSize: 9 }}
+                        tickMargin={2}
+                        width={35}
+                        domain={[0, maxChartValue]}
                       />
                       <ChartTooltip
                         cursor={false}

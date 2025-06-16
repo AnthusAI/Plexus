@@ -210,9 +210,12 @@ function generateCombinedChartData(results: { [key: string]: MetricsResult }): A
     const scoreResultsPoint = scoreResultsResult?.chartData[index]
     const feedbackPoint = feedbackResult?.chartData[index]
 
+    // If we don't have items data, use scoreResults data for items line too
+    const itemsValue = itemsResult ? point.value : (scoreResultsPoint?.value || 0)
+
     return {
       time: point.time,
-      items: point.value,
+      items: itemsValue,
       scoreResults: scoreResultsPoint?.value || 0,
       feedback: feedbackPoint?.value || 0,
       bucketStart: point.bucketStart,
@@ -259,11 +262,16 @@ export function useAllItemsMetrics(): UseUnifiedMetricsResult {
 }
 
 /**
- * Hook for prediction score results only
+ * Hook for prediction items and score results
  */
 export function usePredictionMetrics(): UseUnifiedMetricsResult {
   return useUnifiedMetrics({
     sources: {
+      items: {
+        type: 'items',
+        createdByType: 'prediction',
+        accountId: '', // Will be filled by the hook
+      },
       scoreResults: {
         type: 'scoreResults',
         scoreResultType: 'prediction',
@@ -274,11 +282,16 @@ export function usePredictionMetrics(): UseUnifiedMetricsResult {
 }
 
 /**
- * Hook for evaluation score results only
+ * Hook for evaluation items and score results
  */
 export function useEvaluationMetrics(): UseUnifiedMetricsResult {
   return useUnifiedMetrics({
     sources: {
+      items: {
+        type: 'items',
+        createdByType: 'evaluation',
+        accountId: '', // Will be filled by the hook
+      },
       scoreResults: {
         type: 'scoreResults',
         scoreResultType: 'evaluation',
