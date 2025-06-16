@@ -90,7 +90,7 @@ export function ScoreResultNode({ name, inputs, outputs }: ScoreResultNodeProps)
   }
 
   return (
-    <div className="bg-card rounded-lg p-4 mb-3 last:mb-0">
+    <div className="bg-background rounded-lg p-4 mb-3 last:mb-0">
       <div className="flex items-center justify-between mb-2">
         <div className="font-mono text-sm font-medium">{name}</div>
         <div className="flex items-start gap-2">

@@ -97,6 +97,7 @@ interface ItemCardProps extends React.HTMLAttributes<HTMLDivElement> {
   naturalHeight?: boolean // Add naturalHeight prop for document flow vs height-filling behavior
   onScoreResultSelect?: (scoreResult: any) => void // Add score result selection callback
   selectedScoreResultId?: string // Add selected score result ID
+  hasErrors?: boolean // Add hasErrors prop for error border indicator
 }
 
 const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({ 
@@ -117,6 +118,7 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
   naturalHeight = false,
   onScoreResultSelect,
   selectedScoreResultId,
+  hasErrors = false,
   className, 
   ...props 
 }, ref) => {
@@ -226,10 +228,11 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
         animate={{ opacity: 1 }}
         transition={{ duration: 0.2 }}
         className={cn(
-          "w-full rounded-lg text-card-foreground hover:bg-accent/50 relative cursor-pointer",
-          isSelected ? "bg-card-selected" : "bg-card",
+          "w-full rounded-lg text-card-foreground relative cursor-pointer transition-colors",
+          isSelected ? "bg-card-selected" : "bg-card hover:bg-accent",
           item.isNew && "new-item-shadow",
           isSelected && "selected-border-rounded",
+          hasErrors && "error-border-rounded",
           className
         )}
         onClick={onClick}

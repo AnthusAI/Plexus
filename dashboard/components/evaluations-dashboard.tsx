@@ -2,6 +2,7 @@
 import React from "react"
 import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { useInView } from 'react-intersection-observer'
+import { motion, AnimatePresence } from "framer-motion"
 import type { Schema } from "@/amplify/data/resource"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -827,7 +828,7 @@ export default function EvaluationsDashboard({
   }
 
   return (
-    <div className="@container flex flex-col h-full p-2 overflow-hidden">
+    <div className="@container flex flex-col h-full p-3 overflow-hidden">
       {/* Fixed header */}
       <div className="flex @[600px]:flex-row flex-col @[600px]:items-center @[600px]:justify-between items-stretch gap-3 pb-3 flex-shrink-0">
         <div className="@[600px]:flex-grow w-full">
@@ -847,14 +848,34 @@ export default function EvaluationsDashboard({
       </div>
       
       <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-        <div className="flex flex-1 min-h-0">
-          {/* Left panel - grid content */}
-          <div 
-            className={`${selectedEvaluationId && !isNarrowViewport && isFullWidth ? 'hidden' : 'flex-1'} h-full overflow-auto`}
-            style={selectedEvaluationId && !isNarrowViewport && !isFullWidth ? {
-              width: `${leftPanelWidth}%`
-            } : undefined}
+        <AnimatePresence mode="popLayout">
+          <motion.div 
+            key="evaluations-layout"
+            className="flex flex-1 min-h-0"
+            layout
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ 
+              type: "spring", 
+              stiffness: 300, 
+              damping: 30,
+              opacity: { duration: 0.2 }
+            }}
           >
+            {/* Left panel - grid content */}
+            <motion.div 
+              className={`${selectedEvaluationId && !isNarrowViewport && isFullWidth ? 'hidden' : 'flex-1'} h-full overflow-auto`}
+              style={selectedEvaluationId && !isNarrowViewport && !isFullWidth ? {
+                width: `${leftPanelWidth}%`
+              } : undefined}
+              layout
+              transition={{ 
+                type: "spring", 
+                stiffness: 300, 
+                damping: 30 
+              }}
+            >
             <div className="@container">
               {filteredEvaluations.length === 0 ? (
                 <div className="text-sm text-muted-foreground">No evaluations found</div>
@@ -894,36 +915,55 @@ export default function EvaluationsDashboard({
                 </div>
               )}
             </div>
+            </motion.div>
+
+            {/* Divider for split view */}
+            {selectedEvaluationId && !isNarrowViewport && !isFullWidth && (
+              <div
+                className="w-[12px] relative cursor-col-resize flex-shrink-0 group"
+                onMouseDown={handleDragStart}
+              >
+                <div className="absolute inset-0 rounded-full transition-colors duration-150 
+                  group-hover:bg-accent" />
+              </div>
+            )}
+
+            {/* Right panel - evaluation detail view */}
+            <AnimatePresence>
+              {selectedEvaluationId && !isNarrowViewport && !isFullWidth && (
+                <motion.div 
+                  key={`evaluation-detail-${selectedEvaluationId}`}
+                  className="h-full overflow-hidden flex-shrink-0"
+                  style={{ width: `${100 - leftPanelWidth}%` }}
+                  initial={{ width: 0, opacity: 0 }}
+                  animate={{ 
+                    width: `${100 - leftPanelWidth}%`, 
+                    opacity: 1 
+                  }}
+                  exit={{ 
+                    width: 0, 
+                    opacity: 0 
+                  }}
+                  transition={{ 
+                    type: "spring", 
+                    stiffness: 300, 
+                    damping: 30 
+                  }}
+                >
+                  {renderSelectedTask}
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+          </motion.div>
+        </AnimatePresence>
+        
+        {/* Full-screen view for mobile or full-width mode */}
+        {selectedEvaluationId && (isNarrowViewport || isFullWidth) && (
+          <div className="fixed inset-0 z-50 overflow-y-auto">
+            {renderSelectedTask}
           </div>
-
-          {/* Divider for split view */}
-          {selectedEvaluationId && !isNarrowViewport && !isFullWidth && (
-            <div
-              className="w-[12px] relative cursor-col-resize flex-shrink-0 group"
-              onMouseDown={handleDragStart}
-            >
-              <div className="absolute inset-0 rounded-full transition-colors duration-150 
-                group-hover:bg-accent" />
-            </div>
-          )}
-
-          {/* Right panel - evaluation detail view */}
-          {selectedEvaluationId && !isNarrowViewport && !isFullWidth && (
-            <div 
-              className="h-full overflow-hidden flex-shrink-0"
-              style={{ width: `${100 - leftPanelWidth}%` }}
-            >
-              {renderSelectedTask}
-            </div>
-          )}
-
-          {/* Full-screen view for mobile or full-width mode */}
-          {selectedEvaluationId && (isNarrowViewport || isFullWidth) && (
-            <div className="fixed inset-0 z-50 overflow-y-auto">
-              {renderSelectedTask}
-            </div>
-          )}
-        </div>
+        )}
       </div>
       
       <ShareResourceModal 

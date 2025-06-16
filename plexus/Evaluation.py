@@ -2215,6 +2215,8 @@ Total cost:       ${expenses['total_cost']:.6f}
                     
             data['value'] = value
             data['metadata'] = json.dumps(metadata_dict)  # Ensure metadata is a JSON string
+            data['code'] = '200'  # HTTP response code for successful evaluation
+            data['type'] = 'evaluation'  # Mark this as an evaluation score result
 
             # Add trace data if available
             logging.info("Checking for trace data to add to score result...")            
@@ -2231,7 +2233,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                 self.logging.info(f"{key}: {truncate_dict_strings_inner(value)}")
 
             # Validate all required fields are present and not None
-            required_fields = ['evaluationId', 'itemId', 'accountId', 'scorecardId', 'value', 'metadata']
+            required_fields = ['evaluationId', 'itemId', 'accountId', 'scorecardId', 'value', 'metadata', 'code']
             missing_fields = [field for field in required_fields if not data.get(field)]
             if missing_fields:
                 self.logging.error(f"Missing required fields: {', '.join(missing_fields)}")
@@ -2249,6 +2251,8 @@ Total cost:       ${expenses['total_cost']:.6f}
                     value
                     metadata
                     trace
+                    code
+                    type
                 }
             }
             """
@@ -2403,7 +2407,8 @@ Total cost:       ${expenses['total_cost']:.6f}
                         "description": description,
                         "accountId": self.account_id,
                         "evaluationId": self.experiment_id,
-                        "isEvaluation": is_evaluation
+                        "isEvaluation": is_evaluation,
+                        "createdByType": "evaluation"
                     }
                 }
                 

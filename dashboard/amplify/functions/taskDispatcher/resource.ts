@@ -2,7 +2,6 @@ import { CfnOutput, Stack, StackProps, Duration } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as path from 'path';
-import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
 import { execSync } from 'child_process';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
@@ -10,10 +9,6 @@ import { DynamoEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
 import { StartingPosition } from 'aws-cdk-lib/aws-lambda';
 import { Policy, PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
 import { ITable } from 'aws-cdk-lib/aws-dynamodb';
-
-// Get the directory path in ES module context
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 // Interface for TaskDispatcher stack props
 interface TaskDispatcherStackProps extends StackProps {
@@ -32,7 +27,7 @@ export class TaskDispatcherStack extends Stack {
     super(scope, id, props);
     
     // Get the directory containing the function code
-    const functionDir = path.join(__dirname, '.');
+    const functionDir = path.join(process.cwd(), 'amplify/functions/taskDispatcher');
 
     // Get Celery configuration from props or environment
     const celeryAwsAccessKeyId = props.celeryAwsAccessKeyId || process.env.CELERY_AWS_ACCESS_KEY_ID || 'WILL_BE_SET_AFTER_DEPLOYMENT';

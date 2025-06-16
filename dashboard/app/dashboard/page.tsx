@@ -10,7 +10,7 @@ export default function DashboardPage() {
   
   useEffect(() => {
     if (authStatus === 'authenticated') {
-      router.push('/activity')
+      router.push('/lab/items')
     }
   }, [authStatus, router])
 
