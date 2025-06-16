@@ -2,7 +2,7 @@
 
 import React from 'react'
 import { BaseGauges, BaseGaugesConfig, BaseGaugesData } from './BaseGauges'
-import { useItemsMetrics } from '@/hooks/useItemsMetrics'
+import { useAllItemsMetrics } from '@/hooks/useUnifiedMetrics'
 
 // Configuration for the original items gauges (items + score results)
 const itemsGaugesConfig: BaseGaugesConfig = {
@@ -99,7 +99,7 @@ export function ItemsGaugesRefactored({
   disableEmergenceAnimation = false,
   onErrorClick
 }: ItemsGaugesRefactoredProps) {
-  const { metrics, isLoading, error } = useItemsMetrics()
+  const { metrics, isLoading, error } = useAllItemsMetrics()
   
   // Transform the metrics data to match BaseGaugesData interface
   const transformedData: BaseGaugesData | null = metrics ? {
