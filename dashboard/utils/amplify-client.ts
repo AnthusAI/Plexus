@@ -302,6 +302,7 @@ export const amplifyClient = {
       scoreId?: string;
       evaluationId?: string;
       isEvaluation: boolean;
+      createdByType?: string;
     }) => {
       const response = await (getClient().models.Item as any).create(data)
       return { data: response.data as Schema['Item']['type'] }

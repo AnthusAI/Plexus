@@ -509,9 +509,11 @@ export default function ScorecardsComponent({
           attachedFiles?: string[];
           accountId: string;
           isEvaluation: boolean;
+          createdByType?: string;
         } = {
           accountId: item.accountId || accountId!,
-          isEvaluation: item.isEvaluation || false
+          isEvaluation: item.isEvaluation || false,
+          createdByType: 'prediction' // Dashboard-created items are predictions, not evaluations
         };
 
         // Add optional fields only if they have values

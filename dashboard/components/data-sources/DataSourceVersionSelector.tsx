@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useEffect } from "react"
-import { ChevronDown, ChevronRight, Calendar, Badge as BadgeIcon } from "lucide-react"
+import { ChevronDown, ChevronRight, Calendar, SquareStack } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { amplifyClient } from "@/utils/amplify-client"
@@ -65,70 +65,55 @@ export function DataSourceVersionSelector({
   }
 
   return (
-    <div className={cn("space-y-2", className)}>
-      <Button
-        variant="ghost"
-        size="sm"
+    <div className={cn("flex-shrink-0", className)}>
+      <div 
+        className="flex items-center gap-2 mb-4 cursor-pointer"
         onClick={toggleExpanded}
-        className="h-auto p-2 text-sm text-muted-foreground hover:text-foreground justify-start"
       >
+        <SquareStack className="h-4 w-4 text-foreground" />
+        <span className="text-sm font-medium">Versions ({versions.length})</span>
         {isExpanded ? (
-          <ChevronDown className="h-4 w-4 mr-1" />
+          <ChevronDown className="h-4 w-4 text-muted-foreground ml-1" />
         ) : (
-          <ChevronRight className="h-4 w-4 mr-1" />
+          <ChevronRight className="h-4 w-4 text-muted-foreground ml-1" />
         )}
-        Versions:
-        {versions.length > 0 && (
-          <Badge variant="secondary" className="ml-2 text-xs">
-            {versions.length}
-          </Badge>
-        )}
-      </Button>
+      </div>
 
       {isExpanded && (
-        <div className="bg-background border rounded-md p-3 space-y-2">
+        <div className="space-y-3 mb-2">
           {isLoading ? (
             <div className="text-sm text-muted-foreground">Loading versions...</div>
           ) : versions.length === 0 ? (
             <div className="text-sm text-muted-foreground">No versions found</div>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-3">
               {versions.map((version) => {
                 const isCurrent = version.id === currentVersionId
                 return (
                   <div
                     key={version.id}
-                    className={cn(
-                      "flex items-center justify-between p-2 rounded-md border cursor-pointer transition-colors",
-                      "hover:bg-muted/50",
-                      isCurrent && "bg-primary/10 border-primary/20"
-                    )}
+                    className="p-3 rounded-lg cursor-pointer transition-colors bg-card hover:bg-accent"
                     onClick={() => handleVersionClick(version)}
                   >
-                    <div className="flex items-center space-x-2 flex-1">
-                      <Calendar className="h-4 w-4 text-muted-foreground" />
-                      <div className="flex-1">
-                        <div className="text-sm">
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-sm">
                           <Timestamp time={version.createdAt} variant="relative" />
                         </div>
                         {version.note && (
-                          <div className="text-xs text-muted-foreground mt-1">
+                          <div className="text-xs text-muted-foreground mt-1 line-clamp-2">
                             {version.note}
                           </div>
                         )}
+                        {isCurrent && (
+                          <div className="mt-1">
+                            <Badge variant="default" className="text-xs">
+                              Current
+                            </Badge>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      {version.isFeatured && (
-                        <Badge variant="outline" className="text-xs">
-                          Featured
-                        </Badge>
-                      )}
-                      {isCurrent && (
-                        <Badge variant="default" className="text-xs">
-                          Current
-                        </Badge>
-                      )}
+                      <Calendar className="h-4 w-4 text-muted-foreground ml-2 flex-shrink-0" />
                     </div>
                   </div>
                 )

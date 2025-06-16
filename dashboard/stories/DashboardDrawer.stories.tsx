@@ -125,7 +125,7 @@ export const Controlled: Story = {
         >
           <Button className="gap-2">
             <Gauge className="h-4 w-4" />
-            Dashboard Metrics
+            Dashboard
           </Button>
         </DashboardDrawer>
       </div>
