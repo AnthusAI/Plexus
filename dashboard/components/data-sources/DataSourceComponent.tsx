@@ -23,6 +23,7 @@ import { defineCustomMonacoThemes, applyMonacoTheme, setupMonacoThemeWatcher, ge
 import { amplifyClient } from "@/utils/amplify-client"
 import { FileAttachments } from "@/components/items/FileAttachments"
 import { DataSourceVersionSelector } from "./DataSourceVersionSelector"
+import { CollapsibleFileAttachments } from "./CollapsibleFileAttachments"
 import { uploadData } from 'aws-amplify/storage'
 import { toast } from 'sonner'
 
@@ -254,25 +255,6 @@ const DetailContent = React.memo(function DetailContent({
                      placeholder:text-muted-foreground rounded-md"
             placeholder="Description"
           />
-          {dataSource.id && (
-            <DataSourceVersionSelector
-              dataSourceId={dataSource.id}
-              currentVersionId={dataSource.currentVersionId || undefined}
-              onVersionSelect={onVersionSelect}
-              className="mt-4"
-            />
-          )}
-          <FileAttachments
-            attachedFiles={dataSource.attachedFiles?.filter((file): file is string => file !== null) || []}
-            onChange={(files) => {
-              console.log('FileAttachments onChange called with:', files)
-              console.log('Current dataSource.attachedFiles:', dataSource.attachedFiles)
-              onEditChange?.({ attachedFiles: files })
-            }}
-            onUpload={handleFileUpload}
-            className="mt-4"
-            maxFiles={5}
-          />
         </div>
         <div className="flex gap-2 ml-4">
           <DropdownMenu>
@@ -391,12 +373,35 @@ const DetailContent = React.memo(function DetailContent({
           </div>
         )}
 
+        {/* Versions Section - fixed size, full width */}
+        {dataSource.id && (
+          <DataSourceVersionSelector
+            dataSourceId={dataSource.id}
+            currentVersionId={dataSource.currentVersionId || undefined}
+            onVersionSelect={onVersionSelect}
+            className="mt-4"
+          />
+        )}
+
+        {/* Attached Files Section - fixed size, full width */}
+        <CollapsibleFileAttachments
+          attachedFiles={dataSource.attachedFiles?.filter((file): file is string => file !== null) || []}
+          onChange={(files) => {
+            console.log('FileAttachments onChange called with:', files)
+            console.log('Current dataSource.attachedFiles:', dataSource.attachedFiles)
+            onEditChange?.({ attachedFiles: files })
+          }}
+          onUpload={handleFileUpload}
+          className="mt-4"
+          maxFiles={5}
+        />
+
         {/* Datasets Section - fixed size, only when they exist */}
         {dataSets && dataSets.length > 0 && (
-          <div className="flex-shrink-0">
+          <div className="flex-shrink-0 mt-4">
             <div className="flex items-center gap-2 mb-4">
               <Table className="h-4 w-4 text-foreground" />
-              <span className="text-sm font-medium">Generated Datasets ({dataSets.length})</span>
+              <span className="text-sm font-medium">Datasets ({dataSets.length})</span>
             </div>
             <div className="space-y-3">
               {dataSets.map((dataSet) => (
@@ -574,9 +579,9 @@ export default function DataSourceComponent({
   return (
     <div
       className={cn(
-        "w-full rounded-lg text-card-foreground hover:bg-accent/50 transition-colors relative",
+        "w-full rounded-lg text-card-foreground transition-colors relative",
         variant === 'grid' ? (
-          isSelected ? "bg-card-selected" : "bg-card"
+          isSelected ? "bg-card-selected" : "bg-card hover:bg-accent"
         ) : "bg-card-selected",
         variant === 'detail' && "h-full flex flex-col",
         (isSelected && variant === 'grid') && "selected-border-rounded"

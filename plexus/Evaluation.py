@@ -1809,9 +1809,9 @@ Total cost:       ${expenses['total_cost']:.6f}
                         "externalId": content_id,
                         "description": description,
                         "accountId": self.account_id,
-                        "evaluationId": self.experiment_id or ("evaluation-default" if is_evaluation else "prediction-default"),
+                        "evaluationId": self.experiment_id,
                         "isEvaluation": is_evaluation,
-                        "createdByType": "evaluation" if is_evaluation else "prediction"
+                        "createdByType": "evaluation"
                     }
                 }
                 

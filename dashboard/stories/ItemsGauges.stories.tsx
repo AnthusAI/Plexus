@@ -85,6 +85,16 @@ const meta: Meta<typeof ItemsGauges> = {
 export default meta
 type Story = StoryObj<typeof meta>
 
+// Fallback data for the area chart when loading or no data
+const fallbackChartData = [
+  { time: '00:00', items: 0, scoreResults: 0 },
+  { time: '04:00', items: 0, scoreResults: 0 },
+  { time: '08:00', items: 0, scoreResults: 0 },
+  { time: '12:00', items: 0, scoreResults: 0 },
+  { time: '16:00', items: 0, scoreResults: 0 },
+  { time: '20:00', items: 0, scoreResults: 0 },
+]
+
 // Sample chart data variations
 const lowActivityData = [
   { time: '00:00', items: 1, scoreResults: 1, bucketStart: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), bucketEnd: new Date(Date.now() - 23 * 60 * 60 * 1000).toISOString() },
@@ -495,6 +505,30 @@ export const WithRealData: Story = {
     docs: {
       description: {
         story: 'ItemsGauges using real data from the API - shows actual metrics from the last hour.',
+      },
+    },
+  },
+}
+
+// No data story - demonstrates undefined values showing no needles/values
+export const NoData: Story = {
+  args: {
+    // All values undefined to simulate loading/no data state
+    scoreResultsPerHour: undefined,
+    itemsPerHour: undefined,
+    scoreResultsAveragePerHour: undefined,
+    itemsAveragePerHour: undefined,
+    itemsPeakHourly: 50, // Keep peak values for gauge scale
+    scoreResultsPeakHourly: 100,
+    itemsTotal24h: undefined,
+    scoreResultsTotal24h: undefined,
+    chartData: fallbackChartData, // Use fallback chart data
+    useRealData: false,
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Demonstrates the no-data state where gauges show no needles and per day counts show "?" instead of zeros. This is the correct behavior during loading or when no data is available.',
       },
     },
   },
