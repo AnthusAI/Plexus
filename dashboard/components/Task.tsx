@@ -147,8 +147,8 @@ const Task = <TData extends BaseTaskData = BaseTaskData>({
     <div 
       className={cn(
         "transition-colors duration-200 flex flex-col h-full rounded-lg w-full max-w-full relative",
-        variant === 'grid' ? 'cursor-pointer hover:bg-accent/50' : '',
-        effectiveIsSelected ? 'bg-card-selected' : 'bg-card',
+        variant === 'grid' ? 'cursor-pointer' : '',
+        effectiveIsSelected ? 'bg-card-selected' : variant === 'grid' ? 'bg-card hover:bg-accent' : 'bg-card',
         (effectiveIsSelected && variant === 'grid') && "selected-border-rounded"
       )}
       onClick={variant === 'grid' && !isLoading ? onClick : undefined}

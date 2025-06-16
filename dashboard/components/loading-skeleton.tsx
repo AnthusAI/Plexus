@@ -139,7 +139,7 @@ export function ReportsDashboardSkeleton() {
 // Report Task skeleton component (similar to scorecard cards)
 function ReportTaskSkeleton() {
   return (
-    <div className="w-full rounded-lg text-card-foreground hover:bg-accent/50 bg-card">
+    <div className="w-full rounded-lg text-card-foreground hover:bg-accent bg-card transition-colors">
       <div className="p-4 w-full">
         <div className="flex justify-between items-start">
           <div className="space-y-2 min-h-[4.5rem] flex-1">
@@ -208,7 +208,7 @@ export function ScorecardDashboardSkeleton() {
         <div className="@container">
           <div className="grid grid-cols-1 @[400px]:grid-cols-1 @[600px]:grid-cols-2 @[900px]:grid-cols-3 gap-4">
             {[...Array(6)].map((_, i) => (
-              <div key={i} className="bg-card rounded-lg p-4 hover:bg-accent/50 transition-colors">
+              <div key={i} className="bg-card rounded-lg p-4 hover:bg-accent transition-colors">
                 <div className="flex justify-between items-start">
                   <div className="space-y-2 min-h-[4.5rem] flex-1">
                     {/* Scorecard Name */}
@@ -266,7 +266,7 @@ export function ItemsDashboardSkeleton() {
 // Separate ItemCard skeleton component for reusability
 export function ItemCardSkeleton() {
   return (
-    <div className="w-full rounded-lg text-card-foreground hover:bg-accent/50 bg-card">
+    <div className="w-full rounded-lg text-card-foreground hover:bg-accent bg-card transition-colors">
       <div className="p-3 w-full">
         <div className="space-y-2">
           {/* Top section with scorecard name and timestamp */}
