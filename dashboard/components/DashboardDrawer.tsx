@@ -5,17 +5,12 @@ import { Gauge } from 'lucide-react'
 import {
   Drawer,
   DrawerContent,
-  DrawerHeader,
-  DrawerTitle,
-  DrawerDescription,
   DrawerTrigger,
-  DrawerClose,
 } from '@/components/ui/drawer'
 import { Button } from '@/components/ui/button'
 import { PredictionItemsGauges } from '@/components/PredictionItemsGauges'
 import { EvaluationItemsGauges } from '@/components/EvaluationItemsGauges'
 import { FeedbackItemsGauges } from '@/components/FeedbackItemsGauges'
-import { X } from 'lucide-react'
 
 interface DashboardDrawerProps {
   open?: boolean
@@ -31,22 +26,10 @@ export function DashboardDrawer({
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
       {children && <DrawerTrigger asChild>{children}</DrawerTrigger>}
-      <DrawerContent className="max-h-[85vh] border-0 shadow-none">
-        <div className="mx-auto w-full max-w-7xl">
-          <DrawerHeader className="relative">
-            <DrawerClose asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="absolute right-4 -top-2 h-8 w-8 p-0"
-              >
-                <X className="h-4 w-4" />
-                <span className="sr-only">Close</span>
-              </Button>
-            </DrawerClose>
-          </DrawerHeader>
+      <DrawerContent className="max-h-[85vh] max-sm:max-h-[90vh] border-0 shadow-none outline-none ring-0 rounded-t-[2rem] flex flex-col">
+        <div className="mx-auto w-full max-w-7xl flex flex-col min-h-0">
           
-          <div className="px-4 pb-6 overflow-visible space-y-6">
+          <div className="px-4 pt-4 pb-6 space-y-6 overflow-y-auto overflow-x-hidden flex-1">
             {/* Prediction Items Gauges */}
             <div className="@container overflow-visible">
               <PredictionItemsGauges disableEmergenceAnimation={true} />

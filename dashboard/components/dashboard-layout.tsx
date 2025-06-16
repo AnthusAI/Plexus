@@ -646,9 +646,17 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
       />
       
       <div className={`flex flex-1 min-h-0 relative ${isMobile ? 'bg-background' : 'bg-frame'}`}>
+        {/* Mobile sidebar overlay - click outside to close and darken content */}
+        {isMobile && isLeftSidebarOpen && (
+          <div 
+            className="fixed inset-0 z-30 bg-black/50 backdrop-blur-sm"
+            onClick={toggleLeftSidebar}
+          />
+        )}
+        
         <aside
           className={`
-            ${isMobile ? 'fixed top-0 bottom-0 left-0 z-40 bg-background/80 backdrop-blur-sm' : 
+            ${isMobile ? 'fixed top-0 bottom-0 left-0 z-40' : 
               'fixed top-0 bottom-0 left-0 h-full z-10'}
             ${isLeftSidebarOpen ? (isMobile ? 'w-[min(75vw,12rem)]' : 'w-40') : (isMobile ? 'w-12' : 'w-14')}
             transition-all duration-300 ease-in-out overflow-hidden
@@ -673,6 +681,16 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
           `}
         >
           <div className={`flex-1 flex flex-col bg-background min-h-0 overflow-visible relative ${isMobile ? 'mobile-compact' : 'rounded-lg'}`}>
+            {/* Secret dashboard activation button - invisible, center third of content area */}
+            {pathname.startsWith('/lab/') && (
+              <button
+                onClick={toggleDashboardDrawer}
+                className="absolute top-0 bottom-0 left-1/3 right-1/3 z-10 bg-transparent border-none cursor-default opacity-0 hover:opacity-0 focus:outline-none"
+                aria-label="Activate dashboard"
+                tabIndex={-1}
+              />
+            )}
+            
             {/* Global loading overlay */}
             {isNavigating && (
               <div className={`absolute inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center ${isMobile ? '' : 'rounded-lg'}`}>

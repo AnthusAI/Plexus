@@ -71,17 +71,26 @@ class SessionStorageCache {
   get(key: string): AggregatedData | null {
     try {
       const cached = sessionStorage.getItem(key)
-      if (!cached) return null
+      if (!cached) {
+        console.log('🔍 Cache miss for key:', key.substring(0, 100) + '...')
+        return null
+      }
 
       const parsed = JSON.parse(cached)
       const now = Date.now()
       
       // Check if expired
       if (now - parsed.timestamp > (parsed.ttl || this.DEFAULT_TTL)) {
+        console.log('⏰ Cache expired for key:', key.substring(0, 100) + '...')
         sessionStorage.removeItem(key)
         return null
       }
 
+      console.log('✅ Cache hit for key:', key.substring(0, 100) + '...', {
+        count: parsed.data.count,
+        itemsLength: parsed.data.items?.length || 0,
+        ageMinutes: Math.round((now - parsed.timestamp) / (1000 * 60))
+      })
       return parsed.data
     } catch (error) {
       console.warn('Error reading from session storage cache:', error)
@@ -97,6 +106,11 @@ class SessionStorageCache {
         ttl: ttl || this.DEFAULT_TTL
       }
       sessionStorage.setItem(key, JSON.stringify(cacheEntry))
+      console.log('💾 Cached data for key:', key.substring(0, 100) + '...', {
+        count: data.count,
+        itemsLength: data.items?.length || 0,
+        ttlMinutes: Math.round((ttl || this.DEFAULT_TTL) / (1000 * 60))
+      })
     } catch (error) {
       console.warn('Error writing to session storage cache:', error)
     }
@@ -119,7 +133,7 @@ class SessionStorageCache {
 
 // Main aggregator class
 export class GeneralizedMetricsAggregator {
-  private cache = new SessionStorageCache()
+  public cache = new SessionStorageCache()
   private pendingRequests = new Map<string, Promise<AggregatedData>>()
 
   /**
@@ -600,7 +614,7 @@ export class GeneralizedMetricsAggregator {
    * Generate chart data from a pre-fetched list of records.
    * This avoids making 24 extra API calls for the chart.
    */
-  private generateChartDataFromRecords(records: any[], source: MetricsDataSource): Array<{
+  public generateChartDataFromRecords(records: any[], source: MetricsDataSource): Array<{
     time: string
     value: number
     bucketStart: string
