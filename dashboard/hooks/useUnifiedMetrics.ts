@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useAccount } from '@/app/contexts/AccountContext'
 import { 
   generalizedMetricsAggregator, 
@@ -13,6 +13,9 @@ const globalMetricsState = new Map<string, {
   error: string | null
   lastFetch: number
 }>()
+
+// Global refresh timers to prevent multiple timers for the same config
+const globalRefreshTimers = new Map<string, NodeJS.Timeout>()
 
 // Helper to generate a unique key for the metrics config
 function getConfigKey(accountId: string, config: MetricsConfig): string {
@@ -280,8 +283,6 @@ export function useUnifiedMetrics(config: MetricsConfig): UseUnifiedMetricsResul
     if (updates.error !== undefined) setError(updates.error)
   }, [configKey])
 
-
-
   const calculateUnifiedMetrics = useCallback(async (accountId: string): Promise<UnifiedMetricsData> => {
     const results: { [key: string]: MetricsResult } = {}
     
@@ -451,6 +452,31 @@ export function useUnifiedMetrics(config: MetricsConfig): UseUnifiedMetricsResul
     }
   }, [selectedAccount, config, configKey, updateGlobalState, fetchMetrics, fetchMetricsInBackground])
 
+  // Setup automatic refresh mechanism
+  const setupAutoRefresh = useCallback(() => {
+    if (!selectedAccount || !configKey) return
+
+    // Clear any existing timer for this config
+    const existingTimer = globalRefreshTimers.get(configKey)
+    if (existingTimer) {
+      clearInterval(existingTimer)
+    }
+
+    // Set up new 30-second refresh timer
+    const refreshTimer = setInterval(() => {
+      console.log('🔄 useUnifiedMetrics: Auto-refresh triggered', { configKey })
+      fetchMetricsInBackground()
+    }, 30000) // 30 seconds
+
+    globalRefreshTimers.set(configKey, refreshTimer)
+
+    // Cleanup function
+    return () => {
+      clearInterval(refreshTimer)
+      globalRefreshTimers.delete(configKey)
+    }
+  }, [selectedAccount, configKey, fetchMetricsInBackground])
+
   // Handle account changes and trigger background refresh
   useEffect(() => {
     if (!selectedAccount || !configKey) {
@@ -469,13 +495,16 @@ export function useUnifiedMetrics(config: MetricsConfig): UseUnifiedMetricsResul
       })
       // Always trigger a background refresh to get fresh data, but don't show loading
       fetchMetricsInBackground()
-      return
+    } else {
+      // No data available, fetch fresh data (this will show loading only for first time)
+      console.log('⏳ useUnifiedMetrics: No data in global state, fetching fresh data', { configKey })
+      fetchMetrics()
     }
 
-    // No data available, fetch fresh data (this will show loading only for first time)
-    console.log('⏳ useUnifiedMetrics: No data in global state, fetching fresh data', { configKey })
-    fetchMetrics()
-      }, [selectedAccount, config, configKey, updateGlobalState, fetchMetrics, fetchMetricsInBackground])
+    // Setup automatic refresh
+    const cleanup = setupAutoRefresh()
+    return cleanup
+  }, [selectedAccount, config, configKey, updateGlobalState, fetchMetrics, fetchMetricsInBackground, setupAutoRefresh])
 
   return {
     metrics,
