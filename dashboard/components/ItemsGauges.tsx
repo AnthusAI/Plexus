@@ -153,6 +153,10 @@ export function ItemsGauges({
   const hasErrorsLast24h = useRealData ? (metrics?.hasErrorsLast24h ?? false) : (overrideHasErrors ?? false)
   const errorsCount24h = useRealData ? (metrics?.totalErrors24h ?? 0) : (overrideErrorsCount ?? 0)
   
+  // For chart display: show chart if we have any data (including fallback), only show loading on very first load
+  // Since chartData always falls back to fallbackChartData, we should almost always show the chart
+  const shouldShowChart = !isLoading || hasChartData || (chartData && chartData.length > 0)
+  
   // Calculate maximum value across all chart areas for consistent Y scale
   const maxChartValue = React.useMemo(() => {
     if (!chartData || chartData.length === 0) return 100
@@ -293,8 +297,8 @@ export function ItemsGauges({
           <div className="flex flex-col h-full min-w-0">
             {/* Chart area - responsive height based on width - taller when wide */}
             <div className="w-full flex-[4] min-h-0 min-w-0 mb-1 @[700px]:flex-[5] @[700px]:mb-0 mt-6">
-              {!hasChartData && useRealData ? (
-                // Loading state for chart
+              {!shouldShowChart && useRealData ? (
+                // Loading state for chart - only show on very first load
                 <div className="w-full h-full flex items-center justify-center">
                   <div className="text-center">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
