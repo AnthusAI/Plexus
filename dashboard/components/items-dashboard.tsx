@@ -3472,7 +3472,7 @@ function ItemsDashboardInner() {
                 </div>
                 <Input
                   type="text"
-                  placeholder="Search by identifier"
+                  placeholder="Search by ID"
                   value={searchValue}
                   onChange={(e) => {
                     setSearchValue(e.target.value);
@@ -3570,7 +3570,7 @@ function ItemsDashboardInner() {
                       </div>
                       <Input
                         type="text"
-                        placeholder="Search by identifier"
+                        placeholder="Search by ID"
                         value={searchValue}
                         onChange={(e) => {
                           setSearchValue(e.target.value);
