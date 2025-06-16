@@ -105,13 +105,8 @@ const renderValue = (value: number | string | boolean | Array<any> | Date | unde
       />
     )
   }
-  // For other types, return 0
-  return (
-    <NumberFlowWrapper 
-      value={0} 
-      format={format}
-    />
-  )
+  // For undefined or other types, return null (show nothing)
+  return null
 }
 
 // Custom tooltip component for the chart
@@ -209,9 +204,9 @@ export function BaseGauges({
   const hasErrorsLast24h = effectiveData?.hasErrorsLast24h ?? false
   const errorsCount24h = effectiveData?.totalErrors24h ?? 0
   
-  // For chart display: show chart if we have any data (including fallback), only show loading on very first load
-  // Since chartData always falls back to fallbackChartData, we should almost always show the chart
-  const shouldShowChart = !isLoading || hasChartData || (chartData && chartData.length > 0)
+  // For chart display: show chart if we have real data or if we're not loading
+  // Only show spinner during initial load when we have no real chart data
+  const shouldShowChart = !isLoading || hasChartData
   
   // Calculate maximum value across all chart areas for consistent Y scale
   const maxChartValue = React.useMemo(() => {
@@ -415,10 +410,10 @@ export function BaseGauges({
               <div className="@container flex gap-3 items-start">
                 {/* Render single gauge with fixed width */}
                 {config.gauges.map((gaugeConfig) => {
-                  const value = effectiveData?.[gaugeConfig.valueKey] as number ?? 0
-                  const average = effectiveData?.[gaugeConfig.averageKey] as number ?? 0
+                  const value = effectiveData?.[gaugeConfig.valueKey] as number | undefined
+                  const average = effectiveData?.[gaugeConfig.averageKey] as number | undefined
                   const peak = effectiveData?.[gaugeConfig.peakKey] as number ?? 50
-                  const total = effectiveData?.[gaugeConfig.totalKey] as number ?? 0
+                  const total = effectiveData?.[gaugeConfig.totalKey] as number | undefined
 
                   return (
                     <div 
@@ -430,16 +425,16 @@ export function BaseGauges({
                           value={value}
                           beforeValue={average}
                           title={gaugeConfig.title}
-                          information={hasGaugeData ? `**Current:** ${value}  
+                          information={hasGaugeData ? `**Current:** ${value ?? '?'}  
 *Current hourly rate (rolling 60-min window)*
 
-**Average:** ${average}  
+**Average:** ${average ?? '?'}  
 *24-hour average hourly rate*
 
-**Peak:** ${peak}  
+**Peak:** ${peak ?? '?'}  
 *Peak hourly rate over last 24 hours*
 
-**Total:** ${total}  
+**Total:** ${total ?? '?'}  
 *Total over last 24 hours*` : "Loading metrics..."}
                           valueUnit={gaugeConfig.unit ?? ""}
                           min={0}
@@ -471,10 +466,7 @@ export function BaseGauges({
                       {!shouldShowChart && useRealData ? (
                         // Loading state for chart - only show on very first load
                         <div className="w-full h-full flex items-center justify-center">
-                          <div className="text-center">
-                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
-                            <p className="text-sm text-muted-foreground">Loading chart data...</p>
-                          </div>
+                          <div className="w-8 h-8 border-4 border-muted border-t-primary rounded-full animate-spin"></div>
                         </div>
                       ) : (
                         <div
@@ -662,17 +654,12 @@ export function BaseGauges({
                 
                 {/* Render gauges */}
                 {config.gauges.map((gaugeConfig) => {
-                const rawValue = effectiveData?.[gaugeConfig.valueKey]
-                const rawAverage = effectiveData?.[gaugeConfig.averageKey]
-                const rawPeak = effectiveData?.[gaugeConfig.peakKey]
-                const rawTotal = effectiveData?.[gaugeConfig.totalKey]
+                const value = effectiveData?.[gaugeConfig.valueKey] as number | undefined
+                const average = effectiveData?.[gaugeConfig.averageKey] as number | undefined
+                const peak = effectiveData?.[gaugeConfig.peakKey] as number ?? 50
+                const total = effectiveData?.[gaugeConfig.totalKey] as number | undefined
                 
-                const value = typeof rawValue === 'string' ? 0 : (rawValue as number ?? 0)
-                const average = typeof rawAverage === 'string' ? 0 : (rawAverage as number ?? 0)
-                const peak = typeof rawPeak === 'string' ? 50 : (rawPeak as number ?? 50)
-                const total = typeof rawTotal === 'string' ? 0 : (rawTotal as number ?? 0)
-                
-                const isQuestionMark = typeof rawValue === 'string' || typeof rawAverage === 'string' || typeof rawPeak === 'string' || typeof rawTotal === 'string'
+                const isQuestionMark = typeof value === 'string' || typeof average === 'string' || typeof peak === 'string' || typeof total === 'string'
 
                 // Generate gauge column span classes if specified
                 const gaugeSpanClasses = gaugeConfig.colSpan ? [
@@ -690,16 +677,16 @@ export function BaseGauges({
                         value={value}
                         beforeValue={average}
                         title={gaugeConfig.title}
-                        information={hasGaugeData ? `**Current:** ${isQuestionMark ? '?' : value}  
+                        information={hasGaugeData ? `**Current:** ${value ?? '?'}  
 *Current hourly rate (rolling 60-min window)*
 
-**Average:** ${isQuestionMark ? '?' : average}  
+**Average:** ${average ?? '?'}  
 *24-hour average hourly rate*
 
-**Peak:** ${isQuestionMark ? '?' : peak}  
+**Peak:** ${peak ?? '?'}  
 *Peak hourly rate over last 24 hours*
 
-**Total:** ${isQuestionMark ? '?' : total}  
+**Total:** ${total ?? '?'}  
 *Total over last 24 hours*` : "Loading metrics..."}
                         valueUnit={gaugeConfig.unit ?? ""}
                         min={0}
@@ -731,10 +718,7 @@ export function BaseGauges({
                     {!shouldShowChart && useRealData ? (
                       // Loading state for chart - only show on very first load
                       <div className="w-full h-full flex items-center justify-center">
-                        <div className="text-center">
-                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
-                          <p className="text-sm text-muted-foreground">Loading chart data...</p>
-                        </div>
+                        <div className="w-8 h-8 border-4 border-muted border-t-primary rounded-full animate-spin"></div>
                       </div>
                     ) : (
                       <div
