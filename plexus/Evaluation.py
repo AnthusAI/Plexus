@@ -1810,7 +1810,8 @@ Total cost:       ${expenses['total_cost']:.6f}
                         "description": description,
                         "accountId": self.account_id,
                         "evaluationId": self.experiment_id,
-                        "isEvaluation": is_evaluation
+                        "isEvaluation": is_evaluation,
+                        "createdByType": "evaluation"
                     }
                 }
                 
