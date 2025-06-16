@@ -33,6 +33,7 @@ export interface AggregationRequest {
   startTime: string;
   endTime: string;
   intervalMinutes: number;
+  type?: string; // Filter by score result type: "prediction", "evaluation", etc.
 }
 
 export interface CacheEntry {
@@ -56,6 +57,7 @@ class AggregationCache {
       request.recordType,
       request.scorecardId || 'all',
       request.scoreId || 'all',
+      request.type || 'all',
       request.startTime,
       request.endTime,
       request.intervalMinutes.toString()
@@ -338,6 +340,7 @@ export class HierarchicalAggregator {
               items {
                 value
                 updatedAt
+                type
               }
             }
           }
@@ -359,6 +362,7 @@ export class HierarchicalAggregator {
               items {
                 value
                 updatedAt
+                type
               }
             }
           }
@@ -380,6 +384,7 @@ export class HierarchicalAggregator {
               items {
                 value
                 updatedAt
+                type
               }
             }
           }
@@ -398,7 +403,13 @@ export class HierarchicalAggregator {
     const items = Object.values(response.data)[0] as { items: Array<any> };
     
     // Process the raw data based on record type
-    const records = items.items || [];
+    let records = items.items || [];
+    
+    // Apply type filtering for scoreResults if specified
+    if (request.recordType === 'scoreResults' && request.type) {
+      records = records.filter(record => record.type === request.type);
+    }
+    
     const count = records.length;
     
     let sum = 0;

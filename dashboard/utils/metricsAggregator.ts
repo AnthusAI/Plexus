@@ -39,6 +39,7 @@ export async function getAggregatedMetrics(
   endTime: Date,
   scorecardId?: string,
   scoreId?: string,
+  type?: string,
   onProgress?: (progress: { 
     bucketStart: Date, 
     bucketEnd: Date, 
@@ -61,7 +62,8 @@ export async function getAggregatedMetrics(
     endTime: endTime.toISOString(),
     intervalMinutes,
     ...(scorecardId && { scorecardId }),
-    ...(scoreId && { scoreId })
+    ...(scoreId && { scoreId }),
+    ...(type && { type })
   };
 
   try {
@@ -129,9 +131,10 @@ export async function performJITAggregation(
   startTime: Date,
   endTime: Date,
   scorecardId?: string,
-  scoreId?: string
+  scoreId?: string,
+  type?: string
 ): Promise<AggregatedMetricsData> {
-  return getAggregatedMetrics(accountId, recordType, startTime, endTime, scorecardId, scoreId);
+  return getAggregatedMetrics(accountId, recordType, startTime, endTime, scorecardId, scoreId, type);
 }
 
 /**
@@ -143,7 +146,8 @@ export async function performHierarchicalAggregation(
   startTime: Date,
   endTime: Date,
   scorecardId?: string,
-  scoreId?: string
+  scoreId?: string,
+  type?: string
 ): Promise<AggregatedMetricsData> {
-  return getAggregatedMetrics(accountId, recordType, startTime, endTime, scorecardId, scoreId);
+  return getAggregatedMetrics(accountId, recordType, startTime, endTime, scorecardId, scoreId, type);
 } 
