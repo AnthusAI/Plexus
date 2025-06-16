@@ -49,9 +49,27 @@ const BlockDetails: React.FC<BlockDetailsProps> = ({ block }) => {
       const filesWithUrls = await Promise.all(
         files.map(async (file) => {
           try {
-            const urlResult = await getUrl({
-              path: file.path,
-            });
+            // Determine which storage bucket to use based on file path
+            let urlOptions: { path: string; options?: { bucket?: string } } = { path: file.path };
+            
+            if (file.path.startsWith('reportblocks/')) {
+              // Report block files are stored in the reportBlockDetails bucket
+              urlOptions = {
+                path: file.path,
+                options: { bucket: 'reportBlockDetails' }
+              };
+            } else if (file.path.startsWith('scoreresults/')) {
+              // Score result files are stored in the scoreResultAttachments bucket
+              urlOptions = {
+                path: file.path,
+                options: { bucket: 'scoreResultAttachments' }
+              };
+            } else if (file.path.startsWith('attachments/')) {
+              // These files are in the default attachments bucket
+              urlOptions = { path: file.path };
+            }
+            
+            const urlResult = await getUrl(urlOptions);
             return { ...file, url: urlResult.url.toString() };
           } catch (err) {
             console.error(`Error getting URL for file ${file.name}:`, err);
@@ -76,10 +94,28 @@ const BlockDetails: React.FC<BlockDetailsProps> = ({ block }) => {
     setFileContent(null);
     
     try {
+      // Determine which storage bucket to use based on file path
+      let storageOptions: { path: string; options?: { bucket?: string } } = { path: file.path };
+      
+      if (file.path.startsWith('reportblocks/')) {
+        // Report block files are stored in the reportBlockDetails bucket
+        storageOptions = {
+          path: file.path,
+          options: { bucket: 'reportBlockDetails' }
+        };
+      } else if (file.path.startsWith('scoreresults/')) {
+        // Score result files are stored in the scoreResultAttachments bucket
+        storageOptions = {
+          path: file.path,
+          options: { bucket: 'scoreResultAttachments' }
+        };
+      } else if (file.path.startsWith('attachments/')) {
+        // These files are in the default attachments bucket
+        storageOptions = { path: file.path };
+      }
+      
       // Use Amplify Storage to download the file content
-      const downloadResult = await downloadData({
-        path: file.path,
-      }).result;
+      const downloadResult = await downloadData(storageOptions).result;
       
       // Convert the binary data to text
       const text = await downloadResult.body.text();

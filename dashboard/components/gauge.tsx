@@ -4,6 +4,10 @@ import React, { useState, useEffect } from 'react'
 import { cn } from '@/lib/utils'
 import { Popover, PopoverContent, PopoverTrigger, PopoverAnchor } from '@/components/ui/popover'
 import { CircleHelp } from 'lucide-react'
+import NumberFlowWrapper from '@/components/ui/number-flow'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import remarkBreaks from 'remark-breaks'
 
 export interface Segment {
   start: number
@@ -21,6 +25,16 @@ interface GaugeProps {
   title?: React.ReactNode
   backgroundColor?: string
   showTicks?: boolean
+  /** 
+   * Information text displayed in a popover when the help icon is clicked.
+   * Supports full Markdown formatting including:
+   * - **bold** and *italic* text
+   * - [links](https://example.com)
+   * - Lists (bulleted and numbered)
+   * - `code` blocks
+   * - > blockquotes
+   * - Line breaks (use two spaces at end of line)
+   */
   information?: string
   informationUrl?: string
   priority?: boolean
@@ -28,10 +42,17 @@ interface GaugeProps {
   valueUnit?: string
   decimalPlaces?: number
   tickSpacingThreshold?: number
+  showOnlyEssentialTicks?: boolean
 }
 
 const calculateAngle = (percent: number) => {
   // Use 7π/6 (210 degrees) - halfway between π and 4π/3
+  // For pegged gauges (105%), extend slightly beyond the normal range
+  if (percent > 100) {
+    // Map 100-105% to a small extension beyond the normal range
+    const overPercent = Math.min(percent - 100, 5) / 5 // 0-1 for 100-105%
+    return (Math.PI * 7/6) + (overPercent * (Math.PI * 7/6) * 0.05) // Add 5% more arc
+  }
   return (percent / 100) * (Math.PI * 7/6)
 }
 
@@ -68,7 +89,8 @@ const GaugeComponent: React.FC<GaugeProps> = ({
   valueFormatter,
   valueUnit = '%',
   decimalPlaces = 1,
-  tickSpacingThreshold = 5
+  tickSpacingThreshold = 5,
+  showOnlyEssentialTicks = false
 }) => {
   const [animatedValue, setAnimatedValue] = useState(0)
   const [animatedBeforeValue, setAnimatedBeforeValue] = useState(0)
@@ -77,9 +99,14 @@ const GaugeComponent: React.FC<GaugeProps> = ({
   const containerRef = React.useRef<HTMLDivElement>(null)
   const radius = 80
   const strokeWidth = 25
-  const normalizedValue = value !== undefined 
+  const rawNormalizedValue = value !== undefined 
     ? ((value - min) / (max - min)) * 100
     : ((0 - min) / (max - min)) * 100  // When no data, point needle at 0 position
+  
+  // Check if value is pegged (exceeds max)
+  const isPegged = value !== undefined && value > max
+  // Cap normalized value at 105% for pegged gauges
+  const normalizedValue = isPegged ? 105 : Math.min(rawNormalizedValue, 100)
 
   useEffect(() => {
     const startTime = performance.now()
@@ -231,33 +258,95 @@ const GaugeComponent: React.FC<GaugeProps> = ({
   }
 
   const renderTicks = (minValue: number, maxValue: number) => {
-    // Create an array with all segment starts plus 100
-    const allTicks = [...segments || [], { start: 100, end: 100, color: 'transparent' }]
-      .map(segment => segment.start)
-      .sort((a, b) => a - b); // Sort in ascending order
-
-    // Use the provided threshold for displaying ticks (percentage of total range)
-    const thresholdPercentage = tickSpacingThreshold;
-
-    // Filter ticks starting from highest to lowest
-    // Keep a tick if it's at least thresholdPercentage away from the next higher tick
-    const visibleTicks = new Set<number>();
-    visibleTicks.add(100); // Always show the maximum tick
-
-    // Process remaining ticks from highest to lowest
-    for (let i = allTicks.length - 2; i >= 0; i--) {
-      const currentTick = allTicks[i];
-      const nextHigherTick = allTicks[i + 1]; // The next element is guaranteed to be higher since we sorted
+    let visibleTicks = new Set<number>();
+    
+    if (showOnlyEssentialTicks) {
+      // Essential ticks mode: only show 0, beforeValue position, and 100 (plus 105 if pegged)
+      visibleTicks.add(0);   // Always show the minimum tick
+      visibleTicks.add(100); // Always show the maximum tick
+      if (isPegged) {
+        visibleTicks.add(105); // Always show the pegged tick when over max
+      }
       
-      // If this tick is at least thresholdPercentage away from the next higher tick, show it
-      if (nextHigherTick - currentTick >= thresholdPercentage) {
-        visibleTicks.add(currentTick);
+      // Add the beforeValue (average) position if it exists
+      if (beforeValue !== undefined) {
+        const beforeValuePercent = ((beforeValue - min) / (max - min)) * 100;
+        visibleTicks.add(beforeValuePercent);
+      }
+    } else {
+      // Original logic for segment-based ticks
+      // Create an array with all segment starts plus 100, and 105 if pegged
+      const baseTicks = [...segments || [], { start: 100, end: 100, color: 'transparent' }]
+      if (isPegged) {
+        baseTicks.push({ start: 105, end: 105, color: 'transparent' })
+      }
+      const allTicks = baseTicks
+        .map(segment => segment.start)
+        .sort((a, b) => a - b); // Sort in ascending order
+
+      // Use the provided threshold for displaying ticks (percentage of total range)
+      const thresholdPercentage = tickSpacingThreshold;
+
+      // Filter ticks starting from highest to lowest
+      // Keep a tick if it's at least thresholdPercentage away from the next higher tick
+      visibleTicks.add(100); // Always show the maximum tick
+      visibleTicks.add(0);   // Always show the minimum tick
+      if (isPegged) {
+        visibleTicks.add(105); // Always show the pegged tick when over max
+      }
+
+      // Process remaining ticks from highest to lowest
+      for (let i = allTicks.length - 2; i >= 0; i--) {
+        const currentTick = allTicks[i];
+        const nextHigherTick = allTicks[i + 1]; // The next element is guaranteed to be higher since we sorted
+        
+        // Skip if this is the minimum tick (0) as we already added it
+        if (currentTick === 0) continue;
+        
+        // If this tick is at least thresholdPercentage away from the next higher tick, show it
+        if (nextHigherTick - currentTick >= thresholdPercentage) {
+          visibleTicks.add(currentTick);
+        }
       }
     }
 
-    // Render only the visible ticks
-    return [...segments || [], { start: 100, end: 100, color: 'transparent' }]
-      .filter(segment => visibleTicks.has(segment.start))
+    // Create ticks to render based on visible ticks
+    const ticksToRender = [];
+    
+    // Add essential ticks
+    if (visibleTicks.has(0)) {
+      ticksToRender.push({ start: 0, end: 0, color: 'transparent' });
+    }
+    if (visibleTicks.has(100)) {
+      ticksToRender.push({ start: 100, end: 100, color: 'transparent' });
+    }
+    if (isPegged && visibleTicks.has(105)) {
+      ticksToRender.push({ start: 105, end: 105, color: 'transparent' });
+    }
+    
+    // Add beforeValue tick if in essential mode and beforeValue exists
+    if (showOnlyEssentialTicks && beforeValue !== undefined) {
+      const beforeValuePercent = ((beforeValue - min) / (max - min)) * 100;
+      if (visibleTicks.has(beforeValuePercent)) {
+        ticksToRender.push({ start: beforeValuePercent, end: beforeValuePercent, color: 'transparent' });
+      }
+    }
+    
+    // Add segment-based ticks if not in essential mode
+    if (!showOnlyEssentialTicks) {
+      const segmentTicks = [...segments || [], { start: 100, end: 100, color: 'transparent' }];
+      if (isPegged) {
+        segmentTicks.push({ start: 105, end: 105, color: 'transparent' });
+      }
+      
+      for (const segment of segmentTicks) {
+        if (visibleTicks.has(segment.start) && !ticksToRender.some(t => t.start === segment.start)) {
+          ticksToRender.push(segment);
+        }
+      }
+    }
+    
+    return ticksToRender
       .map((segment, index) => {
         const angle = calculateAngle(segment.start)
         const { x, y } = calculateCoordinates(angle)
@@ -277,7 +366,13 @@ const GaugeComponent: React.FC<GaugeProps> = ({
         const textY = textOffset * Math.sin(angle - Math.PI / 2)
 
         // Calculate the actual value based on min/max
-        const tickValue = minValue + (segment.start / 100) * (maxValue - minValue)
+        let tickValue: number
+        if (segment.start === 105 && isPegged && value !== undefined) {
+          // For the 105% pegged tick, show the actual over-max value
+          tickValue = value
+        } else {
+          tickValue = minValue + (segment.start / 100) * (maxValue - minValue)
+        }
         // Format decimal values without leading zeros
         const formattedTickValue = formatDecimalValue(tickValue, decimalPlaces)
 
@@ -288,8 +383,8 @@ const GaugeComponent: React.FC<GaugeProps> = ({
               y1={y}
               x2={lineEndX}
               y2={lineEndY}
-              className="stroke-muted-foreground"
-              strokeWidth="0.5"
+              className={segment.start === 105 && isPegged ? "stroke-[var(--gauge-great)]" : "stroke-muted-foreground"}
+              strokeWidth={segment.start === 105 && isPegged ? "1.5" : "0.5"}
             />
             <g transform={`translate(${textX} ${textY}) rotate(105)`}>
               <text
@@ -298,7 +393,7 @@ const GaugeComponent: React.FC<GaugeProps> = ({
                 textAnchor="middle"
                 dominantBaseline="middle"
                 fontSize="12"
-                className="fill-muted-foreground"
+                className={segment.start === 105 && isPegged ? "fill-[var(--gauge-great)] font-medium" : "fill-muted-foreground"}
               >
                 {formattedTickValue}
               </text>
@@ -360,25 +455,57 @@ const GaugeComponent: React.FC<GaugeProps> = ({
     )
   }
 
-  const topPadding = showTicks ? 104 : 80
-  const viewBoxHeight = showTicks ? 200 : 170
-  const textY = showTicks ? 45 : 45
-  const clipHeight = showTicks ? 168 : 144
+  const topPadding = showTicks ? 124 : 100
+  const viewBoxHeight = showTicks ? 240 : 200
+  const textY = showTicks ? 65 : 65
+  const clipHeight = showTicks ? 184 : 160
   const labelBottomOffset = getLabelBottomOffset()
 
+  // Proportional label positioning: value label always centered, title label always just below arc
+  // Value label: flexbox center
+  // Title label: top as a percentage of container height, calculated from SVG geometry
+  const titleLabelY_svg = radius + strokeWidth / 2 + 8;
+  const titleLabelTopPercent = ((titleLabelY_svg + topPadding) / viewBoxHeight) * 100;
+
+  // Cap the maximum rendered circle diameter to 160px (SVG circle is 160 units wide)
+  const maxCirclePixelDiameter = 160;
+  const circlePixelDiameter = containerWidth > 0 ? Math.min(containerWidth * (2 * radius / 240), maxCirclePixelDiameter) : 0;
+  // Font sizes based on the actual circle diameter, with reduced scaling factors (half as tall)
+  const valueFontSizePx = circlePixelDiameter * 0.20;
+  const titleFontSizePx = circlePixelDiameter * 0.09;
+
+  // Calculate the actual pixel center of the circle
+  // SVG viewBox: -120 -topPadding 240 viewBoxHeight
+  // Center X: containerWidth / 2
+  // Center Y: containerHeight * (topPadding / viewBoxHeight)
+  const containerHeight = containerRef.current?.offsetHeight || 0;
+  const circleCenterX = containerWidth / 2;
+  const circleCenterY = containerHeight * (topPadding / viewBoxHeight);
+
+  // Calculate the top offset for the value label, subtracting half the font size (in viewBox %)
+  const valueLabelBaseTop = (radius + strokeWidth / 2 + (showTicks ? 40 : 30)) / viewBoxHeight;
+  const valueLabelTop = valueLabelBaseTop - (valueFontSizePx / viewBoxHeight) * 0.5;
+  // Calculate the top offset for the title label, using the same base plus a fixed offset and the title font size
+  const titleLabelTop = valueLabelBaseTop + 0.195 + (titleFontSizePx / viewBoxHeight) * 0.2;
+
+  // Calculate the pixel Y position of the clipped bottom of the gauge (corrected)
+  const clippedBottomY_px = containerHeight > 0 ? containerHeight * (clipHeight / viewBoxHeight) : 0;
+  // Position the value label a fixed proportion above the clipped bottom (increase padding)
+  const valueLabelY = clippedBottomY_px - (circlePixelDiameter * 0.26);
+
   return (
-    <div className="flex flex-col items-center w-full h-full max-h-[220px]">
+    <div className="flex flex-col items-center w-full h-full max-h-[260px] overflow-visible relative">
       <Popover>
         <PopoverAnchor asChild>
-          <div ref={containerRef} className="relative w-full h-full" style={{ maxWidth: '20em' }}>
-            <div className="relative w-full h-full">
+          <div ref={containerRef} className="relative w-full h-full overflow-visible" style={{ maxWidth: '20em' }}>
+            <div className="relative w-full h-full overflow-visible">
               <svg 
                 viewBox={`-120 -${topPadding} 240 ${viewBoxHeight}`}
                 preserveAspectRatio="xMidYMid meet"
                 style={{ 
                   width: '100%', 
                   height: '100%',
-                  maxHeight: '100%' 
+                  maxHeight: '100%'
                 }}
               >
                 <defs>
@@ -421,7 +548,7 @@ const GaugeComponent: React.FC<GaugeProps> = ({
                       <path
                         d={`M 0,-${radius} L -6,0 L 6,0 Z`}
                         className={cn(
-                          priority ? "fill-focus" : "fill-foreground",
+                          isPegged ? "fill-[var(--gauge-great)]" : priority ? "fill-focus" : "fill-foreground",
                           value === undefined && "fill-card",
                           "transition-[fill] duration-500 ease-in-out"
                         )}
@@ -438,68 +565,74 @@ const GaugeComponent: React.FC<GaugeProps> = ({
                       />
                     </g>
                   </g>
-                  <text 
-                    x="0" 
-                    y={textY}
-                    textAnchor="middle" 
-                    className={cn(
-                      "text-[2.25rem] font-bold transition-[fill] duration-500 ease-in-out",
-                      priority ? "fill-focus" : "fill-foreground"
-                    )}
-                    dominantBaseline="middle"
-                  >
-                    {value !== undefined 
-                      ? (valueFormatter
-                          ? valueFormatter(value)
-                          : `${formatDecimalValue(value, decimalPlaces)}${valueUnit}`
-                        )
-                      : ''}
-                  </text>
+
                 </g>
               </svg>
-              {title && (
-                <div 
+              {/* NumberFlow value display positioned over the SVG, using absolutely positioned div */}
+              {value !== undefined && (
+                <div
                   className={cn(
-                    "absolute left-0 right-0 flex justify-center items-center whitespace-nowrap",
-                    "text-[1rem]",
-                    "transition-colors duration-500 ease-in-out",
+                    "absolute left-0 right-0 flex justify-center pointer-events-none",
                     priority ? "text-focus" : "text-foreground"
                   )}
                   style={{
-                    bottom: `calc(${showTicks ? '5%' : '2%'} - ${labelBottomOffset}px)`,
-                    fontSize: containerWidth < 150 ? `max(0.6rem, ${8 + (containerWidth * 0.05)}px)` : undefined
+                    fontSize: `${valueFontSizePx}px`,
+                    top: `${valueLabelY}px`,
+                    left: 0,
+                    right: 0,
+                    overflow: 'visible',
+                    '--number-flow-mask-height': '0.1em',
+                    textAlign: 'center'
+                  } as React.CSSProperties}
+                >
+                  <span className={cn(
+                    "font-bold transition-colors duration-500 ease-in-out"
+                  )}>
+                    {valueFormatter ? (
+                      valueFormatter(value)
+                    ) : (
+                      <>
+                        <NumberFlowWrapper 
+                          value={parseFloat(formatDecimalValue(value, decimalPlaces))}
+                          format={{ 
+                            minimumFractionDigits: value % 1 === 0 ? 0 : decimalPlaces,
+                            maximumFractionDigits: decimalPlaces,
+                            useGrouping: false
+                          }}
+                        />
+                        {valueUnit && <span>{valueUnit}</span>}
+                      </>
+                    )}
+                  </span>
+                </div>
+              )}
+              {/* Title label positioned just below the value label, using absolutely positioned div */}
+              {title && (
+                <div
+                  className={cn(
+                    "absolute left-0 right-0 flex justify-center items-center whitespace-nowrap",
+                    "transition-colors duration-500 ease-in-out",
+                    priority ? "text-focus" : "text-muted-foreground"
+                  )}
+                  style={{
+                    fontSize: `${titleFontSizePx}px`,
+                    top: `${titleLabelTop * 100}%`, // Optionally, use `${circleCenterY + valueFontSizePx * 0.7}px` for below value label
+                    transform: 'translateY(0.2em)',
+                    textAlign: 'center'
                   }}
                 >
-                  <span className="relative">
+                  <span className="relative flex items-center gap-1">
                     {title}
                     {information && (
-                      <div className="absolute -right-5 top-1/2 -translate-y-1/2 inline-flex">
-                        <PopoverTrigger asChild>
-                          <button
-                            className="text-muted-foreground hover:text-foreground transition-colors duration-500 ease-in-out"
-                            aria-label="More information"
-                          >
-                            <CircleHelp className="h-4 w-4 transition-[stroke] duration-500 ease-in-out" />
-                          </button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-80 text-sm">
-                          {information.split('\n\n').map((paragraph, index) => (
-                            <p key={index} className={index > 0 ? 'mt-4' : ''}>
-                              {paragraph}
-                            </p>
-                          ))}
-                          {informationUrl && (
-                            <a 
-                              href={informationUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-primary hover:underline mt-3 inline-block"
-                            >
-                              more...
-                            </a>
-                          )}
-                        </PopoverContent>
-                      </div>
+                      <PopoverTrigger asChild>
+                        <button
+                          className="inline-flex items-center justify-center opacity-70 hover:opacity-100"
+                          aria-label="More information"
+                          style={{ fontSize: `${titleFontSizePx * 0.8}px` }}
+                        >
+                          <CircleHelp className="h-[1em] w-[1em]" />
+                        </button>
+                      </PopoverTrigger>
                     )}
                   </span>
                 </div>
@@ -507,6 +640,46 @@ const GaugeComponent: React.FC<GaugeProps> = ({
             </div>
           </div>
         </PopoverAnchor>
+        {information && (
+          <PopoverContent className="w-80 text-sm" side="top" align="center">
+            <div className="space-y-2">
+              <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:bg-muted prose-pre:text-foreground">
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm, remarkBreaks]}
+                  components={{
+                    p: ({ children }) => <p className="mb-2 last:mb-0 text-sm">{children}</p>,
+                    ul: ({ children }) => <ul className="mb-2 ml-4 list-disc">{children}</ul>,
+                    ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal">{children}</ol>,
+                    li: ({ children }) => <li className="mb-1">{children}</li>,
+                    strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+                    em: ({ children }) => <em className="italic">{children}</em>,
+                    code: ({ children }) => <code className="bg-muted px-1 py-0.5 rounded text-xs font-mono">{children}</code>,
+                    pre: ({ children }) => <pre className="bg-muted p-2 rounded overflow-x-auto text-xs">{children}</pre>,
+                    h1: ({ children }) => <h1 className="text-base font-semibold mb-2 text-foreground">{children}</h1>,
+                    h2: ({ children }) => <h2 className="text-sm font-semibold mb-2 text-foreground">{children}</h2>,
+                    h3: ({ children }) => <h3 className="text-sm font-medium mb-1 text-foreground">{children}</h3>,
+                    blockquote: ({ children }) => <blockquote className="border-l-4 border-muted-foreground/20 pl-3 italic text-muted-foreground">{children}</blockquote>,
+                    a: ({ children, href }) => <a href={href} className="text-primary hover:underline" target="_blank" rel="noopener noreferrer">{children}</a>,
+                  }}
+                >
+                  {information}
+                </ReactMarkdown>
+              </div>
+              {informationUrl && (
+                <p>
+                  <a
+                    href={informationUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline text-xs"
+                  >
+                    Learn more →
+                  </a>
+                </p>
+              )}
+            </div>
+          </PopoverContent>
+        )}
       </Popover>
     </div>
   )

@@ -147,8 +147,8 @@ const Task = <TData extends BaseTaskData = BaseTaskData>({
     <div 
       className={cn(
         "transition-colors duration-200 flex flex-col h-full rounded-lg w-full max-w-full relative",
-        variant === 'grid' ? 'cursor-pointer hover:bg-accent/50' : '',
-        effectiveIsSelected ? 'bg-card-selected' : 'bg-card',
+        variant === 'grid' ? 'cursor-pointer' : '',
+        effectiveIsSelected ? 'bg-card-selected' : variant === 'grid' ? 'bg-card hover:bg-accent' : 'bg-card',
         (effectiveIsSelected && variant === 'grid') && "selected-border-rounded"
       )}
       onClick={variant === 'grid' && !isLoading ? onClick : undefined}
@@ -329,7 +329,7 @@ const TaskContent = <TData extends BaseTaskData = BaseTaskData>({
   return (
     <CardContent className={cn(
       "h-full p-0 flex flex-col flex-1",
-      variant === 'grid' ? 'px-3' : ''
+      variant === 'grid' ? 'px-3 pb-2' : ''
     )}>
       {!hideTaskStatus && (
         <div>
@@ -342,7 +342,7 @@ const TaskContent = <TData extends BaseTaskData = BaseTaskData>({
             startedAt={task.startedAt}
             estimatedCompletionAt={task.estimatedCompletionAt}
             status={task.status || 'PENDING'}
-            command={task.command}
+            command={task.command || task.description}
             statusMessage={statusMessage}
             errorMessage={task.errorMessage}
             dispatchStatus={task.dispatchStatus}

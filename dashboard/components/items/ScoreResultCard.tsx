@@ -1,7 +1,7 @@
 import * as React from 'react'
 import Link from 'next/link';
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
-import { MoreHorizontal, X, Square, Columns2, Box, ListChecks, ListCheck, FileText, Target, MessageSquareMore, View, Files } from 'lucide-react'
+import { MoreHorizontal, X, Square, Columns2, Box, ListChecks, ListCheck, FileText, Target, MessageSquareMore, View, Files, AlertTriangle } from 'lucide-react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { cn } from '@/lib/utils'
 import { CardButton } from '@/components/CardButton'
@@ -32,6 +32,7 @@ export interface ScoreResultData {
   accountId: string
   scorecardId: string
   scoreId: string
+  code?: string // HTTP response code (e.g., "200", "404", "500")
   trace?: any | null
   attachments?: string[] | null
   scorecard?: {
@@ -55,6 +56,8 @@ interface ScoreResultCardProps extends React.HTMLAttributes<HTMLDivElement> {
   onClose?: () => void
   skeletonMode?: boolean
   naturalHeight?: boolean
+  errorCode?: string | null
+  errorMessage?: string | null
 }
 
 const ScoreResultCard = React.forwardRef<HTMLDivElement, ScoreResultCardProps>(({ 
@@ -64,6 +67,8 @@ const ScoreResultCard = React.forwardRef<HTMLDivElement, ScoreResultCardProps>((
   onClose,
   skeletonMode = false,
   naturalHeight = false,
+  errorCode = null,
+  errorMessage = null,
   className, 
   ...props 
 }, ref) => {
@@ -74,6 +79,23 @@ const ScoreResultCard = React.forwardRef<HTMLDivElement, ScoreResultCardProps>((
       console.log('[ScoreResultCard] scoreResult.trace:', scoreResult.trace);
     }
   }, [scoreResult]);
+
+  // Extract error information from the score result - same logic as ItemScoreResults
+  const errorInfo = React.useMemo(() => {
+    
+    const hasError = scoreResult.code?.match(/\b([4-5]\d{2})\b/);
+
+    if (!hasError) {
+      return { hasError: false, errorCode: null, errorMessage: null };
+    }
+
+    // Use provided props if available, otherwise use detected values
+    return { 
+      hasError: true, 
+      errorCode: scoreResult.code, 
+      errorMessage: 'Oops!'
+    };
+  }, [scoreResult.code, errorCode, errorMessage]);
 
   const [isNarrowViewport, setIsNarrowViewport] = React.useState(false)
   const [traceData, setTraceData] = React.useState<any>(null)
@@ -270,6 +292,21 @@ const ScoreResultCard = React.forwardRef<HTMLDivElement, ScoreResultCardProps>((
               )}
             </div>
           </div>
+          
+          {/* Error Indicator */}
+          {errorInfo.hasError && (
+            <div className="p-4 rounded-md bg-destructive">
+              <div className="flex items-center gap-2 mb-2">
+                <AlertTriangle className="h-4 w-4 text-attention" />
+                <h3 className="text-sm font-medium text-attention">Error {errorInfo.errorCode}</h3>
+              </div>
+              {errorInfo.errorMessage && (
+                <div className="text-sm text-attention">
+                  {errorInfo.errorMessage}
+                </div>
+              )}
+            </div>
+          )}
           
           {/* Explanation */}
           {scoreResult.explanation && (

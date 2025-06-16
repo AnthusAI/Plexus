@@ -113,7 +113,7 @@ export function ScoreResultTrace({
     <div className={className}>
       {/* Parsed trace nodes */}
       {parsedTraceNodes && parsedTraceNodes.length > 0 && (
-        <div className="bg-background rounded-lg p-3">
+        <div>
           <div className={containerClasses}>
             {parsedTraceNodes.map((node, index) => (
               <ScoreResultNode
@@ -129,8 +129,8 @@ export function ScoreResultTrace({
 
       {/* Fallback for raw trace data */}
       {!parsedTraceNodes && rawTraceData && (
-        <div className="bg-background rounded-lg p-3">
-          <pre className="text-xs whitespace-pre-wrap overflow-x-auto max-h-[400px] overflow-y-auto">
+        <div>
+          <pre className="text-xs whitespace-pre-wrap overflow-x-auto max-h-[400px] overflow-y-auto bg-background rounded-lg p-3">
             {typeof rawTraceData === 'string' 
               ? rawTraceData 
               : JSON.stringify(rawTraceData, null, 2)}
