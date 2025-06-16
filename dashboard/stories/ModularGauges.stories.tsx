@@ -362,4 +362,125 @@ export const ResponsiveBehavior: Story = {
       </div>
     </div>
   ),
+}
+
+// No data state demonstration
+export const NoDataState: Story = {
+  name: '⏳ No Data State (Loading)',
+  render: () => (
+    <div className="space-y-8">
+      <div className="space-y-4">
+        <h1 className="text-3xl font-bold">No Data State</h1>
+        <p className="text-muted-foreground">
+          When data is undefined (loading state), gauges show no needles and no values instead of zeros.
+          This prevents confusion between "no data yet" and "actual zero values".
+        </p>
+      </div>
+
+      <div className="space-y-6">
+        <div className="bg-muted/20 p-4 rounded-lg">
+          <h3 className="font-semibold mb-2">Overall Metrics - No Data</h3>
+          <p className="text-sm text-muted-foreground mb-4">
+            All gauge values undefined - should show no needles, no values
+          </p>
+          <ItemsGaugesRefactored 
+            useRealData={false}
+            overrideData={{
+              itemsPerHour: undefined,
+              itemsAveragePerHour: undefined,
+              itemsPeakHourly: 85, // Keep peaks for gauge scale
+              itemsTotal24h: undefined,
+              scoreResultsPerHour: undefined,
+              scoreResultsAveragePerHour: undefined,
+              scoreResultsPeakHourly: 320,
+              scoreResultsTotal24h: undefined,
+              chartData: [
+                { time: '24h ago', items: 0, scoreResults: 0 },
+                { time: '20h ago', items: 0, scoreResults: 0 },
+                { time: '16h ago', items: 0, scoreResults: 0 },
+                { time: '12h ago', items: 0, scoreResults: 0 },
+                { time: '8h ago', items: 0, scoreResults: 0 },
+                { time: '4h ago', items: 0, scoreResults: 0 },
+                { time: 'now', items: 0, scoreResults: 0 },
+              ],
+              lastUpdated: undefined,
+              hasErrorsLast24h: false,
+              totalErrors24h: 0
+            }}
+          />
+        </div>
+
+        <div className="bg-muted/20 p-4 rounded-lg">
+          <h3 className="font-semibold mb-2">Evaluation Metrics - No Data</h3>
+          <p className="text-sm text-muted-foreground mb-4">
+            All gauge values undefined - should show no needles, no values
+          </p>
+          <EvaluationItemsGauges 
+            useRealData={false}
+            overrideData={{
+              evaluationItemsPerHour: undefined,
+              evaluationItemsAveragePerHour: undefined,
+              evaluationItemsPeakHourly: 25,
+              evaluationItemsTotal24h: undefined,
+              evaluationScoreResultsPerHour: undefined,
+              evaluationScoreResultsAveragePerHour: undefined,
+              evaluationScoreResultsPeakHourly: 85,
+              evaluationScoreResultsTotal24h: undefined,
+              chartData: [
+                { time: '24h ago', items: 0, scoreResults: 0 },
+                { time: '20h ago', items: 0, scoreResults: 0 },
+                { time: '16h ago', items: 0, scoreResults: 0 },
+                { time: '12h ago', items: 0, scoreResults: 0 },
+                { time: '8h ago', items: 0, scoreResults: 0 },
+                { time: '4h ago', items: 0, scoreResults: 0 },
+                { time: 'now', items: 0, scoreResults: 0 },
+              ],
+              lastUpdated: undefined,
+              hasErrorsLast24h: false,
+              totalErrors24h: 0
+            }}
+          />
+        </div>
+
+        <div className="bg-muted/20 p-4 rounded-lg">
+          <h3 className="font-semibold mb-2">Feedback Metrics - No Data (Single Gauge)</h3>
+          <p className="text-sm text-muted-foreground mb-4">
+            Single gauge with undefined value - should show no needle, no value
+          </p>
+          <FeedbackItemsGauges 
+            useRealData={false}
+            overrideData={{
+              feedbackItemsPerHour: undefined,
+              feedbackItemsAveragePerHour: undefined,
+              feedbackItemsPeakHourly: 25,
+              feedbackItemsTotal24h: undefined,
+              chartData: [
+                { time: '24h ago', feedbackItems: 0 },
+                { time: '20h ago', feedbackItems: 0 },
+                { time: '16h ago', feedbackItems: 0 },
+                { time: '12h ago', feedbackItems: 0 },
+                { time: '8h ago', feedbackItems: 0 },
+                { time: '4h ago', feedbackItems: 0 },
+                { time: 'now', feedbackItems: 0 },
+              ],
+              lastUpdated: undefined,
+              hasErrorsLast24h: false,
+              totalErrors24h: 0
+            }}
+          />
+        </div>
+      </div>
+
+      <div className="bg-card p-4 rounded-lg">
+        <h3 className="font-semibold mb-2">🎯 Expected Behavior</h3>
+        <ul className="text-sm text-muted-foreground space-y-1">
+          <li>• Gauges show no needles (no main needle, no average needle)</li>
+          <li>• Gauges show no central value text</li>
+          <li>• Chart totals show "0" (fallback for NumberFlowWrapper)</li>
+          <li>• Gauge backgrounds and segments still visible</li>
+          <li>• No "Last updated" timestamp shown</li>
+        </ul>
+      </div>
+    </div>
+  ),
 } 

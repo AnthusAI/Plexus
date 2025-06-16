@@ -141,21 +141,21 @@ export function ItemsGauges({
   const shouldShowComponent = !useRealData || !error || hasHourlyData
 
   // Determine which data to use - progressive updates for real data
-  const scoreResultsPerHour = useRealData ? (metrics?.scoreResultsPerHour ?? 0) : (overrideScoreResults ?? 0)
-  const itemsPerHour = useRealData ? (metrics?.itemsPerHour ?? 0) : (overrideItems ?? 0)
-  const scoreResultsAveragePerHour = useRealData ? (metrics?.scoreResultsAveragePerHour ?? 0) : (overrideScoreResultsAverage ?? 0)
-  const itemsAveragePerHour = useRealData ? (metrics?.itemsAveragePerHour ?? 0) : (overrideItemsAverage ?? 0)
+  const scoreResultsPerHour = useRealData ? (metrics?.scoreResultsPerHour ?? undefined) : (overrideScoreResults ?? 0)
+  const itemsPerHour = useRealData ? (metrics?.itemsPerHour ?? undefined) : (overrideItems ?? 0)
+  const scoreResultsAveragePerHour = useRealData ? (metrics?.scoreResultsAveragePerHour ?? undefined) : (overrideScoreResultsAverage ?? 0)
+  const itemsAveragePerHour = useRealData ? (metrics?.itemsAveragePerHour ?? undefined) : (overrideItemsAverage ?? 0)
   const itemsPeakHourly = useRealData ? (metrics?.itemsPeakHourly ?? 50) : (overrideItemsPeak ?? Math.max(...(overrideChartData ?? fallbackChartData).map(point => point.items), 50))
   const scoreResultsPeakHourly = useRealData ? (metrics?.scoreResultsPeakHourly ?? 300) : (overrideScoreResultsPeak ?? Math.max(...(overrideChartData ?? fallbackChartData).map(point => point.scoreResults), 300))
-  const itemsTotal24h = useRealData ? (metrics?.itemsTotal24h ?? 0) : (overrideItemsTotal24h ?? itemsAveragePerHour * 24)
-  const scoreResultsTotal24h = useRealData ? (metrics?.scoreResultsTotal24h ?? 0) : (overrideScoreResultsTotal24h ?? scoreResultsAveragePerHour * 24)
+  const itemsTotal24h = useRealData ? (metrics?.itemsTotal24h ?? undefined) : (overrideItemsTotal24h ?? (itemsAveragePerHour ? itemsAveragePerHour * 24 : 0))
+  const scoreResultsTotal24h = useRealData ? (metrics?.scoreResultsTotal24h ?? undefined) : (overrideScoreResultsTotal24h ?? (scoreResultsAveragePerHour ? scoreResultsAveragePerHour * 24 : 0))
   const chartData = useRealData ? (metrics?.chartData ?? fallbackChartData) : (overrideChartData ?? fallbackChartData)
   const hasErrorsLast24h = useRealData ? (metrics?.hasErrorsLast24h ?? false) : (overrideHasErrors ?? false)
   const errorsCount24h = useRealData ? (metrics?.totalErrors24h ?? 0) : (overrideErrorsCount ?? 0)
   
-  // For chart display: show chart if we have any data (including fallback), only show loading on very first load
-  // Since chartData always falls back to fallbackChartData, we should almost always show the chart
-  const shouldShowChart = !isLoading || hasChartData || (chartData && chartData.length > 0)
+  // For chart display: show chart if we have real data or if we're not loading
+  // Only show spinner during initial load when we have no real chart data
+  const shouldShowChart = !isLoading || hasChartData
   
   // Calculate maximum value across all chart areas for consistent Y scale
   const maxChartValue = React.useMemo(() => {
@@ -300,10 +300,7 @@ export function ItemsGauges({
               {!shouldShowChart && useRealData ? (
                 // Loading state for chart - only show on very first load
                 <div className="w-full h-full flex items-center justify-center">
-                  <div className="text-center">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
-                    <p className="text-sm text-muted-foreground">Loading chart data...</p>
-                  </div>
+                  <div className="w-8 h-8 border-4 border-muted border-t-primary rounded-full animate-spin"></div>
                 </div>
               ) : (
                 <div
@@ -401,10 +398,12 @@ export function ItemsGauges({
                       <span className="text-muted-foreground text-xs leading-tight">Items</span>
                     </div>
                     <span className="font-medium text-foreground text-base leading-tight">
-                      <NumberFlowWrapper 
-                        value={hasChartData ? itemsTotal24h : (hasHourlyData ? itemsTotal24h : 0)} 
-                        format={{ useGrouping: false }}
-                      />
+                      {itemsTotal24h !== undefined ? (
+                        <NumberFlowWrapper 
+                          value={itemsTotal24h} 
+                          format={{ useGrouping: false }}
+                        />
+                      ) : null}
                     </span>
                     <span className="text-muted-foreground text-xs leading-tight">per day</span>
                   </div>
@@ -418,10 +417,12 @@ export function ItemsGauges({
                       }}
                     />
                     <span className="font-medium text-foreground text-base leading-tight">
-                      <NumberFlowWrapper 
-                        value={hasChartData ? itemsTotal24h : (hasHourlyData ? itemsTotal24h : 0)} 
-                        format={{ useGrouping: false }}
-                      />
+                      {itemsTotal24h !== undefined ? (
+                        <NumberFlowWrapper 
+                          value={itemsTotal24h} 
+                          format={{ useGrouping: false }}
+                        />
+                      ) : null}
                     </span>
                   </div>
                   <span className="text-muted-foreground text-xs leading-tight @[500px]:hidden @[700px]:block">Items / day</span>
@@ -476,20 +477,24 @@ export function ItemsGauges({
                       />
                     </div>
                     <span className="font-medium text-foreground text-base leading-tight">
-                      <NumberFlowWrapper 
-                        value={hasChartData ? scoreResultsTotal24h : (hasHourlyData ? scoreResultsTotal24h : 0)} 
-                        format={{ useGrouping: false }}
-                      />
+                      {scoreResultsTotal24h !== undefined ? (
+                        <NumberFlowWrapper 
+                          value={scoreResultsTotal24h} 
+                          format={{ useGrouping: false }}
+                        />
+                      ) : null}
                     </span>
                     <span className="text-muted-foreground text-xs leading-tight">per day</span>
                   </div>
                   {/* Default layout: dot beside number, single-line label */}
                   <div className="flex @[500px]:hidden @[700px]:flex items-center gap-1">
                     <span className="font-medium text-foreground text-base leading-tight">
-                      <NumberFlowWrapper 
-                        value={hasChartData ? scoreResultsTotal24h : (hasHourlyData ? scoreResultsTotal24h : 0)} 
-                        format={{ useGrouping: false }}
-                      />
+                      {scoreResultsTotal24h !== undefined ? (
+                        <NumberFlowWrapper 
+                          value={scoreResultsTotal24h} 
+                          format={{ useGrouping: false }}
+                        />
+                      ) : null}
                     </span>
                     <div 
                       className="w-3 h-3 rounded-sm" 
