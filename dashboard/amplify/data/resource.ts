@@ -26,7 +26,7 @@ type EvaluationIndexFields = "accountId" | "scorecardId" | "type" | "accuracy" |
     "scoreGoal" | "metricsExplanation" | "inferences" | "cost";
 type BatchJobIndexFields = "accountId" | "scorecardId" | "type" | "scoreId" | 
     "status" | "modelProvider" | "modelName" | "batchId";
-type ItemIndexFields = "name" | "description" | "accountId" | "evaluationId" | "updatedAt" | "createdAt" | "isEvaluation";
+type ItemIndexFields = "name" | "description" | "accountId" | "evaluationId" | "updatedAt" | "createdAt" | "isEvaluation" | "createdByType";
 type ScoringJobIndexFields = "accountId" | "scorecardId" | "itemId" | "status" | 
     "scoreId" | "evaluationId" | "startedAt" | "completedAt" | "errorMessage" | "updatedAt" | "createdAt";
 type ScoreResultIndexFields = "accountId" | "scorecardId" | "itemId" | 
@@ -309,6 +309,7 @@ const schema = a.schema({
             updatedAt: a.datetime(),
             createdAt: a.datetime(),
             isEvaluation: a.boolean().required(),
+            createdByType: a.string(), // "evaluation" or "prediction" - tracks original creation context
             identifiers: a.json(),
             feedbackItems: a.hasMany('FeedbackItem', 'itemId'),
             attachedFiles: a.string().array(),
@@ -330,6 +331,8 @@ const schema = a.schema({
             idx("scoreId").sortKeys(["createdAt"]),
             // Composite GSI for accountId+externalId to enforce uniqueness within an account
             idx("accountId").sortKeys(["externalId"]).name("byAccountAndExternalId"),
+            // GSI for efficient querying by creation type (evaluation vs prediction)
+            idx("accountId").sortKeys(["createdByType", "createdAt"]).name("byAccountCreatedByTypeAndCreatedAt"),
         ]),
 
     Identifier: a
