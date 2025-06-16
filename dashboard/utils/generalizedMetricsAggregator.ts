@@ -25,6 +25,7 @@ export interface MetricsDataSource {
   scorecardId?: string
   scoreId?: string
   scoreResultType?: string // For scoreResults: "prediction", "evaluation", etc.
+  createdByType?: string // For items: "evaluation", "prediction", etc.
   // Cache configuration
   cacheKey?: string
   cacheTTL?: number // TTL in milliseconds, default 5 minutes
@@ -60,6 +61,7 @@ class SessionStorageCache {
       source.scorecardId || 'all',
       source.scoreId || 'all',
       source.scoreResultType || 'all',
+      source.createdByType || 'all',
       source.startTime?.toISOString() || 'all',
       source.endTime?.toISOString() || 'all'
     ]
@@ -280,32 +282,69 @@ export class GeneralizedMetricsAggregator {
     const startTime = source.startTime?.toISOString()
     const endTime = source.endTime?.toISOString()
 
-    const query = `
-      query GetItemsForMetrics($accountId: String!, $startTime: String!, $endTime: String!, $nextToken: String) {
-        listItemByAccountIdAndCreatedAt(
-          accountId: $accountId,
-          createdAt: { between: [$startTime, $endTime] },
-          limit: 1000,
-          nextToken: $nextToken
-        ) {
-          items {
-            id
-            createdAt
+    let query: string
+    let variables: any
+
+    if (source.createdByType) {
+      // Use the new GSI to filter by createdByType
+      query = `
+        query GetItemsForMetricsByCreatedByType($accountId: String!, $createdByType: String!, $startTime: String!, $endTime: String!, $nextToken: String) {
+          listItemByAccountCreatedByTypeAndCreatedAt(
+            accountId: $accountId,
+            createdByTypeCreatedAt: {
+              createdByType: { eq: $createdByType },
+              createdAt: { between: [$startTime, $endTime] }
+            },
+            limit: 1000,
+            nextToken: $nextToken
+          ) {
+            items {
+              id
+              createdAt
+              createdByType
+            }
+            nextToken
           }
-          nextToken
         }
-      }
-    `;
-    
-    const variables = {
-      accountId: source.accountId,
-      startTime,
-      endTime,
-      nextToken
-    };
+      `;
+      
+      variables = {
+        accountId: source.accountId,
+        createdByType: source.createdByType,
+        startTime,
+        endTime,
+        nextToken
+      };
+    } else {
+      // Use the original query for all items
+      query = `
+        query GetItemsForMetrics($accountId: String!, $startTime: String!, $endTime: String!, $nextToken: String) {
+          listItemByAccountIdAndCreatedAt(
+            accountId: $accountId,
+            createdAt: { between: [$startTime, $endTime] },
+            limit: 1000,
+            nextToken: $nextToken
+          ) {
+            items {
+              id
+              createdAt
+              createdByType
+            }
+            nextToken
+          }
+        }
+      `;
+      
+      variables = {
+        accountId: source.accountId,
+        startTime,
+        endTime,
+        nextToken
+      };
+    }
 
     const response = await this.performRequestWithRetry(query, variables);
-    const result = response.data.listItemByAccountIdAndCreatedAt as { items: Array<any>; nextToken?: string };
+    const result = Object.values(response.data)[0] as { items: Array<any>; nextToken?: string };
     const records = result.items || [];
     
     return { records, nextToken: result.nextToken || null };
@@ -504,7 +543,13 @@ export class GeneralizedMetricsAggregator {
     const hourlyBuckets = Array.from({ length: 24 }, () => 0);
     const timestampField = source.type === 'items' ? 'createdAt' : 'updatedAt';
 
-    records.forEach(record => {
+    // Apply the same filtering logic as processRecords to ensure consistency
+    let filteredRecords = records;
+    if (source.type === 'scoreResults' && source.scoreResultType) {
+        filteredRecords = records.filter(record => record.type === source.scoreResultType);
+    }
+
+    filteredRecords.forEach(record => {
         const recordDate = new Date(record[timestampField]);
         const hoursAgo = Math.floor((now.getTime() - recordDate.getTime()) / (1000 * 60 * 60));
         if (hoursAgo >= 0 && hoursAgo < 24) {

@@ -717,7 +717,8 @@ def create_error(account: Optional[str], scorecard: Optional[str], score_id: Opt
                 'description': 'Test item created for error ScoreResult testing (delete when done)',
                 'externalId': f'test-error-item-{item_id[:8]}',
                 'createdAt': datetime.now(timezone.utc).isoformat(),
-                'updatedAt': datetime.now(timezone.utc).isoformat()
+                'updatedAt': datetime.now(timezone.utc).isoformat(),
+                'createdByType': 'prediction'
             }
             
             response = client.execute(create_item_mutation, {'input': item_input})

@@ -34,22 +34,22 @@ const evaluationGaugesConfig: BaseGaugesConfig = {
     {
       dataKey: 'items',
       label: 'Evaluation Items',
-      color: 'hsl(var(--chart-1))',
+      color: '#3b82f6',
     },
     {
       dataKey: 'scoreResults',
       label: 'Evaluation Score Results',
-      color: 'hsl(var(--chart-2))',
+      color: '#a855f7',
     }
   ],
   chartConfig: {
     items: {
       label: 'Evaluation Items',
-      color: 'hsl(var(--chart-1))',
+      color: 'hsl(var(--primary))',
     },
     scoreResults: {
       label: 'Evaluation Score Results', 
-      color: 'hsl(var(--chart-2))',
+      color: 'hsl(var(--secondary))',
     },
   },
   gridCols: {
@@ -91,6 +91,7 @@ export function EvaluationItemsGauges({
   
   // Transform the metrics data to match BaseGaugesData interface
   const transformedData: BaseGaugesData | null = metrics ? {
+    // Items metrics now available with createdByType filtering
     itemsPerHour: metrics.itemsPerHour,
     itemsAveragePerHour: metrics.itemsAveragePerHour,
     itemsPeakHourly: metrics.itemsPeakHourly,
