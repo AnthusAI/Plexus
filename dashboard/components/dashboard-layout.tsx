@@ -250,6 +250,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                 (item.name === "Evaluations" && pathname.startsWith(item.path)) ||
                 (item.name === "Scorecards" && pathname.startsWith(item.path)) ||
                 (item.name === "Reports" && pathname.startsWith(item.path)) ||
+                (item.name === "Sources" && pathname.startsWith(item.path)) ||
                 (item.name === "Activity" && isActivityRoute))
               
               const isLoading = loadingRoute === item.path
