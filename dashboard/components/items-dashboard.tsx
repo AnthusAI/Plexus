@@ -643,7 +643,7 @@ function ItemsDashboardInner() {
   const [sampleCount, setSampleCount] = useState(100);
   const [scoreResults, setScoreResults] = useState(sampleScoreResults);
   const [leftPanelWidth, setLeftPanelWidth] = useState(50);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [nextToken, setNextToken] = useState<string | null>(null);
   const [hasInitiallyLoaded, setHasInitiallyLoaded] = useState(false);
@@ -681,6 +681,9 @@ function ItemsDashboardInner() {
   // Score result selection state
   const [selectedScoreResult, setSelectedScoreResult] = useState<ScoreResultData | null>(null);
   const previouslyHadScoreResult = useRef<boolean>(false);
+  
+  // Track whether we should animate the left panel (only after user interactions, not initial load)
+  const [shouldAnimateLeftPanel, setShouldAnimateLeftPanel] = useState(false);
   
   // Handler for score result selection
   const handleScoreResultSelect = useCallback((scoreResult: any) => {
@@ -1452,6 +1455,7 @@ function ItemsDashboardInner() {
       const itemIdFromUrl = pathMatch ? pathMatch[1] : null
       
       if (itemIdFromUrl !== selectedItem) {
+        setShouldAnimateLeftPanel(true); // Enable animation for browser navigation
         setSelectedItem(itemIdFromUrl)
         if (!itemIdFromUrl) {
           setIsFullWidth(false)
@@ -2508,6 +2512,9 @@ function ItemsDashboardInner() {
       setItems([]); // Ensure items are cleared
       setNextToken(null);
       setIsLoading(false); // Stop loading indicator
+    } else if (isLoadingAccounts) {
+      // While accounts are loading, keep the loading state
+      setIsLoading(true);
     }
   }, [fetchItems, selectedAccount?.id, isLoadingAccounts]);
 
@@ -2934,8 +2941,12 @@ function ItemsDashboardInner() {
           } as ItemData}
           getBadgeVariant={getBadgeVariant}
           isFullWidth={isFullWidth}
-          onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
+          onToggleFullWidth={() => {
+            setShouldAnimateLeftPanel(true); // Enable animation when toggling full width
+            setIsFullWidth(!isFullWidth)
+          }}
           onClose={() => {
+            setShouldAnimateLeftPanel(true); // Enable animation when closing
             setIsFullWidth(false);
             window.history.pushState({}, '', `/lab/items`)
             setSelectedItem(null)
@@ -2971,8 +2982,12 @@ function ItemsDashboardInner() {
             } as ItemData}
             getBadgeVariant={getBadgeVariant}
             isFullWidth={isFullWidth}
-            onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
+            onToggleFullWidth={() => {
+              setShouldAnimateLeftPanel(true); // Enable animation when toggling full width
+              setIsFullWidth(!isFullWidth)
+            }}
             onClose={() => {
+              setShouldAnimateLeftPanel(true); // Enable animation when closing
               setIsFullWidth(false);
               window.history.pushState({}, '', `/lab/items`)
               setSelectedItem(null)
@@ -3026,8 +3041,12 @@ function ItemsDashboardInner() {
         item={selectedItemWithCount as ItemData}
         getBadgeVariant={getBadgeVariant}
         isFullWidth={isFullWidth}
-        onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
+        onToggleFullWidth={() => {
+          setShouldAnimateLeftPanel(true); // Enable animation when toggling full width
+          setIsFullWidth(!isFullWidth)
+        }}
         onClose={() => {
+          setShouldAnimateLeftPanel(true); // Enable animation when closing
           setIsFullWidth(false);
           // Use window.history to navigate back to grid view without remount
           window.history.pushState({}, '', `/lab/items`)
@@ -3265,6 +3284,7 @@ function ItemsDashboardInner() {
   }
 
   const handleErrorClick = () => {
+    setShouldAnimateLeftPanel(true); // Enable animation when switching to error filter
     // Clear other filters first
     setSelectedScorecard(null);
     setSelectedScore(null);
@@ -3277,6 +3297,9 @@ function ItemsDashboardInner() {
   };
 
   const handleItemClick = (itemId: string) => {
+    // Enable animations after first user interaction
+    setShouldAnimateLeftPanel(true);
+    
     // Use window.history.pushState for truly shallow navigation that won't cause remount
     window.history.pushState({}, '', `/lab/items/${itemId}`)
     // Manually update the selected item state
@@ -3498,7 +3521,7 @@ function ItemsDashboardInner() {
                   ? `${leftPanelWidth}%`
                   : '100%'
             }}
-            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+            transition={shouldAnimateLeftPanel ? { type: 'spring', stiffness: 300, damping: 30 } : { duration: 0 }}
             style={{
               flexShrink: 0,
               overflow: selectedItem && !isNarrowViewport && (isFullWidth || selectedScoreResult) ? 'hidden' : 'auto'
