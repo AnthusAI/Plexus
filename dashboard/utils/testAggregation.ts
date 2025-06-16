@@ -51,6 +51,7 @@ async function testAggregation() {
         endTime,
         scorecardId,
         scoreId,
+        undefined, // type parameter
         (progress) => {
           console.log(`   Progress: Bucket ${progress.bucketNumber}/${progress.totalBuckets} - Count: ${progress.bucketMetrics.count}`);
         }
