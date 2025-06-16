@@ -286,13 +286,13 @@ export function ItemsGauges({
           - @[900px]:grid-cols-5 (≥ 900px): spans 3 remaining columns (col-span-3) 
           - @[1100px]:grid-cols-6 (≥ 1100px): spans 4 remaining columns (col-span-4)
         */}
-        <div className="col-span-2 @[500px]:col-span-1 @[700px]:col-span-2 @[900px]:col-span-3 @[1100px]:col-span-4 bg-card rounded-lg p-4 h-48 flex flex-col relative">
-          <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-10">
-            <h3 className="text-sm font-medium text-muted-foreground">Items, Last 24 Hours</h3>
+        <div className="col-span-2 @[500px]:col-span-1 @[700px]:col-span-2 @[900px]:col-span-3 @[1100px]:col-span-4 bg-card rounded-lg p-4 h-48 flex flex-col">
+          <div className="flex-shrink-0 mb-3">
+            <h3 className="text-sm font-medium text-foreground">Items, Last 24 Hours</h3>
           </div>
           <div className="flex flex-col h-full min-w-0">
             {/* Chart area - responsive height based on width - taller when wide */}
-            <div className="w-full flex-[4] min-h-0 min-w-0 mb-1 @[700px]:flex-[5] @[700px]:mb-0 mt-6">
+            <div className="w-full flex-[3] min-h-0 min-w-0 mb-1 @[700px]:flex-[4] @[700px]:mb-0">
               {!hasChartData && useRealData ? (
                 // Loading state for chart
                 <div className="w-full h-full flex items-center justify-center">

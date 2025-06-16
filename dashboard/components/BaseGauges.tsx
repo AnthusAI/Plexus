@@ -168,6 +168,8 @@ interface BaseGaugesProps {
   data: BaseGaugesData | null
   isLoading: boolean
   error: string | null
+  // Chart title
+  title?: string
   // Override props for Storybook/testing
   overrideData?: Partial<BaseGaugesData>
   // Control whether to use real data or override props
@@ -184,6 +186,7 @@ export function BaseGauges({
   data,
   isLoading,
   error,
+  title,
   overrideData,
   useRealData = true,
   disableEmergenceAnimation = false,
@@ -229,11 +232,106 @@ export function BaseGauges({
   // For real data usage, show error state only if there's a persistent error with no data after loading
   // This prevents flickering during the loading process
   if (useRealData && error && !hasGaugeData && !isLoading && !data) {
+    // Create error state that maintains the same layout dimensions as the normal component
+    const isFlexLayout = config.layout === 'flex'
+    
+    // Generate responsive grid classes (only for grid layout)
+    const gridClasses = (!isFlexLayout && config.gridCols) ? [
+      `grid-cols-${config.gridCols.base}`,
+      `@[500px]:grid-cols-${config.gridCols.sm}`,
+      `@[700px]:grid-cols-${config.gridCols.md}`,
+      `@[900px]:grid-cols-${config.gridCols.lg}`,
+      `@[1100px]:grid-cols-${config.gridCols.xl}`
+    ].join(' ') : ''
+
+    // Generate chart span classes (only for grid layout)
+    const chartSpanClasses = (!isFlexLayout && config.chartSpan) ? [
+      `col-span-${config.chartSpan.base}`,
+      `@[500px]:col-span-${config.chartSpan.sm}`,
+      `@[700px]:col-span-${config.chartSpan.md}`,
+      `@[900px]:col-span-${config.chartSpan.lg}`,
+      `@[1100px]:col-span-${config.chartSpan.xl}`
+    ].join(' ') : ''
+
     return (
-      <div className={cn("w-full", className)}>
-        <div className="text-center p-8">
-          <p className="text-sm text-muted-foreground mb-2">Unable to load metrics</p>
-          <p className="text-xs text-muted-foreground">{error}</p>
+      <div className={cn("w-full overflow-visible", className)}>
+        <div>
+          {isFlexLayout ? (
+            // Flex layout error state
+            <div className="@container flex gap-3 items-start">
+              {/* Error gauge placeholders */}
+              {config.gauges.map((gaugeConfig) => (
+                <div 
+                  key={gaugeConfig.key} 
+                  className="bg-card rounded-lg h-48 overflow-visible flex items-center justify-center flex-shrink-0 responsive-gauge-width"
+                >
+                  <div className="w-full h-full flex items-center justify-center">
+                    <div className="text-center p-4">
+                      <AlertTriangle className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                      <p className="text-sm text-muted-foreground mb-1">Unable to load</p>
+                      <p className="text-xs text-muted-foreground">{gaugeConfig.title}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {/* Error chart placeholder */}
+              <div className="bg-card rounded-lg p-4 h-48 flex flex-col flex-grow min-w-0 relative">
+                {title && (
+                  <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-10">
+                    <h3 className="text-sm font-medium text-muted-foreground">{title}</h3>
+                  </div>
+                )}
+                <div className="flex flex-col h-full min-w-0 items-center justify-center">
+                  <AlertTriangle className="h-8 w-8 text-muted-foreground mb-2" />
+                  <p className="text-sm text-muted-foreground mb-1">Unable to load chart</p>
+                  <p className="text-xs text-muted-foreground text-center">Metrics temporarily unavailable</p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            // Grid layout error state
+            <div className={cn("grid gap-3 items-start", gridClasses)}>
+              
+              {/* Error gauge placeholders */}
+              {config.gauges.map((gaugeConfig) => {
+                // Generate gauge column span classes if specified
+                const gaugeSpanClasses = gaugeConfig.colSpan ? [
+                  gaugeConfig.colSpan.base ? `col-span-${gaugeConfig.colSpan.base}` : '',
+                  gaugeConfig.colSpan.sm ? `@[500px]:col-span-${gaugeConfig.colSpan.sm}` : '',
+                  gaugeConfig.colSpan.md ? `@[700px]:col-span-${gaugeConfig.colSpan.md}` : '',
+                  gaugeConfig.colSpan.lg ? `@[900px]:col-span-${gaugeConfig.colSpan.lg}` : '',
+                  gaugeConfig.colSpan.xl ? `@[1100px]:col-span-${gaugeConfig.colSpan.xl}` : ''
+                ].filter(Boolean).join(' ') : ''
+
+                return (
+                  <div key={gaugeConfig.key} className={cn("bg-card rounded-lg h-48 overflow-visible flex items-center justify-center", gaugeSpanClasses)}>
+                    <div className="w-full h-full flex items-center justify-center">
+                      <div className="text-center p-4">
+                        <AlertTriangle className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                        <p className="text-sm text-muted-foreground mb-1">Unable to load</p>
+                        <p className="text-xs text-muted-foreground">{gaugeConfig.title}</p>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+
+              {/* Error chart placeholder */}
+              <div className={cn("bg-card rounded-lg p-4 h-48 flex flex-col relative", chartSpanClasses)}>
+                {title && (
+                  <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-10">
+                    <h3 className="text-sm font-medium text-muted-foreground">{title}</h3>
+                  </div>
+                )}
+                <div className="flex flex-col h-full min-w-0 items-center justify-center">
+                  <AlertTriangle className="h-8 w-8 text-muted-foreground mb-2" />
+                  <p className="text-sm text-muted-foreground mb-1">Unable to load chart</p>
+                  <p className="text-xs text-muted-foreground text-center">Metrics temporarily unavailable</p>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     )
@@ -358,9 +456,14 @@ export function BaseGauges({
                 })}
 
                 {/* Chart component - greedy */}
-                <div className="bg-card rounded-lg p-4 h-48 flex flex-col flex-grow min-w-0">
+                <div className="bg-card rounded-lg p-4 h-48 flex flex-col flex-grow min-w-0 relative">
+                  {title && (
+                    <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-10">
+                      <h3 className="text-sm font-medium text-muted-foreground">{title}</h3>
+                    </div>
+                  )}
                   <div className="flex flex-col h-full min-w-0">
-                    <div className="w-full flex-[3] min-h-0 min-w-0 mb-1 @[700px]:flex-[4] @[700px]:mb-0">
+                    <div className="w-full flex-[4] min-h-0 min-w-0 mb-1 @[700px]:flex-[5] @[700px]:mb-0 mt-6">
                       {!hasChartData && useRealData ? (
                         // Loading state for chart
                         <div className="w-full h-full flex items-center justify-center">
@@ -613,9 +716,14 @@ export function BaseGauges({
               })}
 
               {/* Chart component */}
-              <div className={cn("bg-card rounded-lg p-4 h-48 flex flex-col", chartSpanClasses)}>
+              <div className={cn("bg-card rounded-lg p-4 h-48 flex flex-col relative", chartSpanClasses)}>
+                {title && (
+                  <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-10">
+                    <h3 className="text-sm font-medium text-muted-foreground">{title}</h3>
+                  </div>
+                )}
                 <div className="flex flex-col h-full min-w-0">
-                  <div className="w-full flex-[3] min-h-0 min-w-0 mb-1 @[700px]:flex-[4] @[700px]:mb-0">
+                  <div className="w-full flex-[4] min-h-0 min-w-0 mb-1 @[700px]:flex-[5] @[700px]:mb-0 mt-6">
                     {!hasChartData && useRealData ? (
                       // Loading state for chart
                       <div className="w-full h-full flex items-center justify-center">

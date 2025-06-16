@@ -17,7 +17,7 @@ import { graphqlRequest } from './amplify-client'
 
 // Base interfaces
 export interface MetricsDataSource {
-  type: 'items' | 'scoreResults' | 'feedbackItems'
+  type: 'items' | 'scoreResults' | 'feedbackItems' | 'feedbackItemsByItemCreation'
   accountId: string
   startTime?: Date
   endTime?: Date
@@ -120,9 +120,10 @@ class SessionStorageCache {
 // Main aggregator class
 export class GeneralizedMetricsAggregator {
   private cache = new SessionStorageCache()
+  private pendingRequests = new Map<string, Promise<AggregatedData>>()
 
   /**
-   * Get aggregated metrics for a data source
+   * Get aggregated metrics for a data source with request deduplication
    */
   async getMetrics(source: MetricsDataSource): Promise<AggregatedData> {
     const cacheKey = this.cache.generateKey(source)
@@ -133,13 +134,28 @@ export class GeneralizedMetricsAggregator {
       return cached
     }
 
-    // Fetch fresh data
-    const data = await this.fetchRawData(source)
-    
-    // Cache the result
-    this.cache.set(cacheKey, data, source.cacheTTL)
-    
-    return data
+    // Check if there's already a pending request for this exact data
+    const existingRequest = this.pendingRequests.get(cacheKey)
+    if (existingRequest) {
+      console.log('🔄 Deduplicating concurrent request for:', cacheKey.substring(0, 100))
+      return existingRequest
+    }
+
+    // Create new request and store it
+    const requestPromise = this.fetchRawData(source).then(data => {
+      // Cache the result
+      this.cache.set(cacheKey, data, source.cacheTTL)
+      // Remove from pending requests
+      this.pendingRequests.delete(cacheKey)
+      return data
+    }).catch(error => {
+      // Remove from pending requests on error too
+      this.pendingRequests.delete(cacheKey)
+      throw error
+    })
+
+    this.pendingRequests.set(cacheKey, requestPromise)
+    return requestPromise
   }
 
   /**
@@ -233,6 +249,8 @@ export class GeneralizedMetricsAggregator {
         return this.fetchScoreResultsData(source, nextToken);
       case 'feedbackItems':
         return this.fetchFeedbackItemsData(source, nextToken);
+      case 'feedbackItemsByItemCreation':
+        return this.fetchFeedbackItemsByItemCreationData(source, nextToken);
       default:
         // Ensure this is unreachable, but satisfies TypeScript
         const exhaustiveCheck: never = source.type;
@@ -242,8 +260,15 @@ export class GeneralizedMetricsAggregator {
 
   private processRecords(source: MetricsDataSource, records: any[]): AggregatedData {
     let processedRecords = records;
+    
+    // Filter by score result type
     if (source.type === 'scoreResults' && source.scoreResultType) {
         processedRecords = records.filter(record => record.type === source.scoreResultType);
+    }
+    
+    // Filter by item creation type (in-memory filtering)
+    if (source.type === 'items' && source.createdByType) {
+        processedRecords = processedRecords.filter(record => record.createdByType === source.createdByType);
     }
 
     const count = processedRecords.length;
@@ -257,7 +282,7 @@ export class GeneralizedMetricsAggregator {
         
         sum = numericValues.reduce((total, value) => total + value, 0);
         avg = numericValues.length > 0 ? sum / numericValues.length : 0;
-    } else if (source.type === 'feedbackItems') {
+    } else if (source.type === 'feedbackItems' || source.type === 'feedbackItemsByItemCreation') {
         const agreementItems = processedRecords.filter(item => item.isAgreement === true);
         sum = agreementItems.length;
         avg = count > 0 ? sum / count : 0;
@@ -285,37 +310,8 @@ export class GeneralizedMetricsAggregator {
     let query: string
     let variables: any
 
-    if (source.createdByType) {
-      // Use the new GSI to filter by createdByType
-      query = `
-        query GetItemsForMetricsByCreatedByType($accountId: String!, $createdByType: String!, $startTime: String!, $endTime: String!, $nextToken: String) {
-          listItemByAccountCreatedByTypeAndCreatedAt(
-            accountId: $accountId,
-            createdByTypeCreatedAt: {
-              createdByType: { eq: $createdByType },
-              createdAt: { between: [$startTime, $endTime] }
-            },
-            limit: 1000,
-            nextToken: $nextToken
-          ) {
-            items {
-              id
-              createdAt
-              createdByType
-            }
-            nextToken
-          }
-        }
-      `;
-      
-      variables = {
-        accountId: source.accountId,
-        createdByType: source.createdByType,
-        startTime,
-        endTime,
-        nextToken
-      };
-    } else {
+    // Always use the same query as ItemsGauges - we'll filter in memory during processing
+    {
       // Use the original query for all items
       query = `
         query GetItemsForMetrics($accountId: String!, $startTime: String!, $endTime: String!, $nextToken: String) {
@@ -344,7 +340,7 @@ export class GeneralizedMetricsAggregator {
     }
 
     const response = await this.performRequestWithRetry(query, variables);
-    const result = Object.values(response.data)[0] as { items: Array<any>; nextToken?: string };
+    const result = response.data.listItemByAccountIdAndCreatedAt;
     const records = result.items || [];
     
     return { records, nextToken: result.nextToken || null };
@@ -530,6 +526,77 @@ export class GeneralizedMetricsAggregator {
   }
 
   /**
+   * Fetch FeedbackItems associated with Items created in a specific time range
+   */
+  private async fetchFeedbackItemsByItemCreationData(source: MetricsDataSource, nextToken: string | null): Promise<{ records: any[], nextToken: string | null }> {
+    // Step 1: Get Items created in the time range (with optional createdByType filter)
+    const itemsSource: MetricsDataSource = {
+      type: 'items',
+      accountId: source.accountId,
+      startTime: source.startTime,
+      endTime: source.endTime,
+      createdByType: source.createdByType,
+      scorecardId: source.scorecardId,
+      scoreId: source.scoreId
+    }
+
+    // Fetch all items in the time range (this handles pagination internally)
+    const itemsData = await this.fetchRawData(itemsSource)
+    const itemIds = itemsData.items.map(item => item.id)
+
+    if (itemIds.length === 0) {
+      return { records: [], nextToken: null }
+    }
+
+    // Step 2: Query FeedbackItems by itemId for the items we found
+    // Note: We'll need to batch this if there are many items
+    const batchSize = 100 // Reasonable batch size for GraphQL queries
+    let allFeedbackItems: any[] = []
+
+    for (let i = 0; i < itemIds.length; i += batchSize) {
+      const batchItemIds = itemIds.slice(i, i + batchSize)
+      
+      const query = `
+        query GetFeedbackItemsByItemIds($itemIds: [String!]!) {
+          ${batchItemIds.map((itemId, index) => `
+            batch${index}: listFeedbackItemByItemId(itemId: "${itemId}", limit: 1000) {
+              items {
+                id
+                updatedAt
+                editedAt
+                isAgreement
+                initialAnswerValue
+                finalAnswerValue
+                scorecardId
+                scoreId
+                itemId
+              }
+            }
+          `).join('\n')}
+        }
+      `
+
+      const variables = { itemIds: batchItemIds }
+      
+      try {
+        const response = await this.performRequestWithRetry(query, variables)
+        
+        // Collect results from all batch queries
+        Object.keys(response.data).forEach(key => {
+          if (key.startsWith('batch') && response.data[key]?.items) {
+            allFeedbackItems = allFeedbackItems.concat(response.data[key].items)
+          }
+        })
+      } catch (error) {
+        console.error('Error fetching feedback items by item creation:', error)
+        // Continue with partial results rather than failing completely
+      }
+    }
+
+    return { records: allFeedbackItems, nextToken: null }
+  }
+
+  /**
    * Generate chart data from a pre-fetched list of records.
    * This avoids making 24 extra API calls for the chart.
    */
@@ -609,10 +676,16 @@ export class GeneralizedMetricsAggregator {
     this.cache.clear()
   }
 
+  // Clear cache on initialization to handle schema changes
+  constructor() {
+    // Clear cache when the aggregator is instantiated to handle any schema changes
+    this.cache.clear()
+  }
+
   /**
    * Helper to perform a GraphQL request with a retry mechanism for throttling.
    */
-  private async performRequestWithRetry(query: string, variables: any, maxRetries = 3, initialDelay = 300): Promise<any> {
+  private async performRequestWithRetry(query: string, variables: any, maxRetries = 5, initialDelay = 1000): Promise<any> {
     let attempt = 0;
     while (attempt < maxRetries) {
         try {

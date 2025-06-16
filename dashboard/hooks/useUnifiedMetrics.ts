@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useAccount } from '@/app/contexts/AccountContext'
 import { 
   generalizedMetricsAggregator, 
@@ -109,15 +109,16 @@ export function useUnifiedMetrics(config: MetricsConfig): UseUnifiedMetricsResul
     const scoreResultsResult = results.scoreResults
     const feedbackResult = results.feedback
 
-    // Calculate items metrics (from items source or fallback to scoreResults)
-    const itemsMetrics = itemsResult || scoreResultsResult
+    // Calculate items metrics (from items source or fallback to scoreResults or feedback)
+    const itemsMetrics = itemsResult || scoreResultsResult || feedbackResult
     const itemsPerHour = itemsMetrics?.hourly.count || 0
     const itemsTotal24h = itemsMetrics?.total24h.count || 0
     const itemsAveragePerHour = itemsTotal24h > 0 ? Math.round(itemsTotal24h / 24) : 0
 
-    // Calculate score results metrics
-    const scoreResultsPerHour = scoreResultsResult?.hourly.count || 0
-    const scoreResultsTotal24h = scoreResultsResult?.total24h.count || 0
+    // Calculate score results metrics (from scoreResults or fallback to feedback for feedback-only hooks)
+    const scoreResultsMetrics = scoreResultsResult || feedbackResult
+    const scoreResultsPerHour = scoreResultsMetrics?.hourly.count || 0
+    const scoreResultsTotal24h = scoreResultsMetrics?.total24h.count || 0
     const scoreResultsAveragePerHour = scoreResultsTotal24h > 0 ? Math.round(scoreResultsTotal24h / 24) : 0
 
     // Generate combined chart data
@@ -202,8 +203,8 @@ function generateCombinedChartData(results: { [key: string]: MetricsResult }): A
   const scoreResultsResult = results.scoreResults
   const feedbackResult = results.feedback
 
-  // Use the longest chart data as the base
-  const baseChartData = itemsResult?.chartData || scoreResultsResult?.chartData || []
+  // Use the longest chart data as the base, including feedback data
+  const baseChartData = itemsResult?.chartData || scoreResultsResult?.chartData || feedbackResult?.chartData || []
   
   return baseChartData.map((point: any, index: number) => {
     // Get corresponding data points from other sources
@@ -247,70 +248,78 @@ function calculatePeakValues(chartData: Array<{ items: number; scoreResults: num
  * Hook for all items and score results (no filtering) - backward compatible
  */
 export function useAllItemsMetrics(): UseUnifiedMetricsResult {
-  return useUnifiedMetrics({
+  const config = useMemo(() => ({
     sources: {
       items: {
-        type: 'items',
+        type: 'items' as const,
         accountId: '', // Will be filled by the hook
       },
       scoreResults: {
-        type: 'scoreResults',
+        type: 'scoreResults' as const,
         accountId: '', // Will be filled by the hook
       }
     }
-  })
+  }), [])
+
+  return useUnifiedMetrics(config)
 }
 
 /**
  * Hook for prediction items and score results
  */
 export function usePredictionMetrics(): UseUnifiedMetricsResult {
-  return useUnifiedMetrics({
+  const config = useMemo(() => ({
     sources: {
       items: {
-        type: 'items',
+        type: 'items' as const,
         createdByType: 'prediction',
         accountId: '', // Will be filled by the hook
       },
       scoreResults: {
-        type: 'scoreResults',
+        type: 'scoreResults' as const,
         scoreResultType: 'prediction',
         accountId: '', // Will be filled by the hook
       }
     }
-  })
+  }), [])
+
+  return useUnifiedMetrics(config)
 }
 
 /**
  * Hook for evaluation items and score results
  */
 export function useEvaluationMetrics(): UseUnifiedMetricsResult {
-  return useUnifiedMetrics({
+  const config = useMemo(() => ({
     sources: {
       items: {
-        type: 'items',
+        type: 'items' as const,
         createdByType: 'evaluation',
         accountId: '', // Will be filled by the hook
       },
       scoreResults: {
-        type: 'scoreResults',
+        type: 'scoreResults' as const,
         scoreResultType: 'evaluation',
         accountId: '', // Will be filled by the hook
       }
     }
-  })
+  }), [])
+
+  return useUnifiedMetrics(config)
 }
 
 /**
  * Hook for feedback items
  */
 export function useFeedbackMetrics(): UseUnifiedMetricsResult {
-  return useUnifiedMetrics({
+  const config = useMemo(() => ({
     sources: {
       feedback: {
-        type: 'feedbackItems',
+        type: 'feedbackItems' as const,
         accountId: '', // Will be filled by the hook
       }
     }
-  })
+  }), [])
+
+  return useUnifiedMetrics(config)
 } 

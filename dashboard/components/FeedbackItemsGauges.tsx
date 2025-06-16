@@ -2,6 +2,7 @@
 
 import React from 'react'
 import { BaseGauges, BaseGaugesConfig, BaseGaugesData } from './BaseGauges'
+import { useFeedbackMetrics } from '../hooks/useUnifiedMetrics'
 
 // Configuration for feedback-specific gauges (single gauge example)  
 const feedbackGaugesConfig: BaseGaugesConfig = {
@@ -68,37 +69,37 @@ export function FeedbackItemsGauges({
   disableEmergenceAnimation = false,
   onErrorClick
 }: FeedbackItemsGaugesProps) {
-  // For now, we'll use mock data since we don't have a feedback-specific hook yet
-  const isLoading = false
-  const error = null
-  
-  // Mock data for demonstration
-  const mockData: BaseGaugesData = {
-    feedbackItemsPerHour: 12,
-    feedbackItemsAveragePerHour: 8,
-    feedbackItemsPeakHourly: 25,
-    feedbackItemsTotal24h: 192,
-    chartData: [
-      { time: '24h ago', feedbackItems: 5 },
-      { time: '20h ago', feedbackItems: 8 },
-      { time: '16h ago', feedbackItems: 12 },
-      { time: '12h ago', feedbackItems: 15 },
-      { time: '8h ago', feedbackItems: 10 },
-      { time: '4h ago', feedbackItems: 18 },
-      { time: 'now', feedbackItems: 12 },
-    ],
-    lastUpdated: new Date(),
-    hasErrorsLast24h: false,
-    totalErrors24h: 0
-  }
+  // Use real feedback metrics
+  const { 
+    metrics: metricsData, 
+    isLoading, 
+    error 
+  } = useFeedbackMetrics()
+
+  // Transform metrics data to BaseGaugesData format
+  // For feedback metrics, we use the scoreResults data since feedback items are tracked there
+  const data: BaseGaugesData | null = metricsData ? {
+    feedbackItemsPerHour: metricsData.scoreResultsPerHour || 0,
+    feedbackItemsAveragePerHour: metricsData.scoreResultsAveragePerHour || 0,
+    feedbackItemsPeakHourly: metricsData.scoreResultsPeakHourly || 0,
+    feedbackItemsTotal24h: metricsData.scoreResultsTotal24h || 0,
+    chartData: metricsData.chartData?.map((point: any) => ({
+      time: point.time,
+      feedbackItems: (point as any).feedback || 0 // Extract feedback data from chart
+    })) || [],
+    lastUpdated: metricsData.lastUpdated || new Date(),
+    hasErrorsLast24h: metricsData.hasErrorsLast24h || false,
+    totalErrors24h: metricsData.totalErrors24h || 0
+  } : null
 
   return (
     <BaseGauges
       className={className}
       config={feedbackGaugesConfig}
-      data={useRealData ? mockData : null} // Use mock data for now
+      data={useRealData ? data : null}
       isLoading={isLoading}
       error={error}
+      title="Feedback Items, Last 24 Hours"
       overrideData={overrideData}
       useRealData={useRealData}
       disableEmergenceAnimation={disableEmergenceAnimation}
