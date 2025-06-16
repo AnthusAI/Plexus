@@ -228,8 +228,8 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
         animate={{ opacity: 1 }}
         transition={{ duration: 0.2 }}
         className={cn(
-          "w-full rounded-lg text-card-foreground hover:bg-accent/50 relative cursor-pointer",
-          isSelected ? "bg-card-selected" : "bg-card",
+          "w-full rounded-lg text-card-foreground relative cursor-pointer transition-colors",
+          isSelected ? "bg-card-selected" : "bg-card hover:bg-accent",
           item.isNew && "new-item-shadow",
           isSelected && "selected-border-rounded",
           hasErrors && "error-border-rounded",

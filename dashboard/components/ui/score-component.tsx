@@ -1484,9 +1484,9 @@ export function ScoreComponent({
   return (
     <div
       className={cn(
-        "w-full rounded-lg text-card-foreground hover:bg-accent/50 transition-colors",
+        "w-full rounded-lg text-card-foreground transition-colors",
         variant === 'grid' ? (
-          isSelected ? "bg-card-selected" : "bg-card"
+          isSelected ? "bg-card-selected" : "bg-card hover:bg-accent"
         ) : "bg-card-selected",
         variant === 'detail' && "h-full flex flex-col overflow-hidden",
         className

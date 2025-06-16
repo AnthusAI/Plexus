@@ -90,10 +90,10 @@ const ScoreResultCard: React.FC<{
       initial={{ opacity: result.isNew ? 0 : 1 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.5, ease: "easeOut" }}
-      className={`mb-3 bg-background rounded-lg p-4 relative overflow-visible cursor-pointer hover:bg-accent/50 transition-colors ${
+      className={`mb-3 rounded-lg p-4 relative overflow-visible cursor-pointer transition-colors ${
         result.isNew ? 'new-score-result-glow' : ''
       } ${
-        isSelected ? 'selected-border-rounded' : ''
+        isSelected ? 'bg-card-selected selected-border-rounded' : 'bg-background hover:bg-accent'
       } ${
         hasError ? 'error-border-rounded' : ''
       }`}
