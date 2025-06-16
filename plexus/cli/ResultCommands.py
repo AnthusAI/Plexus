@@ -713,7 +713,9 @@ def create_error(account: Optional[str], scorecard: Optional[str], score_id: Opt
             item_input = {
                 'id': item_id,
                 'accountId': account_id,
+                'evaluationId': 'prediction-default',  # Required for GSI
                 'isEvaluation': False,
+                'createdByType': 'prediction',  # CLI-created test items are predictions
                 'description': 'Test item created for error ScoreResult testing (delete when done)',
                 'externalId': f'test-error-item-{item_id[:8]}',
                 'createdAt': datetime.now(timezone.utc).isoformat(),
