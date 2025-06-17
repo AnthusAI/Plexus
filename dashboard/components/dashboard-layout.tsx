@@ -283,9 +283,6 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                   {isLeftSidebarOpen && (
                     <span className={`ml-3 transition-all duration-200 ${isLoading ? 'opacity-75' : ''}`}>
                       {item.name}
-                      {isLoading && (
-                        <span className="ml-2 text-xs opacity-50">Loading...</span>
-                      )}
                     </span>
                   )}
                   {/* Loading progress bar */}
@@ -682,11 +679,11 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
           `}
         >
           <div className={`flex-1 flex flex-col bg-background min-h-0 overflow-visible relative ${isMobile ? 'mobile-compact' : 'rounded-lg'}`}>
-            {/* Secret dashboard activation button - invisible, center third of content area */}
+            {/* Dashboard activation button - bottom center, height of 4 (1rem) */}
             {pathname.startsWith('/lab/') && (
               <button
                 onClick={toggleDashboardDrawer}
-                className="absolute top-0 bottom-0 left-1/3 right-1/3 z-10 bg-transparent border-none cursor-default opacity-0 hover:opacity-0 focus:outline-none"
+                className="absolute bottom-0 left-1/3 right-1/3 h-4 z-10 bg-transparent border-none cursor-default opacity-0 hover:opacity-0 focus:outline-none"
                 aria-label="Activate dashboard"
                 tabIndex={-1}
               />

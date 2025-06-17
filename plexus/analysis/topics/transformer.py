@@ -1340,9 +1340,9 @@ async def _transform_transcripts_itemize_async(
     else:
         raise ValueError("No prompt template provided. Must specify either prompt_template or prompt_template_file")
     
-    # Always use Jinja2 templates
-    logging.info("Using Jinja2 template format")
-    prompt = ChatPromptTemplate.from_template(template, template_format="jinja2")
+    # Use default template format (no problematic JSON examples in template now)
+    logging.info("Using default template format")
+    prompt = ChatPromptTemplate.from_template(template)
     
     logging.info(f"Using prompt template:\n{template}")
 

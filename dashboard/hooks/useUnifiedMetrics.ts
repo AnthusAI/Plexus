@@ -639,9 +639,68 @@ export function useEvaluationMetrics(): UseUnifiedMetricsResult {
 export function useFeedbackMetrics(): UseUnifiedMetricsResult {
   const config = useMemo(() => ({
     sources: {
-      feedback: {
-        type: 'feedbackItems' as const,
+      // For feedback, we track score results with feedback type
+      scoreResults: {
+        type: 'scoreResults' as const,
+        scoreResultType: 'feedback',
         accountId: '', // Will be filled by the hook
+      }
+    }
+  }), [])
+
+  return useUnifiedMetrics(config)
+}
+
+/**
+ * Hook for task metrics
+ */
+export function useTaskMetrics(): UseUnifiedMetricsResult {
+  const config = useMemo(() => ({
+    sources: {
+      // For tasks, we track task records
+      items: {
+        type: 'tasks' as const,
+        accountId: '', // Will be filled by the hook
+      }
+    },
+    transformations: {
+      // Custom peak calculation for tasks (use higher baseline since tasks are less frequent)
+      customPeakCalculation: (chartData: Array<{ items: number; scoreResults: number }>) => {
+        const itemsPeak = Math.max(...chartData.map(point => point.items), 10) // Minimum 10 for tasks
+        const scoreResultsPeak = Math.max(...chartData.map(point => point.scoreResults), 10)
+        return { itemsPeak, scoreResultsPeak }
+      }
+    }
+  }), [])
+
+  return useUnifiedMetrics(config)
+}
+
+/**
+ * Hook for evaluation task metrics (actual task records + score results)
+ */
+export function useEvaluationTaskMetrics(): UseUnifiedMetricsResult {
+  const config = useMemo(() => ({
+    sources: {
+      // For evaluation tasks, we track actual task records (not items)
+      items: {
+        type: 'tasks' as const,
+        taskType: 'evaluation', // Filter for evaluation-related tasks
+        accountId: '', // Will be filled by the hook
+      },
+      // For score results, we track score results with evaluation type
+      scoreResults: {
+        type: 'scoreResults' as const,
+        scoreResultType: 'evaluation',
+        accountId: '', // Will be filled by the hook
+      }
+    },
+    transformations: {
+      // Custom peak calculation for evaluation tasks
+      customPeakCalculation: (chartData: Array<{ items: number; scoreResults: number }>) => {
+        const itemsPeak = Math.max(...chartData.map(point => point.items), 10) // Minimum 10 for evaluation tasks
+        const scoreResultsPeak = Math.max(...chartData.map(point => point.scoreResults), 300) // Higher baseline for score results
+        return { itemsPeak, scoreResultsPeak }
       }
     }
   }), [])

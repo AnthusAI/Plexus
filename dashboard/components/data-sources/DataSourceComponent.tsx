@@ -85,8 +85,11 @@ const GridContent = React.memo(function GridContent({
           />
         )}
       </div>
-      <div className="text-muted-foreground ml-4">
-        <HardDriveDownload className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
+      <div className="flex flex-col items-center gap-1 ml-4">
+        <div className="text-muted-foreground">
+          <HardDriveDownload className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
+        </div>
+        <div className="text-xs text-muted-foreground text-center">Source</div>
       </div>
     </div>
   )
@@ -227,34 +230,12 @@ const DetailContent = React.memo(function DetailContent({
   return (
     <div className="w-full flex flex-col min-h-0 h-full overflow-hidden">
       {/* Header section - fixed size */}
-      <div className="flex justify-between items-start w-full flex-shrink-0">
+      <div className="flex justify-between items-start w-full flex-shrink-0 mb-3">
         <div className="space-y-2 flex-1">
-          <Input
-            value={dataSource.name}
-            onChange={(e) => onEditChange?.({ name: e.target.value })}
-            className="text-lg font-semibold bg-background border-0 px-2 h-auto w-full
-                     focus-visible:ring-0 focus-visible:ring-offset-0 
-                     placeholder:text-muted-foreground rounded-md"
-            placeholder="Data Source Name"
-          />
-          <div className="flex gap-4 w-full">
-            <Input
-              value={dataSource.key || ''}
-              onChange={(e) => onEditChange?.({ key: e.target.value })}
-              className="font-mono bg-background border-0 px-2 h-auto flex-1
-                       focus-visible:ring-0 focus-visible:ring-offset-0 
-                       placeholder:text-muted-foreground rounded-md"
-              placeholder="data-source-key"
-            />
+          <div className="flex items-center gap-2">
+            <HardDriveDownload className="h-5 w-5 text-foreground" />
+            <span className="text-lg font-semibold">Source</span>
           </div>
-          <Input
-            value={dataSource.description || ''}
-            onChange={(e) => onEditChange?.({ description: e.target.value })}
-            className="bg-background border-0 px-2 h-auto w-full
-                     focus-visible:ring-0 focus-visible:ring-offset-0 
-                     placeholder:text-muted-foreground rounded-md"
-            placeholder="Description"
-          />
         </div>
         <div className="flex gap-2 ml-4">
           <DropdownMenu>
@@ -291,6 +272,36 @@ const DetailContent = React.memo(function DetailContent({
             />
           )}
         </div>
+      </div>
+
+      {/* Form fields section - fixed size */}
+      <div className="space-y-2 flex-shrink-0">
+        <Input
+          value={dataSource.name}
+          onChange={(e) => onEditChange?.({ name: e.target.value })}
+          className="text-lg font-semibold bg-background border-0 px-2 h-auto w-full
+                   focus-visible:ring-0 focus-visible:ring-offset-0 
+                   placeholder:text-muted-foreground rounded-md"
+          placeholder="Data Source Name"
+        />
+        <div className="flex gap-4 w-full">
+          <Input
+            value={dataSource.key || ''}
+            onChange={(e) => onEditChange?.({ key: e.target.value })}
+            className="font-mono bg-background border-0 px-2 h-auto flex-1
+                     focus-visible:ring-0 focus-visible:ring-offset-0 
+                     placeholder:text-muted-foreground rounded-md"
+            placeholder="data-source-key"
+          />
+        </div>
+        <Input
+          value={dataSource.description || ''}
+          onChange={(e) => onEditChange?.({ description: e.target.value })}
+          className="bg-background border-0 px-2 h-auto w-full
+                   focus-visible:ring-0 focus-visible:ring-offset-0 
+                   placeholder:text-muted-foreground rounded-md"
+          placeholder="Description"
+        />
       </div>
 
       {/* Configuration Label with Full Width Toggle - fixed size */}
@@ -434,7 +445,10 @@ const DetailContent = React.memo(function DetailContent({
                         />
                       </div>
                     </div>
-                    <Table className="h-4 w-4 text-muted-foreground ml-2 flex-shrink-0" />
+                    <div className="flex flex-col items-center gap-0.5 ml-2 flex-shrink-0">
+                      <Table className="h-4 w-4 text-muted-foreground" />
+                      <div className="text-[10px] text-muted-foreground text-center">Dataset</div>
+                    </div>
                   </div>
                 </div>
               ))}

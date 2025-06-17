@@ -113,7 +113,10 @@ export function DataSourceVersionSelector({
                           </div>
                         )}
                       </div>
-                      <Calendar className="h-4 w-4 text-muted-foreground ml-2 flex-shrink-0" />
+                      <div className="flex flex-col items-center gap-0.5 ml-2 flex-shrink-0">
+                        <Calendar className="h-4 w-4 text-muted-foreground" />
+                        <div className="text-[10px] text-muted-foreground text-center">Version</div>
+                      </div>
                     </div>
                   </div>
                 )
