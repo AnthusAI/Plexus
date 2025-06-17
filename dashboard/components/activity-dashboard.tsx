@@ -22,6 +22,7 @@ import EvaluationTask, { type EvaluationTaskProps, type EvaluationTaskData } fro
 import { observeRecentTasks } from '@/utils/subscriptions'
 import type { AmplifyTask, ProcessedTask } from '@/utils/data-operations'
 import { ActivityDashboardSkeleton } from '@/components/loading-skeleton'
+import { TasksGauges } from './TasksGauges'
 
 type TaskStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
 
@@ -338,7 +339,7 @@ function transformTaskToActivity(task: ProcessedTask) {
 
   const result: EvaluationTaskProps['task'] = {
     id: task.id,
-    type: String((metadata as any)?.type || task.type),
+    type: 'Task',
     scorecard,
     score,
     time: timeStr,
@@ -805,7 +806,12 @@ export default function ActivityDashboard({
                 damping: 30 
               }}
             >
-            <div className="@container">
+            <div className="@container space-y-3 overflow-visible">
+              {/* TasksGauges at the top - only show when not in mobile selected task view */}
+              {!(selectedTask && isNarrowViewport) && (
+                <TasksGauges />
+              )}
+              
               <div className={`
                 grid gap-3
                 ${selectedTask && !isNarrowViewport && !isFullWidth ? 'grid-cols-1' : 'grid-cols-1 @[640px]:grid-cols-2'}

@@ -567,7 +567,7 @@ class TopicAnalysis(BaseReportBlock):
                                 before_topics_path = os.path.join(root, "topics_before_fine_tuning.json")
                                 with open(before_topics_path, 'r', encoding='utf-8') as f:
                                     before_topics_data = json.load(f)
-                                
+                                    
                                 self._log(f"✅ Loaded 'before' topics data from {before_topics_path}")
                                 self._log(f"🔍 Found {len(before_topics_data)} topics before fine-tuning")
                                 break

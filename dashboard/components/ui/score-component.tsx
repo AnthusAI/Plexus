@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { MoreHorizontal, X, Square, Columns2, FileStack, ChevronDown, ChevronUp, Award, FileCode, Minimize, Maximize, ArrowDownWideNarrow, Expand, Shrink, TestTube, FlaskConical, FlaskRound, TestTubes } from 'lucide-react'
+import { MoreHorizontal, X, Square, Columns2, FileStack, ChevronDown, ChevronUp, Award, FileCode, Minimize, Maximize, ArrowDownWideNarrow, Expand, Shrink, TestTube, FlaskConical, FlaskRound, TestTubes, ListCheck } from 'lucide-react'
 import { CardButton } from '@/components/CardButton'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Popover from '@radix-ui/react-popover'
@@ -159,8 +159,11 @@ const GridContent = React.memo(({
         <div className="text-sm">{displayData.description}</div>
       </div>
       {score.icon && (
-        <div className="text-muted-foreground">
-          {score.icon}
+        <div className="flex flex-col items-center gap-1">
+          <div className="text-muted-foreground">
+            {score.icon}
+          </div>
+          <div className="text-xs text-muted-foreground text-center">Score</div>
         </div>
       )}
     </div>
@@ -574,6 +577,10 @@ const DetailContent = React.memo(({
       {!isEditorFullscreen && (
         <div className="flex justify-between items-start w-full">
           <div className="space-y-2 flex-1">
+            <div className="flex items-center gap-2 mb-3">
+              <ListCheck className="h-5 w-5 text-foreground" />
+              <span className="text-lg font-semibold">Score</span>
+            </div>
             <Input
               value={parsedConfig.name || ''}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => 
