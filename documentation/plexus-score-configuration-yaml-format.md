@@ -179,6 +179,152 @@ Apply custom Python logic to make scoring decisions based on previous node outpu
         )
 ```
 
+## LogicalNode Usage
+
+Execute arbitrary Python code and return custom output values without requiring Score.Result objects. Ideal for data processing, parsing, and transformation tasks:
+
+```yaml
+- name: data_processor
+  class: LogicalNode
+  code: |
+    def process_data(context):
+        '''Process input data and return custom fields'''
+        # Access data from previous nodes
+        state = context.get('state')
+        if state and hasattr(state, 'model_dump'):
+            state_dict = state.model_dump()
+            input_text = state_dict.get('extracted_text', '')
+        else:
+            input_text = context.get('extracted_text', context.get('explanation', ''))
+        
+        # Custom processing logic
+        word_count = len(input_text.split())
+        has_keywords = any(keyword in input_text.lower() 
+                          for keyword in ['important', 'urgent', 'critical'])
+        
+        return {
+            "text_length": word_count,
+            "contains_keywords": has_keywords,
+            "processed_timestamp": "2024-01-01"
+        }
+  function_name: process_data  # Name of function to execute (default: "execute")
+  output:  # Map function results to state fields
+    word_count: text_length
+    has_priority_keywords: contains_keywords
+    timestamp: processed_timestamp
+```
+
+### LogicalNode vs LogicalClassifier
+
+| Feature | LogicalClassifier | LogicalNode |
+|---------|------------------|-------------|
+| **Purpose** | Classification with Score.Result | General data processing |
+| **Return Type** | Must return Score.Result object | Any data structure (dict, string, etc.) |
+| **Function Name** | Fixed to `score` | Configurable via `function_name` |
+| **Dependencies** | Requires Score imports | No Score dependency |
+| **Output** | Classification + explanation | Custom fields via output mapping |
+
+### Common LogicalNode Use Cases
+
+**1. Text Parsing and Extraction:**
+```yaml
+- name: response_parser
+  class: LogicalNode
+  code: |
+    def parse_response(context):
+        '''Parse structured response from previous node'''
+        # Get response from previous node
+        state = context.get('state')
+        response = state.model_dump().get('extracted_text', '') if state else ''
+        
+        # Parse line by line
+        parsed_data = {}
+        for line in response.split('\n'):
+            if line.startswith('Primary AOI:'):
+                parsed_data['primary_aoi'] = line.replace('Primary AOI:', '').strip()
+            elif line.startswith('Evidence:'):
+                parsed_data['evidence'] = line.replace('Evidence:', '').strip()
+        
+        return parsed_data
+  function_name: parse_response
+  output:
+    area_of_interest: primary_aoi
+    supporting_evidence: evidence
+```
+
+**2. Data Transformation:**
+```yaml
+- name: data_transformer
+  class: LogicalNode
+  code: |
+    def transform_data(context):
+        '''Transform and normalize data'''
+        state_dict = context['state'].model_dump()
+        
+        # Normalize and clean data
+        cleaned_text = state_dict.get('text', '').strip().lower()
+        confidence = min(1.0, len(cleaned_text) / 100)  # Mock confidence
+        
+        return {
+            "normalized_text": cleaned_text,
+            "confidence_score": confidence,
+            "is_valid": len(cleaned_text) > 10
+        }
+  function_name: transform_data
+```
+
+**3. Conditional Logic:**
+```yaml
+- name: business_logic
+  class: LogicalNode
+  code: |
+    def apply_business_rules(context):
+        '''Apply complex business logic'''
+        state_dict = context['state'].model_dump()
+        
+        # Access metadata from previous nodes
+        schools = state_dict.get('metadata', {}).get('schools', [])
+        
+        # Apply business rules
+        has_campus = any(school.get('modality') == 'Campus' for school in schools)
+        needs_verification = not has_campus
+        
+        return {
+            "campus_program": has_campus,
+            "requires_verification": needs_verification,
+            "rule_applied": "campus_check"
+        }
+  function_name: apply_business_rules
+  output:
+    is_campus_program: campus_program
+    verification_required: requires_verification
+```
+
+### Accessing Data in LogicalNode
+
+LogicalNode receives a `context` dictionary with:
+- `state`: The current graph state object
+- `text`: Primary text content
+- `metadata`: Metadata dictionary
+- `parameters`: Node parameters
+
+```python
+def my_function(context):
+    # Access graph state
+    state = context.get('state')
+    if state and hasattr(state, 'model_dump'):
+        state_dict = state.model_dump()
+        # Access any field from previous nodes
+        extracted_text = state_dict.get('extracted_text')
+        custom_field = state_dict.get('custom_field_name')
+    
+    # Access metadata
+    metadata = context.get('metadata', {})
+    
+    # Process and return results
+    return {"result": "processed_data"}
+```
+
 ## Message Templates
 
 Templates support Jinja2 syntax for dynamic content:
