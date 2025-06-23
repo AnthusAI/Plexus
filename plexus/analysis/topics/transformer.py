@@ -1051,91 +1051,71 @@ async def _process_itemize_transcript_async(
 async def _process_itemize_batch_async(
     llm, prompt, rows, indices, parser, retry_parser, provider, total_count, max_retries, retry_delay, content_column, simple_format
 ):
-    """
-    Process a batch of transcripts asynchronously for itemization.
-    Args:
-        llm: Language model
-        prompt: Prompt template
-        rows: List of DataFrame rows
-        indices: List of indices for the batch
-        parser: Pydantic parser
-        retry_parser: Retry parser for handling errors
-        provider: LLM provider
-        total_count: Total number of transcripts
-        max_retries: Maximum number of retries for parsing failures
-        retry_delay: Delay between retries in seconds
-        content_column: Name of column containing transcript content
-    Returns:
-        List of results
-    """
-    results = []
-    logger.info(f"Processing batch of {len(rows)} transcripts for itemization ({indices[0]+1}-{indices[-1]+1} of {total_count})")
+    """Process a batch of transcripts asynchronously and return results paired with original rows."""
+
+    # Helper coroutine to keep result and row paired
+    async def process_and_pair(coro, row_data):
+        try:
+            result = await coro
+            return result, row_data
+        except Exception as e:
+            logger.error(f"An exception was caught from a transcript processing coroutine: {e}")
+            return {'error': str(e)}, row_data
 
     tasks = []
-    for j, (row, idx) in enumerate(zip(rows, indices)):
-        text = row[content_column]
-        
-        # Enhanced debugging: Log the actual transcript content being processed
-        logger.debug(f"Transcript {idx+1} content: {len(text)} chars")
-        if len(text) < 50:
-            logger.warning(f"Transcript {idx+1} is very short ({len(text)} chars)")
+    for i, row in zip(indices, rows):
+        text_to_process = row[content_column]
+
+        if not isinstance(text_to_process, str):
+            text_to_process = str(text_to_process) if text_to_process is not None else ""
         
         try:
-            format_instructions = parser.get_format_instructions()
-            logger.debug(f"Got format instructions: {len(format_instructions)} chars")
-        except Exception as e:
-            logger.error(f"Error getting format instructions: {type(e).__name__}: {e}")
-            raise
-            
-        # Format the prompt - always use Jinja2 template formatting
-        try:
-            formatted_prompt_obj = prompt.format_prompt(text=text, format_instructions=format_instructions)
-            formatted_prompt = formatted_prompt_obj.to_string()
-        except Exception as e:
-            logger.error(f"Error formatting prompt: {type(e).__name__}: {e}")
-            raise
-        
-        # Enhanced debugging: Log the formatted prompt to see if transcript is included
-        logger.debug(f"Formatted prompt for transcript {idx+1}: {len(formatted_prompt)} chars")
-        
-        # CRITICAL DEBUG: Check if text was actually interpolated
-        if "{{text}}" in formatted_prompt:
-            logger.error(f"🚨 INTERPOLATION FAILURE: {{{{text}}}} still present in formatted prompt for transcript {idx+1}")
-        elif len(text) > 50 and text[:50] not in formatted_prompt:
-            logger.error(f"🚨 INTERPOLATION FAILURE: Transcript text not found in formatted prompt for transcript {idx+1}")
-            logger.error(f"Expected text start: {text[:50]}...")
-            logger.error(f"Formatted prompt preview: {formatted_prompt[:500]}...")
-        else:
-            logger.debug(f"✅ Transcript {idx+1} text appears to be properly interpolated")
-        
-        task = _process_itemize_transcript_async(
-            llm, prompt, formatted_prompt, text, parser, retry_parser, 
-            provider, idx, total_count, max_retries, retry_delay, simple_format
+            # The key for format_prompt MUST match the placeholder in the template string (e.g., {{text}})
+            formatted_prompt = prompt.format_prompt(text=text_to_process).to_string()
+
+            # Debugging to ensure interpolation is working
+            if "{{text}}" in formatted_prompt:
+                logger.error(f"PROMPT INTERPOLATION FAILED for transcript index {i}. '{{text}}' still present.")
+                logger.debug(f"Formatted prompt preview: {formatted_prompt[:500]}...")
+            else:
+                logger.debug(f"Prompt for transcript {i} formatted successfully.")
+
+        except KeyError as e:
+            logger.error(f"Error formatting prompt for transcript index {i}. Missing key: {e}")
+            continue
+
+        # Create the inner coroutine that does the work
+        work_coro = _process_itemize_transcript_async(
+            llm, prompt, formatted_prompt, text_to_process, parser, retry_parser, provider, i, total_count, max_retries, retry_delay, simple_format
         )
-        tasks.append(task)
-    
-    batch_results = await asyncio.gather(*tasks, return_exceptions=True)
-    
-    # Enhanced debugging: Check for identical outputs across transcripts
-    successful_outputs = []
-    for result_pair, row_item in zip(batch_results, rows):
-        results.append((result_pair, row_item))
         
-        # Collect successful outputs for comparison
-        if isinstance(result_pair, tuple) and result_pair[0] == True:
-            successful_outputs.append(str(result_pair[1]))
-    
-    # Check for repetition in outputs
-    if len(successful_outputs) > 1:
-        unique_outputs = set(successful_outputs)
-        if len(unique_outputs) == 1:
-            logging.error(f"🚨 CRITICAL ISSUE: ALL {len(successful_outputs)} TRANSCRIPTS PRODUCED IDENTICAL OUTPUT!")
-            logging.error(f"Identical output: {successful_outputs[0][:300]}...")
-        elif len(unique_outputs) < len(successful_outputs) * 0.5:  # If more than 50% repetition
-            logging.warning(f"⚠️ HIGH REPETITION: {len(successful_outputs)} outputs, only {len(unique_outputs)} unique")
-    
-    gc.collect()
-    return results
+        # Create a task from the helper wrapper coroutine
+        task = asyncio.create_task(process_and_pair(work_coro, row))
+        tasks.append(task)
+
+    batch_results = []
+    processed_count = 0
+    batch_total = len(tasks)
+    log_interval = 250
+
+    if not tasks:
+        return []
+
+    for future in asyncio.as_completed(tasks):
+        processed_count += 1
+        try:
+            # The result from the future is already the (result, row) pair
+            result_pair = await future
+            batch_results.append(result_pair)
+        except Exception as e:
+            logger.error(f"An unexpected exception occurred when awaiting a completed task: {e}")
+            # The inner 'process_and_pair' handler is preferred for associating errors with rows.
+            # This is a fallback for unexpected issues.
+
+        if processed_count % log_interval == 0 or processed_count == batch_total:
+            logger.info(f"    ... processed {processed_count}/{batch_total} transcripts in this batch.")
+                
+    return batch_results
 
 async def _transform_transcripts_itemize_async(
     input_file: str,
@@ -1340,9 +1320,9 @@ async def _transform_transcripts_itemize_async(
     else:
         raise ValueError("No prompt template provided. Must specify either prompt_template or prompt_template_file")
     
-    # Use default template format (no problematic JSON examples in template now)
-    logging.info("Using default template format")
-    prompt = ChatPromptTemplate.from_template(template)
+    # Use Jinja2 template format for consistency
+    logging.info("Using Jinja2 template format")
+    prompt = ChatPromptTemplate.from_template(template, template_format="jinja2")
     
     logging.info(f"Using prompt template:\n{template}")
 
