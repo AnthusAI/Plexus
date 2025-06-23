@@ -9,3 +9,4 @@ from .Classifier import Classifier
 from .ContextExtractor import ContextExtractor
 from .LogicalClassifier import LogicalClassifier
 from .Generator import Generator
+from .LogicalNode import LogicalNode
