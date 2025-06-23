@@ -1,5 +1,3 @@
-const { withHydrationOverlay } = require("@builder.io/react-hydration-overlay/next");
-
 /** @type {import('next').NextConfig} */
 const nextConfig = {
     experimental: {
@@ -33,6 +31,14 @@ const nextConfig = {
         } : false,
     },
     webpack: (config, { dev, isServer }) => {
+        // Handle AWS Amplify bundling issues
+        config.resolve.fallback = {
+            ...config.resolve.fallback,
+            fs: false,
+            net: false,
+            tls: false,
+        };
+
         config.module.rules.forEach(rule => {
             if (rule.oneOf) {
                 rule.oneOf.forEach(one => {
@@ -55,4 +61,10 @@ const nextConfig = {
     },
 }
 
-module.exports = withHydrationOverlay()(nextConfig);
+// Only use hydration overlay in development
+if (process.env.NODE_ENV === 'development') {
+    const { withHydrationOverlay } = require("@builder.io/react-hydration-overlay/next");
+    module.exports = withHydrationOverlay()(nextConfig);
+} else {
+    module.exports = nextConfig;
+}

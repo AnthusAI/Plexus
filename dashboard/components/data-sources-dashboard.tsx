@@ -158,26 +158,27 @@ export default function DataSourcesDashboard({
   }, [dataSets, selectedDatasetId, selectedDataSet])
 
   // Fetch datasets for a specific data source
-  const fetchDataSets = async (dataSourceId: string) => {
+  const fetchDataSets = async (dataSource: Schema['DataSource']['type']) => {
     try {
-      // Fetch datasets associated with this data source
+      // If the data source doesn't have a current version, show no datasets
+      if (!dataSource.currentVersionId) {
+        setDataSets([])
+        return
+      }
+
+      // Fetch datasets that belong to this specific data source version
       const result = await amplifyClient.DataSet.list({
         filter: { 
+          dataSourceVersionId: { eq: dataSource.currentVersionId },
           accountId: { eq: selectedAccount?.id || '' }
-          // Note: You may need to add a GSI for dataSourceVersionId if you want to filter by it
         }
       })
 
-      // Filter datasets that belong to this data source and sort by createdAt descending
-      const filteredDataSets = result.data
-        .filter(dataSet => {
-          // For now, we'll use a simple approach - you may need to adjust this
-          // based on how you want to associate datasets with data sources
-          return dataSet.accountId === selectedAccount?.id
-        })
+      // Sort by createdAt descending
+      const sortedDataSets = result.data
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
 
-      setDataSets(filteredDataSets)
+      setDataSets(sortedDataSets)
     } catch (error) {
       console.error('Error fetching datasets:', error)
       setDataSets([])
@@ -200,7 +201,7 @@ export default function DataSourcesDashboard({
     
     // Load datasets for the selected data source
     if (dataSource && selectedAccount?.id) {
-      fetchDataSets(dataSource.id)
+      fetchDataSets(dataSource)
     } else {
       setDataSets([])
     }
@@ -513,7 +514,7 @@ export default function DataSourcesDashboard({
                     onDelete={handleDeleteDataSource}
                     onLoad={handleLoadDataSource}
                     onDuplicate={handleDuplicateDataSource}
-                    dataSets={dataSets}
+                    dataSets={undefined}
                     onDataSetSelect={handleSelectDataSet}
                     selectedDataSetId={undefined}
                     accountId={selectedAccount?.id}
@@ -603,7 +604,7 @@ export default function DataSourcesDashboard({
                       onDelete={handleDeleteDataSource}
                       onLoad={handleLoadDataSource}
                       onDuplicate={handleDuplicateDataSource}
-                      dataSets={dataSets}
+                      dataSets={undefined}
                       onDataSetSelect={handleSelectDataSet}
                       selectedDataSetId={selectedDataSet.id}
                       accountId={selectedAccount?.id}
@@ -697,7 +698,7 @@ export default function DataSourcesDashboard({
                     onDelete={handleDeleteDataSource}
                     onLoad={handleLoadDataSource}
                     onDuplicate={handleDuplicateDataSource}
-                    dataSets={dataSets}
+                    dataSets={undefined}
                     onDataSetSelect={handleSelectDataSet}
                     selectedDataSetId={undefined}
                     accountId={selectedAccount?.id}

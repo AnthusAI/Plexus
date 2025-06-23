@@ -403,82 +403,97 @@ def analyze_topics(
         logger.error(f"Error during BERTopic fit_transform: {e}", exc_info=True)
         raise
 
-    # --- Generate and Save Visualizations (including new PNGs) ---
+    # --- Post-fitting Analysis and Visualization ---
+
+    # Get topic information
+    topic_info = topic_model.get_topic_info()
+    num_topics = len(topic_info[topic_info.Topic != -1])
+    logger.info(f"Found {num_topics} topics (excluding the outlier topic).")
+
+    # If no topics were found, skip visualizations and return early
+    if num_topics == 0:
+        logger.warning("No topics were discovered. Skipping all visualizations.")
+        save_topic_info(topic_model, output_dir, docs, topics)
+        return topic_model
+
+    # --- Visualizations ---
+    logger.info("Generating visualizations...")
+
+    # Visualize Topics
     try:
-        logger.info("Generating BERTopic visualizations...")
-        
-        # Get number of topics (excluding the outlier topic -1)
-        num_topics = len(topic_model.get_topic_info()) - 1
-        logger.info(f"Found {num_topics} topics for visualization")
-        
-        # Visualize Topics (HTML and PNG) - only if we have enough topics
-        if num_topics >= 2:
-            try:
-                fig_topics = topic_model.visualize_topics()
-                save_visualization(fig_topics, str(Path(output_dir) / "topic_visualization.html"))
-                try:
-                    topics_png_path = str(Path(output_dir) / "topics_visualization.png")
-                    fig_topics.write_image(topics_png_path)
-                    os.chmod(topics_png_path, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH)
-                    logger.info(f"Saved topics visualization to {topics_png_path}")
-                except Exception as e:
-                    logger.error(f"Failed to save topics visualization as PNG: {e}", exc_info=True)
-            except Exception as e:
-                logger.error(f"Error during visualization generation: {e}")
-                logger.info("Continuing without topic visualization due to insufficient data diversity for UMAP embedding")
-        else:
-            logger.warning(f"Skipping topics visualization as there are fewer than 2 topics ({num_topics} found). Need at least 2 topics for 2D visualization.")
-
-        # Visualize Heatmap (HTML and PNG)
-        # Check if there are enough topics to generate a heatmap (BERTopic requires at least 2 topics for heatmap)
-        if num_topics >= 2:
-            fig_heatmap = topic_model.visualize_heatmap()
-            save_visualization(fig_heatmap, str(Path(output_dir) / "heatmap.html"))
-            try:
-                heatmap_png_path = str(Path(output_dir) / "heatmap_visualization.png")
-                fig_heatmap.write_image(heatmap_png_path)
-                os.chmod(heatmap_png_path, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH)
-                logger.info(f"Saved heatmap visualization to {heatmap_png_path}")
-            except Exception as e:
-                logger.error(f"Failed to save heatmap visualization as PNG: {e}", exc_info=True)
-        else:
-            logger.warning(f"Skipping heatmap visualization as there are fewer than 2 topics ({num_topics} found).")
-
-        # Visualize Documents (HTML only, as it's highly interactive and large)
-        # Check if there are enough documents and topics for document visualization
-        if len(docs) >= umap_n_neighbors and num_topics >= 1:
-            try:
-                fig_documents = topic_model.visualize_documents(docs, topics=topics) # Pass topics, remove umap_model
-                save_visualization(fig_documents, str(Path(output_dir) / "document_visualization.html"))
-            except Exception as e:
-                # Log error but continue, as this is a non-critical visualization
-                logger.error(f"Failed to generate or save document visualization: {e}", exc_info=True)
-        else:
-            logger.warning(f"Skipping document visualization due to insufficient documents ({len(docs)} docs, need {umap_n_neighbors}) or topics ({num_topics} topics, need 1).")
-
-
-        # Visualize Topic Hierarchy (HTML only)
+        fig_topics = topic_model.visualize_topics()
+        save_visualization(fig_topics, str(Path(output_dir) / "topic_visualization.html"))
         try:
-            hierarchical_topics_df = topic_model.hierarchical_topics(docs) # Renamed for clarity
-            if hierarchical_topics_df is not None and not hierarchical_topics_df.empty:
-                fig_hierarchy = topic_model.visualize_hierarchy(hierarchical_topics=hierarchical_topics_df, orientation='left') # Pass as keyword arg
-                save_visualization(fig_hierarchy, str(Path(output_dir) / "hierarchy.html"))
-            else:
-                logger.warning("Skipping topic hierarchy visualization as hierarchical_topics_df is empty or None.")
+            topics_png_path = str(Path(output_dir) / "topics_visualization.png")
+            fig_topics.write_image(topics_png_path)
+            os.chmod(topics_png_path, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH)
+            logger.info(f"Saved topics visualization to {topics_png_path}")
         except Exception as e:
-            logger.error(f"Failed to generate or save topic hierarchy visualization: {e}", exc_info=True)
-            
-        # Visualize Topics per Class (if applicable, HTML only)
-        # Note: This requires class labels which are not directly available here unless passed in.
-        # For now, we'll skip this, but it's an example of how it could be added if `classes` were an argument.
-        # topics_per_class_fig = create_topics_per_class_visualization(topic_model, topics, docs, output_dir)
-        # if topics_per_class_fig:
-        #     logger.info("Topics per class visualization generated.")
-
+            logger.error(f"Failed to save topics visualization as PNG: {e}", exc_info=True)
     except Exception as e:
-        logger.error(f"Error during visualization generation: {e}", exc_info=True)
-        # Continue even if visualizations fail, as core topic data might still be useful.
-        
+        logger.error(f"Error during visualization generation: {e}")
+        logger.warning(f"Skipping term score decline visualization as it requires at least one topic.")
+
+    # Visualize Heatmap (HTML and PNG)
+    # Check if there are enough topics to generate a heatmap (BERTopic requires at least 2 topics for heatmap)
+    if num_topics >= 2:
+        fig_heatmap = topic_model.visualize_heatmap()
+        save_visualization(fig_heatmap, str(Path(output_dir) / "heatmap.html"))
+        try:
+            heatmap_png_path = str(Path(output_dir) / "heatmap_visualization.png")
+            fig_heatmap.write_image(heatmap_png_path)
+            os.chmod(heatmap_png_path, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH)
+            logger.info(f"Saved heatmap visualization to {heatmap_png_path}")
+        except Exception as e:
+            logger.error(f"Failed to save heatmap visualization as PNG: {e}", exc_info=True)
+    else:
+        logger.warning(f"Skipping heatmap visualization as there are fewer than 2 topics ({num_topics} found).")
+
+    # Visualize Documents (HTML only, as it's highly interactive and large)
+    # Check if there are enough documents and topics for document visualization
+    if len(docs) >= umap_n_neighbors and num_topics >= 1:
+        try:
+            fig_documents = topic_model.visualize_documents(docs, topics=topics) # Pass topics, remove umap_model
+            save_visualization(fig_documents, str(Path(output_dir) / "document_visualization.html"))
+        except Exception as e:
+            # Log error but continue, as this is a non-critical visualization
+            logger.error(f"Failed to generate or save document visualization: {e}", exc_info=True)
+    else:
+        logger.warning(f"Skipping document visualization due to insufficient documents ({len(docs)} docs, need {umap_n_neighbors}) or topics ({num_topics} topics, need 1).")
+
+    # Visualize Topic Hierarchy (HTML only)
+    try:
+        hierarchical_topics_df = topic_model.hierarchical_topics(docs) # Rename for clarity
+        if hierarchical_topics_df is not None and not hierarchical_topics_df.empty:
+            fig_hierarchy = topic_model.visualize_hierarchy(hierarchical_topics=hierarchical_topics_df, orientation='left') # Pass as keyword arg
+            save_visualization(fig_hierarchy, str(Path(output_dir) / "hierarchy.html"))
+        else:
+            logger.warning("No hierarchical topics found to visualize.")
+    except Exception as e:
+        logger.error(f"Failed to generate or save topic hierarchy visualization: {e}", exc_info=True)
+
+    # Visualize Topic Similarity (Heatmap)
+    try:
+        fig_similarity = topic_model.visualize_heatmap()
+        save_visualization(fig_similarity, str(Path(output_dir) / "topic_similarity.html"))
+        try:
+            similarity_png_path = str(Path(output_dir) / "topic_similarity_visualization.png")
+            fig_similarity.write_image(similarity_png_path)
+            os.chmod(similarity_png_path, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH)
+            logger.info(f"Saved topic similarity visualization to {similarity_png_path}")
+        except Exception as e:
+            logger.error(f"Failed to save topic similarity visualization as PNG: {e}", exc_info=True)
+    except Exception as e:
+        logger.error(f"Error during topic similarity visualization: {e}", exc_info=True)
+        logger.warning(f"Skipping topic similarity visualization as it requires at least two topics.")
+
+    # Visualize Topics per Class (if applicable, HTML only)
+    # Note: This requires class labels which are not directly available here unless passed in.
+    # For now, we'll skip this, but it's an example of how it could be added if `classes` were an argument.
+    # topics_per_class_fig = create_topics_per_class_visualization(topic_model, topics, docs, output_dir)
+    # if topics_per_class_fig:
+    #     logger.info("Topics per class visualization generated.")
+
     # --- Save Topic Information ---
     logger.info("Saving topic information...")
     
