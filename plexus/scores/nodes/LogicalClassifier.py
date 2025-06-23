@@ -79,16 +79,30 @@ class LogicalClassifier(BaseNode):
                 # Continue to next node
                 return state
             
-            # Return dict to merge with state, like YesOrNoClassifier does
+            # Create the initial result state
             state_update = {
                 **state.model_dump(),
                 "classification": result.value,  # Critical for conditions
                 "value": result.value,
                 "explanation": result.metadata.get('explanation')
             }
+            
+            result_state = self.GraphState(**state_update)
+            
+            # Prepare output state for logging
+            output_state = {
+                "classification": result.value,
+                "value": result.value,
+                "explanation": result.metadata.get('explanation')
+            }
+            
             logging.info(f"LogicalClassifier result value: {result.value}")
             logging.info(f"LogicalClassifier result explanation: {result.metadata.get('explanation')}")
-            return self.GraphState(**state_update)
+            
+            # Log the state and get a new state object with updated node_results
+            updated_state = self.log_state(result_state, None, output_state)
+            
+            return updated_state
 
         return execute_score
 
