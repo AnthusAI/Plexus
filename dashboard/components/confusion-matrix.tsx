@@ -9,6 +9,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { useTranslations } from "@/app/contexts/TranslationContext"
 
 export interface ConfusionMatrixRow {
   actualClassLabel: string; // e.g., "Red", "Heads" - represents the true class for this row
@@ -40,21 +41,23 @@ export interface ConfusionMatrixProps {
 
 /**
  * ConfusionMatrix Component
- * 
+ *
  * Displays a confusion matrix with interactive elements:
  * - Clickable cells showing the count of predictions
  * - Tooltips with detailed information
  * - Row labels showing actual classes
  * - Column labels showing predicted classes
- * 
+ *
  * All interactions (cell clicks, row labels, column labels) emit a standardized
- * selection event with both predicted and actual values, using null for the 
+ * selection event with both predicted and actual values, using null for the
  * unselected dimension:
  * - Cell click: { predicted: "class1", actual: "class2" }
  * - Row label: { predicted: null, actual: "class2" }
  * - Column label: { predicted: "class1", actual: null }
  */
 export function ConfusionMatrix({ data, onSelectionChange }: ConfusionMatrixProps) {
+  const t = useTranslations('evaluations');
+
   // Updated validation logic
   if (!data || !data.labels) {
     return (
@@ -145,7 +148,7 @@ export function ConfusionMatrix({ data, onSelectionChange }: ConfusionMatrixProp
     <div className="flex flex-col w-full gap-1 overflow-visible" style={{ overflow: 'visible', position: 'relative' }}>
       <div className="flex items-center gap-1 text-sm text-foreground h-5">
         <Grid2X2 className="w-4 h-4 text-foreground shrink-0" />
-        <span>Confusion matrix</span>
+        <span>{t('confusionMatrix')}</span>
       </div>
 
       <div className="flex flex-col min-w-0 flex-1 overflow-visible">

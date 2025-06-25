@@ -1,6 +1,7 @@
 import React from 'react'
 import { ChartPie } from 'lucide-react'
 import ClassDistributionVisualizer, { type ClassDistribution } from './ClassDistributionVisualizer'
+import { useTranslations } from '@/app/contexts/TranslationContext'
 
 interface PredictedClassDistributionVisualizerProps {
   data?: ClassDistribution[]
@@ -9,20 +10,22 @@ interface PredictedClassDistributionVisualizerProps {
   onLabelSelect?: (label: string) => void
 }
 
-export default function PredictedClassDistributionVisualizer({ 
-  data = [], 
+export default function PredictedClassDistributionVisualizer({
+  data = [],
   rotateThreshold = 8,
   hideThreshold = 4,
   onLabelSelect
 }: PredictedClassDistributionVisualizerProps) {
+  const t = useTranslations('evaluations');
+
   return (
     <div className="w-full flex flex-col gap-1">
       <div className="flex items-start">
         <ChartPie className="w-4 h-4 mr-1 mt-0.5 text-foreground shrink-0" />
-        <span className="text-sm text-foreground">Predicted classes</span>
+        <span className="text-sm text-foreground">{t('predictedClasses')}</span>
       </div>
       <div>
-        <ClassDistributionVisualizer 
+        <ClassDistributionVisualizer
           data={data}
           rotateThreshold={rotateThreshold}
           hideThreshold={hideThreshold}

@@ -4,6 +4,7 @@ import { generateClient } from "aws-amplify/data"
 import type { Schema } from "@/amplify/data/resource"
 import { ModelListResult } from '@/types/shared'
 import { listFromModel } from "@/utils/amplify-helpers"
+import { useTranslations } from "@/app/contexts/TranslationContext"
 
 export const client = generateClient<Schema>()
 
@@ -20,19 +21,20 @@ async function listReportConfigurations(accountId: string): ModelListResult<Sche
   )
 }
 
-const ReportConfigurationSelector: React.FC<ReportConfigurationSelectorProps> = ({ 
-  selectedReportConfiguration, 
+const ReportConfigurationSelector: React.FC<ReportConfigurationSelectorProps> = ({
+  selectedReportConfiguration,
   setSelectedReportConfiguration,
   useMockData = false
 }) => {
+  const t = useTranslations('reports');
   const [reportConfigurations, setReportConfigurations] = useState<Array<{ value: string; label: string }>>([])
   const [isLoading, setIsLoading] = useState(!useMockData)
   const [accountId, setAccountId] = useState<string | null>(null)
 
   // Debug logging
   useEffect(() => {
-    console.debug('ReportConfigurationSelector state:', { 
-      selectedReportConfiguration, 
+    console.debug('ReportConfigurationSelector state:', {
+      selectedReportConfiguration,
       configsCount: reportConfigurations.length,
       configs: reportConfigurations.map(c => ({ id: c.value, name: c.label }))
     });
@@ -127,7 +129,7 @@ const ReportConfigurationSelector: React.FC<ReportConfigurationSelectorProps> = 
           <SelectValue placeholder={isLoading ? "Loading..." : "Report Configuration"} />
         </SelectTrigger>
         <SelectContent className="bg-card border-none focus:ring-0 focus:ring-offset-0 focus:outline-none">
-          <SelectItem value="all">All Report Configurations</SelectItem>
+          <SelectItem value="all">{t('allReportConfigurations')}</SelectItem>
           {reportConfigurations.map(config => (
             <SelectItem key={config.value} value={config.value}>
               {config.label}

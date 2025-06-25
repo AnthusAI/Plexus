@@ -91,7 +91,7 @@ const getDocSections = (locale: string): DocSidebarItem[] => {
         name: "Conceptos",
         href: `${localePrefix}/documentation/concepts`,
         items: [
-          { name: "Elementos", href: `${localePrefix}/documentation/concepts/items` },
+          { name: "Items", href: `${localePrefix}/documentation/concepts/items` },
           { name: "Fuentes", href: `${localePrefix}/documentation/concepts/sources` },
           { name: "Puntuaciones", href: `${localePrefix}/documentation/concepts/scores` },
           { name: "Cuadros", href: `${localePrefix}/documentation/concepts/scorecards` },

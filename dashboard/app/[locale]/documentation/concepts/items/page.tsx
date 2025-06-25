@@ -4,20 +4,20 @@ import { useTranslationContext } from '@/app/contexts/TranslationContext'
 
 export default function ItemsPage() {
   const { locale } = useTranslationContext();
-  
+
   if (locale === 'es') {
     return (
       <div className="max-w-4xl mx-auto py-8 px-6">
-        <h1 className="text-4xl font-bold mb-4">Elementos</h1>
+        <h1 className="text-4xl font-bold mb-4">Items</h1>
         <p className="text-lg text-muted-foreground mb-8">
-          Aprende sobre los Elementos, las unidades de contenido principales que Plexus analiza y califica.
+          Aprende sobre los Items, las unidades de contenido principales que Plexus analiza y califica.
         </p>
 
         <div className="space-y-8">
           <section>
-            <h2 className="text-2xl font-semibold mb-4">¿Qué son los Elementos?</h2>
+            <h2 className="text-2xl font-semibold mb-4">¿Qué son los Items?</h2>
             <p className="text-muted-foreground mb-4">
-              Los Elementos son piezas individuales de contenido que deseas analizar o evaluar usando Plexus. 
+              Los Items son piezas individuales de contenido que deseas analizar o evaluar usando Plexus.
               Pueden ser cualquier tipo de contenido que tus técnicas de puntuación de IA, ML o lógicas puedan procesar, como:
             </p>
             <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
@@ -30,15 +30,15 @@ export default function ItemsPage() {
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold mb-4">Cómo Funcionan los Elementos</h2>
+            <h2 className="text-2xl font-semibold mb-4">Cómo Funcionan los Items</h2>
             <p className="text-muted-foreground mb-4">
-              Los Elementos son la base del sistema de evaluación de Plexus:
+              Los Items son la base del sistema de evaluación de Plexus:
             </p>
             <div className="space-y-4">
               <div>
                 <h3 className="text-xl font-medium mb-2">1. Organización</h3>
                 <p className="text-muted-foreground">
-                  Cada Elemento pertenece a una Cuenta y puede ser referenciado por múltiples Cuadros de Puntuación. 
+                  Cada Elemento pertenece a una Cuenta y puede ser referenciado por múltiples Cuadros de Puntuación.
                   Esto te permite evaluar el mismo contenido usando diferentes criterios o métodos de puntuación.
                 </p>
               </div>
@@ -53,7 +53,7 @@ export default function ItemsPage() {
               <div>
                 <h3 className="text-xl font-medium mb-2">3. Evaluación</h3>
                 <p className="text-muted-foreground">
-                  Los Elementos pueden ser parte de Evaluaciones, donde sus resultados de puntuación se comparan contra
+                  Los Items pueden ser parte de Evaluaciones, donde sus resultados de puntuación se comparan contra
                   respuestas correctas conocidas para medir la precisión y efectividad de tus métodos de puntuación.
                 </p>
               </div>
@@ -61,23 +61,23 @@ export default function ItemsPage() {
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold mb-4">Propiedades del Elemento</h2>
+            <h2 className="text-2xl font-semibold mb-4">Propiedades del Item</h2>
             <div className="space-y-4">
               <div>
                 <h3 className="text-xl font-medium mb-2">Propiedades Principales</h3>
                 <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
-                  <li><strong>Nombre</strong>: Un identificador único para el Elemento</li>
-                  <li><strong>Descripción</strong>: Detalles opcionales sobre el contenido o propósito del Elemento</li>
-                  <li><strong>Cuenta</strong>: La Cuenta que posee este Elemento</li>
+                  <li><strong>Nombre</strong>: Un identificador único para el Item</li>
+                  <li><strong>Descripción</strong>: Detalles opcionales sobre el contenido o propósito del Item</li>
+                  <li><strong>Cuenta</strong>: La Cuenta que posee este Item</li>
                 </ul>
               </div>
               <div>
                 <h3 className="text-xl font-medium mb-2">Relaciones</h3>
                 <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
-                  <li><strong>Cuadros de Puntuación</strong>: Cuadros de Puntuación que referencian este Elemento</li>
-                  <li><strong>Trabajos de Puntuación</strong>: Registros de operaciones de puntuación realizadas en este Elemento</li>
+                  <li><strong>Cuadros de Puntuación</strong>: Cuadros de Puntuación que referencian este Item</li>
+                  <li><strong>Trabajos de Puntuación</strong>: Registros de operaciones de puntuación realizadas en este Item</li>
                   <li><strong>Resultados de Puntuación</strong>: Resultados de operaciones de puntuación</li>
-                  <li><strong>Evaluación</strong>: Enlace opcional a una Evaluación de la que este Elemento forma parte</li>
+                  <li><strong>Evaluación</strong>: Enlace opcional a una Evaluación de la que este Item forma parte</li>
                 </ul>
               </div>
             </div>
@@ -86,10 +86,10 @@ export default function ItemsPage() {
           <section>
             <h2 className="text-2xl font-semibold mb-4">Mejores Prácticas</h2>
             <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
-              <li>Usa nombres claros y descriptivos para tus Elementos para hacerlos fáciles de identificar</li>
+              <li>Usa nombres claros y descriptivos para tus Items para hacerlos fáciles de identificar</li>
               <li>Incluye metadatos relevantes en la descripción para proporcionar contexto</li>
-              <li>Organiza los Elementos lógicamente dentro de tu estructura de Cuenta</li>
-              <li>Mantén un registro de qué Elementos se usan en Evaluaciones para control de calidad</li>
+              <li>Organiza los Items lógicamente dentro de tu estructura de Cuenta</li>
+              <li>Mantén un registro de qué Items se usan en Evaluaciones para control de calidad</li>
               <li>Revisa regularmente los Resultados de Puntuación para monitorear la efectividad de la puntuación</li>
             </ul>
           </section>
@@ -97,10 +97,10 @@ export default function ItemsPage() {
           <section>
             <h2 className="text-2xl font-semibold mb-4">Próximos Pasos</h2>
             <p className="text-muted-foreground mb-4">
-              Ahora que entiendes los Elementos, puedes:
+              Ahora que entiendes los Items, puedes:
             </p>
             <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
-              <li>Crear Cuadros de Puntuación para evaluar tus Elementos</li>
+              <li>Crear Cuadros de Puntuación para evaluar tus Items</li>
               <li>Configurar criterios de puntuación usando Puntuaciones</li>
               <li>Ejecutar Evaluaciones para medir la precisión de la puntuación</li>
               <li>Monitorear resultados a través del panel de control</li>
@@ -123,7 +123,7 @@ export default function ItemsPage() {
         <section>
           <h2 className="text-2xl font-semibold mb-4">What are Items?</h2>
           <p className="text-muted-foreground mb-4">
-            Items are individual pieces of content that you want to analyze or evaluate using Plexus. 
+            Items are individual pieces of content that you want to analyze or evaluate using Plexus.
             They can be any type of content that your AI, ML, or logical scoring techniques can process, such as:
           </p>
           <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
@@ -144,7 +144,7 @@ export default function ItemsPage() {
             <div>
               <h3 className="text-xl font-medium mb-2">1. Organization</h3>
               <p className="text-muted-foreground">
-                Each Item belongs to an Account and can be referenced by multiple Scorecards. 
+                Each Item belongs to an Account and can be referenced by multiple Scorecards.
                 This allows you to evaluate the same content using different criteria or scoring methods.
               </p>
             </div>

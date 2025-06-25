@@ -2,11 +2,12 @@
 
 import { Button as DocButton } from "@/components/ui/button"
 import Link from "next/link"
-import { useTranslationContext } from '@/app/contexts/TranslationContext'
+import { useTranslationContext, useTranslations } from '@/app/contexts/TranslationContext'
 
 export default function ReportsPage() {
+  const t = useTranslations('reports');
   const { locale } = useTranslationContext();
-  
+
   if (locale === 'es') {
     return (
       <div className="max-w-4xl mx-auto py-8 px-6">
@@ -100,7 +101,7 @@ export default function ReportsPage() {
 
   return (
     <div className="max-w-4xl mx-auto py-8 px-6">
-      <h1 className="text-4xl font-bold mb-4">Reports</h1>
+      <h1 className="text-4xl font-bold mb-4">{t('title')}</h1>
       <p className="text-lg text-muted-foreground mb-8">
         Plexus Reports offer a powerful and flexible way to define, generate, and view custom analyses, summaries, and visualizations based on your Plexus data. Instead of building bespoke dashboards for every need, the reporting system provides reusable components and a standardized workflow.
       </p>

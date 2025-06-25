@@ -77,8 +77,8 @@ export default function EvaluationsPage() {
       <div className="max-w-4xl mx-auto py-8 px-6">
         <h1 className="text-4xl font-bold mb-4">Evaluaciones</h1>
         <p className="text-lg text-muted-foreground mb-8">
-          Las Evaluaciones en Plexus son cómo validas y evalúas tus cuadros de puntuación para asegurar que se alineen con tus 
-          políticas y necesidades de partes interesadas. Te ayudan a medir la efectividad y precisión de tus criterios de puntuación 
+          Las Evaluaciones en Plexus son cómo validas y evalúas tus cuadros de puntuación para asegurar que se alineen con tus
+          políticas y necesidades de partes interesadas. Te ayudan a medir la efectividad y precisión de tus criterios de puntuación
           antes de desplegarlos a producción.
         </p>
 
@@ -86,8 +86,8 @@ export default function EvaluationsPage() {
           <section>
             <h2 className="text-2xl font-semibold mb-4">¿Qué son las Evaluaciones?</h2>
             <p className="text-muted-foreground mb-4">
-              Una evaluación es como un proceso de evaluación de aprendizaje automático - es cómo pruebas y validas tus 
-              cuadros de puntuación contra respuestas correctas conocidas. Esto ayuda a asegurar que tus criterios de puntuación estén calibrados apropiadamente 
+              Una evaluación es como un proceso de evaluación de aprendizaje automático - es cómo pruebas y validas tus
+              cuadros de puntuación contra respuestas correctas conocidas. Esto ayuda a asegurar que tus criterios de puntuación estén calibrados apropiadamente
               y producirán resultados confiables cuando se desplieguen.
             </p>
 
@@ -121,7 +121,7 @@ export default function EvaluationsPage() {
               El proceso de evaluación típicamente sigue estos pasos:
             </p>
             <ol className="list-decimal pl-6 space-y-2 text-muted-foreground">
-              <li><strong>Seleccionar Datos</strong>: Elegir un conjunto representativo de elementos con respuestas conocidas</li>
+              <li><strong>Seleccionar Datos</strong>: Elegir un conjunto representativo de items con respuestas conocidas</li>
               <li><strong>Ejecutar Puntuación</strong>: Aplicar el cuadro de puntuación a los datos de prueba</li>
               <li><strong>Comparar Resultados</strong>: Comparar las predicciones del cuadro con las respuestas correctas</li>
               <li><strong>Analizar Métricas</strong>: Revisar precisión, recuperación y otras métricas de rendimiento</li>
@@ -171,8 +171,8 @@ export default function EvaluationsPage() {
     <div className="max-w-4xl mx-auto py-8 px-6">
       <h1 className="text-4xl font-bold mb-4">Evaluations</h1>
       <p className="text-lg text-muted-foreground mb-8">
-        Evaluations in Plexus are how you validate and assess your scorecards to ensure they align with your 
-        policies and stakeholder needs. They help you measure the effectiveness and accuracy of your scoring criteria 
+        Evaluations in Plexus are how you validate and assess your scorecards to ensure they align with your
+        policies and stakeholder needs. They help you measure the effectiveness and accuracy of your scoring criteria
         before deploying them to production.
       </p>
 
@@ -180,8 +180,8 @@ export default function EvaluationsPage() {
         <section>
           <h2 className="text-2xl font-semibold mb-4">What are Evaluations?</h2>
           <p className="text-muted-foreground mb-4">
-            An evaluation is like a machine learning evaluation process - it's how you test and validate your 
-            scorecards against known correct answers. This helps ensure your scoring criteria are properly calibrated 
+            An evaluation is like a machine learning evaluation process - it's how you test and validate your
+            scorecards against known correct answers. This helps ensure your scoring criteria are properly calibrated
             and will produce reliable results when deployed.
           </p>
 

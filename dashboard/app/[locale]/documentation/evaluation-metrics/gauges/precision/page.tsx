@@ -64,13 +64,13 @@ const alwaysProhibitedEmailData = {
 
 export default function PrecisionGaugePage() {
   const { locale } = useTranslationContext();
-  
+
   if (locale === 'es') {
     return (
       <div className="max-w-4xl mx-auto py-8 px-6">
         <h1 className="text-4xl font-bold mb-4">El Indicador de Precisión de Plexus</h1>
         <p className="text-lg text-muted-foreground mb-8">
-          La precisión es una métrica clave que responde la pregunta: <strong>"De todos los elementos que el clasificador etiquetó como positivos, ¿qué proporción eran realmente positivos?"</strong> Mide la exactitud o corrección de las predicciones positivas. Un puntaje de precisión alto indica que el clasificador tiene una tasa baja de Falsos Positivos (FP).
+          La precisión es una métrica clave que responde la pregunta: <strong>"De todos los items que el clasificador etiquetó como positivos, ¿qué proporción eran realmente positivos?"</strong> Mide la exactitud o corrección de las predicciones positivas. Un puntaje de precisión alto indica que el clasificador tiene una tasa baja de Falsos Positivos (FP).
         </p>
 
         <div className="space-y-10">
@@ -98,13 +98,13 @@ export default function PrecisionGaugePage() {
               Precisión = Verdaderos Positivos / (Verdaderos Positivos + Falsos Positivos)
             </p>
             <p className="text-muted-foreground mb-6">
-              Los segmentos visuales en el Indicador de Precisión (ej., colores indicando niveles de rendimiento) típicamente representan puntos de referencia generales de rendimiento. Un puntaje de precisión del 90% se entiende generalmente como que 9 de cada 10 elementos marcados como positivos por el modelo eran realmente positivos. Mientras que el desbalance extremo de clases puede hacer que lograr alta precisión sea desafiante, la interpretación del puntaje de precisión en sí mismo es bastante directa. Los segmentos ayudan a categorizar visualmente este rendimiento (ej., pobre, regular, bueno, excelente).
+              Los segmentos visuales en el Indicador de Precisión (ej., colores indicando niveles de rendimiento) típicamente representan puntos de referencia generales de rendimiento. Un puntaje de precisión del 90% se entiende generalmente como que 9 de cada 10 items marcados como positivos por el modelo eran realmente positivos. Mientras que el desbalance extremo de clases puede hacer que lograr alta precisión sea desafiante, la interpretación del puntaje de precisión en sí mismo es bastante directa. Los segmentos ayudan a categorizar visualmente este rendimiento (ej., pobre, regular, bueno, excelente).
             </p>
             <div className="my-6 p-6 rounded-lg bg-card border flex flex-col items-center">
               <h4 className="text-lg font-semibold mb-4 text-center">Ejemplo: Indicador de Precisión</h4>
               <PrecisionGaugeDisplay value={85} title="Precisión" />
               <p className="text-sm text-muted-foreground mt-3 text-center">
-                Una precisión del 85% indica que el 85% de los elementos predichos como positivos eran realmente positivos.
+                Una precisión del 85% indica que el 85% de los items predichos como positivos eran realmente positivos.
               </p>
             </div>
           </section>

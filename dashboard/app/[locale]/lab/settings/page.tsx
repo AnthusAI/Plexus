@@ -21,14 +21,14 @@ export default function LabSettings() {
       <Card>
         <CardHeader>
           <CardTitle>{t('user')}</CardTitle>
-          <CardDescription>Customize your user preferences.</CardDescription>
+          <CardDescription>{t('customize')}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <LanguageSelector />
-          <p>Update your profile, change notification preferences, and manage security settings.</p>
+          <p>{t('userDescription')}</p>
           <div className="mt-4">
             <Link href="/lab/settings/account" className="text-primary hover:underline">
-              Manage Menu Visibility
+              {t('manageVisibility')}
             </Link>
           </div>
         </CardContent>
@@ -40,7 +40,7 @@ export default function LabSettings() {
           <CardDescription>{t('account.description')}</CardDescription>
         </CardHeader>
         <CardContent>
-          <p>Configure default settings for your organization.</p>
+          <p>{t('organizationDescription')}</p>
           <div className="mt-4">
             <Link href="/lab/settings/account" className="text-primary hover:underline">
               {t('account.title')}
