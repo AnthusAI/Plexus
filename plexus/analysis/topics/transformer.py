@@ -1012,16 +1012,20 @@ async def _process_itemize_transcript_async(
                     # Fall back to retry parser if all extraction attempts fail
                     if not json_extracted:
                         logger.debug("All JSON extraction attempts failed, attempting retry parser")
-                        # Use the original prompt object for retry parser
-                        parsed_items = await retry_parser.aparse_with_prompt(response_text, prompt)
+                        # Create a proper prompt value for retry parser
+                        from langchain_core.prompt_values import StringPromptValue
+                        prompt_value = StringPromptValue(text=formatted_prompt)
+                        parsed_items = await retry_parser.aparse_with_prompt(response_text, prompt_value)
                         logger.debug("Retry parser succeeded")
                         success = True
                 
             except ValidationError as ve:
                 logger.debug(f"Validation error: {ve}")
                 logger.debug("Attempting retry parser")
-                # Use the original prompt object for retry parser
-                parsed_items = await retry_parser.aparse_with_prompt(response_text, prompt)
+                # Create a proper prompt value for retry parser
+                from langchain_core.prompt_values import StringPromptValue
+                prompt_value = StringPromptValue(text=formatted_prompt)
+                parsed_items = await retry_parser.aparse_with_prompt(response_text, prompt_value)
                 logger.debug("Retry parser succeeded")
                 success = True
             
@@ -1051,18 +1055,29 @@ async def _process_itemize_transcript_async(
 async def _process_itemize_batch_async(
     llm, prompt, rows, indices, parser, retry_parser, provider, total_count, max_retries, retry_delay, content_column, simple_format
 ):
-    """Process a batch of transcripts asynchronously and return results paired with original rows."""
+    """Process a batch of transcripts asynchronously with concurrency limits to prevent deadlocks."""
+    
+    # Set concurrency limits based on provider to prevent overwhelming the system
+    if provider.lower() == 'openai':
+        max_concurrent = 10  # Conservative limit for OpenAI API
+        batch_delay = 0.1    # Small delay between batches to respect rate limits
+    else:
+        max_concurrent = 50  # Higher limit for local providers like Ollama
+        batch_delay = 0.05
+    
+    logger.info(f"Processing {len(rows)} transcripts with max concurrency of {max_concurrent}")
 
     # Helper coroutine to keep result and row paired
-    async def process_and_pair(coro, row_data):
+    async def process_and_pair(coro, row_data, transcript_index):
         try:
             result = await coro
-            return result, row_data
+            return result, row_data, transcript_index
         except Exception as e:
-            logger.error(f"An exception was caught from a transcript processing coroutine: {e}")
-            return {'error': str(e)}, row_data
+            logger.error(f"An exception was caught from transcript {transcript_index} processing coroutine: {e}")
+            return {'error': str(e)}, row_data, transcript_index
 
-    tasks = []
+    # Prepare all work items
+    work_items = []
     for i, row in zip(indices, rows):
         text_to_process = row[content_column]
 
@@ -1084,38 +1099,54 @@ async def _process_itemize_batch_async(
             logger.error(f"Error formatting prompt for transcript index {i}. Missing key: {e}")
             continue
 
-        # Create the inner coroutine that does the work
+        # Create the work item
         work_coro = _process_itemize_transcript_async(
             llm, prompt, formatted_prompt, text_to_process, parser, retry_parser, provider, i, total_count, max_retries, retry_delay, simple_format
         )
         
-        # Create a task from the helper wrapper coroutine
-        task = asyncio.create_task(process_and_pair(work_coro, row))
-        tasks.append(task)
+        work_items.append((work_coro, row, i))
 
-    batch_results = []
+    # Process in controlled batches
+    all_results = []
     processed_count = 0
-    batch_total = len(tasks)
-    log_interval = 250
+    total_items = len(work_items)
+    last_log_time = time.time()
 
-    if not tasks:
-        return []
+    # Use asyncio.Semaphore to limit concurrency
+    semaphore = asyncio.Semaphore(max_concurrent)
+    
+    async def process_with_semaphore(work_coro, row_data, transcript_index):
+        async with semaphore:
+            return await process_and_pair(work_coro, row_data, transcript_index)
 
+    # Create all tasks but let semaphore control concurrency
+    tasks = [
+        asyncio.create_task(process_with_semaphore(work_coro, row, transcript_index))
+        for work_coro, row, transcript_index in work_items
+    ]
+
+    # Process results as they complete
     for future in asyncio.as_completed(tasks):
         processed_count += 1
         try:
-            # The result from the future is already the (result, row) pair
-            result_pair = await future
-            batch_results.append(result_pair)
+            result_pair, row_data, transcript_index = await future
+            all_results.append((result_pair, row_data))
         except Exception as e:
             logger.error(f"An unexpected exception occurred when awaiting a completed task: {e}")
-            # The inner 'process_and_pair' handler is preferred for associating errors with rows.
-            # This is a fallback for unexpected issues.
+            # Add error result to maintain order
+            all_results.append(({'error': str(e)}, None))
 
-        if processed_count % log_interval == 0 or processed_count == batch_total:
-            logger.info(f"    ... processed {processed_count}/{batch_total} transcripts in this batch.")
+        # Log progress more frequently - every 25 transcripts or every 5 seconds
+        current_time = time.time()
+        if processed_count % 25 == 0 or current_time - last_log_time > 5 or processed_count == total_items:
+            logger.info(f"Itemization progress: {processed_count}/{total_items} transcripts processed...")
+            last_log_time = current_time
+            
+        # Add small delay every batch to prevent overwhelming the system
+        if processed_count % max_concurrent == 0:
+            await asyncio.sleep(batch_delay)
                 
-    return batch_results
+    return all_results
 
 async def _transform_transcripts_itemize_async(
     input_file: str,
@@ -1349,6 +1380,9 @@ async def _transform_transcripts_itemize_async(
         )
         
         with open(text_file_path, 'w') as f:
+            processed_count = 0
+            last_log_time = time.time()
+            
             for i, (result_pair, row) in enumerate(all_results):
                 if isinstance(result_pair, Exception):
                     logging.error(f"Error processing transcript: {result_pair}")
@@ -1414,6 +1448,14 @@ async def _transform_transcripts_itemize_async(
                     new_row[content_column] = data
                     transformed_rows.append(new_row)
                     f.write(f"{data}\n")
+
+                processed_count += 1
+                
+                # Log progress periodically
+                current_time = time.time()
+                if processed_count % 25 == 0 or current_time - last_log_time > 5:
+                    logger.info(f"Itemization progress: {processed_count}/{len(all_results)} transcripts processed...")
+                    last_log_time = current_time
     else:
         logging.info("No valid transcripts found to process for itemization.")
         with open(text_file_path, 'w') as f:

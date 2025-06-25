@@ -269,7 +269,7 @@ class TopicAnalysis(BaseReportBlock):
 
             # Preprocessing configuration
             preprocessing = self.config.get("preprocessing", {})
-            preprocessing_config = preprocessing.get("steps", self.config.get("preprocessing", []))
+            preprocessing_config = preprocessing.get("steps", [])
             customer_only = preprocessing.get("customer_only", False)
             
             # Log comprehensive configuration summary
