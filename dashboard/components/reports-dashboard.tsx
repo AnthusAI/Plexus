@@ -526,11 +526,13 @@ export default function ReportsDashboard({
 }: {
   initialSelectedReportId?: string | null,
 } = {}) {
+  const t = useTranslations('reports');
+
   // Add a useEffect to potentially log when setup runs relative to mount
   useEffect(() => {
     console.log("ReportsDashboard mounted. Block registry setup should have run.");
   }, []);
-  const tReports = useTranslations('reports'); 
+  const tReports = useTranslations('reports');
 
   const { user } = useAuthenticator()
   const router = useRouter()
@@ -733,13 +735,13 @@ export default function ReportsDashboard({
           if (data?.onCreateReport) {
             const newReport = data.onCreateReport;
             console.log('🔔 SUB-EVENT: Original new report name:', newReport.name, 'type:', typeof newReport.name);
-            
+
             // DIRECT APPROACH: Create a report display object manually to ensure name is preserved
             const manualTransformedReport: ReportDisplayData = {
               id: newReport.id,
-              name: typeof newReport.name === 'string' ? newReport.name : 
-                   (typeof newReport.name === 'object' && newReport.name !== null) ? 
-                   (newReport.name as any).name || `Report ${newReport.id.substring(0, 6)}` : 
+              name: typeof newReport.name === 'string' ? newReport.name :
+                   (typeof newReport.name === 'object' && newReport.name !== null) ?
+                   (newReport.name as any).name || `Report ${newReport.id.substring(0, 6)}` :
                    `Report ${newReport.id.substring(0, 6)}`,
               createdAt: newReport.createdAt,
               updatedAt: newReport.updatedAt,
@@ -1301,7 +1303,7 @@ export default function ReportsDashboard({
   if (error && !dataHasLoadedOnce) { // Show error prominently if initial load failed
     return (
       <div className="space-y-4 p-4">
-        <h1 className="text-2xl font-bold">Reports</h1>
+        <h1 className="text-2xl font-bold">{t('title')}</h1>
         <div className="text-sm text-destructive">Error fetching reports: {error}</div>
         <Button onClick={() => accountId && fetchReports(accountId, null, selectedReportConfiguration)}>Retry</Button>
       </div>
@@ -1346,7 +1348,7 @@ export default function ReportsDashboard({
           >
             <div className="@container">
               {!isLoading && reports.length === 0 && !error && (
-                <div className="text-sm text-muted-foreground p-4 text-center">No reports found for this account.</div>
+                <div className="text-sm text-muted-foreground p-4 text-center">{t('noReports')}</div>
               )}
               {reports.length > 0 && (
                 <div className={`
@@ -1411,11 +1413,11 @@ export default function ReportsDashboard({
                       status: report.task?.status as any || 'PENDING',
                       currentStageName: currentStageName
                     };
-                    
+
                     return (
-                      <div 
-                        key={report.id} 
-                        onClick={clickHandler} 
+                      <div
+                        key={report.id}
+                        onClick={clickHandler}
                         className="cursor-pointer"
                         ref={(el) => {
                           reportRefsMap.current.set(report.id, el);
@@ -1469,7 +1471,7 @@ export default function ReportsDashboard({
                       {/* Loading indicator */}
                       {isLoadingMore && (
                         <div className="flex justify-center p-4">
-                          <div className="text-sm text-muted-foreground">Loading more reports...</div>
+                          <div className="text-sm text-muted-foreground">{t('loadingMoreReports')}</div>
                         </div>
                       )}
                     </div>

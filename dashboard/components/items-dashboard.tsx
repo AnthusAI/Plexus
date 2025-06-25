@@ -166,6 +166,8 @@ const GridContent = ({
   isLoading: boolean;
   hasInitiallyLoaded: boolean;
 }) => {
+  const t = useTranslations('items');
+
   // Only show "No items found" if we're not loading and have actually finished the initial load
   if (filteredItems.length === 0 && !isLoading && hasInitiallyLoaded) {
     return (

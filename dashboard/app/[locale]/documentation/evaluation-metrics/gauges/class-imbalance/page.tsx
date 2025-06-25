@@ -45,13 +45,13 @@ const AccuracyGauge = ({ value, title, segments }: {
 
 export default function ClassImbalanceProblemPage() {
   const { locale } = useTranslationContext();
-  
+
   if (locale === 'es') {
     return (
       <div className="max-w-4xl mx-auto py-8 px-6">
         <h1 className="text-4xl font-bold mb-4">El Desafío: Interpretando la Precisión con Datos Desbalanceados</h1>
         <p className="text-lg text-muted-foreground mb-2">
-          Podrías estar aquí porque una evaluación en Plexus resaltó un <strong>desbalance de clases</strong> en tu conjunto de datos. Esta es una situación común donde algunas categorías (o clases) de datos son mucho más frecuentes que otras. Por ejemplo, en un conjunto de datos de emails, los emails "normales" podrían superar vastamente en número a los emails "spam". O, en manufactura, los elementos no defectuosos podrían ser mucho más comunes que los defectuosos.
+          Podrías estar aquí porque una evaluación en Plexus resaltó un <strong>desbalance de clases</strong> en tu conjunto de datos. Esta es una situación común donde algunas categorías (o clases) de datos son mucho más frecuentes que otras. Por ejemplo, en un conjunto de datos de emails, los emails "normales" podrían superar vastamente en número a los emails "spam". O, en manufactura, los items no defectuosos podrían ser mucho más comunes que los defectuosos.
         </p>
         <p className="text-lg text-muted-foreground mb-8">
           Aunque tener datos desbalanceados no es un error en sí mismo, puede hacer que los puntajes de precisión tradicionales sean altamente engañosos. Exploremos por qué el desbalance de clases es un factor crítico en entender el verdadero rendimiento de tu clasificador y cómo interpretar correctamente las métricas de evaluación en estos escenarios.

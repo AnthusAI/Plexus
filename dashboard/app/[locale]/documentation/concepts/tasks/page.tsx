@@ -20,9 +20,9 @@ export default function TasksPage() {
           <section>
             <h2 className="text-2xl font-semibold mb-4">¿Qué son las Tareas?</h2>
             <p className="text-muted-foreground mb-4">
-              Las tareas son la columna vertebral de Plexus, sirviendo como la infraestructura que conecta todas las 
-              operaciones y miembros del equipo de tu organización. En su núcleo, las tareas representan comandos que operan en los recursos básicos 
-              de Plexus—Elementos, Fuentes, Cuadros de Puntuación y Evaluaciones—y el sistema de gestión de tareas es cómo estos 
+              Las tareas son la columna vertebral de Plexus, sirviendo como la infraestructura que conecta todas las
+              operaciones y miembros del equipo de tu organización. En su núcleo, las tareas representan comandos que operan en los recursos básicos
+              de Items, Fuentes, Cuadros de Puntuación y Evaluaciones—y el sistema de gestión de tareas es cómo estos
               comandos se distribuyen a computadoras trabajadoras para procesamiento.
             </p>
 
@@ -51,7 +51,7 @@ export default function TasksPage() {
                 </p>
                 <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
                   <li><strong>Tareas de Evaluación</strong>: Ejecutar evaluaciones de rendimiento en cuadros de puntuación</li>
-                  <li><strong>Tareas de Puntuación</strong>: Procesar elementos individuales contra criterios de puntuación</li>
+                  <li><strong>Tareas de Puntuación</strong>: Procesar items individuales contra criterios de puntuación</li>
                   <li><strong>Tareas de Reportes</strong>: Generar reportes y análisis de datos</li>
                   <li><strong>Tareas de Procesamiento de Datos</strong>: Manejar importación y transformación de datos</li>
                 </ul>
@@ -111,9 +111,9 @@ export default function TasksPage() {
         <section>
           <h2 className="text-2xl font-semibold mb-4">What are Tasks?</h2>
           <p className="text-muted-foreground mb-4">
-            Tasks are the backbone of Plexus, serving as the infrastructure that connects all of your organization's 
-            operations and team members. At their core, tasks represent commands that operate on Plexus's basic 
-            resources—Items, Sources, Scorecards, and Evaluations—and the task management system is how these 
+            Tasks are the backbone of Plexus, serving as the infrastructure that connects all of your organization's
+            operations and team members. At their core, tasks represent commands that operate on Plexus's basic
+            resources—Items, Sources, Scorecards, and Evaluations—and the task management system is how these
             commands get distributed to worker computers for processing.
           </p>
 
@@ -129,15 +129,15 @@ export default function TasksPage() {
               </p>
               <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
                 <li>
-                  <strong>Command Line Users</strong>: Technical team members can use Plexus's command-line tools 
+                  <strong>Command Line Users</strong>: Technical team members can use Plexus's command-line tools
                   directly, working with YAML configurations and advanced features
                 </li>
                 <li>
-                  <strong>Worker Daemon Users</strong>: Organizations can run Plexus worker daemons that plug into 
+                  <strong>Worker Daemon Users</strong>: Organizations can run Plexus worker daemons that plug into
                   the task dispatch system, allowing tasks to be managed through the dashboard
                 </li>
                 <li>
-                  <strong>Dashboard Users</strong>: Team members can initiate and monitor tasks entirely through 
+                  <strong>Dashboard Users</strong>: Team members can initiate and monitor tasks entirely through
                   the web interface, without needing technical expertise
                 </li>
               </ul>
@@ -146,21 +146,21 @@ export default function TasksPage() {
             <div>
               <h3 className="text-xl font-medium mb-2">Common Infrastructure for All</h3>
               <p className="text-muted-foreground mb-4">
-                While team members might use different tools based on their roles and expertise, everyone operates 
+                While team members might use different tools based on their roles and expertise, everyone operates
                 on the same underlying infrastructure:
               </p>
               <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
                 <li>
-                  <strong>Shared Terminology</strong>: Whether using the dashboard or command line, everyone uses 
+                  <strong>Shared Terminology</strong>: Whether using the dashboard or command line, everyone uses
                   the same concepts of Items, Sources, Scorecards, and Evaluations
                 </li>
                 <li>
-                  <strong>Unified Business Process</strong>: Data scientists working with data sources, ML engineers 
-                  fine-tuning models, and account representatives coordinating with clients all connect through the 
+                  <strong>Unified Business Process</strong>: Data scientists working with data sources, ML engineers
+                  fine-tuning models, and account representatives coordinating with clients all connect through the
                   same task system
                 </li>
                 <li>
-                  <strong>Seamless Collaboration</strong>: Technical consultants can set up advanced configurations 
+                  <strong>Seamless Collaboration</strong>: Technical consultants can set up advanced configurations
                   that non-technical team members can then operate through the dashboard
                 </li>
               </ul>
@@ -169,9 +169,9 @@ export default function TasksPage() {
             <div>
               <h3 className="text-xl font-medium mb-2">Connecting Your Organization</h3>
               <p className="text-muted-foreground">
-                The task system serves as the coordination layer that brings together team members with different skills 
-                and responsibilities. Whether someone is creating specialized ML models, managing client relationships, 
-                or analyzing problem domains, the task system ensures everyone can work together effectively while 
+                The task system serves as the coordination layer that brings together team members with different skills
+                and responsibilities. Whether someone is creating specialized ML models, managing client relationships,
+                or analyzing problem domains, the task system ensures everyone can work together effectively while
                 using the tools that best suit their needs.
               </p>
             </div>
@@ -219,7 +219,7 @@ export default function TasksPage() {
                 </li>
               </ul>
               <p className="text-muted-foreground mt-4">
-                Each worker advertises its capabilities (like having a GPU or access to certain data), 
+                Each worker advertises its capabilities (like having a GPU or access to certain data),
                 allowing Plexus to route tasks to the most appropriate worker.
               </p>
             </div>
@@ -274,28 +274,28 @@ export default function TasksPage() {
             <div>
               <h3 className="text-xl font-medium mb-2">1. Creation</h3>
               <p className="text-muted-foreground">
-                Tasks are created when you initiate operations through the dashboard. Each task is assigned a unique ID 
+                Tasks are created when you initiate operations through the dashboard. Each task is assigned a unique ID
                 and configured based on your requirements.
               </p>
             </div>
             <div>
               <h3 className="text-xl font-medium mb-2">2. Queuing</h3>
               <p className="text-muted-foreground">
-                Tasks are intelligently queued and distributed to specialized worker nodes. Our system matches tasks 
+                Tasks are intelligently queued and distributed to specialized worker nodes. Our system matches tasks
                 with workers that have the right capabilities (like GPU access for intensive operations).
               </p>
             </div>
             <div>
               <h3 className="text-xl font-medium mb-2">3. Execution</h3>
               <p className="text-muted-foreground">
-                Worker nodes process tasks and provide continuous updates. You can monitor progress in real-time 
+                Worker nodes process tasks and provide continuous updates. You can monitor progress in real-time
                 through the dashboard, with detailed status information at each stage.
               </p>
             </div>
             <div>
               <h3 className="text-xl font-medium mb-2">4. Completion</h3>
               <p className="text-muted-foreground">
-                When processing finishes, tasks are marked as complete and their results are stored securely. 
+                When processing finishes, tasks are marked as complete and their results are stored securely.
                 You can access these results through the dashboard for review and analysis.
               </p>
             </div>

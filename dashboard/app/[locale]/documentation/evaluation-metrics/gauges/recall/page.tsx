@@ -44,13 +44,13 @@ const precisionForProhibitedInAlwaysSafe = 0; // 0 / (0 + 0) which is undefined,
 
 export default function RecallGaugePage() {
   const { locale } = useTranslationContext();
-  
+
   if (locale === 'es') {
     return (
       <div className="max-w-4xl mx-auto py-8 px-6">
         <h1 className="text-4xl font-bold mb-4">El Indicador de Recuperación de Plexus</h1>
         <p className="text-lg text-muted-foreground mb-8">
-          La recuperación, también conocida como Sensibilidad o Tasa de Verdaderos Positivos (TVP), responde la pregunta: <strong>"De todos los elementos que fueron realmente positivos, ¿qué proporción identificó correctamente el clasificador?"</strong> Mide la integridad o exhaustividad del clasificador para encontrar todas las instancias positivas. Un puntaje alto de recuperación indica que el clasificador tiene una tasa baja de Falsos Negativos (FN).
+          La recuperación, también conocida como Sensibilidad o Tasa de Verdaderos Positivos (TVP), responde la pregunta: <strong>"De todos los items que fueron realmente positivos, ¿qué proporción identificó correctamente el clasificador?"</strong> Mide la integridad o exhaustividad del clasificador para encontrar todas las instancias positivas. Un puntaje alto de recuperación indica que el clasificador tiene una tasa baja de Falsos Negativos (FN).
         </p>
 
         <div className="space-y-10">

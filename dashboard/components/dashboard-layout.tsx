@@ -1,16 +1,11 @@
 "use client"
 
 import * as React from "react"
-import { useState, useEffect, useRef } from "react"
-import { Activity, StickyNote, FileBarChart, FlaskConical, ListChecks, LogOut, Menu, PanelLeft, PanelRight, Settings, Sparkles, Siren, Database, Sun, Moon, Send, Mic, Headphones, MessageCircleMore, MessageSquare, Inbox, X, ArrowLeftRight, Layers3, Monitor, CircleHelp } from "lucide-react"
+import { useState, useEffect } from "react"
+import { Activity, StickyNote, FileBarChart, FlaskConical, ListChecks, LogOut, Menu, PanelLeft, PanelRight, Settings, Siren, Database, Sun, Moon, Send, Mic, Headphones, MessageCircleMore, MessageSquare, X, ArrowLeftRight, Layers3, Monitor, CircleHelp } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useTheme } from "next-themes"
-import { generateClient } from "aws-amplify/data"
-import { listFromModel } from "@/utils/amplify-helpers"
-import type { Schema } from "@/amplify/data/resource"
-import type { AccountSettings } from "@/types/account-config"
-import { isValidAccountSettings } from "@/types/account-config"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button, type ButtonProps } from "@/components/ui/button"
@@ -55,11 +50,10 @@ const DashboardButton = React.forwardRef<HTMLButtonElement, ButtonProps>(
 )
 DashboardButton.displayName = "DashboardButton"
 
-const MobileHeader = ({ 
-  toggleLeftSidebar, 
-  toggleRightSidebar, 
-  rightSidebarState 
-}: { 
+const MobileHeader = ({
+  toggleLeftSidebar,
+  toggleRightSidebar,
+}: {
   toggleLeftSidebar: () => void;
   toggleRightSidebar: () => void;
   rightSidebarState: 'collapsed' | 'normal' | 'expanded';
@@ -73,7 +67,7 @@ const MobileHeader = ({
     >
       <Menu className="h-5 w-5" />
     </DashboardButton>
-    
+
     <Link href="/" className="flex items-center">
       <SquareLogo variant={LogoVariant.Narrow} />
     </Link>
@@ -88,10 +82,6 @@ const MobileHeader = ({
     </DashboardButton>
   </div>
 )
-
-const client = generateClient<Schema>()
-
-type Account = Schema['Account']['type']
 
 export const menuItems = [
   { name: "Items", icon: StickyNote, path: "/lab/items" },
@@ -108,6 +98,7 @@ export const menuItems = [
 
 const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; signOut: () => Promise<void> }) => {
   const t = useTranslations('navigation')
+  const tCommon = useTranslations('common')
   const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState(true)
   const { rightSidebarState, setRightSidebarState } = useSidebar()
   const { theme, setTheme } = useTheme()
@@ -115,7 +106,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
   const isMobile = useMediaQuery("(max-width: 1023px)")
   const { accounts, selectedAccount, isLoadingAccounts, visibleMenuItems, setSelectedAccount } = useAccount()
 
-  useEffect(() => {    
+  useEffect(() => {
     if (isDesktop) {
       setIsLeftSidebarOpen(true)
     } else if (isMobile) {
@@ -140,7 +131,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
         const newState = prevState === 'collapsed' ? 'normal' : 'collapsed';
         return newState;
       });
-      
+
       // Close left sidebar when opening chat on mobile
       if (rightSidebarState === 'collapsed') {
         setIsLeftSidebarOpen(false);
@@ -148,7 +139,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
     } else {
       // Desktop behavior remains the same
       setRightSidebarState((prevState) => {
-        const newState = prevState === 'collapsed' ? 'normal' : 
+        const newState = prevState === 'collapsed' ? 'normal' :
                         prevState === 'normal' ? 'expanded' : 'collapsed';
         console.log('Setting desktop right sidebar state:', {
           from: prevState,
@@ -182,7 +173,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
         <ScrollArea className="flex-grow overflow-y-auto">
           <div className={`${isLeftSidebarOpen ? 'pl-2' : 'px-3'} ${isMobile ? 'space-y-2' : 'space-y-1'}`}>
             {visibleMenuItems.map((item) => (
-              <Link 
+              <Link
                 key={item.name}
                 href={item.path}
                 className={`flex items-center w-full px-3 py-2 group !rounded-[4px] ${
@@ -226,22 +217,22 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                 className={`w-full justify-start px-2 pr-2 cursor-pointer`}
               >
                 <Avatar className={`h-8 w-8 ${isLeftSidebarOpen ? 'mr-2' : ''}`}>
-                  <AvatarImage 
-                    src={`/avatar-${selectedAccount?.key || '1'}.png`} 
-                    alt={selectedAccount?.name || 'Account'} 
+                  <AvatarImage
+                    src={`/avatar-${selectedAccount?.key || '1'}.png`}
+                    alt={selectedAccount?.name || t('account')}
                   />
                   <AvatarFallback className="bg-background dark:bg-border">
                     {selectedAccount?.name?.split(' ').map(word => word[0]).join('') || 'AC'}
                   </AvatarFallback>
                 </Avatar>
-                {isLeftSidebarOpen && <span className="text-muted-foreground">{selectedAccount?.name || 'Select Account'}</span>}
+                {isLeftSidebarOpen && <span className="text-muted-foreground">{selectedAccount?.name || t('selectAccount')}</span>}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-[200px]">
               <Link href="/settings">
                 <DropdownMenuItem className="cursor-pointer">
                   <Settings className="mr-2 h-4 w-4 text-navigation-icon" />
-                  Settings
+                  {tCommon('settings')}
                 </DropdownMenuItem>
               </Link>
               <DropdownMenuSeparator />
@@ -249,25 +240,25 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                 <DropdownMenuTrigger className="w-full">
                   <DropdownMenuItem className="cursor-pointer">
                     <ArrowLeftRight className="mr-2 h-4 w-4" />
-                    Select Account
+                    {t('selectAccount')}
                   </DropdownMenuItem>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent side="right" align="start" className="w-[200px]">
                   {isLoadingAccounts ? (
-                    <DropdownMenuItem>Loading accounts...</DropdownMenuItem>
+                    <DropdownMenuItem>{t('loadingAccounts')}</DropdownMenuItem>
                   ) : accounts.length === 0 ? (
-                    <DropdownMenuItem>No accounts found</DropdownMenuItem>
+                    <DropdownMenuItem>{t('noAccountsFound')}</DropdownMenuItem>
                   ) : (
                     accounts.map((account) => (
-                      <DropdownMenuItem 
-                        key={account.id} 
+                      <DropdownMenuItem
+                        key={account.id}
                         className="cursor-pointer"
                         onClick={() => setSelectedAccount(account)}
                       >
                         <Avatar className="h-8 w-8 mr-2">
-                          <AvatarImage 
-                            src={`/avatar-${account.key}.png`} 
-                            alt={account.name} 
+                          <AvatarImage
+                            src={`/avatar-${account.key}.png`}
+                            alt={account.name}
                           />
                           <AvatarFallback className="bg-frame dark:bg-border">
                             {account.name.split(' ').map(word => word[0]).join('')}
@@ -296,18 +287,18 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-[200px]">
-              <DropdownMenuLabel>My Account</DropdownMenuLabel>
+              <DropdownMenuLabel>{t('myAccount')}</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <Link href="/settings">
                 <DropdownMenuItem className="cursor-pointer">
                   <Settings className="mr-2 h-4 w-4 text-navigation-icon" />
-                  Settings
+                  {tCommon('settings')}
                 </DropdownMenuItem>
               </Link>
               <DropdownMenuSeparator />
               <DropdownMenuItem className="cursor-pointer" onClick={signOut}>
                 <LogOut className="mr-2 h-4 w-4 text-navigation-icon" />
-                Sign out
+                {t('signOut')}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -325,7 +316,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                   </DashboardButton>
                 </TooltipTrigger>
                 <TooltipContent side="right">
-                  {isLeftSidebarOpen ? "Toggle sidebar" : "Expand sidebar"}
+                  {isLeftSidebarOpen ? t('toggleSidebar') : t('expandSidebar')}
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -349,7 +340,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                     </DashboardButton>
                   </TooltipTrigger>
                   <TooltipContent side="right">
-                    Toggle {theme === "dark" ? "Light" : theme === "light" ? "System" : "Dark"} Mode
+                    {theme === "dark" ? t('toggleLightMode') : theme === "light" ? t('toggleSystemMode') : t('toggleDarkMode')}
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -378,7 +369,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                   </DashboardButton>
                 </TooltipTrigger>
                 <TooltipContent side="left">
-                  Expand chat
+                  {t('expandChat')}
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -465,10 +456,10 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
         {rightSidebarState !== 'collapsed' && (
           <div className="px-4 pt-4 pb-2 border-t border-border">
             <form className="flex items-center">
-              <Input 
-                type="text" 
-                placeholder="Type a message..." 
-                className="flex-grow mr-2 bg-background" 
+              <Input
+                type="text"
+                placeholder={t('typeMessage')}
+                className="flex-grow mr-2 bg-background"
               />
               <DashboardButton type="submit" size="icon">
                 <Send className="h-4 w-4" />
@@ -491,7 +482,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                     </DashboardButton>
                   </TooltipTrigger>
                   <TooltipContent side="top">
-                    Dictate Message
+                    {t('dictateMessage')}
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -507,7 +498,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                     </DashboardButton>
                   </TooltipTrigger>
                   <TooltipContent side="top">
-                    Voice Mode
+                    {t('voiceMode')}
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -526,7 +517,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                 </DashboardButton>
               </TooltipTrigger>
               <TooltipContent side="left">
-                {rightSidebarState === 'collapsed' ? "Expand chat" : "Collapse chat"}
+                {rightSidebarState === 'collapsed' ? t('expandChat') : t('collapseChat')}
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
@@ -536,8 +527,8 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
   }
 
   const toggleTheme = () => {
-    setTheme(theme === "dark" ? "light" : 
-            theme === "light" ? "system" : 
+    setTheme(theme === "dark" ? "light" :
+            theme === "light" ? "system" :
             "dark")
   }
 
@@ -607,7 +598,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
           `}>
             {isMobile && rightSidebarState !== 'collapsed' && (
               <div className="flex items-center justify-between p-2 border-b">
-                <span className="font-semibold">Chat</span>
+                <span className="font-semibold">{t('chat')}</span>
                 <DashboardButton
                   variant="ghost"
                   size="icon"

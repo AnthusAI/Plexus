@@ -8,6 +8,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ChevronDown, ChevronRight, Eye, EyeOff, MessagesSquare, Microscope, FileText } from 'lucide-react';
 import * as yaml from 'js-yaml';
+import { useTranslations } from '@/app/contexts/TranslationContext';
 
 interface TopicAnalysisData {
   summary?: string;
@@ -84,18 +85,19 @@ interface TopicAnalysisData {
 
 /**
  * Topic Analysis Report Block Component
- * 
+ *
  * Displays a comprehensive topic analysis report with sections for:
  * - Pre-processing
- * - LLM Extraction 
+ * - LLM Extraction
  * - BERTopic Analysis
  * - Fine-tuning
  */
 
 const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
+  const t = useTranslations('common');
   const [promptExpanded, setPromptExpanded] = useState(false);
   const [examplesExpanded, setExamplesExpanded] = useState(false);
-  
+
   // Debug logging to see what we're receiving
   console.log('🔍 TopicAnalysis component received props:', {
     hasOutput: !!props.output,
@@ -205,12 +207,12 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
                       LLM Extraction
                       {llmExtraction.examples && (
                         <div className="ml-2 px-2 py-1 text-xs bg-card rounded">
-                          {llmExtraction.examples.length} examples
+                          {llmExtraction.examples.length} {t('examples')}
                         </div>
                       )}
                     </AccordionTrigger>
                     <AccordionContent>
-                      <LLMExtractionSection 
+                      <LLMExtractionSection
                         llmExtraction={llmExtraction}
                         promptExpanded={promptExpanded}
                         setPromptExpanded={setPromptExpanded}
@@ -293,18 +295,20 @@ const TopicAnalysisResults: React.FC<{
     examples?: string[];
   }>;
 }> = ({ topics }) => {
+  const t = useTranslations('topics');
+
   if (topics.length === 0) {
     return (
       <div className="space-y-4">
         <div className="flex items-center gap-2">
           <MessagesSquare className="h-5 w-5" />
-          <h3 className="text-lg font-medium">Topic Analysis Results</h3>
+          <h3 className="text-lg font-medium">{t('topicAnalysisResults')}</h3>
         </div>
         <div className="space-y-4">
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-base text-muted-foreground">Analyzing topics...</CardTitle>
+                <CardTitle className="text-base text-muted-foreground">{t('analyzingTopics')}</CardTitle>
                 <div className="h-4 w-4 animate-spin rounded-full border-2 border-muted border-t-foreground"></div>
               </div>
             </CardHeader>
@@ -331,11 +335,11 @@ const TopicAnalysisResults: React.FC<{
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <MessagesSquare className="h-5 w-5" />
-          <h3 className="text-lg font-medium">Topic Analysis Results</h3>
+          <h3 className="text-lg font-medium">{t('topicAnalysisResults')}</h3>
         </div>
-        <span className="text-sm text-muted-foreground">{topics.length} topics discovered</span>
+        <span className="text-sm text-muted-foreground">{topics.length} {t('topicsDiscovered')}</span>
       </div>
-      
+
       <div className="space-y-4">
         {topics.map((topic) => (
           <Card key={topic.id} className="shadow-none border">
@@ -365,7 +369,7 @@ const TopicAnalysisResults: React.FC<{
                 {/* Debug: Show if examples are missing */}
                 {(!topic.examples || topic.examples.length === 0) && (
                   <div className="text-xs text-muted-foreground italic">
-                    No examples available for this topic
+                    {t('noExamplesAvailable')}
                   </div>
                 )}
               </div>
@@ -385,18 +389,19 @@ const TopicExamplesSection: React.FC<{
   examples: string[];
   topicId: number;
 }> = ({ examples, topicId }) => {
+  const t = useTranslations('topics');
   const [expanded, setExpanded] = useState(false);
-  
+
   if (examples.length === 0) {
     return null;
   }
-  
+
   return (
     <div className="space-y-2">
       <Collapsible open={expanded} onOpenChange={setExpanded}>
         <CollapsibleTrigger asChild>
-          <Button 
-            variant="ghost" 
+          <Button
+            variant="ghost"
             size="sm"
             className="justify-start gap-2 p-0 h-auto font-normal"
           >
@@ -407,7 +412,7 @@ const TopicExamplesSection: React.FC<{
             )}
             <FileText className="h-4 w-4" />
             <span className="text-sm text-muted-foreground">
-              {examples.length} example{examples.length === 1 ? '' : 's'}
+              {examples.length} {examples.length === 1 ? t('example') : t('examples')}
             </span>
           </Button>
         </CollapsibleTrigger>
@@ -527,12 +532,13 @@ const LLMExtractionSection: React.FC<{
   examplesExpanded: boolean;
   setExamplesExpanded: (expanded: boolean) => void;
 }> = ({ llmExtraction, promptExpanded, setPromptExpanded, examplesExpanded, setExamplesExpanded }) => {
+  const t = useTranslations('common');
   const [selectedExamples, setSelectedExamples] = useState<Set<number>>(new Set());
   const [showAllExamples, setShowAllExamples] = useState(false);
-  
+
   const examples = llmExtraction.examples || [];
   const displayedExamples = showAllExamples ? examples : examples.slice(0, 20);
-  
+
   const toggleExampleSelection = (index: number) => {
     const newSelection = new Set(selectedExamples);
     if (newSelection.has(index)) {
@@ -647,10 +653,10 @@ const LLMExtractionSection: React.FC<{
               );
             })}
           </div>
-          
+
           {!showAllExamples && examples.length > 20 && (
             <div className="text-center text-sm text-muted-foreground">
-              Showing 20 of {examples.length} examples
+              Showing 20 of {examples.length} {t('examples')}
             </div>
           )}
         </div>

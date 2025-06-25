@@ -6,13 +6,13 @@ import { useTranslationContext } from '@/app/contexts/TranslationContext'
 
 export default function ScoresPage() {
   const { locale } = useTranslationContext();
-  
+
   if (locale === 'es') {
     return (
       <div className="max-w-4xl mx-auto py-8 px-6">
         <h1 className="text-4xl font-bold mb-4">Puntuaciones</h1>
         <p className="text-lg text-muted-foreground mb-8">
-          Las puntuaciones son los elementos fundamentales de evaluación en Plexus. Definen qué quieres medir 
+          Las puntuaciones son los items fundamentales de evaluación en Plexus. Definen qué quieres medir
           o evaluar sobre tu contenido.
         </p>
 
@@ -20,8 +20,8 @@ export default function ScoresPage() {
           <section>
             <h2 className="text-2xl font-semibold mb-4">¿Qué son las Puntuaciones?</h2>
             <p className="text-muted-foreground mb-4">
-              Las puntuaciones son criterios de evaluación individuales que definen aspectos específicos que quieres evaluar en tu contenido. 
-              Aunque pueden ser preguntas, no se limitan solo a preguntas - pueden ser cualquier tipo de punto de evaluación 
+              Las puntuaciones son criterios de evaluación individuales que definen aspectos específicos que quieres evaluar en tu contenido.
+              Aunque pueden ser preguntas, no se limitan solo a preguntas - pueden ser cualquier tipo de punto de evaluación
               que ayude a analizar tu contenido.
             </p>
 
@@ -39,7 +39,7 @@ export default function ScoresPage() {
                     <strong>Análisis de Sentimiento</strong>: Evaluar si el tono del contenido es positivo, negativo o neutral
                   </li>
                   <li>
-                    <strong>Verificaciones de Cumplimiento</strong>: Verificar si elementos requeridos específicos están presentes
+                    <strong>Verificaciones de Cumplimiento</strong>: Verificar si items requeridos específicos están presentes
                   </li>
                   <li>
                     <strong>Métricas</strong>: Medidas cuantitativas como tiempo de respuesta o conteo de palabras
@@ -64,7 +64,7 @@ export default function ScoresPage() {
           <section>
             <h2 className="text-2xl font-semibold mb-4">Organización de las Puntuaciones</h2>
             <p className="text-muted-foreground mb-4">
-              Las puntuaciones se organizan dentro de Cuadros de Puntuación, que agrupan criterios de evaluación relacionados. 
+              Las puntuaciones se organizan dentro de Cuadros de Puntuación, que agrupan criterios de evaluación relacionados.
               Esta organización ayuda a mantener tus evaluaciones estructuradas y manejables.
             </p>
           </section>
@@ -101,7 +101,7 @@ export default function ScoresPage() {
     <div className="max-w-4xl mx-auto py-8 px-6">
       <h1 className="text-4xl font-bold mb-4">Scores</h1>
       <p className="text-lg text-muted-foreground mb-8">
-        Scores are the fundamental building blocks of evaluation in Plexus. They define what you want to measure 
+        Scores are the fundamental building blocks of evaluation in Plexus. They define what you want to measure
         or assess about your content.
       </p>
 
@@ -109,8 +109,8 @@ export default function ScoresPage() {
         <section>
           <h2 className="text-2xl font-semibold mb-4">What are Scores?</h2>
           <p className="text-muted-foreground mb-4">
-            Scores are individual evaluation criteria that define specific aspects you want to assess in your content. 
-            While they can be questions, they're not limited to just questions - they can be any type of evaluation 
+            Scores are individual evaluation criteria that define specific aspects you want to assess in your content.
+            While they can be questions, they're not limited to just questions - they can be any type of evaluation
             point that helps analyze your content.
           </p>
 
@@ -162,7 +162,7 @@ export default function ScoresPage() {
         <section>
           <h2 className="text-2xl font-semibold mb-4">Score Results</h2>
           <p className="text-muted-foreground mb-4">
-            Plexus standardizes all score results around a common structure, ensuring consistency and enabling 
+            Plexus standardizes all score results around a common structure, ensuring consistency and enabling
             powerful analysis capabilities across different types of evaluations.
           </p>
 
@@ -174,17 +174,17 @@ export default function ScoresPage() {
               </p>
               <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
                 <li>
-                  <strong>Result Value</strong>: The actual outcome of the evaluation (e.g., "yes"/"no", a numeric score, 
+                  <strong>Result Value</strong>: The actual outcome of the evaluation (e.g., "yes"/"no", a numeric score,
                   or a category)
                 </li>
                 <li>
-                  <strong>Explanation</strong>: A detailed description of why this result was chosen, providing 
-                  transparency into the decision-making process. For LLM-based scores, this often includes chain-of-thought 
+                  <strong>Explanation</strong>: A detailed description of why this result was chosen, providing
+                  transparency into the decision-making process. For LLM-based scores, this often includes chain-of-thought
                   reasoning similar to what you might see from models like OpenAI's GPT-4 o1/o3, Google's "thinking" models, or Deepseek R1.
                 </li>
                 <li>
-                  <strong>Confidence Level</strong>: For applicable scores (like machine learning classifiers or LLM-based 
-                  evaluations), this indicates how certain the system is about the result. This can be used for filtering, 
+                  <strong>Confidence Level</strong>: For applicable scores (like machine learning classifiers or LLM-based
+                  evaluations), this indicates how certain the system is about the result. This can be used for filtering,
                   quality control, or triggering human review when needed.
                 </li>
               </ul>
@@ -216,10 +216,10 @@ export default function ScoresPage() {
         <section>
           <h2 className="text-2xl font-semibold mb-4">Using Scores</h2>
           <p className="text-muted-foreground mb-4">
-            Scores are organized into scorecards, which group related evaluation criteria together. When you run an 
+            Scores are organized into scorecards, which group related evaluation criteria together. When you run an
             evaluation, each score in the scorecard is applied to your content, building a comprehensive assessment.
           </p>
-          
+
           <div className="space-y-4">
             <div>
               <h3 className="text-xl font-medium mb-2">Score Versions</h3>
@@ -236,7 +236,7 @@ export default function ScoresPage() {
                   <strong>Featured Versions</strong>: Versions that are highlighted for importance or reference
                 </li>
                 <li>
-                  <strong>Configuration</strong>: Each version contains its own configuration, including prompts, 
+                  <strong>Configuration</strong>: Each version contains its own configuration, including prompts,
                   parameters, and other settings
                 </li>
               </ul>
@@ -249,12 +249,12 @@ export default function ScoresPage() {
                 </div>
               </pre>
               <p className="text-muted-foreground">
-                This command displays up to 10 versions in reverse chronological order (newest first), showing which 
+                This command displays up to 10 versions in reverse chronological order (newest first), showing which
                 version is the champion and which versions are featured.
               </p>
             </div>
           </div>
-          
+
           <div className="flex gap-4 mt-6">
             <Link href="/documentation/concepts/scorecards">
               <DocButton>Learn about Scorecards</DocButton>

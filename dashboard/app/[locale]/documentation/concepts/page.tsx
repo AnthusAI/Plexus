@@ -20,12 +20,12 @@ export default function BasicsPage() {
             <h2 className="text-2xl font-semibold mb-4">Conceptos Principales</h2>
             <div className="grid gap-6 sm:grid-cols-2">
               <div>
-                <h3 className="text-xl font-medium mb-2">Elementos</h3>
+                <h3 className="text-xl font-medium mb-2">Items</h3>
                 <p className="text-muted-foreground mb-4">
-                  Piezas individuales de contenido que deseas analizar o evaluar usando Plexus. Los elementos son las unidades centrales que se califican.
+                  Piezas individuales de contenido que deseas analizar o evaluar usando Plexus. Los items son las unidades centrales que se califican.
                 </p>
                 <Link href="/es/documentation/concepts/items">
-                  <DocButton>Aprender sobre Elementos</DocButton>
+                  <DocButton>Aprender sobre Items</DocButton>
                 </Link>
               </div>
 

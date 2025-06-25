@@ -6,21 +6,21 @@ import { useTranslationContext } from '@/app/contexts/TranslationContext'
 
 export default function ScoreResultsPage() {
   const { locale } = useTranslationContext();
-  
+
   if (locale === 'es') {
     return (
       <div className="max-w-4xl mx-auto py-8 px-6">
         <h1 className="text-4xl font-bold mb-4">Resultados de Puntuación</h1>
         <p className="text-lg text-muted-foreground mb-8">
-          Los Resultados de Puntuación registran los resultados de evaluar elementos contra puntuaciones en un cuadro de puntuación, proporcionando información detallada sobre el proceso de evaluación y los resultados.
+          Los Resultados de Puntuación registran los resultados de evaluar items contra puntuaciones en un cuadro de puntuación, proporcionando información detallada sobre el proceso de evaluación y los resultados.
         </p>
 
         <div className="space-y-8">
           <section>
             <h2 className="text-2xl font-semibold mb-4">¿Qué son los Resultados de Puntuación?</h2>
             <p className="text-muted-foreground mb-4">
-              Un Resultado de Puntuación es un registro creado cuando un elemento es evaluado contra una puntuación o puntuaciones en un cuadro de puntuación. 
-              Captura no solo el resultado de la evaluación sino también información contextual importante sobre cómo 
+              Un Resultado de Puntuación es un registro creado cuando un elemento es evaluado contra una puntuación o puntuaciones en un cuadro de puntuación.
+              Captura no solo el resultado de la evaluación sino también información contextual importante sobre cómo
               se realizó la evaluación y qué datos se utilizaron.
             </p>
 
@@ -48,7 +48,7 @@ export default function ScoreResultsPage() {
                   <li><strong>Cuándo</strong>: Marcas de tiempo para la creación y última actualización</li>
                   <li><strong>Cómo</strong>: Qué versión de la puntuación se utilizó</li>
                   <li><strong>Por qué</strong>: Explicación del razonamiento (cuando esté disponible)</li>
-                  <li><strong>Contexto</strong>: Enlaces a elementos, cuadros de puntuación y evaluaciones relacionados</li>
+                  <li><strong>Contexto</strong>: Enlaces a items, cuadros de puntuación y evaluaciones relacionados</li>
                 </ul>
               </div>
             </div>
@@ -80,7 +80,7 @@ export default function ScoreResultsPage() {
               </Link>
               <Link href="/es/documentation/concepts/items">
                 <DocButton variant="outline" className="w-full justify-start">
-                  Elementos - Lo que se está evaluando
+                  Items - Lo que se está evaluando
                 </DocButton>
               </Link>
               <Link href="/es/documentation/concepts/evaluations">
@@ -106,8 +106,8 @@ export default function ScoreResultsPage() {
         <section>
           <h2 className="text-2xl font-semibold mb-4">What are Score Results?</h2>
           <p className="text-muted-foreground mb-4">
-            A Score Result is a record created when an item is evaluated against a score or scores in a scorecard. 
-            It captures not only the outcome of the evaluation but also important contextual information about how 
+            A Score Result is a record created when an item is evaluated against a score or scores in a scorecard.
+            It captures not only the outcome of the evaluation but also important contextual information about how
             the evaluation was performed and what data was used.
           </p>
 

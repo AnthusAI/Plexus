@@ -164,8 +164,8 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
 
   // Grid mode content
   const renderGridContent = () => (
-    <div className="space-y-1">
-      <IdentifierDisplay 
+    <div className="space-y-1 @[500px]:min-h-[150px] @[700px]:min-h-[150px] @[900px]:min-h-[150px] @[1100px]:min-h-[120px]">
+      <IdentifierDisplay
         externalId={item.externalId}
         identifiers={item.identifiers}
         iconSize="md"
@@ -199,20 +199,20 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
         <div className="flex items-baseline gap-1 font-semibold text-sm mt-3">
           <ListChecks className="h-4 w-4 flex-shrink-0 text-muted-foreground translate-y-0.5" />
           <span className="text-foreground">
-            {hasMultipleScorecards ? 
-              `${item.scorecards.length} ${t('scorecards')}` : 
+            {hasMultipleScorecards ?
+              `${item.scorecards.length} ${t('scorecards')}` :
               item.scorecards[0]?.scorecardName || t('scorecard')
             }
           </span>
         </div>
       )}
-      
+
       {/* Results count - only show if there are actually scorecards */}
       {item.scorecards.length > 0 && (
         <div className="flex items-baseline gap-1 text-sm text-muted-foreground">
           <Box className="h-4 w-4 flex-shrink-0 translate-y-0.5" />
           <span>
-            <span className="text-foreground"><NumberFlowWrapper value={totalResults} skeletonMode={skeletonMode || item.isLoadingResults} /></span> {t(totalResults === 1 ? 'scoreResult' : 'scoreResults')}
+            <span className="text-foreground"><NumberFlowWrapper value={totalResults} skeletonMode={skeletonMode || item.isLoadingResults} /></span> {t(totalResults === 1 ? 'scoreResults' : 'scoreResults')}
           </span>
         </div>
       )}

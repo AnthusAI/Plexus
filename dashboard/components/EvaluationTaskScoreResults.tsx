@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import type { Schema } from "@/amplify/data/resource"
 import { ScoreResultComponent, ScoreResultData } from '@/components/ui/score-result'
+import { useTranslations } from '@/app/contexts/TranslationContext'
 
 interface FilterState {
   showCorrect: boolean | null  // null means show all
@@ -37,6 +38,8 @@ export function EvaluationTaskScoreResults({
   selectedScoreResult,
   navigationControls
 }: EvaluationTaskScoreResultsProps) {
+  const t = useTranslations('evaluations');
+
   console.log('EvaluationTaskScoreResults render:', {
     resultCount: results.length,
     firstResult: results[0],
@@ -165,7 +168,7 @@ export function EvaluationTaskScoreResults({
       <div className="flex justify-between items-center mb-2 flex-shrink-0">
         <div className="flex items-center">
           <Split className="w-4 h-4 mr-1 text-foreground shrink-0" />
-          <span className="text-sm text-foreground">Score Results ({filteredResults.length})</span>
+          <span className="text-sm text-foreground">{t('scoreResults')} ({filteredResults.length})</span>
         </div>
         <div className="flex items-center gap-2">
           {navigationControls}
