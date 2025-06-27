@@ -129,7 +129,7 @@ export function ReportConfigurationsDashboard() {
       })
 
       if ('data' in response && response.data?.listReportConfigurations?.items) {
-        const sortedConfigurations = response.data.listReportConfigurations.items.sort((a, b) => 
+        const sortedConfigurations = response.data.listReportConfigurations.items.sort((a: ReportConfiguration, b: ReportConfiguration) => 
           a.name.localeCompare(b.name)
         )
         setConfigurations(sortedConfigurations)
