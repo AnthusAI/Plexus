@@ -39,7 +39,7 @@ type ShareLinkIndexFields = "token" | "resourceType" | "resourceId" | "accountId
 type ScoreVersionIndexFields = "scoreId" | "versionNumber" | "isFeatured";
 type ReportConfigurationIndexFields = "accountId" | "name";
 type ReportIndexFields = "accountId" | "reportConfigurationId" | "createdAt" | "updatedAt" | "taskId";
-type ReportBlockIndexFields = "reportId" | "name" | "position";
+type ReportBlockIndexFields = "reportId" | "name" | "position" | "dataSetId";
 type FeedbackItemIndexFields = "accountId" | "scorecardId" | "scoreId" | "cacheKey" | "updatedAt" | "itemId"; // UPDATED: Renamed externalId to cacheKey and added itemId
 type ScorecardExampleItemIndexFields = "scorecardId" | "itemId" | "addedAt";
 type ScorecardProcessedItemIndexFields = "scorecardId" | "itemId" | "processedAt";
@@ -637,6 +637,8 @@ const schema = a.schema({
             warning: a.string(), // Optional warning message (styled as 'false' alert)
             error: a.string(), // Optional error message (styled as red 'danger' alert)
             attachedFiles: a.string().array(), // This is the corrected field name and type
+            dataSetId: a.string(), // Optional dataset association
+            dataSet: a.belongsTo('DataSet', 'dataSetId'),
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
         })
@@ -647,7 +649,8 @@ const schema = a.schema({
         ])
         .secondaryIndexes((idx: (field: ReportBlockIndexFields) => any) => [
             idx("reportId").sortKeys(["name"]).name("byReportAndName"),
-            idx("reportId").sortKeys(["position"]).name("byReportAndPosition")
+            idx("reportId").sortKeys(["position"]).name("byReportAndPosition"),
+            idx("dataSetId").sortKeys(["position"]).name("byDataSetAndPosition")
         ]),
 
     FeedbackItem: a
@@ -840,6 +843,7 @@ const schema = a.schema({
             scoreVersion: a.belongsTo('ScoreVersion', 'scoreVersionId'),
             dataSourceVersionId: a.string().required(),
             dataSourceVersion: a.belongsTo('DataSourceVersion', 'dataSourceVersionId'),
+            reportBlocks: a.hasMany('ReportBlock', 'dataSetId'),
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
         })
