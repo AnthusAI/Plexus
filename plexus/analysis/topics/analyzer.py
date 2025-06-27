@@ -67,6 +67,32 @@ def save_visualization(fig, filepath: str) -> None:
         logger.error(f"Failed to save visualization to {filepath}: {e}", exc_info=True)
         raise
 
+def save_topic_info(topic_model, output_dir: str, docs: List[str], topics: List[int]) -> None:
+    """Save topic information to JSON files."""
+    try:
+        import json
+        
+        # Ensure the output directory exists
+        os.makedirs(output_dir, mode=0o755, exist_ok=True)
+        
+        # Get topic information
+        topic_info = topic_model.get_topic_info()
+        
+        # Save topic info as JSON
+        topic_info_path = os.path.join(output_dir, "topic_info.json")
+        topic_info_dict = topic_info.to_dict(orient='records')
+        with open(topic_info_path, 'w', encoding='utf-8') as f:
+            json.dump(topic_info_dict, f, indent=2, ensure_ascii=False)
+        
+        # Set appropriate permissions
+        os.chmod(topic_info_path, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH)
+        
+        logger.info(f"Saved topic information to {topic_info_path}")
+        
+    except Exception as e:
+        logger.error(f"Failed to save topic information: {e}", exc_info=True)
+        raise
+
 def create_topics_per_class_visualization(
     topic_model, 
     topics, 
