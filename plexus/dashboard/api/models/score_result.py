@@ -78,6 +78,8 @@ class ScoreResult(BaseModel):
     scoringJobId: Optional[str] = None
     evaluationId: Optional[str] = None
     correct: Optional[bool] = None
+    code: Optional[str] = None
+    type: Optional[str] = None  # Type of score result: "prediction", "evaluation", etc.
 
     def __init__(
         self,
@@ -96,6 +98,8 @@ class ScoreResult(BaseModel):
         scoringJobId: Optional[str] = None,
         evaluationId: Optional[str] = None,
         correct: Optional[bool] = None,
+        code: Optional[str] = None,
+        type: Optional[str] = None,
         client: Optional[_BaseAPIClient] = None
     ):
         super().__init__(id, client)
@@ -113,6 +117,8 @@ class ScoreResult(BaseModel):
         self.scoringJobId = scoringJobId
         self.evaluationId = evaluationId
         self.correct = correct
+        self.code = code
+        self.type = type
     
     @property
     def scoreName(self) -> Optional[str]:
@@ -151,6 +157,8 @@ class ScoreResult(BaseModel):
             scoringJobId
             evaluationId
             correct
+            code
+            type
         """
 
     @classmethod
@@ -188,6 +196,8 @@ class ScoreResult(BaseModel):
             scoringJobId=data.get('scoringJobId'),
             evaluationId=data.get('evaluationId'),
             correct=data.get('correct'),
+            code=data.get('code'),
+            type=data.get('type'),
             client=client
         )
 
@@ -201,6 +211,8 @@ class ScoreResult(BaseModel):
         scorecardId: str,
         scoringJobId: Optional[str] = None,
         evaluationId: Optional[str] = None,
+        code: str = '200',
+        type: Optional[str] = None,
         **kwargs
     ) -> 'ScoreResult':
         """Create a new score result.
@@ -213,6 +225,8 @@ class ScoreResult(BaseModel):
             scorecardId: ID of scorecard used (required)
             scoringJobId: ID of scoring job (optional)
             evaluationId: ID of evaluation (optional)
+            code: HTTP response code (defaults to '200' for success)
+            type: Type of score result - "prediction", "evaluation", etc. (optional)
             **kwargs: Optional fields:
                      - confidence: float
                      - metadata: dict (will be JSON serialized)
@@ -230,6 +244,7 @@ class ScoreResult(BaseModel):
             'itemId': itemId,
             'accountId': accountId,
             'scorecardId': scorecardId,
+            'code': code,
             **kwargs
         }
         
@@ -237,6 +252,8 @@ class ScoreResult(BaseModel):
             input_data['scoringJobId'] = scoringJobId
         if evaluationId is not None:
             input_data['evaluationId'] = evaluationId
+        if type is not None:
+            input_data['type'] = type
         
         mutation = """
         mutation CreateScoreResult($input: CreateScoreResultInput!) {
@@ -263,9 +280,14 @@ class ScoreResult(BaseModel):
         }
         """ % self.fields()
         
+        # When updating any field, DynamoDB automatically updates 'updatedAt', which triggers
+        # GSI composite key requirements. Must include all fields for affected GSIs:
+        # - byAccountCodeAndUpdatedAt: accountId + code + updatedAt
         variables = {
             'input': {
                 'id': self.id,
+                'accountId': self.accountId,  # Required for byAccountCodeAndUpdatedAt GSI
+                'code': getattr(self, 'code', '200'),  # Required for byAccountCodeAndUpdatedAt GSI, default to '200'
                 **kwargs
             }
         }
@@ -283,6 +305,10 @@ class ScoreResult(BaseModel):
         for item in items:
             if 'metadata' in item:
                 item['metadata'] = json.dumps(item['metadata'])
+                
+            # Add default code if not provided
+            if 'code' not in item:
+                item['code'] = '200'
                 
             # Verify required fields
             missing = required_fields - set(item.keys())

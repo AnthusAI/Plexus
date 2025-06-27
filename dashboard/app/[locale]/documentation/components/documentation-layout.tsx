@@ -238,7 +238,7 @@ export default function DocumentationLayout({ children, tableOfContents }: Docum
     return (
       <div className="flex flex-col h-full py-2 bg-muted">
         <div className={`mb-4 ${isLeftSidebarOpen ? 'pl-2' : ''}`}>
-          <Link href="/" className={`block relative ${isLeftSidebarOpen ? 'w-[140px] ml-4' : 'w-12 pl-2'}`}>
+          <Link href="/" className={`block relative ${isLeftSidebarOpen ? 'w-[140px] ml-4' : 'w-12 pl-4'}`}>
             <div className="absolute -inset-1 bg-gradient-to-r from-secondary to-primary rounded-md blur-sm opacity-50"></div>
             <div className="relative">
               {isLeftSidebarOpen ? (

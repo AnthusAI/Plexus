@@ -7,6 +7,8 @@ from plexus.dashboard.api.models.score_result import ScoreResult
 from plexus.scores.Score import Score
 from plexus.LangChainUser import LangChainUser
 import pydantic
+import sys
+from io import StringIO
 
 class LogicalClassifier(BaseNode):
     """
@@ -31,9 +33,42 @@ class LogicalClassifier(BaseNode):
             __base__=(LogicalClassifier.Parameters, LangChainUser.Parameters))
         self.parameters = combined_parameters_model(**parameters)
         
-        # Compile the code string into a function
+        # Create a custom print function that logs instead of printing to stdout
+        def log_print(*args, **kwargs):
+            """Custom print function that logs messages instead of printing to stdout."""
+            # Convert print arguments to a string like normal print would
+            sep = kwargs.get('sep', ' ')
+            message = sep.join(str(arg) for arg in args)
+            # Log at INFO level so it gets captured by the log capture system
+            logging.info(f"[LogicalClassifier] {message}")
+        
+        # Create a logging function for explicit logging in embedded code
+        def log_info(message):
+            """Logging function available in embedded code."""
+            logging.info(f"[LogicalClassifier] {message}")
+        
+        def log_debug(message):
+            """Debug logging function available in embedded code."""
+            logging.debug(f"[LogicalClassifier] {message}")
+        
+        def log_warning(message):
+            """Warning logging function available in embedded code."""
+            logging.warning(f"[LogicalClassifier] {message}")
+        
+        def log_error(message):
+            """Error logging function available in embedded code."""
+            logging.error(f"[LogicalClassifier] {message}")
+        
+        # Compile the code string into a function with enhanced namespace
         namespace = {
-            'Score': Score
+            'Score': Score,
+            'print': log_print,  # Replace print with our logging version
+            'log': log_info,     # Provide explicit logging functions
+            'log_info': log_info,
+            'log_debug': log_debug,
+            'log_warning': log_warning,
+            'log_error': log_error,
+            'logging': logging   # Also provide the full logging module
         }
         exec(self.parameters.code, namespace)
         self.score_function = namespace.get('score')
@@ -79,16 +114,30 @@ class LogicalClassifier(BaseNode):
                 # Continue to next node
                 return state
             
-            # Return dict to merge with state, like YesOrNoClassifier does
+            # Create the initial result state
             state_update = {
                 **state.model_dump(),
                 "classification": result.value,  # Critical for conditions
                 "value": result.value,
                 "explanation": result.metadata.get('explanation')
             }
+            
+            result_state = self.GraphState(**state_update)
+            
+            # Prepare output state for logging
+            output_state = {
+                "classification": result.value,
+                "value": result.value,
+                "explanation": result.metadata.get('explanation')
+            }
+            
             logging.info(f"LogicalClassifier result value: {result.value}")
             logging.info(f"LogicalClassifier result explanation: {result.metadata.get('explanation')}")
-            return self.GraphState(**state_update)
+            
+            # Log the state and get a new state object with updated node_results
+            updated_state = self.log_state(result_state, None, output_state)
+            
+            return updated_state
 
         return execute_score
 

@@ -23,7 +23,7 @@ class CloudWatchLogger:
                                                     region_name=aws_region,
                                                     aws_access_key_id=aws_access_key,
                                                     aws_secret_access_key=aws_secret_key)
-                logging.debug("Successfully initialized CloudWatch client")
+                logging.info("Successfully initialized CloudWatch client")
             except Exception as e:
                 logging.error(f"Failed to initialize CloudWatch client: {str(e)}")
         else:
@@ -43,20 +43,20 @@ class CloudWatchLogger:
             return
 
         try:
-            logging.debug(f"Attempting to log metric to CloudWatch - Name: {metric_name}, Value: {metric_value}")
+            logging.info(f"Attempting to log metric to CloudWatch - Name: {metric_name}, Value: {metric_value}")
             metric_data = {
                 'MetricName': metric_name,
                 'Value': float(metric_value),
                 'Unit': 'None',
                 'Dimensions': [{'Name': k, 'Value': str(v)} for k, v in dimensions.items()]
             }
-            logging.debug(f"Prepared metric data: {metric_data}")
+            logging.info(f"Prepared metric data: {metric_data}")
 
             self.cloudwatch_client.put_metric_data(
                 Namespace=self.namespace,
                 MetricData=[metric_data]
             )
-            logging.debug(f"Successfully logged {metric_name} to CloudWatch with dimensions: {dimensions}")
+            logging.info(f"Successfully logged {metric_name} to CloudWatch with dimensions: {dimensions}")
         except ClientError as e:
             logging.error(f"Failed to log metric to CloudWatch: {e}")
             if hasattr(e, 'response'):

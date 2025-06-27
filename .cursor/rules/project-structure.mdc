@@ -11,6 +11,10 @@ Plexus is a documentation and evaluation platform for AI/ML systems with:
 - Python backend code for AI/ML functionality
 - Celery with AWS SQS and DynamoDB for remote task dispatch
 
+## GitHub
+The project is here at GitHub: https://github.com/orgs/AnthusAI
+Use that with the GitHub MCP.
+
 ## Key Directories
 - `plexus/`: Python modules for AI/ML, CLI, and other core functionality
 - `dashboard/app/`: Next.js routes and pages

@@ -23,7 +23,7 @@ export async function graphqlRequest<T>(query: string, variables?: Record<string
     });
     
     // Check if response is a subscription result
-    if ('subscribe' in response) {
+    if (response && typeof response === 'object' && 'subscribe' in response) {
       throw new Error('Subscription responses should be handled by observeGraphQL');
     }
     
@@ -302,6 +302,7 @@ export const amplifyClient = {
       scoreId?: string;
       evaluationId?: string;
       isEvaluation: boolean;
+      createdByType?: string;
     }) => {
       const response = await (getClient().models.Item as any).create(data)
       return { data: response.data as Schema['Item']['type'] }
@@ -513,6 +514,124 @@ export const amplifyClient = {
         console.error('Error in amplifyClient.ShareLink.update:', error);
         throw error;
       }
+    }
+  },
+  DataSource: {
+    list: async (params?: any) => {
+      const response = await (getClient().models.DataSource as any).list(params)
+      return response as AmplifyResponse<Schema['DataSource']['type'][]>
+    },
+    get: async (params: any) => {
+      const response = await (getClient().models.DataSource as any).get(params)
+      return { data: response.data as Schema['DataSource']['type'] | null }
+    },
+    create: async (data: {
+      name: string
+      key?: string
+      description?: string
+      yamlConfiguration?: string
+      attachedFiles?: string[]
+      accountId: string
+      scorecardId?: string
+      scoreId?: string
+      currentVersionId?: string
+    }) => {
+      const response = await (getClient().models.DataSource as any).create(data)
+      return { data: response.data as Schema['DataSource']['type'] }
+    },
+    update: async (data: {
+      id: string
+      name?: string
+      key?: string
+      description?: string
+      yamlConfiguration?: string
+      attachedFiles?: string[]
+      scorecardId?: string
+      scoreId?: string
+      currentVersionId?: string
+    }) => {
+      const response = await (getClient().models.DataSource as any).update(data)
+      return { data: response.data as Schema['DataSource']['type'] }
+    },
+    delete: async (params: { id: string }) => {
+      const response = await (getClient().models.DataSource as any).delete(params)
+      return { data: response.data as Schema['DataSource']['type'] }
+    }
+  },
+  DataSourceVersion: {
+    list: async (params?: any) => {
+      const response = await (getClient().models.DataSourceVersion as any).list(params)
+      return response as AmplifyResponse<Schema['DataSourceVersion']['type'][]>
+    },
+    get: async (params: any) => {
+      const response = await (getClient().models.DataSourceVersion as any).get(params)
+      return { data: response.data as Schema['DataSourceVersion']['type'] | null }
+    },
+    create: async (data: {
+      dataSourceId: string;
+      yamlConfiguration: string;
+      isFeatured: boolean;
+      note?: string;
+      parentVersionId?: string;
+    }) => {
+      const response = await (getClient().models.DataSourceVersion as any).create(data)
+      return { data: response.data as Schema['DataSourceVersion']['type'] }
+    },
+    update: async (data: {
+      id: string;
+      yamlConfiguration?: string;
+      isFeatured?: boolean;
+      note?: string;
+      parentVersionId?: string;
+    }) => {
+      const response = await (getClient().models.DataSourceVersion as any).update(data)
+      return { data: response.data as Schema['DataSourceVersion']['type'] }
+    },
+    delete: async (params: { id: string }) => {
+      const response = await (getClient().models.DataSourceVersion as any).delete(params)
+      return { data: response.data as Schema['DataSourceVersion']['type'] }
+    }
+  },
+  DataSet: {
+    list: async (params?: any) => {
+      const response = await (getClient().models.DataSet as any).list(params)
+      return response as AmplifyResponse<Schema['DataSet']['type'][]>
+    },
+    get: async (params: any) => {
+      const response = await (getClient().models.DataSet as any).get(params)
+      return { data: response.data as Schema['DataSet']['type'] | null }
+    },
+    create: async (data: {
+      name?: string
+      description?: string
+      file?: string
+      attachedFiles?: string[]
+      accountId: string
+      scorecardId?: string
+      scoreId?: string
+      scoreVersionId: string
+      dataSourceVersionId: string
+    }) => {
+      const response = await (getClient().models.DataSet as any).create(data)
+      return { data: response.data as Schema['DataSet']['type'] }
+    },
+    update: async (data: {
+      id: string
+      name?: string
+      description?: string
+      file?: string
+      attachedFiles?: string[]
+      scorecardId?: string
+      scoreId?: string
+      scoreVersionId?: string
+      dataSourceVersionId?: string
+    }) => {
+      const response = await (getClient().models.DataSet as any).update(data)
+      return { data: response.data as Schema['DataSet']['type'] }
+    },
+    delete: async (params: { id: string }) => {
+      const response = await (getClient().models.DataSet as any).delete(params)
+      return { data: response.data as Schema['DataSet']['type'] }
     }
   }
 } 

@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
-import { MoreHorizontal, X, Square, Columns2, StickyNote, Info, ChevronDown, ChevronUp, Loader2, Box, ListChecks, FileText, Tag } from 'lucide-react'
+import { MoreHorizontal, X, Square, Columns2, StickyNote, Info, ChevronDown, ChevronRight, ChevronUp, Loader2, Box, ListChecks, FileText, Tag } from 'lucide-react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { cn } from '@/lib/utils'
 import { CardButton } from '@/components/CardButton'
@@ -98,13 +98,14 @@ interface ItemCardProps extends React.HTMLAttributes<HTMLDivElement> {
   naturalHeight?: boolean // Add naturalHeight prop for document flow vs height-filling behavior
   onScoreResultSelect?: (scoreResult: any) => void // Add score result selection callback
   selectedScoreResultId?: string // Add selected score result ID
+  hasErrors?: boolean // Add hasErrors prop for error border indicator
 }
 
-const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({ 
-  item, 
-  onEdit, 
-  onViewData, 
-  variant = 'grid', 
+const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
+  item,
+  onEdit,
+  onViewData,
+  variant = 'grid',
   isSelected,
   onClick,
   isFullWidth = false,
@@ -118,13 +119,14 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
   naturalHeight = false,
   onScoreResultSelect,
   selectedScoreResultId,
-  className, 
-  ...props 
+  hasErrors = false,
+  className,
+  ...props
 }, ref) => {
   const t = useTranslations('scorecards')
   const tItems = useTranslations('items')
   const [isNarrowViewport, setIsNarrowViewport] = React.useState(false)
-  
+
   // Use the score results hook for detail view
   const { groupedResults, isLoading, error, refetch, silentRefetch } = useItemScoreResults(
     variant === 'detail' ? String(item.id) : null
@@ -229,10 +231,11 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
         animate={{ opacity: 1 }}
         transition={{ duration: 0.2 }}
         className={cn(
-          "w-full rounded-lg text-card-foreground hover:bg-accent/50 relative cursor-pointer",
-          isSelected ? "bg-card-selected" : "bg-card",
+          "w-full rounded-lg text-card-foreground relative cursor-pointer transition-colors",
+          isSelected ? "bg-card-selected" : "bg-card hover:bg-accent",
           item.isNew && "new-item-shadow",
           isSelected && "selected-border-rounded",
+          hasErrors && "error-border-rounded",
           className
         )}
         onClick={onClick}
@@ -360,16 +363,18 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
               </div>
             </div>
           )}
-          
+
           {/* Collapsible sections for text, metadata, and file attachments */}
           <Accordion type="multiple" className="w-full space-y-4">
             {/* Text field display */}
             {item.text && (
               <AccordionItem value="text" className="border-b-0">
-                <AccordionTrigger className="hover:no-underline py-2 px-0">
+                <AccordionTrigger className="hover:no-underline py-2 px-0 justify-start [&>svg]:hidden group">
                   <div className="flex items-center gap-2">
                     <FileText className="h-3 w-3 text-muted-foreground" />
                     <span className="text-sm font-medium leading-none text-muted-foreground">{tItems('text')}</span>
+                    <ChevronRight className="h-3 w-3 text-muted-foreground transition-transform duration-200 group-data-[state=open]:hidden" />
+                    <ChevronDown className="h-3 w-3 text-muted-foreground transition-transform duration-200 hidden group-data-[state=open]:block" />
                   </div>
                 </AccordionTrigger>
                 <AccordionContent className="pt-0 pb-4">
@@ -400,14 +405,16 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
                 </AccordionContent>
               </AccordionItem>
             )}
-            
+
             {/* Metadata section */}
             {(item.metadata && Object.keys(item.metadata).length > 0) && (
               <AccordionItem value="metadata" className="border-b-0">
-                <AccordionTrigger className="hover:no-underline py-2 px-0">
+                <AccordionTrigger className="hover:no-underline py-2 px-0 justify-start [&>svg]:hidden group">
                   <div className="flex items-center gap-2">
                     <Tag className="h-3 w-3 text-muted-foreground" />
                     <span className="text-sm font-medium leading-none text-muted-foreground">{tItems('metadata')}</span>
+                    <ChevronRight className="h-3 w-3 text-muted-foreground transition-transform duration-200 group-data-[state=open]:hidden" />
+                    <ChevronDown className="h-3 w-3 text-muted-foreground transition-transform duration-200 hidden group-data-[state=open]:block" />
                     {!readOnly && <span className="text-[10px] text-muted-foreground">{tItems('optional')}</span>}
                   </div>
                 </AccordionTrigger>
@@ -426,14 +433,16 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
                 </AccordionContent>
               </AccordionItem>
             )}
-            
+
             {/* File attachments section */}
             {(item.attachedFiles && item.attachedFiles.length > 0) && (
               <AccordionItem value="attachments" className="border-b-0">
-                <AccordionTrigger className="hover:no-underline py-2 px-0">
+                <AccordionTrigger className="hover:no-underline py-2 px-0 justify-start [&>svg]:hidden group">
                   <div className="flex items-center gap-2">
                     <FileText className="h-3 w-3 text-muted-foreground" />
-                    <span className="text-sm font-medium leading-none text-muted-foreground">{tItems('attachedFiles')}</span>
+                    <span className="text-sm font-medium leading-none text-muted-foreground">{tItems('attachedFiles')}s</span>
+                    <ChevronRight className="h-3 w-3 text-muted-foreground transition-transform duration-200 group-data-[state=open]:hidden" />
+                    <ChevronDown className="h-3 w-3 text-muted-foreground transition-transform duration-200 hidden group-data-[state=open]:block" />
                   </div>
                 </AccordionTrigger>
                 <AccordionContent className="pt-0 pb-4">

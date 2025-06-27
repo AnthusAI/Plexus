@@ -10,7 +10,7 @@ const meta: Meta<typeof FileAttachments> = {
     layout: 'centered',
     docs: {
       description: {
-        component: 'A file attachments component that supports both read-only and edit modes for managing file references and uploads.'
+        component: 'A file attachments component that supports both read-only and edit modes for managing file references and uploads. Now includes preview functionality for Parquet files and other text-based files.'
       }
     }
   },
@@ -45,11 +45,20 @@ const meta: Meta<typeof FileAttachments> = {
 export default meta
 type Story = StoryObj<typeof FileAttachments>
 
-// Sample file lists for stories
+// Sample files including Parquet and other viewable types
 const sampleFiles = [
-  'https://example.com/documents/report.pdf',
-  'https://example.com/audio/call-recording.mp3',
-  '/uploads/transcript.txt'
+  '/uploads/document.pdf',
+  'https://example.com/external-file.txt',
+  'datasources/account-123/datasource-456/sample-data.parquet',
+  'datasources/account-123/datasource-456/config.yaml',
+  'datasources/account-123/datasource-456/results.json'
+]
+
+const sampleFilesWithParquet = [
+  'datasources/account-123/datasource-456/customer-data.parquet',
+  'datasources/account-123/datasource-456/sales-metrics.parquet',
+  'datasources/account-123/datasource-456/configuration.yaml',
+  'datasources/account-123/datasource-456/metadata.json'
 ]
 
 const documentFiles = [
@@ -73,18 +82,11 @@ const mixedFiles = [
   'https://example.com/images/diagram.svg'
 ]
 
-// Mock upload function for stories
+// Mock upload function
 const mockUpload = async (file: File): Promise<string> => {
   // Simulate upload delay
-  await new Promise(resolve => setTimeout(resolve, 2000))
-  
-  // Simulate occasional failures for demo
-  if (Math.random() < 0.1) {
-    throw new Error('Upload failed: Network error')
-  }
-  
-  // Return a mock URL
-  return `https://storage.example.com/uploads/${file.name}`
+  await new Promise(resolve => setTimeout(resolve, 1000))
+  return Promise.resolve(`/uploads/${file.name}`)
 }
 
 // Read-only mode stories
@@ -97,7 +99,22 @@ export const ReadOnlyDefault: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Read-only view showing file attachments with clickable links for URLs. Perfect for display-only contexts.'
+        story: 'Read-only view showing file attachments with clickable links for URLs and view buttons for supported file types (Parquet, YAML, JSON, etc.).'
+      }
+    }
+  }
+}
+
+export const ReadOnlyWithParquetFiles: Story = {
+  args: {
+    attachedFiles: sampleFilesWithParquet,
+    readOnly: true,
+    onChange: action('files-changed')
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Read-only view specifically showing Parquet files and other data files with preview capabilities. Click the eye icon to preview Parquet files.'
       }
     }
   }
@@ -159,7 +176,23 @@ export const EditDefault: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Edit mode with existing files. Users can modify paths, remove files, and upload new ones.'
+        story: 'Edit mode with existing files. Users can modify paths, remove files, upload new ones, and preview supported file types.'
+      }
+    }
+  }
+}
+
+export const EditWithParquetFiles: Story = {
+  args: {
+    attachedFiles: sampleFilesWithParquet,
+    readOnly: false,
+    onChange: action('files-changed'),
+    onUpload: mockUpload
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Edit mode showing Parquet files and other data files. Demonstrates the view functionality alongside edit capabilities.'
       }
     }
   }
@@ -181,57 +214,61 @@ export const EditEmpty: Story = {
   }
 }
 
-export const EditWithoutUpload: Story = {
+export const EditWithFileTypeRestrictions: Story = {
   args: {
-    attachedFiles: ['/local/file1.txt', '/local/file2.pdf'],
+    attachedFiles: ['datasources/account-123/datasource-456/data.parquet'],
     readOnly: false,
-    onChange: action('files-changed')
-    // No onUpload provided - shows manual path entry only
+    onChange: action('files-changed'),
+    onUpload: mockUpload,
+    allowedTypes: ['.parquet', '.csv', '.json'],
+    maxFiles: 3
   },
   parameters: {
     docs: {
       description: {
-        story: 'Edit mode without upload functionality. Users can only manually enter file paths.'
+        story: 'Edit mode with file type restrictions. Only allows specific file types to be uploaded.'
       }
     }
   }
 }
 
-export const EditWithUploadAndValidation: Story = {
-  render: (args) => {
-    const [files, setFiles] = React.useState(args.attachedFiles)
-    
-    const handleChange = (newFiles: string[]) => {
-      setFiles(newFiles)
-      action('files-changed')(newFiles)
-    }
-
-    return (
-      <div className="w-96">
-        <FileAttachments
-          {...args}
-          attachedFiles={files}
-          onChange={handleChange}
-        />
-        <div className="mt-4 p-4 bg-muted rounded">
-          <h3 className="text-sm font-medium mb-2">Current Files:</h3>
-          <pre className="text-xs">{JSON.stringify(files, null, 2)}</pre>
-        </div>
-      </div>
-    )
-  },
+// Loading states
+export const EditWithUploadInProgress: Story = {
   args: {
-    attachedFiles: ['https://example.com/sample.pdf'],
+    attachedFiles: ['/uploads/document.pdf'],
     readOnly: false,
     onChange: action('files-changed'),
-    onUpload: mockUpload,
-    maxFiles: 3,
-    allowedTypes: ['application/pdf', 'text/plain', 'image/*']
+    onUpload: async (file: File) => {
+      // Simulate a longer upload
+      await new Promise(resolve => setTimeout(resolve, 3000))
+      return `/uploads/${file.name}`
+    }
   },
   parameters: {
     docs: {
       description: {
-        story: 'Interactive edit mode with file type restrictions and upload limits. Try uploading different file types.'
+        story: 'Edit mode showing upload progress state. Upload a file to see the loading indicator.'
+      }
+    }
+  }
+}
+
+// Error states
+export const EditWithUploadError: Story = {
+  args: {
+    attachedFiles: [],
+    readOnly: false,
+    onChange: action('files-changed'),
+    onUpload: async (file: File) => {
+      // Simulate upload failure
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      throw new Error('Upload failed: Network error')
+    }
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Edit mode demonstrating upload error handling. Try uploading a file to see the error state.'
       }
     }
   }
@@ -404,14 +441,14 @@ export const InItemCard: Story = {
     </div>
   ),
   args: {
-    attachedFiles: sampleFiles,
+    attachedFiles: sampleFilesWithParquet,
     readOnly: true,
     onChange: action('files-changed')
   },
   parameters: {
     docs: {
       description: {
-        story: 'How the FileAttachments component appears when used within an ItemCard component context.'
+        story: 'How the FileAttachments component appears when used within an ItemCard component context, showing Parquet files with preview capabilities.'
       }
     }
   }
@@ -420,20 +457,20 @@ export const InItemCard: Story = {
 export const InEditableForm: Story = {
   render: (args) => (
     <div className="bg-card rounded-lg p-4 border max-w-md space-y-4">
-      <h2 className="text-lg font-semibold">Edit Item</h2>
+      <h2 className="text-lg font-semibold">Edit Data Source</h2>
       <div>
-        <label className="text-sm font-medium">External ID</label>
-        <input className="w-full mt-1 p-2 border rounded" defaultValue="ITEM-001" />
+        <label className="text-sm font-medium">Name</label>
+        <input className="w-full mt-1 p-2 border rounded" defaultValue="Customer Analytics Dataset" />
       </div>
       <div>
         <label className="text-sm font-medium">Description</label>
-        <textarea className="w-full mt-1 p-2 border rounded" defaultValue="Sample item description" />
+        <textarea className="w-full mt-1 p-2 border rounded" defaultValue="Customer behavior analysis data in Parquet format" />
       </div>
       <FileAttachments {...args} />
     </div>
   ),
   args: {
-    attachedFiles: ['/uploads/document.pdf'],
+    attachedFiles: ['datasources/account-123/customer-analytics/data.parquet'],
     readOnly: false,
     onChange: action('files-changed'),
     onUpload: mockUpload
@@ -441,7 +478,49 @@ export const InEditableForm: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'How the FileAttachments component appears when used within a larger editable form context.'
+        story: 'How the FileAttachments component appears when used within a data source editing form, showing Parquet file management capabilities.'
+      }
+    }
+  }
+}
+
+export const InDataSourceDashboard: Story = {
+  render: (args) => (
+    <div className="bg-background rounded-lg p-6 border max-w-2xl space-y-6">
+      <div className="space-y-2">
+        <h2 className="text-xl font-semibold">Sales Analytics Data Source</h2>
+        <p className="text-muted-foreground">Customer transaction data for Q4 2024 analysis</p>
+      </div>
+      
+      <div className="space-y-4">
+        <div>
+          <label className="text-sm font-medium text-muted-foreground">Configuration</label>
+          <div className="mt-2 p-3 bg-muted/50 rounded-md font-mono text-sm">
+            class: CallCriteriaDBCache<br/>
+            queries: [...]<br/>
+            balance: true
+          </div>
+        </div>
+        
+        <FileAttachments {...args} />
+      </div>
+    </div>
+  ),
+  args: {
+    attachedFiles: [
+      'datasources/account-123/sales-analytics/transactions-q4.parquet',
+      'datasources/account-123/sales-analytics/customer-segments.parquet',
+      'datasources/account-123/sales-analytics/schema.json',
+      'datasources/account-123/sales-analytics/config.yaml'
+    ],
+    readOnly: false,
+    onChange: action('files-changed'),
+    onUpload: mockUpload
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'FileAttachments component as it appears in the data source dashboard, showing multiple Parquet files and configuration files with full preview capabilities.'
       }
     }
   }

@@ -31,7 +31,6 @@ import {
 } from "lucide-react"
 import { ScoreCount } from "./scorecards/score-count"
 import { CardButton } from "./CardButton"
-import { DatasetConfigFormComponent } from "./dataset-config-form"
 import { listFromModel } from "@/utils/amplify-helpers"
 import { AmplifyListResult } from '@/types/shared'
 import { graphqlRequest } from "@/utils/amplify-client"
@@ -90,8 +89,6 @@ export default function ScorecardsComponent({
   const [error, setError] = useState<Error | null>(null)
   const [isFullWidth, setIsFullWidth] = useState(!!initialSelectedScorecardId)
   const [isNarrowViewport, setIsNarrowViewport] = useState(false)
-  const [showDatasetConfig, setShowDatasetConfig] = useState(false)
-  const [selectedScorecardForDataset, setSelectedScorecardForDataset] = useState<string>("")
   const [leftPanelWidth, setLeftPanelWidth] = useState(40)
   const [scorecardScoreCounts, setScorecardScoreCounts] = useState<Record<string, number>>({})
   const [scorecardDetailWidth, setScorecardDetailWidth] = useState(50)
@@ -514,9 +511,11 @@ export default function ScorecardsComponent({
           attachedFiles?: string[];
           accountId: string;
           isEvaluation: boolean;
+          createdByType?: string;
         } = {
           accountId: item.accountId || accountId!,
-          isEvaluation: item.isEvaluation || false
+          isEvaluation: item.isEvaluation || false,
+          createdByType: 'prediction' // Dashboard-created items are predictions, not evaluations
         };
 
         // Add optional fields only if they have values
@@ -932,8 +931,8 @@ export default function ScorecardsComponent({
           score={scorecardData}
           onEdit={() => handleEdit(selectedScorecard)}
           onViewData={() => {
-            setSelectedScorecardForDataset(selectedScorecard.id)
-            setShowDatasetConfig(true)
+            console.log('View data for scorecard:', selectedScorecard.id)
+            // TODO: Implement data source view
           }}
           isFullWidth={isFullWidth}
           onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
@@ -991,6 +990,15 @@ export default function ScorecardsComponent({
             setSelectedScore(null);
             setMaximizedScoreId(null);
           }}
+          exampleItems={scorecardExamples.map(example => {
+            // Extract item ID from "item:uuid" format
+            const itemId = example.replace('item:', '');
+            return {
+              id: itemId,
+              displayValue: `Item ${itemId.slice(0, 8)}...` // Show first 8 chars of ID as display
+            };
+          })}
+          scorecardName={selectedScorecard?.name}
         />
       </div>
     );
@@ -1045,7 +1053,7 @@ export default function ScorecardsComponent({
   }
 
   return (
-    <div className="@container flex flex-col h-full p-2 overflow-hidden">
+    <div className="@container flex flex-col h-full p-3 overflow-hidden">
       <div className="flex flex-1 min-h-0">
         {/* Grid Panel */}
         <div 
@@ -1164,15 +1172,6 @@ export default function ScorecardsComponent({
         </div>
       </div>
 
-      {showDatasetConfig && selectedScorecardForDataset && (
-        <DatasetConfigFormComponent
-          scorecardId={selectedScorecardForDataset}
-          onClose={() => {
-            setShowDatasetConfig(false)
-            setSelectedScorecardForDataset("")
-          }}
-        />
-      )}
     </div>
   )
 }

@@ -95,8 +95,11 @@ const GridContent = React.memo(({
         </div>
         <div className="text-sm text-muted-foreground">{scoreCount} {scoreText}</div>
       </div>
-      <div className="text-muted-foreground">
-        {score.icon || <ListChecks className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />}
+      <div className="flex flex-col items-center gap-1">
+        <div className="text-muted-foreground">
+          {score.icon || <ListChecks className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />}
+        </div>
+        <div className="text-xs text-muted-foreground text-center">Scorecard</div>
       </div>
     </div>
   )
@@ -442,6 +445,10 @@ export const DetailContent = React.memo(function DetailContent({
     <div className="w-full flex flex-col min-h-0">
       <div className="flex justify-between items-start w-full">
         <div className="space-y-2 flex-1">
+          <div className="flex items-center gap-2 mb-3">
+            <ListChecks className="h-5 w-5 text-foreground" />
+            <span className="text-lg font-semibold">Scorecard</span>
+          </div>
           <Input
             value={score.name}
             onChange={(e) => onEditChange?.({ name: e.target.value })}
@@ -975,9 +982,9 @@ export default function ScorecardComponent({
   return (
     <div
       className={cn(
-        "w-full rounded-lg text-card-foreground hover:bg-accent/50 transition-colors relative",
+        "w-full rounded-lg text-card-foreground transition-colors relative",
         variant === 'grid' ? (
-          isSelected ? "bg-card-selected" : "bg-card"
+          isSelected ? "bg-card-selected" : "bg-card hover:bg-accent"
         ) : "bg-card-selected",
         variant === 'detail' && "h-full flex flex-col",
         (isSelected && variant === 'grid') && "selected-border-rounded",

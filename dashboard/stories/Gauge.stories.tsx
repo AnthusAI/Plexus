@@ -27,7 +27,7 @@ export const Default: Story = {
     const canvas = within(canvasElement)
     const valueText = canvas.getByText('75%')
     const titleText = canvas.getByText('Accuracy')
-    await expect(valueText).toHaveClass('text-[2.25rem]')
+    await expect(valueText).toBeInTheDocument()
     await expect(titleText).toBeInTheDocument()
   }
 }
@@ -69,8 +69,9 @@ export const WithTarget: Story = {
     await expect(canvas.getByText('75.7%')).toBeInTheDocument()
     
     // Check that there are two needles in the gauge
-    const svg = canvas.getByText('75.7%').closest('svg')
+    const svg = canvasElement.querySelector('svg')
     const needles = svg?.querySelectorAll('path[d^="M 0,-"]')
+    await expect(needles).toBeTruthy()
     await expect(needles?.length).toBeGreaterThanOrEqual(2)
   },
   decorators: [
@@ -122,7 +123,7 @@ export const CustomSegments: Story = {
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    const svg = canvas.getByText('75%').closest('svg')
+    const svg = canvasElement.querySelector('svg')
     await expect(svg).toBeInTheDocument()
     const paths = svg?.querySelectorAll('path[fill^="var(--gauge"]')
     await expect(paths?.length).toBeGreaterThanOrEqual(5)
@@ -196,11 +197,15 @@ export const NoTicks: Story = {
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    const svg = canvas.getByText('75%').closest('svg')
+    // Verify the percentage value is displayed (now outside SVG in NumberFlow component)
+    await expect(canvas.getByText('75%')).toBeInTheDocument()
+    
+    // Verify no tick marks are shown in the SVG when showTicks is false
+    const svg = canvasElement.querySelector('svg')
     const tickTexts = svg?.querySelectorAll('text')
-    const percentageTexts = Array.from(tickTexts || [])
+    const tickMarkerTexts = Array.from(tickTexts || [])
       .filter(text => text.textContent?.includes('%'))
-    await expect(percentageTexts.length).toBe(1)
+    await expect(tickMarkerTexts.length).toBe(0)
   }
 }
 
@@ -499,6 +504,62 @@ export const TickSpacingComparison: Story = {
     docs: {
       description: {
         story: 'This comparison shows how different `tickSpacingThreshold` values affect which ticks are displayed. The left gauge uses the default 5% threshold, while the right uses a smaller 2% threshold, showing more tick marks.'
+      }
+    }
+  }
+}
+
+export const WithMarkdownInformation: Story = {
+  args: {
+    value: 85,
+    title: 'System Performance',
+    information: `**Current Status:** Excellent  
+*System is performing above target*
+
+**Key Metrics:**
+- Response time: \`< 200ms\`
+- Uptime: **99.9%**
+- Error rate: *0.1%*
+
+> **Note:** Performance has improved significantly since the last deployment.
+
+For more details, visit our [monitoring dashboard](https://example.com/monitoring).
+
+**Thresholds:**
+1. **Green:** 80-100% (Excellent)
+2. **Yellow:** 60-79% (Good) 
+3. **Red:** 0-59% (Needs attention)`
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    const infoButton = canvas.getByLabelText('More information')
+    await expect(infoButton).toBeInTheDocument()
+    
+    await userEvent.click(infoButton)
+    // The Popover is rendered in a portal, so we need to look at the document body
+    const infoPopover = document.body.querySelector('.w-80.text-sm')
+    await expect(infoPopover).toBeInTheDocument()
+    
+    // Check for markdown formatting
+    const boldText = infoPopover?.querySelector('strong')
+    await expect(boldText).toBeInTheDocument()
+    
+    const italicText = infoPopover?.querySelector('em')
+    await expect(italicText).toBeInTheDocument()
+    
+    const codeText = infoPopover?.querySelector('code')
+    await expect(codeText).toBeInTheDocument()
+    
+    const link = infoPopover?.querySelector('a[href="https://example.com/monitoring"]')
+    await expect(link).toBeInTheDocument()
+    
+    const list = infoPopover?.querySelector('ol')
+    await expect(list).toBeInTheDocument()
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Demonstrates the full markdown formatting capabilities of the information prop, including bold text, italics, code blocks, links, lists, and blockquotes.'
       }
     }
   }

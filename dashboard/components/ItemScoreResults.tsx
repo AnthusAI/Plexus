@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, ExternalLink, ChevronDown, ChevronUp, ListChecks, IdCard, Box } from 'lucide-react';
+import { Loader2, ExternalLink, ChevronDown, ChevronUp, ListChecks, IdCard, Box, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { motion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
@@ -71,16 +71,32 @@ const ScoreResultCard: React.FC<{
   const displayExplanation = needsExpansion && !isExpanded 
     ? result.explanation!.substring(0, 200) + '...' 
     : result.explanation;
+
+  // Extract error information from the score result
+  const errorInfo = React.useMemo(() => {
+    // Only check the code field for errors - don't look at text content
+    const hasError = result.code && /^[4-5]\d{2}$/.test(result.code);
+
+    if (!hasError) {
+      return { hasError: false, errorCode: null, errorMessage: null };
+    }
+
+    return { hasError: true, errorCode: result.code, errorMessage: null };
+  }, [result.code]);
+
+  const hasError = errorInfo.hasError;
   
   return (
     <motion.div
       initial={{ opacity: result.isNew ? 0 : 1 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.5, ease: "easeOut" }}
-      className={`mb-3 bg-background rounded-lg p-4 relative overflow-visible cursor-pointer hover:bg-accent/50 transition-colors ${
-        result.isNew ? 'new-item-shadow' : ''
+      className={`mb-3 rounded-lg p-4 relative overflow-visible cursor-pointer transition-colors ${
+        result.isNew ? 'new-score-result-glow' : ''
       } ${
-        isSelected ? 'bg-card-selected selected-border-rounded' : ''
+        isSelected ? 'bg-card-selected selected-border-rounded' : 'bg-background hover:bg-accent'
+      } ${
+        hasError ? 'error-border-rounded' : ''
       }`}
       onClick={onClick}
       role="button"
@@ -127,6 +143,19 @@ const ScoreResultCard: React.FC<{
           )}
         </div>
       </div>
+      {hasError && (
+        <div className="mt-3 p-3 rounded-md bg-card border border-destructive">
+          <div className="flex items-center gap-2 mb-1">
+            <AlertTriangle className="h-4 w-4 text-attention" />
+            <span className="text-sm font-medium text-attention">Error {errorInfo.errorCode}</span>
+          </div>
+          {errorInfo.errorMessage && (
+            <div className="text-sm text-attention">
+              {errorInfo.errorMessage}
+            </div>
+          )}
+        </div>
+      )}
       {result.explanation && (
         <div className="mt-3 text-sm text-muted-foreground relative z-10">
           <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-muted-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:bg-muted prose-pre:text-foreground">

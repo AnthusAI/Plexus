@@ -551,6 +551,59 @@ class Score(BaseModel):
             
             local_yaml_clean = '\n'.join(local_yaml_lines).strip()
 
+            # Use the foundational create_version_from_yaml method
+            return self.create_version_from_yaml(
+                local_yaml_clean, 
+                note or 'Updated via Score.push_configuration()'
+            )
+            
+        except Exception as e:
+            error_msg = f"Error pushing configuration for Score {self.name}: {str(e)}"
+            logger.error(error_msg)
+            return {
+                "success": False,
+                "error": "UNEXPECTED_ERROR",
+                "message": error_msg
+            }
+
+    def create_version_from_yaml(self, yaml_content: str, note: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Create a new score version from YAML content string.
+        
+        This is the foundational method that only creates a new version if the content 
+        has changed from the current champion version.
+        
+        Args:
+            yaml_content: The YAML configuration content as a string
+            note: Optional version note. Defaults to "Updated via Score.create_version_from_yaml()"
+            
+        Returns:
+            Dict containing:
+                - success: bool
+                - version_id: str (new version ID if created, existing if no changes)
+                - champion_updated: bool (whether champion version was updated)
+                - message: str (success/error message)
+                - skipped: bool (true if no changes detected)
+        """
+        if not self._client:
+            return {
+                "success": False,
+                "error": "NO_CLIENT",
+                "message": "Score instance must have an API client to create version"
+            }
+
+        try:
+            # Validate YAML content
+            try:
+                import yaml
+                yaml.safe_load(yaml_content)
+            except yaml.YAMLError as e:
+                return {
+                    "success": False,
+                    "error": "INVALID_YAML",
+                    "message": f"Invalid YAML content: {str(e)}"
+                }
+
             # Get current champion version for comparison
             query = """
             query GetScore($id: ID!) {
@@ -585,13 +638,13 @@ class Score(BaseModel):
                     current_yaml = version_result['getScoreVersion'].get('configuration', '').strip()
                     
                     # Compare content (ignoring whitespace differences)
-                    if current_yaml == local_yaml_clean:
+                    if current_yaml == yaml_content.strip():
                         logger.info(f"No changes detected for Score {self.name}, skipping version creation")
                         return {
                             "success": True,
                             "version_id": current_champion_id,
                             "champion_updated": False,
-                            "message": f"No changes detected, keeping current version {current_champion_id}",
+                            "message": f"No changes detected for Score {self.name}, skipping version creation",
                             "skipped": True
                         }
 
@@ -614,8 +667,8 @@ class Score(BaseModel):
             
             version_input = {
                 'scoreId': self.id,
-                'configuration': local_yaml_clean,
-                'note': note or 'Updated via Score.push_configuration()',
+                'configuration': yaml_content.strip(),
+                'note': note or 'Updated via Score.create_version_from_yaml()',
                 'isFeatured': True  # Auto-promote to champion
             }
             
@@ -634,22 +687,46 @@ class Score(BaseModel):
             
             new_version = result['createScoreVersion']
             new_version_id = new_version['id']
+
+            # Update the score to point to the new champion version
+            update_mutation = """
+            mutation UpdateScore($input: UpdateScoreInput!) {
+                updateScore(input: $input) {
+                    id
+                    name
+                    championVersionId
+                }
+            }
+            """
             
+            update_input = {
+                'id': self.id,
+                'championVersionId': new_version_id
+            }
+            
+            update_result = self._client.execute(update_mutation, {'input': update_input})
+            
+            if 'errors' in update_result:
+                logger.warning(f"Failed to update champion version for Score {self.id}: {update_result['errors']}")
+                champion_updated = False
+            else:
+                champion_updated = True
+
             logger.info(f"Successfully created new version {new_version_id} for Score {self.name}")
             
             return {
                 "success": True,
                 "version_id": new_version_id,
-                "champion_updated": True,
-                "message": f"Successfully created new version {new_version_id}",
+                "champion_updated": champion_updated,
+                "message": f"Successfully created new version for Score {self.name}",
                 "skipped": False
             }
             
         except Exception as e:
-            error_msg = f"Error pushing configuration for Score {self.name}: {str(e)}"
+            error_msg = f"Error creating version for Score {self.name}: {str(e)}"
             logger.error(error_msg)
             return {
                 "success": False,
-                "error": "UNEXPECTED_ERROR", 
+                "error": "UNEXPECTED_ERROR",
                 "message": error_msg
             }
