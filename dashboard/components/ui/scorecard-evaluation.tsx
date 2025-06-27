@@ -144,7 +144,24 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
 
     setIsLoadingScoreDetails(true);
     try {
-      const downloadResult = await downloadData({ path: scoreDetailsFile.path }).result;
+      // Determine which storage bucket to use based on file path
+      let storageOptions: { path: string; options?: { bucket?: string } } = { path: scoreDetailsFile.path };
+      
+      if (scoreDetailsFile.path.startsWith('reportblocks/')) {
+        // Report block files are stored in the reportBlockDetails bucket
+        storageOptions = {
+          path: scoreDetailsFile.path,
+          options: { bucket: 'reportBlockDetails' }
+        };
+      } else if (scoreDetailsFile.path.startsWith('scoreresults/')) {
+        // Score result files are stored in the scoreResultAttachments bucket
+        storageOptions = {
+          path: scoreDetailsFile.path,
+          options: { bucket: 'scoreResultAttachments' }
+        };
+      }
+      
+      const downloadResult = await downloadData(storageOptions).result;
       const text = await downloadResult.body.text();
       setScoreDetailsContent(text);
     } catch (error) {

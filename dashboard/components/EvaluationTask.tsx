@@ -19,6 +19,8 @@ import isEqual from 'lodash/isEqual'
 import { standardizeScoreResults } from '@/utils/data-operations'
 import { ScoreResultComponent, ScoreResultData } from '@/components/ui/score-result'
 import { useTranslations } from '@/app/contexts/TranslationContext'
+import { cn } from '@/lib/utils'
+import { Timestamp } from '@/components/ui/timestamp'
 
 export interface EvaluationMetric {
   name: string
@@ -921,7 +923,7 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
   onSelectScoreResult,
   extra,
   isSelected,
-  commandDisplay: initialCommandDisplay = 'show',
+  commandDisplay: initialCommandDisplay = 'hide',
   ...restProps
 }: EvaluationTaskProps) {
   const [commandDisplay, setCommandDisplay] = useState(initialCommandDisplay);
@@ -1076,18 +1078,9 @@ evaluation:
 
   const taskWithDefaults = useMemo(() => ({
     id: task.id,
-    type: (() => {
-      // If we have a task record, use its type directly (just capitalize it)
-      if (taskData?.type) {
-        return taskData.type.split(' ')
-          .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-          .join(' ')
-      }
-      // Otherwise, this is from an Evaluation record, so append "Evaluation"
-      return `${(task.type || '').split(' ')
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-        .join(' ')} Evaluation`.trim()
-    })(),
+    type: task.type ? task.type.split(' ').map(word =>
+      word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+    ).join(' ') : 'Unknown',
     scorecard: task.scorecard,
     score: task.score,
     time: task.time,
@@ -1193,9 +1186,60 @@ evaluation:
       commandDisplay={commandDisplay}
       {...restProps}
       renderHeader={(props) => (
-        <TaskHeader {...props}>
-          {headerContent}
-        </TaskHeader>
+        <div className={cn(
+          "space-y-1.5 p-0 flex flex-col items-start w-full max-w-full",
+          variant === 'detail' && "px-1"
+        )}>
+          <div className="flex justify-between items-start w-full max-w-full gap-3 overflow-hidden">
+            <div className="flex flex-col pb-1 leading-none min-w-0 flex-1 overflow-hidden">
+              {variant === 'detail' && (
+                <div className="flex items-center gap-2 mb-3">
+                  <FlaskConical className="h-5 w-5 text-muted-foreground" />
+                  <span className="text-lg font-semibold text-muted-foreground">{props.task.type}</span>
+                </div>
+              )}
+              {props.task.name && (
+                <div className="font-semibold text-sm truncate">{props.task.name}</div>
+              )}
+              {props.task.description && (
+                <div className={`text-sm text-muted-foreground ${variant === 'detail' ? '' : 'truncate'}`}>
+                  {props.task.description}
+                </div>
+              )}
+              {props.task.scorecard && props.task.scorecard.trim() !== '' && (
+                <div className="font-semibold text-sm truncate">{props.task.scorecard}</div>
+              )}
+              {props.task.score && props.task.score.trim() !== '' && (
+                <div className="font-semibold text-sm truncate">{props.task.score}</div>
+              )}
+              <Timestamp time={props.task.time} variant="relative" />
+            </div>
+            <div className="flex flex-col items-end flex-shrink-0">
+              {variant === 'grid' ? (
+                <div className="flex flex-col items-center gap-1">
+                  <div className="text-muted-foreground">
+                    <FlaskConical className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
+                  </div>
+                  <div className="text-xs text-muted-foreground text-center">
+                    {(() => {
+                      const [firstWord, ...restWords] = props.task.type.split(/\s+/);
+                      return (
+                        <>
+                          {firstWord}<br />
+                          {restWords.join(' ')}
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  {headerContent}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
       renderContent={(props) => {
         // Add logging for content rendering decision

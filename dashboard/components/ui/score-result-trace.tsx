@@ -114,21 +114,15 @@ export function ScoreResultTrace({
       {/* Parsed trace nodes */}
       {parsedTraceNodes && parsedTraceNodes.length > 0 && (
         <div>
-          <div className="flex items-center mb-1">
-            <View className="w-4 h-4 mr-1 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">Trace</p>
-          </div>
-          <div className="bg-background rounded-lg p-3">
-            <div className={containerClasses}>
-              {parsedTraceNodes.map((node, index) => (
-                <ScoreResultNode
-                  key={`${node.name || 'node'}-${index}`}
-                  name={node.name}
-                  inputs={node.inputs}
-                  outputs={node.outputs}
-                />
-              ))}
-            </div>
+          <div className={containerClasses}>
+            {parsedTraceNodes.map((node, index) => (
+              <ScoreResultNode
+                key={`${node.name || 'node'}-${index}`}
+                name={node.name}
+                inputs={node.inputs}
+                outputs={node.outputs}
+              />
+            ))}
           </div>
         </div>
       )}
@@ -136,17 +130,11 @@ export function ScoreResultTrace({
       {/* Fallback for raw trace data */}
       {!parsedTraceNodes && rawTraceData && (
         <div>
-          <div className="flex items-center mb-1">
-            <View className="w-4 h-4 mr-1 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">Trace (Raw Data)</p>
-          </div>
-          <div className="bg-background rounded-lg p-3">
-            <pre className="text-xs whitespace-pre-wrap overflow-x-auto max-h-[400px] overflow-y-auto">
-              {typeof rawTraceData === 'string' 
-                ? rawTraceData 
-                : JSON.stringify(rawTraceData, null, 2)}
-            </pre>
-          </div>
+          <pre className="text-xs whitespace-pre-wrap overflow-x-auto max-h-[400px] overflow-y-auto bg-background rounded-lg p-3">
+            {typeof rawTraceData === 'string' 
+              ? rawTraceData 
+              : JSON.stringify(rawTraceData, null, 2)}
+          </pre>
         </div>
       )}
     </div>

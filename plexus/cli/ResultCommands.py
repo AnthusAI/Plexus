@@ -6,7 +6,8 @@ from rich.panel import Panel
 from rich.text import Text
 from rich.json import JSON
 import json
-from datetime import datetime
+import uuid
+from datetime import datetime, timezone
 from plexus.dashboard.api.models.score_result import ScoreResult
 from plexus.cli.client_utils import create_client
 from plexus.cli.reports.utils import resolve_account_id_for_command
@@ -475,6 +476,337 @@ def info(id: str):
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {str(e)}")
 
+@score_results.command()
+@click.option('--id', required=True, help='Score result ID to delete')
+@click.option('--confirm', is_flag=True, help='Skip confirmation prompt')
+def delete(id: str, confirm: bool):
+    """Delete a specific score result by ID"""
+    client = create_client()
+    
+    if not confirm:
+        # Get the score result first to show what we're about to delete
+        try:
+            query = f"""
+            query GetScoreResult($id: ID!) {{
+                getScoreResult(id: $id) {{
+                    id
+                    value
+                    accountId
+                    scorecardId
+                    itemId
+                    updatedAt
+                    createdAt
+                }}
+            }}
+            """
+            response = client.execute(query, {'id': id})
+            result = response.get('getScoreResult')
+            
+            if not result:
+                console.print(f"[bold red]Error:[/bold red] No score result found with ID: {id}")
+                return
+                
+            console.print(f"[bold yellow]About to delete score result:[/bold yellow]")
+            console.print(f"  ID: {result['id']}")
+            console.print(f"  Value: {result['value']}")
+            console.print(f"  Account: {result['accountId']}")
+            console.print(f"  Scorecard: {result['scorecardId']}")
+            console.print(f"  Item: {result['itemId']}")
+            console.print(f"  Created: {result.get('createdAt', 'N/A')}")
+            
+            if not click.confirm("Are you sure you want to delete this score result?"):
+                console.print("[yellow]Deletion cancelled.[/yellow]")
+                return
+                
+        except Exception as e:
+            console.print(f"[bold red]Error getting score result info:[/bold red] {str(e)}")
+            return
+    
+    # Perform the deletion
+    try:
+        mutation = f"""
+        mutation DeleteScoreResult($id: ID!) {{
+            deleteScoreResult(input: {{ id: $id }}) {{
+                id
+            }}
+        }}
+        """
+        
+        response = client.execute(mutation, {'id': id})
+        deleted_result = response.get('deleteScoreResult')
+        
+        if deleted_result:
+            console.print(f"[bold green]Successfully deleted score result:[/bold green] {deleted_result['id']}")
+        else:
+            console.print(f"[bold red]Error:[/bold red] Failed to delete score result {id}")
+            
+    except Exception as e:
+        console.print(f"[bold red]Error deleting score result:[/bold red] {str(e)}")
+
+@score_results.command()
+@click.option('--account', help='Account key or ID (optional, uses default from environment if not provided)')
+@click.option('--scorecard', help='Scorecard identifier (accepts ID, name, key, or external ID)')
+@click.option('--score-id', help='Score ID to associate with the error score result')
+@click.option('--item-id', help='Item ID to associate with the error score result')
+@click.option('--count', type=int, default=1, help='Number of error score results to create (default: 1)')
+@click.option('--value', default='Error', help='Value for the error score result (default: "Error")')
+@click.option('--code', default='500', help='HTTP response code for the error (default: "500")')
+def create_error(account: Optional[str], scorecard: Optional[str], score_id: Optional[str], item_id: Optional[str], count: int, value: str, code: str):
+    """Create test score results with error codes for testing error detection (temporary command)"""
+    client = create_client()
+    
+    # Resolve account ID using the same pattern as other commands
+    account_id = resolve_account_id_for_command(client, account)
+    
+    # Resolve scorecard ID if provided, otherwise use a default or create a dummy one
+    scorecard_id = None
+    if scorecard:
+        scorecard_id = resolve_scorecard_identifier(client, scorecard)
+        if not scorecard_id:
+            console.print(f"[bold red]Error:[/bold red] No scorecard found with identifier: {scorecard}")
+            return
+    else:
+        # If no scorecard specified, try to find the first available scorecard for this account
+        try:
+            query = f"""
+            query ListScorecards($accountId: String!) {{
+                listScorecardByAccountId(accountId: $accountId, limit: 1) {{
+                    items {{
+                        id
+                        name
+                    }}
+                }}
+            }}
+            """
+            response = client.execute(query, {'accountId': account_id})
+            scorecards = response.get('listScorecardByAccountId', {}).get('items', [])
+            
+            if scorecards:
+                scorecard_id = scorecards[0]['id']
+                console.print(f"[dim]Using first available scorecard: {scorecards[0]['name']} ({scorecard_id})[/dim]")
+            else:
+                console.print(f"[bold red]Error:[/bold red] No scorecards found for account {account_id}. Please specify a scorecard or create one first.")
+                return
+                
+        except Exception as e:
+            console.print(f"[bold red]Error finding scorecard:[/bold red] {str(e)}")
+            return
+    
+    # Resolve score ID if provided, otherwise try to find one but don't fail if none exists
+    if not score_id:
+        try:
+            query = f"""
+            query ListScores($scorecardId: String!) {{
+                listScores(filter: {{ scorecardId: {{ eq: $scorecardId }} }}, limit: 1) {{
+                    items {{
+                        id
+                        name
+                    }}
+                }}
+            }}
+            """
+            response = client.execute(query, {'scorecardId': scorecard_id})
+            scores = response.get('listScores', {}).get('items', [])
+            
+            if scores:
+                score_id = scores[0]['id']
+                console.print(f"[dim]Using first available score: {scores[0]['name']} ({score_id})[/dim]")
+            else:
+                console.print(f"[dim]No scores found for scorecard {scorecard_id}. Creating a dummy score to satisfy GSI constraints.[/dim]")
+                # Create a dummy score to satisfy the GSI constraints
+                try:
+                    # First, we need a scorecard section
+                    section_query = f"""
+                    query ListSections($scorecardId: String!) {{
+                        listScorecardSections(filter: {{ scorecardId: {{ eq: $scorecardId }} }}, limit: 1) {{
+                            items {{
+                                id
+                                name
+                            }}
+                        }}
+                    }}
+                    """
+                    section_response = client.execute(section_query, {'scorecardId': scorecard_id})
+                    sections = section_response.get('listScorecardSections', {}).get('items', [])
+                    
+                    section_id = None
+                    if sections:
+                        section_id = sections[0]['id']
+                        console.print(f"[dim]Using existing section: {sections[0]['name']} ({section_id})[/dim]")
+                    else:
+                        # Create a dummy section first
+                        console.print(f"[dim]Creating dummy section for scorecard[/dim]")
+                        create_section_mutation = f"""
+                        mutation CreateSection($input: CreateScorecardSectionInput!) {{
+                            createScorecardSection(input: $input) {{
+                                id
+                                name
+                            }}
+                        }}
+                        """
+                        
+                        section_input = {
+                            'name': 'Test Section (DELETE ME)',
+                            'order': 999,
+                            'scorecardId': scorecard_id
+                        }
+                        
+                        section_response = client.execute(create_section_mutation, {'input': section_input})
+                        created_section = section_response.get('createScorecardSection')
+                        
+                        if created_section:
+                            section_id = created_section['id']
+                            console.print(f"[dim]Created dummy section: {created_section['name']} ({section_id})[/dim]")
+                        else:
+                            console.print(f"[yellow]Could not create dummy section, will try without scoreId anyway[/yellow]")
+                    
+                    # Now create a dummy score if we have a section
+                    if section_id:
+                        create_score_mutation = f"""
+                        mutation CreateScore($input: CreateScoreInput!) {{
+                            createScore(input: $input) {{
+                                id
+                                name
+                            }}
+                        }}
+                        """
+                        
+                        score_input = {
+                            'name': 'Test Score (DELETE ME)',
+                            'order': 999,
+                            'type': 'test',
+                            'sectionId': section_id,
+                            'scorecardId': scorecard_id,
+                            'externalId': f'test-score-{uuid.uuid4()}'
+                        }
+                        
+                        score_response = client.execute(create_score_mutation, {'input': score_input})
+                        created_score = score_response.get('createScore')
+                        
+                        if created_score:
+                            score_id = created_score['id']
+                            console.print(f"[dim]Created dummy score: {created_score['name']} ({score_id})[/dim]")
+                        else:
+                            console.print(f"[yellow]Could not create dummy score[/yellow]")
+                            
+                except Exception as e:
+                    console.print(f"[yellow]Warning: Could not create dummy score ({str(e)}). Will try without scoreId.[/yellow]")
+                
+        except Exception as e:
+            console.print(f"[yellow]Warning: Error finding score ({str(e)}). Creating ScoreResult without scoreId.[/yellow]")
+    
+    # Create a test Item first if we need one
+    if not item_id:
+        item_id = str(uuid.uuid4())
+        console.print(f"[dim]Creating test Item with ID: {item_id}[/dim]")
+        
+        # Create the test Item first
+        try:
+            create_item_mutation = f"""
+            mutation CreateItem($input: CreateItemInput!) {{
+                createItem(input: $input) {{
+                    id
+                }}
+            }}
+            """
+            
+            item_input = {
+                'id': item_id,
+                'accountId': account_id,
+                'evaluationId': 'prediction-default',  # Required for GSI
+                'isEvaluation': False,
+                'createdByType': 'prediction',  # CLI-created test items are predictions
+                'description': 'Test item created for error ScoreResult testing (delete when done)',
+                'externalId': f'test-error-item-{item_id[:8]}',
+                'createdAt': datetime.now(timezone.utc).isoformat(),
+                'updatedAt': datetime.now(timezone.utc).isoformat(),
+                'createdByType': 'prediction'
+            }
+            
+            response = client.execute(create_item_mutation, {'input': item_input})
+            created_item = response.get('createItem')
+            
+            if created_item:
+                console.print(f"[dim]Created test Item: {created_item['id']}[/dim]")
+            else:
+                console.print(f"[bold red]Error:[/bold red] Failed to create test Item")
+                return
+                
+        except Exception as e:
+            console.print(f"[bold red]Error creating test Item:[/bold red] {str(e)}")
+            return
+    
+    console.print(f"[bold yellow]Creating {count} error score result(s) with code {code}...[/bold yellow]")
+    console.print(f"[dim]Item ID: {item_id}[/dim]")
+    console.print(f"[dim]HTTP Code: {code}[/dim]")
+    if score_id:
+        console.print(f"[dim]Score ID: {score_id}[/dim]")
+    
+    # Create the error score results
+    created_count = 0
+    for i in range(count):
+        try:
+            now = datetime.now(timezone.utc).isoformat()
+            
+            mutation = f"""
+            mutation CreateScoreResult($input: CreateScoreResultInput!) {{
+                createScoreResult(input: $input) {{
+                    id
+                    value
+                    code
+                    accountId
+                    scorecardId
+                    itemId
+                }}
+            }}
+            """
+            
+            # Create input data with all required fields
+            input_data = {
+                'value': f"{value}_{i+1}" if count > 1 else value,
+                'code': code,  # HTTP response code (e.g., "500", "404")
+                'accountId': account_id,
+                'scorecardId': scorecard_id,
+                'itemId': item_id,  # itemId is required
+                'explanation': f"Test error score result created by CLI command for testing error detection feature",
+                'confidence': 0.0,
+                'correct': False,
+                'type': 'test',  # CLI-created test error results
+                'createdAt': now,
+                'updatedAt': now
+            }
+            
+            # Include scoreId only if we have one
+            if score_id:
+                input_data['scoreId'] = score_id
+            
+            response = client.execute(mutation, {'input': input_data})
+            created_result = response.get('createScoreResult')
+            
+            if created_result:
+                created_count += 1
+                console.print(f"[green]✓ Created error score result {i+1}/{count}: {created_result['id']}[/green]")
+            else:
+                console.print(f"[bold red]Error:[/bold red] Failed to create score result {i+1}")
+                
+        except Exception as e:
+            console.print(f"[bold red]Error creating score result {i+1}:[/bold red] {str(e)}")
+    
+    if created_count > 0:
+        console.print(f"\n[bold green]Successfully created {created_count} error score result(s) with code {code}![/bold green]")
+        console.print(f"[dim]These test records have code='{code}' and should trigger the error indicator in the dashboard.[/dim]")
+        console.print(f"\n[bold yellow]Test records created (DELETE WHEN DONE TESTING):[/bold yellow]")
+        console.print(f"[dim]• Test Item ID: {item_id}[/dim]")
+        if score_id:
+            console.print(f"[dim]• Test Score ID: {score_id} (if created)[/dim]")
+        console.print(f"\n[bold yellow]To clean up test records:[/bold yellow]")
+        console.print(f"[dim]1. Find ScoreResult IDs: plexus score-results list --limit 10[/dim]")
+        console.print(f"[dim]2. Delete ScoreResults: plexus score-results delete --id <score-result-id>[/dim]")
+        console.print(f"[dim]3. Delete test Item: plexus items delete --id {item_id} (if this command exists)[/dim]")
+        console.print(f"[dim]4. Delete test Score/Section if created (look for 'Test Score (DELETE ME)')[/dim]")
+    else:
+        console.print(f"[bold red]No error score results were created.[/bold red]")
+
 # Create all the synonym groups
 @click.group()
 def score_result():
@@ -495,4 +827,6 @@ def results():
 for group in [score_result, result, results]:
     group.add_command(list)
     group.add_command(last)
-    group.add_command(info) 
+    group.add_command(info)
+    group.add_command(delete)
+    group.add_command(create_error) 

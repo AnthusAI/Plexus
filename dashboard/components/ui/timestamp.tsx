@@ -72,108 +72,109 @@ const formatElapsedTime = (start: Date, end: Date, t: (key: string, variables?: 
     if (duration.seconds && duration.seconds > 0) {
       const secondText = duration.seconds === 1 ? 'second' : 'seconds';
       parts.push(
-        <span key="seconds"> 
+        <span key="seconds">
           <NumberFlowWrapper value={duration.seconds} /> {t(secondText)}
         </span>
       )
     }
   }
-  
-  // If no parts, return empty
+
+  // If no parts, it means the duration is less than a second, so we show 0 seconds.
   if (parts.length === 0) {
-    return { type: 'string', value: '' }
+    return {
+      type: 'component',
+      value: (
+        <span key="seconds">
+          <NumberFlowWrapper value={0} /> seconds
+        </span>
+      ),
+    }
   }
-  
-  return { 
-    type: 'component', 
+
+  return {
+    type: 'component',
     value: <span>{parts}</span>
   }
 }
 
-const areDatesMeaningfullyDifferent = (start: Date, end: Date): boolean => {
-  // Return false if times are the same or within 1 second of each other
-  const diffInMs = Math.abs(end.getTime() - start.getTime())
-  return diffInMs > 1000 // More than 1 second difference
-}
-
-const formatRelativeTime = (date: Date, t: (key: string, variables?: Record<string, any>) => string): { type: 'string', value: string } | { type: 'component', value: React.ReactNode } => {
+const formatRelativeTime = (date: Date): { type: 'string', value: string } | { type: 'component', value: React.ReactNode } => {
   try {
     // Check if date is valid
     if (isNaN(date.getTime())) {
       return { type: 'string', value: '' };
     }
-    
+
     const now = new Date();
     const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-    
+
     // Handle future dates
     if (diffInSeconds < 0) {
       return { type: 'string', value: t('inTheFuture') };
     }
-    
+
     // Less than 1 minute
     if (diffInSeconds < 60) {
       return { type: 'string', value: t('lessThanMinute') };
     }
-    
+
     // Minutes
     const diffInMinutes = Math.floor(diffInSeconds / 60);
     if (diffInMinutes < 60) {
       const timeKey = diffInMinutes === 1 ? 'minuteAgo' : 'minutesAgo';
-      return { 
-        type: 'string', 
+      return {
+        type: 'string',
         value: t(timeKey, { count: diffInMinutes })
       };
     }
-    
+
     // Hours
     const diffInHours = Math.floor(diffInMinutes / 60);
     if (diffInHours < 24) {
       const timeKey = diffInHours === 1 ? 'hourAgo' : 'hoursAgo';
-      return { 
-        type: 'string', 
+      return {
+        type: 'string',
         value: t(timeKey, { count: diffInHours })
       };
     }
-    
+
     // Days
     const diffInDays = Math.floor(diffInHours / 24);
     if (diffInDays < 7) {
       const timeKey = diffInDays === 1 ? 'dayAgo' : 'daysAgo';
-      return { 
-        type: 'string', 
+      return {
+        type: 'string',
         value: t(timeKey, { count: diffInDays })
       };
     }
-    
+
     // Weeks
     const diffInWeeks = Math.floor(diffInDays / 7);
     if (diffInWeeks < 4) {
       const timeKey = diffInWeeks === 1 ? 'weekAgo' : 'weeksAgo';
-      return { 
-        type: 'string', 
+      return {
+        type: 'string',
         value: t(timeKey, { count: diffInWeeks })
       };
     }
-    
+
     // Months
     const diffInMonths = Math.floor(diffInDays / 30);
     if (diffInMonths < 12) {
       const timeKey = diffInMonths === 1 ? 'monthAgo' : 'monthsAgo';
-      return { 
-        type: 'string', 
+      return {
+        type: 'string',
         value: t(timeKey, { count: diffInMonths })
       };
     }
-    
+
     // Years
     const diffInYears = Math.floor(diffInDays / 365);
     const timeKey = diffInYears === 1 ? 'yearAgo' : 'yearsAgo';
-    return { 
-      type: 'string', 
+    return {
+      type: 'string',
       value: t(timeKey, { count: diffInYears })
     };
-    
+
   } catch (e) {
     console.warn('Invalid date format:', date);
     return { type: 'string', value: '' };
@@ -221,17 +222,12 @@ export function Timestamp({
   useEffect(() => {
     const updateTime = () => {
       if (variant === 'elapsed') {
-        const endTime = completionTime 
+        const endTime = completionTime
           ? (typeof completionTime === 'string' ? new Date(completionTime) : completionTime)
           : new Date()
-        
-        // Only show elapsed time if the dates are meaningfully different
-        if (areDatesMeaningfullyDifferent(timeDate, endTime)) {
-          const result = formatElapsedTime(timeDate, endTime, t)
-          setDisplayContent(result.type === 'component' ? result.value : result.value)
-        } else {
-          setDisplayContent('') // Return empty string if times are effectively the same
-        }
+
+        const result = formatElapsedTime(timeDate, endTime, t)
+        setDisplayContent(result.value)
       } else {
         if (showAbsolute) {
           setDisplayContent(formatAbsoluteTime(timeDate))

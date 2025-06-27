@@ -19,6 +19,8 @@ from plexus.analysis.topics.analyzer import analyze_topics
 from plexus.dashboard.api.models.report_block import ReportBlock # For type hinting if needed
 from plexus.processors.ProcessorFactory import ProcessorFactory
 from plexus.reports.s3_utils import download_report_block_file
+from plexus.dashboard.api.client import PlexusDashboardClient
+from .data_utils import DatasetResolver
 
 from .base import BaseReportBlock
 
@@ -42,16 +44,19 @@ class TopicAnalysis(BaseReportBlock):
         "class": "TopicAnalysis",
         "name": "My Topic Analysis", // Optional, display name
         
-        // Data source configuration
-        "data_source": {
-            "input_file_path": "/path/to/your/transcripts.parquet", // Required
+        // Data configuration - specify either 'source' OR 'dataset'
+        "data": {
+            "source": "my-data-source-name", // DataSource name, key, or ID
+            // OR
+            "dataset": "dataset-id-123", // Specific DataSet ID
             "content_column": "text", // Optional, default: "text"
-            "customer_only": false, // Optional, default: false
-            "sample_size": null // Optional, default: null (process all)
+            "sample_size": null, // Optional, default: null (process all)
+            "fresh": false // Optional, bypass cache and fetch from API
         },
         
         // Stage 1: Preprocessing configuration
         "preprocessing": {
+            "customer_only": false, // Optional, filter to customer-only records, default: false
             "steps": [ // Optional, list of preprocessing steps
                 {
                     "class": "RemoveSpeakerIdentifiersTranscriptFilter", // Processor class name
@@ -124,21 +129,98 @@ class TopicAnalysis(BaseReportBlock):
             self._log("🚀 STAGE 1: CONFIGURATION EXTRACTION AND VALIDATION")
             self._log("="*60)
             
-            # Data source configuration
-            data_source = self.config.get("data_source", {})
-            input_file_path = data_source.get("input_file_path") or self.config.get("input_file_path")  # Backward compatibility
-            if not input_file_path or not Path(input_file_path).exists():
-                msg = f"'data_source.input_file_path' is required and must exist. Provided: {input_file_path}"
+            # Data configuration
+            data_config = self.config.get("data")
+            
+            # Debug logging to understand the configuration structure
+            self._log(f"🔍 DEBUG: Full config keys: {list(self.config.keys())}", level="DEBUG")
+            self._log(f"🔍 DEBUG: data_config type: {type(data_config)}", level="DEBUG")
+            self._log(f"🔍 DEBUG: data_config value: {data_config}", level="DEBUG")
+            
+            if not data_config:
+                msg = "'data' configuration section is required"
                 self._log(msg, level="ERROR")
                 final_output_data["errors"].append(msg)
                 final_output_data["summary"] = "Configuration error."
                 shutil.rmtree(main_temp_dir)
-                self._log(f"Cleaned up main temporary directory: {main_temp_dir}")
+                return final_output_data, self._get_log_string()
+            
+            if not isinstance(data_config, dict):
+                msg = f"'data' configuration must be a dictionary, got {type(data_config).__name__}: {data_config}"
+                self._log(msg, level="ERROR")
+                final_output_data["errors"].append(msg)
+                final_output_data["summary"] = "Configuration error."
+                shutil.rmtree(main_temp_dir)
+                return final_output_data, self._get_log_string()
+            
+            # Extract data resolution parameters
+            source_identifier = data_config.get("source")
+            dataset_identifier = data_config.get("dataset")
+            fresh_data = data_config.get("fresh", False)
+            
+            # Check if CLI fresh flag should override config fresh setting
+            if hasattr(self, 'params') and self.params:
+                # Check for various fresh parameter names that might come from CLI
+                for param_name in ['fresh', 'fresh_data_cache', 'fresh_transform_cache']:
+                    if param_name in self.params:
+                        cli_fresh = str(self.params[param_name]).lower() in ('true', '1', 'yes')
+                        if cli_fresh:
+                            fresh_data = True
+                            self._log(f"Fresh data cache enabled via CLI --fresh flag (param: {param_name})")
+                            break
+            
+            if not source_identifier and not dataset_identifier:
+                msg = "Must specify either 'source' or 'dataset' in data configuration"
+                self._log(msg, level="ERROR")
+                final_output_data["errors"].append(msg)
+                final_output_data["summary"] = "Configuration error."
+                shutil.rmtree(main_temp_dir)
+                return final_output_data, self._get_log_string()
+                
+            if source_identifier and dataset_identifier:
+                msg = "Cannot specify both 'source' and 'dataset' in data configuration"
+                self._log(msg, level="ERROR")
+                final_output_data["errors"].append(msg)
+                final_output_data["summary"] = "Configuration error."
+                shutil.rmtree(main_temp_dir)
+                return final_output_data, self._get_log_string()
+            
+            # Resolve dataset
+            self._log("📊 Resolving dataset from DataSource/Dataset")
+            try:
+                client = PlexusDashboardClient()
+                resolver = DatasetResolver(client)
+                
+                self._log(f"Resolving: source='{source_identifier}' dataset='{dataset_identifier}' fresh={fresh_data}")
+                input_file_path, dataset_metadata = await resolver.resolve_and_cache_dataset(
+                    source=source_identifier,
+                    dataset=dataset_identifier,
+                    fresh=fresh_data
+                )
+                
+                if not input_file_path:
+                    msg = f"Failed to resolve dataset. Source: {source_identifier}, Dataset: {dataset_identifier}"
+                    self._log(msg, level="ERROR")
+                    final_output_data["errors"].append(msg)
+                    final_output_data["summary"] = "Dataset resolution error."
+                    shutil.rmtree(main_temp_dir)
+                    return final_output_data, self._get_log_string()
+                    
+                self._log(f"✅ Resolved dataset to: {input_file_path}")
+                if dataset_metadata:
+                    self._log(f"   • Source Type: {dataset_metadata.get('source_type', 'unknown')}")
+                    self._log(f"   • Name: {dataset_metadata.get('name', 'unknown')}")
+                    
+            except Exception as e:
+                msg = f"Error resolving dataset: {str(e)}"
+                self._log(msg, level="ERROR")
+                final_output_data["errors"].append(msg)
+                final_output_data["summary"] = "Dataset resolution error."
+                shutil.rmtree(main_temp_dir)
                 return final_output_data, self._get_log_string()
 
-            content_column = data_source.get("content_column", self.config.get("content_column", "text"))
-            customer_only = data_source.get("customer_only", self.config.get("customer_only", False))
-            sample_size = data_source.get("sample_size", self.config.get("sample_size"))
+            content_column = data_config.get("content_column", "text")
+            sample_size = data_config.get("sample_size")
             
             # LLM extraction configuration
             llm_extraction = self.config.get("llm_extraction", {})
@@ -186,11 +268,20 @@ class TopicAnalysis(BaseReportBlock):
             top_n_words = bertopic_analysis.get("top_n_words", self.config.get("top_n_words", 10))
 
             # Preprocessing configuration
-            preprocessing_config = self.config.get("preprocessing", {}).get("steps", self.config.get("preprocessing", []))
+            preprocessing = self.config.get("preprocessing", {})
+            preprocessing_config = preprocessing.get("steps", [])
+            customer_only = preprocessing.get("customer_only", False)
             
             # Log comprehensive configuration summary
             self._log("📋 CONFIGURATION SUMMARY:")
             self._log(f"   • Input File: {input_file_path}")
+            if dataset_metadata:
+                self._log(f"   • Dataset Source: {dataset_metadata.get('source_type', 'unknown')}")
+                self._log(f"   • Dataset Name: {dataset_metadata.get('name', 'unknown')}")
+                if source_identifier:
+                    self._log(f"   • DataSource Identifier: {source_identifier}")
+                if dataset_identifier:
+                    self._log(f"   • DataSet ID: {dataset_identifier}")
             self._log(f"   • Content Column: {content_column}")
             self._log(f"   • Transform Method: {transform_method}")
             self._log(f"   • LLM Provider: {llm_provider}")
@@ -201,6 +292,7 @@ class TopicAnalysis(BaseReportBlock):
             self._log(f"   • Min Topic Size: {min_topic_size}")
             self._log(f"   • Use Representation Model: {use_representation_model}")
             self._log(f"   • Preprocessing Steps: {len(preprocessing_config)}")
+            self._log(f"   • Fresh Data Fetch: {fresh_data}")
             self._log("="*60)
 
             # --- 2. Apply Preprocessing (if configured) ---
@@ -350,7 +442,13 @@ class TopicAnalysis(BaseReportBlock):
                 "input_file": input_file_path,
                 "content_column": content_column,
                 "sample_size": sample_size,
-                "customer_only": customer_only
+                "customer_only": customer_only,
+                "data": {
+                    "source_identifier": source_identifier,
+                    "dataset_identifier": dataset_identifier,
+                    "fresh_data": fresh_data,
+                    "metadata": dataset_metadata
+                }
             }
             
             # Add preprocessing steps info if they were applied
@@ -361,6 +459,20 @@ class TopicAnalysis(BaseReportBlock):
             
             # 2. LLM Extraction (what was previously called preprocessing)
             final_output_data["llm_extraction"] = preprocessing_info
+
+            # Add debug logging to verify hit rate stats are included
+            self._log("🔍 DEBUG: LLM Extraction preprocessing_info contents:")
+            self._log(f"   • Method: {preprocessing_info.get('method', 'unknown')}")
+            self._log(f"   • Hit rate stats present: {'hit_rate_stats' in preprocessing_info}")
+            if 'hit_rate_stats' in preprocessing_info:
+                hit_stats = preprocessing_info['hit_rate_stats']
+                self._log(f"   • Total processed: {hit_stats.get('total_processed', 'unknown')}")
+                self._log(f"   • Successful: {hit_stats.get('successful_extractions', 'unknown')}")
+                self._log(f"   • Failed: {hit_stats.get('failed_extractions', 'unknown')}")
+                self._log(f"   • Hit rate: {hit_stats.get('hit_rate_percentage', 'unknown')}%")
+            else:
+                self._log("   • No hit_rate_stats found in preprocessing_info")
+                self._log(f"   • Available keys: {list(preprocessing_info.keys())}")
             
             # 3. Add debugging information - show sample of transformed text file
             debug_info = {}
@@ -455,7 +567,7 @@ class TopicAnalysis(BaseReportBlock):
                                 before_topics_path = os.path.join(root, "topics_before_fine_tuning.json")
                                 with open(before_topics_path, 'r', encoding='utf-8') as f:
                                     before_topics_data = json.load(f)
-                                
+                                    
                                 self._log(f"✅ Loaded 'before' topics data from {before_topics_path}")
                                 self._log(f"🔍 Found {len(before_topics_data)} topics before fine-tuning")
                                 break
@@ -763,6 +875,21 @@ class TopicAnalysis(BaseReportBlock):
 
         # Add block metadata for frontend display
         final_output_data["block_title"] = self.config.get("name", self.DEFAULT_NAME)
+
+        # Debug logging to verify hit rate stats are in final output
+        self._log("🔍 DEBUG: Final output data structure verification:")
+        if "llm_extraction" in final_output_data:
+            llm_data = final_output_data["llm_extraction"]
+            self._log(f"   • LLM extraction present: True")
+            self._log(f"   • Hit rate stats in final output: {'hit_rate_stats' in llm_data}")
+            if 'hit_rate_stats' in llm_data:
+                hit_stats = llm_data['hit_rate_stats']
+                self._log(f"   • Final hit rate: {hit_stats.get('hit_rate_percentage', 'unknown')}%")
+                self._log(f"   • Final total processed: {hit_stats.get('total_processed', 'unknown')}")
+            else:
+                self._log(f"   • LLM extraction keys: {list(llm_data.keys())}")
+        else:
+            self._log("   • LLM extraction missing from final output")
 
         # Return YAML formatted output with contextual comments
         try:

@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useState } from 'react';
 import { ReportBlockProps } from './ReportBlock';
 import ReportBlock from './ReportBlock';
@@ -6,9 +8,19 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ChevronDown, ChevronRight, Eye, EyeOff, MessagesSquare, Microscope, FileText } from 'lucide-react';
+import { ChevronDown, ChevronUp, ChevronRight, Eye, EyeOff, MessagesSquare, Microscope, FileText, PocketKnife } from 'lucide-react';
 import * as yaml from 'js-yaml';
 import { useTranslations } from '@/app/contexts/TranslationContext';
+import { PieChart, Pie, Cell, Tooltip, Label, ResponsiveContainer, Sector } from 'recharts';
+import { PieSectorDataItem } from 'recharts/types/polar/Pie';
+import { TopicAnalysisViewer } from '@/components/diagrams';
+import { TemplateVariables } from '@/components/diagrams/topic-analysis-diagram';
+import {
+  formatPreprocessor,
+  formatLLM,
+  formatBERTopic,
+  formatFineTuning
+} from '@/components/diagrams/text-formatting-utils';
 
 interface TopicAnalysisData {
   summary?: string;
@@ -34,6 +46,12 @@ interface TopicAnalysisData {
     prompt_used?: string;
     examples?: string[];
     llm_provider?: string;
+    hit_rate_stats?: {
+      total_processed: number;
+      successful_extractions: number;
+      failed_extractions: number;
+      hit_rate_percentage: number;
+    };
   };
   bertopic_analysis?: {
     num_topics_requested?: number;
@@ -97,6 +115,7 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
   const t = useTranslations('common');
   const [promptExpanded, setPromptExpanded] = useState(false);
   const [examplesExpanded, setExamplesExpanded] = useState(false);
+  const [selectedTopicIndex, setSelectedTopicIndex] = useState<number>(-1);
 
   // Debug logging to see what we're receiving
   console.log('🔍 TopicAnalysis component received props:', {
@@ -154,6 +173,34 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
     } : 'No topics'
   });
 
+  // Extract configuration summaries for the pipeline diagram
+  const getDiagramVariables = (): TemplateVariables => {
+    return {
+      preprocessor: formatPreprocessor(
+        preprocessing.method || 'Standard',
+        preprocessing.sample_size
+      ),
+      LLM: formatLLM(
+        llmExtraction.llm_provider || 'LLM',
+        llmExtraction.llm_model,
+        llmExtraction.prompt_used
+      ),
+      BERTopic: formatBERTopic({
+        minTopicSize: bertopicAnalysis.min_topic_size,
+        requestedTopics: bertopicAnalysis.num_topics_requested,
+        minNgram: bertopicAnalysis.min_ngram,
+        maxNgram: bertopicAnalysis.max_ngram,
+        topNWords: bertopicAnalysis.top_n_words,
+        discoveredTopics: topics.length
+      }),
+      finetune: formatFineTuning({
+        useRepresentationModel: fineTuning.use_representation_model || false,
+        provider: fineTuning.representation_model_provider,
+        model: fineTuning.representation_model_name
+      })
+    };
+  };
+
 
 
   return (
@@ -174,100 +221,98 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
         {/* Main Topic Analysis Results */}
         <TopicAnalysisResults topics={topics} />
 
+        {/* Pipeline Setup */}
+        <div className="w-full">
+          <div className="text-lg font-medium mb-4">
+            <div className="flex items-center gap-2">
+              <PocketKnife className="h-5 w-5" />
+              Pipeline Setup
+            </div>
+          </div>
+          <Card>
+            <CardContent className="p-0">
+              <TopicAnalysisViewer
+                variables={getDiagramVariables()}
+                className="rounded-lg"
+                viewModeEnabled={true}
+                height={600}
+              />
+            </CardContent>
+          </Card>
+        </div>
+
         {/* Analysis Details Section */}
-        <Accordion type="multiple" defaultValue={["analysis-details"]} className="w-full">
-          <AccordionItem value="analysis-details">
-            <AccordionTrigger className="text-lg font-medium">
-              <div className="flex items-center gap-2">
-                <Microscope className="h-5 w-5" />
-                Analysis Details
-              </div>
-            </AccordionTrigger>
-            <AccordionContent>
-              <div className="space-y-6 pt-6 [&>*:last-child]:border-b-0">
-                {/* Pre-processing Section */}
-                <Accordion type="multiple" defaultValue={[]} className="w-full">
-                  <AccordionItem value="preprocessing">
-                    <AccordionTrigger className="text-base font-medium">
-                      Pre-processing
-                      <div className="ml-2 px-2 py-1 text-xs bg-card rounded">
-                        {preprocessing.method || 'itemize'}
-                      </div>
-                    </AccordionTrigger>
-                    <AccordionContent>
-                      <PreprocessingSection preprocessing={preprocessing} />
-                    </AccordionContent>
-                  </AccordionItem>
-                </Accordion>
+        <div className="w-full">
+          <div className="text-lg font-medium mb-6">
+            <div className="flex items-center gap-2">
+              <Microscope className="h-5 w-5" />
+              Analysis Details
+            </div>
+          </div>
+          <div className="space-y-6 [&>*:last-child]:border-b-0">
+            {/* Pre-processing Section */}
+            <Accordion type="multiple" defaultValue={[]} className="w-full">
+              <AccordionItem value="preprocessing">
+                <AccordionTrigger className="text-base font-medium">
+                  Pre-processing
+                </AccordionTrigger>
+                <AccordionContent>
+                  <PreprocessingSection preprocessing={preprocessing} />
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
 
-                {/* LLM Extraction Section */}
-                <Accordion type="multiple" defaultValue={[]} className="w-full">
-                  <AccordionItem value="llm-extraction">
-                    <AccordionTrigger className="text-base font-medium">
-                      LLM Extraction
-                      {llmExtraction.examples && (
-                        <div className="ml-2 px-2 py-1 text-xs bg-card rounded">
-                          {llmExtraction.examples.length} {t('examples')}
-                        </div>
-                      )}
-                    </AccordionTrigger>
-                    <AccordionContent>
-                      <LLMExtractionSection
-                        llmExtraction={llmExtraction}
-                        promptExpanded={promptExpanded}
-                        setPromptExpanded={setPromptExpanded}
-                        examplesExpanded={examplesExpanded}
-                        setExamplesExpanded={setExamplesExpanded}
-                      />
-                    </AccordionContent>
-                  </AccordionItem>
-                </Accordion>
+            {/* LLM Extraction Section */}
+            <Accordion type="multiple" defaultValue={[]} className="w-full">
+              <AccordionItem value="llm-extraction">
+                <AccordionTrigger className="text-base font-medium">
+                  LLM Extraction
+                </AccordionTrigger>
+                <AccordionContent>
+                  <LLMExtractionSection
+                    llmExtraction={llmExtraction}
+                    promptExpanded={promptExpanded}
+                    setPromptExpanded={setPromptExpanded}
+                    examplesExpanded={examplesExpanded}
+                    setExamplesExpanded={setExamplesExpanded}
+                  />
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
 
-                {/* BERTopic Analysis Section */}
-                <Accordion type="multiple" defaultValue={[]} className="w-full">
-                  <AccordionItem value="bertopic">
-                    <AccordionTrigger className="text-base font-medium">
-                      BERTopic Analysis
-                      {topics.length > 0 && (
-                        <div className="ml-2 px-2 py-1 text-xs bg-card rounded">
-                          {topics.length} topics
-                        </div>
-                      )}
-                    </AccordionTrigger>
-                    <AccordionContent>
-                      <BERTopicSection 
-                        topics={topics}
-                        bertopicAnalysis={bertopicAnalysis}
-                        visualizationNotes={data.visualization_notes}
-                        attachedFiles={props.attachedFiles || undefined}
-                      />
-                    </AccordionContent>
-                  </AccordionItem>
-                </Accordion>
+            {/* BERTopic Analysis Section */}
+            <Accordion type="multiple" defaultValue={[]} className="w-full">
+              <AccordionItem value="bertopic">
+                <AccordionTrigger className="text-base font-medium">
+                  BERTopic Analysis
+                </AccordionTrigger>
+                <AccordionContent>
+                  <BERTopicSection
+                    topics={topics}
+                    bertopicAnalysis={bertopicAnalysis}
+                    visualizationNotes={data.visualization_notes}
+                    attachedFiles={props.attachedFiles || undefined}
+                  />
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
 
-                {/* Fine-tuning Section */}
-                <Accordion type="multiple" defaultValue={[]} className="w-full">
-                  <AccordionItem value="fine-tuning">
-                    <AccordionTrigger className="text-base font-medium">
-                      Fine-tuning
-                      {fineTuning.representation_model_provider && (
-                        <div className="ml-2 px-2 py-1 text-xs bg-card rounded">
-                          {fineTuning.representation_model_name || fineTuning.representation_model_provider}
-                        </div>
-                      )}
-                    </AccordionTrigger>
-                    <AccordionContent>
-                      <FineTuningSection 
-                        fineTuning={fineTuning}
-                        topics={topics}
-                      />
-                    </AccordionContent>
-                  </AccordionItem>
-                </Accordion>
-              </div>
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
+            {/* Fine-tuning Section */}
+            <Accordion type="multiple" defaultValue={[]} className="w-full">
+              <AccordionItem value="fine-tuning">
+                <AccordionTrigger className="text-base font-medium">
+                  Fine-tuning
+                </AccordionTrigger>
+                <AccordionContent>
+                  <FineTuningSection
+                    fineTuning={fineTuning}
+                    topics={topics}
+                  />
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+          </div>
+        </div>
       </div>
     </ReportBlock>
   );
@@ -277,8 +322,11 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
  * Helper function to clean topic names by removing prefixes like "0_"
  */
 const cleanTopicName = (name: string): string => {
-  // Remove prefixes like "0_", "1_", etc. from the beginning of topic names
-  return name.replace(/^\d+_/, '');
+  // Remove prefixes like "0_", "1_", etc., replace underscores, and capitalize
+  const cleaned = name.replace(/^\d+_/, '');
+  return cleaned
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, char => char.toUpperCase());
 };
 
 /**
@@ -296,6 +344,7 @@ const TopicAnalysisResults: React.FC<{
   }>;
 }> = ({ topics }) => {
   const t = useTranslations('topics');
+  const [selectedTopicIndex, setSelectedTopicIndex] = useState<number>(-1);
 
   if (topics.length === 0) {
     return (
@@ -332,50 +381,85 @@ const TopicAnalysisResults: React.FC<{
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <MessagesSquare className="h-5 w-5" />
-          <h3 className="text-lg font-medium">{t('topicAnalysisResults')}</h3>
-        </div>
-        <span className="text-sm text-muted-foreground">{topics.length} {t('topicsDiscovered')}</span>
+      <div className="flex items-center gap-2">
+        <MessagesSquare className="h-5 w-5" />
+        <h3 className="text-lg font-medium">{t('topicAnalysisResults')}</h3>
       </div>
 
-      <div className="space-y-4">
-        {topics.map((topic) => (
-          <Card key={topic.id} className="shadow-none border">
-            <CardContent className="p-4">
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-muted-foreground">#{topic.id + 1}</span>
-                    <h4 className="font-medium">{cleanTopicName(topic.name)}</h4>
+      <div className="grid grid-cols-1 sm:grid-cols-5 gap-8 items-start">
+        <div className="sticky top-4 sm:col-span-2">
+          <TopicDistributionChart
+            topics={topics}
+            selectedIndex={selectedTopicIndex}
+            onTopicSelect={setSelectedTopicIndex}
+          />
+        </div>
+
+        <div className="sm:col-span-3">
+          <Accordion
+            type="single"
+            collapsible
+            className="w-full"
+            value={selectedTopicIndex >= 0 ? `item-${selectedTopicIndex}` : ""}
+            onValueChange={(value) => {
+              if (value && value !== "") {
+                const index = parseInt(value.replace('item-', ''));
+                setSelectedTopicIndex(index);
+              } else {
+                setSelectedTopicIndex(-1);
+              }
+            }}
+          >
+            {topics.map((topic, index) => {
+              const isSelected = selectedTopicIndex === index;
+              return (
+                <AccordionItem key={topic.id} value={`item-${index}`} className="mb-4">
+                  <AccordionTrigger className={`py-2 px-3 rounded-lg transition-colors ${
+                    isSelected ? 'bg-primary text-primary-foreground' : 'hover:bg-muted/50'
+                  }`}>
+                    <div className="flex items-center justify-between w-full pr-4">
+                      <span className="font-medium text-left">{cleanTopicName(topic.name)}</span>
+                      <Badge variant="secondary" className="border-none bg-card font-normal">{topic.count} items</Badge>
+                    </div>
+                  </AccordionTrigger>
+                <AccordionContent>
+                  <div className="space-y-3 p-1">
+                    {topic.words && topic.words.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {topic.words
+                          .filter(word => {
+                            // Filter out empty or blank words
+                            if (!word.word || word.word.trim() === '') {
+                              return false;
+                            }
+                            // More robustly filter out the topic name from keywords
+                            const normalizedWord = word.word.toLowerCase().replace(/_/g, ' ').trim();
+                            const normalizedTopicName = cleanTopicName(topic.name).toLowerCase().trim();
+                            return normalizedWord !== normalizedTopicName;
+                          })
+                          .slice(0, 6)
+                          .map((word, i) => (
+                            <Badge key={i} variant="secondary" className="text-xs">
+                              {word.word}
+                            </Badge>
+                          ))}
+                      </div>
+                    )}
+                    {topic.examples && topic.examples.length > 0 && (
+                      <TopicExamplesSection examples={topic.examples} />
+                    )}
+                    {(!topic.examples || topic.examples.length === 0) && (
+                      <div className="text-xs text-muted-foreground italic">
+                        No examples available for this topic
+                      </div>
+                    )}
                   </div>
-                  <span className="text-sm text-muted-foreground">{topic.count} items</span>
-                </div>
-                {topic.words && topic.words.length > 0 && (
-                  <div className="flex flex-wrap gap-1">
-                    {topic.words.slice(0, 6)
-                      .filter(word => word.word !== topic.name && word.word !== cleanTopicName(topic.name))
-                      .map((word, i) => (
-                        <Badge key={i} variant="outline" className="text-xs font-mono px-0 py-0">
-                          {word.word}
-                        </Badge>
-                      ))}
-                  </div>
-                )}
-                {topic.examples && topic.examples.length > 0 && (
-                  <TopicExamplesSection examples={topic.examples} topicId={topic.id} />
-                )}
-                {/* Debug: Show if examples are missing */}
-                {(!topic.examples || topic.examples.length === 0) && (
-                  <div className="text-xs text-muted-foreground italic">
-                    {t('noExamplesAvailable')}
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+                </AccordionContent>
+              </AccordionItem>
+              );
+            })}
+          </Accordion>
+        </div>
       </div>
     </div>
   );
@@ -387,47 +471,28 @@ const TopicAnalysisResults: React.FC<{
  */
 const TopicExamplesSection: React.FC<{
   examples: string[];
-  topicId: number;
-}> = ({ examples, topicId }) => {
+}> = ({ examples }) => {
   const t = useTranslations('topics');
-  const [expanded, setExpanded] = useState(false);
 
-  if (examples.length === 0) {
+  if (!examples || examples.length === 0) {
     return null;
   }
 
   return (
     <div className="space-y-2">
-      <Collapsible open={expanded} onOpenChange={setExpanded}>
-        <CollapsibleTrigger asChild>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="justify-start gap-2 p-0 h-auto font-normal"
-          >
-            {expanded ? (
-              <ChevronDown className="h-4 w-4" />
-            ) : (
-              <ChevronRight className="h-4 w-4" />
-            )}
-            <FileText className="h-4 w-4" />
-            <span className="text-sm text-muted-foreground">
-              {examples.length} {examples.length === 1 ? t('example') : t('examples')}
-            </span>
-          </Button>
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <div className="mt-2 space-y-1">
-            {examples.map((example, index) => (
-              <div key={index} className="p-2 bg-muted/20 rounded-md border-l-2 border-primary/20">
-                <div className="text-sm text-foreground whitespace-pre-wrap break-words">
-                  {example.length > 200 ? `${example.slice(0, 200)}...` : example}
-                </div>
-              </div>
-            ))}
+      <div className="flex items-center gap-2 mt-2">
+        <FileText className="h-4 w-4 text-muted-foreground" />
+        <h5 className="text-sm font-medium">{t('examples')}</h5>
+      </div>
+      <div className="space-y-2 pl-6">
+        {examples.map((example, index) => (
+          <div key={index} className="p-2 bg-muted/20 rounded-md border-l-2 border-muted-foreground/40">
+            <p className="text-sm text-foreground whitespace-pre-wrap break-words">
+              {example}
+            </p>
           </div>
-        </CollapsibleContent>
-      </Collapsible>
+        ))}
+      </div>
     </div>
   );
 };
@@ -522,6 +587,132 @@ const PreprocessingSection: React.FC<{
 };
 
 /**
+ * LLM Extraction Hit Rate Chart Component
+ * Shows the success rate of LLM extraction as a pie chart
+ */
+const LLMExtractionHitRateChart: React.FC<{
+  hitRateStats: {
+    total_processed: number;
+    successful_extractions: number;
+    failed_extractions: number;
+    hit_rate_percentage: number;
+  };
+}> = ({ hitRateStats }) => {
+  // Get the computed CSS custom property values for true/false colors
+  const trueColor = React.useMemo(() => {
+    if (typeof window !== 'undefined') {
+      const style = getComputedStyle(document.documentElement);
+      return style.getPropertyValue('--true').trim();
+    }
+    return 'hsl(142 76% 36%)'; // fallback
+  }, []);
+
+  const falseColor = React.useMemo(() => {
+    if (typeof window !== 'undefined') {
+      const style = getComputedStyle(document.documentElement);
+      return style.getPropertyValue('--false').trim();
+    }
+    return 'hsl(358 75% 59%)'; // fallback
+  }, []);
+
+  const chartData = [
+    {
+      name: "Successful",
+      value: hitRateStats.successful_extractions,
+      percentage: hitRateStats.hit_rate_percentage,
+    },
+    {
+      name: "Failed",
+      value: hitRateStats.failed_extractions,
+      percentage: 100 - hitRateStats.hit_rate_percentage,
+    }
+  ];
+
+  return (
+    <div className="space-y-3">
+      <h4 className="font-medium">Extraction Hit Rate</h4>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+        <div className="w-full aspect-square max-w-[200px] mx-auto" style={{ pointerEvents: 'none' }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={chartData}
+                dataKey="value"
+                nameKey="name"
+                innerRadius="50%"
+                outerRadius="80%"
+                strokeWidth={2}
+                stroke="hsl(var(--background))"
+                paddingAngle={2}
+                onClick={() => {}}
+                onMouseEnter={() => {}}
+                onMouseLeave={() => {}}
+              >
+                <Cell fill={trueColor} style={{ outline: 'none', cursor: 'default' }} />
+                <Cell fill={falseColor} style={{ outline: 'none', cursor: 'default' }} />
+                <Label
+                  content={({ viewBox }) => {
+                    if (viewBox && "cx" in viewBox && "cy" in viewBox) {
+                      return (
+                        <text
+                          x={viewBox.cx}
+                          y={viewBox.cy}
+                          textAnchor="middle"
+                          dominantBaseline="middle"
+                        >
+                          <tspan
+                            x={viewBox.cx}
+                            y={viewBox.cy}
+                            className="fill-foreground text-2xl font-bold"
+                          >
+                            {hitRateStats.hit_rate_percentage}%
+                          </tspan>
+                        </text>
+                      );
+                    }
+                    return null;
+                  }}
+                  position="center"
+                />
+              </Pie>
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-true"></div>
+              <span className="text-sm font-medium">Successful</span>
+            </div>
+            <span className="text-sm text-muted-foreground">
+              {hitRateStats.successful_extractions} items
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-false"></div>
+              <span className="text-sm font-medium">Failed</span>
+            </div>
+            <span className="text-sm text-muted-foreground">
+              {hitRateStats.failed_extractions} items
+            </span>
+          </div>
+          <div className="pt-2 border-t">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Total Processed</span>
+              <span className="text-sm text-muted-foreground">
+                {hitRateStats.total_processed} items
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/**
  * LLM Extraction Section Component
  * Displays the prompt and extracted examples with collapsible/expandable sections
  */
@@ -608,6 +799,29 @@ const LLMExtractionSection: React.FC<{
             </CollapsibleContent>
           </Collapsible>
         </div>
+      )}
+
+      {/* Hit Rate Section */}
+      {llmExtraction.hit_rate_stats && (
+        <>
+          {llmExtraction.hit_rate_stats.total_processed > 0 ? (
+            <LLMExtractionHitRateChart hitRateStats={llmExtraction.hit_rate_stats} />
+          ) : (
+            <div className="space-y-3">
+              <h4 className="font-medium">Extraction Hit Rate</h4>
+              <div className="p-3 bg-muted/20 rounded-md border-l-2 border-primary/20">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-3 h-3 rounded-full bg-primary"></div>
+                  <span className="text-sm font-medium">Using Cached Results</span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  This analysis used previously processed data for faster results.
+                  Hit rate statistics are only available when processing fresh data.
+                </p>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {/* Examples Section */}
@@ -978,7 +1192,101 @@ const FineTuningSection: React.FC<{
   );
 };
 
+/**
+ * Topic Distribution Chart Component
+ * Displays a pie chart for topic distribution
+ */
+const TopicDistributionChart: React.FC<{
+  topics: Array<{
+    id: number;
+    name: string;
+    count: number;
+  }>;
+  selectedIndex: number;
+  onTopicSelect: (index: number) => void;
+}> = ({ topics, selectedIndex, onTopicSelect }) => {
+  const chartData = topics.map(topic => ({
+    name: cleanTopicName(topic.name),
+    value: topic.count,
+  }));
+
+  const handlePieClick = (data: any, index: number) => {
+    // Toggle selection - if clicking the same segment, deselect it
+    if (selectedIndex === index) {
+      onTopicSelect(-1);
+    } else {
+      onTopicSelect(index);
+    }
+  };
+
+  return (
+    <div className="w-full mx-auto aspect-square">
+      <ResponsiveContainer width="100%" height="100%">
+        <PieChart>
+          <Pie
+            data={chartData}
+            dataKey="value"
+            nameKey="name"
+            innerRadius="60%"
+            outerRadius="80%"
+            strokeWidth={2}
+            stroke="hsl(var(--background))"
+            paddingAngle={2}
+            activeIndex={selectedIndex >= 0 ? selectedIndex : undefined}
+            activeShape={({
+              outerRadius = 0,
+              ...props
+            }: PieSectorDataItem) => (
+              <Sector {...props} outerRadius={outerRadius + 20} />
+            )}
+            onClick={handlePieClick}
+          >
+            {chartData.map((entry, index) => (
+              <Cell
+                key={`cell-${index}`}
+                fill={`var(--chart-${(index % 7) + 1})`}
+                style={{ cursor: 'pointer', outline: 'none' }}
+              />
+            ))}
+            <Label
+              content={({ viewBox }) => {
+                if (viewBox && "cx" in viewBox && "cy" in viewBox) {
+                  return (
+                    <text
+                      x={viewBox.cx}
+                      y={viewBox.cy}
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                    >
+                      <tspan
+                        x={viewBox.cx}
+                        y={viewBox.cy}
+                        className="fill-foreground text-3xl font-bold"
+                      >
+                        {topics.length.toLocaleString()}
+                      </tspan>
+                      <tspan
+                        x={viewBox.cx}
+                        y={(viewBox.cy || 0) + 24}
+                        className="fill-muted-foreground"
+                      >
+                        Topics
+                      </tspan>
+                    </text>
+                  );
+                }
+                return null;
+              }}
+              position="center"
+            />
+          </Pie>
+        </PieChart>
+      </ResponsiveContainer>
+    </div>
+  );
+};
+
 // Set the blockClass property for the registry
 (TopicAnalysis as any).blockClass = 'TopicAnalysis';
 
-export default TopicAnalysis; 
+export default TopicAnalysis;

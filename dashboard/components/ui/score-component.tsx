@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { MoreHorizontal, X, Square, Columns2, FileStack, ChevronDown, ChevronUp, Award, FileCode, Minimize, Maximize, ArrowDownWideNarrow, Expand, Shrink, TestTube, FlaskConical, FlaskRound, TestTubes } from 'lucide-react'
+import { MoreHorizontal, X, Square, Columns2, FileStack, ChevronDown, ChevronUp, Award, FileCode, Minimize, Maximize, ArrowDownWideNarrow, Expand, Shrink, TestTube, FlaskConical, FlaskRound, TestTubes, ListCheck } from 'lucide-react'
 import { CardButton } from '@/components/CardButton'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Popover from '@radix-ui/react-popover'
@@ -24,6 +24,8 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import type { editor } from 'monaco-editor'
 import { defineCustomMonacoThemes, applyMonacoTheme, setupMonacoThemeWatcher, getCommonMonacoOptions } from '@/lib/monaco-theme'
 import { TestScoreDialog } from '@/components/scorecards/test-score-dialog'
+import { createTask } from '@/utils/data-operations'
+import { useAccount } from '@/app/contexts/AccountContext'
 
 const client = generateClient();
 
@@ -106,6 +108,7 @@ interface ScoreComponentProps extends React.HTMLAttributes<HTMLDivElement> {
     id: string
     displayValue: string
   }>
+  scorecardName?: string
 }
 
 interface DetailContentProps {
@@ -131,6 +134,8 @@ interface DetailContentProps {
     id: string
     displayValue: string
   }>
+  selectedAccount?: { id: string } | null
+  scorecardName?: string
 }
 
 const GridContent = React.memo(({ 
@@ -154,8 +159,11 @@ const GridContent = React.memo(({
         <div className="text-sm">{displayData.description}</div>
       </div>
       {score.icon && (
-        <div className="text-muted-foreground">
-          {score.icon}
+        <div className="flex flex-col items-center gap-1">
+          <div className="text-muted-foreground">
+            {score.icon}
+          </div>
+          <div className="text-xs text-muted-foreground text-center">Score</div>
         </div>
       )}
     </div>
@@ -243,6 +251,8 @@ const DetailContent = React.memo(({
   resetEditingCounter,
   forceExpandHistory,
   exampleItems = [],
+  selectedAccount,
+  scorecardName,
 }: DetailContentProps) => {
   // Get the current version's configuration
   const currentVersion = versions?.find(v => 
@@ -444,14 +454,118 @@ const DetailContent = React.memo(({
     setIsTestDialogOpen(true);
   };
 
-  const handleTestScoreWithItem = (itemId: string) => {
+  const handleTestScoreWithItem = async (itemId: string) => {
     console.log('Testing score with item:', { scoreId: score.id, scoreName: score.name, itemId });
-    // TODO: Implement actual test logic
-    toast.success(`Testing score "${score.name}" with selected item`);
+    console.log('Account context:', { selectedAccount });
+    
+    try {
+      const command = `predict --scorecard-name "${scorecardName || 'Unknown'}" --score-name "${score.name}" --item-id ${itemId}`;
+      const taskInput = {
+        type: 'Score Test',
+        target: 'prediction',
+        command: command,
+        accountId: selectedAccount?.id || 'call-criteria',
+        dispatchStatus: 'PENDING',
+        status: 'PENDING'
+      };
+      
+      console.log('Creating task with input:', taskInput);
+      
+      const task = await createTask(taskInput);
+      
+      console.log('Task creation result:', task);
+      
+      if (task) {
+        toast.success("Score test dispatched", {
+          description: <span className="font-mono text-sm truncate block">{command}</span>
+        });
+      } else {
+        console.error("createTask returned null or undefined");
+        toast.error("Failed to dispatch score test - no task returned");
+      }
+    } catch (error) {
+      console.error("Error dispatching score test:", error);
+      toast.error(`Error dispatching score test: ${error}`);
+    }
   };
 
   const closeTestScoreDialog = () => {
     setIsTestDialogOpen(false);
+  };
+
+  const handleEvaluateAccuracy = async () => {
+    try {
+      const command = `evaluate accuracy --score-id ${score.id}`;
+      const task = await createTask({
+        type: 'Accuracy Evaluation',
+        target: 'evaluation',
+        command: command,
+        accountId: selectedAccount?.id || 'call-criteria',
+        dispatchStatus: 'PENDING',
+        status: 'PENDING'
+      });
+      
+      if (task) {
+        toast.success("Accuracy evaluation dispatched", {
+          description: <span className="font-mono text-sm truncate block">{command}</span>
+        });
+      } else {
+        toast.error("Failed to dispatch accuracy evaluation");
+      }
+    } catch (error) {
+      console.error("Error dispatching accuracy evaluation:", error);
+      toast.error("Error dispatching accuracy evaluation");
+    }
+  };
+
+  const handleEvaluateConsistency = async () => {
+    try {
+      const command = `evaluate consistency --score-id ${score.id}`;
+      const task = await createTask({
+        type: 'Consistency Evaluation',
+        target: 'evaluation',
+        command: command,
+        accountId: selectedAccount?.id || 'call-criteria',
+        dispatchStatus: 'PENDING',
+        status: 'PENDING'
+      });
+      
+      if (task) {
+        toast.success("Consistency evaluation dispatched", {
+          description: <span className="font-mono text-sm truncate block">{command}</span>
+        });
+      } else {
+        toast.error("Failed to dispatch consistency evaluation");
+      }
+    } catch (error) {
+      console.error("Error dispatching consistency evaluation:", error);
+      toast.error("Error dispatching consistency evaluation");
+    }
+  };
+
+  const handleEvaluateAlignment = async () => {
+    try {
+      const command = `evaluate alignment --score-id ${score.id}`;
+      const task = await createTask({
+        type: 'Alignment Evaluation',
+        target: 'evaluation',
+        command: command,
+        accountId: selectedAccount?.id || 'call-criteria',
+        dispatchStatus: 'PENDING',
+        status: 'PENDING'
+      });
+      
+      if (task) {
+        toast.success("Alignment evaluation dispatched", {
+          description: <span className="font-mono text-sm truncate block">{command}</span>
+        });
+      } else {
+        toast.error("Failed to dispatch alignment evaluation");
+      }
+    } catch (error) {
+      console.error("Error dispatching alignment evaluation:", error);
+      toast.error("Error dispatching alignment evaluation");
+    }
   };
 
   return (
@@ -463,6 +577,10 @@ const DetailContent = React.memo(({
       {!isEditorFullscreen && (
         <div className="flex justify-between items-start w-full">
           <div className="space-y-2 flex-1">
+            <div className="flex items-center gap-2 mb-3">
+              <ListCheck className="h-5 w-5 text-foreground" />
+              <span className="text-lg font-semibold">Score</span>
+            </div>
             <Input
               value={parsedConfig.name || ''}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => 
@@ -525,24 +643,15 @@ const DetailContent = React.memo(({
                   <TestTube className="mr-2 h-4 w-4" />
                   Test
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => {
-                  console.log('Evaluate Accuracy clicked');
-                  toast.success('Evaluate Accuracy action triggered');
-                }}>
+                <DropdownMenuItem onClick={handleEvaluateAccuracy}>
                   <FlaskConical className="mr-2 h-4 w-4" />
                   Evaluate Accuracy
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => {
-                  console.log('Evaluate Consistency clicked');
-                  toast.success('Evaluate Consistency action triggered');
-                }}>
+                <DropdownMenuItem onClick={handleEvaluateConsistency}>
                   <FlaskRound className="mr-2 h-4 w-4" />
                   Evaluate Consistency
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => {
-                  console.log('Evaluate Alignment clicked');
-                  toast.success('Evaluate Alignment action triggered');
-                }}>
+                <DropdownMenuItem onClick={handleEvaluateAlignment}>
                   <TestTubes className="mr-2 h-4 w-4" />
                   Evaluate Alignment
                 </DropdownMenuItem>
@@ -597,24 +706,15 @@ const DetailContent = React.memo(({
                   <TestTube className="mr-2 h-4 w-4" />
                   Test
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => {
-                  console.log('Evaluate Accuracy clicked');
-                  toast.success('Evaluate Accuracy action triggered');
-                }}>
+                <DropdownMenuItem onClick={handleEvaluateAccuracy}>
                   <FlaskConical className="mr-2 h-4 w-4" />
                   Evaluate Accuracy
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => {
-                  console.log('Evaluate Consistency clicked');
-                  toast.success('Evaluate Consistency action triggered');
-                }}>
+                <DropdownMenuItem onClick={handleEvaluateConsistency}>
                   <FlaskRound className="mr-2 h-4 w-4" />
                   Evaluate Consistency
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => {
-                  console.log('Evaluate Alignment clicked');
-                  toast.success('Evaluate Alignment action triggered');
-                }}>
+                <DropdownMenuItem onClick={handleEvaluateAlignment}>
                   <TestTubes className="mr-2 h-4 w-4" />
                   Evaluate Alignment
                 </DropdownMenuItem>
@@ -862,9 +962,11 @@ export function ScoreComponent({
   isFullWidth = false,
   onSave,
   exampleItems = [],
+  scorecardName,
   className,
   ...props
 }: ScoreComponentProps) {
+  const { selectedAccount } = useAccount();
   const [editedScore, setEditedScore] = React.useState<ScoreData>(score)
   const [hasChanges, setHasChanges] = React.useState(false)
   const [versions, setVersions] = React.useState<ScoreVersion[]>([])
@@ -1389,9 +1491,9 @@ export function ScoreComponent({
   return (
     <div
       className={cn(
-        "w-full rounded-lg text-card-foreground hover:bg-accent/50 transition-colors",
+        "w-full rounded-lg text-card-foreground transition-colors",
         variant === 'grid' ? (
-          isSelected ? "bg-card-selected" : "bg-card"
+          isSelected ? "bg-card-selected" : "bg-card hover:bg-accent"
         ) : "bg-card-selected",
         variant === 'detail' && "h-full flex flex-col overflow-hidden",
         className
@@ -1446,6 +1548,8 @@ export function ScoreComponent({
               resetEditingCounter={resetEditingCounter}
               forceExpandHistory={forceExpandHistory}
               exampleItems={exampleItems}
+              selectedAccount={selectedAccount}
+              scorecardName={scorecardName}
             />
           )}
         </div>

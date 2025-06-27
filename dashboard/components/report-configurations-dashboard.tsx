@@ -131,7 +131,10 @@ export function ReportConfigurationsDashboard() {
       })
 
       if ('data' in response && response.data?.listReportConfigurations?.items) {
-        setConfigurations(response.data.listReportConfigurations.items)
+        const sortedConfigurations = response.data.listReportConfigurations.items.sort((a: ReportConfiguration, b: ReportConfiguration) => 
+          a.name.localeCompare(b.name)
+        )
+        setConfigurations(sortedConfigurations)
       }
     } catch (err: any) {
       console.error('Error fetching report configurations:', err)
@@ -195,7 +198,9 @@ export function ReportConfigurationsDashboard() {
 
       if ('data' in response && response.data?.createReportConfiguration) {
         const newConfig = response.data.createReportConfiguration
-        setConfigurations(prev => [newConfig, ...prev])
+        setConfigurations(prev => [...prev, newConfig].sort((a, b) => 
+          a.name.localeCompare(b.name)
+        ))
         toast.success('Report configuration duplicated')
       }
     } catch (err: any) {

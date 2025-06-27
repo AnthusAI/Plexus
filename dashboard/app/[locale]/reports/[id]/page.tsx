@@ -17,6 +17,7 @@ import BlockRegistryInitializer from '@/components/blocks/BlockRegistryInitializ
 import SquareLogo, { LogoVariant } from '@/components/logo-square';
 import { format, parseISO } from 'date-fns';
 import { Timestamp } from '@/components/ui/timestamp';
+import { Spinner } from '@/components/ui/spinner';
 
 // Share link data type
 type ShareLinkData = {
@@ -422,8 +423,7 @@ export function PublicReport({
       <div className="px-4 w-full">
         <div className="bg-background p-6 rounded-md">
           <div className="flex flex-col items-center justify-center min-h-[200px]">
-            <div className="w-10 h-10 border-t-[8px] border-secondary rounded-full animate-spin mb-4"></div>
-            <p className="text-muted-foreground">Loading report...</p>
+            <Spinner size="xl" variant="secondary" />
           </div>
         </div>
       </div>

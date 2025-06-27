@@ -76,7 +76,7 @@ export const ItemScoreResultCard = React.forwardRef<
             <div 
               key={index} 
               className={cn(
-                "w-full bg-card rounded-md hover:bg-accent/10 transition-colors duration-200",
+                "w-full bg-card rounded-md hover:bg-accent transition-colors duration-200",
                 className
               )}
             >

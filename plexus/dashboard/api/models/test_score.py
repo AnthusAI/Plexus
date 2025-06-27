@@ -60,6 +60,14 @@ class MockAPIClient:
                     }
                 }
             })
+        elif 'UpdateScore' in query:
+            return self.execute_responses.get('update_score', {
+                'updateScore': {
+                    'id': 'score-123',
+                    'name': 'Test Score',
+                    'championVersionId': 'new-version-789'
+                }
+            })
         
         return {}
 
@@ -370,6 +378,251 @@ nested:
         self.assertIn('key: value', pushed_content)
         # Regular comments should remain
         self.assertIn('# This comment should remain', pushed_content)
+
+
+class TestScoreVersionCreation(unittest.TestCase):
+    """Test cases for Score.create_version_from_yaml() - the foundational string-based method."""
+    
+    def setUp(self):
+        """Set up test fixtures."""
+        self.mock_client = MockAPIClient()
+        self.score = Score(
+            id='score-123',
+            name='Test Score',
+            key='test_score',
+            externalId='ext-123',
+            type='Classifier',
+            order=1,
+            sectionId='section-789',
+            client=self.mock_client
+        )
+        
+    def test_create_version_from_yaml_success(self):
+        """Test successful version creation from YAML string."""
+        yaml_content = """
+test: configuration
+nodes:
+  - type: classifier
+    name: test_classifier
+"""
+        
+        # Setup different current version to trigger creation
+        self.mock_client.execute_responses['get_version'] = {
+            'getScoreVersion': {
+                'configuration': 'different: content'
+            }
+        }
+        
+        result = self.score.create_version_from_yaml(yaml_content, note="Test version creation")
+        
+        # Verify success
+        self.assertTrue(result['success'])
+        self.assertEqual(result['version_id'], 'new-version-789')
+        self.assertTrue(result['champion_updated'])
+        self.assertFalse(result['skipped'])
+        
+        # Verify GraphQL calls
+        create_call = None
+        update_call = None
+        for call in self.mock_client.call_history:
+            if 'CreateScoreVersion' in call['query']:
+                create_call = call
+            elif 'UpdateScore' in call['query']:
+                update_call = call
+        
+        self.assertIsNotNone(create_call)
+        self.assertIsNotNone(update_call)
+        
+        # Verify version input
+        version_input = create_call['variables']['input']
+        self.assertEqual(version_input['scoreId'], 'score-123')
+        self.assertEqual(version_input['note'], 'Test version creation')
+        self.assertTrue(version_input['isFeatured'])
+        self.assertEqual(version_input['parentVersionId'], 'version-123')
+
+    def test_create_version_from_yaml_no_changes(self):
+        """Test version creation skipped when content hasn't changed."""
+        yaml_content = "test: yaml content"
+        
+        # Setup same content in current version
+        self.mock_client.execute_responses['get_version'] = {
+            'getScoreVersion': {
+                'configuration': 'test: yaml content'
+            }
+        }
+        
+        result = self.score.create_version_from_yaml(yaml_content)
+        
+        # Verify skipped
+        self.assertTrue(result['success'])
+        self.assertEqual(result['version_id'], 'version-123')
+        self.assertFalse(result['champion_updated'])
+        self.assertTrue(result['skipped'])
+        
+        # Verify no CreateScoreVersion call was made
+        for call in self.mock_client.call_history:
+            self.assertNotIn('CreateScoreVersion', call['query'])
+
+    def test_create_version_from_yaml_invalid_yaml(self):
+        """Test version creation fails with invalid YAML."""
+        invalid_yaml = """
+test: [unclosed bracket
+another: "unclosed quote
+invalid: yaml: structure: with: colons
+"""
+        
+        result = self.score.create_version_from_yaml(invalid_yaml)
+        
+        self.assertFalse(result['success'])
+        self.assertEqual(result['error'], 'INVALID_YAML')
+        self.assertIn('Invalid YAML content', result['message'])
+
+    def test_create_version_from_yaml_no_client(self):
+        """Test version creation fails without API client."""
+        score_no_client = Score(
+            id='score-123',
+            name='Test Score',
+            key='test_score',
+            externalId='ext-123',
+            type='Classifier',
+            order=1,
+            sectionId='section-789',
+            client=None
+        )
+        
+        result = score_no_client.create_version_from_yaml("test: yaml")
+        
+        self.assertFalse(result['success'])
+        self.assertEqual(result['error'], 'NO_CLIENT')
+
+    def test_create_version_from_yaml_no_current_champion(self):
+        """Test version creation when no current champion version exists."""
+        yaml_content = "test: new configuration"
+        
+        # Setup no champion version
+        self.mock_client.execute_responses['get_champion'] = {
+            'getScore': {'championVersionId': None}
+        }
+        
+        result = self.score.create_version_from_yaml(yaml_content)
+        
+        # Should still create version successfully
+        self.assertTrue(result['success'])
+        self.assertEqual(result['version_id'], 'new-version-789')
+        
+        # Verify no parentVersionId was set
+        create_call = None
+        for call in self.mock_client.call_history:
+            if 'CreateScoreVersion' in call['query']:
+                create_call = call
+                break
+        
+        self.assertIsNotNone(create_call)
+        version_input = create_call['variables']['input']
+        self.assertNotIn('parentVersionId', version_input)
+
+    def test_create_version_from_yaml_api_error(self):
+        """Test version creation handles API errors gracefully."""
+        yaml_content = "test: configuration"
+        
+        # Setup API error
+        self.mock_client.execute_responses['get_champion'] = None
+        
+        result = self.score.create_version_from_yaml(yaml_content)
+        
+        self.assertFalse(result['success'])
+        self.assertEqual(result['error'], 'API_ERROR')
+
+    def test_create_version_from_yaml_version_creation_failure(self):
+        """Test handling of version creation API failure."""
+        yaml_content = "test: configuration"
+        
+        # Setup successful champion lookup but failed version creation
+        self.mock_client.execute_responses['create_version'] = None
+        
+        result = self.score.create_version_from_yaml(yaml_content)
+        
+        self.assertFalse(result['success'])
+        self.assertEqual(result['error'], 'VERSION_CREATION_FAILED')
+
+    def test_create_version_from_yaml_champion_update_failure(self):
+        """Test handling when version creates but champion update fails."""
+        yaml_content = "test: configuration"
+        
+        # Setup version creation success but champion update failure
+        self.mock_client.execute_responses['update_score'] = {
+            'errors': [{'message': 'Failed to update champion'}]
+        }
+        
+        result = self.score.create_version_from_yaml(yaml_content)
+        
+        # Should still report success but with champion_updated = False
+        self.assertTrue(result['success'])
+        self.assertEqual(result['version_id'], 'new-version-789')
+        self.assertFalse(result['champion_updated'])
+        self.assertFalse(result['skipped'])
+
+    def test_create_version_from_yaml_whitespace_handling(self):
+        """Test that YAML content whitespace is properly handled."""
+        yaml_content = """
+        
+test: configuration
+nodes:
+  - type: classifier
+        
+        """
+        
+        # Setup different current version to trigger creation
+        self.mock_client.execute_responses['get_version'] = {
+            'getScoreVersion': {
+                'configuration': 'different: content'
+            }
+        }
+        
+        result = self.score.create_version_from_yaml(yaml_content)
+        
+        # Verify success
+        self.assertTrue(result['success'])
+        
+        # Verify that the YAML was stripped before sending to API
+        create_call = None
+        for call in self.mock_client.call_history:
+            if 'CreateScoreVersion' in call['query']:
+                create_call = call
+                break
+        
+        self.assertIsNotNone(create_call)
+        sent_config = create_call['variables']['input']['configuration']
+        
+        # Should be stripped but maintain internal structure
+        self.assertFalse(sent_config.startswith('\n'))
+        self.assertFalse(sent_config.endswith('\n'))
+        self.assertIn('test: configuration', sent_config)
+        self.assertIn('nodes:', sent_config)
+
+    def test_create_version_from_yaml_default_note(self):
+        """Test that default note is used when none provided."""
+        yaml_content = "test: configuration"
+        
+        # Setup different current version to trigger creation
+        self.mock_client.execute_responses['get_version'] = {
+            'getScoreVersion': {
+                'configuration': 'different: content'
+            }
+        }
+        
+        result = self.score.create_version_from_yaml(yaml_content)
+        
+        # Verify default note was used
+        create_call = None
+        for call in self.mock_client.call_history:
+            if 'CreateScoreVersion' in call['query']:
+                create_call = call
+                break
+        
+        self.assertIsNotNone(create_call)
+        version_input = create_call['variables']['input']
+        self.assertEqual(version_input['note'], 'Updated via Score.create_version_from_yaml()')
 
 
 if __name__ == '__main__':

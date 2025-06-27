@@ -105,12 +105,15 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
   console.log('TaskDisplay received data:', {
     id: reportData?.id || evaluationData?.id,
     type: reportData ? 'Report' : evaluationData?.type,
+    hasTask: !!task,
+    taskId: task?.id,
+    taskType: typeof task,
+    taskKeys: task ? Object.keys(task) : [],
+    taskStages: task?.stages,
+    taskStagesType: task?.stages ? typeof task.stages : 'undefined',
+    taskStagesData: (task?.stages as any)?.data,
+    taskStagesItems: (task?.stages as any)?.items,
     hasScoreResults: !!evaluationData?.scoreResults,
-    scoreResultsType: evaluationData?.scoreResults ? typeof evaluationData.scoreResults : 'undefined',
-    scoreResultsItemsType: evaluationData?.scoreResults?.items ? typeof evaluationData.scoreResults.items : 'undefined',
-    scoreResultsItemsLength: evaluationData?.scoreResults?.items?.length ?? 0,
-    scoreResultsItemsIsArray: Array.isArray(evaluationData?.scoreResults?.items),
-    firstScoreResult: evaluationData?.scoreResults?.items?.[0],
     variant
   });
 
@@ -125,8 +128,22 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
         return;
       }
       try {
+        console.log('TaskDisplay: Processing task data:', {
+          taskId: task.id,
+          taskStages: task.stages,
+          taskStagesType: typeof task.stages
+        });
         const convertedTask = await transformAmplifyTask(task);
+        console.log('TaskDisplay: Converted task:', {
+          taskId: convertedTask.id,
+          stages: convertedTask.stages
+        });
         const result = await processTask(convertedTask);
+        console.log('TaskDisplay: Processed task result:', {
+          taskId: result.id,
+          stages: result.stages,
+          stagesCount: result.stages?.length
+        });
         setProcessedTask(result);
       } catch (error) {
         console.error('Error processing task:', error);
@@ -231,7 +248,7 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
 
   // Define base properties, prefer reportData if available
   const displayId = reportData?.id || evaluationData?.id || 'unknown-id';
-  const displayType = reportData ? 'Report' : evaluationData?.type || 'Unknown';
+  const displayType = reportData ? 'Report' : (evaluationData ? `${evaluationData.type} Evaluation` : 'Unknown');
   const displayTime = reportData?.createdAt || evaluationData?.createdAt || new Date().toISOString();
   const displayTitle = reportData?.name || (evaluationData ? `${evaluationData.scorecard?.name || '-'} - ${evaluationData.score?.name || '-'}` : 'Report');
 
@@ -332,11 +349,94 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
           scoreResults: transformedScoreResults,
           task: processedTask ? { 
               id: processedTask.id,
+              accountId: '',
+              type: processedTask.type || displayType,
+              command: processedTask.command,
               status: processedTask.status,
-              stages: commonTaskProps.stages,
+              target: processedTask.target,
+              description: processedTask.description,
+              dispatchStatus: processedTask.dispatchStatus,
+              startedAt: processedTask.startedAt,
+              completedAt: processedTask.completedAt,
+              estimatedCompletionAt: processedTask.estimatedCompletionAt,
+              celeryTaskId: processedTask.celeryTaskId,
+              workerNodeId: processedTask.workerNodeId,
+              stages: commonTaskProps.stages ? {
+                items: commonTaskProps.stages
+              } : { items: [] },
               errorMessage: commonTaskProps.errorMessage,
               errorDetails: commonTaskProps.errorDetails
-          } : null
+          } : {
+              id: displayId,
+              accountId: '',
+              type: displayType,
+              command: task?.command,
+              status: task?.status || evaluationData?.status || 'PENDING',
+              target: task?.target,
+              description: task?.description,
+              dispatchStatus: task?.dispatchStatus,
+              startedAt: task?.startedAt || evaluationData?.startedAt,
+              completedAt: task?.completedAt,
+              estimatedCompletionAt: task?.estimatedCompletionAt,
+              celeryTaskId: task?.celeryTaskId,
+              workerNodeId: task?.workerNodeId,
+              stages: (() => {
+                // Try to extract stages from the original task data
+                console.log('TaskDisplay: Extracting stages from task in fallback case:', {
+                  taskId: task?.id,
+                  taskStages: task?.stages,
+                  taskStagesType: typeof task?.stages
+                });
+                
+                // Handle different possible structures for stages
+                let stageItems: any[] = [];
+                if (task?.stages) {
+                  if (Array.isArray(task.stages)) {
+                    stageItems = task.stages;
+                  } else if (typeof task.stages === 'function') {
+                    // This is a lazy loader, we can't process it synchronously
+                    console.log('TaskDisplay: Task stages is a lazy loader, cannot process synchronously');
+                  } else {
+                    // Try to access data or items properties safely
+                    const stagesData = (task.stages as any);
+                    if (stagesData?.data?.items) {
+                      stageItems = stagesData.data.items;
+                    } else if (stagesData?.items) {
+                      stageItems = stagesData.items;
+                    }
+                  }
+                }
+                
+                console.log('TaskDisplay: Extracted stage items:', {
+                  count: stageItems.length,
+                  items: stageItems
+                });
+                
+                return {
+                  items: stageItems.map((stage: any) => ({
+                    id: stage.id || stage.name,
+                    key: stage.name,
+                    label: stage.name,
+                    color: stage.status === 'COMPLETED' ? 'bg-primary' :
+                           stage.status === 'RUNNING' ? 'bg-secondary' :
+                           stage.status === 'FAILED' ? 'bg-false' :
+                           'bg-neutral',
+                    name: stage.name,
+                    order: stage.order || 0,
+                    status: stage.status as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
+                    statusMessage: stage.statusMessage,
+                    startedAt: stage.startedAt,
+                    completedAt: stage.completedAt,
+                    estimatedCompletionAt: stage.estimatedCompletionAt,
+                    processedItems: stage.processedItems,
+                    totalItems: stage.totalItems,
+                    completed: stage.status === 'COMPLETED'
+                  }))
+                };
+              })(),
+              errorMessage: task?.errorMessage || evaluationData?.errorMessage,
+              errorDetails: task?.errorDetails || evaluationData?.errorDetails,
+          }
         }
       },
       onClick,

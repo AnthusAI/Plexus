@@ -18,15 +18,19 @@ export const reportBlockDetails = defineStorage({
   })
 });
 
-// Define a storage bucket for item attachments
-export const attachments = defineStorage({
-  name: 'attachments',
+// Define a storage bucket for data sources and datasets
+export const dataSources = defineStorage({
+  name: 'dataSources',
   isDefault: true,
   access: (allow) => ({
-    'attachments/*': [
+    'datasources/*': [
       allow.guest.to(['read']),
       allow.authenticated.to(['read', 'write', 'delete'])
-    ]
+    ],
+    'datasets/*': [
+      allow.guest.to(['read']),
+      allow.authenticated.to(['read', 'write', 'delete'])
+    ],
   })
 });
 
