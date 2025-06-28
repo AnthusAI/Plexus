@@ -143,12 +143,15 @@ class Classifier(BaseNode):
             # Select the appropriate match
             selected_class = self.select_match(matches, output)
             
-            # Defensive fallback: if no classification found, default to "No"
-            if selected_class is None:
-                selected_class = "No"
+            # Only return a classification if it's actually one of the valid classes
+            # This allows the retry logic to work properly when invalid responses are received
+            if selected_class is not None and selected_class in self.valid_classes:
+                classification = selected_class
+            else:
+                classification = None
             
             return {
-                "classification": selected_class,
+                "classification": classification,
                 "explanation": output.strip() or "No explanation provided"
             }
 
