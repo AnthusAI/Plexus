@@ -143,9 +143,13 @@ class Classifier(BaseNode):
             # Select the appropriate match
             selected_class = self.select_match(matches, output)
             
+            # Defensive fallback: if no classification found, default to "No"
+            if selected_class is None:
+                selected_class = "No"
+            
             return {
                 "classification": selected_class,
-                "explanation": output.strip()
+                "explanation": output.strip() or "No explanation provided"
             }
 
     def get_llm_prompt_node(self):
