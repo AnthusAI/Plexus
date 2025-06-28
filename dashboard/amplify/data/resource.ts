@@ -632,7 +632,7 @@ const schema = a.schema({
             name: a.string(), // Optional name for the block
             position: a.integer().required(), // Required position for ordering
             type: a.string().required(), // Required type for the block
-            output: a.json().required(), // JSON output from the block's execution
+            output: a.string(), // Corrected type to string, and made it optional
             log: a.string(), // Optional log output from the block
             warning: a.string(), // Optional warning message (styled as 'false' alert)
             error: a.string(), // Optional error message (styled as red 'danger' alert)
