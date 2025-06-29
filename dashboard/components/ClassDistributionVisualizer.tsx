@@ -7,19 +7,20 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { 
-  SquareSplitHorizontalIcon as SquareSplit, 
-  Layers, 
-  Scale, 
-  EqualNotIcon, 
-  SquareMinusIcon, 
-  Info 
+import {
+  SquareSplitHorizontalIcon as SquareSplit,
+  Layers,
+  Scale,
+  EqualNotIcon,
+  SquareMinusIcon,
+  Info
 } from 'lucide-react'
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
+import { useTranslations } from '@/app/contexts/TranslationContext'
 
 export interface ClassDistribution {
   label: string
@@ -42,28 +43,30 @@ const getSegmentPosition = (index: number, total: number) => {
   return 'middle'
 }
 
-export default function ClassDistributionVisualizer({ 
-  data = [], 
+export default function ClassDistributionVisualizer({
+  data = [],
   rotateThreshold = 8,
   hideThreshold = 4,
   isBalanced = null,
   hideHeader = false,
   onLabelSelect
 }: ClassDistributionVisualizerProps) {
-  const safeData = Array.isArray(data) ? 
-    [...data].sort((a, b) => b.count - a.count) : 
+  const t = useTranslations('evaluations');
+
+  const safeData = Array.isArray(data) ?
+    [...data].sort((a, b) => b.count - a.count) :
     []
   const classCount = safeData.length
-  
+
   const hasHeader = !hideHeader && (isBalanced !== null || classCount > 0)
 
   if (!safeData || classCount === 0) {
     return (
       <div className="w-full">
         <div className="relative h-14 rounded-md overflow-hidden">
-          <div className="absolute inset-0 bg-pink-100 flex items-center 
+          <div className="absolute inset-0 bg-pink-100 flex items-center
             justify-center rounded-md dark:bg-pink-950">
-            <span className="text-sm font-medium text-pink-500 
+            <span className="text-sm font-medium text-pink-500
               dark:text-pink-400">No data</span>
           </div>
         </div>
@@ -90,27 +93,27 @@ export default function ClassDistributionVisualizer({
             <div className="flex items-start">
               {classCount === 1 ? (
                 <>
-                  <SquareMinusIcon className="w-4 h-4 mr-1 mt-0.5 text-foreground 
+                  <SquareMinusIcon className="w-4 h-4 mr-1 mt-0.5 text-foreground
                     shrink-0" />
-                  <span className="text-sm text-foreground">Labels: One class</span>
+                  <span className="text-sm text-foreground">{t('labels')}: {t('oneClass')}</span>
                 </>
               ) : classCount === 2 ? (
                 <>
-                  <SquareSplit className="w-4 h-4 mr-1 mt-0.5 text-foreground 
+                  <SquareSplit className="w-4 h-4 mr-1 mt-0.5 text-foreground
                     shrink-0" />
-                  <span className="text-sm text-foreground">Labels: Binary</span>
+                  <span className="text-sm text-foreground">{t('labels')}: {t('binary')}</span>
                 </>
               ) : (
                 <>
                   <Layers className="w-4 h-4 mr-1 mt-0.5 text-foreground shrink-0" />
-                  <span className="text-sm text-foreground">Labels: {classCount} classes</span>
+                  <span className="text-sm text-foreground">{t('labels')}: {classCount} {t('classes')}</span>
                   <Popover>
                     <PopoverTrigger asChild>
-                      <button 
+                      <button
                         className="inline-flex items-center"
                         aria-label="Show class list"
                       >
-                        <Info className="w-4 h-4 ml-1 mt-0.5 text-foreground shrink-0 
+                        <Info className="w-4 h-4 ml-1 mt-0.5 text-foreground shrink-0
                           cursor-pointer opacity-70 hover:opacity-100" />
                       </button>
                     </PopoverTrigger>

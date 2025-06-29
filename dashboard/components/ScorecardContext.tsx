@@ -4,6 +4,7 @@ import { generateClient } from "aws-amplify/data"
 import type { Schema } from "@/amplify/data/resource"
 import { ModelListResult, AmplifyListResult } from '@/types/shared'
 import { listFromModel } from "@/utils/amplify-helpers"
+import { useTranslations } from '@/app/contexts/TranslationContext'
 
 export const client = generateClient<Schema>()
 
@@ -46,6 +47,7 @@ const ScorecardContext: React.FC<ScorecardContextProps> = ({
   useMockData = false,
   skeletonMode = false
 }) => {
+  const t = useTranslations('scorecards')
   const [scorecards, setScorecards] = useState<Array<{ value: string; label: string }>>([])
   const [scores, setScores] = useState<Array<{ value: string; label: string }>>([])
   const [isLoading, setIsLoading] = useState(!useMockData)
@@ -151,11 +153,11 @@ const ScorecardContext: React.FC<ScorecardContextProps> = ({
           disabled={skeletonMode}
         >
           <SelectTrigger className={`@[450px]:w-[200px] w-full h-9 bg-card border-none ${skeletonMode ? 'animate-pulse' : ''}`}>
-            <SelectValue placeholder="Scorecard" />
+            <SelectValue placeholder={t('scorecard')} />
           </SelectTrigger>
           {!skeletonMode && (
             <SelectContent className="bg-card border-none">
-              <SelectItem value="all">All Scorecards</SelectItem>
+              <SelectItem value="all">{t('allScorecards')}</SelectItem>
               {scorecards?.sort((a, b) => a.label.localeCompare(b.label)).map(field => (
                 <SelectItem key={field.value} value={field.value}>
                   {field.label}
@@ -170,11 +172,11 @@ const ScorecardContext: React.FC<ScorecardContextProps> = ({
           value={skeletonMode ? undefined : (selectedScore || "all")}
         >
           <SelectTrigger className={`@[450px]:w-[200px] w-full h-9 bg-card border-none ${skeletonMode ? 'opacity-50 animate-pulse' : ''}`}>
-            <SelectValue placeholder="Score" />
+            <SelectValue placeholder={t('score')} />
           </SelectTrigger>
           {!skeletonMode && (
             <SelectContent className="bg-card border-none">
-              <SelectItem value="all">All Scores</SelectItem>
+              <SelectItem value="all">{t('allScores')}</SelectItem>
               {selectedScorecard && scores?.sort((a, b) => a.label.localeCompare(b.label)).map(option => (
                 <SelectItem key={option.value} value={option.value}>
                   {option.label}

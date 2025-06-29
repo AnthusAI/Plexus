@@ -10,15 +10,16 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ChevronDown, ChevronUp, ChevronRight, Eye, EyeOff, MessagesSquare, Microscope, FileText, PocketKnife } from 'lucide-react';
 import * as yaml from 'js-yaml';
+import { useTranslations } from '@/app/contexts/TranslationContext';
 import { PieChart, Pie, Cell, Tooltip, Label, ResponsiveContainer, Sector } from 'recharts';
 import { PieSectorDataItem } from 'recharts/types/polar/Pie';
 import { TopicAnalysisViewer } from '@/components/diagrams';
 import { TemplateVariables } from '@/components/diagrams/topic-analysis-diagram';
-import { 
-  formatPreprocessor, 
-  formatLLM, 
-  formatBERTopic, 
-  formatFineTuning 
+import {
+  formatPreprocessor,
+  formatLLM,
+  formatBERTopic,
+  formatFineTuning
 } from '@/components/diagrams/text-formatting-utils';
 
 interface TopicAnalysisData {
@@ -102,19 +103,20 @@ interface TopicAnalysisData {
 
 /**
  * Topic Analysis Report Block Component
- * 
+ *
  * Displays a comprehensive topic analysis report with sections for:
  * - Pre-processing
- * - LLM Extraction 
+ * - LLM Extraction
  * - BERTopic Analysis
  * - Fine-tuning
  */
 
 const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
+  const t = useTranslations('common');
   const [promptExpanded, setPromptExpanded] = useState(false);
   const [examplesExpanded, setExamplesExpanded] = useState(false);
   const [selectedTopicIndex, setSelectedTopicIndex] = useState<number>(-1);
-  
+
   // Debug logging to see what we're receiving
   console.log('🔍 TopicAnalysis component received props:', {
     hasOutput: !!props.output,
@@ -229,7 +231,7 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
           </div>
           <Card>
             <CardContent className="p-0">
-              <TopicAnalysisViewer 
+              <TopicAnalysisViewer
                 variables={getDiagramVariables()}
                 className="rounded-lg"
                 viewModeEnabled={true}
@@ -267,7 +269,7 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
                   LLM Extraction
                 </AccordionTrigger>
                 <AccordionContent>
-                  <LLMExtractionSection 
+                  <LLMExtractionSection
                     llmExtraction={llmExtraction}
                     promptExpanded={promptExpanded}
                     setPromptExpanded={setPromptExpanded}
@@ -285,7 +287,7 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
                   BERTopic Analysis
                 </AccordionTrigger>
                 <AccordionContent>
-                  <BERTopicSection 
+                  <BERTopicSection
                     topics={topics}
                     bertopicAnalysis={bertopicAnalysis}
                     visualizationNotes={data.visualization_notes}
@@ -302,7 +304,7 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
                   Fine-tuning
                 </AccordionTrigger>
                 <AccordionContent>
-                  <FineTuningSection 
+                  <FineTuningSection
                     fineTuning={fineTuning}
                     topics={topics}
                   />
@@ -341,6 +343,7 @@ const TopicAnalysisResults: React.FC<{
     examples?: string[];
   }>;
 }> = ({ topics }) => {
+  const t = useTranslations('topics');
   const [selectedTopicIndex, setSelectedTopicIndex] = useState<number>(-1);
 
   if (topics.length === 0) {
@@ -348,13 +351,13 @@ const TopicAnalysisResults: React.FC<{
       <div className="space-y-4">
         <div className="flex items-center gap-2">
           <MessagesSquare className="h-5 w-5" />
-          <h3 className="text-lg font-medium">Topic Analysis Results</h3>
+          <h3 className="text-lg font-medium">{t('topicAnalysisResults')}</h3>
         </div>
         <div className="space-y-4">
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-base text-muted-foreground">Analyzing topics...</CardTitle>
+                <CardTitle className="text-base text-muted-foreground">{t('analyzingTopics')}</CardTitle>
                 <div className="h-4 w-4 animate-spin rounded-full border-2 border-muted border-t-foreground"></div>
               </div>
             </CardHeader>
@@ -380,23 +383,23 @@ const TopicAnalysisResults: React.FC<{
     <div className="space-y-4">
       <div className="flex items-center gap-2">
         <MessagesSquare className="h-5 w-5" />
-        <h3 className="text-lg font-medium">Topic Analysis Results</h3>
+        <h3 className="text-lg font-medium">{t('topicAnalysisResults')}</h3>
       </div>
-      
+
       <div className="grid grid-cols-1 sm:grid-cols-5 gap-8 items-start">
         <div className="sticky top-4 sm:col-span-2">
-          <TopicDistributionChart 
-            topics={topics} 
+          <TopicDistributionChart
+            topics={topics}
             selectedIndex={selectedTopicIndex}
             onTopicSelect={setSelectedTopicIndex}
           />
         </div>
-        
+
         <div className="sm:col-span-3">
-          <Accordion 
-            type="single" 
-            collapsible 
-            className="w-full" 
+          <Accordion
+            type="single"
+            collapsible
+            className="w-full"
             value={selectedTopicIndex >= 0 ? `item-${selectedTopicIndex}` : ""}
             onValueChange={(value) => {
               if (value && value !== "") {
@@ -469,6 +472,8 @@ const TopicAnalysisResults: React.FC<{
 const TopicExamplesSection: React.FC<{
   examples: string[];
 }> = ({ examples }) => {
+  const t = useTranslations('topics');
+
   if (!examples || examples.length === 0) {
     return null;
   }
@@ -477,7 +482,7 @@ const TopicExamplesSection: React.FC<{
     <div className="space-y-2">
       <div className="flex items-center gap-2 mt-2">
         <FileText className="h-4 w-4 text-muted-foreground" />
-        <h5 className="text-sm font-medium">Examples</h5>
+        <h5 className="text-sm font-medium">{t('examples')}</h5>
       </div>
       <div className="space-y-2 pl-6">
         {examples.map((example, index) => (
@@ -617,7 +622,7 @@ const LLMExtractionHitRateChart: React.FC<{
       percentage: hitRateStats.hit_rate_percentage,
     },
     {
-      name: "Failed", 
+      name: "Failed",
       value: hitRateStats.failed_extractions,
       percentage: 100 - hitRateStats.hit_rate_percentage,
     }
@@ -673,7 +678,7 @@ const LLMExtractionHitRateChart: React.FC<{
             </PieChart>
           </ResponsiveContainer>
         </div>
-        
+
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -718,12 +723,13 @@ const LLMExtractionSection: React.FC<{
   examplesExpanded: boolean;
   setExamplesExpanded: (expanded: boolean) => void;
 }> = ({ llmExtraction, promptExpanded, setPromptExpanded, examplesExpanded, setExamplesExpanded }) => {
+  const t = useTranslations('common');
   const [selectedExamples, setSelectedExamples] = useState<Set<number>>(new Set());
   const [showAllExamples, setShowAllExamples] = useState(false);
-  
+
   const examples = llmExtraction.examples || [];
   const displayedExamples = showAllExamples ? examples : examples.slice(0, 20);
-  
+
   const toggleExampleSelection = (index: number) => {
     const newSelection = new Set(selectedExamples);
     if (newSelection.has(index)) {
@@ -809,7 +815,7 @@ const LLMExtractionSection: React.FC<{
                   <span className="text-sm font-medium">Using Cached Results</span>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  This analysis used previously processed data for faster results. 
+                  This analysis used previously processed data for faster results.
                   Hit rate statistics are only available when processing fresh data.
                 </p>
               </div>
@@ -861,10 +867,10 @@ const LLMExtractionSection: React.FC<{
               );
             })}
           </div>
-          
+
           {!showAllExamples && examples.length > 20 && (
             <div className="text-center text-sm text-muted-foreground">
-              Showing 20 of {examples.length} examples
+              Showing 20 of {examples.length} {t('examples')}
             </div>
           )}
         </div>
@@ -1236,8 +1242,8 @@ const TopicDistributionChart: React.FC<{
             onClick={handlePieClick}
           >
             {chartData.map((entry, index) => (
-              <Cell 
-                key={`cell-${index}`} 
+              <Cell
+                key={`cell-${index}`}
                 fill={`var(--chart-${(index % 7) + 1})`}
                 style={{ cursor: 'pointer', outline: 'none' }}
               />
@@ -1283,4 +1289,4 @@ const TopicDistributionChart: React.FC<{
 // Set the blockClass property for the registry
 (TopicAnalysis as any).blockClass = 'TopicAnalysis';
 
-export default TopicAnalysis; 
+export default TopicAnalysis;

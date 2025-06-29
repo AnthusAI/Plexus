@@ -42,13 +42,15 @@ import { useRouter, useParams, usePathname } from 'next/navigation'
 import { Observable } from 'rxjs'
 import { getClient } from '@/utils/amplify-client'
 import type { GraphQLResult, GraphQLSubscription } from '@aws-amplify/api'
-import { TaskDispatchButton, evaluationsConfig } from '@/components/task-dispatch'
+import { TaskDispatchButton } from '@/components/task-dispatch'
+import { createEvaluationsConfig } from '@/components/task-dispatch/configs/evaluations'
 import { EvaluationCard, EvaluationGrid } from '@/features/evaluations'
 import { useEvaluationSubscriptions, useTaskUpdates } from '@/features/evaluations'
 import { formatStatus, getBadgeVariant, calculateProgress } from '@/features/evaluations'
 import EvaluationTask from '@/components/EvaluationTask'
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { CardButton } from "@/components/CardButton"
+import { useTranslations } from '@/app/contexts/TranslationContext'
 import { GraphQLResult as APIGraphQLResult } from '@aws-amplify/api-graphql'
 import type { EvaluationTaskProps } from '@/components/EvaluationTask'
 import type { TaskData } from '@/types/evaluation'
@@ -425,6 +427,7 @@ export default function EvaluationsDashboard({
   const pathname = usePathname()
   const params = useParams()
   const [accountId, setAccountId] = useState<string | null>(null)
+  const tEvaluations = useTranslations('evaluations')
   const [selectedEvaluationId, setSelectedEvaluationId] = useState<string | null>(initialSelectedEvaluationId)
   const [isFullWidth, setIsFullWidth] = useState(false)
   const [leftPanelWidth, setLeftPanelWidth] = useState(50)
@@ -694,11 +697,11 @@ export default function EvaluationsDashboard({
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={copyLinkToClipboard}>
                 <Share className="mr-2 h-4 w-4" />
-                <span>Share</span>
+                <span>{tEvaluations('share')}</span>
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleDelete(evaluation.id)}>
                 <Trash2 className="mr-2 h-4 w-4" />
-                <span>Delete</span>
+                <span>{tEvaluations('delete')}</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -849,7 +852,7 @@ export default function EvaluationsDashboard({
         
         {/* TaskDispatchButton on top right */}
         <div className="flex-shrink-0">
-          <TaskDispatchButton config={evaluationsConfig} />
+          <TaskDispatchButton config={createEvaluationsConfig(tEvaluations)} />
         </div>
       </div>
       

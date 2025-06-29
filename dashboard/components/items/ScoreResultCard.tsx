@@ -14,6 +14,7 @@ import { IdentifierDisplay } from '@/components/ui/identifier-display'
 import { ScoreResultTrace } from '@/components/ui/score-result-trace'
 import FileContentViewer from '@/components/ui/FileContentViewer'
 import { getDashboardUrl } from '@/utils/plexus-links';
+import { useTranslations } from '@/app/contexts/TranslationContext';
 import { downloadData } from 'aws-amplify/storage';
 import {
   Accordion,
@@ -60,7 +61,7 @@ interface ScoreResultCardProps extends React.HTMLAttributes<HTMLDivElement> {
   errorMessage?: string | null
 }
 
-const ScoreResultCard = React.forwardRef<HTMLDivElement, ScoreResultCardProps>(({ 
+const ScoreResultCard = React.forwardRef<HTMLDivElement, ScoreResultCardProps>(({
   scoreResult,
   isFullWidth = false,
   onToggleFullWidth,
@@ -69,9 +70,11 @@ const ScoreResultCard = React.forwardRef<HTMLDivElement, ScoreResultCardProps>((
   naturalHeight = false,
   errorCode = null,
   errorMessage = null,
-  className, 
-  ...props 
+  className,
+  ...props
 }, ref) => {
+  const t = useTranslations('items');
+
   React.useEffect(() => {
     console.log('[ScoreResultCard] Received scoreResult:', scoreResult);
     if (scoreResult) {
@@ -82,7 +85,7 @@ const ScoreResultCard = React.forwardRef<HTMLDivElement, ScoreResultCardProps>((
 
   // Extract error information from the score result - same logic as ItemScoreResults
   const errorInfo = React.useMemo(() => {
-    
+
     const hasError = scoreResult.code?.match(/\b([4-5]\d{2})\b/);
 
     if (!hasError) {
@@ -90,9 +93,9 @@ const ScoreResultCard = React.forwardRef<HTMLDivElement, ScoreResultCardProps>((
     }
 
     // Use provided props if available, otherwise use detected values
-    return { 
-      hasError: true, 
-      errorCode: scoreResult.code, 
+    return {
+      hasError: true,
+      errorCode: scoreResult.code,
       errorMessage: 'Oops!'
     };
   }, [scoreResult.code, errorCode, errorMessage]);
@@ -117,7 +120,7 @@ const ScoreResultCard = React.forwardRef<HTMLDivElement, ScoreResultCardProps>((
   // Check for trace.json file and load its content
   const traceJsonPath = React.useMemo(() => {
     if (!scoreResult.attachments) return null;
-    return scoreResult.attachments.find(path => 
+    return scoreResult.attachments.find(path =>
       getFileName(path).toLowerCase() === 'trace.json'
     ) || null;
   }, [scoreResult.attachments]);
@@ -125,15 +128,15 @@ const ScoreResultCard = React.forwardRef<HTMLDivElement, ScoreResultCardProps>((
   // Load trace data from trace.json file
   React.useEffect(() => {
     console.log('[ScoreResultCard] traceJsonPath:', traceJsonPath);
-    
+
     if (traceJsonPath) {
       const fetchTraceData = async () => {
         try {
           console.log('[ScoreResultCard] Fetching trace.json content from:', traceJsonPath);
-          
+
           // Determine which storage bucket to use based on file path
           let storageOptions: { path: string; options?: { bucket?: string } } = { path: traceJsonPath };
-          
+
           if (traceJsonPath.startsWith('scoreresults/')) {
             // Score result files are stored in the scoreResultAttachments bucket
             storageOptions = {
@@ -150,16 +153,16 @@ const ScoreResultCard = React.forwardRef<HTMLDivElement, ScoreResultCardProps>((
             // These files are in the default attachments bucket
             storageOptions = { path: traceJsonPath };
           }
-          
+
           const downloadResult = await downloadData(storageOptions).result;
           const fileText = await downloadResult.body.text();
-          
+
           console.log('[ScoreResultCard] Raw trace.json content:', fileText);
-          
+
           // Parse the JSON content
           const parsedTraceData = JSON.parse(fileText);
           console.log('[ScoreResultCard] Parsed trace data:', parsedTraceData);
-          
+
           setTraceData(parsedTraceData);
         } catch (error) {
           console.error('[ScoreResultCard] Error fetching trace.json:', error);
@@ -168,7 +171,7 @@ const ScoreResultCard = React.forwardRef<HTMLDivElement, ScoreResultCardProps>((
           setTraceData(scoreResult.trace || null);
         }
       };
-      
+
       fetchTraceData();
     } else {
       console.log('[ScoreResultCard] No trace.json found, setting traceData to null');
@@ -182,7 +185,7 @@ const ScoreResultCard = React.forwardRef<HTMLDivElement, ScoreResultCardProps>((
         <div>
           <div className="flex items-center gap-1">
             <Box className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
-            <h2 className="text-xl text-muted-foreground font-semibold">Score Result Details</h2>
+            <h2 className="text-xl text-muted-foreground font-semibold">{t('scoreResultDetails')}</h2>
           </div>
           <div className="mt-1 space-y-1">
             <IdentifierDisplay 
@@ -251,7 +254,7 @@ const ScoreResultCard = React.forwardRef<HTMLDivElement, ScoreResultCardProps>((
                   className="relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
                   onSelect={() => {}}
                 >
-                  View Raw Data
+                  {t('viewRawData')}
                 </DropdownMenu.Item>
               </DropdownMenu.Content>
             </DropdownMenu.Portal>
@@ -260,7 +263,7 @@ const ScoreResultCard = React.forwardRef<HTMLDivElement, ScoreResultCardProps>((
             <CardButton
               icon={isFullWidth ? Columns2 : Square}
               onClick={onToggleFullWidth}
-              aria-label={isFullWidth ? 'Exit full width' : 'Full width'}
+              aria-label={isFullWidth ? t('exitFullWidth') : t('fullWidth')}
               skeletonMode={skeletonMode}
             />
           )}
@@ -268,7 +271,7 @@ const ScoreResultCard = React.forwardRef<HTMLDivElement, ScoreResultCardProps>((
             <CardButton
               icon={X}
               onClick={onClose}
-              aria-label="Close"
+              aria-label={t('close')}
               skeletonMode={skeletonMode}
             />
           )}
@@ -281,18 +284,18 @@ const ScoreResultCard = React.forwardRef<HTMLDivElement, ScoreResultCardProps>((
           <div>
             <div className="flex items-center gap-1 mb-2">
               <Target className="h-4 w-4 text-muted-foreground" />
-              <h3 className="text-sm font-medium text-muted-foreground">Value</h3>
+              <h3 className="text-sm font-medium text-muted-foreground">{t('value')}</h3>
             </div>
             <div className="flex items-center gap-2">
               <Badge variant="secondary">{scoreResult.value}</Badge>
               {scoreResult.confidence !== null && scoreResult.confidence !== undefined && (
                 <span className="text-xs text-muted-foreground">
-                  {Math.round((scoreResult.confidence || 0) * 100)}% confidence
+                  {Math.round((scoreResult.confidence || 0) * 100)}% {t('confidence')}
                 </span>
               )}
             </div>
           </div>
-          
+
           {/* Error Indicator */}
           {errorInfo.hasError && (
             <div className="p-4 rounded-md bg-destructive">
@@ -307,13 +310,13 @@ const ScoreResultCard = React.forwardRef<HTMLDivElement, ScoreResultCardProps>((
               )}
             </div>
           )}
-          
+
           {/* Explanation */}
           {scoreResult.explanation && (
             <div>
               <div className="flex items-center gap-1 mb-2">
                 <MessageSquareMore className="h-4 w-4 text-muted-foreground" />
-                <h3 className="text-sm font-medium text-muted-foreground">Explanation</h3>
+                <h3 className="text-sm font-medium text-muted-foreground">{t('explanation')}</h3>
               </div>
               <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:bg-muted prose-pre:text-foreground">
                 <ReactMarkdown
@@ -338,7 +341,7 @@ const ScoreResultCard = React.forwardRef<HTMLDivElement, ScoreResultCardProps>((
               </div>
             </div>
           )}
-          
+
           {/* Trace */}
           {traceJsonPath && (
             <div>
@@ -355,12 +358,12 @@ const ScoreResultCard = React.forwardRef<HTMLDivElement, ScoreResultCardProps>((
             <div>
               <div className="flex items-center gap-1 mb-2">
                 <Files className="h-4 w-4 text-muted-foreground" />
-                <h3 className="text-sm font-medium text-muted-foreground">Attachments</h3>
+                <h3 className="text-sm font-medium text-muted-foreground">{t('attachments')}</h3>
               </div>
               <Accordion type="multiple" className="w-full">
                 {scoreResult.attachments.map((attachmentPath, index) => (
-                  <AccordionItem 
-                    value={`attachment-${index}`} 
+                  <AccordionItem
+                    value={`attachment-${index}`}
                     key={attachmentPath + index}
                     className="border-b-0 mb-2"
                   >

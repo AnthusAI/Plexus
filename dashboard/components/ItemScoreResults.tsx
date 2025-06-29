@@ -13,6 +13,7 @@ import Link from 'next/link';
 import { GroupedScoreResults, ScoreResultWithDetails } from '@/hooks/useItemScoreResults';
 import { IdentifierDisplay } from '@/components/ui/identifier-display';
 import NumberFlowWrapper from '@/components/ui/number-flow';
+import { useTranslations } from '@/app/contexts/TranslationContext';
 
 interface ItemScoreResultsProps {
   groupedResults: GroupedScoreResults;
@@ -137,7 +138,7 @@ const ScoreResultCard: React.FC<{
           </Badge>
           {result.confidence !== null && (
             <span className="text-xs text-muted-foreground">
-              {Math.round((result.confidence || 0) * 100)}% confidence
+              {Math.round((result.confidence || 0) * 100)}% {t('confidence')}
             </span>
           )}
         </div>
@@ -208,6 +209,7 @@ const ItemScoreResults: React.FC<ItemScoreResultsProps> = ({
   onScoreResultSelect,
   selectedScoreResultId
 }) => {
+  const t = useTranslations('scorecards');
   if (isLoading) {
     return <ScoreResultsSkeletonLoader />;
   }
@@ -244,13 +246,13 @@ const ItemScoreResults: React.FC<ItemScoreResultsProps> = ({
       <div className="flex items-end justify-between">
         <div className="flex items-center gap-1">
           <Box className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
-          <h3 className="text-xl text-muted-foreground font-semibold">Score Results</h3>
+          <h3 className="text-xl text-muted-foreground font-semibold">{t('scoreResults')}</h3>
         </div>
         {scorecardIds.length > 1 && (
           <div className="flex items-center gap-1 text-sm">
             <Box className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
             <span>
-              <span className="text-foreground font-medium"><NumberFlowWrapper value={totalResults} /></span> <span className="text-muted-foreground">score result{totalResults !== 1 ? 's' : ''} across</span> <span className="text-foreground font-medium"><NumberFlowWrapper value={scorecardIds.length} /></span> <span className="text-muted-foreground">scorecard{scorecardIds.length !== 1 ? 's' : ''}</span>
+              <span className="text-foreground font-medium"><NumberFlowWrapper value={totalResults} /></span> <span className="text-muted-foreground">{t(totalResults === 1 ? 'scoreResultAcross' : 'scoreResultsAcross')}</span> <span className="text-foreground font-medium"><NumberFlowWrapper value={scorecardIds.length} /></span> <span className="text-muted-foreground">{t(scorecardIds.length === 1 ? 'scorecard' : 'scorecards')}</span>
             </span>
           </div>
         )}
@@ -282,7 +284,7 @@ const ItemScoreResults: React.FC<ItemScoreResultsProps> = ({
                   <div className="flex items-center gap-1 text-sm">
                     <Box className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
                     <span>
-                      <span className="text-foreground font-medium"><NumberFlowWrapper value={group.scores.length} /></span> <span className="text-muted-foreground">score result{group.scores.length !== 1 ? 's' : ''}</span>
+                      <span className="text-foreground font-medium"><NumberFlowWrapper value={group.scores.length} /></span> <span className="text-muted-foreground">{t(group.scores.length === 1 ? 'scoreResult' : 'scoreResults')}</span>
                     </span>
                   </div>
                 </div>

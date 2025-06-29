@@ -1,9 +1,10 @@
 "use client"
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react"
+import { useTranslations } from '@/app/contexts/TranslationContext'
 // Import the setup file for its side effects
 import "@/components/blocks/registrySetup";
-import { motion, AnimatePresence } from "framer-motion" 
+import { motion, AnimatePresence } from "framer-motion"
 import type { Schema } from "@/amplify/data/resource"
 import { Button } from "@/components/ui/button"
 import { X, MoreHorizontal, Trash2, Share, Pencil, Settings } from "lucide-react"
@@ -522,10 +523,13 @@ export default function ReportsDashboard({
 }: {
   initialSelectedReportId?: string | null,
 } = {}) {
+  const t = useTranslations('reports');
+
   // Add a useEffect to potentially log when setup runs relative to mount
   useEffect(() => {
     console.log("ReportsDashboard mounted. Block registry setup should have run.");
-  }, []); 
+  }, []);
+  const tReports = useTranslations('reports');
 
   const { user } = useAuthenticator()
   const router = useRouter()
@@ -728,13 +732,13 @@ export default function ReportsDashboard({
           if (data?.onCreateReport) {
             const newReport = data.onCreateReport;
             console.log('🔔 SUB-EVENT: Original new report name:', newReport.name, 'type:', typeof newReport.name);
-            
+
             // DIRECT APPROACH: Create a report display object manually to ensure name is preserved
             const manualTransformedReport: ReportDisplayData = {
               id: newReport.id,
-              name: typeof newReport.name === 'string' ? newReport.name : 
-                   (typeof newReport.name === 'object' && newReport.name !== null) ? 
-                   (newReport.name as any).name || `Report ${newReport.id.substring(0, 6)}` : 
+              name: typeof newReport.name === 'string' ? newReport.name :
+                   (typeof newReport.name === 'object' && newReport.name !== null) ?
+                   (newReport.name as any).name || `Report ${newReport.id.substring(0, 6)}` :
                    `Report ${newReport.id.substring(0, 6)}`,
               createdAt: newReport.createdAt,
               updatedAt: newReport.updatedAt,
@@ -841,7 +845,7 @@ export default function ReportsDashboard({
             console.error('Error parsing block output:', err);
             outputData = block.output || {};
           }
-          
+
           return {
             type: block.type || outputData.class || 'unknown', // Use API type first, then output.class as fallback
             config: outputData, // Use output as config
@@ -852,13 +856,13 @@ export default function ReportsDashboard({
             attachedFiles: block.attachedFiles || undefined
           };
         });
-        
+
         // Important log to verify block count
         console.log(`Fetched ${transformedBlocks.length} blocks for report ${reportId}`);
-        
+
         // Force a state update by creating a new array
         setSelectedReportBlocks([...transformedBlocks]);
-        
+
         // Create a new snapshot of the reports array with the updated report
         // This forces a re-render of the component tree
         setReports(prevReports => {
@@ -1297,7 +1301,7 @@ export default function ReportsDashboard({
   if (error && !dataHasLoadedOnce) { // Show error prominently if initial load failed
     return (
       <div className="space-y-4 p-4">
-        <h1 className="text-2xl font-bold">Reports</h1>
+        <h1 className="text-2xl font-bold">{t('title')}</h1>
         <div className="text-sm text-destructive">Error fetching reports: {error}</div>
         <Button onClick={() => accountId && fetchReports(accountId, null, selectedReportConfiguration)}>Retry</Button>
       </div>
@@ -1325,7 +1329,7 @@ export default function ReportsDashboard({
             variant="ghost"
             className="bg-card hover:bg-accent text-muted-foreground"
           >
-            <Pencil className="mr-2 h-4 w-4"/> Edit Configurations
+            <Pencil className="mr-2 h-4 w-4"/> {tReports('editConfigurations')}
           </Button>
           <RunReportButton />
         </div>
@@ -1335,12 +1339,12 @@ export default function ReportsDashboard({
         {/* Content area - uses the same base structure */}
         <div className="flex flex-1 min-h-0">
           {/* Left panel - grid content */}
-          <motion.div 
+          <motion.div
             className="h-full overflow-auto overflow-x-visible"
             animate={{
-              width: selectedReportId && !isNarrowViewport && isFullWidth 
-                ? 0 
-                : selectedReportId && !isNarrowViewport && !isFullWidth 
+              width: selectedReportId && !isNarrowViewport && isFullWidth
+                ? 0
+                : selectedReportId && !isNarrowViewport && !isFullWidth
                   ? `${leftPanelWidth}%`
                   : '100%'
             }}
@@ -1364,7 +1368,7 @@ export default function ReportsDashboard({
                     <div className="text-sm text-muted-foreground p-4 text-center">No reports found for this account.</div>
                   )}
                   {reports.length > 0 && (
-                    <motion.div 
+                    <motion.div
                       className="grid grid-cols-1 gap-3"
                       layout
                       transition={{
@@ -1379,7 +1383,7 @@ export default function ReportsDashboard({
                       <AnimatePresence mode="popLayout">
                         {reports.map((report) => {
                           const clickHandler = getReportClickHandler(report.id);
-                          
+
                           // Safely extract stages (reuse the same approach as above)
                           const stages = [];
                           if (report.task && 'stages' in report.task && report.task.stages) {
@@ -1407,10 +1411,10 @@ export default function ReportsDashboard({
                               currentStageName = currentStage.name;
                             }
                           }
-                          
+
                           // Ensure we have a valid display name for the report - USE FORCED STRING TYPE
                           const displayName = String(report.name || 'Report');
-                                          
+
                           // The ReportTask component uses configName as the primary display name
                           // We need to pass the report name both as title and as configName to ensure it displays correctly
                           const taskData = {
@@ -1435,7 +1439,7 @@ export default function ReportsDashboard({
                             status: report.task?.status as any || 'PENDING',
                             currentStageName: currentStageName
                           };
-                          
+
                           return (
                             <motion.div
                               key={report.id}
@@ -1443,7 +1447,7 @@ export default function ReportsDashboard({
                               layout
                               initial={{ opacity: 0 }}
                               animate={{ opacity: 1 }}
-                              exit={{ 
+                              exit={{
                                 opacity: 0,
                                 transition: { duration: 0.2 }
                               }}
@@ -1455,7 +1459,7 @@ export default function ReportsDashboard({
                                 },
                                 opacity: { duration: 0.4 }
                               }}
-                              onClick={clickHandler} 
+                              onClick={clickHandler}
                               className="cursor-pointer"
                               ref={(el) => {
                                 reportRefsMap.current.set(report.id, el);
@@ -1469,9 +1473,9 @@ export default function ReportsDashboard({
                                 controlButtons={
                                   <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
-                                       <Button 
-                                         variant="ghost" 
-                                         size="icon" 
+                                       <Button
+                                         variant="ghost"
+                                         size="icon"
                                          className="h-8 w-8 rounded-md bg-border hover:bg-accent"
                                          aria-label="More options"
                                          onClick={(e) => e.stopPropagation()} // Prevent card click when clicking dropdown
@@ -1528,7 +1532,7 @@ export default function ReportsDashboard({
               className="w-[12px] relative cursor-col-resize flex-shrink-0 group"
               onMouseDown={handleDragStart}
             >
-              <div className="absolute inset-0 rounded-full transition-colors duration-150 
+              <div className="absolute inset-0 rounded-full transition-colors duration-150
                 group-hover:bg-accent" />
             </div>
           )}
@@ -1543,10 +1547,10 @@ export default function ReportsDashboard({
                 exit={{ x: '100%', opacity: 0 }}
                 transition={{ type: 'spring', stiffness: 300, damping: 30 }}
                 className="h-full overflow-hidden"
-                style={{ 
-                  width: isFullWidth 
-                    ? '100%' 
-                    : `${100 - leftPanelWidth}%` 
+                style={{
+                  width: isFullWidth
+                    ? '100%'
+                    : `${100 - leftPanelWidth}%`
                 }}
               >
                 {renderSelectedReport}

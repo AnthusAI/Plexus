@@ -226,7 +226,7 @@ const SquareLogo = ({
             <span
               key={letter}
               style={{
-                fontFamily: "'Jersey 20', sans-serif",
+                fontFamily: "var(--font-jersey-20), 'Jersey 20', sans-serif",
                 fontSize: fontSize,
                 fontWeight: 400,
                 color: 'var(--muted)',
@@ -243,7 +243,7 @@ const SquareLogo = ({
         ) : (
           <span
             style={{
-              fontFamily: "'Jersey 20', sans-serif",
+              fontFamily: "var(--font-jersey-20), 'Jersey 20', sans-serif",
               fontSize: fontSize,
               fontWeight: 400,
               color: 'var(--muted)',

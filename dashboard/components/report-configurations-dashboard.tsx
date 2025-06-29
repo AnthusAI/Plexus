@@ -10,6 +10,7 @@ import { getClient } from '@/utils/amplify-client'
 import type { GraphQLResult } from '@aws-amplify/api'
 import { toast } from "sonner"
 import { useAuthenticator } from '@aws-amplify/ui-react'
+import { useTranslations } from "@/app/contexts/TranslationContext"
 
 // Define types based on Amplify schema
 type ReportConfiguration = {
@@ -66,6 +67,7 @@ const CREATE_REPORT_CONFIGURATION = `
 const ACCOUNT_KEY = process.env.NEXT_PUBLIC_PLEXUS_ACCOUNT_KEY || 'call-criteria'
 
 export function ReportConfigurationsDashboard() {
+  const t = useTranslations('reports');
   const { user } = useAuthenticator()
   const router = useRouter()
   const [configurations, setConfigurations] = useState<ReportConfiguration[]>([])
@@ -214,7 +216,7 @@ export function ReportConfigurationsDashboard() {
   if (error) {
     return (
       <div className="space-y-4 p-4">
-        <h1 className="text-2xl font-bold">Report Configurations</h1>
+        <h1 className="text-2xl font-bold">{t('reportConfigurations')}</h1>
         <div className="text-sm text-destructive">{error}</div>
         <Button onClick={() => accountId && fetchConfigurations()}>Retry</Button>
       </div>
@@ -236,7 +238,7 @@ export function ReportConfigurationsDashboard() {
               <ChevronLeft className="h-6 w-6" />
             </Button>
             <div>
-              <h1 className="text-xl font-semibold">Report Configurations</h1>
+              <h1 className="text-xl font-semibold">{t('reportConfigurations')}</h1>
               {error && <p className="text-xs text-destructive">{error}</p>}
             </div>
           </div>

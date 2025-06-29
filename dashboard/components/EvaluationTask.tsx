@@ -18,6 +18,7 @@ import { EvaluationListAccuracyBar } from '@/components/EvaluationListAccuracyBa
 import isEqual from 'lodash/isEqual'
 import { standardizeScoreResults } from '@/utils/data-operations'
 import { ScoreResultComponent, ScoreResultData } from '@/components/ui/score-result'
+import { useTranslations } from '@/app/contexts/TranslationContext'
 import { cn } from '@/lib/utils'
 import { Timestamp } from '@/components/ui/timestamp'
 
@@ -195,6 +196,9 @@ const mapTaskStatus = (status: string | undefined | null): 'PENDING' | 'RUNNING'
 }
 
 const getStatusMessage = (data: EvaluationTaskData) => {
+  const t = useTranslations('evaluations');
+  const tItems = useTranslations('items');
+
   // If we have task data with stages, use that
   if (data.task?.stages?.items?.length) {
     // If task failed, show the failed stage's message
@@ -230,22 +234,22 @@ const getStatusMessage = (data: EvaluationTaskData) => {
       return firstStage?.statusMessage;
     }
   }
-  
+
   // Otherwise, construct a status message from the evaluation data
   if (data.status === 'COMPLETED') {
-    return `Processed ${data.processedItems} of ${data.totalItems} items`;
+    return `${t('processed')} ${data.processedItems} ${t('of')} ${data.totalItems} ${tItems('items')}`;
   }
   if (data.status === 'FAILED') {
     return data.errorMessage || 'Task failed';
   }
   if (data.status === 'RUNNING') {
-    return `Processing ${data.processedItems} of ${data.totalItems} items...`;
+    return `${t('processing')} ${data.processedItems} ${t('of')} ${data.totalItems} ${tItems('items')}...`;
   }
   return undefined;
 }
 
-const GridContent = React.memo(({ data, extra, isSelected }: { 
-  data: EvaluationTaskData; 
+const GridContent = React.memo(({ data, extra, isSelected }: {
+  data: EvaluationTaskData;
   extra?: boolean;
   isSelected?: boolean;
 }) => {
@@ -1074,7 +1078,7 @@ evaluation:
 
   const taskWithDefaults = useMemo(() => ({
     id: task.id,
-    type: task.type ? task.type.split(' ').map(word => 
+    type: task.type ? task.type.split(' ').map(word =>
       word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
     ).join(' ') : 'Unknown',
     scorecard: task.scorecard,
