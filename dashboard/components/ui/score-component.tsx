@@ -22,7 +22,7 @@ import * as monaco from 'monaco-editor'
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import type { editor } from 'monaco-editor'
-import { defineCustomMonacoThemes, applyMonacoTheme, setupMonacoThemeWatcher, getCommonMonacoOptions } from '@/lib/monaco-theme'
+import { defineCustomMonacoThemes, applyMonacoTheme, setupMonacoThemeWatcher, getCommonMonacoOptions, configureYamlLanguage } from '@/lib/monaco-theme'
 import { TestScoreDialog } from '@/components/scorecards/test-score-dialog'
 import { createTask } from '@/utils/data-operations'
 import { useAccount } from '@/app/contexts/AccountContext'
@@ -749,6 +749,9 @@ const DetailContent = React.memo(({
                 // Store the Monaco instance
                 monacoRef.current = monaco;
                 
+                // Configure YAML language support with enhanced syntax highlighting
+                configureYamlLanguage(monaco);
+                
                 // Apply our custom theme when the editor mounts
                 defineCustomMonacoThemes(monaco);
                 applyMonacoTheme(monaco);
@@ -825,6 +828,9 @@ const DetailContent = React.memo(({
               
               // Store the Monaco instance
               monacoRef.current = monaco;
+              
+              // Configure YAML language support with enhanced syntax highlighting
+              configureYamlLanguage(monaco);
               
               // Apply our custom theme when the editor mounts
               defineCustomMonacoThemes(monaco);

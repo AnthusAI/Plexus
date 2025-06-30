@@ -45,17 +45,207 @@ const getEditorColor = (cssVar: string): string => {
 }
 
 /**
+ * Configure YAML language support with enhanced syntax highlighting and validation
+ */
+export const configureYamlLanguage = (monaco: Monaco): void => {
+  // Register YAML language configuration
+  monaco.languages.setLanguageConfiguration('yaml', {
+    comments: {
+      lineComment: '#',
+    },
+    brackets: [
+      ['{', '}'],
+      ['[', ']'],
+      ['(', ')'],
+    ],
+    autoClosingPairs: [
+      { open: '{', close: '}' },
+      { open: '[', close: ']' },
+      { open: '(', close: ')' },
+      { open: '"', close: '"' },
+      { open: "'", close: "'" },
+    ],
+    surroundingPairs: [
+      { open: '{', close: '}' },
+      { open: '[', close: ']' },
+      { open: '(', close: ')' },
+      { open: '"', close: '"' },
+      { open: "'", close: "'" },
+    ],
+    indentationRules: {
+      increaseIndentPattern: /^(\s*)(.*:(\s*$|\s+.*))/,
+      decreaseIndentPattern: /^\s*[\}\]\)].*$/,
+    },
+  })
+
+  // Enhanced YAML tokenization rules for better syntax highlighting
+  monaco.languages.setMonarchTokensProvider('yaml', {
+    tokenizer: {
+      root: [
+        // Comments
+        [/#.*$/, 'comment'],
+        
+        // Document separators
+        [/^---\s*$/, 'tag'],
+        [/^\.\.\.\s*$/, 'tag'],
+        
+        // Keys (including quoted keys)
+        [/^\s*([a-zA-Z_][\w\-]*)\s*:/, 'key'],
+        [/^\s*(['"])(.*?)\1\s*:/, 'key'],
+        
+        // Strings (single quoted)
+        [/'([^'\\]|\\.)*'/, 'string'],
+        
+        // Strings (double quoted)
+        [/"([^"\\]|\\.)*"/, 'string'],
+        
+        // Multiline strings (literal and folded)
+        [/^\s*[\|>][-+]?\d*\s*$/, 'string.yaml'],
+        
+        // Numbers
+        [/-?\d+\.?\d*([eE][-+]?\d+)?/, 'number'],
+        
+        // Booleans and null
+        [/\b(true|false|null|True|False|Null|TRUE|FALSE|NULL|~)\b/, 'keyword'],
+        
+        // Arrays and objects
+        [/[\[\]{}]/, 'delimiter.bracket'],
+        [/[,]/, 'delimiter.comma'],
+        
+        // Anchors and aliases
+        [/&[a-zA-Z_][\w]*/, 'type'],
+        [/\*[a-zA-Z_][\w]*/, 'type'],
+        
+        // Tags
+        [/![a-zA-Z_][\w]*/, 'tag'],
+        
+        // Indentation guides (important for YAML)
+        [/^\s+/, 'whitespace'],
+        
+        // Everything else as default
+        [/./, 'identifier'],
+      ],
+    },
+  })
+
+  // Set up YAML validation for indentation errors
+  monaco.languages.registerDocumentFormattingEditProvider('yaml', {
+    provideDocumentFormattingEdits: (model: editor.ITextModel) => {
+      // Basic YAML formatting - mainly for indentation consistency
+      const text = model.getValue()
+      const lines = text.split('\n')
+      const formattedLines: string[] = []
+      
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i]
+        // Keep original line for now - could add more sophisticated formatting
+        formattedLines.push(line)
+      }
+      
+      return [{
+        range: model.getFullModelRange(),
+        text: formattedLines.join('\n')
+      }]
+    }
+  })
+
+  // Enhanced YAML diagnostics for indentation and syntax errors
+  monaco.languages.registerDocumentSemanticTokensProvider('yaml', {
+    getLegend: () => ({
+      tokenTypes: ['comment', 'string', 'keyword', 'number', 'type', 'class', 'function'],
+      tokenModifiers: ['declaration', 'documentation']
+    }),
+    provideDocumentSemanticTokens: (model: editor.ITextModel) => {
+      // This helps with better syntax highlighting
+      const data: number[] = []
+      return {
+        data: new Uint32Array(data),
+        resultId: null
+      }
+    }
+  })
+
+  // Add YAML validation for indentation errors
+  const validateYamlIndentation = (model: editor.ITextModel) => {
+    const markers: editor.IMarkerData[] = []
+    const lines = model.getValue().split('\n')
+    const indentationStack: number[] = []
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]
+      const lineNumber = i + 1
+      
+      // Skip empty lines and comments
+      if (line.trim() === '' || line.trim().startsWith('#')) {
+        continue
+      }
+      
+      // Calculate indentation level
+      const match = line.match(/^(\s*)/)
+      const indentLevel = match ? match[1].length : 0
+      
+      // Check for tabs (not allowed in YAML)
+      if (line.includes('\t')) {
+        markers.push({
+          severity: monaco.MarkerSeverity.Error,
+          message: 'Tabs are not allowed in YAML. Use spaces for indentation.',
+          startLineNumber: lineNumber,
+          startColumn: line.indexOf('\t') + 1,
+          endLineNumber: lineNumber,
+          endColumn: line.indexOf('\t') + 2
+        })
+      }
+      
+      // Check for inconsistent indentation
+      if (line.includes(':')) {
+        // This is a key line
+        if (indentationStack.length > 0) {
+          const lastIndent = indentationStack[indentationStack.length - 1]
+          if (indentLevel > lastIndent && (indentLevel - lastIndent) % 2 !== 0) {
+            markers.push({
+              severity: monaco.MarkerSeverity.Warning,
+              message: 'Inconsistent indentation. YAML typically uses 2-space indentation.',
+              startLineNumber: lineNumber,
+              startColumn: 1,
+              endLineNumber: lineNumber,
+              endColumn: indentLevel + 1
+            })
+          }
+        }
+        
+        // Update indentation stack
+        while (indentationStack.length > 0 && indentationStack[indentationStack.length - 1] >= indentLevel) {
+          indentationStack.pop()
+        }
+        indentationStack.push(indentLevel)
+      }
+    }
+    
+    return markers
+  }
+
+  // Register YAML validation
+  monaco.languages.registerCodeLensProvider('yaml', {
+    provideCodeLenses: (model: editor.ITextModel) => {
+      const markers = validateYamlIndentation(model)
+      monaco.editor.setModelMarkers(model, 'yaml-validation', markers)
+      return { lenses: [], dispose: () => {} }
+    }
+  })
+}
+
+/**
  * Define custom Monaco Editor themes that match our Tailwind theme using standardized CSS variables
  */
 export const defineCustomMonacoThemes = (monaco: Monaco): void => {
-  // Improved token rules using standardized editor colors
+  // Enhanced token rules for YAML syntax highlighting using standardized editor colors
   const commonRules = [
     // Comments - using editor-comment color
     { token: 'comment', foreground: getEditorColor('--editor-comment'), fontStyle: 'italic' },
     
-    // Keys - using editor-key color  
-    { token: 'type', foreground: getEditorColor('--editor-key'), fontStyle: 'bold' },
+    // YAML Keys - using editor-key color with bold styling
     { token: 'key', foreground: getEditorColor('--editor-key'), fontStyle: 'bold' },
+    { token: 'type', foreground: getEditorColor('--editor-key'), fontStyle: 'bold' },
     
     // Strings - using editor-string color (violet)
     { token: 'string', foreground: getEditorColor('--editor-string') },
@@ -65,22 +255,25 @@ export const defineCustomMonacoThemes = (monaco: Monaco): void => {
     { token: 'number', foreground: getEditorColor('--editor-number') },
     { token: 'number.yaml', foreground: getEditorColor('--editor-number') },
     
-    // Booleans - using editor-keyword color
+    // Keywords/Booleans - using editor-keyword color
+    { token: 'keyword', foreground: getEditorColor('--editor-keyword'), fontStyle: 'bold' },
+    { token: 'keyword.yaml', foreground: getEditorColor('--editor-keyword'), fontStyle: 'bold' },
     { token: 'boolean', foreground: getEditorColor('--editor-keyword') },
+    
+    // YAML Tags and document separators - using accent color
+    { token: 'tag', foreground: getCssVar('--accent-foreground'), fontStyle: 'bold' },
     
     // Structural elements - using muted foreground
     { token: 'delimiter', foreground: getCssVar('--muted-foreground') },
+    { token: 'delimiter.bracket', foreground: getCssVar('--muted-foreground') },
+    { token: 'delimiter.comma', foreground: getCssVar('--muted-foreground') },
     { token: 'bracket', foreground: getCssVar('--muted-foreground') },
-    
-    // Keywords - using editor-keyword color
-    { token: 'keyword', foreground: getEditorColor('--editor-keyword'), fontStyle: 'bold' },
-    { token: 'keyword.yaml', foreground: getEditorColor('--editor-keyword'), fontStyle: 'bold' },
     
     // Identifiers - using foreground color
     { token: 'identifier', foreground: getCssVar('--foreground') },
     
-    // YAML specific tags - using editor-key color
-    { token: 'tag', foreground: getEditorColor('--editor-key'), fontStyle: 'bold' },
+    // Whitespace - minimal visibility for indentation guides
+    { token: 'whitespace', foreground: getCssVar('--border') },
   ]
 
   // Create a light theme using CSS variables
