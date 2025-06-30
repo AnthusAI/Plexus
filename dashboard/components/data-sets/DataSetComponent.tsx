@@ -228,13 +228,19 @@ const DetailContent = React.memo(function DetailContent({
                         
                         // Get the download URL for the file
                         const urlResult = await getUrl({
-                          path: dataSet.file,
-                          options: { bucket: 'dataSources' }
+                          path: dataSet.file
                         })
                         
                         if (urlResult.url) {
-                          // Open the file in a new tab for download
-                          window.open(urlResult.url.toString(), '_blank')
+                          // Create a temporary anchor element for direct download
+                          const fileName = dataSet.file.split('/').pop() || 'dataset.parquet'
+                          const a = document.createElement('a')
+                          a.href = urlResult.url.toString()
+                          a.download = fileName
+                          a.style.display = 'none'
+                          document.body.appendChild(a)
+                          a.click()
+                          document.body.removeChild(a)
                         }
                       } catch (error) {
                         console.error('Error downloading dataset file:', error)
