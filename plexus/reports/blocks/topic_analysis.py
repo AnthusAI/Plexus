@@ -349,6 +349,7 @@ class TopicAnalysis(BaseReportBlock):
             self._log("⚡ STAGE 3: TRANSCRIPT TRANSFORMATION") 
             self._log("="*60)
             text_file_path_str: Optional[str] = None # Path to the text file for BERTopic
+            transformed_parquet_path: Optional[str] = None # Path to the parquet file with metadata
             
             # The transformer functions create their own temp subdirectories.
             # We pass `main_temp_dir` to them so their caches are contained and cleaned up.
@@ -370,7 +371,7 @@ class TopicAnalysis(BaseReportBlock):
                     self._log("   • User Prompt:")
                     self._log("     " + "\n     ".join(user_prompt.split('\n')))
                 self._log("-" * 40)
-                _, text_file_path_str, preprocessing_info = await transform_transcripts_itemize(
+                transformed_parquet_path, text_file_path_str, preprocessing_info = await transform_transcripts_itemize(
                     input_file=input_file_path,
                     content_column=content_column,
                     prompt_template_file=prompt_template_path,
@@ -394,7 +395,7 @@ class TopicAnalysis(BaseReportBlock):
                     self._log("   • User Prompt:")
                     self._log("     " + "\n     ".join(user_prompt.split('\n')))
                 self._log("-" * 40)
-                _, text_file_path_str, preprocessing_info = await transform_transcripts_llm(
+                transformed_parquet_path, text_file_path_str, preprocessing_info = await transform_transcripts_llm(
                     input_file=input_file_path,
                     content_column=content_column,
                     prompt_template_file=prompt_template_path,
@@ -410,7 +411,7 @@ class TopicAnalysis(BaseReportBlock):
                 self._log(f"🤖 TRANSFORMATION METHOD: Chunking (default)")
                 self._log(f"   • No LLM processing - direct text chunking")
                 self._log("-" * 40)
-                _, text_file_path_str, preprocessing_info = await asyncio.to_thread(
+                transformed_parquet_path, text_file_path_str, preprocessing_info = await asyncio.to_thread(
                     transform_transcripts,
                     input_file=input_file_path,
                     content_column=content_column,
@@ -550,7 +551,8 @@ class TopicAnalysis(BaseReportBlock):
                     openai_api_key=openai_api_key, # Passed directly
                     use_langchain=True, # Enable LangChain path to use SQLite caching
                     representation_model_provider=representation_model_provider,
-                    representation_model_name=representation_model_name
+                    representation_model_name=representation_model_name,
+                    transformed_data_path=transformed_parquet_path
                 )
                 self._log("✅ BERTopic analysis completed successfully")
                 self._log("="*60)
@@ -659,9 +661,27 @@ class TopicAnalysis(BaseReportBlock):
                                         for topic in topics_list:
                                             topic_id_str = str(topic["id"])
                                             if topic_id_str in repr_docs_data:
-                                                topic["examples"] = repr_docs_data[topic_id_str][:20]  # Limit to 20 examples for UI
+                                                # Handle both old format (strings) and new format (objects with text and ids)
+                                                raw_examples = repr_docs_data[topic_id_str][:20]  # Limit to 20 examples for UI
+                                                formatted_examples = []
+                                                
+                                                for example in raw_examples:
+                                                    if isinstance(example, str):
+                                                        # Old format: just text
+                                                        formatted_examples.append({"text": example})
+                                                    elif isinstance(example, dict) and "text" in example:
+                                                        # New format: object with text and possibly ids
+                                                        formatted_examples.append(example)
+                                                    else:
+                                                        # Fallback: convert to string
+                                                        formatted_examples.append({"text": str(example)})
+                                                
+                                                topic["examples"] = formatted_examples
                                                 examples_added += 1
-                                                self._log(f"🔍 Added {len(topic['examples'])} examples to topic {topic_id_str}: {topic.get('name', 'Unnamed')}")
+                                                
+                                                # Count how many examples have ids
+                                                examples_with_ids = sum(1 for ex in formatted_examples if "ids" in ex and ex["ids"])
+                                                self._log(f"🔍 Added {len(topic['examples'])} examples to topic {topic_id_str}: {topic.get('name', 'Unnamed')} ({examples_with_ids} with IDs)")
                                         
                                         self._log(f"✅ Added examples to {examples_added}/{len(topics_list)} topics from temp directory")
                                         
@@ -687,9 +707,27 @@ class TopicAnalysis(BaseReportBlock):
                                                 for topic in topics_list:
                                                     topic_id_str = str(topic["id"])
                                                     if topic_id_str in repr_docs_data:
-                                                        topic["examples"] = repr_docs_data[topic_id_str][:20]  # Limit to 20 examples for UI
+                                                        # Handle both old format (strings) and new format (objects with text and ids)
+                                                        raw_examples = repr_docs_data[topic_id_str][:20]  # Limit to 20 examples for UI
+                                                        formatted_examples = []
+                                                        
+                                                        for example in raw_examples:
+                                                            if isinstance(example, str):
+                                                                # Old format: just text
+                                                                formatted_examples.append({"text": example})
+                                                            elif isinstance(example, dict) and "text" in example:
+                                                                # New format: object with text and possibly ids
+                                                                formatted_examples.append(example)
+                                                            else:
+                                                                # Fallback: convert to string
+                                                                formatted_examples.append({"text": str(example)})
+                                                        
+                                                        topic["examples"] = formatted_examples
                                                         examples_added += 1
-                                                        self._log(f"🔍 Added {len(topic['examples'])} examples to topic {topic_id_str}: {topic.get('name', 'Unnamed')}")
+                                                        
+                                                        # Count how many examples have ids
+                                                        examples_with_ids = sum(1 for ex in formatted_examples if "ids" in ex and ex["ids"])
+                                                        self._log(f"🔍 Added {len(topic['examples'])} examples to topic {topic_id_str}: {topic.get('name', 'Unnamed')} ({examples_with_ids} with IDs)")
                                                 
                                                 self._log(f"✅ Added examples to {examples_added}/{len(topics_list)} topics from attached files")
                                                 

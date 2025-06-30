@@ -241,6 +241,9 @@ def transform_transcripts(
             # Create new row with speaking turn
             new_row = row.copy()
             new_row[content_column] = turn
+            # Preserve ids column if it exists
+            if 'ids' in row.index and pd.notna(row.get('ids')):
+                new_row['ids'] = row['ids']
             transformed_rows.append(new_row)
     
     # Create transformed DataFrame
@@ -641,6 +644,9 @@ async def _transform_transcripts_llm_async(
                 # Create new row with LLM response
                 new_row = row.copy()
                 new_row[content_column] = response_text
+                # Preserve ids column if it exists
+                if 'ids' in row.index and pd.notna(row.get('ids')):
+                    new_row['ids'] = row['ids']
                 transformed_rows.append(new_row)
                 
                 # Write to the file
@@ -1423,6 +1429,9 @@ async def _transform_transcripts_itemize_async(
                             # Create new row with item data
                             new_row = row.copy()
                             new_row[content_column] = item_text
+                            # Preserve ids column if it exists
+                            if 'ids' in row.index and pd.notna(row.get('ids')):
+                                new_row['ids'] = row['ids']
                             transformed_rows.append(new_row)
                             
                             # Write to the text file
@@ -1439,6 +1448,9 @@ async def _transform_transcripts_itemize_async(
                             new_row['question'] = item.question
                             combined_text = item.category + ": " + item.question
                             new_row[content_column] = combined_text
+                            # Preserve ids column if it exists
+                            if 'ids' in row.index and pd.notna(row.get('ids')):
+                                new_row['ids'] = row['ids']
                             transformed_rows.append(new_row)
                             
                             # Write to the text file
@@ -1446,6 +1458,9 @@ async def _transform_transcripts_itemize_async(
                 else:
                     new_row = row.copy()
                     new_row[content_column] = data
+                    # Preserve ids column if it exists
+                    if 'ids' in row.index and pd.notna(row.get('ids')):
+                        new_row['ids'] = row['ids']
                     transformed_rows.append(new_row)
                     f.write(f"{data}\n")
 
