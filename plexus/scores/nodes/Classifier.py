@@ -143,9 +143,16 @@ class Classifier(BaseNode):
             # Select the appropriate match
             selected_class = self.select_match(matches, output)
             
+            # Only return a classification if it's actually one of the valid classes
+            # This allows the retry logic to work properly when invalid responses are received
+            if selected_class is not None and selected_class in self.valid_classes:
+                classification = selected_class
+            else:
+                classification = None
+            
             return {
-                "classification": selected_class,
-                "explanation": output.strip()
+                "classification": classification,
+                "explanation": output.strip() or "No explanation provided"
             }
 
     def get_llm_prompt_node(self):
