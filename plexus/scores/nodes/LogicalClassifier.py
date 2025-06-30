@@ -24,6 +24,7 @@ class LogicalClassifier(BaseNode):
     class GraphState(BaseNode.GraphState):
         classification: Optional[str]
         explanation: Optional[str]
+        criteria_met: Optional[Any] = None  # Allow any type for criteria_met
 
     def __init__(self, **parameters):
         LangChainUser.__init__(self, **parameters)
@@ -81,7 +82,7 @@ class LogicalClassifier(BaseNode):
         parameters = Score.Parameters(**self.parameters.model_dump())  # Convert to Score.Parameters
 
         def execute_score(state):
-            logging.info("<*> Entering execute_score node")
+            logging.info(f"→ {self.node_name}: Executing logical score")
             if isinstance(state, dict):
                 state = self.GraphState(**state)
 
@@ -89,7 +90,7 @@ class LogicalClassifier(BaseNode):
             # and all state attributes (excluding 'metadata' itself to avoid recursion)
             state_dict = state.model_dump()
 
-            logging.info(f"LogicalClassifier state_dict: {state_dict}")
+            # logging.info(f"LogicalClassifier state_dict: {state_dict}")
 
             merged_metadata = state_dict.get('metadata', {}).copy()
 
@@ -104,8 +105,8 @@ class LogicalClassifier(BaseNode):
                 metadata=merged_metadata
             )
 
-            logging.info(f"LogicalClassifier parameters: {parameters}")
-            logging.info(f"LogicalClassifier score_input: {score_input}")
+            # logging.info(f"LogicalClassifier parameters: {parameters}")
+            # logging.info(f"LogicalClassifier score_input: {score_input}")
 
             # Execute the score function with both parameters and input
             result = score_function(parameters, score_input)
@@ -122,6 +123,12 @@ class LogicalClassifier(BaseNode):
                 "explanation": result.metadata.get('explanation')
             }
             
+            # Add all metadata fields as direct state attributes for output aliasing
+            if result.metadata:
+                for key, value in result.metadata.items():
+                    if key != 'explanation':  # explanation is already handled above
+                        state_update[key] = value
+            
             result_state = self.GraphState(**state_update)
             
             # Prepare output state for logging
@@ -131,8 +138,13 @@ class LogicalClassifier(BaseNode):
                 "explanation": result.metadata.get('explanation')
             }
             
-            logging.info(f"LogicalClassifier result value: {result.value}")
-            logging.info(f"LogicalClassifier result explanation: {result.metadata.get('explanation')}")
+            # Add all metadata fields to output state for logging
+            if result.metadata:
+                for key, value in result.metadata.items():
+                    if key != 'explanation':  # explanation is already handled above
+                        output_state[key] = value
+            
+            logging.info(f"  ✓ {self.node_name}: {result.value}")
             
             # Log the state and get a new state object with updated node_results
             updated_state = self.log_state(result_state, None, output_state)

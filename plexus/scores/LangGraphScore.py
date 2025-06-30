@@ -788,24 +788,50 @@ class LangGraphScore(Score, LangChainUser):
         def output_aliasing(state):
             logging.info(f"Applying output aliases: {list(output_mapping.keys())}")
             
+            # DEBUG: Log the current state before aliasing
+            logging.info(f"DEBUG: State before aliasing: {state.model_dump()}")
+            logging.info(f"DEBUG: State attributes: {[attr for attr in dir(state) if not attr.startswith('_')]}")
+            
             # Create a new dict with all current state values
             new_state = state.model_dump()
             
             # Add aliased values
             for alias, original in output_mapping.items():
+                logging.info(f"DEBUG: Processing alias '{alias}' -> '{original}'")
                 if hasattr(state, original):
                     original_value = getattr(state, original)
+                    logging.info(f"DEBUG: Found {original} = {original_value!r} (type: {type(original_value)})")
+                    
+                    # Defensive check: never set a field to None, provide sensible defaults
+                    if original_value is None:
+                        if alias == 'value':
+                            original_value = "No"  # Default classification value
+                        elif alias in ['explanation', 'criteria_met']:
+                            original_value = ""  # Default empty string for text fields
+                        else:
+                            original_value = ""  # General fallback
+                        logging.warning(f"Output aliasing: {original} was None, defaulting {alias} to '{original_value}'")
+                    
                     new_state[alias] = original_value
+                    logging.info(f"DEBUG: Set new_state['{alias}'] = {original_value!r}")
                     # Also directly set on the state object to ensure it's accessible
                     setattr(state, alias, original_value)
                 else:
+                    logging.info(f"DEBUG: {original} not found as attribute, treating as literal")
                     # If the original isn't a state variable, treat it as a literal value
                     new_state[alias] = original
                     # Also directly set on the state object
                     setattr(state, alias, original)
             
+            # DEBUG: Log the final new_state before creating combined_state
+            logging.info(f"DEBUG: Final new_state: {new_state}")
+            
             # Create new state with extra fields allowed
             combined_state = state.__class__(**new_state)
+            
+            # DEBUG: Log the combined_state after creation
+            logging.info(f"DEBUG: Combined state created: {combined_state.model_dump()}")
+            
             return combined_state
             
         return output_aliasing
@@ -978,10 +1004,20 @@ class LangGraphScore(Score, LangChainUser):
                 config=thread
             )
             
+            # DEBUG: Log the graph_result before converting to Score.Result
+            logging.info(f"DEBUG: graph_result keys: {list(graph_result.keys())}")
+            logging.info(f"DEBUG: graph_result['value'] = {graph_result.get('value')!r} (type: {type(graph_result.get('value'))})")
+            logging.info(f"DEBUG: Full graph_result: {graph_result}")
+            
             # Convert graph result to Score.Result
+            value_for_result = graph_result.get('value', 'Error')
+            if value_for_result is None:
+                logging.warning("DEBUG: graph_result['value'] is None, defaulting to 'No'")
+                value_for_result = 'No'
+            
             result = Score.Result(
                 parameters=self.parameters,
-                value=graph_result.get('value', 'Error'),
+                value=value_for_result,
                 metadata={
                     'explanation': graph_result.get('explanation'),
                     'good_call': graph_result.get('good_call'),
