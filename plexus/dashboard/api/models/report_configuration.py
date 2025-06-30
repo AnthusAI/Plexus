@@ -278,7 +278,7 @@ class ReportConfiguration(BaseModel):
         mutation = f"""
         mutation UpdateReportConfiguration($input: UpdateReportConfigurationInput!) {{
             updateReportConfiguration(input: $input) {{
-                {cls.fields()}
+                {self.__class__.fields()}
             }}
         }}
         """
@@ -301,7 +301,7 @@ class ReportConfiguration(BaseModel):
                 logger.error(error_msg)
                 raise Exception(error_msg)
             # Convert the response dict back using from_dict
-            return cls.from_dict(result['updateReportConfiguration'], client)
+            return self.__class__.from_dict(result['updateReportConfiguration'], client)
         except Exception as e:
             logger.exception(f"Error updating ReportConfiguration '{self.name}' for account {self.accountId}: {e}")
             raise 

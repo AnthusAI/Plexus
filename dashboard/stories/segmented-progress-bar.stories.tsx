@@ -3,7 +3,7 @@ import type { Meta, StoryObj } from '@storybook/react'
 import { SegmentedProgressBar, SegmentConfig } from '../components/ui/segmented-progress-bar'
 
 const meta = {
-  title: 'Progress Bars/SegmentedProgressBar',
+  title: 'General/Components/SegmentedProgressBar',
   component: SegmentedProgressBar,
   parameters: {
     layout: 'padded',

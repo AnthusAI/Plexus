@@ -5,6 +5,7 @@ import rich
 import tempfile
 import urllib3.exceptions
 import requests
+import sys
 from pathlib import Path
 from ruamel.yaml import YAML
 from rich.table import Table
@@ -19,7 +20,9 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 import botocore.exceptions
 import urllib3.exceptions
 import re
+import datetime
 import requests
+from gql import gql
 from plexus.cli.file_editor import FileEditor
 from plexus.cli.shared import sanitize_path_name, get_score_yaml_path
 from plexus.cli.memoized_resolvers import (
@@ -27,6 +30,7 @@ from plexus.cli.memoized_resolvers import (
     memoized_resolve_score_identifier,
     clear_resolver_caches
 )
+from plexus.cli.score_config_fetching import fetch_and_cache_single_score
 
 # Define the main command groups that will be exported
 @click.group()
@@ -758,138 +762,45 @@ score.add_command(optimize)
 @score.command()
 @click.option('--scorecard', required=True, help='Scorecard containing the score (accepts ID, name, key, or external ID)')
 @click.option('--score', required=True, help='Score to pull (accepts ID, name, key, or external ID)')
-def pull(scorecard: str, score: str):
+@click.option('--use-cache', is_flag=True, help='Use cached file if available (default: always fetch fresh from API)')
+@click.option('--verbose', is_flag=True, help='Show detailed progress and caching information')
+def pull(scorecard: str, score: str, use_cache: bool = False, verbose: bool = False):
     """Pull a score's current champion version as a YAML file."""
-    client = create_client()
-    
-    # First, resolve the scorecard identifier to an ID
-    scorecard_id = memoized_resolve_scorecard_identifier(client, scorecard)
-    if not scorecard_id:
-        console.print(f"[red]Could not find scorecard: {scorecard}[/red]")
-        return
-    
-    # Get scorecard details for display
-    query = f"""
-    query GetScorecardDetails {{
-        getScorecard(id: "{scorecard_id}") {{
-            id
-            name
-            key
-            sections {{
-                items {{
-                    id
-                    name
-                    scores {{
-                        items {{
-                            id
-                            name
-                            key
-                            championVersionId
-                        }}
-                    }}
-                }}
-            }}
-        }}
-    }}
-    """
-    
     try:
-        result = client.execute(query)
-        scorecard_data = result.get('getScorecard', {})
-        scorecard_name = scorecard_data.get('name', 'Unknown')
-        scorecard_key = scorecard_data.get('key', 'Unknown')
+        client = create_client()
         
-        console.print(f"[green]Found scorecard: {scorecard_name} (ID: {scorecard_id})[/green]")
+        # Show welcome message
+        console.print(f"[bold]Pulling score '{score}' from scorecard '{scorecard}'...[/bold]")
+        if use_cache:
+            console.print("[blue]Using cached version if available (--use-cache flag is set)[/blue]")
         
-        # Find the score in the scorecard
-        found_score = None
-        for section in scorecard_data.get('sections', {}).get('items', []):
-            for score_item in section.get('scores', {}).get('items', []):
-                if (score_item['id'] == score or 
-                    score_item['key'] == score or 
-                    score_item['name'] == score):
-                    found_score = score_item
-                    break
-            if found_score:
-                break
+        # Fetch and cache the score configuration
+        config, yaml_path, from_cache = fetch_and_cache_single_score(
+            client=client,
+            scorecard_identifier=scorecard,
+            score_identifier=score,
+            use_cache=use_cache,
+            verbose=verbose
+        )
         
-        if not found_score:
-            console.print(f"[red]Could not find score: {score}[/red]")
-            return
-        
-        score_id = found_score['id']
-        score_name = found_score['name']
-        score_key = found_score['key']
-        champion_version_id = found_score.get('championVersionId')
-        
-        if not champion_version_id:
-            console.print(f"[red]No champion version found for score: {score_name}[/red]")
-            return
-        
-        console.print(f"[green]Found score: {score_name} (ID: {score_id})[/green]")
-        console.print(f"[green]Champion version ID: {champion_version_id}[/green]")
-        
-        # Get the score version content
-        version_query = f"""
-        query GetScoreVersion {{
-            getScoreVersion(id: "{champion_version_id}") {{
-                id
-                configuration
-                createdAt
-                updatedAt
-                note
-            }}
-        }}
-        """
-        
-        version_result = client.execute(version_query)
-        version_data = version_result.get('getScoreVersion')
-        
-        if not version_data or not version_data.get('configuration'):
-            console.print(f"[red]No configuration found for version: {champion_version_id}[/red]")
-            return
-        
-        # Get the YAML file path using the utility function
-        yaml_path = get_score_yaml_path(scorecard_name, score_name)
-        
-        # Parse the content as YAML using ruamel.yaml
-        try:
-            content = version_data.get('configuration')
+        # Display success message with the same format as the original implementation
+        if from_cache:
+            console.print(f"[green]Loaded score configuration from cache: {yaml_path}[/green]")
+        else:
+            # Extract some details for display
+            score_name = config.get('name', 'Unknown')
+            score_id = config.get('id', 'Unknown')
+            version_id = config.get('version', 'Unknown')
             
-            # Initialize ruamel.yaml
-            yaml = YAML()
-            yaml.preserve_quotes = True
-            yaml.width = 4096  # Prevent line wrapping
-            
-            # Configure YAML formatting
-            yaml.indent(mapping=2, sequence=4, offset=2)
-            yaml.map_indent = 2
-            yaml.sequence_indent = 4
-            yaml.sequence_dash_offset = 2
-            
-            # Configure literal block style for system_message and user_message
-            def literal_presenter(dumper, data):
-                if isinstance(data, str) and "\n" in data:
-                    return dumper.represent_scalar('tag:yaml.org,2002:str', data, style='|')
-                return dumper.represent_scalar('tag:yaml.org,2002:str', data)
-            
-            yaml.representer.add_representer(str, literal_presenter)
-            
-            # Parse the YAML content
-            yaml_data = yaml.load(content)
-            
-            # Write to file
-            with open(yaml_path, 'w') as f:
-                yaml.dump(yaml_data, f)
-            
+            console.print(f"[green]Found score: {score_name} (ID: {score_id})[/green]")
+            console.print(f"[green]Champion version ID: {version_id}[/green]")
             console.print(f"[green]Saved score configuration to: {yaml_path}[/green]")
             
-        except Exception as e:
-            console.print(f"[red]Error parsing YAML content: {str(e)}[/red]")
-            import traceback
-            console.print(f"[red]{traceback.format_exc()}[/red]")
-            
+    except ValueError as e:
+        # Handle expected errors with user-friendly messages
+        console.print(f"[red]{str(e)}[/red]")
     except Exception as e:
+        # Handle unexpected errors with traceback
         console.print(f"[red]Error during pull operation: {str(e)}[/red]")
         import traceback
         console.print(f"[red]{traceback.format_exc()}[/red]")
@@ -900,73 +811,154 @@ def pull(scorecard: str, score: str):
 def push(scorecard: str, score: str):
     """Push a score's YAML configuration to the server.
     
-    The YAML file is expected to be in the standard location:
-    ./scorecards/[scorecard_name]/[score_name].yaml
+    This command reads the local YAML file for a score, compares it with the cloud version,
+    and only pushes a new version if actual changes are detected.
     """
     client = create_client()
     
-    # Resolve the scorecard ID and get its name
+    # Resolve scorecard ID
     scorecard_id = memoized_resolve_scorecard_identifier(client, scorecard)
     if not scorecard_id:
-        click.echo(f"Scorecard not found: {scorecard}")
+        console.print(f"[red]Unable to find scorecard: {scorecard}[/red]")
         return
     
-    # Get the scorecard name
+    # Resolve score ID
+    score_id = memoized_resolve_score_identifier(client, scorecard_id, score)
+    if not score_id:
+        console.print(f"[red]Unable to find score: {score} in scorecard: {scorecard}[/red]")
+        return
+    
+    # Get score details including name
     query = f"""
+    query GetScore {{
+        getScore(id: "{score_id}") {{
+            id
+            name
+        }}
+    }}
+    """
+    
+    try:
+        with client as session:
+            result = session.execute(gql(query))
+        score_name = result.get('getScore', {}).get('name', 'Unknown')
+    except Exception as e:
+        console.print(f"[red]Error fetching score details: {e}[/red]")
+        return
+    
+    # Get scorecard name for proper file path
+    scorecard_query = f"""
     query GetScorecard {{
         getScorecard(id: "{scorecard_id}") {{
             name
         }}
     }}
     """
-    result = client.execute(query)
-    scorecard_data = result.get('getScorecard')
-    if not scorecard_data:
-        click.echo(f"Error retrieving scorecard: {scorecard}")
-        return
-    scorecard_name = scorecard_data['name']
     
-    # Resolve the score ID and get its name
-    score_id = memoized_resolve_score_identifier(client, scorecard_id, score)
-    if not score_id:
-        click.echo(f"Score not found: {score}")
+    try:
+        with client as session:
+            result = session.execute(gql(scorecard_query))
+        scorecard_name = result.get('getScorecard', {}).get('name', 'Unknown')
+    except Exception as e:
+        console.print(f"[red]Error fetching scorecard details: {e}[/red]")
         return
     
-    # Get the score name and champion version ID
-    query = f"""
-    query GetScore {{
-        getScore(id: "{score_id}") {{
-            name
-            championVersionId
-        }}
-    }}
-    """
-    result = client.execute(query)
-    score_data = result.get('getScore')
-    if not score_data:
-        click.echo(f"Error retrieving score: {score}")
-        return
-    score_name = score_data['name']
-    champion_version_id = score_data.get('championVersionId')
-    
-    # Compute the YAML file path
+    # Get the local YAML file path using the utility function
     yaml_path = get_score_yaml_path(scorecard_name, score_name)
     
-    if not yaml_path.exists():
-        click.echo(f"YAML file not found at expected location: {yaml_path}")
+    if not os.path.exists(yaml_path):
+        console.print(f"[red]YAML file not found: {yaml_path}[/red]")
         return
     
     # Read the YAML file
-    yaml = YAML()
     with open(yaml_path, 'r') as f:
         yaml_content = f.read()
-        score_config = yaml.load(yaml_content)
     
-    if not score_config:
-        click.echo(f"Error reading YAML file: {yaml_path}")
-        return
+    # Extract version information from the YAML
+    version_match = re.search(r'^version:\s*["\']?([^"\'\n]+)["\']?', yaml_content, re.MULTILINE)
+    parent_match = re.search(r'^parent:\s*["\']?([^"\'\n]+)["\']?', yaml_content, re.MULTILINE)
     
-    # Create a new version with the configuration
+    current_version_id = version_match.group(1) if version_match else None
+    parent_version_id = parent_match.group(1) if parent_match else None
+    
+    # If no current version is found, try to get the champion version from the API
+    if not current_version_id:
+        query = f"""
+        query GetScore {{
+            getScore(id: "{score_id}") {{
+                championVersionId
+            }}
+        }}
+        """
+        result = client.execute(query)
+        current_version_id = result.get('getScore', {}).get('championVersionId')
+        parent_version_id = current_version_id  # Use current as parent if creating a new version
+        
+        console.print(f"[blue]No version ID found in YAML, using champion version: {current_version_id}[/blue]")
+    
+    if not current_version_id:
+        console.print(f"[yellow]No version ID found in YAML and no champion version exists. Creating initial version.[/yellow]")
+        parent_version_id = None
+    else:
+        console.print(f"[blue]Current version ID: {current_version_id}[/blue]")
+        console.print(f"[blue]Parent version ID: {parent_version_id}[/blue]")
+    
+    # Clean the YAML content for comparison
+    # Remove version and parent lines
+    cleaned_yaml_content = re.sub(
+        r'^version:\s*["\']?[^"\'\n]+["\']?(\s*parent:\s*["\']?[^"\'\n]+["\']?)?', 
+        '', 
+        yaml_content, 
+        flags=re.MULTILINE
+    )
+    cleaned_yaml_content = re.sub(
+        r'^parent:\s*["\']?[^"\'\n]+["\']?', 
+        '', 
+        cleaned_yaml_content, 
+        flags=re.MULTILINE
+    )
+    
+    # Normalize newlines to avoid false positives due to whitespace
+    cleaned_yaml_content = re.sub(r'\n\n+', '\n', cleaned_yaml_content)
+    
+    # Get the current version from the API to compare
+    if current_version_id:
+        query = f"""
+        query GetScoreVersion {{
+            getScoreVersion(id: "{current_version_id}") {{
+                configuration
+            }}
+        }}
+        """
+        with client as session:
+            result = session.execute(gql(query))
+        cloud_yaml = result.get('getScoreVersion', {}).get('configuration', '')
+        
+        # Clean the cloud YAML content for comparison
+        cleaned_cloud_yaml = re.sub(
+            r'^version:\s*["\']?[^"\'\n]+["\']?(\s*parent:\s*["\']?[^"\'\n]+["\']?)?', 
+            '', 
+            cloud_yaml, 
+            flags=re.MULTILINE
+        )
+        cleaned_cloud_yaml = re.sub(
+            r'^parent:\s*["\']?[^"\'\n]+["\']?', 
+            '', 
+            cleaned_cloud_yaml, 
+            flags=re.MULTILINE
+        )
+        
+        # Normalize newlines
+        cleaned_cloud_yaml = re.sub(r'\n\n+', '\n', cleaned_cloud_yaml)
+        
+        # Compare the cleaned YAML content with the cloud version
+        if cleaned_yaml_content.strip() == cleaned_cloud_yaml.strip():
+            console.print("[yellow]No changes detected in the YAML configuration. Skipping push.[/yellow]")
+            return
+        else:
+            console.print("[blue]Changes detected in the YAML configuration. Creating new version.[/blue]")
+    
+    # Create a new version with the cleaned configuration
     mutation = """
     mutation CreateScoreVersion($input: CreateScoreVersionInput!) {
         createScoreVersion(input: $input) {
@@ -985,24 +977,76 @@ def push(scorecard: str, score: str):
     """
     
     try:
-        result = client.execute(mutation, {
+        mutation_input = {
             'input': {
                 'scoreId': score_id,
-                'configuration': yaml_content,
-                'parentVersionId': champion_version_id,
+                'configuration': cleaned_yaml_content,
+                'parentVersionId': parent_version_id,
                 'note': 'Updated via CLI push command',
                 'isFeatured': True
             }
-        })
+        }
+        
+        with client as session:
+            result = session.execute(gql(mutation), mutation_input)
         
         if result.get('createScoreVersion'):
-            click.echo(f"Successfully created new version for score: {score_name}")
-            click.echo(f"New version ID: {result['createScoreVersion']['id']}")
+            new_version_id = result['createScoreVersion']['id']
+            console.print(f"[green]Successfully created new version for score: {score_name}[/green]")
+            console.print(f"[green]New version ID: {new_version_id}[/green]")
+            
+            # Update the local YAML file with the new version information
+            name_match = re.search(r'^name:\s*[^\n]+\n', yaml_content, re.MULTILINE)
+            id_match = re.search(r'^id:\s*[^\n]+\n', yaml_content, re.MULTILINE)
+            key_match = re.search(r'^key:\s*[^\n]+\n', yaml_content, re.MULTILINE)
+            
+            # Prioritize insertion after name, then id, then key
+            insertion_point = None
+            if name_match:
+                insertion_point = name_match.end()
+            elif id_match:
+                insertion_point = id_match.end()
+            elif key_match:
+                insertion_point = key_match.end()
+            
+            if insertion_point is not None:
+                # First remove any existing version/parent lines to avoid duplication
+                cleaned_yaml = re.sub(
+                    r'^version:\s*["\']?[^"\'\n]+["\']?(\s*parent:\s*["\']?[^"\'\n]+["\']?)?', 
+                    '', 
+                    yaml_content, 
+                    flags=re.MULTILINE
+                )
+                cleaned_yaml = re.sub(
+                    r'^parent:\s*["\']?[^"\'\n]+["\']?', 
+                    '', 
+                    cleaned_yaml, 
+                    flags=re.MULTILINE
+                )
+                
+                # Normalize newlines to prepare for insertion
+                cleaned_yaml = re.sub(r'\n\n+', '\n', cleaned_yaml)
+                
+                # Update the YAML content with new version and parent information
+                updated_yaml = (
+                    cleaned_yaml[:insertion_point] + 
+                    f"version: {new_version_id}\n" + 
+                    f"parent: {parent_version_id}\n" + 
+                    cleaned_yaml[insertion_point:]
+                )
+                
+                # Write the updated YAML back to the file
+                with open(yaml_path, 'w') as f:
+                    f.write(updated_yaml)
+                
+                console.print(f"[green]Updated local YAML file with new version information[/green]")
+            else:
+                console.print(f"[yellow]Could not locate proper position to insert version information in the YAML file[/yellow]")
         else:
-            click.echo("Error creating new version")
+            console.print("[red]Error creating new version[/red]")
             
     except Exception as e:
-        click.echo(f"Error pushing score configuration: {e}")
+        console.print(f"[red]Error pushing score configuration: {e}[/red]")
 
 # Add the push command to the score group as an alias
 score.add_command(push)

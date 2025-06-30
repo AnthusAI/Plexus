@@ -315,6 +315,34 @@ def dispatch(
                         total=100,  # Set a default total
                         status=stage_configs["Setup"].status_message
                     )
+                
+                with Progress(
+                    TextColumn("[bright_magenta]{task.fields[status]}"),
+                    TextColumn(""), 
+                    TextColumn("\n"),
+                    SpinnerColumn(style="bright_magenta"),
+                    ItemCountColumn(),
+                    BarColumn(
+                        complete_style="bright_magenta",
+                        finished_style="bright_magenta"
+                    ),
+                    TaskProgressColumn(),
+                    TimeElapsedColumn(),
+                    TimeRemainingColumn(),
+                    expand=True
+                ) as progress:
+                    stage_configs = {
+                        "Setup": StageConfig(
+                            order=1,
+                            status_message="Setting up...",
+                            total_items=100  # Set a default total
+                        )
+                    }
+                    task_progress = progress.add_task(
+                        "Processing...",
+                        total=100,  # Set a default total
+                        status=stage_configs["Setup"].status_message
+                    )
                     
                     while not task.ready():
                         if task.info and isinstance(task.info, dict):
@@ -323,7 +351,6 @@ def dispatch(
                             status_from_worker = task.info.get('status')
                             
                             if all([current is not None, total_from_worker is not None, status_from_worker is not None]):
-                                # Update progress and status, ensuring the total is updated
                                 progress.update(
                                     task_progress,
                                     total=float(total_from_worker),
@@ -433,8 +460,29 @@ def status(task_id: str, loglevel: str) -> None:
         # Log the raw task data as JSON for complete transparency
         if task.ready() and task.successful():
             result = task.get()
+            logging.info(f"Task result: {result}")
+            console.print("Status: " + ("[green]Success" if result['status'] == 'success' else "[red]Failed"))
+            if result['status'] == 'success':
+                if result.get('stdout'):
+                    console.print("\nOutput:")
+                    console.print(result['stdout'], end='')
+                if result.get('stderr'):
+                    console.print("\nErrors:")
+                    console.print(result['stderr'], end='')
+            else:
+                console.print(f"\nError: {result.get('error', 'Unknown error')}")
+                if result.get('stderr'):
+                    console.print("\nError Details:")
+                    console.print(result['stderr'], end='')
+            
             import json
             logging.info(f"TASK_RESULT_JSON: {json.dumps(result, default=str)}")
+        elif task.failed():
+            console.print("[red]Status: Failed with exception")
+            if task.info:
+                console.print(f"Error: {str(task.info)}")
+        else:
+            console.print("[bright_magenta]Status: Running")
             
     except Exception as e:
         logging.error(f"Error retrieving task status: {e}", exc_info=True)
@@ -765,7 +813,8 @@ def create_cli():
     from plexus.cli.EvaluationCommands import evaluate
     from plexus.cli.DataCommands import data
     from plexus.cli.BatchCommands import batch
-    from plexus.cli.TaskCommands import tasks
+    from plexus.cli.TaskCommands import tasks, task
+    from plexus.cli.ItemCommands import items, item
     from plexus.cli.ResultCommands import results
     from plexus.cli.AnalyzeCommands import analyze
     from plexus.cli.DataLakeCommands import lake_group as datalake
@@ -774,6 +823,7 @@ def create_cli():
     from plexus.cli.PredictionCommands import predict
     from plexus.cli.ScoreChatCommands import score_chat
     from plexus.cli.ReportCommands import report # Import the new command group
+    from plexus.cli.FeedbackCommands import feedback # Import the feedback command group
     
     # Add top-level commands
     cli.add_command(score)
@@ -782,6 +832,9 @@ def create_cli():
     cli.add_command(data)
     cli.add_command(batch)
     cli.add_command(tasks)
+    cli.add_command(task)
+    cli.add_command(items)
+    cli.add_command(item)
     cli.add_command(results)
     cli.add_command(analyze)
     cli.add_command(datalake)
@@ -790,6 +843,7 @@ def create_cli():
     cli.add_command(predict)
     cli.add_command(score_chat)
     cli.add_command(report) # Register the new command group
+    cli.add_command(feedback) # Register the feedback command group
     cli.add_command(command)
     
     return cli

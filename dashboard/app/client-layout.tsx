@@ -24,6 +24,19 @@ function AuthWrapper({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   
+  // Helper functions to check path types
+  const isPublicReport = (path: string) => 
+    path.startsWith('/reports/') && 
+    path.split('/').length === 3 && 
+    !path.startsWith('/reports/lab');
+
+  const isPublicEvaluation = (path: string) => 
+    path.startsWith('/evaluations/') && 
+    !path.startsWith('/evaluations/lab');
+    
+  const isDocumentation = (path: string) =>
+    path.startsWith('/documentation');
+  
   // Allow unauthenticated access to marketing pages and solutions
   const publicPaths = [
     '/',
@@ -47,25 +60,47 @@ function AuthWrapper({ children }: { children: React.ReactNode }) {
     '/documentation/concepts/tasks',
     '/documentation/concepts/items',
     '/documentation/concepts/score-results',
+    '/documentation/concepts/reports',
+    '/documentation/evaluation-metrics',
+    '/documentation/evaluation-metrics/gauges-with-context',
+    '/documentation/evaluation-metrics/gauges/agreement',
+    '/documentation/evaluation-metrics/gauges/accuracy',
+    '/documentation/evaluation-metrics/gauges/precision',
+    '/documentation/evaluation-metrics/gauges/recall',
+    '/documentation/evaluation-metrics/gauges/class-number',
+    '/documentation/evaluation-metrics/gauges/class-imbalance',
+    '/documentation/evaluation-metrics/examples',
     '/documentation/methods/add-edit-source',
     '/documentation/methods/profile-source',
     '/documentation/methods/add-edit-scorecard',
     '/documentation/methods/add-edit-score',
     '/documentation/methods/evaluate-score',
     '/documentation/methods/monitor-tasks',
-    '/documentation/concepts/reports',
+    '/documentation/advanced',
+    '/documentation/advanced/cli',
+    '/documentation/advanced/worker-nodes',
+    '/documentation/advanced/sdk',
+    '/documentation/advanced/universal-code',
+    '/documentation/advanced/mcp-server',
+    '/login',
+    '/signup',
   ];
   
   // Check if we should direct users straight to login
-  const directToLogin = process.env.NEXT_PUBLIC_DIRECT_TO_LOGIN === 'true';
+  const directToLogin = process.env.NEXT_PUBLIC_MINIMAL_BRANDING === 'true';
   
-  // Only allow dynamic evaluation pages (with an ID) to be public
+  // Only allow dynamic evaluation and report pages (with an ID) to be public
   const isPublicPath = publicPaths.includes(pathname) || 
-    (pathname.startsWith('/evaluations/') && pathname.split('/').length === 3 && !pathname.startsWith('/evaluations/lab'));
+    isPublicEvaluation(pathname) ||
+    isPublicReport(pathname) ||
+    isDocumentation(pathname);
     
-  // If directToLogin is true, only /dashboard should be accessible for unauthenticated users
+  // Allow public reports, evaluations, and documentation even in minimal branding mode
   const isAccessiblePublicPath = directToLogin 
-    ? pathname === '/dashboard'
+    ? pathname === '/dashboard' || 
+      isPublicEvaluation(pathname) || 
+      isPublicReport(pathname) || 
+      isDocumentation(pathname)
     : isPublicPath;
   
   useEffect(() => {
@@ -75,8 +110,9 @@ function AuthWrapper({ children }: { children: React.ReactNode }) {
     
     // Redirect logic based on authentication status and directToLogin setting
     if (authStatus === 'unauthenticated') {
-      if (directToLogin && pathname !== '/dashboard') {
+      if (directToLogin && pathname !== '/dashboard' && !isAccessiblePublicPath) {
         // When directToLogin is true, redirect all unauthenticated traffic to login page
+        // except for paths explicitly allowed in isAccessiblePublicPath
         router.push('/dashboard');
       } else if (!isPublicPath) {
         // Normal behavior: redirect to home if trying to access protected page
@@ -86,7 +122,7 @@ function AuthWrapper({ children }: { children: React.ReactNode }) {
       // Redirect authenticated users from home to lab/items
       router.push('/lab/items');
     }
-  }, [authStatus, router, pathname, directToLogin, isPublicPath]);
+  }, [authStatus, router, pathname, directToLogin, isPublicPath, isAccessiblePublicPath]);
 
   // While auth is loading, render nothing
   if (!authStatus) {

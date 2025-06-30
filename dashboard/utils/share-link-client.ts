@@ -142,6 +142,11 @@ export const shareLinkClient = {
       return `${window.location.origin}/evaluations/${token}`;
     }
     
+    // For reports, use the direct reports route
+    if (resourceType === 'Report') {
+      return `${window.location.origin}/reports/${token}`;
+    }
+    
     // For other resource types, use the generic share route
     return `${window.location.origin}/share/${token}`;
   }

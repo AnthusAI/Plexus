@@ -4,7 +4,7 @@ import ItemContext from "@/components/ItemContext"
 import { FilterConfig } from "@/components/filter-control"
 
 export default {
-  title: "Context/ItemContext",
+  title: "Content/ItemContext",
   component: ItemContext,
 } as Meta
 

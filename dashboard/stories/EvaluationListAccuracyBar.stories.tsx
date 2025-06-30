@@ -4,7 +4,7 @@ import { expect, within } from '@storybook/test'
 import { EvaluationListAccuracyBar } from '@/components/EvaluationListAccuracyBar'
 
 const meta = {
-  title: 'Visualization/EvaluationListAccuracyBar',
+  title: 'Evaluations/EvaluationListAccuracyBar',
   component: EvaluationListAccuracyBar,
   parameters: {
     layout: 'centered',

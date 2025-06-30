@@ -1,4 +1,5 @@
 import pytest
+import click
 from unittest.mock import MagicMock, patch
 from click.testing import CliRunner
 from datetime import datetime, timezone
@@ -90,14 +91,11 @@ def mock_task_from_dict():
         yield mock
 
 def test_list_tasks(mock_client, runner, mock_task_fields, mock_task_from_dict):
-    # Mock the account lookup
-    mock_client.execute.side_effect = [
-        {
-            'listAccountByKey': {
-                'items': [{'id': 'test-account-id'}]
-            }
-        },
-        {
+    # Mock the account resolution and task listing
+    with patch('plexus.cli.TaskCommands.resolve_account_id_for_command') as mock_resolve:
+        mock_resolve.return_value = 'test-account-id'
+        
+        mock_client.execute.return_value = {
             'listTaskByAccountIdAndUpdatedAt': {
                 'items': [
                     {
@@ -128,60 +126,57 @@ def test_list_tasks(mock_client, runner, mock_task_fields, mock_task_from_dict):
                 ]
             }
         }
-    ]
 
-    result = runner.invoke(tasks, ['list', '--account', 'test-account'])
-    assert result.exit_code == 0
-    assert 'task-1' in result.output
-    assert 'TEST' in result.output
-    assert 'COMPLETED' in result.output
+        result = runner.invoke(tasks, ['list', '--account', 'test-account'])
+        assert result.exit_code == 0
+        assert 'task-1' in result.output
+        assert 'TEST' in result.output
+        assert 'COMPLETED' in result.output
 
 def test_delete_specific_task(mock_client, runner, mock_task_fields, mock_task_from_dict):
-    # Mock the account lookup and task listing
-    mock_client.execute.side_effect = [
-        {
-            'listAccountByKey': {
-                'items': [{'id': 'test-account-id'}]
-            }
-        },
-        {
-            'listTaskByAccountIdAndUpdatedAt': {
-                'items': [
-                    {
-                        'id': 'task-1',
-                        'accountId': 'test-account-id',
-                        'type': 'TEST',
-                        'status': 'COMPLETED',
-                        'target': 'test/target',
-                        'command': 'test command',
-                        'createdAt': '2024-01-01T00:00:00Z',
-                        'updatedAt': '2024-01-01T00:00:00Z',
-                        'stages': {'items': []},
-                        'scorecardId': None,
-                        'scoreId': None,
-                        'currentStageId': None,
-                        'workerNodeId': None,
-                        'dispatchStatus': None,
-                        'startedAt': None,
-                        'completedAt': None,
-                        'estimatedCompletionAt': None,
-                        'description': None,
-                        'metadata': None,
-                        'errorMessage': None,
-                        'errorDetails': None,
-                        'stdout': None,
-                        'stderr': None
-                    }
-                ]
-            }
-        },
-        # Mock successful task deletion
-        {'deleteTask': {'id': 'task-1'}}
-    ]
+    # Mock the account resolution and task operations
+    with patch('plexus.cli.TaskCommands.resolve_account_id_for_command') as mock_resolve:
+        mock_resolve.return_value = 'test-account-id'
+        
+        mock_client.execute.side_effect = [
+            {
+                'listTaskByAccountIdAndUpdatedAt': {
+                    'items': [
+                        {
+                            'id': 'task-1',
+                            'accountId': 'test-account-id',
+                            'type': 'TEST',
+                            'status': 'COMPLETED',
+                            'target': 'test/target',
+                            'command': 'test command',
+                            'createdAt': '2024-01-01T00:00:00Z',
+                            'updatedAt': '2024-01-01T00:00:00Z',
+                            'stages': {'items': []},
+                            'scorecardId': None,
+                            'scoreId': None,
+                            'currentStageId': None,
+                            'workerNodeId': None,
+                            'dispatchStatus': None,
+                            'startedAt': None,
+                            'completedAt': None,
+                            'estimatedCompletionAt': None,
+                            'description': None,
+                            'metadata': None,
+                            'errorMessage': None,
+                            'errorDetails': None,
+                            'stdout': None,
+                            'stderr': None
+                        }
+                    ]
+                }
+            },
+            # Mock successful task deletion
+            {'deleteTask': {'id': 'task-1'}}
+        ]
 
-    result = runner.invoke(tasks, ['delete', '--account', 'test-account', '--task-id', 'task-1', '-y'])
-    assert result.exit_code == 0
-    assert 'Successfully deleted' in result.output
+        result = runner.invoke(tasks, ['delete', '--account', 'test-account', '--task-id', 'task-1', '-y'])
+        assert result.exit_code == 0
+        assert 'Successfully deleted' in result.output
 
 def test_delete_all_tasks(mock_client, runner, mock_task_fields, mock_task_from_dict):
     # Mock listing all tasks
@@ -236,79 +231,81 @@ def test_delete_requires_criteria(mock_client, runner):
     assert result.exit_code == 1
 
 def test_delete_requires_account_unless_all(mock_client, runner):
-    result = runner.invoke(tasks, ['delete', '--task-id', 'task-1'])
-    assert 'Error: --account is required unless using --all' in result.output
-    assert result.exit_code == 1
+    # When delete command is called without --account and without --all, 
+    # resolve_account_id_for_command will be called and should raise click.Abort()
+    
+    # Mock resolve_account_id_for_command to raise an exception (simulating missing account)
+    with patch('plexus.cli.TaskCommands.resolve_account_id_for_command') as mock_resolve:
+        mock_resolve.side_effect = click.Abort()
+        
+        result = runner.invoke(tasks, ['delete', '--task-id', 'task-1'])
+        # click.Abort() translates to exit code 1
+        assert result.exit_code == 1
 
 def test_delete_with_stages(mock_client, runner, mock_task_fields, mock_task_from_dict):
-    # Mock the account lookup and task listing
-    mock_client.execute.side_effect = [
-        {
-            'listAccountByKey': {
-                'items': [{'id': 'test-account-id'}]
-            }
-        },
-        {
-            'listTaskByAccountIdAndUpdatedAt': {
-                'items': [
-                    {
-                        'id': 'task-1',
-                        'accountId': 'test-account-id',
-                        'type': 'TEST',
-                        'status': 'COMPLETED',
-                        'target': 'test/target',
-                        'command': 'test command',
-                        'createdAt': '2024-01-01T00:00:00Z',
-                        'updatedAt': '2024-01-01T00:00:00Z',
-                        'stages': {
-                            'items': [
-                                {
-                                    'id': 'stage-1',
-                                    'taskId': 'task-1',
-                                    'name': 'Stage 1',
-                                    'order': 1,
-                                    'status': 'COMPLETED'
-                                }
-                            ]
-                        },
-                        'scorecardId': None,
-                        'scoreId': None,
-                        'currentStageId': None,
-                        'workerNodeId': None,
-                        'dispatchStatus': None,
-                        'startedAt': None,
-                        'completedAt': None,
-                        'estimatedCompletionAt': None,
-                        'description': None,
-                        'metadata': None,
-                        'errorMessage': None,
-                        'errorDetails': None,
-                        'stdout': None,
-                        'stderr': None
-                    }
-                ]
-            }
-        },
-        # Mock successful stage deletion
-        {'deleteTaskStage': {'id': 'stage-1'}},
-        # Mock successful task deletion
-        {'deleteTask': {'id': 'task-1'}}
-    ]
+    # Mock the account resolution and task operations
+    with patch('plexus.cli.TaskCommands.resolve_account_id_for_command') as mock_resolve:
+        mock_resolve.return_value = 'test-account-id'
+        
+        mock_client.execute.side_effect = [
+            {
+                'listTaskByAccountIdAndUpdatedAt': {
+                    'items': [
+                        {
+                            'id': 'task-1',
+                            'accountId': 'test-account-id',
+                            'type': 'TEST',
+                            'status': 'COMPLETED',
+                            'target': 'test/target',
+                            'command': 'test command',
+                            'createdAt': '2024-01-01T00:00:00Z',
+                            'updatedAt': '2024-01-01T00:00:00Z',
+                            'stages': {
+                                'items': [
+                                    {
+                                        'id': 'stage-1',
+                                        'taskId': 'task-1',
+                                        'name': 'Stage 1',
+                                        'order': 1,
+                                        'status': 'COMPLETED'
+                                    }
+                                ]
+                            },
+                            'scorecardId': None,
+                            'scoreId': None,
+                            'currentStageId': None,
+                            'workerNodeId': None,
+                            'dispatchStatus': None,
+                            'startedAt': None,
+                            'completedAt': None,
+                            'estimatedCompletionAt': None,
+                            'description': None,
+                            'metadata': None,
+                            'errorMessage': None,
+                            'errorDetails': None,
+                            'stdout': None,
+                            'stderr': None
+                        }
+                    ]
+                }
+            },
+            # Mock successful stage deletion
+            {'deleteTaskStage': {'id': 'stage-1'}},
+            # Mock successful task deletion
+            {'deleteTask': {'id': 'task-1'}}
+        ]
 
-    result = runner.invoke(tasks, ['delete', '--account', 'test-account', '--task-id', 'task-1', '-y'])
-    assert result.exit_code == 0
-    assert 'Successfully deleted' in result.output
-    assert 'stages' in result.output
+        result = runner.invoke(tasks, ['delete', '--account', 'test-account', '--task-id', 'task-1', '-y'])
+        assert result.exit_code == 0
+        assert 'Successfully deleted' in result.output
+        assert 'stages' in result.output
 
 def test_delete_confirmation_required(mock_client, runner, mock_task_fields, mock_task_from_dict):
-    # Mock the account lookup and task listing
-    mock_client.execute.side_effect = [
-        {
-            'listAccountByKey': {
-                'items': [{'id': 'test-account-id'}]
-            }
-        },
-        {
+    # Mock the account resolution and task listing
+    with patch('plexus.cli.TaskCommands.resolve_account_id_for_command') as mock_resolve:
+        mock_resolve.return_value = 'test-account-id'
+        
+        mock_client.execute.return_value = {
             'listTaskByAccountIdAndUpdatedAt': {
                 'items': [
                     {
@@ -339,9 +336,8 @@ def test_delete_confirmation_required(mock_client, runner, mock_task_fields, moc
                 ]
             }
         }
-    ]
 
-    # Simulate user answering 'n' to confirmation
-    result = runner.invoke(tasks, ['delete', '--account', 'test-account', '--task-id', 'task-1'], input='n\n')
-    assert result.exit_code == 0
-    assert 'Operation cancelled' in result.output 
+        # Simulate user answering 'n' to confirmation
+        result = runner.invoke(tasks, ['delete', '--account', 'test-account', '--task-id', 'task-1'], input='n\n')
+        assert result.exit_code == 0
+        assert 'Operation cancelled' in result.output 

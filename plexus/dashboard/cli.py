@@ -368,6 +368,7 @@ def create(value, item_id, account_id, scoring_job_id, scorecard_id, confidence,
         accountId=account_id,
         scoringJobId=scoring_job_id,
         scorecardId=scorecard_id,
+        type="prediction",  # CLI-created score results are typically predictions
         **kwargs
     )
     
@@ -716,6 +717,7 @@ def simulate(
                     "evaluationId": evaluation.id,
                     "scorecardId": scorecard.id,
                     "scoringJobId": None,
+                    "type": "evaluation",  # Mark as evaluation score result
                     "metadata": {
                         "true_value": true_value,
                         "predicted_value": predicted_value,

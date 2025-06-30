@@ -1,3 +1,5 @@
+'use client';
+
 import React from 'react'
 import {
   Tooltip,
@@ -200,7 +202,7 @@ export default function ClassDistributionVisualizer({
             )
 
             return (
-              <Tooltip key={item.label} delayDuration={0}>
+              <Tooltip key={`tooltip-${item.label}`} delayDuration={0}>
                 <TooltipTrigger asChild>
                   <div
                     onClick={() => onLabelSelect?.(item.label)}

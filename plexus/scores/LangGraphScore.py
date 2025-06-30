@@ -13,6 +13,8 @@ from dotenv import load_dotenv
 import json
 import warnings
 from functools import partialmethod
+import inspect  # Ensure inspect is imported at the top
+import uuid # Add this import
 
 from plexus.LangChainUser import LangChainUser
 from plexus.scores.Score import Score
@@ -31,9 +33,10 @@ else:
     set_debug(False)
     set_verbose(False)
 
-from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
-from pathlib import Path
-import uuid
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver, CheckpointMetadata
+from langgraph.checkpoint.base import Checkpoint
+import types
+
 from langgraph.errors import NodeInterrupt
 from plexus.dashboard.api.client import PlexusDashboardClient
 from plexus.dashboard.api.models.account import Account
@@ -52,6 +55,163 @@ class BatchProcessingPause(Exception):
 # Temporarily suppress the specific Pydantic warning about protected namespaces
 warnings.filterwarnings("ignore", 
     message="Field \"model_.*\" .* has conflict with protected namespace \"model_\".*")
+
+# Custom Checkpointer with detailed logging on serialization error
+class LoggingAsyncPostgresSaver(AsyncPostgresSaver):
+
+    @staticmethod
+    def _find_unserializable(obj, path=""):
+        """Recursively find the first unserializable object (method/function/callable) in a nested structure."""
+        if isinstance(obj, (types.MethodType, types.FunctionType, types.LambdaType)) or callable(obj):
+            try:
+                # Try to get a meaningful name
+                name = getattr(obj, '__qualname__', str(obj))
+                return path, f"<callable: {name}>"
+            except Exception:
+                return path, "<callable: unknown>"
+        elif isinstance(obj, dict):
+            for k, v in obj.items():
+                found_path, found_val = LoggingAsyncPostgresSaver._find_unserializable(v, path=f"{path}['{k}']")
+                if found_path:
+                    return found_path, found_val
+        elif isinstance(obj, (list, tuple)):
+            for i, item in enumerate(obj):
+                found_path, found_val = LoggingAsyncPostgresSaver._find_unserializable(item, path=f"{path}[{i}]")
+                if found_path:
+                    return found_path, found_val
+        # Add checks for other known complex types if necessary
+        return None, None
+
+    async def aput(
+        self, 
+        config: CheckpointMetadata, 
+        checkpoint: Checkpoint, 
+        metadata: CheckpointMetadata, 
+        new_versions: Optional[Dict[str, int]] = None
+    ) -> CheckpointMetadata:
+        """Save checkpoint to DB, logging unserializable data on TypeError."""
+        try:
+            # Log the state *before* attempting serialization
+            logging.debug(f"[Checkpointer] Pre-serialization checkpoint for thread_id: {config['configurable']['thread_id']}")
+            # Use truncate_dict_strings for potentially large state
+            logging.debug(f"[Checkpointer] Checkpoint data (pre-serialization, truncated): {truncate_dict_strings(checkpoint, 150)}")
+            
+            # --- Add safety net: Ensure checkpoint is serializable ---
+            try:
+                logging.debug("[Checkpointer] Applying _ensure_serializable safeguard...")
+                # Use the utility function defined within LangGraphScore scope
+                serializable_checkpoint = _ensure_serializable(checkpoint)
+                logging.debug("[Checkpointer] _ensure_serializable safeguard applied.")
+                logging.debug(f"[Checkpointer] Checkpoint data (post-serialization safeguard, truncated): {truncate_dict_strings(serializable_checkpoint, 150)}")
+            except Exception as e_ensure:
+                logging.error(f"[Checkpointer] Error applying _ensure_serializable: {e_ensure}", exc_info=True)
+                # Fallback to original checkpoint if safeguard fails
+                serializable_checkpoint = checkpoint
+            # --- End safety net ---
+
+            # Directly call the superclass method which handles the internal logic including _dump_blobs
+            logging.debug(f"[Checkpointer] Attempting to save checkpoint for thread_id: {config['configurable']['thread_id']}")
+            # Use the potentially modified checkpoint
+            result = await super().aput(config, serializable_checkpoint, metadata, new_versions)
+            logging.debug(f"[Checkpointer] Successfully saved checkpoint for thread_id: {config['configurable']['thread_id']}")
+            return result
+        except (TypeError, OverflowError) as e:
+            logging.error(f"[Checkpointer] Serialization failed during aput: {e}", exc_info=True)
+            try:
+                # Attempt to find the specific problematic part of the checkpoint
+                problem_path, problem_value = self._find_unserializable(checkpoint)
+                if problem_path:
+                    logging.error(f"[Checkpointer] Found potentially unserializable object at path: {problem_path}")
+                    logging.error(f"[Checkpointer] Value (representation): {problem_value}")
+                else:
+                    logging.error("[Checkpointer] Could not pinpoint the exact unserializable object, but error occurred during serialization.")
+                # Log the full checkpoint structure (truncated) for context
+                logging.error(f"[Checkpointer] Checkpoint structure keys: {list(checkpoint.keys()) if isinstance(checkpoint, dict) else 'N/A'}")
+                logging.error(f"[Checkpointer] Checkpoint data (truncated): {truncate_dict_strings(checkpoint, 150)}")
+
+            except Exception as find_err:
+                logging.error(f"[Checkpointer] Error while trying to find unserializable object: {find_err}")
+            
+            # Re-raise the original serialization error
+            raise e
+        except Exception as e_aput:
+            logging.error(f"[Checkpointer] Unexpected error during aput: {e_aput}", exc_info=True)
+            raise e_aput
+
+# Utility function to ensure an object is serializable
+def _ensure_serializable(obj, _level=0, _current_path="root"):
+    _indent = "  " * _level
+    # Add import inside function if not at module level
+    import inspect
+    import json
+    import logging # Assuming logging is configured
+    from plexus.utils.dict_utils import truncate_dict_strings # Assuming this path is correct
+
+    logging.debug(f"{_indent}ensure_serializable: path='{_current_path}', type='{type(obj)}'")
+
+    if obj is None:
+        logging.debug(f"{_indent} -> None")
+        return None
+    elif isinstance(obj, (str, int, float, bool)):
+        # Truncate long strings in debug logs
+        log_val = str(obj) if not isinstance(obj, str) else obj
+        logging.debug(f"{_indent} -> Basic type: {log_val[:50]}{'...' if len(log_val) > 50 else ''}")
+        return obj
+    elif inspect.ismethod(obj) or inspect.isfunction(obj) or callable(obj):
+        try:
+            name = obj.__qualname__ if hasattr(obj, '__qualname__') else str(obj)
+            logging.warning(f"{_indent} -> Found callable at path '{_current_path}': {name}. Converting to string representation.")
+            return f"<callable: {name}>"
+        except Exception as e:
+            logging.warning(f"{_indent}Error getting callable name at path '{_current_path}': {e}")
+            return "<callable: unknown>"
+    elif isinstance(obj, (list, tuple)):
+        logging.debug(f"{_indent} -> List/Tuple (len={len(obj)}), processing items...")
+        return [_ensure_serializable(item, _level + 1, f"{_current_path}[{i}]") for i, item in enumerate(obj)]
+    elif isinstance(obj, dict):
+        logging.debug(f"{_indent} -> Dict (keys={list(obj.keys())}), processing items...")
+        return {k: _ensure_serializable(v, _level + 1, f"{_current_path}['{k}']") for k, v in obj.items()}
+    elif hasattr(obj, '__dict__'):
+        logging.debug(f"{_indent} -> Custom object: {obj.__class__.__name__}, processing attributes...")
+        try:
+            serializable_dict = {
+                k: _ensure_serializable(v, _level + 1, f"{_current_path}.{k}")
+                for k, v in obj.__dict__.items()
+                # Avoid private/protected attributes and callables
+                if not k.startswith('_') and not callable(v)
+            }
+            serializable_dict['__class__'] = obj.__class__.__name__
+            logging.debug(f"{_indent} -> Serialized custom object: {list(serializable_dict.keys())}")
+            return serializable_dict
+        except (TypeError, AttributeError, RecursionError) as e:
+             logging.warning(f"{_indent}Could not serialize object attribute for {obj.__class__.__name__} at path '{_current_path}': {e}")
+             return f"<object: {obj.__class__.__name__} (serialization error)>"
+    else:
+        # Add specific handling for common unserializable types if needed
+        # E.g., if isinstance(obj, SomeUnserializableType): return repr(obj)
+        logging.debug(f"{_indent} -> Fallback attempt for type: {type(obj)}")
+        try:
+            # Use default=str as a fallback for json.dumps
+            json.dumps(obj, default=str) 
+            logging.debug(f"{_indent} -> Fallback: Directly JSON serializable (or via str)")
+            # If dumps worked with default=str, it might still be problematic for msgpack
+            # Let's try returning the string representation for safety
+            try:
+                s = str(obj)
+                logging.debug(f"{_indent} -> Fallback: Returning string representation: {s[:50]}{'...' if len(s) > 50 else ''}")
+                return s
+            except Exception as e_repr:
+                 logging.warning(f"{_indent}Fallback: Could not get string representation at path '{_current_path}': {e_repr}")
+                 return f"<unserializable: {type(obj).__name__} (repr error)>"
+        except (TypeError, OverflowError) as e_json:
+            logging.debug(f"{_indent} -> Fallback: Not directly JSON serializable, even with str. Error: {e_json}")
+            try:
+                s = str(obj)
+                logging.debug(f"{_indent} -> Fallback: Converting to string: {s[:50]}{'...' if len(s) > 50 else ''}")
+                return s
+            except Exception as e_str:
+                logging.warning(f"{_indent}Fallback: Could not convert object of type {type(obj)} to string at path '{_current_path}': {e_str}")
+                return f"<unserializable: {type(obj).__name__} (str error)>"
 
 class LangGraphScore(Score, LangChainUser):
     """
@@ -216,9 +376,9 @@ class LangGraphScore(Score, LangChainUser):
                  os.getenv('PLEXUS_LANGGRAPH_CHECKPOINTER_POSTGRES_URI')
         
         if db_uri:
-            logging.info("Using PostgreSQL checkpoint database")
-            # Create checkpointer and store the context manager
-            self._checkpointer_context = AsyncPostgresSaver.from_conn_string(db_uri)
+            logging.info("Using PostgreSQL checkpoint database with Logging Checkpointer")
+            # Use the custom Logging Checkpointer
+            self._checkpointer_context = LoggingAsyncPostgresSaver.from_conn_string(db_uri)
             # Enter the context and store the checkpointer
             self.checkpointer = await self._checkpointer_context.__aenter__()
             
@@ -255,6 +415,38 @@ class LangGraphScore(Score, LangChainUser):
                 node_config = next((node for node in graph_config
                                   if node['name'] == previous_node), None)
                 
+                # Add node result storage between nodes
+                storage_node_name = f"{previous_node}_result_storage"
+                def create_storage_function(prev_node_name):
+                    def store_node_result(state):
+                        """Store this node's result under the node name for template access by other nodes."""
+                        logging.info(f"=== Node Result Storage for '{prev_node_name}' ===")
+                        
+                        # Create node result object
+                        node_result = {}
+                        if hasattr(state, 'classification') and state.classification is not None:
+                            node_result['classification'] = state.classification
+                        if hasattr(state, 'explanation') and state.explanation is not None:
+                            node_result['explanation'] = state.explanation
+                        if hasattr(state, 'value') and state.value is not None:
+                            node_result['value'] = state.value
+                        if hasattr(state, 'confidence') and state.confidence is not None:
+                            node_result['confidence'] = state.confidence
+                            
+                        # Create new state with node result stored in node_results container
+                        new_state = state.model_dump()
+                        
+                        # Store in the node_results container
+                        if 'node_results' not in new_state or new_state['node_results'] is None:
+                            new_state['node_results'] = {}
+                        new_state['node_results'][prev_node_name] = node_result
+                        
+                        logging.info(f"Stored node result under '{prev_node_name}': {node_result}")
+                        return state.__class__(**new_state)
+                    return store_node_result
+                
+                workflow.add_node(storage_node_name, create_storage_function(previous_node))
+                
                 if node_config:
                     # Handle output field in node config directly - this is critical for node-level output aliasing
                     if 'output' in node_config:
@@ -265,12 +457,13 @@ class LangGraphScore(Score, LangChainUser):
                                 node_config['output']
                             )
                         )
-                        workflow.add_edge(previous_node, value_setter_name)
+                        workflow.add_edge(previous_node, storage_node_name)
+                        workflow.add_edge(storage_node_name, value_setter_name)
                         workflow.add_edge(value_setter_name, node_name)
                         continue  # Skip other edge processing for this node
                         
                     # Handle edge clause - direct routing with output aliasing
-                    if 'edge' in node_config:
+                    elif 'edge' in node_config:
                         edge = node_config['edge']
                         value_setter_name = f"{previous_node}_value_setter"
                         # Create value setter node for the edge
@@ -280,8 +473,9 @@ class LangGraphScore(Score, LangChainUser):
                                 edge.get('output', {})
                             )
                         )
-                        # Add edge from previous node to value setter
-                        workflow.add_edge(previous_node, value_setter_name)
+                        # Add edge from previous node to result storage then to value setter
+                        workflow.add_edge(previous_node, storage_node_name)
+                        workflow.add_edge(storage_node_name, value_setter_name)
                         # Add edge from value setter to target node
                         target_node = edge.get('node', node_name)
                         if target_node == 'END':
@@ -307,8 +501,30 @@ class LangGraphScore(Score, LangChainUser):
                                     )
                                 )
 
-                            def create_routing_function(conditions, value_setters, next_node):
+                            def create_routing_function(conditions, value_setters, storage_node, next_node):
                                 def routing_function(state):
+                                    if hasattr(state, 'classification') and state.classification is not None:
+                                        state_value = state.classification.lower()
+                                        # Check if we have a value setter for this classification
+                                        if state_value in value_setters:
+                                            return storage_node  # Route through storage first
+                                    # Default case - route through storage to next node
+                                    return storage_node
+                                return routing_function
+
+                            # Create a list of valid targets for conditional edges
+                            valid_targets = [storage_node_name]
+                            
+                            # Add conditional routing to storage node
+                            workflow.add_conditional_edges(
+                                previous_node,
+                                create_routing_function(conditions, value_setters, storage_node_name, node_name),
+                                valid_targets
+                            )
+                            
+                            # Add conditional routing from storage node to value setters or next node
+                            def create_storage_routing_function(conditions, value_setters, next_node):
+                                def storage_routing_function(state):
                                     if hasattr(state, 'classification') and state.classification is not None:
                                         state_value = state.classification.lower()
                                         # Check if we have a value setter for this classification
@@ -316,16 +532,13 @@ class LangGraphScore(Score, LangChainUser):
                                             return value_setters[state_value]
                                     # Default case - route to next node
                                     return next_node
-                                return routing_function
-
-                            # Create a list of valid targets for conditional edges
-                            valid_targets = list(value_setters.values()) + [node_name]
+                                return storage_routing_function
                             
-                            # Add conditional routing only to valid targets
+                            storage_valid_targets = list(value_setters.values()) + [node_name]
                             workflow.add_conditional_edges(
-                                previous_node,
-                                create_routing_function(conditions, value_setters, node_name),
-                                valid_targets
+                                storage_node_name,
+                                create_storage_routing_function(conditions, value_setters, node_name),
+                                storage_valid_targets
                             )
 
                             # Add edges from value setters to their target nodes
@@ -338,12 +551,18 @@ class LangGraphScore(Score, LangChainUser):
                                     workflow.add_edge(value_setter_name, target_node)
                         else:
                             logging.error(f"Conditions is not a list: {conditions}")
-                            workflow.add_edge(previous_node, node_name)
+                            workflow.add_edge(previous_node, storage_node_name)
+                            workflow.add_edge(storage_node_name, node_name)
                     
-                    # No edge or conditions clause - add direct edge to next node
+                    # No edge or conditions clause - add direct edge through storage to next node
                     else:
                         logging.debug(f"Node '{previous_node}' does not have conditions or edge clause")
-                        workflow.add_edge(previous_node, node_name)
+                        workflow.add_edge(previous_node, storage_node_name)
+                        workflow.add_edge(storage_node_name, node_name)
+                else:
+                    # No node config found - add direct edge through storage
+                    workflow.add_edge(previous_node, storage_node_name)
+                    workflow.add_edge(storage_node_name, node_name)
 
     async def build_compiled_workflow(self):
         """Build the LangGraph workflow with optional persistence."""
@@ -692,6 +911,10 @@ class LangGraphScore(Score, LangChainUser):
         base_annotations = self.GraphState.__annotations__.copy()
         logging.info(f"Starting with base annotations: {base_annotations}")
 
+        # Add a special field to store all node results
+        base_annotations['node_results'] = Optional[dict]
+        logging.info(f"Added node_results field to store all node outputs")
+        
         # First collect all attributes from node instances
         for instance in instances:
             # Add fields from the node's GraphState
@@ -766,6 +989,9 @@ class LangGraphScore(Score, LangChainUser):
                 validate_assignment=False,  # Don't validate on assignment
                 populate_by_name=True,  # Allow population by field name
                 use_enum_values=True,  # Use enum values instead of enum objects
+                # Allow fields to be set dynamically
+                protected_namespaces=(),  # Don't protect any namespaces
+                validate_call=False,  # Don't validate function calls
             )
 
             def __init__(self, **data):
@@ -796,10 +1022,10 @@ class LangGraphScore(Score, LangChainUser):
     @staticmethod
     def generate_output_aliasing_function(output_mapping: dict) -> FunctionType:
         def output_aliasing(state):
-            logging.info("=== Output Aliasing Node Start ===")
-            logging.info(f"Input state type: {type(state)}")
-            logging.info(f"Input state fields: {state.model_fields.keys()}")
-            logging.info(f"Input state values: {truncate_dict_strings(state.model_dump(), max_length=80)}")
+            logging.debug("=== Output Aliasing Node Start ===")
+            logging.debug(f"Input state type: {type(state)}")
+            logging.debug(f"Input state fields: {state.model_fields.keys()}")
+            logging.debug(f"Input state values: {truncate_dict_strings(state.model_dump(), max_length=80)}")
             
             # Create a new dict with all current state values
             new_state = state.model_dump()
@@ -1014,28 +1240,81 @@ class LangGraphScore(Score, LangChainUser):
                     raise TypeError(f"Expected Score.Result object but got {type(result)}")
                 initial_results[result.parameters.name] = result.value
 
-        initial_state = self.combined_state_class(
-            text=self.preprocess_text(model_input.text),
-            metadata=model_input.metadata,
-            results=initial_results,
-            retry_count=0,
-            at_llm_breakpoint=False,
-        ).model_dump()
+        # --- Logging Input Metadata ---
+        logging.debug("=== Inspecting model_input.metadata before state creation ===")
+        if model_input.metadata:
+            logging.debug(f"model_input.metadata type: {type(model_input.metadata)}")
+            logging.debug(f"model_input.metadata keys: {list(model_input.metadata.keys()) if isinstance(model_input.metadata, dict) else 'N/A'}")
+            logging.debug(f"model_input.metadata content (truncated): {truncate_dict_strings(model_input.metadata, 150)}")
+            if isinstance(model_input.metadata, dict) and 'scorecard_name' in model_input.metadata:
+                logging.debug(f"model_input.metadata['scorecard_name'] type: {type(model_input.metadata['scorecard_name'])}")
+                logging.debug(f"model_input.metadata['scorecard_name'] value: {str(model_input.metadata['scorecard_name'])[:100]}")
+        else:
+            logging.debug("model_input.metadata is None or empty.")
+        # --- End Logging ---
+
+        # --- Sanitize metadata BEFORE adding to state ---
+        sanitized_metadata = _ensure_serializable(model_input.metadata)
+        logging.debug("=== Sanitized metadata before state creation ===")
+        logging.debug(f"sanitized_metadata type: {type(sanitized_metadata)}")
+        logging.debug(f"sanitized_metadata content (truncated): {truncate_dict_strings(sanitized_metadata, 150)}")
+        # --- End Sanitization ---
+
+        initial_state_dict = {
+            'text': self.preprocess_text(model_input.text),
+            'metadata': sanitized_metadata, # Use sanitized version
+            'results': initial_results,
+            'retry_count': 0,
+            'at_llm_breakpoint': False,
+        }
 
         if batch_data:
-            initial_state.update(batch_data)
+            initial_state_dict.update(batch_data)
+
+        # Create the state object using the combined class
+        try:
+            initial_state_obj = self.combined_state_class(**initial_state_dict)
+            initial_state = initial_state_obj.model_dump()
+        except Exception as e_state_create:
+            logging.error(f"Error creating combined_state_class instance: {e_state_create}", exc_info=True)
+            logging.error(f"Initial data provided: {initial_state_dict}")
+            raise
+
+        # --- Logging Initial State ---
+        logging.debug("=== Inspecting initial_state before workflow invocation ===")
+        logging.debug(f"initial_state type: {type(initial_state)}")
+        logging.debug(f"initial_state keys: {list(initial_state.keys()) if isinstance(initial_state, dict) else 'N/A'}")
+        if isinstance(initial_state, dict) and 'metadata' in initial_state and initial_state['metadata']:
+             logging.debug(f"initial_state['metadata'] type: {type(initial_state['metadata'])}")
+             logging.debug(f"initial_state['metadata'] keys: {list(initial_state['metadata'].keys()) if isinstance(initial_state['metadata'], dict) else 'N/A'}")
+             logging.debug(f"initial_state['metadata'] content (truncated): {truncate_dict_strings(initial_state['metadata'], 150)}")
+             if isinstance(initial_state['metadata'], dict) and 'scorecard_name' in initial_state['metadata']:
+                 logging.debug(f"initial_state['metadata']['scorecard_name'] type: {type(initial_state['metadata']['scorecard_name'])}")
+                 logging.debug(f"initial_state['metadata']['scorecard_name'] value: {str(initial_state['metadata']['scorecard_name'])[:100]}")
+        else:
+             logging.debug("initial_state['metadata'] is missing, None, or empty.")
+        # --- End Logging ---
 
         try:
             logging.info("=== Pre-invoke State Inspection ===")
             logging.info(f"Initial state type: {type(initial_state)}")
-            logging.info(f"Initial state keys: {initial_state.keys()}")
+            logging.info(f"Initial state keys: {list(initial_state.keys())}") # Log keys as list
+            logging.debug(f"Initial state values (truncated): {truncate_dict_strings(initial_state, max_length=100)}")
             logging.info(f"Workflow type: {type(self.workflow)}")
-            
+
             graph_result = await self.workflow.ainvoke(
                 initial_state,
                 config=thread
             )
-            
+
+            logging.info("=== Post-invoke Graph Result ===")
+            logging.info(f"Graph result type: {type(graph_result)}")
+            if isinstance(graph_result, dict):
+                 logging.info(f"Graph result keys: {list(graph_result.keys())}") # Log keys as list
+                 logging.debug(f"Graph result values (truncated): {truncate_dict_strings(graph_result, max_length=100)}")
+            else:
+                 logging.debug(f"Graph result value (truncated): {str(graph_result)[:100]}")
+
             # Convert graph result to Score.Result
             result = Score.Result(
                 parameters=self.parameters,
@@ -1059,18 +1338,58 @@ class LangGraphScore(Score, LangChainUser):
             
             # If metadata with trace exists in graph_result, add it to the result metadata
             if 'metadata' in graph_result and graph_result['metadata'] is not None:
-                # Merge the existing metadata with the graph_result metadata
-                result.metadata.update(graph_result['metadata'])
-            
+                logging.info("=== Processing graph_result['metadata'] ===")
+                logging.debug(f"Original graph_result['metadata'] type: {type(graph_result['metadata'])}")
+                logging.debug(f"Original graph_result['metadata'] (truncated): {truncate_dict_strings(graph_result['metadata'], 100) if isinstance(graph_result['metadata'], dict) else str(graph_result['metadata'])[:100]}")
+
+                # Ensure the incoming metadata is serializable BEFORE merging
+                serializable_graph_metadata = _ensure_serializable(graph_result['metadata'])
+                logging.debug(f"Serialized graph_result['metadata'] type: {type(serializable_graph_metadata)}")
+                logging.debug(f"Serialized graph_result['metadata'] (truncated): {truncate_dict_strings(serializable_graph_metadata, 100) if isinstance(serializable_graph_metadata, dict) else str(serializable_graph_metadata)[:100]}")
+
+                if isinstance(serializable_graph_metadata, dict):
+                    result.metadata.update(serializable_graph_metadata)
+                    logging.info("Successfully merged serializable graph_result['metadata'] (dict) into result.metadata")
+                else:
+                    logging.warning(f"graph_result['metadata'] was not a dict after serialization attempt, type: {type(serializable_graph_metadata)}. Adding as extra key.")
+                    result.metadata['additional_graph_metadata'] = serializable_graph_metadata
+            else:
+                logging.info("No 'metadata' key found in graph_result or it is None.")
+
+
+            # Apply serialization safety to the final result dict's metadata before returning
+            logging.info("=== Final Serialization Pass for result.metadata ===")
+            try:
+                if result.metadata and isinstance(result.metadata, dict):
+                    logging.debug(f"Pre-final serialization result.metadata type: {type(result.metadata)}")
+                    logging.debug(f"Pre-final serialization result.metadata (truncated): {truncate_dict_strings(result.metadata, 100)}")
+                    result.metadata = _ensure_serializable(result.metadata)
+                    logging.debug(f"Post-final serialization result.metadata type: {type(result.metadata)}")
+                    logging.debug(f"Post-final serialization result.metadata (truncated): {truncate_dict_strings(result.metadata, 100)}")
+                    logging.info("Final serialization pass on result.metadata completed.")
+                elif not result.metadata:
+                     logging.info("result.metadata is None or empty, skipping final serialization.")
+                else:
+                     logging.warning(f"result.metadata is not a dict (type: {type(result.metadata)}), skipping final serialization.")
+
+            except Exception as e:
+                logging.error(f"Error during final serialization of result.metadata: {e}")
+                # Provide a fallback result if serialization fails
+                result.metadata = {"value": "Error", "explanation": f"Final serialization error: {str(e)}"}
+
+            logging.info("=== Predict Method Complete ===")
+            logging.debug(f"Final Score.Result value: {result.value}")
+            logging.debug(f"Final Score.Result metadata (truncated): {truncate_dict_strings(result.metadata, 100) if isinstance(result.metadata, dict) else str(result.metadata)[:100]}")
             return result
         except BatchProcessingPause:
             # Let BatchProcessingPause propagate up
+            logging.info("BatchProcessingPause encountered, propagating.")
             raise
         except Exception as e:
-            logging.error(f"Error in predict: {e}")
+            logging.error(f"Error in predict: {e}", exc_info=True) # Add exc_info for traceback
             return Score.Result(
                 parameters=self.parameters,
-                value="Error",
+                value="ERROR",
                 error=str(e)
             )
 

@@ -20,6 +20,7 @@ interface EvaluationCardProps {
   scoreNames: Record<string, string>
   onSelect: (evaluation: Schema['Evaluation']['type']) => void
   onDelete: (evaluationId: string) => Promise<boolean>
+  evaluationRefsMap?: React.MutableRefObject<Map<string, HTMLDivElement | null>>
 }
 
 interface RawTaskStage {
@@ -68,7 +69,8 @@ export const EvaluationCard = React.memo(({
   scorecardNames, 
   scoreNames,
   onSelect,
-  onDelete
+  onDelete,
+  evaluationRefsMap
 }: EvaluationCardProps) => {
   const [taskData, setTaskData] = React.useState<TaskData | null>(null)
 
@@ -143,39 +145,48 @@ export const EvaluationCard = React.memo(({
     fetchTaskData()
   }, [evaluation.task])
 
+  // Ref callback to store ref in the evaluationRefsMap
+  const refCallback = React.useCallback((el: HTMLDivElement | null) => {
+    if (evaluationRefsMap) {
+      evaluationRefsMap.current.set(evaluation.id, el);
+    }
+  }, [evaluation.id, evaluationRefsMap]);
+
   return (
-    <EvaluationTask
-      variant="grid"
-      task={{
-        id: evaluation.id,
-        type: evaluation.type,
-        scorecard: scorecardNames[evaluation.id] || 'Unknown Scorecard',
-        score: scoreNames[evaluation.id] || 'Unknown Score',
-        time: evaluation.createdAt,
-        data: evaluationTaskData
-      }}
-      onClick={() => onSelect(evaluation)}
-      isSelected={evaluation.id === selectedEvaluationId}
-      controlButtons={
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-            <Button variant="ghost" size="icon" className="h-8 w-8 p-0">
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={async (e) => {
-              e.stopPropagation()
-              if (window.confirm('Are you sure you want to delete this evaluation?')) {
-                await onDelete(evaluation.id)
-              }
-            }}>
-              <Trash2 className="h-4 w-4 mr-2" /> Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      }
-      extra={true}
-    />
+    <div ref={refCallback}>
+      <EvaluationTask
+        variant="grid"
+        task={{
+          id: evaluation.id,
+          type: evaluation.type,
+          scorecard: scorecardNames[evaluation.id] || 'Unknown Scorecard',
+          score: scoreNames[evaluation.id] || 'Unknown Score',
+          time: evaluation.createdAt,
+          data: evaluationTaskData
+        }}
+        onClick={() => onSelect(evaluation)}
+        isSelected={evaluation.id === selectedEvaluationId}
+        controlButtons={
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+              <Button variant="ghost" size="icon" className="h-8 w-8 p-0">
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={async (e) => {
+                e.stopPropagation()
+                if (window.confirm('Are you sure you want to delete this evaluation?')) {
+                  await onDelete(evaluation.id)
+                }
+              }}>
+                <Trash2 className="h-4 w-4 mr-2" /> Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        }
+        extra={true}
+      />
+    </div>
   )
 }) 

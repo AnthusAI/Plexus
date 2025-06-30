@@ -3,7 +3,7 @@ import type { Meta, StoryObj } from '@storybook/react'
 import { EvaluationTaskScoreResults } from '../components/EvaluationTaskScoreResults'
 
 const meta: Meta<typeof EvaluationTaskScoreResults> = {
-  title: 'Components/EvaluationTaskScoreResults',
+  title: 'Evaluations/EvaluationTaskScoreResults',
   component: EvaluationTaskScoreResults,
   parameters: {
     layout: 'centered',

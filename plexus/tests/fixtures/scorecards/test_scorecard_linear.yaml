@@ -1,0 +1,103 @@
+name: Linear Dependency Scorecard
+key: linear_dependency_scorecard
+id: linear-scorecard-id
+externalId: linear-scorecard-external-id
+description: A test scorecard with a linear chain of dependencies
+
+scores:
+  - name: Score A
+    key: score_a
+    id: score-a-id
+    class: LangGraphScore
+    description: The first score in the chain
+    externalId: score-a-external-id
+    model_provider: ChatOpenAI
+    model_name: gpt-4o-mini
+    graph:
+      - name: classify
+        class: Classifier
+        valid_classes: ["High", "Medium", "Low"]
+        system_message: |
+          You are a helpful assistant that classifies text.
+        user_message: |
+          Please classify the following text:
+          {{ text }}
+          
+          How would you rate the complexity of this text?
+  
+  - name: Score B
+    key: score_b
+    id: score-b-id
+    externalId: score-b-external-id
+    class: LangGraphScore
+    description: Depends on Score A
+    depends_on:
+      - Score A
+    model_provider: ChatOpenAI
+    model_name: gpt-4o-mini
+    graph:
+      - name: classify
+        class: Classifier
+        valid_classes: ["High", "Medium", "Low"]
+        system_message: |
+          You are a helpful assistant that classifies text.
+        user_message: |
+          Please classify the following text:
+          {{ text }}
+          
+          Previous complexity rating (Score A): {{ results["Score A"].value }}
+          
+          How would you rate the clarity of this text?
+  
+  - name: Score C
+    key: score_c
+    id: score-c-id
+    externalId: score-c-external-id
+    class: LangGraphScore
+    description: Depends on Score B
+    depends_on:
+      - Score B
+    model_provider: ChatOpenAI
+    model_name: gpt-4o-mini
+    graph:
+      - name: classify
+        class: Classifier
+        valid_classes: ["High", "Medium", "Low"]
+        system_message: |
+          You are a helpful assistant that classifies text.
+        user_message: |
+          Please classify the following text:
+          {{ text }}
+          
+          Previous ratings:
+          - Complexity (Score A): {{ results["Score A"].value }}
+          - Clarity (Score B): {{ results["Score B"].value }}
+          
+          How would you rate the conciseness of this text?
+  
+  - name: Score D
+    key: score_d
+    id: score-d-id
+    externalId: score-d-external-id
+    class: LangGraphScore
+    description: Depends on Score C
+    depends_on:
+      - Score C
+    model_provider: ChatOpenAI
+    model_name: gpt-4o-mini
+    graph:
+      - name: classify
+        class: Classifier
+        valid_classes: ["Excellent", "Good", "Fair", "Poor"]
+        system_message: |
+          You are a helpful assistant that provides an overall assessment.
+        user_message: |
+          Please provide an overall assessment for the following text:
+          {{ text }}
+          
+          Previous ratings:
+          - Complexity (Score A): {{ results["Score A"].value }}
+          - Clarity (Score B): {{ results["Score B"].value }}
+          - Conciseness (Score C): {{ results["Score C"].value }}
+          
+          Based on all previous ratings, what is your overall assessment of the text quality? 

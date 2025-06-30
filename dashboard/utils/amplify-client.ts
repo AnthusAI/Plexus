@@ -271,6 +271,36 @@ export const amplifyClient = {
     get: async (params: any) => {
       const response = await (getClient().models.Evaluation as any).get(params)
       return { data: response.data as Schema['Evaluation']['type'] | null }
+    },
+    update: async (data: {
+      id: string;
+      type?: string;
+      status?: string;
+      parameters?: any;
+      metrics?: any;
+      metricsExplanation?: string;
+      inferences?: number;
+      accuracy?: number;
+      cost?: number;
+      startedAt?: string;
+      elapsedSeconds?: number;
+      estimatedRemainingSeconds?: number;
+      totalItems?: number;
+      processedItems?: number;
+      errorMessage?: string;
+      errorDetails?: any;
+      scorecardId?: string;
+      scoreId?: string;
+      confusionMatrix?: any;
+      scoreGoal?: string;
+      datasetClassDistribution?: any;
+      isDatasetClassDistributionBalanced?: boolean;
+      predictedClassDistribution?: any;
+      isPredictedClassDistributionBalanced?: boolean;
+      taskId?: string;
+    }) => {
+      const response = await (getClient().models.Evaluation as any).update(data);
+      return { data: response.data as Schema['Evaluation']['type'] };
     }
   },
   BatchJob: {
@@ -295,14 +325,127 @@ export const amplifyClient = {
     create: async (data: {
       externalId?: string;
       description?: string;
+      text?: string;
+      metadata?: Record<string, any>;
+      attachedFiles?: string[];
       accountId: string;
-      scorecardId?: string;
       scoreId?: string;
       evaluationId?: string;
       isEvaluation: boolean;
+      createdByType?: string;
     }) => {
       const response = await (getClient().models.Item as any).create(data)
       return { data: response.data as Schema['Item']['type'] }
+    },
+    update: async (data: {
+      id: string;
+      externalId?: string;
+      description?: string;
+      text?: string;
+      metadata?: Record<string, any>;
+      attachedFiles?: string[];
+    }) => {
+      const response = await (getClient().models.Item as any).update(data)
+      return { data: response.data as Schema['Item']['type'] }
+    }
+  },
+  ScorecardExampleItem: {
+    create: async (data: {
+      itemId: string;
+      scorecardId: string;
+      addedAt?: string;
+      addedBy?: string;
+      notes?: string;
+    }) => {
+      const response = await (getClient().models.ScorecardExampleItem as any).create(data)
+      return { data: response.data as Schema['ScorecardExampleItem']['type'] }
+    },
+    delete: async (params: {
+      itemId: string;
+      scorecardId: string;
+    }) => {
+      // First find the record by the composite key
+      const listResponse = await (getClient().models.ScorecardExampleItem as any).list({
+        filter: {
+          and: [
+            { itemId: { eq: params.itemId } },
+            { scorecardId: { eq: params.scorecardId } }
+          ]
+        }
+      });
+      
+      if (listResponse.data && listResponse.data.length > 0) {
+        const record = listResponse.data[0];
+        const response = await (getClient().models.ScorecardExampleItem as any).delete({ id: record.id });
+        return { data: response.data as Schema['ScorecardExampleItem']['type'] };
+      } else {
+        throw new Error('ScorecardExampleItem association not found');
+      }
+    },
+    listByScorecard: async (scorecardId: string) => {
+      const response = await (getClient().models.ScorecardExampleItem as any).list({
+        filter: { scorecardId: { eq: scorecardId } }
+      });
+      return response as AmplifyResponse<Schema['ScorecardExampleItem']['type'][]>;
+    },
+    listByItem: async (itemId: string) => {
+      const response = await (getClient().models.ScorecardExampleItem as any).list({
+        filter: { itemId: { eq: itemId } }
+      });
+      return response as AmplifyResponse<Schema['ScorecardExampleItem']['type'][]>;
+    },
+    list: async (params?: any) => {
+      const response = await (getClient().models.ScorecardExampleItem as any).list(params)
+      return response as AmplifyResponse<Schema['ScorecardExampleItem']['type'][]>
+    }
+  },
+  ScorecardProcessedItem: {
+    create: async (data: {
+      itemId: string;
+      scorecardId: string;
+      processedAt?: string;
+      lastScoreResultId?: string;
+    }) => {
+      const response = await (getClient().models.ScorecardProcessedItem as any).create(data)
+      return { data: response.data as Schema['ScorecardProcessedItem']['type'] }
+    },
+    delete: async (params: {
+      itemId: string;
+      scorecardId: string;
+    }) => {
+      // First find the record by the composite key
+      const listResponse = await (getClient().models.ScorecardProcessedItem as any).list({
+        filter: {
+          and: [
+            { itemId: { eq: params.itemId } },
+            { scorecardId: { eq: params.scorecardId } }
+          ]
+        }
+      });
+      
+      if (listResponse.data && listResponse.data.length > 0) {
+        const record = listResponse.data[0];
+        const response = await (getClient().models.ScorecardProcessedItem as any).delete({ id: record.id });
+        return { data: response.data as Schema['ScorecardProcessedItem']['type'] };
+      } else {
+        throw new Error('ScorecardProcessedItem association not found');
+      }
+    },
+    listByScorecard: async (scorecardId: string) => {
+      const response = await (getClient().models.ScorecardProcessedItem as any).list({
+        filter: { scorecardId: { eq: scorecardId } }
+      });
+      return response as AmplifyResponse<Schema['ScorecardProcessedItem']['type'][]>;
+    },
+    listByItem: async (itemId: string) => {
+      const response = await (getClient().models.ScorecardProcessedItem as any).list({
+        filter: { itemId: { eq: itemId } }
+      });
+      return response as AmplifyResponse<Schema['ScorecardProcessedItem']['type'][]>;
+    },
+    list: async (params?: any) => {
+      const response = await (getClient().models.ScorecardProcessedItem as any).list(params)
+      return response as AmplifyResponse<Schema['ScorecardProcessedItem']['type'][]>
     }
   },
   ScoringJob: {
@@ -401,6 +544,124 @@ export const amplifyClient = {
         console.error('Error in amplifyClient.ShareLink.update:', error);
         throw error;
       }
+    }
+  },
+  DataSource: {
+    list: async (params?: any) => {
+      const response = await (getClient().models.DataSource as any).list(params)
+      return response as AmplifyResponse<Schema['DataSource']['type'][]>
+    },
+    get: async (params: any) => {
+      const response = await (getClient().models.DataSource as any).get(params)
+      return { data: response.data as Schema['DataSource']['type'] | null }
+    },
+    create: async (data: {
+      name: string
+      key?: string
+      description?: string
+      yamlConfiguration?: string
+      attachedFiles?: string[]
+      accountId: string
+      scorecardId?: string
+      scoreId?: string
+      currentVersionId?: string
+    }) => {
+      const response = await (getClient().models.DataSource as any).create(data)
+      return { data: response.data as Schema['DataSource']['type'] }
+    },
+    update: async (data: {
+      id: string
+      name?: string
+      key?: string
+      description?: string
+      yamlConfiguration?: string
+      attachedFiles?: string[]
+      scorecardId?: string
+      scoreId?: string
+      currentVersionId?: string
+    }) => {
+      const response = await (getClient().models.DataSource as any).update(data)
+      return { data: response.data as Schema['DataSource']['type'] }
+    },
+    delete: async (params: { id: string }) => {
+      const response = await (getClient().models.DataSource as any).delete(params)
+      return { data: response.data as Schema['DataSource']['type'] }
+    }
+  },
+  DataSourceVersion: {
+    list: async (params?: any) => {
+      const response = await (getClient().models.DataSourceVersion as any).list(params)
+      return response as AmplifyResponse<Schema['DataSourceVersion']['type'][]>
+    },
+    get: async (params: any) => {
+      const response = await (getClient().models.DataSourceVersion as any).get(params)
+      return { data: response.data as Schema['DataSourceVersion']['type'] | null }
+    },
+    create: async (data: {
+      dataSourceId: string;
+      yamlConfiguration: string;
+      isFeatured: boolean;
+      note?: string;
+      parentVersionId?: string;
+    }) => {
+      const response = await (getClient().models.DataSourceVersion as any).create(data)
+      return { data: response.data as Schema['DataSourceVersion']['type'] }
+    },
+    update: async (data: {
+      id: string;
+      yamlConfiguration?: string;
+      isFeatured?: boolean;
+      note?: string;
+      parentVersionId?: string;
+    }) => {
+      const response = await (getClient().models.DataSourceVersion as any).update(data)
+      return { data: response.data as Schema['DataSourceVersion']['type'] }
+    },
+    delete: async (params: { id: string }) => {
+      const response = await (getClient().models.DataSourceVersion as any).delete(params)
+      return { data: response.data as Schema['DataSourceVersion']['type'] }
+    }
+  },
+  DataSet: {
+    list: async (params?: any) => {
+      const response = await (getClient().models.DataSet as any).list(params)
+      return response as AmplifyResponse<Schema['DataSet']['type'][]>
+    },
+    get: async (params: any) => {
+      const response = await (getClient().models.DataSet as any).get(params)
+      return { data: response.data as Schema['DataSet']['type'] | null }
+    },
+    create: async (data: {
+      name?: string
+      description?: string
+      file?: string
+      attachedFiles?: string[]
+      accountId: string
+      scorecardId?: string
+      scoreId?: string
+      scoreVersionId: string
+      dataSourceVersionId: string
+    }) => {
+      const response = await (getClient().models.DataSet as any).create(data)
+      return { data: response.data as Schema['DataSet']['type'] }
+    },
+    update: async (data: {
+      id: string
+      name?: string
+      description?: string
+      file?: string
+      attachedFiles?: string[]
+      scorecardId?: string
+      scoreId?: string
+      scoreVersionId?: string
+      dataSourceVersionId?: string
+    }) => {
+      const response = await (getClient().models.DataSet as any).update(data)
+      return { data: response.data as Schema['DataSet']['type'] }
+    },
+    delete: async (params: { id: string }) => {
+      const response = await (getClient().models.DataSet as any).delete(params)
+      return { data: response.data as Schema['DataSet']['type'] }
     }
   }
 } 

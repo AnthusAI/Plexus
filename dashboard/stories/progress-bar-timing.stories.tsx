@@ -3,7 +3,7 @@ import type { Meta, StoryObj } from '@storybook/react'
 import { ProgressBarTiming } from '../components/ui/progress-bar-timing'
 
 const meta = {
-  title: 'Progress Bars/ProgressBarTiming',
+  title: 'General/Components/ProgressBarTiming',
   component: ProgressBarTiming,
   parameters: {
     layout: 'padded',

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useInView } from 'react-intersection-observer'
+import { motion, AnimatePresence } from "framer-motion"
 import { formatTimeAgo } from '@/utils/format-time'
 import { formatDuration } from '@/utils/format-duration'
 import { TaskStageConfig } from '@/components/ui/task-status'
@@ -20,6 +21,7 @@ import { toast } from 'sonner'
 import EvaluationTask, { type EvaluationTaskProps, type EvaluationTaskData } from '@/components/EvaluationTask'
 import { observeRecentTasks } from '@/utils/subscriptions'
 import type { AmplifyTask, ProcessedTask } from '@/utils/data-operations'
+import { ActivityDashboardSkeleton } from '@/components/loading-skeleton'
 
 type TaskStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
 
@@ -681,14 +683,7 @@ export default function ActivityDashboard({
               completedAt: null,
               processedItems: 0,
               totalItems: stage.totalItems || null, // Preserve total items if it exists
-              statusMessage: "Not started",
-              errorMessage: null, // Reset error fields if they exist
-              errorDetails: null,
-              metadata: null, // Reset any stage-specific metadata
-              progress: null, // Reset any progress tracking
-              elapsedTime: null, // Reset timing information
-              estimatedTimeRemaining: null,
-              lastUpdateTime: null
+              statusMessage: "Not started"
             }, 'TaskStage')
             console.log('Stage update result:', updatedStage)
           }
@@ -757,87 +752,143 @@ export default function ActivityDashboard({
     return null;
   }
 
+  // Show loading skeleton during initial load
+  if (isInitialLoading) {
+    return <ActivityDashboardSkeleton />
+  }
+
   return (
-    <div className="flex flex-col h-full p-1.5">
-      <div className="mb-3 flex justify-between items-start">
-        <ScorecardContext 
-          selectedScorecard={selectedScorecard}
-          setSelectedScorecard={setSelectedScorecard}
-          selectedScore={selectedScore}
-          setSelectedScore={setSelectedScore}
-        />
-        <TaskDispatchButton config={activityConfig} />
-      </div>
-      <div className="flex h-full">
-        <div 
-          className={`
-            ${selectedTask && !isNarrowViewport && !isFullWidth ? '' : 'w-full'}
-            ${selectedTask && !isNarrowViewport && isFullWidth ? 'hidden' : ''}
-            h-full overflow-y-auto overflow-x-hidden @container
-          `}
-          style={selectedTask && !isNarrowViewport && !isFullWidth ? {
-            width: `${leftPanelWidth}%`
-          } : undefined}
-        >
-          <div className={`
-            grid gap-3
-            ${selectedTask && !isNarrowViewport && !isFullWidth ? 'grid-cols-1' : 'grid-cols-1 @[640px]:grid-cols-2'}
-          `}>
-            {displayedTasks.map((task) => (
-              <div 
-                key={task.id} 
-                onClick={() => {
-                  handleSelectTask(task.id)
-                }}
-              >
-                {task.type.toLowerCase().includes('evaluation') ? (
-                  <EvaluationTask
-                    variant="grid"
-                    task={task}
-                    isSelected={task.id === selectedTask}
-                    onClick={() => {
-                      handleSelectTask(task.id)
-                    }}
-                  />
-                ) : (
-                  <Task
-                    variant="grid"
-                    task={task}
-                    isSelected={task.id === selectedTask}
-                    onClick={() => {
-                      handleSelectTask(task.id)
-                    }}
-                    renderHeader={TaskHeader}
-                    renderContent={(props) => <TaskContent {...props} />}
-                  />
-                )}
-              </div>
-            ))}
-            <div ref={ref} />
-          </div>
+    <div className="@container flex flex-col h-full p-3 overflow-hidden">
+      {/* Fixed header */}
+      <div className="flex @[600px]:flex-row flex-col @[600px]:items-center @[600px]:justify-between items-stretch gap-3 pb-3 flex-shrink-0">
+        <div className="@[600px]:flex-grow w-full">
+          <ScorecardContext 
+            selectedScorecard={selectedScorecard}
+            setSelectedScorecard={setSelectedScorecard}
+            selectedScore={selectedScore}
+            setSelectedScore={setSelectedScore}
+          />
         </div>
-
-        {selectedTask && !isNarrowViewport && !isFullWidth && (
-          <div
-            className="w-[12px] relative cursor-col-resize flex-shrink-0 group"
-            onMouseDown={handleDragStart}
+        
+        {/* TaskDispatchButton on top right */}
+        <div className="flex-shrink-0">
+          <TaskDispatchButton config={activityConfig} />
+        </div>
+      </div>
+      
+      <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+        <AnimatePresence mode="popLayout">
+          <motion.div 
+            key="activity-layout"
+            className="flex flex-1 min-h-0"
+            layout
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ 
+              type: "spring", 
+              stiffness: 300, 
+              damping: 30,
+              opacity: { duration: 0.2 }
+            }}
           >
-            <div className="absolute inset-0 rounded-full transition-colors duration-150 
-              group-hover:bg-accent" />
-          </div>
-        )}
+            {/* Left panel - grid content */}
+            <motion.div 
+              className={`${selectedTask && !isNarrowViewport && isFullWidth ? 'hidden' : 'flex-1'} h-full overflow-auto`}
+              style={selectedTask && !isNarrowViewport && !isFullWidth ? {
+                width: `${leftPanelWidth}%`
+              } : undefined}
+              layout
+              transition={{ 
+                type: "spring", 
+                stiffness: 300, 
+                damping: 30 
+              }}
+            >
+            <div className="@container">
+              <div className={`
+                grid gap-3
+                ${selectedTask && !isNarrowViewport && !isFullWidth ? 'grid-cols-1' : 'grid-cols-1 @[640px]:grid-cols-2'}
+              `}>
+                {displayedTasks.map((task) => (
+                  <div 
+                    key={task.id} 
+                    onClick={() => {
+                      handleSelectTask(task.id)
+                    }}
+                  >
+                    {task.type.toLowerCase().includes('evaluation') ? (
+                      <EvaluationTask
+                        variant="grid"
+                        task={task}
+                        isSelected={task.id === selectedTask}
+                        onClick={() => {
+                          handleSelectTask(task.id)
+                        }}
+                      />
+                    ) : (
+                      <Task
+                        variant="grid"
+                        task={task}
+                        isSelected={task.id === selectedTask}
+                        onClick={() => {
+                          handleSelectTask(task.id)
+                        }}
+                        renderHeader={TaskHeader}
+                        renderContent={(props) => <TaskContent {...props} />}
+                      />
+                    )}
+                  </div>
+                ))}
+                <div ref={ref} />
+              </div>
+            </div>
+            </motion.div>
 
-        {selectedTask && !isNarrowViewport && !isFullWidth && (
-          <div 
-            className="h-full overflow-hidden"
-            style={{ width: `${100 - leftPanelWidth}%` }}
-          >
-            {renderSelectedTask()}
-          </div>
-        )}
+            {/* Divider for split view */}
+            {selectedTask && !isNarrowViewport && !isFullWidth && (
+              <div
+                className="w-[12px] relative cursor-col-resize flex-shrink-0 group"
+                onMouseDown={handleDragStart}
+              >
+                <div className="absolute inset-0 rounded-full transition-colors duration-150 
+                  group-hover:bg-accent" />
+              </div>
+            )}
 
+            {/* Right panel - task detail view */}
+            <AnimatePresence>
+              {selectedTask && !isNarrowViewport && !isFullWidth && (
+                <motion.div 
+                  key={`task-detail-${selectedTask}`}
+                  className="h-full overflow-hidden flex-shrink-0"
+                  style={{ width: `${100 - leftPanelWidth}%` }}
+                  initial={{ width: 0, opacity: 0 }}
+                  animate={{ 
+                    width: `${100 - leftPanelWidth}%`, 
+                    opacity: 1 
+                  }}
+                  exit={{ 
+                    width: 0, 
+                    opacity: 0 
+                  }}
+                  transition={{ 
+                    type: "spring", 
+                    stiffness: 300, 
+                    damping: 30 
+                  }}
+                >
+                  {renderSelectedTask()}
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+          </motion.div>
+        </AnimatePresence>
+        
+        {/* Full-screen view for mobile or full-width mode */}
         {selectedTask && (isNarrowViewport || isFullWidth) && (
-          <div className="fixed inset-0 bg-background z-50">
+          <div className="fixed inset-0 z-50 overflow-y-auto">
             {renderSelectedTask()}
           </div>
         )}

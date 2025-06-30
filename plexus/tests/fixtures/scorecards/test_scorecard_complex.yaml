@@ -1,0 +1,183 @@
+name: Complex Dependency Scorecard
+key: complex_dependency_scorecard
+id: complex-scorecard-id
+externalId: complex-scorecard-external-id
+description: A test scorecard with a complex dependency structure
+
+scores:
+  - name: Root Score
+    key: root_score
+    id: root-score-id
+    class: LangGraphScore
+    description: The root score that others depend on
+    externalId: root-score-external-id
+    model_provider: ChatOpenAI
+    model_name: gpt-4o-mini
+    graph:
+      - name: classify
+        class: Classifier
+        valid_classes: ["Relevant", "Not Relevant"]
+        system_message: |
+          You are a helpful assistant that determines if text is relevant.
+        user_message: |
+          Please determine if the following text is relevant:
+          {{ text }}
+          
+          Is this content relevant for analysis?
+  
+  # First branch - Three parallel scores that all depend on Root Score
+  - name: Branch A Score
+    key: branch_a_score
+    id: branch-a-score-id
+    externalId: branch-a-score-external-id
+    class: LangGraphScore
+    description: Branch A depends on Root Score
+    depends_on:
+      Root Score:
+        operator: "=="
+        value: "Relevant"
+    model_provider: ChatOpenAI
+    model_name: gpt-4o-mini
+    graph:
+      - name: classify
+        class: Classifier
+        valid_classes: ["High", "Medium", "Low"]
+        system_message: |
+          You are a helpful assistant that classifies text.
+        user_message: |
+          Please classify the following relevant text:
+          {{ text }}
+          
+          How would you rate the technical complexity?
+  
+  - name: Branch B Score
+    key: branch_b_score
+    id: branch-b-score-id
+    externalId: branch-b-score-external-id
+    class: LangGraphScore
+    description: Branch B depends on Root Score
+    depends_on:
+      Root Score:
+        operator: "=="
+        value: "Relevant"
+    model_provider: ChatOpenAI
+    model_name: gpt-4o-mini
+    graph:
+      - name: classify
+        class: Classifier
+        valid_classes: ["High", "Medium", "Low"]
+        system_message: |
+          You are a helpful assistant that classifies text.
+        user_message: |
+          Please classify the following relevant text:
+          {{ text }}
+          
+          How would you rate the emotional tone?
+  
+  - name: Branch C Score
+    key: branch_c_score
+    id: branch-c-score-id
+    externalId: branch-c-score-external-id
+    class: LangGraphScore
+    description: Branch C depends on Root Score
+    depends_on:
+      Root Score:
+        operator: "=="
+        value: "Relevant"
+    model_provider: ChatOpenAI
+    model_name: gpt-4o-mini
+    graph:
+      - name: classify
+        class: Classifier
+        valid_classes: ["High", "Medium", "Low"]
+        system_message: |
+          You are a helpful assistant that classifies text.
+        user_message: |
+          Please classify the following relevant text:
+          {{ text }}
+          
+          How would you rate the audience engagement level?
+  
+  # Second level - Integrator scores that depend on multiple branches
+  - name: Technical-Emotional Integrator
+    key: tech_emotion_integrator
+    id: tech-emotion-integrator-id
+    externalId: tech-emotion-integrator-external-id
+    class: LangGraphScore
+    description: Integrates Branch A and Branch B
+    depends_on:
+      - Branch A Score
+      - Branch B Score
+    model_provider: ChatOpenAI
+    model_name: gpt-4o-mini
+    graph:
+      - name: classify
+        class: Classifier
+        valid_classes: ["Balanced", "Technical-Heavy", "Emotional-Heavy"]
+        system_message: |
+          You are a helpful assistant that evaluates balance.
+        user_message: |
+          Please evaluate the balance of the following text:
+          {{ text }}
+          
+          Technical complexity: {{ results["Branch A Score"].value }}
+          Emotional tone: {{ results["Branch B Score"].value }}
+          
+          How would you characterize the balance between technical complexity and emotional tone?
+  
+  - name: Engagement-Technical Integrator
+    key: engage_tech_integrator
+    id: engage-tech-integrator-id
+    externalId: engage-tech-integrator-external-id
+    class: LangGraphScore
+    description: Integrates Branch A and Branch C
+    depends_on:
+      - Branch A Score
+      - Branch C Score
+    model_provider: ChatOpenAI
+    model_name: gpt-4o-mini
+    graph:
+      - name: classify
+        class: Classifier
+        valid_classes: ["Accessible", "Technical-but-Engaging", "Complex-and-Dry"]
+        system_message: |
+          You are a helpful assistant that evaluates accessibility.
+        user_message: |
+          Please evaluate the accessibility of the following text:
+          {{ text }}
+          
+          Technical complexity: {{ results["Branch A Score"].value }}
+          Audience engagement: {{ results["Branch C Score"].value }}
+          
+          How would you characterize the accessibility of this content?
+  
+  # Final score that depends on all previous scores
+  - name: Final Assessment
+    key: final_assessment
+    id: final-assessment-id
+    externalId: final-assessment-external-id
+    class: LangGraphScore
+    description: Final assessment that depends on all integrator scores
+    depends_on:
+      - Technical-Emotional Integrator
+      - Engagement-Technical Integrator
+    model_provider: ChatOpenAI
+    model_name: gpt-4o-mini
+    graph:
+      - name: classify
+        class: Classifier
+        valid_classes: ["Excellent", "Good", "Fair", "Poor"]
+        system_message: |
+          You are a helpful assistant that provides a comprehensive assessment.
+        user_message: |
+          Please provide a final assessment for the following text:
+          {{ text }}
+          
+          Previous assessments:
+          - Technical complexity: {{ results["Branch A Score"].value }}
+          - Emotional tone: {{ results["Branch B Score"].value }}
+          - Audience engagement: {{ results["Branch C Score"].value }}
+          - Technical-Emotional balance: {{ results["Technical-Emotional Integrator"].value }}
+          - Content accessibility: {{ results["Engagement-Technical Integrator"].value }}
+          
+          Based on all these factors, what is your overall assessment of the content quality? 

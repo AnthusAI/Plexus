@@ -4,7 +4,7 @@ import { FeatureCard } from '../components/landing/FeatureCard'
 import { Shield, Headphones, Filter, Target } from 'lucide-react'
 
 const meta: Meta<typeof FeatureCard> = {
-  title: 'Landing/FeatureCard',
+  title: 'Landing Pages/FeatureCard',
   component: FeatureCard,
   parameters: {
     layout: 'centered',

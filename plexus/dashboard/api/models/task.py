@@ -203,6 +203,271 @@ class Task(BaseModel):
         task_data = response['createTask']
         return cls.from_dict(task_data, client)
 
+    @classmethod
+    def create_with_stages(cls, client, type: str, target: str, command: str, stages: list, **kwargs) -> 'Task':
+        """Create a new task record with stages in a single GraphQL request.
+        
+        Args:
+            client: The API client instance
+            type: Task type
+            target: Task target
+            command: Command string
+            stages: List of stage configurations in the format 
+                   [{"name": str, "order": int, "status": str, "statusMessage": str, 
+                     "totalItems": int, "estimatedCompletionAt": str}]
+            **kwargs: Additional task fields
+        
+        Returns:
+            Task: The created task instance with stages initialized
+        """
+        # Get the account ID if not provided
+        if 'accountId' not in kwargs:
+            kwargs['accountId'] = cls._get_account_id(client)
+
+        # Get current timestamp for createdAt and updatedAt
+        now = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
+
+        # Prepare input data
+        input_data = {
+            "type": type,
+            "target": target,
+            "command": command,
+            "status": "PENDING",  # Default status for new tasks
+            "createdAt": now,
+            "updatedAt": now,  # Set initial updatedAt
+            **kwargs
+        }
+
+        # Execute a multi-operation request that creates the task and all stages in one HTTP call
+        # Each operation needs a unique name in the multi-operation request
+        operations = """
+        mutation CreateTaskAndStages(
+            $taskInput: CreateTaskInput!
+            $stage1: CreateTaskStageInput
+            $stage2: CreateTaskStageInput
+            $stage3: CreateTaskStageInput
+            $stage4: CreateTaskStageInput
+            $stage5: CreateTaskStageInput
+        ) {
+            # First create the task
+            createTask(input: $taskInput) {
+                id
+                type
+                target
+                command
+                accountId
+                status
+                description
+                dispatchStatus
+                metadata
+                createdAt
+                updatedAt
+                startedAt
+                completedAt
+                estimatedCompletionAt
+                scorecardId
+                scoreId
+            }
+            
+            # Then create each stage if variables are provided
+            stage1: createTaskStage(input: $stage1) @include(if: $hasStage1) {
+                id
+                taskId
+                name
+                order
+                status
+                statusMessage
+                totalItems
+            }
+            
+            stage2: createTaskStage(input: $stage2) @include(if: $hasStage2) {
+                id
+                taskId
+                name
+                order
+                status
+                statusMessage
+                totalItems
+            }
+            
+            stage3: createTaskStage(input: $stage3) @include(if: $hasStage3) {
+                id
+                taskId
+                name
+                order
+                status
+                statusMessage
+                totalItems
+            }
+            
+            stage4: createTaskStage(input: $stage4) @include(if: $hasStage4) {
+                id
+                taskId
+                name
+                order
+                status
+                statusMessage
+                totalItems
+            }
+            
+            stage5: createTaskStage(input: $stage5) @include(if: $hasStage5) {
+                id
+                taskId
+                name
+                order
+                status
+                statusMessage
+                totalItems
+            }
+        }
+        """
+        
+        # Prepare variables with conditional flags for stage inclusion
+        variables = {
+            "taskInput": input_data,
+            "hasStage1": False,
+            "hasStage2": False,
+            "hasStage3": False,
+            "hasStage4": False,
+            "hasStage5": False,
+        }
+        
+        # Maximum of 5 stages in a single request
+        if len(stages) > 5:
+            raise ValueError("Cannot create more than 5 stages in a single request")
+        
+        # Add stage variables
+        for i, stage in enumerate(stages, 1):
+            stage_key = f"stage{i}"
+            has_stage_key = f"hasStage{i}"
+            
+            variables[has_stage_key] = True
+            variables[stage_key] = {
+                "name": stage["name"],
+                "order": stage["order"],
+                "status": stage.get("status", "PENDING"),
+                # Dummy taskId will be replaced after task creation
+                "taskId": "PLACEHOLDER"
+            }
+            
+            # Add optional fields
+            if "statusMessage" in stage:
+                variables[stage_key]["statusMessage"] = stage["statusMessage"]
+            if "totalItems" in stage:
+                variables[stage_key]["totalItems"] = stage["totalItems"]
+            if "estimatedCompletionAt" in stage:
+                variables[stage_key]["estimatedCompletionAt"] = stage["estimatedCompletionAt"]
+        
+        try:
+            # Create the task first
+            create_response = client.execute(
+                """
+                mutation CreateTask($input: CreateTaskInput!) {
+                    createTask(input: $input) {
+                        id
+                        type
+                        target
+                        command
+                        accountId
+                        status
+                        description
+                        dispatchStatus
+                        metadata
+                        createdAt
+                        updatedAt
+                        startedAt
+                        completedAt
+                        estimatedCompletionAt
+                        scorecardId
+                        scoreId
+                    }
+                }
+                """,
+                {"input": input_data}
+            )
+            
+            task_data = create_response['createTask']
+            task_id = task_data['id']
+            
+            # Now create all stages with the actual task ID
+            stage_data_list = []
+            for i, stage in enumerate(stages):
+                stage_input = {
+                    "taskId": task_id,
+                    "name": stage["name"],
+                    "order": stage["order"],
+                    "status": stage.get("status", "PENDING"),
+                }
+                
+                # Add optional fields
+                if "statusMessage" in stage:
+                    stage_input["statusMessage"] = stage["statusMessage"]
+                if "totalItems" in stage:
+                    stage_input["totalItems"] = stage["totalItems"]
+                if "estimatedCompletionAt" in stage:
+                    stage_input["estimatedCompletionAt"] = stage["estimatedCompletionAt"]
+                
+                # Create the stage
+                stage_response = client.execute(
+                    """
+                    mutation CreateTaskStage($input: CreateTaskStageInput!) {
+                        createTaskStage(input: $input) {
+                            id
+                            taskId
+                            name
+                            order
+                            status
+                            statusMessage
+                            startedAt
+                            completedAt
+                            estimatedCompletionAt
+                            processedItems
+                            totalItems
+                        }
+                    }
+                    """,
+                    {"input": stage_input}
+                )
+                
+                stage_data = stage_response['createTaskStage']
+                stage_data_list.append(stage_data)
+                
+                # If this is the first stage, set it as the current stage
+                if i == 0:
+                    client.execute(
+                        """
+                        mutation UpdateTask($input: UpdateTaskInput!) {
+                            updateTask(input: $input) {
+                                id
+                                currentStageId
+                            }
+                        }
+                        """,
+                        {
+                            "input": {
+                                "id": task_id,
+                                "accountId": input_data["accountId"],
+                                "type": input_data["type"],
+                                "status": input_data["status"],
+                                "target": input_data["target"],
+                                "command": input_data["command"],
+                                "currentStageId": stage_data["id"]
+                            }
+                        }
+                    )
+            
+            # Create the task instance
+            task = cls.from_dict(task_data, client)
+            
+            # Attach the stages data for later access
+            task._stages = stage_data_list
+            
+            return task
+            
+        except Exception as e:
+            logging.error(f"Failed to create task with stages: {str(e)}")
+            raise ValueError(f"Failed to create task with stages: {str(e)}")
+
     @staticmethod
     def _parse_datetime(value: Any) -> Optional[datetime]:
         """Safely parse a datetime value from various formats."""

@@ -100,6 +100,7 @@ def get_yaml_handler():
     yaml_handler.preserve_quotes = True
     yaml_handler.width = 4096  # Prevent line wrapping
     yaml_handler.indent(mapping=2, sequence=4, offset=2)
+    yaml_handler.allow_duplicate_keys = True  # Allow duplicate keys in YAML
     return yaml_handler
 
 def detect_and_clean_duplicates(client, scorecard_id: str) -> int:
@@ -1366,198 +1367,160 @@ def fix(scorecard: str, skip_duplicate_check: bool, skip_external_id_check: bool
     except Exception as e:
         console.print(f"[red]Error during fix operation: {e}[/red]")
 
-@scorecards.command()
-@click.option('--scorecard', required=True, help='Scorecard to push (accepts ID, name, key, or external ID)')
-@click.option('--account', default='call-criteria', help='Account to push scorecard to (accepts ID, name, or key)')
-@click.option('--skip-duplicate-check', is_flag=True, help='Skip checking for and removing duplicate scores')
-@click.option('--skip-external-id-check', is_flag=True, help='Skip checking for and fixing missing external IDs')
-@click.option('--file', help='Path to specific YAML file to push (if not provided, will search in scorecards/ directory)')
-@click.option('--note', help='Note to include when creating a new score version')
-@click.option('--create-if-missing', is_flag=True, help='Create the scorecard if it does not exist')
-def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external_id_check: bool, file: Optional[str] = None, note: Optional[str] = None, create_if_missing: bool = False):
-    """Push a scorecard to the dashboard."""
-    client = create_client()
-    
-    # Initialize variables
-    yaml_data = None
-    scorecard_id = None
-    
-    # Load YAML configuration first
-    if file:
-        # Load from specified file
-        if not os.path.exists(file):
-            console.print(f"[red]File not found: {file}[/red]")
-            return
+def _process_single_scorecard_push(client, scorecard_identifier: str, account: str, skip_duplicate_check: bool, skip_external_id_check: bool, file_path: Optional[str] = None, yaml_data: Optional[dict] = None, note: Optional[str] = None, create_if_missing: bool = False) -> bool:
+    """
+    Process a single scorecard push operation.
+    Returns True if successful, False if failed.
+    """
+    try:
+        # The logic here will be the same as the original push command
+        # but wrapped in a try-catch and returning a boolean
+        # This is a simplified version that just calls the original push logic
         
-        try:
-            # Use ruamel.yaml for better handling of multi-line strings
-            yaml_handler = get_yaml_handler()
-            with open(file, 'r') as f:
-                yaml_data = yaml_handler.load(f)
-            console.print(f"[green]Loaded configuration from {file}[/green]")
-        except Exception as e:
-            console.print(f"[red]Error loading YAML from {file}: {e}[/red]")
-            return
-    else:
-        # Search for matching YAML file in scorecards/ directory
-        if not os.path.exists('scorecards'):
-            console.print("[red]scorecards/ directory not found[/red]")
-            return
-        
-        yaml_files = [f for f in os.listdir('scorecards') if f.endswith('.yaml')]
-        if not yaml_files:
-            console.print("[red]No YAML files found in scorecards/ directory[/red]")
-            return
-        
-        # First try to resolve the scorecard identifier to an ID to check if it exists
-        scorecard_id = resolve_scorecard_identifier(client, scorecard)
-        
-        if scorecard_id:
-            # Scorecard exists, get its details
-            query = f"""
-            query GetScorecard {{
-                getScorecard(id: "{scorecard_id}") {{
-                    id
-                    name
-                    key
-                    externalId
-                }}
-            }}
-            """
-            result = client.execute(query)
-            scorecard_data = result.get('getScorecard', {})
-            scorecard_name = scorecard_data.get('name', 'Unknown')
-            scorecard_key = scorecard_data.get('key', 'Unknown')
-            
-            # Try to find a matching file by ID, key, or name
-            matching_file = None
-            for yaml_file in yaml_files:
-                try:
-                    with open(os.path.join('scorecards', yaml_file), 'r') as f:
-                        yaml_handler = get_yaml_handler()
-                        data = yaml_handler.load(f)
-                        if (data.get('id') == scorecard_id or 
-                            data.get('key') == scorecard_key or 
-                            data.get('name') == scorecard_name or
-                            data.get('key') == scorecard or
-                            data.get('name') == scorecard):
-                            matching_file = os.path.join('scorecards', yaml_file)
-                            yaml_data = data
-                            break
-                except Exception:
-                    continue
+        # If yaml_data is already provided, use it directly
+        if yaml_data is not None:
+            # We have the YAML data, now process it
+            yaml_config = yaml_data
         else:
-            # Scorecard doesn't exist, try to find a file that matches the provided identifier
-            matching_file = None
-            for yaml_file in yaml_files:
+            # Load YAML from file or find matching file
+            if file_path:
+                if not os.path.exists(file_path):
+                    console.print(f"[red]File not found: {file_path}[/red]")
+                    return False
+                
                 try:
-                    with open(os.path.join('scorecards', yaml_file), 'r') as f:
-                        yaml_handler = get_yaml_handler()
-                        data = yaml_handler.load(f)
-                        # For new scorecards, match by filename (without extension), key, or name
-                        filename_without_ext = os.path.splitext(yaml_file)[0].lower()
-                        if (filename_without_ext == scorecard.lower() or
-                            data.get('key') == scorecard or
-                            data.get('name') == scorecard):
-                            matching_file = os.path.join('scorecards', yaml_file)
-                            yaml_data = data
-                            break
-                except Exception:
-                    continue
+                    yaml_handler = get_yaml_handler()
+                    with open(file_path, 'r') as f:
+                        yaml_config = yaml_handler.load(f)
+                    console.print(f"[green]Loaded configuration from {file_path}[/green]")
+                except Exception as e:
+                    console.print(f"[red]Error loading YAML from {file_path}: {e}[/red]")
+                    return False
+            else:
+                # Search for matching YAML file in scorecards/ directory
+                if not os.path.exists('scorecards'):
+                    console.print("[red]scorecards/ directory not found[/red]")
+                    return False
+                
+                yaml_files = [f for f in os.listdir('scorecards') if f.endswith('.yaml')]
+                if not yaml_files:
+                    console.print("[red]No YAML files found in scorecards/ directory[/red]")
+                    return False
+                
+                # Try to find a matching YAML file
+                matching_file = None
+                yaml_config = None
+                
+                for yaml_file in yaml_files:
+                    try:
+                        file_path = os.path.join('scorecards', yaml_file)
+                        with open(file_path, 'r') as f:
+                            yaml_handler = get_yaml_handler()
+                            data = yaml_handler.load(f)
+                            
+                            # Check if this file matches our scorecard identifier
+                            filename_without_ext = os.path.splitext(yaml_file)[0].lower()
+                            if (filename_without_ext == scorecard_identifier.lower() or
+                                data.get('key') == scorecard_identifier or
+                                data.get('name') == scorecard_identifier):
+                                matching_file = file_path
+                                yaml_config = data
+                                break
+                    except Exception:
+                        continue
+                
+                if not matching_file:
+                    console.print(f"[red]Could not find matching YAML file for scorecard: {scorecard_identifier}[/red]")
+                    return False
+                
+                console.print(f"[green]Found and loaded configuration from {matching_file}[/green]")
         
-        if not matching_file:
-            console.print(f"[red]Could not find matching YAML file for scorecard: {scorecard}[/red]")
-            return
+        # Now we have yaml_config, proceed with the push logic
+        # Try to resolve the scorecard identifier to an ID
+        scorecard_id = resolve_scorecard_identifier(client, scorecard_identifier)
         
-        console.print(f"[green]Found and loaded configuration from {matching_file}[/green]")
-    
-    # Now try to resolve the scorecard identifier to an ID (if we haven't already)
-    if not scorecard_id:
-        scorecard_id = resolve_scorecard_identifier(client, scorecard)
-    
-    # If scorecard doesn't exist and create_if_missing is True, create it
-    if not scorecard_id and create_if_missing:
-        # First, resolve the account identifier to an ID
-        account_id = resolve_account_identifier(client, account)
-        if not account_id:
-            console.print(f"[red]Could not find account: {account}[/red]")
-            return
-        
-        # Extract required fields from YAML
-        scorecard_name = yaml_data.get('name')
-        scorecard_key = yaml_data.get('key')
-        scorecard_external_id = str(yaml_data.get('id', ''))
-        scorecard_description = yaml_data.get('description', '')
-        
-        if not scorecard_name or not scorecard_key:
-            console.print("[red]YAML file must contain 'name' and 'key' fields to create a new scorecard[/red]")
-            return
-        
-        # Create the scorecard
-        try:
-            create_mutation = f"""
-            mutation CreateScorecard {{
-                createScorecard(input: {{
-                    name: "{scorecard_name}"
-                    key: "{scorecard_key}"
-                    externalId: "{scorecard_external_id}"
-                    accountId: "{account_id}"
-                    description: "{scorecard_description}"
-                }}) {{
-                    id
-                    name
-                    key
-                    externalId
+        # If scorecard doesn't exist and create_if_missing is True, create it
+        if not scorecard_id and create_if_missing:
+            # First, resolve the account identifier to an ID
+            account_id = resolve_account_identifier(client, account)
+            if not account_id:
+                console.print(f"[red]Could not find account: {account}[/red]")
+                return False
+            
+            # Extract required fields from YAML
+            scorecard_name = yaml_config.get('name')
+            scorecard_key = yaml_config.get('key')
+            scorecard_external_id = str(yaml_config.get('id', ''))
+            scorecard_description = yaml_config.get('description', '')
+            
+            if not scorecard_name or not scorecard_key:
+                console.print("[red]YAML file must contain 'name' and 'key' fields to create a new scorecard[/red]")
+                return False
+            
+            # Create the scorecard
+            try:
+                create_mutation = f"""
+                mutation CreateScorecard {{
+                    createScorecard(input: {{
+                        name: "{scorecard_name}"
+                        key: "{scorecard_key}"
+                        externalId: "{scorecard_external_id}"
+                        accountId: "{account_id}"
+                        description: "{scorecard_description}"
+                    }}) {{
+                        id
+                        name
+                        key
+                        externalId
+                    }}
                 }}
-            }}
-            """
-            result = client.execute(create_mutation)
-            new_scorecard = result.get('createScorecard', {})
-            scorecard_id = new_scorecard.get('id')
-            
-            if not scorecard_id:
-                console.print("[red]Failed to create new scorecard[/red]")
-                return
-            
-            console.print(f"[green]Created new scorecard: {scorecard_name} (ID: {scorecard_id}, Key: {scorecard_key})[/green]")
-        except Exception as e:
-            console.print(f"[red]Error creating scorecard: {e}[/red]")
-            return
-    elif not scorecard_id:
-        console.print(f"[red]Could not find scorecard: {scorecard}[/red]")
-        console.print("[yellow]Use --create-if-missing flag to create a new scorecard if it doesn't exist[/yellow]")
-        return
-    
-    # Get scorecard details for display
-    query = f"""
-    query GetScorecard {{
-        getScorecard(id: "{scorecard_id}") {{
-            id
-            name
-            key
-            externalId
-            sections {{
-                items {{
-                    id
-                    name
-                    scores {{
-                        items {{
-                            id
-                            name
-                            key
-                            description
-                            type
-                            order
-                            externalId
+                """
+                result = client.execute(create_mutation)
+                new_scorecard = result.get('createScorecard', {})
+                scorecard_id = new_scorecard.get('id')
+                
+                if not scorecard_id:
+                    console.print("[red]Failed to create new scorecard[/red]")
+                    return False
+                
+                console.print(f"[green]Created new scorecard: {scorecard_name} (ID: {scorecard_id}, Key: {scorecard_key})[/green]")
+            except Exception as e:
+                console.print(f"[red]Error creating scorecard: {e}[/red]")
+                return False
+        elif not scorecard_id:
+            console.print(f"[red]Could not find scorecard: {scorecard_identifier}[/red]")
+            console.print("[yellow]Use --create-if-missing flag to create a new scorecard if it doesn't exist[/yellow]")
+            return False
+        
+        # Get scorecard details for display
+        query = f"""
+        query GetScorecard {{
+            getScorecard(id: "{scorecard_id}") {{
+                id
+                name
+                key
+                externalId
+                sections {{
+                    items {{
+                        id
+                        name
+                        scores {{
+                            items {{
+                                id
+                                name
+                                key
+                                description
+                                type
+                                order
+                                externalId
+                            }}
                         }}
                     }}
                 }}
             }}
         }}
-    }}
-    """
-    
-    try:
+        """
+        
         result = client.execute(query)
         scorecard_data = result.get('getScorecard', {})
         scorecard_name = scorecard_data.get('name', 'Unknown')
@@ -1567,14 +1530,14 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
         console.print(f"[green]Found scorecard: {scorecard_name} (ID: {scorecard_id}, Key: {scorecard_key}, External ID: {scorecard_external_id})[/green]")
         
         # Update scorecard metadata if necessary
-        if yaml_data.get('name') != scorecard_name or yaml_data.get('key') != scorecard_key or yaml_data.get('externalId') != scorecard_external_id:
+        if yaml_config.get('name') != scorecard_name or yaml_config.get('key') != scorecard_key or yaml_config.get('externalId') != scorecard_external_id:
             update_mutation = f"""
             mutation UpdateScorecard {{
                 updateScorecard(input: {{
                     id: "{scorecard_id}"
-                    name: "{yaml_data.get('name', scorecard_name)}"
-                    key: "{yaml_data.get('key', scorecard_key)}"
-                    externalId: "{yaml_data.get('externalId', scorecard_external_id)}"
+                    name: "{yaml_config.get('name', scorecard_name)}"
+                    key: "{yaml_config.get('key', scorecard_key)}"
+                    externalId: "{yaml_config.get('externalId', scorecard_external_id)}"
                 }}) {{
                     id
                     name
@@ -1586,9 +1549,9 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
             client.execute(update_mutation)
             console.print("[green]Updated scorecard metadata[/green]")
         
-        # Process scores
-        if 'scores' in yaml_data:
-            console.print(f"[green]Found {len(yaml_data['scores'])} scores in YAML configuration[/green]")
+        # Process scores if they exist in the YAML
+        if 'scores' in yaml_config and yaml_config['scores']:
+            console.print(f"[green]Found {len(yaml_config['scores'])} scores in YAML configuration[/green]")
             
             # Get existing scores for this scorecard
             existing_scores_query = f"""
@@ -1632,7 +1595,6 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
             # Create a map of score name to ID within each section
             score_map = {}
             for section in sections:
-                section_id = section.get('id')
                 section_name = section.get('name')
                 if section_name not in score_map:
                     score_map[section_name] = {}
@@ -1643,16 +1605,19 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
                     score_map[section_name][score_name] = score
             
             # Process each score in the YAML
-            for score_data in yaml_data['scores']:
+            scores_processed = 0
+            scores_updated = 0
+            scores_created = 0
+            
+            for score_data in yaml_config['scores']:
                 score_name = score_data.get('name')
                 section_name = score_data.get('section', 'Default')
                 
-                # Ensure we have the complete score data structure
-                # This is important to preserve the original YAML structure
-                # including top-level fields like name, id, class, model_name, etc.
+                if not score_name:
+                    console.print("[yellow]Skipping score with missing name[/yellow]")
+                    continue
                 
                 # Remove section from score_data as it's not part of the score configuration
-                # but used for organizing scores in the UI
                 score_config_data = score_data.copy()
                 if 'section' in score_config_data:
                     del score_config_data['section']
@@ -1684,10 +1649,6 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
                     # Update existing score
                     existing_score = score_map[section_name][score_name]
                     score_id = existing_score.get('id')
-                    
-                    # Handle ScoreVersion management
-                    # We want to store the complete score_data in the configuration
-                    # This includes all top-level fields like name, id, class, model_name, etc.
                     
                     # Get existing versions for this score
                     existing_versions = existing_score.get('versions', {}).get('items', [])
@@ -1739,7 +1700,6 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
                             del parent_config_obj['parent']
                         
                         # Compare the configurations
-                        # Use ruamel.yaml for better handling of multi-line strings
                         yaml_handler = get_yaml_handler()
                         
                         yaml_str1 = io.StringIO()
@@ -1750,12 +1710,9 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
                         yaml_handler.dump(parent_config_obj, yaml_str2)
                         yaml_str2 = yaml_str2.getvalue()
                         
-                        # Log the comparison for debugging
-                        console.print(f"[dim]Comparing configurations for score: {score_name}[/dim]")
-                        
                         if yaml_str1 == yaml_str2:
                             create_new_version = False
-                            console.print(f"[green]No changes detected for score: {score_name}[/green]")
+                            console.print(f"[dim]No changes detected for score: {score_name}[/dim]")
                         else:
                             console.print(f"[yellow]Changes detected for score: {score_name}[/yellow]")
                     
@@ -1764,9 +1721,7 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
                     current_external_id = existing_score.get('externalId', '')
                     
                     if yaml_id and yaml_id != current_external_id:
-                        console.print(f"[yellow]External ID mismatch for score: {score_name}[/yellow]")
-                        console.print(f"[yellow]  Current: {current_external_id}[/yellow]")
-                        console.print(f"[yellow]  YAML: {yaml_id}[/yellow]")
+                        console.print(f"[yellow]External ID mismatch for score: {score_name} - updating to {yaml_id}[/yellow]")
                         
                         # Update the external ID even if no other changes
                         update_external_id_mutation = f"""
@@ -1781,8 +1736,7 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
                             }}
                         }}
                         """
-                        external_id_result = client.execute(update_external_id_mutation)
-                        console.print(f"[green]Updated external ID for score: {score_name} to {yaml_id}[/green]")
+                        client.execute(update_external_id_mutation)
                     
                     if create_new_version:
                         # Add parent ID to score_data for the new version
@@ -1790,20 +1744,13 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
                             score_config_data['parent'] = parent_version_id
                         
                         # Convert score_data to YAML string for configuration
-                        # Use ruamel.yaml for better handling of multi-line strings
                         yaml_handler = get_yaml_handler()
                         yaml_str = io.StringIO()
                         yaml_handler.dump(score_config_data, yaml_str)
-                        yaml_config = yaml_str.getvalue()
+                        yaml_config_str = yaml_str.getvalue()
                         
-                        # Get version note - either from command line or prompt user
-                        version_note = note
-                        if version_note is None:
-                            console.print(f"[yellow]Creating new version for score: {score_name}[/yellow]")
-                            version_note = click.prompt("Enter a note for this version (press Enter for no note)", default="", show_default=False)
-                        
-                        # Include note in mutation if provided
-                        note_field = f'note: {json.dumps(version_note)},' if version_note else ""
+                        # Get version note
+                        version_note = note or ""
                         
                         # Define timestamp for version creation
                         now = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -1811,11 +1758,14 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
                         # Define parent version field if parent_version_id exists
                         parent_version_field = f'parentVersionId: "{parent_version_id}",' if parent_version_id else ""
                         
+                        # Include note in mutation if provided
+                        note_field = f'note: {json.dumps(version_note)},' if version_note else ""
+                        
                         create_version_mutation = f"""
                         mutation CreateScoreVersion {{
                             createScoreVersion(input: {{
                                 scoreId: "{score_id}"
-                                configuration: {json.dumps(yaml_config)}
+                                configuration: {json.dumps(yaml_config_str)}
                                 isFeatured: true
                                 createdAt: "{now}"
                                 updatedAt: "{now}"
@@ -1838,7 +1788,6 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
                         new_version_id = version_result.get('createScoreVersion', {}).get('id')
                         
                         # Update Score to point to new champion version
-                        # Always use the 'id' field from the YAML as the external ID
                         external_id = str(score_data.get('id', ''))
                         
                         # Ensure key is not an empty string to avoid DynamoDB errors
@@ -1875,14 +1824,16 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
                         """
                         client.execute(update_score_mutation)
                         console.print(f"[green]Created new version for score: {score_name}[/green]")
+                        scores_updated += 1
+                    
+                    scores_processed += 1
+                    
                 else:
                     # Create new score
-                    # Generate a key if one doesn't exist
                     score_key = score_data.get('key', '')
                     if not score_key or not score_key.strip():
                         score_key = generate_key(score_name)
                     
-                    # Always use the 'id' field from the YAML as the external ID
                     external_id = str(score_data.get('id', ''))
                     
                     # Ensure aiProvider and aiModel are not empty strings
@@ -1905,6 +1856,7 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
                             aiProvider: "{ai_provider}"
                             aiModel: "{ai_model}"
                             sectionId: "{section_id}"
+                            scorecardId: "{scorecard_id}"
                         }}) {{
                             id
                             name
@@ -1919,17 +1871,13 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
                     now = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
                     
                     # Convert score_data to YAML string for configuration
-                    # Use ruamel.yaml for better handling of multi-line strings
                     yaml_handler = get_yaml_handler()
                     yaml_str = io.StringIO()
                     yaml_handler.dump(score_config_data, yaml_str)
-                    yaml_config = yaml_str.getvalue()
+                    yaml_config_str = yaml_str.getvalue()
                     
-                    # Get version note - either from command line or prompt user
-                    version_note = note
-                    if version_note is None:
-                        console.print(f"[yellow]Creating initial version for new score: {score_name}[/yellow]")
-                        version_note = click.prompt("Enter a note for this version (press Enter for no note)", default="", show_default=False)
+                    # Get version note
+                    version_note = note or ""
                     
                     # Include note in mutation if provided
                     note_field = f'note: {json.dumps(version_note)},' if version_note else ""
@@ -1938,7 +1886,7 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
                     mutation CreateScoreVersion {{
                         createScoreVersion(input: {{
                             scoreId: "{new_score_id}"
-                            configuration: {json.dumps(yaml_config)}
+                            configuration: {json.dumps(yaml_config_str)}
                             isFeatured: true
                             createdAt: "{now}"
                             updatedAt: "{now}"
@@ -1959,23 +1907,6 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
                     new_version_id = version_result.get('createScoreVersion', {}).get('id')
                     
                     # Update Score to point to new champion version
-                    # Always use the 'id' field from the YAML as the external ID
-                    external_id = str(score_data.get('id', ''))
-                    
-                    # Ensure key is not an empty string to avoid DynamoDB errors
-                    score_key = score_data.get('key', '')
-                    if not score_key or score_key.strip() == '':
-                        score_key = generate_key(score_name)
-                    
-                    # Ensure aiProvider and aiModel are not empty strings
-                    ai_provider = score_data.get('model_provider', '')
-                    if not ai_provider or ai_provider.strip() == '':
-                        ai_provider = "unknown"
-                        
-                    ai_model = score_data.get('model_name', '')
-                    if not ai_model or ai_model.strip() == '':
-                        ai_model = "unknown"
-                    
                     update_score_mutation = f"""
                     mutation UpdateScore {{
                         updateScore(input: {{
@@ -1996,6 +1927,13 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
                     """
                     client.execute(update_score_mutation)
                     console.print(f"[green]Created new score with initial version: {score_name}[/green]")
+                    scores_created += 1
+                    scores_processed += 1
+            
+            if scores_processed > 0:
+                console.print(f"[green]Processed {scores_processed} scores ({scores_created} created, {scores_updated} updated)[/green]")
+        else:
+            console.print("[dim]No scores found in YAML configuration[/dim]")
         
         # Check for duplicates if requested
         if not skip_duplicate_check:
@@ -2005,10 +1943,96 @@ def push(scorecard: str, account: str, skip_duplicate_check: bool, skip_external
         if not skip_external_id_check:
             ensure_valid_external_ids(client, scorecard_id)
         
-        console.print("\n[green]Push operation completed successfully[/green]")
+        return True
         
     except Exception as e:
-        console.print(f"[red]Error during push operation: {e}[/red]") 
+        console.print(f"[red]Error processing scorecard {scorecard_identifier}: {e}[/red]")
+        return False
+
+@scorecards.command()
+@click.option('--scorecard', help='Scorecard to push (accepts ID, name, key, or external ID)')
+@click.option('--all', is_flag=True, help='Push all scorecards found in the scorecards directory')
+@click.option('--account', default='call-criteria', help='Account to push scorecard to (accepts ID, name, or key)')
+@click.option('--skip-duplicate-check', is_flag=True, help='Skip checking for and removing duplicate scores')
+@click.option('--skip-external-id-check', is_flag=True, help='Skip checking for and fixing missing external IDs')
+@click.option('--file', help='Path to specific YAML file to push (if not provided, will search in scorecards/ directory)')
+@click.option('--note', help='Note to include when creating a new score version')
+@click.option('--create-if-missing', is_flag=True, help='Create the scorecard if it does not exist')
+def push(scorecard: Optional[str], all: bool, account: str, skip_duplicate_check: bool, skip_external_id_check: bool, file: Optional[str] = None, note: Optional[str] = None, create_if_missing: bool = False):
+    """Push a scorecard to the dashboard."""
+    client = create_client()
+    
+    # Validate input - either --all or --scorecard must be provided
+    if all and scorecard:
+        console.print("[red]Cannot specify both --all and --scorecard options[/red]")
+        return
+    
+    if not all and not scorecard:
+        console.print("[red]Must specify either --all or --scorecard option[/red]")
+        return
+    
+    # If --all flag is used, push all scorecards in the directory
+    if all:
+        if not os.path.exists('scorecards'):
+            console.print("[red]scorecards/ directory not found[/red]")
+            return
+        
+        yaml_files = [f for f in os.listdir('scorecards') if f.endswith('.yaml')]
+        if not yaml_files:
+            console.print("[red]No YAML files found in scorecards/ directory[/red]")
+            return
+        
+        console.print(f"[green]Found {len(yaml_files)} YAML files to push[/green]")
+        
+        # Process each YAML file
+        for yaml_file in yaml_files:
+            yaml_file_path = os.path.join('scorecards', yaml_file)
+            scorecard_name_from_file = os.path.splitext(yaml_file)[0]
+            
+            console.print(f"\n[bold]Processing {yaml_file}...[/bold]")
+            
+            try:
+                # Load YAML data
+                yaml_handler = get_yaml_handler()
+                with open(yaml_file_path, 'r') as f:
+                    yaml_data = yaml_handler.load(f)
+                
+                # Use the scorecard key or name from the YAML, or fallback to filename
+                scorecard_identifier = yaml_data.get('key') or yaml_data.get('name') or scorecard_name_from_file
+                
+                # Process this individual scorecard using the same logic as the single scorecard push
+                # Set the scorecard variable to the identifier for this file
+                scorecard = scorecard_identifier
+                file = yaml_file_path
+                
+                # Execute the single scorecard push logic
+                success = _process_single_scorecard_push(
+                    client, scorecard, account, skip_duplicate_check, 
+                    skip_external_id_check, file, yaml_data, note, create_if_missing
+                )
+                
+                if success:
+                    console.print(f"[green]✓ Successfully pushed {yaml_file}[/green]")
+                else:
+                    console.print(f"[red]✗ Failed to push {yaml_file}[/red]")
+                
+            except Exception as e:
+                console.print(f"[red]Error processing {yaml_file}: {e}[/red]")
+                continue
+        
+        console.print("\n[green]Finished pushing all scorecards[/green]")
+        return
+    
+    # Handle single scorecard push
+    success = _process_single_scorecard_push(
+        client, scorecard, account, skip_duplicate_check, 
+        skip_external_id_check, file, None, note, create_if_missing
+    )
+    
+    if success:
+        console.print("\n[green]Push operation completed successfully[/green]")
+    else:
+        console.print("\n[red]Push operation failed[/red]") 
 
 @scorecards.command()
 @click.option('--account', help='Filter by account (accepts ID, name, or key)')

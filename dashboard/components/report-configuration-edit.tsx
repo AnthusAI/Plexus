@@ -14,6 +14,7 @@ import Editor, { Monaco } from '@monaco-editor/react'
 import * as monaco from 'monaco-editor'
 import type { editor } from 'monaco-editor'
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
+import { defineCustomMonacoThemes, applyMonacoTheme, setupMonacoThemeWatcher, getCommonMonacoOptions } from '@/lib/monaco-theme'
 
 // Define types based on Amplify schema
 type ReportConfiguration = {
@@ -91,8 +92,6 @@ export function ReportConfigurationEdit({ id }: { id: string }) {
   const [error, setError] = useState<string | null>(null)
   const [accountId, setAccountId] = useState<string | null>(null)
   const [hasChanges, setHasChanges] = useState(false)
-  const [editorHeight, setEditorHeight] = useState(500)
-  const [isEditorFullscreen, setIsEditorFullscreen] = useState(false)
   const monacoRef = useRef<Monaco | null>(null)
   const editorInstanceRef = useRef<editor.IStandaloneCodeEditor | null>(null)
 
@@ -177,107 +176,13 @@ export function ReportConfigurationEdit({ id }: { id: string }) {
     fetchConfiguration()
   }, [id, accountId])
 
-  // Define custom Monaco theme
-  const defineCustomTheme = useCallback((monaco: Monaco) => {
-    const getCssVar = (name: string) => {
-      const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
-      if (value.startsWith('hsl(')) {
-        const tempEl = document.createElement('div')
-        tempEl.style.color = value
-        document.body.appendChild(tempEl)
-        const computedColor = getComputedStyle(tempEl).color
-        document.body.removeChild(tempEl)
-        if (computedColor.startsWith('rgb')) {
-          const rgbValues = computedColor.match(/\d+/g)
-          if (rgbValues && rgbValues.length >= 3) {
-            const hex = rgbValues.slice(0, 3).map(x => {
-              const hex = parseInt(x).toString(16)
-              return hex.length === 1 ? '0' + hex : hex
-            }).join('')
-            return hex
-          }
-        }
-      }
-      if (value.startsWith('#')) {
-        return value.substring(1)
-      }
-      return value
-    }
-
-    const commonRules = [
-      { token: 'comment', foreground: getCssVar('--muted-foreground'), fontStyle: 'italic' },
-      { token: 'type', foreground: getCssVar('--primary') },
-      { token: 'key', foreground: getCssVar('--primary') },
-      { token: 'string', foreground: getCssVar('--foreground') },
-      { token: 'number', foreground: getCssVar('--foreground') },
-      { token: 'boolean', foreground: getCssVar('--foreground') },
-      { token: 'delimiter', foreground: getCssVar('--muted-foreground') },
-      { token: 'bracket', foreground: getCssVar('--muted-foreground') },
-      { token: 'keyword', foreground: getCssVar('--accent') },
-      { token: 'identifier', foreground: getCssVar('--foreground') },
-      { token: 'tag', foreground: getCssVar('--primary') },
-      { token: 'number.yaml', foreground: getCssVar('--foreground') },
-      { token: 'string.yaml', foreground: getCssVar('--foreground') },
-      { token: 'keyword.yaml', foreground: getCssVar('--accent') },
-    ]
-
-    monaco.editor.defineTheme('plexusLightTheme', {
-      base: 'vs',
-      inherit: true,
-      rules: commonRules,
-      colors: {
-        'editor.background': '#' + getCssVar('--background'),
-        'editor.foreground': '#' + getCssVar('--foreground'),
-        'editor.lineHighlightBackground': '#' + getCssVar('--muted'),
-        'editorLineNumber.foreground': '#' + getCssVar('--muted-foreground'),
-        'editor.selectionBackground': '#' + getCssVar('--primary'),
-        'editorIndentGuide.background': '#' + getCssVar('--border'),
-        'editor.selectionHighlightBackground': '#' + getCssVar('--muted'),
-        'editorCursor.foreground': '#' + getCssVar('--foreground'),
-        'editorWhitespace.foreground': '#' + getCssVar('--border'),
-        'editorLineNumber.activeForeground': '#' + getCssVar('--foreground'),
-      }
-    } as editor.IStandaloneThemeData)
-
-    monaco.editor.defineTheme('plexusDarkTheme', {
-      base: 'vs-dark',
-      inherit: true,
-      rules: commonRules,
-      colors: {
-        'editor.background': '#' + getCssVar('--background'),
-        'editor.foreground': '#' + getCssVar('--foreground'),
-        'editor.lineHighlightBackground': '#' + getCssVar('--muted'),
-        'editorLineNumber.foreground': '#' + getCssVar('--muted-foreground'),
-        'editor.selectionBackground': '#' + getCssVar('--primary'),
-        'editorIndentGuide.background': '#' + getCssVar('--border'),
-        'editor.selectionHighlightBackground': '#' + getCssVar('--muted'),
-        'editorCursor.foreground': '#' + getCssVar('--foreground'),
-        'editorWhitespace.foreground': '#' + getCssVar('--border'),
-        'editorLineNumber.activeForeground': '#' + getCssVar('--foreground'),
-      }
-    } as editor.IStandaloneThemeData)
-  }, [])
-
-  // Apply theme changes
+  // Set up Monaco theme watcher
   useEffect(() => {
-    const applyTheme = () => {
-      if (!monacoRef.current) return
-      const isDarkMode = document.documentElement.classList.contains('dark')
-      defineCustomTheme(monacoRef.current)
-      monacoRef.current.editor.setTheme(isDarkMode ? 'plexusDarkTheme' : 'plexusLightTheme')
-    }
-
-    applyTheme()
-    const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        if (mutation.attributeName === 'class') {
-          applyTheme()
-        }
-      })
-    })
-    observer.observe(document.documentElement, { attributes: true })
-    return () => observer.disconnect()
-  }, [defineCustomTheme])
+    if (!monacoRef.current) return
+    
+    const cleanup = setupMonacoThemeWatcher(monacoRef.current)
+    return cleanup
+  }, [monacoRef.current])
 
   const handleSave = async () => {
     if (!configuration || !accountId) return
@@ -357,71 +262,54 @@ export function ReportConfigurationEdit({ id }: { id: string }) {
         </div>
       </div>
 
-      {/* Main Content Area */}
-      <div className="flex-1 p-1.5 overflow-y-auto">
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Input
-              value={configuration.name}
-              onChange={(e) => {
-                setConfiguration(prev => prev ? { ...prev, name: e.target.value } : null)
-                setHasChanges(true)
-              }}
-              className="text-lg font-semibold bg-background border-0 px-2 h-auto w-full
-                       focus-visible:ring-0 focus-visible:ring-offset-0 
-                       placeholder:text-muted-foreground rounded-md"
-              placeholder="Configuration Name"
-            />
-            <Input
-              value={configuration.description || ''}
-              onChange={(e) => {
-                setConfiguration(prev => prev ? { ...prev, description: e.target.value } : null)
-                setHasChanges(true)
-              }}
-              className="bg-background border-0 px-2 h-auto w-full
-                       focus-visible:ring-0 focus-visible:ring-offset-0 
-                       placeholder:text-muted-foreground rounded-md"
-              placeholder="Description (optional)"
-            />
-          </div>
+      {/* Main Content Area - Now uses flex-1 to fill remaining space */}
+      <div className="flex-1 flex flex-col p-1.5 min-h-0">
+        {/* Form Fields - Fixed height section */}
+        <div className="flex-none space-y-2 mb-4">
+          <Input
+            value={configuration.name}
+            onChange={(e) => {
+              setConfiguration(prev => prev ? { ...prev, name: e.target.value } : null)
+              setHasChanges(true)
+            }}
+            className="text-lg font-semibold bg-background border-0 px-2 h-auto w-full
+                     focus-visible:ring-0 focus-visible:ring-offset-0 
+                     placeholder:text-muted-foreground rounded-md"
+            placeholder="Configuration Name"
+          />
+          <Input
+            value={configuration.description || ''}
+            onChange={(e) => {
+              setConfiguration(prev => prev ? { ...prev, description: e.target.value } : null)
+              setHasChanges(true)
+            }}
+            className="bg-background border-0 px-2 h-auto w-full
+                     focus-visible:ring-0 focus-visible:ring-offset-0 
+                     placeholder:text-muted-foreground rounded-md"
+            placeholder="Description (optional)"
+          />
+        </div>
 
-          <div className="border rounded-md overflow-hidden">
-            <Editor
-              height={editorHeight}
-              defaultLanguage="yaml"
-              value={configuration.configuration}
-              onChange={(value) => {
-                if (!value) return
-                setConfiguration(prev => prev ? { ...prev, configuration: value } : null)
-                setHasChanges(true)
-              }}
-              onMount={(editor, monaco) => {
-                editorInstanceRef.current = editor
-                monacoRef.current = monaco
-                defineCustomTheme(monaco)
-                const isDarkMode = document.documentElement.classList.contains('dark')
-                monaco.editor.setTheme(isDarkMode ? 'plexusDarkTheme' : 'plexusLightTheme')
-                editor.layout()
-              }}
-              options={{
-                minimap: { enabled: false },
-                fontSize: 14,
-                lineNumbers: 'on',
-                scrollBeyondLastLine: false,
-                wordWrap: 'on',
-                wrappingIndent: 'indent',
-                automaticLayout: true,
-                fontFamily: 'monospace',
-                fontLigatures: true,
-                contextmenu: true,
-                cursorBlinking: 'smooth',
-                cursorSmoothCaretAnimation: 'on',
-                smoothScrolling: true,
-                renderLineHighlight: 'all',
-                colorDecorators: true
-              }}
-            />
-          </div>
+        {/* Editor Container - Takes up remaining space */}
+        <div className="flex-1 border rounded-md overflow-hidden min-h-0">
+          <Editor
+            height="100%"
+            defaultLanguage="yaml"
+            value={configuration.configuration}
+            onChange={(value) => {
+              if (!value) return
+              setConfiguration(prev => prev ? { ...prev, configuration: value } : null)
+              setHasChanges(true)
+            }}
+            onMount={(editor, monaco) => {
+              editorInstanceRef.current = editor
+              monacoRef.current = monaco
+              defineCustomMonacoThemes(monaco)
+              applyMonacoTheme(monaco)
+              editor.layout()
+            }}
+            options={getCommonMonacoOptions()}
+          />
         </div>
       </div>
     </div>

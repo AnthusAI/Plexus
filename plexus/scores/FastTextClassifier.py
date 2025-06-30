@@ -3,7 +3,7 @@ import numpy as np
 import re
 from pydantic import Field
 from plexus.CustomLogging import logging
-import fasttext
+# import fasttext
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix
@@ -12,7 +12,7 @@ import mlflow.pyfunc
 
 from plexus.scores.Score import Score
 
-fasttext.FastText.eprint = lambda x: None
+# fasttext.FastText.eprint = lambda x: None
 
 class FastTextClassifier(Score):
 
@@ -107,24 +107,24 @@ class FastTextClassifier(Score):
             sample_lines = f.readlines()[:5]
         logging.info(f"Sample lines from training file:\n{''.join(sample_lines)}")
 
-        self.model = fasttext.train_supervised(
-            input=train_filename,
-            lr=self.parameters.learning_rate,
-            dim=self.parameters.dimension,
-            ws=self.parameters.window_size,
-            epoch=self.parameters.number_of_epochs,
-            minCount=self.parameters.minimum_word_count,
-            minCountLabel=self.parameters.minimum_label_count,
-            minn=self.parameters.minimum_character_ngram_length,
-            maxn=self.parameters.maximum_character_ngram_length,
-            neg=self.parameters.number_of_negative_samples,
-            wordNgrams=self.parameters.word_ngram_count,
-            loss=self.parameters.loss_function,
-            bucket=self.parameters.bucket_size,
-            thread=self.parameters.number_of_threads,
-            lrUpdateRate=self.parameters.learning_rate_update_rate,
-            t=self.parameters.sampling_threshold
-        )
+        # self.model = fasttext.train_supervised(
+        #     input=train_filename,
+        #     lr=self.parameters.learning_rate,
+        #     dim=self.parameters.dimension,
+        #     ws=self.parameters.window_size,
+        #     epoch=self.parameters.number_of_epochs,
+        #     minCount=self.parameters.minimum_word_count,
+        #     minCountLabel=self.parameters.minimum_label_count,
+        #     minn=self.parameters.minimum_character_ngram_length,
+        #     maxn=self.parameters.maximum_character_ngram_length,
+        #     neg=self.parameters.number_of_negative_samples,
+        #     wordNgrams=self.parameters.word_ngram_count,
+        #     loss=self.parameters.loss_function,
+        #     bucket=self.parameters.bucket_size,
+        #     thread=self.parameters.number_of_threads,
+        #     lrUpdateRate=self.parameters.learning_rate_update_rate,
+        #     t=self.parameters.sampling_threshold
+        # )
 
         logging.info("Model trained successfully!")
 
@@ -249,7 +249,7 @@ class FastTextClassifier(Score):
         # Register the model with MLflow
         model_name = self._model_name()
         model_binary_path = f"{self._model_name()}.bin"
-        mlflow.fasttext.log_model(self.model, model_name)
+        # mlflow.fasttext.log_model(self.model, model_name)
         logging.info(f"Model registered successfully with name: {model_name}")
 
     def save_model(self):
@@ -258,7 +258,8 @@ class FastTextClassifier(Score):
         logging.info(f"Model binary saved to {model_binary_path}")
 
     def load_model(self, model_path):
-        self.model = fasttext.load_model(model_path)
+        # self.model = fasttext.load_model(model_path)
+        pass
 
     def load_context(self, context):
         # The context object will contain the path to the model binary
@@ -269,7 +270,8 @@ class FastTextClassifier(Score):
         elif model_path.endswith("."):
             model_path = model_path[:-1]  # Remove the erroneous character
 
-        self.model = fasttext.load_model(model_path)
+        # self.model = fasttext.load_model(model_path)
+        pass
 
     def get_model_artifact_path(self):
         # Retrieve the model path from MLflow

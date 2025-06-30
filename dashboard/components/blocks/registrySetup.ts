@@ -6,18 +6,27 @@
  */
 
 import { registerBlock } from './BlockRegistry';
-import ScoreInfo from './ScoreInfo';
+import { BlockComponent } from './ReportBlock';
 import ReportBlock from './ReportBlock';
-import TextBlock from './TextBlock'; // Assuming TextBlock exists and should be registered
+import TextBlock from './TextBlock';
 import FeedbackAnalysis from './FeedbackAnalysis';
+import ScorecardReport from './ScorecardReport';
+import ScoreInfo from './ScoreInfo';
+import TopicAnalysis from './TopicAnalysis';
 
 // Register all block components
-console.log("Running Block Registry Setup..."); // Add log for debugging
-registerBlock('ScoreInfo', ScoreInfo as any); // Keep the 'as any' for now if it was there
-registerBlock('FeedbackAnalysis', FeedbackAnalysis as any);
-registerBlock('default', ReportBlock);
-// If TextBlock registers itself, remove its import and registration here.
-// Otherwise, ensure it's registered correctly:
-// registerBlock('TextBlock', TextBlock); 
+console.log("Running Block Registry Setup...");
 
-console.log("Block Registry Setup Complete."); 
+// Register the default block handler first
+registerBlock('default', ReportBlock);
+
+// Register specific block types - use type casting to satisfy BlockComponent interface
+registerBlock('ScorecardReport', ScorecardReport as BlockComponent);
+registerBlock('FeedbackAnalysis', FeedbackAnalysis as BlockComponent);
+registerBlock('text', TextBlock as BlockComponent);
+registerBlock('ScoreInfo', ScoreInfo as BlockComponent);
+registerBlock('TopicAnalysis', TopicAnalysis as BlockComponent);
+
+// Log all registered block types
+import { getRegisteredBlockTypes } from './BlockRegistry';
+console.log("Registered block types:", getRegisteredBlockTypes()); 

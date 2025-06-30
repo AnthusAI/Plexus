@@ -72,7 +72,7 @@ const mockVersions = [
 ]
 
 const meta = {
-  title: 'UI/ScoreVersionHistory',
+  title: 'Scorecards/ScoreVersionHistory',
   component: ScoreVersionHistory,
   parameters: {
     layout: 'centered',

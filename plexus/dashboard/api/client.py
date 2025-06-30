@@ -744,6 +744,43 @@ class _BaseAPIClient:
             logging.error(f"Error updating evaluation: {e}")
             raise
 
+    def generate_deep_link(self, url_pattern: str, params: Dict[str, str]) -> str:
+        """
+        Generate a deep link URL to a Plexus dashboard resource.
+        
+        Args:
+            url_pattern: URL pattern with placeholders (e.g., "/reports/{reportId}")
+            params: Dictionary of parameters to fill into the URL pattern
+                   (e.g., {"reportId": "123"})
+        
+        Returns:
+            Complete URL including protocol and hostname
+        
+        Example:
+            client.generate_deep_link("/reports/{reportId}", {"reportId": "123"})
+            # Returns: "https://app.plexus.domain/reports/123"
+        """
+        # Use environment variable for base URL, with fallback to a default
+        base_url = os.environ.get('PLEXUS_DASHBOARD_URL', 'https://app.plexus.ai')
+        
+        # Remove trailing slash from base_url if present
+        if base_url.endswith('/'):
+            base_url = base_url[:-1]
+        
+        # Add leading slash to url_pattern if not present
+        if not url_pattern.startswith('/'):
+            url_pattern = '/' + url_pattern
+            
+        # Replace placeholders in the URL pattern
+        for key, value in params.items():
+            placeholder = f"{{{key}}}"
+            url_pattern = url_pattern.replace(placeholder, value)
+            
+        # Combine the base URL with the filled pattern
+        full_url = f"{base_url}{url_pattern}"
+        
+        return full_url
+
 class PlexusDashboardClient(_BaseAPIClient):
     """
     Client for the Plexus Dashboard API.
@@ -760,6 +797,7 @@ class PlexusDashboardClient(_BaseAPIClient):
     - Thread-safe operations
     - Context management for accounts, scorecards, and scores
     """
+    
     def __init__(
         self,
         api_url: Optional[str] = None,
@@ -767,7 +805,16 @@ class PlexusDashboardClient(_BaseAPIClient):
         context: Optional[ClientContext] = None
     ):
         super().__init__(api_url=api_url, api_key=api_key, context=context)
-
+        
+    # Context manager methods
+    def __enter__(self):
+        """Make the client usable as a context manager, returning the GQL client."""
+        return self.client
+        
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Handle cleanup when exiting the context manager."""
+        return False  # Don't suppress exceptions
+    
     @classmethod
     def for_account(cls, account_key: str) -> 'PlexusDashboardClient':
         """Create a client initialized with account context"""
