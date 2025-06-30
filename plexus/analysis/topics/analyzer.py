@@ -205,7 +205,8 @@ def analyze_topics(
     openai_api_key: Optional[str] = None,
     use_langchain: bool = False,
     representation_model_provider: str = "openai",
-    representation_model_name: str = "gpt-4o-mini"
+    representation_model_name: str = "gpt-4o-mini",
+    transformed_data_path: Optional[str] = None
 ) -> Optional[BERTopic]:
     """
     Perform BERTopic analysis on transformed transcripts.
@@ -222,6 +223,7 @@ def analyze_topics(
         use_langchain: Whether to use LangChain for representation model (default: False)
         representation_model_provider: LLM provider for topic naming (default: "openai")
         representation_model_name: Specific model name for topic naming (default: "gpt-4o-mini")
+        transformed_data_path: Path to parquet file with transformed data including ids column
         
     Returns:
         BERTopic: The fitted topic model with discovered topics, or None if analysis fails
@@ -552,6 +554,20 @@ def analyze_topics(
     # --- Extract and Save Representative Documents ---
     logger.info("Extracting representative documents for each topic...")
     try:
+        # Load transformed data if available to get ids column
+        transformed_df = None
+        if transformed_data_path and os.path.exists(transformed_data_path):
+            try:
+                transformed_df = pd.read_parquet(transformed_data_path)
+                logger.info(f"Loaded transformed data with {len(transformed_df)} rows from {transformed_data_path}")
+                if 'ids' in transformed_df.columns:
+                    logger.info("Found 'ids' column in transformed data")
+                else:
+                    logger.info("No 'ids' column found in transformed data")
+            except Exception as e:
+                logger.warning(f"Could not load transformed data from {transformed_data_path}: {e}")
+                transformed_df = None
+        
         # Get representative documents using BERTopic's method
         # Note: BERTopic's get_representative_docs() method by default returns only 3 docs per topic
         # We need to use a different approach to get more representative documents
@@ -566,10 +582,27 @@ def analyze_topics(
                 topic_docs = []
                 for i, doc_topic in enumerate(topics):
                     if doc_topic == topic_id:
-                        topic_docs.append((i, docs[i]))
+                        doc_data = {"text": docs[i]}
+                        
+                        # Add ids if available from transformed data
+                        if transformed_df is not None and i < len(transformed_df) and 'ids' in transformed_df.columns:
+                            ids_value = transformed_df.iloc[i].get('ids')
+                            if pd.notna(ids_value):
+                                try:
+                                    # Parse JSON if it's a string
+                                    if isinstance(ids_value, str):
+                                        import json
+                                        doc_data["ids"] = json.loads(ids_value)
+                                    else:
+                                        doc_data["ids"] = ids_value
+                                except (json.JSONDecodeError, TypeError):
+                                    # If parsing fails, store as-is
+                                    doc_data["ids"] = ids_value
+                        
+                        topic_docs.append((i, doc_data))
                 
                 # Just take the first 20 documents for this topic (simplified to avoid probability access issues)
-                representative_docs[topic_id] = [doc for _, doc in topic_docs[:20]]
+                representative_docs[topic_id] = [doc_data for _, doc_data in topic_docs[:20]]
                 
                 logger.info(f"Topic {topic_id}: Found {len(topic_docs)} total docs, selected {len(representative_docs[topic_id])} representative docs")
         
