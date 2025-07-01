@@ -1,5 +1,5 @@
 import type { Monaco } from '@monaco-editor/react'
-import type { editor } from 'monaco-editor'
+import type { editor, CancellationToken } from 'monaco-editor'
 
 /**
  * Helper function to get CSS variable value and convert it to hex format for Monaco
@@ -200,13 +200,16 @@ export const configureYamlLanguage = (monaco: Monaco): void => {
       tokenTypes: ['comment', 'string', 'keyword', 'number', 'type', 'class', 'function'],
       tokenModifiers: ['declaration', 'documentation']
     }),
-    provideDocumentSemanticTokens: (model: editor.ITextModel) => {
+    provideDocumentSemanticTokens: (model: editor.ITextModel, lastResultId: string | null, token: CancellationToken) => {
       // This helps with better syntax highlighting
       const data: number[] = []
       return {
         data: new Uint32Array(data),
-        resultId: null
+        resultId: undefined
       }
+    },
+    releaseDocumentSemanticTokens: (resultId: string) => {
+      // Optional cleanup method - no action needed for our simple implementation
     }
   })
 
