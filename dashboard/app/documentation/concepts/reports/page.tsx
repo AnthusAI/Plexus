@@ -127,11 +127,14 @@ python -m plexus.cli.CommandLineInterface report last`}</code>
         <section>
           <h2 className="text-2xl font-semibold mb-4">Next Steps</h2>
           <p className="text-muted-foreground mb-4">
-            Explore how Reports integrate with other core concepts like Scores and Evaluations. Check the CLI documentation for detailed commands on managing and running reports.
+            Explore how Reports integrate with other core concepts like Scores and Evaluations. Check the CLI documentation for detailed commands on managing and running reports, or browse the available report blocks to see what types of analysis you can include in your reports.
           </p>
           <div className="flex gap-4">
             <Link href="/documentation/concepts">
               <DocButton variant="outline">Back to Core Concepts</DocButton>
+            </Link>
+            <Link href="/documentation/report-blocks">
+              <DocButton>Browse Report Blocks</DocButton>
             </Link>
             {/* Add link to specific CLI docs page when available */}
             {/* <Link href="/documentation/cli/reports">

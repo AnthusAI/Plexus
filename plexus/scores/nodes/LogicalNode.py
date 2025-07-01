@@ -1,6 +1,6 @@
 from typing import Optional, Dict
 from pydantic import Field
-from langgraph.graph import StateGraph
+from langgraph.graph import StateGraph, END
 from plexus.scores.nodes.BaseNode import BaseNode
 from plexus.CustomLogging import logging
 
@@ -39,15 +39,17 @@ class LogicalNode(BaseNode):
         if not self.execute_function:
             raise ValueError(f"Code must define a '{function_name}' function")
 
-    def get_execute_node(self):
+    def get_execute_node(self, graph_state_class=None):
         """Node that executes the user-defined function."""
         execute_function = self.execute_function
         parameters = self.parameters
+        # Use the passed graph_state_class or fall back to self.GraphState
+        StateClass = graph_state_class or self.GraphState
 
         def execute_code(state):
             logging.info(f"<*> Entering LogicalNode execute_code node: {self.node_name}")
             if isinstance(state, dict):
-                state = self.GraphState(**state)
+                state = StateClass(**state)
 
             # Create a merged metadata dictionary that includes both the existing metadata
             # and all state attributes (excluding 'metadata' itself to avoid recursion)
@@ -109,7 +111,7 @@ class LogicalNode(BaseNode):
                     logging.info(f"Stored result: {result}")
             
             # Create the updated state
-            result_state = self.GraphState(**state_update)
+            result_state = StateClass(**state_update)
             
             # Log the state changes
             output_state = {}
@@ -129,8 +131,34 @@ class LogicalNode(BaseNode):
             
             logging.info(f"LogicalNode output_state: {output_state}")
             
-            # Log the state and get a new state object with updated node_results
-            updated_state = self.log_state(result_state, {}, output_state)
+            # Log the state and get a new state object with updated node_results  
+            # Use the correct state class for logging
+            if hasattr(self, 'GraphStateClass'):
+                # Manually log state to avoid BaseNode.log_state using wrong state class
+                logging.info(f"=== LOGGING STATE FOR {self.node_name} ===")
+                updated_state = result_state
+            else:
+                updated_state = self.log_state(result_state, {}, output_state)
+            
+            # ENHANCED DEBUGGING - Log final state details
+            logging.info(f"=== LogicalNode {self.node_name} Final State Debug ===")
+            logging.info(f"Final state type: {type(updated_state)}")
+            logging.info(f"Final state model_fields: {list(updated_state.model_fields.keys())}")
+            final_state_dict = updated_state.model_dump()
+            logging.info(f"Final state dict keys: {list(final_state_dict.keys())}")
+            
+            # Check if campaign_name specifically exists
+            if hasattr(updated_state, 'campaign_name'):
+                logging.info(f"✅ campaign_name exists in state: {getattr(updated_state, 'campaign_name')}")
+            else:
+                logging.info(f"❌ campaign_name NOT found in state attributes")
+                
+            if 'campaign_name' in final_state_dict:
+                logging.info(f"✅ campaign_name exists in state dict: {final_state_dict['campaign_name']}")
+            else:
+                logging.info(f"❌ campaign_name NOT found in state dict")
+            
+            logging.info(f"=== End LogicalNode {self.node_name} Debug ===")
             
             return updated_state
 
@@ -140,3 +168,37 @@ class LogicalNode(BaseNode):
         """Add core nodes to the workflow."""
         workflow.add_node(self.node_name, self.get_execute_node())
         return workflow
+    
+    def build_compiled_workflow(self, graph_state_class):
+        """Override to use the correct graph_state_class instead of inheriting from BaseNode."""
+        workflow = StateGraph(graph_state_class)
+        
+        # Store the graph_state_class for use in node functions
+        self.GraphStateClass = graph_state_class
+        
+        # Add input aliasing function if needed
+        if hasattr(self.parameters, 'input') and self.parameters.input is not None:
+            input_aliasing_function = LangGraphScore.generate_input_aliasing_function(self.parameters.input)
+            workflow.add_node('input_aliasing', input_aliasing_function)
+
+        # Add the execute node using the correct state class
+        workflow.add_node(self.node_name, self.get_execute_node(graph_state_class))
+        
+        # Handle edges
+        if 'input_aliasing' in workflow.nodes:
+            workflow.add_edge('input_aliasing', self.node_name)
+            workflow.set_entry_point('input_aliasing')
+        else:
+            workflow.set_entry_point(self.node_name)
+
+        # Add output aliasing function if needed
+        if hasattr(self.parameters, 'output') and self.parameters.output is not None:
+            from plexus.scores.LangGraphScore import LangGraphScore
+            output_aliasing_function = LangGraphScore.generate_output_aliasing_function(self.parameters.output)
+            workflow.add_node('output_aliasing', output_aliasing_function)
+            workflow.add_edge(self.node_name, 'output_aliasing')
+            workflow.add_edge('output_aliasing', END)
+        else:
+            workflow.add_edge(self.node_name, END)
+        
+        return workflow.compile()
