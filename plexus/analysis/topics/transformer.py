@@ -241,6 +241,9 @@ def transform_transcripts(
             # Create new row with speaking turn
             new_row = row.copy()
             new_row[content_column] = turn
+            # Preserve ids column if it exists
+            if 'ids' in row.index and pd.notna(row.get('ids')):
+                new_row['ids'] = row['ids']
             transformed_rows.append(new_row)
     
     # Create transformed DataFrame
@@ -641,6 +644,9 @@ async def _transform_transcripts_llm_async(
                 # Create new row with LLM response
                 new_row = row.copy()
                 new_row[content_column] = response_text
+                # Preserve ids column if it exists
+                if 'ids' in row.index and pd.notna(row.get('ids')):
+                    new_row['ids'] = row['ids']
                 transformed_rows.append(new_row)
                 
                 # Write to the file
@@ -1012,16 +1018,20 @@ async def _process_itemize_transcript_async(
                     # Fall back to retry parser if all extraction attempts fail
                     if not json_extracted:
                         logger.debug("All JSON extraction attempts failed, attempting retry parser")
-                        # Use the original prompt object for retry parser
-                        parsed_items = await retry_parser.aparse_with_prompt(response_text, prompt)
+                        # Create a proper prompt value for retry parser
+                        from langchain_core.prompt_values import StringPromptValue
+                        prompt_value = StringPromptValue(text=formatted_prompt)
+                        parsed_items = await retry_parser.aparse_with_prompt(response_text, prompt_value)
                         logger.debug("Retry parser succeeded")
                         success = True
                 
             except ValidationError as ve:
                 logger.debug(f"Validation error: {ve}")
                 logger.debug("Attempting retry parser")
-                # Use the original prompt object for retry parser
-                parsed_items = await retry_parser.aparse_with_prompt(response_text, prompt)
+                # Create a proper prompt value for retry parser
+                from langchain_core.prompt_values import StringPromptValue
+                prompt_value = StringPromptValue(text=formatted_prompt)
+                parsed_items = await retry_parser.aparse_with_prompt(response_text, prompt_value)
                 logger.debug("Retry parser succeeded")
                 success = True
             
@@ -1051,91 +1061,98 @@ async def _process_itemize_transcript_async(
 async def _process_itemize_batch_async(
     llm, prompt, rows, indices, parser, retry_parser, provider, total_count, max_retries, retry_delay, content_column, simple_format
 ):
-    """
-    Process a batch of transcripts asynchronously for itemization.
-    Args:
-        llm: Language model
-        prompt: Prompt template
-        rows: List of DataFrame rows
-        indices: List of indices for the batch
-        parser: Pydantic parser
-        retry_parser: Retry parser for handling errors
-        provider: LLM provider
-        total_count: Total number of transcripts
-        max_retries: Maximum number of retries for parsing failures
-        retry_delay: Delay between retries in seconds
-        content_column: Name of column containing transcript content
-    Returns:
-        List of results
-    """
-    results = []
-    logger.info(f"Processing batch of {len(rows)} transcripts for itemization ({indices[0]+1}-{indices[-1]+1} of {total_count})")
+    """Process a batch of transcripts asynchronously with concurrency limits to prevent deadlocks."""
+    
+    # Set concurrency limits based on provider to prevent overwhelming the system
+    if provider.lower() == 'openai':
+        max_concurrent = 10  # Conservative limit for OpenAI API
+        batch_delay = 0.1    # Small delay between batches to respect rate limits
+    else:
+        max_concurrent = 50  # Higher limit for local providers like Ollama
+        batch_delay = 0.05
+    
+    logger.info(f"Processing {len(rows)} transcripts with max concurrency of {max_concurrent}")
 
-    tasks = []
-    for j, (row, idx) in enumerate(zip(rows, indices)):
-        text = row[content_column]
-        
-        # Enhanced debugging: Log the actual transcript content being processed
-        logger.debug(f"Transcript {idx+1} content: {len(text)} chars")
-        if len(text) < 50:
-            logger.warning(f"Transcript {idx+1} is very short ({len(text)} chars)")
+    # Helper coroutine to keep result and row paired
+    async def process_and_pair(coro, row_data, transcript_index):
+        try:
+            result = await coro
+            return result, row_data, transcript_index
+        except Exception as e:
+            logger.error(f"An exception was caught from transcript {transcript_index} processing coroutine: {e}")
+            return {'error': str(e)}, row_data, transcript_index
+
+    # Prepare all work items
+    work_items = []
+    for i, row in zip(indices, rows):
+        text_to_process = row[content_column]
+
+        if not isinstance(text_to_process, str):
+            text_to_process = str(text_to_process) if text_to_process is not None else ""
         
         try:
-            format_instructions = parser.get_format_instructions()
-            logger.debug(f"Got format instructions: {len(format_instructions)} chars")
-        except Exception as e:
-            logger.error(f"Error getting format instructions: {type(e).__name__}: {e}")
-            raise
-            
-        # Format the prompt - always use Jinja2 template formatting
-        try:
-            formatted_prompt_obj = prompt.format_prompt(text=text, format_instructions=format_instructions)
-            formatted_prompt = formatted_prompt_obj.to_string()
-        except Exception as e:
-            logger.error(f"Error formatting prompt: {type(e).__name__}: {e}")
-            raise
-        
-        # Enhanced debugging: Log the formatted prompt to see if transcript is included
-        logger.debug(f"Formatted prompt for transcript {idx+1}: {len(formatted_prompt)} chars")
-        
-        # CRITICAL DEBUG: Check if text was actually interpolated
-        if "{{text}}" in formatted_prompt:
-            logger.error(f"🚨 INTERPOLATION FAILURE: {{{{text}}}} still present in formatted prompt for transcript {idx+1}")
-        elif len(text) > 50 and text[:50] not in formatted_prompt:
-            logger.error(f"🚨 INTERPOLATION FAILURE: Transcript text not found in formatted prompt for transcript {idx+1}")
-            logger.error(f"Expected text start: {text[:50]}...")
-            logger.error(f"Formatted prompt preview: {formatted_prompt[:500]}...")
-        else:
-            logger.debug(f"✅ Transcript {idx+1} text appears to be properly interpolated")
-        
-        task = _process_itemize_transcript_async(
-            llm, prompt, formatted_prompt, text, parser, retry_parser, 
-            provider, idx, total_count, max_retries, retry_delay, simple_format
+            # The key for format_prompt MUST match the placeholder in the template string (e.g., {{text}})
+            formatted_prompt = prompt.format_prompt(text=text_to_process).to_string()
+
+            # Debugging to ensure interpolation is working
+            if "{{text}}" in formatted_prompt:
+                logger.error(f"PROMPT INTERPOLATION FAILED for transcript index {i}. '{{text}}' still present.")
+                logger.debug(f"Formatted prompt preview: {formatted_prompt[:500]}...")
+            else:
+                logger.debug(f"Prompt for transcript {i} formatted successfully.")
+
+        except KeyError as e:
+            logger.error(f"Error formatting prompt for transcript index {i}. Missing key: {e}")
+            continue
+
+        # Create the work item
+        work_coro = _process_itemize_transcript_async(
+            llm, prompt, formatted_prompt, text_to_process, parser, retry_parser, provider, i, total_count, max_retries, retry_delay, simple_format
         )
-        tasks.append(task)
-    
-    batch_results = await asyncio.gather(*tasks, return_exceptions=True)
-    
-    # Enhanced debugging: Check for identical outputs across transcripts
-    successful_outputs = []
-    for result_pair, row_item in zip(batch_results, rows):
-        results.append((result_pair, row_item))
         
-        # Collect successful outputs for comparison
-        if isinstance(result_pair, tuple) and result_pair[0] == True:
-            successful_outputs.append(str(result_pair[1]))
+        work_items.append((work_coro, row, i))
+
+    # Process in controlled batches
+    all_results = []
+    processed_count = 0
+    total_items = len(work_items)
+    last_log_time = time.time()
+
+    # Use asyncio.Semaphore to limit concurrency
+    semaphore = asyncio.Semaphore(max_concurrent)
     
-    # Check for repetition in outputs
-    if len(successful_outputs) > 1:
-        unique_outputs = set(successful_outputs)
-        if len(unique_outputs) == 1:
-            logging.error(f"🚨 CRITICAL ISSUE: ALL {len(successful_outputs)} TRANSCRIPTS PRODUCED IDENTICAL OUTPUT!")
-            logging.error(f"Identical output: {successful_outputs[0][:300]}...")
-        elif len(unique_outputs) < len(successful_outputs) * 0.5:  # If more than 50% repetition
-            logging.warning(f"⚠️ HIGH REPETITION: {len(successful_outputs)} outputs, only {len(unique_outputs)} unique")
-    
-    gc.collect()
-    return results
+    async def process_with_semaphore(work_coro, row_data, transcript_index):
+        async with semaphore:
+            return await process_and_pair(work_coro, row_data, transcript_index)
+
+    # Create all tasks but let semaphore control concurrency
+    tasks = [
+        asyncio.create_task(process_with_semaphore(work_coro, row, transcript_index))
+        for work_coro, row, transcript_index in work_items
+    ]
+
+    # Process results as they complete
+    for future in asyncio.as_completed(tasks):
+        processed_count += 1
+        try:
+            result_pair, row_data, transcript_index = await future
+            all_results.append((result_pair, row_data))
+        except Exception as e:
+            logger.error(f"An unexpected exception occurred when awaiting a completed task: {e}")
+            # Add error result to maintain order
+            all_results.append(({'error': str(e)}, None))
+
+        # Log progress more frequently - every 25 transcripts or every 5 seconds
+        current_time = time.time()
+        if processed_count % 25 == 0 or current_time - last_log_time > 5 or processed_count == total_items:
+            logger.info(f"Itemization progress: {processed_count}/{total_items} transcripts processed...")
+            last_log_time = current_time
+            
+        # Add small delay every batch to prevent overwhelming the system
+        if processed_count % max_concurrent == 0:
+            await asyncio.sleep(batch_delay)
+                
+    return all_results
 
 async def _transform_transcripts_itemize_async(
     input_file: str,
@@ -1340,7 +1357,7 @@ async def _transform_transcripts_itemize_async(
     else:
         raise ValueError("No prompt template provided. Must specify either prompt_template or prompt_template_file")
     
-    # Always use Jinja2 templates
+    # Use Jinja2 template format for consistency
     logging.info("Using Jinja2 template format")
     prompt = ChatPromptTemplate.from_template(template, template_format="jinja2")
     
@@ -1369,6 +1386,9 @@ async def _transform_transcripts_itemize_async(
         )
         
         with open(text_file_path, 'w') as f:
+            processed_count = 0
+            last_log_time = time.time()
+            
             for i, (result_pair, row) in enumerate(all_results):
                 if isinstance(result_pair, Exception):
                     logging.error(f"Error processing transcript: {result_pair}")
@@ -1409,6 +1429,9 @@ async def _transform_transcripts_itemize_async(
                             # Create new row with item data
                             new_row = row.copy()
                             new_row[content_column] = item_text
+                            # Preserve ids column if it exists
+                            if 'ids' in row.index and pd.notna(row.get('ids')):
+                                new_row['ids'] = row['ids']
                             transformed_rows.append(new_row)
                             
                             # Write to the text file
@@ -1425,6 +1448,9 @@ async def _transform_transcripts_itemize_async(
                             new_row['question'] = item.question
                             combined_text = item.category + ": " + item.question
                             new_row[content_column] = combined_text
+                            # Preserve ids column if it exists
+                            if 'ids' in row.index and pd.notna(row.get('ids')):
+                                new_row['ids'] = row['ids']
                             transformed_rows.append(new_row)
                             
                             # Write to the text file
@@ -1432,8 +1458,19 @@ async def _transform_transcripts_itemize_async(
                 else:
                     new_row = row.copy()
                     new_row[content_column] = data
+                    # Preserve ids column if it exists
+                    if 'ids' in row.index and pd.notna(row.get('ids')):
+                        new_row['ids'] = row['ids']
                     transformed_rows.append(new_row)
                     f.write(f"{data}\n")
+
+                processed_count += 1
+                
+                # Log progress periodically
+                current_time = time.time()
+                if processed_count % 25 == 0 or current_time - last_log_time > 5:
+                    logger.info(f"Itemization progress: {processed_count}/{len(all_results)} transcripts processed...")
+                    last_log_time = current_time
     else:
         logging.info("No valid transcripts found to process for itemization.")
         with open(text_file_path, 'w') as f:

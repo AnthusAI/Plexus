@@ -518,6 +518,12 @@ const ReportTask: React.FC<ReportTaskProps> = ({
         <div className={`space-y-1.5 p-0 flex flex-col items-start w-full max-w-full ${variant === 'detail' ? 'px-1' : ''}`}>
           <div className="flex justify-between items-start w-full max-w-full gap-3 overflow-hidden">
             <div className="flex flex-col pb-1 leading-none min-w-0 flex-1 overflow-hidden">
+              {variant === 'detail' && (
+                <div className="flex items-center gap-2 mb-2">
+                  <FileBarChart className="h-5 w-5 text-muted-foreground" />
+                  <span className="text-lg font-semibold text-muted-foreground">Report</span>
+                </div>
+              )}
               {props.task.name && (
                 <div className="font-semibold text-sm truncate">{props.task.name}</div>
               )}
@@ -545,21 +551,11 @@ const ReportTask: React.FC<ReportTaskProps> = ({
             </div>
             <div className="flex flex-col items-end flex-shrink-0">
               {variant === 'grid' ? (
-                <div className="flex items-start gap-2">
-                  <div className="text-sm text-muted-foreground text-right">
-                    {(() => {
-                      const [firstWord, ...restWords] = props.task.type.split(/\s+/);
-                      return (
-                        <>
-                          {firstWord}<br />
-                          {restWords.join(' ')}
-                        </>
-                      );
-                    })()}
-                  </div>
-                  <div className="text-muted-foreground mt-[0.15rem]">
+                <div className="flex flex-col items-center gap-1">
+                  <div className="text-muted-foreground">
                     <FileBarChart className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
                   </div>
+                  <div className="text-xs text-muted-foreground text-center">Report</div>
                 </div>
               ) : (
                 <>

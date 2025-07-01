@@ -50,8 +50,9 @@ logger = logging.getLogger(__name__)
 @click.option('--config', 'config_identifier', required=True, help='ID or name of the ReportConfiguration to use.')
 @click.option('--days', type=int, help='Number of days to analyze (overrides the default in the report configuration).')
 @click.option('--fresh', is_flag=True, help='Force fresh processing, bypassing any cached transformations')
+@click.option('--task-id', default=None, type=str, help='Task ID for progress tracking')
 @click.argument('params', nargs=-1)
-def run(config_identifier: str, days: Optional[int], fresh: bool, params: Tuple[str]):
+def run(config_identifier: str, days: Optional[int], fresh: bool, task_id: Optional[str], params: Tuple[str]):
     """
     Generate a new report instance from a ReportConfiguration synchronously.
 
@@ -102,19 +103,25 @@ def run(config_identifier: str, days: Optional[int], fresh: bool, params: Tuple[
         metadata_json = json.dumps(task_metadata)
         task_description = f"Synchronously generate report from config '{report_config.name}' ({resolved_config_id})"
 
-        new_task = Task.create(
-            client=client,
-            accountId=account_id, # Explicitly set account ID
-            type="report_generation",
-            target=resolved_config_id,
-            command="plexus report run (sync)",
-            description=task_description,
-            metadata=metadata_json,
-            dispatchStatus="SYNC", # Indicate synchronous execution
-            status="PENDING" # Initial status, will be updated by tracker
-        )
-        task_id = new_task.id # Store task_id for potential error reporting
-        console.print(f"Created Task: [cyan]{task_id}[/cyan]")
+        if task_id:
+            # Use existing task from Celery execution
+            console.print(f"Using existing task from Celery: [cyan]{task_id}[/cyan]")
+            new_task = Task.get_by_id(task_id, client)
+        else:
+            # Create new task for standalone execution
+            new_task = Task.create(
+                client=client,
+                accountId=account_id, # Explicitly set account ID
+                type="report_generation",
+                target=resolved_config_id,
+                command="plexus report run (sync)",
+                description=task_description,
+                metadata=metadata_json,
+                dispatchStatus="SYNC", # Indicate synchronous execution
+                status="PENDING" # Initial status, will be updated by tracker
+            )
+            task_id = new_task.id # Store task_id for potential error reporting
+            console.print(f"Created Task: [cyan]{task_id}[/cyan]")
 
         # --- Step 4: Initialize Task Progress Tracker ---
         console.print(f"Initializing progress tracker for Task [cyan]{task_id}[/cyan]...")

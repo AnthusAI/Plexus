@@ -17,3 +17,14 @@ from plexus.scores.AWSComprehendEntityExtractor import AWSComprehendEntityExtrac
 # from plexus.scores.LLMClassifier import LLMClassifier
 from plexus.scores.LangGraphScore import LangGraphScore
 from plexus.scores.OpenAIEmbeddingsClassifier import OpenAIEmbeddingsClassifier
+
+# Import node classes that are used in YAML files
+from plexus.scores.nodes.MultiClassClassifier import MultiClassClassifier
+from plexus.scores.nodes.YesOrNoClassifier import YesOrNoClassifier
+from plexus.scores.nodes.NumericClassifier import NumericClassifier
+from plexus.scores.nodes.Extractor import Extractor
+from plexus.scores.nodes.Classifier import Classifier
+from plexus.scores.nodes.ContextExtractor import ContextExtractor
+from plexus.scores.nodes.LogicalClassifier import LogicalClassifier
+from plexus.scores.nodes.Generator import Generator
+from plexus.scores.nodes.BeforeAfterSlicer import BeforeAfterSlicer

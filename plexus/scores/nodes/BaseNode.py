@@ -102,9 +102,6 @@ class BaseNode(ABC, LangChainUser):
         # Add the new node result
         state_dict['metadata']['trace']['node_results'].append(node_result)
         
-        # Log for debugging
-        logging.info(f"=== LOGGING STATE FOR {full_node_name} ===")
-        
         # Create and return a new state object
         return self.GraphState(**state_dict)
 
@@ -226,4 +223,32 @@ class BaseNode(ABC, LangChainUser):
         # logging.info(f"Graph for {self.__class__.__name__}:")
         # app.get_graph().print_ascii()
 
-        return app
+        async def invoke_workflow(state: Any) -> dict:
+            # The state passed to a node is the Pydantic model object. Convert it to a dict.
+            if isinstance(state, BaseModel):
+                state_dict = state.model_dump()
+            else:
+                state_dict = dict(state) # Fallback
+
+            final_node_state = await app.ainvoke(state_dict)
+            
+            # Manually merge the classification and explanation back into the main state dict
+            if 'classification' in final_node_state:
+                state_dict['classification'] = final_node_state['classification']
+            if 'explanation' in final_node_state:
+                state_dict['explanation'] = final_node_state['explanation']
+            
+            # Also merge the metadata trace
+            if 'metadata' in final_node_state and final_node_state.get('metadata') and final_node_state['metadata'].get('trace'):
+                if 'metadata' not in state_dict or not state_dict.get('metadata'):
+                    state_dict['metadata'] = {}
+                if 'trace' not in state_dict['metadata']:
+                    state_dict['metadata']['trace'] = {'node_results': []}
+                
+                state_dict['metadata']['trace']['node_results'].extend(
+                    final_node_state['metadata']['trace']['node_results']
+                )
+
+            return state_dict
+
+        return invoke_workflow
