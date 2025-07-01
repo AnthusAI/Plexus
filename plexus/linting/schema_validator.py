@@ -13,6 +13,8 @@ try:
     HAS_JSONSCHEMA = True
 except ImportError:
     HAS_JSONSCHEMA = False
+    ValidationError = Exception
+    SchemaError = Exception
 
 
 class SchemaValidator:

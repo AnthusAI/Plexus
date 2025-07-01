@@ -64,53 +64,68 @@ export const SCORE_YAML_SCHEMA = {
 // Data Source Configuration Schema
 export const DATA_SOURCE_YAML_SCHEMA = {
   type: 'object',
-  required: ['type'],
+  required: ['class'],
   properties: {
-    type: {
+    class: {
       type: 'string',
-      enum: ['file', 'database', 'api', 'stream'],
-      description: 'Type of data source'
+      enum: ['CallCriteriaDBCache'],
+      description: 'Data source class - currently only CallCriteriaDBCache is supported'
     },
-    name: {
-      type: 'string',
-      description: 'Human-readable name for the data source'
-    },
-    connection: {
-      type: 'object',
-      properties: {
-        host: { type: 'string' },
-        port: { type: 'number' },
-        database: { type: 'string' },
-        username: { type: 'string' },
-        password: { type: 'string' },
-        ssl: { type: 'boolean' }
+    queries: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['scorecard_id', 'number'],
+        properties: {
+          scorecard_id: {
+            type: 'number',
+            description: 'ID of the scorecard to query'
+          },
+          number: {
+            type: 'number',
+            minimum: 1,
+            description: 'Number of records to retrieve'
+          },
+          query: {
+            type: 'string',
+            description: 'Custom SQL query with placeholders like {scorecard_id} and {number}'
+          },
+          minimum_calibration_count: {
+            type: 'number',
+            minimum: 0,
+            description: 'Minimum calibration count required'
+          }
+        },
+        additionalProperties: false
       },
-      description: 'Connection parameters for the data source'
+      description: 'List of database queries to execute'
     },
-    query: {
-      type: 'string',
-      description: 'Query or filter to apply to the data source'
-    },
-    format: {
-      type: 'string',
-      enum: ['csv', 'json', 'parquet', 'xlsx', 'sql'],
-      description: 'Format of the data'
-    },
-    schema: {
-      type: 'object',
-      description: 'Schema definition for the data'
-    },
-    refresh: {
-      type: 'object',
-      properties: {
-        enabled: { type: 'boolean' },
-        interval: { type: 'string' },
-        schedule: { type: 'string' }
+    searches: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['item_list_filename'],
+        properties: {
+          item_list_filename: {
+            type: 'string',
+            pattern: '^.+\\.(csv|txt)$',
+            description: 'Path to CSV or text file containing search items'
+          }
+        },
+        additionalProperties: false
       },
-      description: 'Refresh settings for the data source'
+      description: 'List of file-based searches to perform'
+    },
+    balance: {
+      type: 'boolean',
+      description: 'Whether to balance the dataset (defaults to true)'
     }
   },
-  additionalProperties: true
+  additionalProperties: false,
+  anyOf: [
+    { required: ['queries'] },
+    { required: ['searches'] }
+  ]
 }
 
 // Score validation rules
@@ -184,61 +199,155 @@ export function createScoreValidationRules(): ValidationRule[] {
 export function createDataSourceValidationRules(): ValidationRule[] {
   return [
     // Required fields
-    new RequiredFieldRule('type'),
+    new RequiredFieldRule('class'),
 
     // Type validation
-    new TypeValidationRule('type', 'string'),
-    new TypeValidationRule('name', 'string'),
+    new TypeValidationRule('class', 'string'),
 
-    // Allowed data source types
-    new AllowedValuesRule('type', ['file', 'database', 'api', 'stream']),
+    // Allowed data source classes
+    new AllowedValuesRule('class', ['CallCriteriaDBCache']),
 
-    // Format validation
-    new AllowedValuesRule('format', ['csv', 'json', 'parquet', 'xlsx', 'sql']),
-
-    // Connection validation for database types
+    // Ensure either queries or searches is present
     {
-      rule_id: 'DATA_SOURCE_DB_CONNECTION',
-      description: 'Database data sources should have connection information',
-      severity: 'warning',
+      rule_id: 'DATA_SOURCE_QUERIES_OR_SEARCHES_REQUIRED',
+      description: 'Data source must have either queries or searches defined',
+      severity: 'error',
       validate: (data: Record<string, any>) => {
-        const messages = []
-        if (data.type === 'database' && !data.connection) {
+        const messages: any[] = []
+        const hasQueries = data.queries && Array.isArray(data.queries) && data.queries.length > 0
+        const hasSearches = data.searches && Array.isArray(data.searches) && data.searches.length > 0
+        
+        if (!hasQueries && !hasSearches) {
           messages.push({
-            level: 'warning' as const,
-            code: 'DATA_SOURCE_DB_CONNECTION',
-            title: 'Missing Database Connection',
-            message: 'Database data sources should include connection information.',
-            suggestion: 'Add a "connection" section with host, port, database, and other connection parameters.',
-            doc_url: 'https://docs.plexus.ai/yaml-dsl/data-sources#database',
-            context: { data_source_type: data.type }
+            level: 'error' as const,
+            code: 'DATA_SOURCE_QUERIES_OR_SEARCHES_REQUIRED',
+            title: 'Missing Queries or Searches',
+            message: 'Data source must have either "queries" or "searches" defined (or both).',
+            suggestion: 'Add a "queries" section for database queries or a "searches" section for file-based searches.',
+            doc_url: 'https://docs.plexus.ai/yaml-dsl/data-sources#structure',
+            context: { has_queries: hasQueries, has_searches: hasSearches }
           })
         }
         return messages
       }
     },
 
-    // Query validation for database and API types
+    // Validate query structure
     {
-      rule_id: 'DATA_SOURCE_QUERY_RECOMMENDATION',
-      description: 'Database and API data sources benefit from having a query defined',
-      severity: 'info',
+      rule_id: 'DATA_SOURCE_QUERY_STRUCTURE',
+      description: 'Query items must have required fields and valid structure',
+      severity: 'error',
       validate: (data: Record<string, any>) => {
-        const messages = []
-        if ((data.type === 'database' || data.type === 'api') && !data.query) {
-          messages.push({
-            level: 'info' as const,
-            code: 'DATA_SOURCE_QUERY_RECOMMENDATION',
-            title: 'Consider Adding Query',
-            message: `${data.type === 'database' ? 'Database' : 'API'} data sources often benefit from having a query defined.`,
-            suggestion: `Add a "query" field to specify the ${data.type === 'database' ? 'SQL query' : 'API endpoint or filter'} for this data source.`,
-            doc_url: `https://docs.plexus.ai/yaml-dsl/data-sources#${data.type}`,
-            context: { data_source_type: data.type }
+        const messages: any[] = []
+        
+        if (data.queries && Array.isArray(data.queries)) {
+          data.queries.forEach((query: any, index: number) => {
+            const queryPath = `queries[${index}]`
+            
+            // Check required fields
+            if (!query.scorecard_id) {
+              messages.push({
+                level: 'error' as const,
+                code: 'DATA_SOURCE_QUERY_MISSING_SCORECARD_ID',
+                title: 'Missing Scorecard ID',
+                message: `Query item ${index + 1} is missing required "scorecard_id" field.`,
+                suggestion: 'Add a "scorecard_id" field with a numeric scorecard identifier.',
+                doc_url: 'https://docs.plexus.ai/yaml-dsl/data-sources#queries',
+                context: { query_index: index, field: 'scorecard_id' }
+              })
+            }
+            
+            if (!query.number) {
+              messages.push({
+                level: 'error' as const,
+                code: 'DATA_SOURCE_QUERY_MISSING_NUMBER',
+                title: 'Missing Number Field',
+                message: `Query item ${index + 1} is missing required "number" field.`,
+                suggestion: 'Add a "number" field specifying how many records to retrieve.',
+                doc_url: 'https://docs.plexus.ai/yaml-dsl/data-sources#queries',
+                context: { query_index: index, field: 'number' }
+              })
+            }
+            
+            // Validate number is positive
+            if (query.number && (typeof query.number !== 'number' || query.number < 1)) {
+              messages.push({
+                level: 'error' as const,
+                code: 'DATA_SOURCE_QUERY_INVALID_NUMBER',
+                title: 'Invalid Number Value',
+                message: `Query item ${index + 1} has invalid "number" value. Must be a positive integer.`,
+                suggestion: 'Set "number" to a positive integer (e.g., 1000, 5000).',
+                doc_url: 'https://docs.plexus.ai/yaml-dsl/data-sources#queries',
+                context: { query_index: index, current_value: query.number }
+              })
+            }
+            
+            // Validate scorecard_id is numeric
+            if (query.scorecard_id && typeof query.scorecard_id !== 'number') {
+              messages.push({
+                level: 'error' as const,
+                code: 'DATA_SOURCE_QUERY_INVALID_SCORECARD_ID',
+                title: 'Invalid Scorecard ID',
+                message: `Query item ${index + 1} has invalid "scorecard_id" value. Must be a number.`,
+                suggestion: 'Set "scorecard_id" to a numeric scorecard identifier (e.g., 1329, 555).',
+                doc_url: 'https://docs.plexus.ai/yaml-dsl/data-sources#queries',
+                context: { query_index: index, current_value: query.scorecard_id }
+              })
+            }
           })
         }
+        
         return messages
       }
-    }
+    },
+
+    // Validate searches structure
+    {
+      rule_id: 'DATA_SOURCE_SEARCH_STRUCTURE',
+      description: 'Search items must have required fields and valid file paths',
+      severity: 'error',
+      validate: (data: Record<string, any>) => {
+        const messages: any[] = []
+        
+        if (data.searches && Array.isArray(data.searches)) {
+          data.searches.forEach((search: any, index: number) => {
+            // Check required fields
+            if (!search.item_list_filename) {
+              messages.push({
+                level: 'error' as const,
+                code: 'DATA_SOURCE_SEARCH_MISSING_FILENAME',
+                title: 'Missing Item List Filename',
+                message: `Search item ${index + 1} is missing required "item_list_filename" field.`,
+                suggestion: 'Add an "item_list_filename" field with a path to a CSV or text file.',
+                doc_url: 'https://docs.plexus.ai/yaml-dsl/data-sources#searches',
+                context: { search_index: index, field: 'item_list_filename' }
+              })
+            }
+            
+            // Validate file extension
+            if (search.item_list_filename && typeof search.item_list_filename === 'string') {
+              const filename = search.item_list_filename.toLowerCase()
+              if (!filename.endsWith('.csv') && !filename.endsWith('.txt')) {
+                messages.push({
+                  level: 'warning' as const,
+                  code: 'DATA_SOURCE_SEARCH_INVALID_FILE_TYPE',
+                  title: 'Unusual File Type',
+                  message: `Search item ${index + 1} file "${search.item_list_filename}" should typically be a .csv or .txt file.`,
+                  suggestion: 'Use a .csv or .txt file for item lists.',
+                  doc_url: 'https://docs.plexus.ai/yaml-dsl/data-sources#searches',
+                  context: { search_index: index, filename: search.item_list_filename }
+                })
+              }
+            }
+          })
+        }
+        
+        return messages
+      }
+    },
+
+    // Validate balance field
+    new TypeValidationRule('balance', 'boolean')
   ]
 }
 
