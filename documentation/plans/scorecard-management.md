@@ -13,8 +13,8 @@
 - Scorecard Pages: `dashboard/app/scorecards/` - Next.js pages for scorecard management
 
 ### Running the CLI
-- Use the conda environment: `conda run -n py39 python -m plexus.cli.CommandLineInterface [command]`
-- Example: `conda run -n py39 python -m plexus.cli.CommandLineInterface scorecard push --scorecard "My Scorecard"`
+- Use the conda environment: `conda run -n py311 python -m plexus.cli.CommandLineInterface [command]`
+- Example: `conda run -n py311 python -m plexus.cli.CommandLineInterface scorecard push --scorecard "My Scorecard"`
 
 ## Overview
 

@@ -6,7 +6,7 @@ Plexus is a documentation and evaluation platform for AI/ML systems, with an Amp
 ### Python AI/ML
 - Python
 - LangChain/LangGraph
-- Miniconda environment `py39`
+- Miniconda environment `py311`
 ### Dashboard app
 - Next.js 14.1
 - AWS Amplify Gen2

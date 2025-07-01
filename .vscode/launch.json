@@ -1,7 +1,7 @@
 {
     "version": "0.2.0",
     "python": {
-        "python": "/Users/ryan/miniconda3/envs/py39/bin/python"
+        "python": "/Users/ryan/miniconda3/envs/py311/bin/python"
     },
     "configurations": [
 
