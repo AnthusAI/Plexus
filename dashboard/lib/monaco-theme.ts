@@ -48,6 +48,9 @@ const getEditorColor = (cssVar: string): string => {
  * Configure YAML language support with enhanced syntax highlighting and validation
  */
 export const configureYamlLanguage = (monaco: Monaco): void => {
+  // First, register YAML as a language
+  monaco.languages.register({ id: 'yaml' });
+
   // Register YAML language configuration
   monaco.languages.setLanguageConfiguration('yaml', {
     comments: {
@@ -165,8 +168,12 @@ export const configureYamlLanguage = (monaco: Monaco): void => {
     }
   })
 
-  // Add YAML validation for indentation errors
-  const validateYamlIndentation = (model: editor.ITextModel) => {
+}
+
+/**
+ * YAML validation function for indentation errors
+ */
+export const validateYamlIndentation = (monaco: Monaco, model: editor.ITextModel) => {
     const markers: editor.IMarkerData[] = []
     const lines = model.getValue().split('\n')
     const indentationStack: number[] = []
@@ -224,14 +231,11 @@ export const configureYamlLanguage = (monaco: Monaco): void => {
     return markers
   }
 
-  // Register YAML validation
-  monaco.languages.registerCodeLensProvider('yaml', {
-    provideCodeLenses: (model: editor.ITextModel) => {
-      const markers = validateYamlIndentation(model)
-      monaco.editor.setModelMarkers(model, 'yaml-validation', markers)
-      return { lenses: [], dispose: () => {} }
-    }
-  })
+    // Register YAML validation - we'll call this from the editor onChange
+  monaco.languages.onLanguage('yaml', () => {
+    // This ensures the language is properly registered
+    console.log('YAML language registered successfully')
+   })
 }
 
 /**
