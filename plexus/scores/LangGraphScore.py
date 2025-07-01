@@ -363,7 +363,38 @@ class LangGraphScore(Score, LangChainUser):
                 else:
                     logging.warning(f"No config found for previous_node: {previous_node}")
         
+        # NEW: Handle edge configurations for the final node that routes to END
+        if node_instances:
+            final_node_name = node_instances[-1][0]
+            final_node_config = next((node for node in graph_config
+                                    if node['name'] == final_node_name), None)
+            
+            if final_node_config and 'edge' in final_node_config:
+                edge = final_node_config['edge']
+                target_node = edge.get('node')
+                
+                # Only process if this edge routes to END
+                if target_node == 'END' and 'output' in edge:
+                    value_setter_name = f"{final_node_name}_value_setter"
+                    # Create value setter node for the final edge
+                    workflow.add_node(
+                        value_setter_name,
+                        LangGraphScore.create_value_setter_node(
+                            edge.get('output', {})
+                        )
+                    )
+                    # Add edge from final node to value setter
+                    workflow.add_edge(final_node_name, value_setter_name)
+                    # Add edge from value setter to end target
+                    final_target = end_node or END
+                    workflow.add_edge(value_setter_name, final_target)
+                    logging.info(f"Added final node edge routing: {final_node_name} -> {value_setter_name} -> {final_target}")
+                    
+                    # Return True to indicate we handled the final node's routing
+                    return True
+        
         logging.info("Workflow edges configured")
+        return False  # Indicate we didn't handle final node routing
 
     async def build_compiled_workflow(self):
         """Build the LangGraph workflow with optional persistence."""
@@ -433,10 +464,10 @@ class LangGraphScore(Score, LangChainUser):
                 logging.info("Added final output aliasing node, which will connect to END.")
 
             # Add edges between nodes, redirecting any 'END' edges to the output aliasing node
-            self.add_edges(workflow, node_instances, None, self.parameters.graph, end_node=output_aliasing_node_name)
+            final_node_handled = self.add_edges(workflow, node_instances, None, self.parameters.graph, end_node=output_aliasing_node_name)
 
             # Connect the last sequential node to the appropriate end target
-            if node_instances:
+            if node_instances and not final_node_handled:
                 last_node_name = node_instances[-1][0]
                 last_node_config = next((n for n in self.parameters.graph if n['name'] == last_node_name), None)
                 
