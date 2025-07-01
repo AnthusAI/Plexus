@@ -205,7 +205,7 @@ export const configureYamlLanguage = (monaco: Monaco): void => {
       const data: number[] = []
       return {
         data: new Uint32Array(data),
-        resultId: null
+        resultId: undefined
       }
     }
   })
