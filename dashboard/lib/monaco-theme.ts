@@ -218,11 +218,74 @@ export const configureYamlLanguage = (monaco: Monaco): void => {
 }
 
 /**
- * YAML validation function for indentation errors
+ * Helper function to detect if a line contains a YAML key (not just any colon)
+ */
+const isYamlKeyLine = (line: string): boolean => {
+  const trimmed = line.trim()
+  if (!trimmed || trimmed.startsWith('#')) return false
+  
+  // Skip document separators and list items
+  if (trimmed.startsWith('---') || trimmed.startsWith('...') || trimmed.startsWith('- ')) return false
+  
+  // Look for key pattern: non-quoted key followed by colon and whitespace/end of line
+  const keyPattern = /^(\s*)([^'"\s][^:]*?):\s*($|[^:])/
+  const quotedKeyPattern = /^(\s*)(['"])(.*?)\2:\s*($|.)/
+  
+  return keyPattern.test(line) || quotedKeyPattern.test(line)
+}
+
+/**
+ * Helper function to detect the predominant indentation pattern in a YAML document
+ */
+const detectIndentationPattern = (lines: string[]): number => {
+  const indentSteps: number[] = []
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    if (!isYamlKeyLine(line)) continue
+    
+    const indentMatch = line.match(/^(\s*)/)
+    const currentIndent = indentMatch ? indentMatch[1].length : 0
+    
+    // Look for the next key line at a deeper level
+    for (let j = i + 1; j < lines.length; j++) {
+      const nextLine = lines[j]
+      if (!isYamlKeyLine(nextLine)) continue
+      
+      const nextIndentMatch = nextLine.match(/^(\s*)/)
+      const nextIndent = nextIndentMatch ? nextIndentMatch[1].length : 0
+      
+      if (nextIndent > currentIndent) {
+        indentSteps.push(nextIndent - currentIndent)
+        break
+      } else if (nextIndent <= currentIndent) {
+        break
+      }
+    }
+  }
+  
+  if (indentSteps.length === 0) return 2 // Default to 2 spaces if no pattern detected
+  
+  // Find the most common indentation step
+  const stepCounts = indentSteps.reduce((acc, step) => {
+    acc[step] = (acc[step] || 0) + 1
+    return acc
+  }, {} as Record<number, number>)
+  
+  return parseInt(Object.keys(stepCounts).reduce((a, b) => 
+    stepCounts[parseInt(a)] > stepCounts[parseInt(b)] ? a : b
+  ))
+}
+
+/**
+ * YAML validation function for indentation errors - Fixed version
  */
 export const validateYamlIndentation = (monaco: Monaco, model: editor.ITextModel) => {
   const markers: editor.IMarkerData[] = []
   const lines = model.getValue().split('\n')
+  
+  // Detect the document's indentation pattern
+  const expectedIndentStep = detectIndentationPattern(lines)
   const indentationStack: number[] = []
   
   for (let i = 0; i < lines.length; i++) {
@@ -235,8 +298,8 @@ export const validateYamlIndentation = (monaco: Monaco, model: editor.ITextModel
     }
     
     // Calculate indentation level
-    const match = line.match(/^(\s*)/)
-    const indentLevel = match ? match[1].length : 0
+    const indentMatch = line.match(/^(\s*)/)
+    const indentLevel = indentMatch ? indentMatch[1].length : 0
     
     // Check for tabs (not allowed in YAML)
     if (line.includes('\t')) {
@@ -250,20 +313,41 @@ export const validateYamlIndentation = (monaco: Monaco, model: editor.ITextModel
       })
     }
     
-    // Check for inconsistent indentation
-    if (line.includes(':')) {
-      // This is a key line
+    // Only validate indentation for actual YAML key lines
+    if (isYamlKeyLine(line)) {
+      // Check for inconsistent indentation based on detected pattern
       if (indentationStack.length > 0) {
         const lastIndent = indentationStack[indentationStack.length - 1]
-        if (indentLevel > lastIndent && (indentLevel - lastIndent) % 2 !== 0) {
-          markers.push({
-            severity: monaco.MarkerSeverity.Warning,
-            message: 'Inconsistent indentation. YAML typically uses 2-space indentation.',
-            startLineNumber: lineNumber,
-            startColumn: 1,
-            endLineNumber: lineNumber,
-            endColumn: indentLevel + 1
-          })
+        
+        if (indentLevel > lastIndent) {
+          // This should be a child element - check if indentation follows the pattern
+          const indentDifference = indentLevel - lastIndent
+          if (indentDifference % expectedIndentStep !== 0) {
+            markers.push({
+              severity: monaco.MarkerSeverity.Warning,
+              message: `Inconsistent indentation. This document uses ${expectedIndentStep}-space indentation. Expected ${lastIndent + expectedIndentStep} spaces, got ${indentLevel}.`,
+              startLineNumber: lineNumber,
+              startColumn: 1,
+              endLineNumber: lineNumber,
+              endColumn: indentLevel + 1
+            })
+          }
+        } else if (indentLevel < lastIndent) {
+          // Moving back to a parent level - check if it aligns with a previous level
+          const validIndentLevels = [0, ...indentationStack.filter(level => level < indentLevel)]
+          if (validIndentLevels.length > 0 && !validIndentLevels.includes(indentLevel)) {
+            const nearestValidLevel = validIndentLevels.reduce((prev, curr) => 
+              Math.abs(curr - indentLevel) < Math.abs(prev - indentLevel) ? curr : prev
+            )
+            markers.push({
+              severity: monaco.MarkerSeverity.Warning,
+              message: `Invalid indentation level. Expected ${nearestValidLevel} spaces to match parent level.`,
+              startLineNumber: lineNumber,
+              startColumn: 1,
+              endLineNumber: lineNumber,
+              endColumn: indentLevel + 1
+            })
+          }
         }
       }
       
