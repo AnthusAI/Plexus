@@ -168,74 +168,72 @@ export const configureYamlLanguage = (monaco: Monaco): void => {
     }
   })
 
+  // Register YAML validation - we'll call this from the editor onChange
+  monaco.languages.onLanguage('yaml', () => {
+    // This ensures the language is properly registered
+    console.log('YAML language registered successfully')
+  })
 }
 
 /**
  * YAML validation function for indentation errors
  */
 export const validateYamlIndentation = (monaco: Monaco, model: editor.ITextModel) => {
-    const markers: editor.IMarkerData[] = []
-    const lines = model.getValue().split('\n')
-    const indentationStack: number[] = []
+  const markers: editor.IMarkerData[] = []
+  const lines = model.getValue().split('\n')
+  const indentationStack: number[] = []
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    const lineNumber = i + 1
     
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i]
-      const lineNumber = i + 1
-      
-      // Skip empty lines and comments
-      if (line.trim() === '' || line.trim().startsWith('#')) {
-        continue
-      }
-      
-      // Calculate indentation level
-      const match = line.match(/^(\s*)/)
-      const indentLevel = match ? match[1].length : 0
-      
-      // Check for tabs (not allowed in YAML)
-      if (line.includes('\t')) {
-        markers.push({
-          severity: monaco.MarkerSeverity.Error,
-          message: 'Tabs are not allowed in YAML. Use spaces for indentation.',
-          startLineNumber: lineNumber,
-          startColumn: line.indexOf('\t') + 1,
-          endLineNumber: lineNumber,
-          endColumn: line.indexOf('\t') + 2
-        })
-      }
-      
-      // Check for inconsistent indentation
-      if (line.includes(':')) {
-        // This is a key line
-        if (indentationStack.length > 0) {
-          const lastIndent = indentationStack[indentationStack.length - 1]
-          if (indentLevel > lastIndent && (indentLevel - lastIndent) % 2 !== 0) {
-            markers.push({
-              severity: monaco.MarkerSeverity.Warning,
-              message: 'Inconsistent indentation. YAML typically uses 2-space indentation.',
-              startLineNumber: lineNumber,
-              startColumn: 1,
-              endLineNumber: lineNumber,
-              endColumn: indentLevel + 1
-            })
-          }
-        }
-        
-        // Update indentation stack
-        while (indentationStack.length > 0 && indentationStack[indentationStack.length - 1] >= indentLevel) {
-          indentationStack.pop()
-        }
-        indentationStack.push(indentLevel)
-      }
+    // Skip empty lines and comments
+    if (line.trim() === '' || line.trim().startsWith('#')) {
+      continue
     }
     
-    return markers
+    // Calculate indentation level
+    const match = line.match(/^(\s*)/)
+    const indentLevel = match ? match[1].length : 0
+    
+    // Check for tabs (not allowed in YAML)
+    if (line.includes('\t')) {
+      markers.push({
+        severity: monaco.MarkerSeverity.Error,
+        message: 'Tabs are not allowed in YAML. Use spaces for indentation.',
+        startLineNumber: lineNumber,
+        startColumn: line.indexOf('\t') + 1,
+        endLineNumber: lineNumber,
+        endColumn: line.indexOf('\t') + 2
+      })
+    }
+    
+    // Check for inconsistent indentation
+    if (line.includes(':')) {
+      // This is a key line
+      if (indentationStack.length > 0) {
+        const lastIndent = indentationStack[indentationStack.length - 1]
+        if (indentLevel > lastIndent && (indentLevel - lastIndent) % 2 !== 0) {
+          markers.push({
+            severity: monaco.MarkerSeverity.Warning,
+            message: 'Inconsistent indentation. YAML typically uses 2-space indentation.',
+            startLineNumber: lineNumber,
+            startColumn: 1,
+            endLineNumber: lineNumber,
+            endColumn: indentLevel + 1
+          })
+        }
+      }
+      
+      // Update indentation stack
+      while (indentationStack.length > 0 && indentationStack[indentationStack.length - 1] >= indentLevel) {
+        indentationStack.pop()
+      }
+      indentationStack.push(indentLevel)
+    }
   }
-
-    // Register YAML validation - we'll call this from the editor onChange
-  monaco.languages.onLanguage('yaml', () => {
-    // This ensures the language is properly registered
-    console.log('YAML language registered successfully')
-   })
+  
+  return markers
 }
 
 /**
