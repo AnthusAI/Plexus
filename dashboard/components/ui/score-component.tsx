@@ -23,6 +23,8 @@ import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import type { editor } from 'monaco-editor'
 import { defineCustomMonacoThemes, applyMonacoTheme, setupMonacoThemeWatcher, getCommonMonacoOptions, configureYamlLanguage, validateYamlIndentation } from '@/lib/monaco-theme'
+import { useYamlLinter, useLintMessageHandler } from '@/hooks/use-yaml-linter'
+import YamlLinterPanel from '@/components/ui/yaml-linter-panel'
 import { TestScoreDialog } from '@/components/scorecards/test-score-dialog'
 import { createTask } from '@/utils/data-operations'
 import { useAccount } from '@/app/contexts/AccountContext'
@@ -271,6 +273,14 @@ const DetailContent = React.memo(({
   
   // Track if we're currently editing to prevent useEffect from overriding changes
   const [isEditing, setIsEditing] = React.useState(false)
+  
+  // YAML Linting integration
+  const { lintResult, setupMonacoIntegration, jumpToLine } = useYamlLinter({
+    context: 'score',
+    debounceMs: 500,
+    showMonacoMarkers: true
+  })
+  const handleLintMessageClick = useLintMessageHandler(jumpToLine)
   
   // Let ScoreVersionHistory component handle its own featured filtering with smart defaults
   
@@ -758,6 +768,9 @@ const DetailContent = React.memo(({
                 defineCustomMonacoThemes(monaco);
                 applyMonacoTheme(monaco);
                 
+                // Set up YAML linting integration
+                setupMonacoIntegration(editor, monaco);
+                
                 // Debug: Check if YAML language is registered
                 const registeredLanguages = monaco.languages.getLanguages();
                 const yamlLang = registeredLanguages.find((lang: any) => lang.id === 'yaml');
@@ -857,6 +870,9 @@ const DetailContent = React.memo(({
               defineCustomMonacoThemes(monaco);
               applyMonacoTheme(monaco);
               
+              // Set up YAML linting integration
+              setupMonacoIntegration(editor, monaco);
+              
               // Debug: Check if YAML language is registered
               const registeredLanguages = monaco.languages.getLanguages();
               const yamlLang = registeredLanguages.find((lang: any) => lang.id === 'yaml');
@@ -925,6 +941,17 @@ const DetailContent = React.memo(({
             options={getCommonMonacoOptions(isMobileDevice)}
           />
           </ResizableEditorContainer>
+        )}
+        
+        {/* YAML Linter Panel - show linting results */}
+        {lintResult && (
+          <div className="mt-3">
+            <YamlLinterPanel
+              result={lintResult}
+              onMessageClick={handleLintMessageClick}
+              className="text-sm"
+            />
+          </div>
         )}
       </div>
 
