@@ -1,3 +1,5 @@
+"use client"
+
 import { Button as DocButton } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -171,7 +173,7 @@ export default function FeedbackAnalysisPage() {
               Configure the FeedbackAnalysis block in your report configuration:
             </p>
             <div className="bg-muted p-4 rounded-lg font-mono text-sm">
-              <div className="text-foreground">```block name="Feedback Analysis"</div>
+              <div className="text-foreground">```block</div>
               <div className="text-foreground">class: FeedbackAnalysis</div>
               <div className="text-foreground">scorecard: "1438"          # Required: Call Criteria Scorecard ID</div>
               <div className="text-foreground">days: 30                   # Optional: Number of days to analyze (default: 14)</div>

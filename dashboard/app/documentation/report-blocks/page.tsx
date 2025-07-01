@@ -40,7 +40,7 @@ export default function ReportBlocksPage() {
         <h2 className="text-2xl font-semibold mb-6">Available Report Blocks</h2>
         <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-2">
           
-          <Card className="hover:shadow-md transition-shadow">
+          <Card className="hover:shadow-md transition-shadow border-border dark:border-transparent">
             <CardHeader>
               <div className="flex items-start justify-between">
                 <div>
@@ -89,7 +89,7 @@ export default function ReportBlocksPage() {
             </CardContent>
           </Card>
 
-          <Card className="hover:shadow-md transition-shadow">
+          <Card className="hover:shadow-md transition-shadow border-border dark:border-transparent">
             <CardHeader>
               <div className="flex items-start justify-between">
                 <div>
@@ -147,16 +147,16 @@ export default function ReportBlocksPage() {
           <p>
             Report blocks are configured in report configuration files using Markdown with embedded code blocks:
           </p>
-          <div className="bg-muted p-4 rounded-lg font-mono text-sm">
-            <div className="text-foreground"># My Report</div>
-            <div className="text-muted-foreground">This report analyzes feedback data.</div>
-            <br />
-            <div className="text-foreground">```block name="Analysis"</div>
-            <div className="text-foreground">class: FeedbackAnalysis</div>
-            <div className="text-foreground">scorecard: example_scorecard</div>
-            <div className="text-foreground">days: 30</div>
-            <div className="text-foreground">```</div>
-          </div>
+                      <div className="bg-muted p-4 rounded-lg font-mono text-sm">
+              <div className="text-foreground"># My Report</div>
+              <div className="text-muted-foreground">This report analyzes feedback data.</div>
+              <br />
+              <div className="text-foreground">```block</div>
+              <div className="text-foreground">class: FeedbackAnalysis</div>
+              <div className="text-foreground">scorecard: example_scorecard</div>
+              <div className="text-foreground">days: 30</div>
+              <div className="text-foreground">```</div>
+            </div>
           <p>
             Each block type has its own configuration parameters and generates specific types of output. 
             See the individual block documentation pages for detailed configuration options and examples.
