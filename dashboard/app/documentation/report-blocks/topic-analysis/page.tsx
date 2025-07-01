@@ -1,3 +1,5 @@
+"use client"
+
 import { Button as DocButton } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -231,7 +233,7 @@ export default function TopicAnalysisPage() {
               Configure the TopicAnalysis block in your report configuration:
             </p>
             <div className="bg-muted p-4 rounded-lg font-mono text-sm">
-              <div className="text-foreground">```block name="Topic Analysis"</div>
+              <div className="text-foreground">```block</div>
               <div className="text-foreground">class: TopicAnalysis</div>
               <div className="text-foreground">data:</div>
               <div className="text-foreground">  source: "customer-calls"      # DataSource name or ID</div>
