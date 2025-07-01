@@ -179,6 +179,67 @@ Apply custom Python logic to make scoring decisions based on previous node outpu
         )
 ```
 
+## LogicalNode Usage
+
+Execute arbitrary Python code and return custom output values. Use for data processing, parsing, and transformation:
+
+```yaml
+- name: data_processor
+  class: LogicalNode
+  code: |
+    def process_data(context):
+        # Access data from previous nodes
+        state = context.get('state')
+        state_dict = state.model_dump() if state else {}
+        input_text = state_dict.get('extracted_text', '')
+        
+        # Custom processing logic
+        return {
+            "word_count": len(input_text.split()),
+            "has_keywords": 'important' in input_text.lower()
+        }
+  function_name: process_data
+  output:  # Map function results to state fields
+    text_length: word_count
+    contains_keywords: has_keywords
+```
+
+**Key differences from LogicalClassifier:**
+- No Score.Result dependency - returns any data structure
+- Configurable function name (not fixed to `score`)
+- Direct state field updates via `output` mapping
+
+**Common patterns:**
+```yaml
+# Text parsing
+- name: parser
+  class: LogicalNode
+  code: |
+    def parse_response(context):
+        state_dict = context['state'].model_dump()
+        response = state_dict.get('extracted_text', '')
+        
+        result = {}
+        for line in response.split('\n'):
+            if line.startswith('Primary AOI:'):
+                result['primary_aoi'] = line.replace('Primary AOI:', '').strip()
+        return result
+  function_name: parse_response
+  output:
+    area_of_interest: primary_aoi
+
+# Business logic
+- name: business_rules
+  class: LogicalNode
+  code: |
+    def apply_rules(context):
+        state_dict = context['state'].model_dump()
+        schools = state_dict.get('metadata', {}).get('schools', [])
+        has_campus = any(s.get('modality') == 'Campus' for s in schools)
+        return {"campus_program": has_campus}
+  function_name: apply_rules
+```
+
 ## Message Templates
 
 Templates support Jinja2 syntax for dynamic content:

@@ -67,6 +67,32 @@ def save_visualization(fig, filepath: str) -> None:
         logger.error(f"Failed to save visualization to {filepath}: {e}", exc_info=True)
         raise
 
+def save_topic_info(topic_model, output_dir: str, docs: List[str], topics: List[int]) -> None:
+    """Save topic information to JSON files."""
+    try:
+        import json
+        
+        # Ensure the output directory exists
+        os.makedirs(output_dir, mode=0o755, exist_ok=True)
+        
+        # Get topic information
+        topic_info = topic_model.get_topic_info()
+        
+        # Save topic info as JSON
+        topic_info_path = os.path.join(output_dir, "topic_info.json")
+        topic_info_dict = topic_info.to_dict(orient='records')
+        with open(topic_info_path, 'w', encoding='utf-8') as f:
+            json.dump(topic_info_dict, f, indent=2, ensure_ascii=False)
+        
+        # Set appropriate permissions
+        os.chmod(topic_info_path, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH)
+        
+        logger.info(f"Saved topic information to {topic_info_path}")
+        
+    except Exception as e:
+        logger.error(f"Failed to save topic information: {e}", exc_info=True)
+        raise
+
 def create_topics_per_class_visualization(
     topic_model, 
     topics, 
@@ -179,7 +205,8 @@ def analyze_topics(
     openai_api_key: Optional[str] = None,
     use_langchain: bool = False,
     representation_model_provider: str = "openai",
-    representation_model_name: str = "gpt-4o-mini"
+    representation_model_name: str = "gpt-4o-mini",
+    transformed_data_path: Optional[str] = None
 ) -> Optional[BERTopic]:
     """
     Perform BERTopic analysis on transformed transcripts.
@@ -196,6 +223,7 @@ def analyze_topics(
         use_langchain: Whether to use LangChain for representation model (default: False)
         representation_model_provider: LLM provider for topic naming (default: "openai")
         representation_model_name: Specific model name for topic naming (default: "gpt-4o-mini")
+        transformed_data_path: Path to parquet file with transformed data including ids column
         
     Returns:
         BERTopic: The fitted topic model with discovered topics, or None if analysis fails
@@ -403,82 +431,97 @@ def analyze_topics(
         logger.error(f"Error during BERTopic fit_transform: {e}", exc_info=True)
         raise
 
-    # --- Generate and Save Visualizations (including new PNGs) ---
+    # --- Post-fitting Analysis and Visualization ---
+
+    # Get topic information
+    topic_info = topic_model.get_topic_info()
+    num_topics = len(topic_info[topic_info.Topic != -1])
+    logger.info(f"Found {num_topics} topics (excluding the outlier topic).")
+
+    # If no topics were found, skip visualizations and return early
+    if num_topics == 0:
+        logger.warning("No topics were discovered. Skipping all visualizations.")
+        save_topic_info(topic_model, output_dir, docs, topics)
+        return topic_model
+
+    # --- Visualizations ---
+    logger.info("Generating visualizations...")
+
+    # Visualize Topics
     try:
-        logger.info("Generating BERTopic visualizations...")
-        
-        # Get number of topics (excluding the outlier topic -1)
-        num_topics = len(topic_model.get_topic_info()) - 1
-        logger.info(f"Found {num_topics} topics for visualization")
-        
-        # Visualize Topics (HTML and PNG) - only if we have enough topics
-        if num_topics >= 2:
-            try:
-                fig_topics = topic_model.visualize_topics()
-                save_visualization(fig_topics, str(Path(output_dir) / "topic_visualization.html"))
-                try:
-                    topics_png_path = str(Path(output_dir) / "topics_visualization.png")
-                    fig_topics.write_image(topics_png_path)
-                    os.chmod(topics_png_path, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH)
-                    logger.info(f"Saved topics visualization to {topics_png_path}")
-                except Exception as e:
-                    logger.error(f"Failed to save topics visualization as PNG: {e}", exc_info=True)
-            except Exception as e:
-                logger.error(f"Error during visualization generation: {e}")
-                logger.info("Continuing without topic visualization due to insufficient data diversity for UMAP embedding")
-        else:
-            logger.warning(f"Skipping topics visualization as there are fewer than 2 topics ({num_topics} found). Need at least 2 topics for 2D visualization.")
-
-        # Visualize Heatmap (HTML and PNG)
-        # Check if there are enough topics to generate a heatmap (BERTopic requires at least 2 topics for heatmap)
-        if num_topics >= 2:
-            fig_heatmap = topic_model.visualize_heatmap()
-            save_visualization(fig_heatmap, str(Path(output_dir) / "heatmap.html"))
-            try:
-                heatmap_png_path = str(Path(output_dir) / "heatmap_visualization.png")
-                fig_heatmap.write_image(heatmap_png_path)
-                os.chmod(heatmap_png_path, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH)
-                logger.info(f"Saved heatmap visualization to {heatmap_png_path}")
-            except Exception as e:
-                logger.error(f"Failed to save heatmap visualization as PNG: {e}", exc_info=True)
-        else:
-            logger.warning(f"Skipping heatmap visualization as there are fewer than 2 topics ({num_topics} found).")
-
-        # Visualize Documents (HTML only, as it's highly interactive and large)
-        # Check if there are enough documents and topics for document visualization
-        if len(docs) >= umap_n_neighbors and num_topics >= 1:
-            try:
-                fig_documents = topic_model.visualize_documents(docs, topics=topics) # Pass topics, remove umap_model
-                save_visualization(fig_documents, str(Path(output_dir) / "document_visualization.html"))
-            except Exception as e:
-                # Log error but continue, as this is a non-critical visualization
-                logger.error(f"Failed to generate or save document visualization: {e}", exc_info=True)
-        else:
-            logger.warning(f"Skipping document visualization due to insufficient documents ({len(docs)} docs, need {umap_n_neighbors}) or topics ({num_topics} topics, need 1).")
-
-
-        # Visualize Topic Hierarchy (HTML only)
+        fig_topics = topic_model.visualize_topics()
+        save_visualization(fig_topics, str(Path(output_dir) / "topic_visualization.html"))
         try:
-            hierarchical_topics_df = topic_model.hierarchical_topics(docs) # Renamed for clarity
-            if hierarchical_topics_df is not None and not hierarchical_topics_df.empty:
-                fig_hierarchy = topic_model.visualize_hierarchy(hierarchical_topics=hierarchical_topics_df, orientation='left') # Pass as keyword arg
-                save_visualization(fig_hierarchy, str(Path(output_dir) / "hierarchy.html"))
-            else:
-                logger.warning("Skipping topic hierarchy visualization as hierarchical_topics_df is empty or None.")
+            topics_png_path = str(Path(output_dir) / "topics_visualization.png")
+            fig_topics.write_image(topics_png_path)
+            os.chmod(topics_png_path, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH)
+            logger.info(f"Saved topics visualization to {topics_png_path}")
         except Exception as e:
-            logger.error(f"Failed to generate or save topic hierarchy visualization: {e}", exc_info=True)
-            
-        # Visualize Topics per Class (if applicable, HTML only)
-        # Note: This requires class labels which are not directly available here unless passed in.
-        # For now, we'll skip this, but it's an example of how it could be added if `classes` were an argument.
-        # topics_per_class_fig = create_topics_per_class_visualization(topic_model, topics, docs, output_dir)
-        # if topics_per_class_fig:
-        #     logger.info("Topics per class visualization generated.")
-
+            logger.error(f"Failed to save topics visualization as PNG: {e}", exc_info=True)
     except Exception as e:
-        logger.error(f"Error during visualization generation: {e}", exc_info=True)
-        # Continue even if visualizations fail, as core topic data might still be useful.
-        
+        logger.error(f"Error during visualization generation: {e}")
+        logger.warning(f"Skipping term score decline visualization as it requires at least one topic.")
+
+    # Visualize Heatmap (HTML and PNG)
+    # Check if there are enough topics to generate a heatmap (BERTopic requires at least 2 topics for heatmap)
+    if num_topics >= 2:
+        fig_heatmap = topic_model.visualize_heatmap()
+        save_visualization(fig_heatmap, str(Path(output_dir) / "heatmap.html"))
+        try:
+            heatmap_png_path = str(Path(output_dir) / "heatmap_visualization.png")
+            fig_heatmap.write_image(heatmap_png_path)
+            os.chmod(heatmap_png_path, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH)
+            logger.info(f"Saved heatmap visualization to {heatmap_png_path}")
+        except Exception as e:
+            logger.error(f"Failed to save heatmap visualization as PNG: {e}", exc_info=True)
+    else:
+        logger.warning(f"Skipping heatmap visualization as there are fewer than 2 topics ({num_topics} found).")
+
+    # Visualize Documents (HTML only, as it's highly interactive and large)
+    # Check if there are enough documents and topics for document visualization
+    if len(docs) >= umap_n_neighbors and num_topics >= 1:
+        try:
+            fig_documents = topic_model.visualize_documents(docs, topics=topics) # Pass topics, remove umap_model
+            save_visualization(fig_documents, str(Path(output_dir) / "document_visualization.html"))
+        except Exception as e:
+            # Log error but continue, as this is a non-critical visualization
+            logger.error(f"Failed to generate or save document visualization: {e}", exc_info=True)
+    else:
+        logger.warning(f"Skipping document visualization due to insufficient documents ({len(docs)} docs, need {umap_n_neighbors}) or topics ({num_topics} topics, need 1).")
+
+    # Visualize Topic Hierarchy (HTML only)
+    try:
+        hierarchical_topics_df = topic_model.hierarchical_topics(docs) # Rename for clarity
+        if hierarchical_topics_df is not None and not hierarchical_topics_df.empty:
+            fig_hierarchy = topic_model.visualize_hierarchy(hierarchical_topics=hierarchical_topics_df, orientation='left') # Pass as keyword arg
+            save_visualization(fig_hierarchy, str(Path(output_dir) / "hierarchy.html"))
+        else:
+            logger.warning("No hierarchical topics found to visualize.")
+    except Exception as e:
+        logger.error(f"Failed to generate or save topic hierarchy visualization: {e}", exc_info=True)
+
+    # Visualize Topic Similarity (Heatmap)
+    try:
+        fig_similarity = topic_model.visualize_heatmap()
+        save_visualization(fig_similarity, str(Path(output_dir) / "topic_similarity.html"))
+        try:
+            similarity_png_path = str(Path(output_dir) / "topic_similarity_visualization.png")
+            fig_similarity.write_image(similarity_png_path)
+            os.chmod(similarity_png_path, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH)
+            logger.info(f"Saved topic similarity visualization to {similarity_png_path}")
+        except Exception as e:
+            logger.error(f"Failed to save topic similarity visualization as PNG: {e}", exc_info=True)
+    except Exception as e:
+        logger.error(f"Error during topic similarity visualization: {e}", exc_info=True)
+        logger.warning(f"Skipping topic similarity visualization as it requires at least two topics.")
+
+    # Visualize Topics per Class (if applicable, HTML only)
+    # Note: This requires class labels which are not directly available here unless passed in.
+    # For now, we'll skip this, but it's an example of how it could be added if `classes` were an argument.
+    # topics_per_class_fig = create_topics_per_class_visualization(topic_model, topics, docs, output_dir)
+    # if topics_per_class_fig:
+    #     logger.info("Topics per class visualization generated.")
+
     # --- Save Topic Information ---
     logger.info("Saving topic information...")
     
@@ -511,6 +554,20 @@ def analyze_topics(
     # --- Extract and Save Representative Documents ---
     logger.info("Extracting representative documents for each topic...")
     try:
+        # Load transformed data if available to get ids column
+        transformed_df = None
+        if transformed_data_path and os.path.exists(transformed_data_path):
+            try:
+                transformed_df = pd.read_parquet(transformed_data_path)
+                logger.info(f"Loaded transformed data with {len(transformed_df)} rows from {transformed_data_path}")
+                if 'ids' in transformed_df.columns:
+                    logger.info("Found 'ids' column in transformed data")
+                else:
+                    logger.info("No 'ids' column found in transformed data")
+            except Exception as e:
+                logger.warning(f"Could not load transformed data from {transformed_data_path}: {e}")
+                transformed_df = None
+        
         # Get representative documents using BERTopic's method
         # Note: BERTopic's get_representative_docs() method by default returns only 3 docs per topic
         # We need to use a different approach to get more representative documents
@@ -525,10 +582,27 @@ def analyze_topics(
                 topic_docs = []
                 for i, doc_topic in enumerate(topics):
                     if doc_topic == topic_id:
-                        topic_docs.append((i, docs[i]))
+                        doc_data = {"text": docs[i]}
+                        
+                        # Add ids if available from transformed data
+                        if transformed_df is not None and i < len(transformed_df) and 'ids' in transformed_df.columns:
+                            ids_value = transformed_df.iloc[i].get('ids')
+                            if pd.notna(ids_value):
+                                try:
+                                    # Parse JSON if it's a string
+                                    if isinstance(ids_value, str):
+                                        import json
+                                        doc_data["ids"] = json.loads(ids_value)
+                                    else:
+                                        doc_data["ids"] = ids_value
+                                except (json.JSONDecodeError, TypeError):
+                                    # If parsing fails, store as-is
+                                    doc_data["ids"] = ids_value
+                        
+                        topic_docs.append((i, doc_data))
                 
                 # Just take the first 20 documents for this topic (simplified to avoid probability access issues)
-                representative_docs[topic_id] = [doc for _, doc in topic_docs[:20]]
+                representative_docs[topic_id] = [doc_data for _, doc_data in topic_docs[:20]]
                 
                 logger.info(f"Topic {topic_id}: Found {len(topic_docs)} total docs, selected {len(representative_docs[topic_id])} representative docs")
         

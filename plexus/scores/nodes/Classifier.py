@@ -113,10 +113,6 @@ class Classifier(BaseNode):
                             if not conflict:
                                 # Store match
                                 matches.append((original_class, line_idx, pos, original_idx))
-                                
-                                # When parsing from start, return first match immediately
-                                if self.parse_from_start:
-                                    return [(original_class, line_idx, pos, original_idx)]
                             
                             # Skip past this match
                             pos += len(normalized_class)
@@ -140,62 +136,6 @@ class Classifier(BaseNode):
                 matches.sort(key=lambda x: (x[1], x[2]), reverse=True)
                 return matches[0][0]  # Return the original class name
 
-        def strip_classification_from_explanation(self, output: str, classification: str) -> str:
-            """Remove the classification from the explanation text."""
-            if not classification:
-                return output.strip()
-
-            lines = output.strip().split('\n')
-            result_lines = []
-            classification_removed = False
-
-            # Normalize the classification for comparison
-            normalized_classification = self.normalize_text(classification)
-            
-            for line in lines:
-                normalized_line = self.normalize_text(line)
-                
-                # Skip lines that ONLY contain the classification or very short lines with the classification
-                if (normalized_line == normalized_classification or 
-                    (len(normalized_line) < len(normalized_classification) + 5 and 
-                     normalized_classification in normalized_line)):
-                    classification_removed = True
-                    continue
-                
-                result_lines.append(line)
-            
-            # If we didn't filter any lines and there are at least 2 lines,
-            # try to remove classification from the beginning of the first line
-            if not classification_removed and len(lines) >= 1:
-                first_line = lines[0]
-                normalized_first = self.normalize_text(first_line)
-                
-                if normalized_first.startswith(normalized_classification):
-                    # Try to find where to split the first line
-                    # Look for common separators after the classification
-                    original_class_len = len(classification)
-                    potential_cuts = [
-                        first_line.find(': ', 0, len(first_line)),
-                        first_line.find(' - ', 0, len(first_line)),
-                        first_line.find('. ', 0, len(first_line)),
-                        first_line.find(', ', 0, len(first_line)),
-                        first_line.find(':\n', 0, len(first_line)),
-                        first_line.find('.\n', 0, len(first_line))
-                    ]
-                    
-                    valid_cuts = [cut for cut in potential_cuts if cut > 0]
-                    if valid_cuts:
-                        cut_point = min(valid_cuts) + 2  # +2 to include the separator
-                        result_lines[0] = first_line[cut_point:].strip()
-                    else:
-                        # No clear separator found, try a simpler approach
-                        for i, char in enumerate(first_line):
-                            if i >= original_class_len and not char.isalnum():
-                                result_lines[0] = first_line[i+1:].strip()
-                                break
-            
-            return '\n'.join(result_lines).strip()
-
         def parse(self, output: str) -> Dict[str, Any]:
             # Find all matches in the text
             matches = self.find_matches_in_text(output)
@@ -203,12 +143,16 @@ class Classifier(BaseNode):
             # Select the appropriate match
             selected_class = self.select_match(matches, output)
             
-            # Remove the classification from the explanation
-            clean_explanation = self.strip_classification_from_explanation(output, selected_class)
+            # Only return a classification if it's actually one of the valid classes
+            # This allows the retry logic to work properly when invalid responses are received
+            if selected_class is not None and selected_class in self.valid_classes:
+                classification = selected_class
+            else:
+                classification = None
             
             return {
-                "classification": selected_class,
-                "explanation": clean_explanation or output.strip()  # Fall back to original if empty
+                "classification": classification,
+                "explanation": output.strip() or "No explanation provided"
             }
 
     def get_llm_prompt_node(self):
@@ -217,21 +161,11 @@ class Classifier(BaseNode):
         prompt_templates = self.get_prompt_templates()
 
         async def llm_request(state):
-            logging.info("<*> Entering llm_request node")
-            logging.debug(f"Initial state: {state}")
+            logging.info(f"→ {self.node_name}: Preparing LLM request")
             
             # Keep state as GraphState object to preserve Message types
             if isinstance(state, dict):
                 state = self.GraphState(**state)
-            
-            # Add detailed logging
-            logging.info("Message details:")
-            if hasattr(state, 'messages') and state.messages:
-                for i, msg in enumerate(state.messages):
-                    logging.info(f"Message {i}: type={type(msg)}, content={msg}")
-            if hasattr(state, 'chat_history') and state.chat_history:
-                for i, msg in enumerate(state.chat_history):
-                    logging.info(f"Message type: {type(msg)}, content={msg}")
             
             # If we have chat history from a retry, use that
             if hasattr(state, 'chat_history') and state.chat_history:
@@ -271,21 +205,7 @@ class Classifier(BaseNode):
             else:
                 logging.info("Building new messages from prompt template")
                 try:
-                    state_dict = state.model_dump()
-                    logging.info(f"Template context keys: {list(state_dict.keys())}")
-                    logging.info(f"Looking for enrollment_type_detector in state: {'enrollment_type_detector' in state_dict}")
-                    
-                    # Flatten node results into the state dict for template access
-                    if 'node_results' in state_dict and state_dict['node_results']:
-                        for node_name, node_result in state_dict['node_results'].items():
-                            if node_name not in state_dict:  # Don't overwrite existing keys
-                                state_dict[node_name] = node_result
-                                logging.info(f"Flattened node result for template access: {node_name} = {node_result}")
-                    
-                    if 'enrollment_type_detector' in state_dict:
-                        logging.info(f"enrollment_type_detector value: {state_dict['enrollment_type_detector']}")
-                    
-                    prompt = prompt_templates[0].format_prompt(**state_dict)
+                    prompt = prompt_templates[0].format_prompt(**state.model_dump())
                     messages = prompt.to_messages()
                     logging.info(f"Built new messages: {[type(m).__name__ for m in messages]}")
                 except Exception as e:
@@ -317,27 +237,33 @@ class Classifier(BaseNode):
         )
 
         async def parse_completion(state):
-            logging.info("<*> Entering parse_completion node")
+            logging.info(f"→ {self.node_name}: Parsing LLM response")
             if isinstance(state, dict):
                 state = self.GraphState(**state)
             
-            logging.info("Parsing completion")
-            logging.debug(f"State before parsing: {state}")
-            logging.debug(f"Completion to parse: {state.completion}")
-            
-            # Add check for None completion
+            logging.info(f"  - Input state completion for {self.node_name}: {state.completion!r}")
+
             if state.completion is None:
-                logging.info("No completion to parse - workflow likely interrupted")
+                logging.info(f"  ⚠ {self.node_name}: No completion to parse")
                 return state
             
             result = parser.parse(state.completion)
-            logging.info(f"Parsed result: {result}")
+            logging.info(f"  - Parser result for {self.node_name}: {result}")
+
+            if result['classification']:
+                logging.info(f"  ✓ {self.node_name}: {result['classification']}")
+            else:
+                logging.info(f"  ⚠ {self.node_name}: Could not parse classification")
             
-            return self.GraphState(
+            new_state = self.GraphState(
                 **{k: v for k, v in state.model_dump().items() if k not in ['classification', 'explanation']},
                 classification=result['classification'],
                 explanation=result['explanation']
             )
+
+            logging.info(f"  - Output state for {self.node_name} has classification: {new_state.classification!r}")
+            
+            return new_state
 
         return parse_completion
 
@@ -609,47 +535,32 @@ class Classifier(BaseNode):
 
     def add_core_nodes(self, workflow: StateGraph) -> StateGraph:
         """Add core nodes to the workflow."""
-        logging.info("Adding core nodes to workflow...")
-        
         # Add all nodes
         workflow.add_node("llm_prompt", self.get_llm_prompt_node())
-        logging.info("Added llm_prompt node")
-        
         workflow.add_node("llm_call", self.get_llm_call_node())
-        logging.info("Added llm_call node")
-        
         workflow.add_node("parse", self.get_parser_node())
-        logging.info("Added parse node")
-        
         workflow.add_node("retry", self.get_retry_node())
-        logging.info("Added retry node")
-        
         workflow.add_node("max_retries", self.get_max_retries_node())
-        logging.info("Added max_retries node")
 
         # Add conditional edges for parse
-        logging.info("Adding conditional edges for parse...")
         workflow.add_conditional_edges(
             "parse",
             self.should_retry,
             {
                 "retry": "retry",
-                "end": "store_node_result",  # Route successful completion through node result storage
+                "end": END,
                 "max_retries": "max_retries"
             }
         )
-        logging.info("Added parse edges")
         
         # Add regular edges
         workflow.add_edge("llm_prompt", "llm_call")
         workflow.add_edge("llm_call", "parse")
         workflow.add_edge("retry", "llm_prompt")
-        workflow.add_edge("max_retries", "store_node_result")  # Route max retries through node result storage too
-        logging.info("Added regular edges")
+        workflow.add_edge("max_retries", END)
         
         # Set entry point
         workflow.set_entry_point("llm_prompt")
-        logging.info("Set entry point to llm_prompt")
         
         return workflow
 

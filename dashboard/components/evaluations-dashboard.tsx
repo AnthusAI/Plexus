@@ -64,6 +64,7 @@ import { toast } from "sonner"
 import { shareLinkClient, ShareLinkViewOptions } from "@/utils/share-link-client"
 import { fetchAuthSession } from 'aws-amplify/auth'
 import { ShareResourceModal } from "@/components/share-resource-modal"
+import { EvaluationTasksGauges } from './EvaluationTasksGauges'
 
 type TaskResponse = {
   items: Evaluation[]
@@ -357,7 +358,12 @@ export function transformEvaluation(evaluation: Schema['Evaluation']['type']) {
     taskKeys: taskData ? Object.keys(taskData) : [],
     hasScoreResults: !!scoreResults?.items?.length,
     rawStages,
-    transformedStages
+    rawStagesType: typeof rawStages,
+    rawStagesKeys: rawStages ? Object.keys(rawStages) : [],
+    rawStagesData: rawStages?.data,
+    rawStagesItems: rawStages?.items,
+    transformedStages,
+    transformedStagesCount: transformedStages?.items?.length
   });
 
   // Transform the evaluation into the format expected by components
@@ -876,7 +882,12 @@ export default function EvaluationsDashboard({
                 damping: 30 
               }}
             >
-            <div className="@container">
+            <div className="@container space-y-3 overflow-visible">
+              {/* EvaluationTasksGauges at the top - only show when not in mobile selected evaluation view */}
+              {!(selectedEvaluationId && isNarrowViewport) && (
+                <EvaluationTasksGauges />
+              )}
+              
               {filteredEvaluations.length === 0 ? (
                 <div className="text-sm text-muted-foreground">No evaluations found</div>
               ) : (

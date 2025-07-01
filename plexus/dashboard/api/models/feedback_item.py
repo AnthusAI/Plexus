@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from plexus.dashboard.api.models.account import Account
     from plexus.dashboard.api.models.scorecard import Scorecard
     from plexus.dashboard.api.models.score import Score
+    from plexus.dashboard.api.models.item import Item
 
 logger = logging.getLogger(__name__)
 

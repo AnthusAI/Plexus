@@ -163,26 +163,27 @@ class DatasetResolver:
             logger.error(f"Error fetching full DataSource record: {e}")
             return None, None
             
-        # Check local cache first (unless fresh=True)
-        cache_dir = Path(".plexus") / "cache" / "datasets" / full_data_source['id']
+        # Get the current DataSourceVersion ID for cache key
+        data_source_version_id = full_data_source.get('currentVersionId')
+        if not data_source_version_id:
+            logger.error(f"❌ DataSource '{full_data_source['name']}' has no currentVersionId")
+            return None, None
+        
+        # Use DataSourceVersion ID as cache key instead of DataSource ID
+        # This ensures each version gets its own cache directory
+        cache_dir = Path(".plexus") / "cache" / "datasets" / data_source_version_id
         cache_file = cache_dir / "dataset.parquet"
         metadata_file = cache_dir / "metadata.json"
         
         if not fresh and cache_file.exists() and metadata_file.exists():
-            logger.info(f"Using cached dataset for DataSource {full_data_source['name']}: {cache_file}")
+            logger.info(f"Using cached dataset for DataSourceVersion {data_source_version_id}: {cache_file}")
             metadata = self._load_metadata(metadata_file)
             return str(cache_file), metadata
         
         # Look for existing DataSets associated with this DataSource
         logger.info(f"Looking for existing DataSets for DataSource {full_data_source['name']}")
+        logger.info(f"Using DataSourceVersion ID: {data_source_version_id}")
         try:
-            # First, get the current DataSourceVersion for this DataSource
-            data_source_version_id = full_data_source.get('currentVersionId')
-            if not data_source_version_id:
-                logger.error(f"❌ DataSource '{full_data_source['name']}' has no currentVersionId")
-                return None, None
-            
-            logger.info(f"Using DataSourceVersion ID: {data_source_version_id}")
             
             # Query DataSets using the dataSourceVersionId GSI
             query = """
