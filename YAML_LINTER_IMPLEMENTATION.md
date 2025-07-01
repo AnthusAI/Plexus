@@ -95,11 +95,13 @@ Pre-configured schemas for different YAML contexts:
 - ✅ Field type validation (string, number, etc.)
 
 #### Data Source Configuration Rules:
-- ✅ Required fields: `type`
-- ✅ Allowed data source types: `file`, `database`, `api`, `stream`
-- ✅ Allowed format types: `csv`, `json`, `parquet`, `xlsx`, `sql`
-- ✅ Database connection validation (warns if missing for database type)
-- ✅ Query recommendations for database and API types
+- ✅ Required fields: `class`
+- ✅ Allowed data source classes: `CallCriteriaDBCache`
+- ✅ Required sections: at least one of `queries` or `searches` (or both)
+- ✅ Query validation: required `scorecard_id` and `number` fields
+- ✅ Query type validation: numeric scorecard_id, positive number
+- ✅ Search validation: required `item_list_filename` with .csv/.txt extension
+- ✅ Balance field validation: boolean type (optional, defaults to true)
 
 ### ✅ User Experience Features
 
@@ -157,14 +159,18 @@ The test suite includes:
 - ✅ Empty document handling
 - ✅ YAML syntax errors
 
-#### Data Source Tests (7 test cases):
-- ✅ Valid file data source
-- ✅ Valid database data source
-- ✅ Missing required type
-- ✅ Invalid data source type
-- ✅ Database without connection warnings
-- ✅ API without query recommendations
-- ✅ Invalid format validation
+#### Data Source Tests (12 test cases):
+- ✅ Valid data source with queries
+- ✅ Valid data source with custom SQL query
+- ✅ Valid data source with searches
+- ✅ Valid data source with minimum calibration
+- ✅ Missing required class field
+- ✅ Invalid class value
+- ✅ Missing queries and searches
+- ✅ Query missing required fields
+- ✅ Invalid query field types
+- ✅ Search missing filename
+- ✅ Search with unusual file type
 
 #### Integration Tests (2 test cases):
 - ✅ Complex score with all fields

@@ -124,128 +124,200 @@ score_tests:
 
 # Data Source Configuration Test Cases
 data_source_tests:
-  - name: "Valid file data source"
-    description: "A properly formatted file data source configuration"
+  - name: "Valid data source with queries"
+    description: "A properly formatted data source with database queries"
     context: "data-source"
     input: |
-      type: "file"
-      name: "Customer Feedback CSV"
-      format: "csv"
-      schema:
-        columns:
-          - name: "customer_id"
-            type: "string"
-          - name: "feedback"
-            type: "text"
-          - name: "rating"
-            type: "number"
-      refresh:
-        enabled: true
-        interval: "daily"
+      class: CallCriteriaDBCache
+      queries:
+        - scorecard_id: 1329
+          number: 1000
+      balance: false
     expected:
       is_valid: true
       error_count: 0
       warning_count: 0
-    tags: ["valid", "file"]
+    tags: ["valid", "queries"]
 
-  - name: "Valid database data source"
-    description: "A properly formatted database data source configuration"
+  - name: "Valid data source with custom query"
+    description: "Data source with custom SQL query"
     context: "data-source"
     input: |
-      type: "database"
-      name: "Customer Database"
-      connection:
-        host: "db.example.com"
-        port: 5432
-        database: "customers"
-        username: "readonly"
-        ssl: true
-      query: "SELECT * FROM feedback WHERE created_at > NOW() - INTERVAL '30 days'"
-      format: "sql"
+      class: CallCriteriaDBCache
+      queries:
+        - scorecard_id: 1329
+          number: 6000
+          query: |
+            SELECT DISTINCT TOP {number} 
+                a.scorecard as scorecard_id,
+                a.f_id,
+                a.call_date
+            FROM 
+                vwForm a 
+            JOIN 
+                otherformdata ofd ON a.review_id = ofd.xcc_id
+            WHERE 
+                a.scorecard = {scorecard_id} 
+                AND a.transcript_analyzed IS NOT NULL 
+                AND a.max_reviews != -1
+                AND ofd.data_key = 'SOLD_FLAG'
+                AND ofd.data_value = '0'
+            ORDER BY 
+                a.call_date DESC, a.f_id DESC
+      balance: false
     expected:
       is_valid: true
       error_count: 0
       warning_count: 0
-    tags: ["valid", "database"]
+    tags: ["valid", "queries", "custom-sql"]
 
-  - name: "Missing required type"
-    description: "Data source missing required type field"
+  - name: "Valid data source with searches"
+    description: "Data source with file-based searches"
     context: "data-source"
     input: |
-      name: "Incomplete Data Source"
-      format: "csv"
+      class: CallCriteriaDBCache
+      searches:
+        - item_list_filename: scorecards/TermLifeAI/high-value-customers.csv
+      balance: false
+    expected:
+      is_valid: true
+      error_count: 0
+      warning_count: 0
+    tags: ["valid", "searches"]
+
+  - name: "Valid data source with minimum calibration"
+    description: "Data source with minimum calibration count"
+    context: "data-source"
+    input: |
+      class: CallCriteriaDBCache
+      queries:
+        - scorecard_id: 555
+          number: 100
+          minimum_calibration_count: 1
+      balance: true
+    expected:
+      is_valid: true
+      error_count: 0
+      warning_count: 0
+    tags: ["valid", "queries", "calibration"]
+
+  - name: "Missing required class"
+    description: "Data source missing required class field"
+    context: "data-source"
+    input: |
+      queries:
+        - scorecard_id: 1329
+          number: 1000
+      balance: false
     expected:
       is_valid: false
       error_count: 1
       warning_count: 0
       messages:
-        - code: "REQUIRED_FIELD_TYPE"
+        - code: "REQUIRED_FIELD_CLASS"
           level: "error"
     tags: ["invalid", "required-fields"]
 
-  - name: "Invalid data source type"
-    description: "Data source with unsupported type"
+  - name: "Invalid class value"
+    description: "Data source with unsupported class"
     context: "data-source"
     input: |
-      type: "unsupported"
-      name: "Invalid Type Source"
+      class: "UnsupportedClass"
+      queries:
+        - scorecard_id: 1329
+          number: 1000
     expected:
       is_valid: false
       error_count: 1
       warning_count: 0
       messages:
-        - code: "ALLOWED_VALUES_TYPE"
+        - code: "ALLOWED_VALUES_CLASS"
           level: "error"
-    tags: ["invalid", "type-validation"]
+    tags: ["invalid", "class-validation"]
 
-  - name: "Database without connection warning"
-    description: "Database data source without connection information"
+  - name: "Missing queries and searches"
+    description: "Data source without queries or searches"
     context: "data-source"
     input: |
-      type: "database"
-      name: "Database Without Connection"
-      format: "sql"
+      class: CallCriteriaDBCache
+      balance: true
+    expected:
+      is_valid: false
+      error_count: 1
+      warning_count: 0
+      messages:
+        - code: "DATA_SOURCE_QUERIES_OR_SEARCHES_REQUIRED"
+          level: "error"
+    tags: ["invalid", "required-sections"]
+
+  - name: "Query missing required fields"
+    description: "Query item missing scorecard_id and number"
+    context: "data-source"
+    input: |
+      class: CallCriteriaDBCache
+      queries:
+        - query: "SELECT * FROM calls"
+    expected:
+      is_valid: false
+      error_count: 2
+      warning_count: 0
+      messages:
+        - code: "DATA_SOURCE_QUERY_MISSING_SCORECARD_ID"
+          level: "error"
+        - code: "DATA_SOURCE_QUERY_MISSING_NUMBER"
+          level: "error"
+    tags: ["invalid", "query-validation"]
+
+  - name: "Invalid query field types"
+    description: "Query with invalid field types"
+    context: "data-source"
+    input: |
+      class: CallCriteriaDBCache
+      queries:
+        - scorecard_id: "not-a-number"
+          number: -5
+    expected:
+      is_valid: false
+      error_count: 2
+      warning_count: 0
+      messages:
+        - code: "DATA_SOURCE_QUERY_INVALID_SCORECARD_ID"
+          level: "error"
+        - code: "DATA_SOURCE_QUERY_INVALID_NUMBER"
+          level: "error"
+    tags: ["invalid", "query-validation", "field-types"]
+
+  - name: "Search missing filename"
+    description: "Search item missing required filename"
+    context: "data-source"
+    input: |
+      class: CallCriteriaDBCache
+      searches:
+        - description: "Missing filename"
+    expected:
+      is_valid: false
+      error_count: 1
+      warning_count: 0
+      messages:
+        - code: "DATA_SOURCE_SEARCH_MISSING_FILENAME"
+          level: "error"
+    tags: ["invalid", "search-validation"]
+
+  - name: "Search with unusual file type"
+    description: "Search with file that's not CSV or TXT"
+    context: "data-source"
+    input: |
+      class: CallCriteriaDBCache
+      searches:
+        - item_list_filename: "data/items.json"
     expected:
       is_valid: true
       error_count: 0
       warning_count: 1
       messages:
-        - code: "DATA_SOURCE_DB_CONNECTION"
+        - code: "DATA_SOURCE_SEARCH_INVALID_FILE_TYPE"
           level: "warning"
-    tags: ["valid", "warnings", "database"]
-
-  - name: "API without query recommendation"
-    description: "API data source without query field"
-    context: "data-source"
-    input: |
-      type: "api"
-      name: "API Without Query"
-      format: "json"
-    expected:
-      is_valid: true
-      error_count: 0
-      warning_count: 0
-      info_count: 1
-      messages:
-        - code: "DATA_SOURCE_QUERY_RECOMMENDATION"
-          level: "info"
-    tags: ["valid", "info", "api"]
-
-  - name: "Invalid format type"
-    description: "Data source with unsupported format"
-    context: "data-source"
-    input: |
-      type: "file"
-      name: "Invalid Format Source"
-      format: "unsupported_format"
-    expected:
-      is_valid: false
-      error_count: 1
-      warning_count: 0
-      messages:
-        - code: "ALLOWED_VALUES_FORMAT"
-          level: "error"
-    tags: ["invalid", "format-validation"]
+    tags: ["valid", "warnings", "search-validation"]
 
 # Complex Integration Test Cases
 integration_tests:
@@ -288,59 +360,41 @@ integration_tests:
     tags: ["valid", "complex", "comprehensive"]
 
   - name: "Complex data source with all features"
-    description: "Comprehensive data source configuration with all features"
+    description: "Comprehensive data source configuration with both queries and searches"
     context: "data-source"
     input: |
-      type: "database"
-      name: "Customer 360 Data Warehouse"
-      connection:
-        host: "warehouse.company.com"
-        port: 5432
-        database: "customer_360"
-        username: "analytics_user"
-        password: "${DB_PASSWORD}"
-        ssl: true
-        pool_size: 10
-        timeout: 30
-      query: |
-        SELECT 
-          c.customer_id,
-          c.first_name,
-          c.last_name,
-          c.email,
-          i.purchase_amount,
-          i.purchase_date,
-          f.feedback_text,
-          f.rating,
-          f.created_at as feedback_date
-        FROM customers c
-        LEFT JOIN interactions i ON c.customer_id = i.customer_id
-        LEFT JOIN feedback f ON c.customer_id = f.customer_id
-        WHERE f.created_at >= NOW() - INTERVAL '90 days'
-        ORDER BY f.created_at DESC
-      format: "sql"
-      schema:
-        primary_key: "customer_id"
-        columns:
-          - name: "customer_id"
-            type: "string"
-            nullable: false
-          - name: "feedback_text"
-            type: "text"
-            nullable: true
-          - name: "rating"
-            type: "number"
-            min: 1
-            max: 5
-      refresh:
-        enabled: true
-        interval: "hourly"
-        schedule: "0 * * * *"
-        retry_policy:
-          max_retries: 3
-          backoff: "exponential"
+      class: CallCriteriaDBCache
+      queries:
+        - scorecard_id: 1329
+          number: 5000
+          query: |
+            SELECT DISTINCT TOP {number} 
+                a.scorecard as scorecard_id,
+                a.f_id,
+                a.call_date,
+                a.rating,
+                a.transcript_analyzed
+            FROM 
+                vwForm a 
+            JOIN 
+                otherformdata ofd ON a.review_id = ofd.xcc_id
+            WHERE 
+                a.scorecard = {scorecard_id} 
+                AND a.transcript_analyzed IS NOT NULL 
+                AND a.max_reviews != -1
+                AND ofd.data_key = 'CUSTOMER_TYPE'
+                AND ofd.data_value = 'PREMIUM'
+            ORDER BY 
+                a.call_date DESC, a.f_id DESC
+        - scorecard_id: 555
+          number: 2000
+          minimum_calibration_count: 3
+      searches:
+        - item_list_filename: scorecards/TermLifeAI/high-value-customers.csv
+        - item_list_filename: data/special-cases.txt
+      balance: true
     expected:
       is_valid: true
       error_count: 0
       warning_count: 0
-    tags: ["valid", "complex", "comprehensive", "database"]
+    tags: ["valid", "complex", "comprehensive", "queries", "searches"]
