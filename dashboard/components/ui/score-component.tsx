@@ -750,11 +750,21 @@ const DetailContent = React.memo(({
                 monacoRef.current = monaco;
                 
                 // Configure YAML language support with enhanced syntax highlighting
+                console.log('Configuring YAML language support...');
                 configureYamlLanguage(monaco);
                 
                 // Apply our custom theme when the editor mounts
+                console.log('Applying Monaco themes...');
                 defineCustomMonacoThemes(monaco);
                 applyMonacoTheme(monaco);
+                
+                // Debug: Check if YAML language is registered
+                const registeredLanguages = monaco.languages.getLanguages();
+                const yamlLang = registeredLanguages.find((lang: any) => lang.id === 'yaml');
+                console.log('YAML language registered:', yamlLang ? 'YES' : 'NO');
+                if (yamlLang) {
+                  console.log('YAML language details:', yamlLang);
+                }
                 
                 // Force immediate layout to ensure correct sizing
                 editor.layout();
@@ -839,11 +849,18 @@ const DetailContent = React.memo(({
               monacoRef.current = monaco;
               
               // Configure YAML language support with enhanced syntax highlighting
+              console.log('Configuring YAML language support (fullscreen)...');
               configureYamlLanguage(monaco);
               
               // Apply our custom theme when the editor mounts
+              console.log('Applying Monaco themes (fullscreen)...');
               defineCustomMonacoThemes(monaco);
               applyMonacoTheme(monaco);
+              
+              // Debug: Check if YAML language is registered
+              const registeredLanguages = monaco.languages.getLanguages();
+              const yamlLang = registeredLanguages.find((lang: any) => lang.id === 'yaml');
+              console.log('YAML language registered (fullscreen):', yamlLang ? 'YES' : 'NO');
               
               // Force immediate layout to ensure correct sizing
               editor.layout();
@@ -860,6 +877,15 @@ const DetailContent = React.memo(({
             }}
             onChange={(value) => {
               if (!value) return;
+              
+              // Run YAML validation and show indentation errors
+              if (monacoRef.current && editorInstanceRef.current) {
+                const model = editorInstanceRef.current.getModel();
+                if (model) {
+                  const markers = validateYamlIndentation(monacoRef.current, model);
+                  monacoRef.current.editor.setModelMarkers(model, 'yaml-validation', markers);
+                }
+              }
               
               try {
                 // Set editing flag to prevent useEffect from overriding our changes
