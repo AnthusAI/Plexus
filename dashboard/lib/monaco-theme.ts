@@ -48,8 +48,19 @@ const getEditorColor = (cssVar: string): string => {
  * Configure YAML language support with enhanced syntax highlighting and validation
  */
 export const configureYamlLanguage = (monaco: Monaco): void => {
-  // First, register YAML as a language
-  monaco.languages.register({ id: 'yaml' });
+  // First, register YAML as a language if not already registered
+  const registeredLanguages = monaco.languages.getLanguages();
+  const yamlLanguageExists = registeredLanguages.some((lang: any) => lang.id === 'yaml');
+  
+  if (!yamlLanguageExists) {
+    monaco.languages.register({ 
+      id: 'yaml',
+      extensions: ['.yaml', '.yml'],
+      aliases: ['YAML', 'yaml', 'YML', 'yml'],
+      mimetypes: ['application/x-yaml', 'text/x-yaml', 'text/yaml']
+    });
+    console.log('YAML language registered successfully');
+  }
 
   // Register YAML language configuration
   monaco.languages.setLanguageConfiguration('yaml', {
@@ -80,9 +91,23 @@ export const configureYamlLanguage = (monaco: Monaco): void => {
       decreaseIndentPattern: /^\s*[\}\]\)].*$/,
     },
   })
+  console.log('YAML language configuration set');
 
   // Enhanced YAML tokenization rules for better syntax highlighting
   monaco.languages.setMonarchTokensProvider('yaml', {
+    defaultToken: 'invalid',
+    tokenPostfix: '.yaml',
+    
+    keywords: [
+      'true', 'True', 'TRUE',
+      'false', 'False', 'FALSE',
+      'null', 'Null', 'NULL',
+      'yes', 'Yes', 'YES',
+      'no', 'No', 'NO',
+      'on', 'On', 'ON',
+      'off', 'Off', 'OFF'
+    ],
+    
     tokenizer: {
       root: [
         // Comments
@@ -92,44 +117,61 @@ export const configureYamlLanguage = (monaco: Monaco): void => {
         [/^---\s*$/, 'tag'],
         [/^\.\.\.\s*$/, 'tag'],
         
-        // Keys (including quoted keys)
-        [/^\s*([a-zA-Z_][\w\-]*)\s*:/, 'key'],
-        [/^\s*(['"])(.*?)\1\s*:/, 'key'],
+        // Keys (including quoted keys) - more comprehensive pattern
+        [/^\s*([a-zA-Z_][\w\-]*)\s*(?=:)/, 'key'],
+        [/^\s*(['"])((?:[^'"]|\\.)*)(\1)\s*(?=:)/, ['delimiter', 'key', 'delimiter']],
         
+        // Values after colons
+        [/:\s*/, 'delimiter', '@value'],
+        
+        // Arrays
+        [/^\s*-\s*/, 'delimiter.array'],
+        
+        // Everything else
+        [/./, 'identifier'],
+      ],
+      
+      value: [
         // Strings (single quoted)
-        [/'([^'\\]|\\.)*'/, 'string'],
+        [/'([^'\\]|\\.)*'/, 'string', '@pop'],
         
         // Strings (double quoted)
-        [/"([^"\\]|\\.)*"/, 'string'],
+        [/"([^"\\]|\\.)*"/, 'string', '@pop'],
         
         // Multiline strings (literal and folded)
-        [/^\s*[\|>][-+]?\d*\s*$/, 'string.yaml'],
+        [/[\|>][-+]?\d*\s*$/, 'string.yaml', '@multiline'],
         
         // Numbers
-        [/-?\d+\.?\d*([eE][-+]?\d+)?/, 'number'],
+        [/-?\d+\.?\d*([eE][-+]?\d+)?/, 'number', '@pop'],
         
-        // Booleans and null
-        [/\b(true|false|null|True|False|Null|TRUE|FALSE|NULL|~)\b/, 'keyword'],
+        // Booleans and keywords
+        [/\b(?:true|false|null|True|False|Null|TRUE|FALSE|NULL|yes|no|Yes|No|YES|NO|on|off|On|Off|ON|OFF|~)\b/, 'keyword', '@pop'],
         
         // Arrays and objects
         [/[\[\]{}]/, 'delimiter.bracket'],
-        [/[,]/, 'delimiter.comma'],
+        [/,/, 'delimiter.comma'],
         
         // Anchors and aliases
-        [/&[a-zA-Z_][\w]*/, 'type'],
-        [/\*[a-zA-Z_][\w]*/, 'type'],
+        [/&[a-zA-Z_][\w]*/, 'type', '@pop'],
+        [/\*[a-zA-Z_][\w]*/, 'type', '@pop'],
         
         // Tags
-        [/![a-zA-Z_][\w]*/, 'tag'],
+        [/![a-zA-Z_][\w]*/, 'tag', '@pop'],
         
-        // Indentation guides (important for YAML)
-        [/^\s+/, 'whitespace'],
+        // Newline ends value
+        [/\n/, '', '@pop'],
         
-        // Everything else as default
-        [/./, 'identifier'],
+        // Unquoted strings
+        [/[^\n\r]+/, 'string', '@pop'],
+      ],
+      
+      multiline: [
+        [/^(\s*)(.*)$/, ['', 'string']],
+        [/^(?!\s)/, '', '@pop'],
       ],
     },
   })
+  console.log('YAML tokenizer provider registered');
 
   // Set up YAML validation for indentation errors
   monaco.languages.registerDocumentFormattingEditProvider('yaml', {
