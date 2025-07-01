@@ -22,7 +22,7 @@ import * as monaco from 'monaco-editor'
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import type { editor } from 'monaco-editor'
-import { defineCustomMonacoThemes, applyMonacoTheme, setupMonacoThemeWatcher, getCommonMonacoOptions, configureYamlLanguage } from '@/lib/monaco-theme'
+import { defineCustomMonacoThemes, applyMonacoTheme, setupMonacoThemeWatcher, getCommonMonacoOptions, configureYamlLanguage, validateYamlIndentation } from '@/lib/monaco-theme'
 import { TestScoreDialog } from '@/components/scorecards/test-score-dialog'
 import { createTask } from '@/utils/data-operations'
 import { useAccount } from '@/app/contexts/AccountContext'
@@ -771,6 +771,15 @@ const DetailContent = React.memo(({
               }}
               onChange={(value) => {
                 if (!value) return;
+                
+                // Run YAML validation and show indentation errors
+                if (monacoRef.current && editorInstanceRef.current) {
+                  const model = editorInstanceRef.current.getModel();
+                  if (model) {
+                    const markers = validateYamlIndentation(monacoRef.current, model);
+                    monacoRef.current.editor.setModelMarkers(model, 'yaml-validation', markers);
+                  }
+                }
                 
                 try {
                   // Set editing flag to prevent useEffect from overriding our changes
