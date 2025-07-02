@@ -956,6 +956,9 @@ class LangGraphScore(Score, LangChainUser):
     @staticmethod
     def create_value_setter_node(output_mapping: dict) -> FunctionType:
         def value_setter(state):
+            logging.debug(f"Value setter processing aliases: {list(output_mapping.keys())}")
+            logging.debug(f"Input state dump: {state.model_dump()}")
+            
             # Create a new dict with all current state values
             new_state = state.model_dump()
             
@@ -963,10 +966,12 @@ class LangGraphScore(Score, LangChainUser):
             for alias, original in output_mapping.items():
                 if hasattr(state, original):
                     original_value = getattr(state, original)
+                    logging.debug(f"Aliasing {original} = {original_value!r} -> {alias}")
                     new_state[alias] = original_value
                     # Also directly set on the state object to ensure it's accessible
                     setattr(state, alias, original_value)
                 else:
+                    logging.debug(f"Original field '{original}' not found in state, treating as literal")
                     # If the original isn't a state variable, treat it as a literal value
                     new_state[alias] = original
                     # Also directly set on the state object
