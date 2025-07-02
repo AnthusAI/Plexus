@@ -182,7 +182,7 @@ class Extractor(BaseNode, LangChainUser):
             
             # Invoke the chain to get the extraction result
             extraction_result = chain.invoke({
-                **state.dict()
+                **state.model_dump()
             })
             
             # Create the result state with the extracted text

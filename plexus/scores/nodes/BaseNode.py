@@ -198,22 +198,26 @@ class BaseNode(ABC, LangChainUser):
 
             final_node_state = await app.ainvoke(state_dict)
             
-            # Manually merge the classification and explanation back into the main state dict
-            if 'classification' in final_node_state:
-                state_dict['classification'] = final_node_state['classification']
-            if 'explanation' in final_node_state:
-                state_dict['explanation'] = final_node_state['explanation']
-            
-            # Also merge the metadata trace
-            if 'metadata' in final_node_state and final_node_state.get('metadata') and final_node_state['metadata'].get('trace'):
-                if 'metadata' not in state_dict or not state_dict.get('metadata'):
-                    state_dict['metadata'] = {}
-                if 'trace' not in state_dict['metadata']:
-                    state_dict['metadata']['trace'] = {'node_results': []}
-                
-                state_dict['metadata']['trace']['node_results'].extend(
-                    final_node_state['metadata']['trace']['node_results']
-                )
+            # Merge ALL fields from final_node_state back into state_dict
+            # This ensures fields like extracted_text, classification, explanation, etc. are preserved
+            for key, value in final_node_state.items():
+                if key == 'metadata':
+                    # Special handling for metadata to merge traces properly
+                    if value and value.get('trace'):
+                        if 'metadata' not in state_dict or not state_dict.get('metadata'):
+                            state_dict['metadata'] = {}
+                        if 'trace' not in state_dict['metadata']:
+                            state_dict['metadata']['trace'] = {'node_results': []}
+                        
+                        state_dict['metadata']['trace']['node_results'].extend(
+                            value['trace']['node_results']
+                        )
+                    else:
+                        # If no trace, just update the metadata
+                        state_dict['metadata'] = value
+                else:
+                    # For all other fields, directly merge them
+                    state_dict[key] = value
 
             return state_dict
 
