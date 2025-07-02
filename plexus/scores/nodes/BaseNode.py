@@ -209,9 +209,16 @@ class BaseNode(ABC, LangChainUser):
                         if 'trace' not in state_dict['metadata']:
                             state_dict['metadata']['trace'] = {'node_results': []}
                         
-                        state_dict['metadata']['trace']['node_results'].extend(
-                            value['trace']['node_results']
-                        )
+                        # Only add NEW trace entries to avoid duplicates
+                        existing_entries = state_dict['metadata']['trace']['node_results']
+                        new_entries = value['trace']['node_results']
+                        
+                        # Find entries that are actually new (not already in existing_entries)
+                        existing_count = len(existing_entries)
+                        if len(new_entries) > existing_count:
+                            # Only add the entries beyond what we already have
+                            truly_new_entries = new_entries[existing_count:]
+                            state_dict['metadata']['trace']['node_results'].extend(truly_new_entries)
                     else:
                         # If no trace, just update the metadata
                         state_dict['metadata'] = value
