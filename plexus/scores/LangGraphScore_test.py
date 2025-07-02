@@ -837,3 +837,40 @@ async def test_edge_routing(graph_config_with_edge, mock_azure_openai, mock_yes_
         
         # Check that the value setter connects to revenue_classifier
         assert "revenue_classifier" in workflow.graph.nodes
+
+@pytest.mark.asyncio
+async def test_condition_output_preservation_with_end_routing():
+    """Test that condition outputs are preserved when routing to END with final output aliasing"""
+    # This test verifies the fix for the issue where condition outputs 
+    # were being overwritten by final output aliasing
+    
+    # Test the output aliasing function directly
+    from plexus.scores.LangGraphScore import LangGraphScore
+    
+    # Create a mock state that simulates what happens after a condition runs
+    class MockState:
+        def __init__(self, **kwargs):
+            self.value = kwargs.get("value", "NA")  # Set by condition
+            self.explanation = kwargs.get("explanation", "Customer did not mention the criteria.")  # Set by condition  
+            self.classification = kwargs.get("classification", "No")  # Original classifier result
+            # Accept any additional kwargs to handle aliasing
+            for key, val in kwargs.items():
+                setattr(self, key, val)
+            
+        def model_dump(self):
+            return {attr: getattr(self, attr) for attr in dir(self) 
+                   if not attr.startswith('_') and not callable(getattr(self, attr))}
+    
+    # Test the output aliasing with scorecard config that maps value->classification
+    output_mapping = {"value": "classification", "explanation": "explanation"}
+    aliasing_func = LangGraphScore.generate_output_aliasing_function(output_mapping)
+    
+    # Create state where condition has set value="NA" but classification="No"
+    state = MockState()
+    
+    # Run output aliasing 
+    result = aliasing_func(state)
+    
+    # Verify that condition output is preserved (should NOT be overwritten by classification)
+    assert result.value == "NA"  # Should preserve condition output, not overwrite with "No"
+    assert result.explanation == "Customer did not mention the criteria."

@@ -829,6 +829,15 @@ class LangGraphScore(Score, LangChainUser):
             # Add aliased values
             for alias, original in output_mapping.items():
                 logging.info(f"DEBUG: Processing alias '{alias}' -> '{original}'")
+                
+                # Check if the alias field already has a meaningful value from conditions
+                existing_alias_value = new_state.get(alias)
+                if existing_alias_value is not None and existing_alias_value != "":
+                    logging.info(f"DEBUG: Preserving existing {alias} = {existing_alias_value!r}")
+                    # Also directly set on the state object to ensure it's accessible
+                    setattr(state, alias, existing_alias_value)
+                    continue
+                
                 if hasattr(state, original):
                     original_value = getattr(state, original)
                     logging.info(f"DEBUG: Found {original} = {original_value!r} (type: {type(original_value)})")
