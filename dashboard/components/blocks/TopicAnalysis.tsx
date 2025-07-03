@@ -20,6 +20,19 @@ import {
   formatBERTopic, 
   formatFineTuning 
 } from '@/components/diagrams/text-formatting-utils';
+import { IdentifierDisplay } from '../ui/identifier-display';
+
+interface Identifier {
+  id: string;
+  name: string;
+  url?: string;
+}
+
+interface TopicExample {
+  id?: Identifier[] | string;
+  text: string;
+  [key: string]: any; // Allow other properties
+}
 
 interface TopicAnalysisData {
   summary?: string;
@@ -43,7 +56,7 @@ interface TopicAnalysisData {
     llm_model?: string;
     method?: string;
     prompt_used?: string;
-    examples?: string[];
+    examples?: TopicExample[];
     llm_provider?: string;
     hit_rate_stats?: {
       total_processed: number;
@@ -78,7 +91,7 @@ interface TopicAnalysisData {
     count: number;
     representation: string;
     words: Array<{ word: string; weight: number }>;
-    examples?: string[];
+    examples?: TopicExample[];
   }>;
   visualization_notes?: {
     topics_visualization?: string;
@@ -144,6 +157,27 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
       // Legacy format: use object directly
       data = props.output as TopicAnalysisData;
     }
+    
+    // Debug the parsed data structure
+    console.log('🔍 TopicAnalysis: Parsed data structure:', {
+      dataType: typeof data,
+      dataKeys: data ? Object.keys(data) : 'none',
+      dataKeysCount: data ? Object.keys(data).length : 0,
+      hasTopics: !!(data && data.topics),
+      topicsType: data && data.topics ? typeof data.topics : 'none',
+      topicsLength: data && data.topics && Array.isArray(data.topics) ? data.topics.length : 'not array'
+    });
+    
+    // Safety check: if the parsed data looks like a massive array-like object, it's probably malformed
+    if (data && Object.keys(data).length > 1000) {
+      console.error('❌ TopicAnalysis: Parsed data has too many keys, likely malformed YAML:', Object.keys(data).length);
+      return (
+        <div className="p-4 text-center text-destructive">
+          Error: Topic analysis data appears to be malformed (too many keys: {Object.keys(data).length}). Please regenerate the report.
+        </div>
+      );
+    }
+    
   } catch (error) {
     console.error('❌ TopicAnalysis: Failed to parse output data:', error);
     return (
@@ -158,6 +192,7 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
   const fineTuning = data.fine_tuning || {};
   const topics = data.topics || [];
   const errors = data.errors || [];
+  const summary = data.summary;
   
   // Debug logging for topics data
   console.log('🔍 TopicAnalysis: Topics data received:', {
@@ -217,7 +252,7 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
         )}
 
         {/* Main Topic Analysis Results */}
-        <TopicAnalysisResults topics={topics} />
+        <TopicAnalysisResults topics={topics} summary={summary} bertopicAnalysis={bertopicAnalysis} />
 
         {/* Pipeline Setup */}
         <div className="w-full">
@@ -305,6 +340,7 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
                   <FineTuningSection 
                     fineTuning={fineTuning}
                     topics={topics}
+                    bertopicAnalysis={bertopicAnalysis}
                   />
                 </AccordionContent>
               </AccordionItem>
@@ -338,9 +374,11 @@ const TopicAnalysisResults: React.FC<{
     count: number;
     representation: string;
     words: Array<{ word: string; weight: number }>;
-    examples?: string[];
+    examples?: TopicExample[];
   }>;
-}> = ({ topics }) => {
+  summary?: string;
+  bertopicAnalysis?: any;
+}> = ({ topics, summary, bertopicAnalysis }) => {
   const [selectedTopicIndex, setSelectedTopicIndex] = useState<number>(-1);
 
   if (topics.length === 0) {
@@ -350,28 +388,16 @@ const TopicAnalysisResults: React.FC<{
           <MessagesSquare className="h-5 w-5" />
           <h3 className="text-lg font-medium">Topic Analysis Results</h3>
         </div>
-        <div className="space-y-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base text-muted-foreground">Analyzing topics...</CardTitle>
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-muted border-t-foreground"></div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                <div className="h-4 bg-muted rounded animate-pulse w-3/4"></div>
-                <div className="space-y-2">
-                  <div className="flex flex-wrap gap-1">
-                    {[1, 2, 3, 4, 5, 6].map((j) => (
-                      <div key={j} className="h-6 bg-muted rounded animate-pulse w-16"></div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>No Topics Discovered</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              {summary || "The analysis completed, but no distinct topics were found in the data. You could try adjusting the analysis parameters, like 'min_topic_size', or increasing the sample size."}
+            </p>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -425,21 +451,25 @@ const TopicAnalysisResults: React.FC<{
                       <div className="flex flex-wrap gap-1">
                         {topic.words
                           .filter(word => {
-                            // Filter out empty or blank words
-                            if (!word.word || word.word.trim() === '') {
+                            // Ensure word is a non-empty string
+                            if (!word.word || typeof word.word !== 'string' || word.word.trim() === '') {
                               return false;
                             }
-                            // More robustly filter out the topic name from keywords
+                            // Also filter out the main topic name itself
                             const normalizedWord = word.word.toLowerCase().replace(/_/g, ' ').trim();
                             const normalizedTopicName = cleanTopicName(topic.name).toLowerCase().trim();
                             return normalizedWord !== normalizedTopicName;
                           })
-                          .slice(0, 6)
-                          .map((word, i) => (
-                            <Badge key={i} variant="secondary" className="text-xs">
-                              {word.word}
-                            </Badge>
-                          ))}
+                          .slice(0, bertopicAnalysis.top_n_words || 6)
+                          .map((word, i) => {
+                            const wordText = typeof word.word === 'string' ? word.word : 
+                              (typeof word.word === 'object' ? JSON.stringify(word.word) : String(word.word));
+                            return (
+                              <Badge key={i} variant="secondary" className="text-xs">
+                                {wordText}
+                              </Badge>
+                            );
+                          })}
                       </div>
                     )}
                     {topic.examples && topic.examples.length > 0 && (
@@ -467,7 +497,7 @@ const TopicAnalysisResults: React.FC<{
  * Shows representative example texts for a topic with collapsible display
  */
 const TopicExamplesSection: React.FC<{
-  examples: string[];
+  examples: TopicExample[];
 }> = ({ examples }) => {
   if (!examples || examples.length === 0) {
     return null;
@@ -480,13 +510,90 @@ const TopicExamplesSection: React.FC<{
         <h5 className="text-sm font-medium">Examples</h5>
       </div>
       <div className="space-y-2 pl-6">
-        {examples.map((example, index) => (
-          <div key={index} className="p-2 bg-muted/20 rounded-md border-l-2 border-muted-foreground/40">
-            <p className="text-sm text-foreground whitespace-pre-wrap break-words">
-              {example}
-            </p>
-          </div>
-        ))}
+        {examples.map((example, index) => {
+          // Debug: Log the structure of example objects to see what metadata is available
+          if (index === 0 && typeof example === 'object') {
+            console.log('🔍 TopicAnalysis: Example object structure:', {
+              keys: Object.keys(example),
+              example: example,
+              hasIds: 'ids' in example,
+              hasId: 'id' in example,
+              hasText: 'text' in example
+            });
+          }
+          
+          // Extract text and metadata from object or use as string
+          let displayText: string;
+          let metadata: any = null;
+          
+          if (typeof example === 'string') {
+            displayText = example;
+          } else if (typeof example === 'object' && example !== null) {
+            // If it's an object with a 'text' property, extract that
+            const exampleObj = example as any;
+            if ('text' in exampleObj && typeof exampleObj.text === 'string') {
+              displayText = exampleObj.text;
+              metadata = exampleObj; // Store the full object for metadata access
+            } else {
+              // Fallback to stringifying the whole object
+              displayText = JSON.stringify(example);
+            }
+          } else {
+            displayText = String(example);
+          }
+          
+          return (
+            <div key={index} className="p-2 bg-muted/20 rounded-md border-l-2 border-muted-foreground/40">
+              {/* Display identifier/metadata if available */}
+              {(metadata?.id || metadata?.ids) && (
+                <div className="mb-2">
+                  {(() => {
+                    let identifierArray: Identifier[] = [];
+                    
+                    // Check both 'id' and 'ids' fields for backward compatibility
+                    const idField = metadata?.id || metadata?.ids;
+                    
+                    // Handle different formats of the id field
+                    if (Array.isArray(idField)) {
+                      identifierArray = idField;
+                    } else if (typeof idField === 'string') {
+                      try {
+                        const parsed = JSON.parse(idField);
+                        if (Array.isArray(parsed)) {
+                          identifierArray = parsed;
+                        }
+                      } catch (e) {
+                        // If parsing fails, treat as a simple string ID
+                        identifierArray = [{ id: idField, name: 'ID' }];
+                      }
+                    }
+                    
+                    // Only render if we have valid identifiers
+                    if (identifierArray.length > 0) {
+                      return (
+                        <IdentifierDisplay 
+                          identifiers={
+                            identifierArray.map(identifier => ({
+                                name: identifier.name || 'ID',
+                                value: identifier.id,
+                                url: identifier.url
+                            }))
+                          }
+                          iconSize="sm"
+                          textSize="xs"
+                        />
+                      );
+                    }
+                    return null;
+                  })()}
+                </div>
+              )}
+              <p className="text-sm text-foreground whitespace-pre-wrap break-words">
+                {displayText}
+              </p>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -846,7 +953,7 @@ const LLMExtractionSection: React.FC<{
           </div>
           
           <div className="grid gap-2">
-            {displayedExamples.map((example: string, index: number) => {
+            {displayedExamples.map((example: TopicExample, index: number) => {
               const isSelected = selectedExamples.has(index);
               const actualIndex = showAllExamples ? index : (index < 20 ? index : examples.indexOf(example));
               
@@ -878,15 +985,54 @@ const LLMExtractionSection: React.FC<{
  * Compact display with click to expand, defensive design for long content
  */
 const ExampleCard: React.FC<{
-  example: string;
+  example: TopicExample;
   index: number;
   isSelected: boolean;
   onToggle: () => void;
 }> = ({ example, index, isSelected, onToggle }) => {
   const [expanded, setExpanded] = useState(false);
   const maxPreviewLength = 120;
-  const isLong = example.length > maxPreviewLength;
-  const displayText = expanded || !isLong ? example : `${example.slice(0, maxPreviewLength)}...`;
+  
+  // Extract text and metadata from object or use as string
+  let safeExample: string;
+  let metadata: any = null;
+  
+  if (typeof example === 'string') {
+    safeExample = example;
+  } else if (typeof example === 'object' && example !== null) {
+    // If it's an object with a 'text' property, extract that
+    const exampleObj = example as any;
+    if ('text' in exampleObj && typeof exampleObj.text === 'string') {
+      safeExample = exampleObj.text;
+      metadata = exampleObj; // Store the full object for metadata access
+    } else {
+      // Fallback to stringifying the whole object
+      safeExample = JSON.stringify(example);
+    }
+  } else {
+    safeExample = String(example);
+  }
+  
+  const isLong = safeExample.length > maxPreviewLength;
+  const displayText = expanded || !isLong ? safeExample : `${safeExample.slice(0, maxPreviewLength)}...`;
+
+  // Safely parse the ID field if it's a string
+  let parsedId: Identifier[] | null = null;
+  if (metadata?.id) {
+    if (Array.isArray(metadata.id)) {
+      parsedId = metadata.id;
+    } else if (typeof metadata.id === 'string') {
+      try {
+        const parsed = JSON.parse(metadata.id);
+        if (Array.isArray(parsed)) {
+          parsedId = parsed;
+        }
+      } catch (e) {
+        // Not a valid JSON string, so we can't parse it.
+        // It will be handled as a plain string below.
+      }
+    }
+  }
 
   return (
     <div
@@ -898,9 +1044,36 @@ const ExampleCard: React.FC<{
       onClick={onToggle}
     >
       <div className="flex items-start justify-between mb-2">
-        <span className="text-xs font-mono text-muted-foreground">#{index}</span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-mono text-muted-foreground">#{index}</span>
+          {/* Display identifier if available */}
+          {parsedId ? (
+            parsedId.map((identifier: Identifier) => (
+              identifier.url ? (
+                <a 
+                  href={identifier.url} 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  key={identifier.id} 
+                  onClick={(e) => e.stopPropagation()}
+                  className="text-xs font-mono bg-muted px-1 py-0.5 rounded text-muted-foreground hover:bg-primary/20 hover:text-primary-foreground"
+                >
+                  {identifier.name}: {identifier.id}
+                </a>
+              ) : (
+                <span key={identifier.id} className="text-xs font-mono bg-muted px-1 py-0.5 rounded text-muted-foreground">
+                  {identifier.name}: {identifier.id}
+                </span>
+              )
+            ))
+          ) : metadata?.id ? (
+            <span className="text-xs font-mono bg-muted px-1 py-0.5 rounded text-muted-foreground">
+              ID: {String(metadata.id)}
+            </span>
+          ) : null}
+        </div>
         <div className="flex items-center gap-1">
-          {example.length > maxPreviewLength && (
+          {safeExample.length > maxPreviewLength && (
             <Button
               variant="ghost"
               size="sm"
@@ -914,7 +1087,7 @@ const ExampleCard: React.FC<{
             </Button>
           )}
           <span className="text-xs text-muted-foreground">
-            {example.length} chars
+            {safeExample.length} chars
           </span>
         </div>
       </div>
@@ -936,7 +1109,7 @@ const BERTopicSection: React.FC<{
     count: number;
     representation: string;
     words: Array<{ word: string; weight: number }>;
-    examples?: string[];
+    examples?: TopicExample[];
   }>;
   bertopicAnalysis: any;
   visualizationNotes?: {
@@ -992,11 +1165,15 @@ const BERTopicSection: React.FC<{
                 </div>
                 {topic.words && topic.words.length > 0 && (
                   <div className="flex flex-wrap gap-1">
-                    {topic.words.slice(0, 8).map((word, i) => (
-                      <Badge key={i} variant="outline" className="text-xs">
-                        {word.word} ({word.weight.toFixed(3)})
-                      </Badge>
-                    ))}
+                    {topic.words.slice(0, bertopicAnalysis?.top_n_words || 8).map((word, i) => {
+                      const wordText = typeof word.word === 'string' ? word.word : 
+                        (typeof word.word === 'object' ? JSON.stringify(word.word) : String(word.word));
+                      return (
+                        <Badge key={i} variant="outline" className="text-xs">
+                          {wordText} ({word.weight.toFixed(3)})
+                        </Badge>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -1054,9 +1231,10 @@ const FineTuningSection: React.FC<{
     count: number;
     representation: string;
     words: Array<{ word: string; weight: number }>;
-    examples?: string[];
+    examples?: TopicExample[];
   }>;
-}> = ({ fineTuning, topics }) => {
+  bertopicAnalysis?: any;
+}> = ({ fineTuning, topics, bertopicAnalysis }) => {
   const topicsBefore = fineTuning.topics_before || [];
   const hasBeforeAfterData = topicsBefore.length > 0 && topics.length > 0;
 
@@ -1118,11 +1296,15 @@ const FineTuningSection: React.FC<{
                         <h5 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Original Keywords</h5>
                         <div className="p-3 bg-muted/30 rounded border-l-2 border-primary/20">
                           <div className="flex flex-wrap gap-1">
-                            {beforeTopic.words.slice(0, 6).map((word: any, i: number) => (
-                              <Badge key={i} variant="outline" className="text-xs">
-                                {word.word}
-                              </Badge>
-                            ))}
+                            {beforeTopic.words.slice(0, bertopicAnalysis?.top_n_words || 6).map((word: any, i: number) => {
+                              const wordText = typeof word.word === 'string' ? word.word : 
+                                (typeof word.word === 'object' ? JSON.stringify(word.word) : String(word.word));
+                              return (
+                                <Badge key={i} variant="outline" className="text-xs">
+                                  {wordText}
+                                </Badge>
+                              );
+                            })}
                           </div>
                         </div>
                       </div>
@@ -1136,19 +1318,9 @@ const FineTuningSection: React.FC<{
                       <div className="space-y-2">
                         <h5 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">LLM Refined</h5>
                         <div className="p-3 bg-primary/5 rounded border-l-2 border-primary/20">
-                          <p className="text-sm font-medium mb-2">
+                          <p className="text-sm font-medium">
                             {cleanTopicName(afterTopic.name)}
                           </p>
-                          <div className="flex flex-wrap gap-1">
-                            {afterTopic.words
-                              .filter((word: any) => !cleanTopicName(afterTopic.name).toLowerCase().includes(word.word.toLowerCase()))
-                              .slice(0, 6)
-                              .map((word: any, i: number) => (
-                                <Badge key={i} variant="outline" className="text-xs">
-                                  {word.word}
-                                </Badge>
-                              ))}
-                          </div>
                         </div>
                       </div>
                     </div>
