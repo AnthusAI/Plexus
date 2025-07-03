@@ -1,6 +1,7 @@
 import React from 'react';
 import { ReportBlockProps, BlockComponent } from './ReportBlock';
 import { Badge } from '@/components/ui/badge';
+import { parseOutputString } from '@/lib/utils';
 
 /**
  * Specialized block for displaying Score Information.
@@ -18,8 +19,8 @@ const ScoreInfo: React.FC<ReportBlockProps> = ({
   let data: Record<string, any> = {};
   try {
     if (typeof output === 'string') {
-      // Parse string output as JSON
-      data = JSON.parse(output);
+      // Use the safe parser that handles both JSON and YAML
+      data = parseOutputString(output);
     } else {
       // Use object output directly
       data = output || {};

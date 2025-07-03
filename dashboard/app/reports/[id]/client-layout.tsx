@@ -4,6 +4,7 @@ import React from 'react'
 import { useParams } from 'next/navigation'
 import SquareLogo, { LogoVariant } from '@/components/logo-square'
 import { ReportService } from './page'
+import BlockRegistryInitializer from '@/components/blocks/BlockRegistryInitializer'
 
 export default function ReportClientLayout({
   children,
@@ -16,6 +17,9 @@ export default function ReportClientLayout({
   // Use the custom share layout for all report views
   return (
     <div className="flex flex-col min-h-screen bg-background">
+      {/* Add the initializer here to ensure it runs for all report pages */}
+      <BlockRegistryInitializer />
+
       {/* Main content - fills available space and handles overflow */}
       <main className="flex-1 overflow-auto">
         {children}
