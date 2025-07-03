@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { ScrollText, Download, Paperclip, AlertTriangle, AlertCircle, Code, Eye, MessageSquareCode, Copy } from 'lucide-react';
+import { ScrollText, Download, Paperclip, AlertTriangle, AlertCircle, Code, Eye, MessageSquareCode, Copy, Database, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { downloadData, getUrl } from 'aws-amplify/storage';
 import { CardButton } from '@/components/CardButton';
@@ -56,6 +56,20 @@ export interface ReportBlockProps {
     start: string;
     end: string;
   }
+  /** Associated dataset information */
+  dataSet?: {
+    id: string;
+    name?: string;
+    description?: string;
+    dataSourceVersion?: {
+      id: string;
+      dataSource?: {
+        id: string;
+        name: string;
+        key?: string;
+      };
+    };
+  } | null;
 }
 
 /**
@@ -87,7 +101,8 @@ const ReportBlock: BlockComponent = ({
   notes,
   error,
   warning,
-  dateRange
+  dateRange,
+  dataSet
 }) => {
   // State for inline log display
   const [showLog, setShowLog] = useState(false);
@@ -359,11 +374,13 @@ const ReportBlock: BlockComponent = ({
   };
 
   // Extract error and warning from output if not provided directly
-  const displayError = error || (output && typeof output === 'object' && output.error);
-  const displayWarning = warning || (output && typeof output === 'object' && output.warning);
+  const outputObject = (output && typeof output === 'object') ? output as Record<string, any> : {};
+  const outputError = outputObject.error || (Array.isArray(outputObject.errors) && outputObject.errors.length > 0 ? outputObject.errors[0] : undefined);
+  const displayError = error || outputError;
+  const displayWarning = warning || outputObject.warning;
   
   // Extract date range from output if not provided directly
-  const displayDateRange = dateRange || (output && typeof output === 'object' && output.date_range);
+  const displayDateRange = dateRange || outputObject.date_range;
 
   // Render the log details
   const renderLogDetails = () => {
@@ -590,6 +607,36 @@ ${Object.entries(config).map(([key, value]) => `${key}: ${formatValue(value)}`).
                 <p className="text-sm text-muted-foreground mt-1">
                   {formattedDate(displayDateRange.start)} to {formattedDate(displayDateRange.end)}
                 </p>
+              )}
+              {dataSet && (
+                <div className="flex items-center gap-2 mt-2">
+                  <Database className="h-4 w-4 text-muted-foreground" />
+                  <div className="flex items-center gap-1 text-sm">
+                    <span className="text-muted-foreground">Dataset:</span>
+                    <a
+                      href={`/datasets/${dataSet.id}`}
+                      className="text-foreground hover:text-primary hover:underline font-medium"
+                      title={dataSet.description || `View dataset: ${dataSet.name || dataSet.id}`}
+                    >
+                      {dataSet.name || dataSet.id}
+                    </a>
+                    <ExternalLink className="h-3 w-3 text-muted-foreground" />
+                    {dataSet.dataSourceVersion?.dataSource?.name && (
+                      <>
+                        <span className="text-muted-foreground mx-1">•</span>
+                        <span className="text-muted-foreground">Source:</span>
+                        <a
+                          href={`/data-sources/${dataSet.dataSourceVersion.dataSource.id}`}
+                          className="text-foreground hover:text-primary hover:underline"
+                          title={`View data source: ${dataSet.dataSourceVersion.dataSource.name}`}
+                        >
+                          {dataSet.dataSourceVersion.dataSource.name}
+                        </a>
+                        <ExternalLink className="h-3 w-3 text-muted-foreground" />
+                      </>
+                    )}
+                  </div>
+                </div>
               )}
               {notes && (
                 <div className="text-sm text-muted-foreground mt-2 max-w-prose">

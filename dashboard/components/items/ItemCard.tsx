@@ -395,7 +395,8 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
                           blockquote: ({ children }) => <blockquote className="border-l-4 border-muted-foreground/20 pl-4 italic text-muted-foreground">{children}</blockquote>,
                         }}
                       >
-                        {item.text}
+                        {typeof item.text === 'string' ? item.text : 
+                          (typeof item.text === 'object' ? JSON.stringify(item.text, null, 2) : String(item.text))}
                       </ReactMarkdown>
                     </div>
                   </div>
