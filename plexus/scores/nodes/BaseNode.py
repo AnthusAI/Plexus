@@ -195,36 +195,31 @@ class BaseNode(ABC, LangChainUser):
                 state_dict = state.model_dump()
             else:
                 state_dict = dict(state) # Fallback
-
+            
             final_node_state = await app.ainvoke(state_dict)
             
-            # Merge ALL fields from final_node_state back into state_dict
-            # This ensures fields like extracted_text, classification, explanation, etc. are preserved
-            for key, value in final_node_state.items():
-                if key == 'metadata':
-                    # Special handling for metadata to merge traces properly
-                    if value and value.get('trace'):
-                        if 'metadata' not in state_dict or not state_dict.get('metadata'):
-                            state_dict['metadata'] = {}
-                        if 'trace' not in state_dict['metadata']:
-                            state_dict['metadata']['trace'] = {'node_results': []}
-                        
-                        # Only add NEW trace entries to avoid duplicates
-                        existing_entries = state_dict['metadata']['trace']['node_results']
-                        new_entries = value['trace']['node_results']
-                        
-                        # Find entries that are actually new (not already in existing_entries)
-                        existing_count = len(existing_entries)
-                        if len(new_entries) > existing_count:
-                            # Only add the entries beyond what we already have
-                            truly_new_entries = new_entries[existing_count:]
-                            state_dict['metadata']['trace']['node_results'].extend(truly_new_entries)
-                    else:
-                        # If no trace, just update the metadata
-                        state_dict['metadata'] = value
-                else:
-                    # For all other fields, directly merge them
-                    state_dict[key] = value
+            # Manually merge specific fields back into the main state dict
+            if 'classification' in final_node_state:
+                state_dict['classification'] = final_node_state['classification']
+            if 'explanation' in final_node_state:
+                state_dict['explanation'] = final_node_state['explanation']
+            if 'extracted_text' in final_node_state:
+                state_dict['extracted_text'] = final_node_state['extracted_text']
+
+            # Also merge the metadata trace, but avoid duplicates
+            if 'metadata' in final_node_state and final_node_state.get('metadata') and final_node_state['metadata'].get('trace'):
+                if 'metadata' not in state_dict or not state_dict.get('metadata'):
+                    state_dict['metadata'] = {}
+                if 'trace' not in state_dict['metadata']:
+                    state_dict['metadata']['trace'] = {'node_results': []}
+                
+                # Get existing node names to avoid duplicates
+                existing_node_names = {result.get('node_name') for result in state_dict['metadata']['trace']['node_results']}
+                
+                # Only add trace entries that don't already exist
+                for trace_entry in final_node_state['metadata']['trace']['node_results']:
+                    if trace_entry.get('node_name') not in existing_node_names:
+                        state_dict['metadata']['trace']['node_results'].append(trace_entry)
 
             return state_dict
 
