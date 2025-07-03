@@ -3,6 +3,7 @@ from pydantic import Field
 from langgraph.graph import StateGraph, END
 from plexus.scores.nodes.BaseNode import BaseNode
 from plexus.CustomLogging import logging
+from plexus.scores.LangGraphScore import LangGraphScore
 
 class LogicalNode(BaseNode):
     """
@@ -193,7 +194,6 @@ class LogicalNode(BaseNode):
 
         # Add output aliasing function if needed
         if hasattr(self.parameters, 'output') and self.parameters.output is not None:
-            from plexus.scores.LangGraphScore import LangGraphScore
             output_aliasing_function = LangGraphScore.generate_output_aliasing_function(self.parameters.output)
             workflow.add_node('output_aliasing', output_aliasing_function)
             workflow.add_edge(self.node_name, 'output_aliasing')
