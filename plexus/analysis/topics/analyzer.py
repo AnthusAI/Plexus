@@ -16,6 +16,24 @@ from umap import UMAP
 from bertopic.representation import OpenAI, LangChain
 import openai
 from pathlib import Path
+import json
+
+# Load environment variables from .env file
+try:
+    import dotenv
+    # Try to find .env file in common locations
+    env_paths = [
+        '.env',
+        os.path.join(os.path.dirname(__file__), '../../../.env'),  # From topics/ to project root
+        '/Users/ryan.porter/Projects/Plexus/.env'  # Absolute path as fallback
+    ]
+    
+    for env_path in env_paths:
+        if os.path.exists(env_path):
+            dotenv.load_dotenv(env_path, override=True)
+            break
+except ImportError:
+    pass  # dotenv not available, environment variables must be set externally
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -70,8 +88,6 @@ def save_visualization(fig, filepath: str) -> None:
 def save_topic_info(topic_model, output_dir: str, docs: List[str], topics: List[int]) -> None:
     """Save topic information to JSON files."""
     try:
-        import json
-        
         # Ensure the output directory exists
         os.makedirs(output_dir, mode=0o755, exist_ok=True)
         
@@ -203,11 +219,17 @@ def analyze_topics(
     top_n_words: int = 10,
     use_representation_model: bool = True,
     openai_api_key: Optional[str] = None,
-    use_langchain: bool = False,
     representation_model_provider: str = "openai",
     representation_model_name: str = "gpt-4o-mini",
-    transformed_data_path: Optional[str] = None
-) -> Optional[BERTopic]:
+    transformed_df: Optional[pd.DataFrame] = None,
+    prompt: Optional[str] = None,
+    force_single_representation: bool = True,
+    # New configurable parameters for document selection
+    nr_docs: int = 100,
+    diversity: float = 0.1,
+    doc_length: int = 500,
+    tokenizer: str = "whitespace"
+) -> Optional[Tuple[BERTopic, pd.DataFrame, List[int], List[str]]]:
     """
     Perform BERTopic analysis on transformed transcripts.
     
@@ -220,10 +242,15 @@ def analyze_topics(
         top_n_words: Number of words per topic (default: 10)
         use_representation_model: Whether to use LLM for better topic naming (default: True)
         openai_api_key: OpenAI API key for representation model (default: None, uses env var)
-        use_langchain: Whether to use LangChain for representation model (default: False)
         representation_model_provider: LLM provider for topic naming (default: "openai")
         representation_model_name: Specific model name for topic naming (default: "gpt-4o-mini")
-        transformed_data_path: Path to parquet file with transformed data including ids column
+        transformed_df: DataFrame with transformed data including ids column
+        prompt: Custom prompt for topic naming
+        force_single_representation: Use only one representation model to avoid duplicate titles
+        nr_docs: Number of representative documents to select per topic (default: 100)
+        diversity: Diversity factor for document selection, 0-1 (default: 0.1)
+        doc_length: Maximum characters per document (default: 500)
+        tokenizer: Tokenization method for documents (default: "whitespace")
         
     Returns:
         BERTopic: The fitted topic model with discovered topics, or None if analysis fails
@@ -231,12 +258,33 @@ def analyze_topics(
     # Create output directory if it doesn't exist
     ensure_directory(output_dir)
     
+    # Default prompts
+    default_prompt = """
+    I have a topic from call center transcripts that is described by the following keywords: [KEYWORDS]
+    In this topic, these customer-agent conversations are representative examples:
+    [DOCUMENTS]
+
+    Based on the keywords and representative examples above, provide a short, descriptive label for this topic in customer service context. Return only the label, no other text or formatting.
+    """
+    
+    # Use provided prompt or default
+    prompt = prompt or default_prompt
+    
     # Load text data
     logger.info(f"Loading text data from {text_file_path}")
     try:
         with open(text_file_path, 'r') as f:
-            docs = [line.strip() for line in f if line.strip()]
+            all_lines = f.readlines()
+            docs = [line.strip() for line in all_lines if line.strip()]
         logger.debug(f"Loaded {len(docs)} documents from {text_file_path}")
+        logger.info(f"🔍 ALIGNMENT_DEBUG: Total lines in file: {len(all_lines)}")
+        logger.info(f"🔍 ALIGNMENT_DEBUG: Non-empty lines (docs): {len(docs)}")
+        if transformed_df is not None:
+            logger.info(f"🔍 ALIGNMENT_DEBUG: transformed_df rows: {len(transformed_df)}")
+            length_diff = len(docs) - len(transformed_df)
+            if length_diff != 0:
+                logger.warning(f"⚠️ ALIGNMENT_WARNING: Length mismatch detected: docs({len(docs)}) vs transformed_df({len(transformed_df)}) = difference of {length_diff}")
+                logger.warning("⚠️ ALIGNMENT_WARNING: This may cause misalignment issues later")
         
         # Check if enough documents are loaded for analysis
         min_docs_for_umap = 3 # UMAP generally needs n_neighbors < n_samples, and n_neighbors >= 2
@@ -278,157 +326,139 @@ def analyze_topics(
     # Initialize representation model if requested
     representation_model = None
     if use_representation_model:
+        logger.info("🔍 Initializing OpenAI representation model for topic naming...")
+        logger.info(f"   • Provider: {representation_model_provider}")
+        logger.info(f"   • Model: {representation_model_name}")
+        logger.info(f"   • Document selection: {nr_docs} docs, diversity={diversity}")
         try:
             # Use provided API key or environment variable
             api_key = openai_api_key or os.environ.get("OPENAI_API_KEY")
+            
             if not api_key:
-                logger.warning("OpenAI API key not provided. Continuing without representation model.")
+                logger.error("❌ OpenAI API key not found. Continuing without representation model.")
+                logger.error("   This will result in keyword-based topic names instead of LLM-generated names.")
+                representation_model = None
             else:
-                if use_langchain:
-                    # Using simplified LangChain integration directly from docs
-                    logger.info(f"Initializing LangChain representation model with {representation_model_name} from {representation_model_provider}...")
-                    
-                    # Create a llm for LangChain
-                    if representation_model_provider.lower() == "openai":
-                        llm = ChatOpenAI(
-                            model=representation_model_name,
-                            temperature=0.0,
-                            openai_api_key=api_key
-                        )
-                    else:
-                        logger.warning(f"Provider {representation_model_provider} not supported for LangChain integration, falling back to OpenAI")
-                        llm = ChatOpenAI(
-                            model=representation_model_name,
-                            temperature=0.0,
-                            openai_api_key=api_key
-                        )
-                    
-                    # Create a simple QA chain  
-                    chain = load_qa_chain(llm, chain_type="stuff")
-                    
-                    # Simple prompt as shown in the docs
-                    simple_prompt = """
-                    I have a topic from call center transcripts that is described by the following keywords: [KEYWORDS]
-
-                    What is a short, descriptive label for this topic in customer service context? Return only the label, no other text or formatting.
-                    """
-                    
-                    # Create the representation model with the simple prompt
-                    representation_model = LangChain(chain=chain, prompt=simple_prompt)
-                    logger.info("LangChain representation model initialized successfully.")
-                else:
-                    # Using direct OpenAI integration
-                    logger.info(f"Initializing OpenAI representation model with {representation_model_name} from {representation_model_provider}...")
-                    
-                    if representation_model_provider.lower() == "openai":
-                        client = openai.OpenAI(api_key=api_key)
-                    else:
-                        logger.warning(f"Provider {representation_model_provider} not supported for direct integration, falling back to OpenAI")
-                        client = openai.OpenAI(api_key=api_key)
-                    
-                    # Custom prompt for OpenAI
-                    summarization_prompt = """
-                    I have a topic from call center transcripts that is described by the following keywords: [KEYWORDS]
-                    In this topic, these customer-agent conversations are representative examples:
-                    [DOCUMENTS]
-
-                    Based on the information above, provide a short, descriptive label for this topic in this format:
-                    topic: <concise label that describes what this topic represents in customer interactions>
-                    """
-                    
-                    representation_model = OpenAI(
-                        client=client, 
-                        model=representation_model_name, 
-                        prompt=summarization_prompt,
-                        delay_in_seconds=1
-                    )
-                    logger.info("OpenAI representation model initialized successfully.")
+                client = openai.OpenAI(api_key=api_key)
+                logger.info(f"🔥 REPR_DEBUG: Creating OpenAI representation model with:")
+                logger.info(f"🔥 REPR_DEBUG:   - model: {representation_model_name}")
+                logger.info(f"🔥 REPR_DEBUG:   - nr_docs: {nr_docs}")
+                logger.info(f"🔥 REPR_DEBUG:   - diversity: {diversity}")
+                logger.info(f"🔥 REPR_DEBUG:   - prompt length: {len(prompt) if prompt else 0}")
+                
+                representation_model = OpenAI(
+                    client=client, 
+                    model=representation_model_name, 
+                    prompt=prompt,
+                    delay_in_seconds=1,
+                    nr_docs=nr_docs,
+                    diversity=diversity,
+                    doc_length=doc_length,
+                    tokenizer=tokenizer
+                )
+                logger.info("✅ OpenAI representation model initialized successfully")
+                
+                        
         except Exception as e:
-            logger.error(f"Failed to initialize representation model: {e}", exc_info=True)
-            logger.warning("Continuing without representation model.")
+            logger.error(f"❌ Failed to initialize representation model: {e}")
+            logger.error("   Continuing without representation model - topics will use keyword-based names.")
             representation_model = None
+    else:
+        logger.info("ℹ️  Representation model disabled - topics will use keyword-based names")
 
     # Initialize BERTopic model with n-gram range and other parameters
     logger.info(f"Initializing BERTopic model with n-gram range {n_gram_range} and custom UMAP model.")
     
-    # First, create a model WITHOUT representation model to get the original topic names
-    initial_topic_model = BERTopic(
-        n_gram_range=n_gram_range,
-        min_topic_size=min_topic_size,
-        top_n_words=top_n_words,
-        umap_model=umap_model,
-        representation_model=None,  # No representation model for initial run
-        verbose=True
-    )
+    # SIMPLIFIED APPROACH: Create a single BERTopic model without complex state tracking
+    # This prevents topic assignment corruption that happens with update_topics()
+    logger.info("🔍 REPR_DEBUG: Using SIMPLIFIED representation model approach")
     
-    # If we're using a representation model, we'll capture before/after states
-    capture_before_after = use_representation_model and representation_model is not None
+    if use_representation_model and representation_model is not None:
+        logger.info("✅ Creating BERTopic model with LLM-powered topic naming")
+        topic_model = BERTopic(
+            n_gram_range=n_gram_range,
+            min_topic_size=min_topic_size,
+            top_n_words=top_n_words,
+            umap_model=umap_model,
+            representation_model=representation_model,  # Apply directly
+            verbose=True
+        )
+    else:
+        logger.info("ℹ️  Creating BERTopic model with keyword-based topic naming")
+        topic_model = BERTopic(
+            n_gram_range=n_gram_range,
+            min_topic_size=min_topic_size,
+            top_n_words=top_n_words,
+            umap_model=umap_model,
+            representation_model=None,
+            verbose=True
+        )
     
-    topic_model = BERTopic(
-        n_gram_range=n_gram_range,
-        min_topic_size=min_topic_size,
-        top_n_words=top_n_words,
-        umap_model=umap_model,
-        representation_model=representation_model,
-        verbose=True
-    )
     logger.debug("BERTopic model initialized successfully.")
     
-    # Fit and transform
-    logger.info(f"Starting topic modeling process with BERTopic (n_gram_range={n_gram_range}, min_topic_size={min_topic_size}, nr_topics={nr_topics or 'auto'})...")
+    # Fit and transform - SIMPLIFIED SINGLE-STAGE APPROACH
+    logger.info(f"🔍 REPR_DEBUG: Starting SIMPLIFIED topic modeling process")
+    logger.info(f"🔍 REPR_DEBUG: Parameters - n_gram_range={n_gram_range}, min_topic_size={min_topic_size}, nr_topics={nr_topics or 'auto'}")
     start_time = time.time()
     
     try:
-        if capture_before_after:
-            # First run without representation model to get original topic names
-            logger.info("Running initial topic modeling without representation model...")
-            topics, probs = initial_topic_model.fit_transform(docs)
-            
-            # Save the "before" topic information
-            logger.info("Capturing 'before' topic state...")
-            before_topic_info = initial_topic_model.get_topic_info()
-            before_topics_data = {}
-            
-            for _, row in before_topic_info.iterrows():
-                topic_id = row.get('Topic', -1)
-                if topic_id != -1:  # Skip outlier topic
-                    topic_words = []
-                    if hasattr(initial_topic_model, 'get_topic'):
-                        words_weights = initial_topic_model.get_topic(topic_id)
-                        topic_words = [{"word": word, "weight": weight} for word, weight in words_weights]
-                    
-                    before_topics_data[str(topic_id)] = {
-                        "id": int(topic_id),
-                        "name": row.get('Name', f'Topic {topic_id}'),
-                        "count": int(row.get('Count', 0)),
-                        "representation": row.get('Representation', ''),
-                        "words": topic_words
-                    }
-            
-            # Save before state to JSON file
-            import json
-            before_state_path = os.path.join(output_dir, "topics_before_fine_tuning.json")
-            with open(before_state_path, 'w', encoding='utf-8') as f:
-                json.dump(before_topics_data, f, indent=2, ensure_ascii=False)
-            logger.info(f"Saved 'before' topic state to {before_state_path}")
-            
-            # Now apply the representation model using update_topics
-            logger.info("Applying representation model for fine-tuning...")
-            topic_model = initial_topic_model  # Use the fitted model
-            
-            # Update topics with representation model
-            if representation_model:
-                topic_model.representation_model = representation_model
-                topic_model.update_topics(docs, representation_model=representation_model)
-                logger.info("Representation model applied successfully")
+        logger.info(f"Running BERTopic analysis on {len(docs)} documents...")
+        if topic_model.representation_model is not None:
+            logger.info("   • Using LLM representation model for topic naming")
         else:
-            # Regular single-stage processing
-            topics, probs = topic_model.fit_transform(docs)
+            logger.info("   • Using default keyword-based topic naming")
         
-        logger.info(f"BERTopic fit_transform completed in {time.time() - start_time:.2f} seconds.")
-        logger.info(f"Found {len(topic_model.get_topic_info())-1} topics initially (before any reduction).") # -1 for outlier topic
+        topics, probs = topic_model.fit_transform(docs)
+        
+        logger.info(f"✅ BERTopic analysis completed in {time.time() - start_time:.2f} seconds")
+        
+        # IMMEDIATE CHECK: Verify if representation model generated any custom labels
+        logger.info("🔥 IMMEDIATE_CHECK: Checking if representation model was used during fit_transform")
+        if hasattr(topic_model, 'custom_labels_') and topic_model.custom_labels_:
+            logger.info(f"🔥 IMMEDIATE_CHECK: Found {len(topic_model.custom_labels_)} custom labels - LLM WAS used")
+            sample_labels = dict(list(topic_model.custom_labels_.items())[:3])
+            logger.info(f"🔥 IMMEDIATE_CHECK: Sample custom labels: {sample_labels}")
+        else:
+            logger.warning("🔥 IMMEDIATE_CHECK: NO custom labels found - LLM was NOT used during fit_transform")
+            logger.warning("🔥 IMMEDIATE_CHECK: This means the OpenAI representation model failed silently")
+            
+            # Check if representation model is still attached
+            if topic_model.representation_model is not None:
+                logger.warning("🔥 IMMEDIATE_CHECK: Representation model is attached but didn't generate labels")
+                logger.warning("🔥 IMMEDIATE_CHECK: This suggests an OpenAI API error or configuration issue")
+            else:
+                logger.error("🔥 IMMEDIATE_CHECK: Representation model was removed during fit_transform - initialization failed")
+        
+        # Log topic discovery results
+        topic_info = topic_model.get_topic_info()
+        num_topics = len(topic_info[topic_info.Topic != -1])
+        logger.info(f"📊 Discovered {num_topics} topics (excluding outlier topic)")
+        
+        # CRITICAL DEBUG: Check if representation model was actually used
+        if topic_model.representation_model is not None:
+            logger.info("🔥 REPR_DEBUG: Representation model was attached to BERTopic")
+            if hasattr(topic_model, 'custom_labels_') and topic_model.custom_labels_:
+                logger.info("🔥 REPR_DEBUG: Custom labels found - LLM was used")
+                sample_custom = list(topic_model.custom_labels_.values())[:3]
+                logger.info(f"🔥 REPR_DEBUG: Sample custom labels: {sample_custom}")
+            else:
+                logger.warning("🔥 REPR_DEBUG: No custom labels found - LLM may not have been called")
+        else:
+            logger.warning("🔥 REPR_DEBUG: No representation model attached")
+        
+        if not topic_info.empty and 'Name' in topic_info.columns:
+            sample_names = topic_info['Name'].head(3).tolist()
+            logger.info(f"🎯 Sample topic names: {sample_names}")
+            
+            # Check if names look like LLM-generated vs keyword concatenation
+            for i, name in enumerate(sample_names):
+                if '_' in name and len(name.split('_')) > 2:
+                    logger.warning(f"🔥 REPR_DEBUG: Topic {i} name '{name}' looks like keyword concatenation")
+                else:
+                    logger.info(f"🔥 REPR_DEBUG: Topic {i} name '{name}' looks like LLM-generated")
+        
     except Exception as e:
-        logger.error(f"Error during BERTopic fit_transform: {e}", exc_info=True)
+        logger.error(f"❌ Error during BERTopic fit_transform: {e}", exc_info=True)
         raise
 
     # --- Post-fitting Analysis and Visualization ---
@@ -442,7 +472,7 @@ def analyze_topics(
     if num_topics == 0:
         logger.warning("No topics were discovered. Skipping all visualizations.")
         save_topic_info(topic_model, output_dir, docs, topics)
-        return topic_model
+        return topic_model, topic_model.get_topic_info(), topics, docs
 
     # --- Visualizations ---
     logger.info("Generating visualizations...")
@@ -539,91 +569,180 @@ def analyze_topics(
         logger.error(f"Failed to save topic info: {e}", exc_info=True)
     
     # Reduce topics if requested
+    # CRITICAL FIX: Skip topic reduction entirely when using representation models
+    # BERTopic's reduce_topics() method discards LLM-generated topic names
     if nr_topics is not None and n_topics > 0 and nr_topics < n_topics: # Also check n_topics > 0 before reducing
-        logger.info(f"Reducing topics from {n_topics} to {nr_topics}")
-        try:
-            topic_model.reduce_topics(docs, nr_topics=nr_topics)
-            topics = topic_model.topics_ # Update topics after reduction
-            n_topics = len(set(topics)) - 1 # Update n_topics after reduction
-            logger.info(f"Reduced to {n_topics} topics")
-        except Exception as e:
-            logger.error("Failed to reduce topics", exc_info=True)
-            # Do not re-raise here, allow to proceed with unreduced topics if reduction fails
-            logger.warning("Proceeding with unreduced topics after reduction failure.")
-    
-    # --- Extract and Save Representative Documents ---
-    logger.info("Extracting representative documents for each topic...")
-    try:
-        # Load transformed data if available to get ids column
-        transformed_df = None
-        if transformed_data_path and os.path.exists(transformed_data_path):
+        if topic_model.representation_model is not None:
+            logger.warning(f"🔥 SKIP_REDUCTION: Skipping topic reduction ({n_topics} -> {nr_topics}) to preserve LLM-generated topic names")
+            logger.warning("🔥 SKIP_REDUCTION: BERTopic's reduce_topics() discards representation model results")
+            logger.warning("🔥 SKIP_REDUCTION: Using original topic set with LLM names instead")
+            logger.info(f"🔥 SKIP_REDUCTION: Keeping all {n_topics} topics with LLM-generated names")
+        else:
+            logger.info(f"Reducing topics from {n_topics} to {nr_topics}")
             try:
-                transformed_df = pd.read_parquet(transformed_data_path)
-                logger.info(f"Loaded transformed data with {len(transformed_df)} rows from {transformed_data_path}")
-                if 'ids' in transformed_df.columns:
-                    logger.info("Found 'ids' column in transformed data")
-                else:
-                    logger.info("No 'ids' column found in transformed data")
+                topic_model.reduce_topics(docs, nr_topics=nr_topics)
+                topics = topic_model.topics_ # Update topics after reduction
+                n_topics = len(set(topics)) - 1 # Update n_topics after reduction
+                logger.info(f"Reduced to {n_topics} topics")
+                
             except Exception as e:
-                logger.warning(f"Could not load transformed data from {transformed_data_path}: {e}")
-                transformed_df = None
-        
-        # Get representative documents using BERTopic's method
-        # Note: BERTopic's get_representative_docs() method by default returns only 3 docs per topic
-        # We need to use a different approach to get more representative documents
+                logger.error("Failed to reduce topics", exc_info=True)
+                # Do not re-raise here, allow to proceed with unreduced topics if reduction fails
+                logger.warning("Proceeding with unreduced topics after reduction failure.")
+    
+    # SIMPLIFIED APPROACH: No complex update_topics that corrupts assignments
+    # The representation model was applied during initial fit_transform, so topic assignments are stable
+    logger.info("🔍 REPR_DEBUG: Using SIMPLIFIED approach - no post-processing update_topics")
+    logger.info(f"🔍 REPR_DEBUG: Final topic assignments - total: {len(topics)}, unique: {sorted(set(topics))}")
+
+    # --- Extract and Save Representative Documents ---
+    # IMPORTANT: This must happen AFTER representation model is applied since topic assignments may change
+    logger.info("Extracting representative documents for each topic...")
+    logger.info(f"🔍 ALIGNMENT_CHECK: Starting representative docs extraction")
+    logger.info(f"🔍 ALIGNMENT_CHECK: topics array length = {len(topics)}")
+    logger.info(f"🔍 ALIGNMENT_CHECK: unique topic IDs = {sorted(set(topics))}")
+    
+    try:
         representative_docs = {}
-        
-        # Get topic assignments and document info to find more representative docs per topic
-        topic_info = topic_model.get_topic_info()
-        for _, row in topic_info.iterrows():
-            topic_id = row.get('Topic', -1)
-            if topic_id != -1:  # Skip outlier topic
-                # Get all documents assigned to this topic
-                topic_docs = []
-                for i, doc_topic in enumerate(topics):
-                    if doc_topic == topic_id:
-                        doc_data = {"text": docs[i]}
+        if transformed_df is not None and not transformed_df.empty:
+            logger.info(f"🔍 ALIGNMENT_CHECK: transformed_df provided with {len(transformed_df)} rows")
+            logger.info(f"🔍 ALIGNMENT_CHECK: transformed_df columns = {list(transformed_df.columns)}")
+            
+            # Check if we have text column
+            if 'text' not in transformed_df.columns:
+                logger.error(f"❌ VALIDATION_FAIL: transformed_df missing 'text' column")
+                logger.error(f"❌ VALIDATION_FAIL: available columns = {list(transformed_df.columns)}")
+            else:
+                logger.info(f"✅ VALIDATION_PASS: transformed_df has 'text' column")
+            
+            try:
+                # The topics list corresponds to lines in the text file, which should match the dataframe
+                logger.info(f"🔍 ALIGNMENT_CHECK: Checking length alignment: transformed_df({len(transformed_df)}) vs topics({len(topics)})")
+                
+                # CRITICAL FIX: The topics array should ALWAYS match the transformed_df length
+                # because BERTopic processes the text file that was generated from transformed_df
+                if len(transformed_df) == len(topics):
+                    logger.info(f"✅ VALIDATION_PASS: DataFrame and topics arrays have matching lengths")
+                    transformed_df['topic'] = topics
+                elif len(topics) > 0:
+                    # If there's a mismatch, it's likely a bug in our pipeline
+                    # The topics should match the text file, which was generated from transformed_df
+                    logger.error(f"❌ VALIDATION_FAIL: CRITICAL ALIGNMENT ISSUE")
+                    logger.error(f"❌ VALIDATION_FAIL: transformed_df has {len(transformed_df)} rows")
+                    logger.error(f"❌ VALIDATION_FAIL: topics array has {len(topics)} assignments")
+                    logger.error(f"❌ VALIDATION_FAIL: These SHOULD be the same since topics come from the text file")
+                    
+                    # Try to salvage the situation by using the smaller length
+                    min_length = min(len(transformed_df), len(topics))
+                    logger.warning(f"⚠️ ALIGNMENT_CHECK: Attempting to salvage by using first {min_length} entries")
+                    
+                    if min_length > 0:
+                        salvaged_df = transformed_df.head(min_length).copy()
+                        salvaged_topics = topics[:min_length]
+                        salvaged_df['topic'] = salvaged_topics
                         
-                        # Add ids if available from transformed data
-                        if transformed_df is not None and i < len(transformed_df) and 'ids' in transformed_df.columns:
-                            ids_value = transformed_df.iloc[i].get('ids')
-                            if pd.notna(ids_value):
-                                try:
-                                    # Parse JSON if it's a string
-                                    if isinstance(ids_value, str):
-                                        import json
-                                        doc_data["ids"] = json.loads(ids_value)
+                        logger.warning(f"⚠️ ALIGNMENT_CHECK: Using salvaged dataframe with {len(salvaged_df)} rows")
+                        transformed_df = salvaged_df
+                        topics = salvaged_topics
+                    else:
+                        logger.error(f"❌ VALIDATION_FAIL: Cannot salvage - no valid entries found")
+                        # Continue with empty representative docs
+                        pass
+                else:
+                    logger.error(f"❌ VALIDATION_FAIL: No topics found in BERTopic analysis")
+                
+                # Only proceed if we have valid alignment
+                if 'topic' in transformed_df.columns:
+                    logger.info(f"✅ VALIDATION_PASS: Proceeding with aligned dataframe")
+                    
+                    # Check for ids column (case insensitive)
+                    ids_column_name = None
+                    for col in transformed_df.columns:
+                        if col.lower() in ['id', 'ids']:
+                            ids_column_name = col
+                            break
+                    
+                    if ids_column_name:
+                        logger.info(f"🔍 ID_DEBUG: Found ID column '{ids_column_name}' in transformed_df")
+                        # Sample some ID values to check format
+                        sample_ids = transformed_df[ids_column_name].head(3).tolist()
+                        logger.info(f"🔍 ID_DEBUG: Sample ID values = {sample_ids}")
+                    else:
+                        logger.warning(f"⚠️ ID_DEBUG: No ID column found in transformed_df. Available columns: {list(transformed_df.columns)}")
+                    
+                    unique_topics = sorted(transformed_df['topic'].unique())
+                    logger.info(f"🔍 TOPIC_DEBUG: Found {len(unique_topics)} unique topics in transformed_df: {unique_topics}")
+                    
+                    for topic_id in unique_topics:
+                        if topic_id == -1:
+                            logger.info(f"🔍 TOPIC_DEBUG: Skipping outlier topic -1")
+                            continue
+                        
+                        topic_docs_df = transformed_df[transformed_df['topic'] == topic_id].head(20)
+                        logger.info(f"🔍 TOPIC_DEBUG: Topic {topic_id} has {len(topic_docs_df)} documents (limited to 20)")
+                        
+                        if len(topic_docs_df) > 0:
+                            topic_examples = []
+                            docs_with_ids = 0
+                            
+                            for idx, row in topic_docs_df.iterrows():
+                                doc_data = {"text": row['text']}
+                                if ids_column_name and pd.notna(row[ids_column_name]):
+                                    # Parse JSON string IDs into proper YAML structure
+                                    id_value = row[ids_column_name]
+                                    if isinstance(id_value, str):
+                                        try:
+                                            # Try to parse as JSON
+                                            parsed_id = json.loads(id_value)
+                                            doc_data["id"] = parsed_id
+                                            logger.debug(f"🔍 ID_DEBUG: Parsed JSON ID: {parsed_id}")
+                                        except json.JSONDecodeError:
+                                            # If not valid JSON, store as string
+                                            doc_data["id"] = id_value
+                                            logger.debug(f"🔍 ID_DEBUG: Using string ID: {id_value}")
                                     else:
-                                        doc_data["ids"] = ids_value
-                                except (json.JSONDecodeError, TypeError):
-                                    # If parsing fails, store as-is
-                                    doc_data["ids"] = ids_value
-                        
-                        topic_docs.append((i, doc_data))
-                
-                # Just take the first 20 documents for this topic (simplified to avoid probability access issues)
-                representative_docs[topic_id] = [doc_data for _, doc_data in topic_docs[:20]]
-                
-                logger.info(f"Topic {topic_id}: Found {len(topic_docs)} total docs, selected {len(representative_docs[topic_id])} representative docs")
-        
-        # Save representative documents to a JSON file for later use
-        import json
-        repr_docs_data = {}
-        for topic_id, docs_list in representative_docs.items():
-            repr_docs_data[str(topic_id)] = docs_list
-        
+                                        # Already an object/list
+                                        doc_data["id"] = id_value
+                                        logger.debug(f"🔍 ID_DEBUG: Using object ID: {id_value}")
+                                    docs_with_ids += 1
+                                topic_examples.append(doc_data)
+                            
+                            representative_docs[str(topic_id)] = topic_examples
+                            logger.info(f"🔍 TOPIC_DEBUG: Topic {topic_id} saved with {len(topic_examples)} examples ({docs_with_ids} with IDs)")
+                        else:
+                            logger.warning(f"⚠️ TOPIC_DEBUG: Topic {topic_id} has no documents")
+                    
+                    logger.info(f"✅ VALIDATION_PASS: Successfully extracted examples for {len(representative_docs)} topics")
+                else:
+                    logger.error(f"❌ VALIDATION_FAIL: No valid topic column in dataframe after alignment attempt")
+                    logger.error(f"❌ VALIDATION_FAIL: This is the PRIMARY CAUSE of 'no examples available' issue")
+            except Exception as e:
+                logger.error(f"❌ VALIDATION_FAIL: Exception in transformed_df processing: {e}", exc_info=True)
+        else:
+            logger.warning("⚠️ ALIGNMENT_CHECK: No transformed_df provided. Cannot extract representative documents with IDs.")
+
+        # Save representative documents to a JSON file
         repr_docs_path = os.path.join(output_dir, "representative_documents.json")
-        with open(repr_docs_path, 'w', encoding='utf-8') as f:
-            json.dump(repr_docs_data, f, indent=2, ensure_ascii=False)
+        logger.info(f"🔍 ALIGNMENT_CHECK: Saving {len(representative_docs)} topic groups to {repr_docs_path}")
         
-        logger.info(f"Saved representative documents to {repr_docs_path}")
-        logger.info(f"Found representative documents for {len(repr_docs_data)} topics")
+        # Log summary of what we're saving
+        total_examples = sum(len(examples) for examples in representative_docs.values())
+        logger.info(f"🔍 ALIGNMENT_CHECK: Total examples being saved: {total_examples}")
+        
+        with open(repr_docs_path, 'w', encoding='utf-8') as f:
+            json.dump(representative_docs, f, indent=2, ensure_ascii=False)
+        
+        if representative_docs:
+            logger.info(f"✅ VALIDATION_PASS: Successfully saved representative documents to {repr_docs_path}")
+        else:
+            logger.error(f"❌ VALIDATION_FAIL: No representative documents to save - this will cause 'no examples available'")
         
     except Exception as e:
-        logger.error(f"Failed to extract representative documents: {e}", exc_info=True)
-        # Continue without representative documents if extraction fails
+        logger.error(f"❌ VALIDATION_FAIL: Critical error in representative documents extraction: {e}", exc_info=True)
     
     logger.info(f"Analysis complete. Results saved to {output_dir}")
     
     # Return the topic model for further use
-    return topic_model 
+    final_topic_info = topic_model.get_topic_info()
+    logger.info(f"Returning final topic info with {len(final_topic_info)} topics.")
+    return topic_model, final_topic_info, topics, docs
