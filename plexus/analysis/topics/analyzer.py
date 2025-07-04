@@ -373,26 +373,19 @@ def analyze_topics(
     # This prevents topic assignment corruption that happens with update_topics()
     logger.info("🔍 REPR_DEBUG: Using SIMPLIFIED representation model approach")
     
-    if use_representation_model and representation_model is not None:
-        logger.info("✅ Creating BERTopic model with LLM-powered topic naming")
-        topic_model = BERTopic(
-            n_gram_range=n_gram_range,
-            min_topic_size=min_topic_size,
-            top_n_words=top_n_words,
-            umap_model=umap_model,
-            representation_model=representation_model,  # Apply directly
-            verbose=True
-        )
-    else:
-        logger.info("ℹ️  Creating BERTopic model with keyword-based topic naming")
-        topic_model = BERTopic(
-            n_gram_range=n_gram_range,
-            min_topic_size=min_topic_size,
-            top_n_words=top_n_words,
-            umap_model=umap_model,
-            representation_model=None,
-            verbose=True
-        )
+    # Always start without representation model to avoid wasteful LLM calls during topic reduction
+    logger.info("ℹ️  Creating BERTopic model with keyword-based topic naming (representation model applied after reduction)")
+    topic_model = BERTopic(
+        n_gram_range=n_gram_range,
+        min_topic_size=min_topic_size,
+        top_n_words=top_n_words,
+        umap_model=umap_model,
+        representation_model=None,  # Applied later after reduction
+        verbose=True
+    )
+    
+    # Store representation model for later application
+    saved_representation_model = representation_model if use_representation_model else None
     
     logger.debug("BERTopic model initialized successfully.")
     
@@ -403,59 +396,37 @@ def analyze_topics(
     
     try:
         logger.info(f"Running BERTopic analysis on {len(docs)} documents...")
-        if topic_model.representation_model is not None:
-            logger.info("   • Using LLM representation model for topic naming")
-        else:
-            logger.info("   • Using default keyword-based topic naming")
+        logger.info("   • Using keyword-based topic naming (LLM naming applied after reduction)")
+        if saved_representation_model is not None:
+            logger.info("   • LLM representation model will be applied after topic reduction")
         
         topics, probs = topic_model.fit_transform(docs)
         
         logger.info(f"✅ BERTopic analysis completed in {time.time() - start_time:.2f} seconds")
         
-        # IMMEDIATE CHECK: Verify if representation model generated any custom labels
-        logger.info("🔥 IMMEDIATE_CHECK: Checking if representation model was used during fit_transform")
+        # EXPECTED: No custom labels during initial discovery (representation model applied later)
+        logger.info("🔍 REPR_DEBUG: Initial discovery completed with keyword-based naming")
         if hasattr(topic_model, 'custom_labels_') and topic_model.custom_labels_:
-            logger.info(f"🔥 IMMEDIATE_CHECK: Found {len(topic_model.custom_labels_)} custom labels - LLM WAS used")
-            sample_labels = dict(list(topic_model.custom_labels_.items())[:3])
-            logger.info(f"🔥 IMMEDIATE_CHECK: Sample custom labels: {sample_labels}")
+            logger.warning(f"🔍 REPR_DEBUG: Unexpected custom labels found: {len(topic_model.custom_labels_)}")
         else:
-            logger.warning("🔥 IMMEDIATE_CHECK: NO custom labels found - LLM was NOT used during fit_transform")
-            logger.warning("🔥 IMMEDIATE_CHECK: This means the OpenAI representation model failed silently")
-            
-            # Check if representation model is still attached
-            if topic_model.representation_model is not None:
-                logger.warning("🔥 IMMEDIATE_CHECK: Representation model is attached but didn't generate labels")
-                logger.warning("🔥 IMMEDIATE_CHECK: This suggests an OpenAI API error or configuration issue")
-            else:
-                logger.error("🔥 IMMEDIATE_CHECK: Representation model was removed during fit_transform - initialization failed")
+            logger.info("🔍 REPR_DEBUG: No custom labels during initial discovery (as expected)")
         
         # Log topic discovery results
         topic_info = topic_model.get_topic_info()
         num_topics = len(topic_info[topic_info.Topic != -1])
         logger.info(f"📊 Discovered {num_topics} topics (excluding outlier topic)")
         
-        # CRITICAL DEBUG: Check if representation model was actually used
-        if topic_model.representation_model is not None:
-            logger.info("🔥 REPR_DEBUG: Representation model was attached to BERTopic")
-            if hasattr(topic_model, 'custom_labels_') and topic_model.custom_labels_:
-                logger.info("🔥 REPR_DEBUG: Custom labels found - LLM was used")
-                sample_custom = list(topic_model.custom_labels_.values())[:3]
-                logger.info(f"🔥 REPR_DEBUG: Sample custom labels: {sample_custom}")
-            else:
-                logger.warning("🔥 REPR_DEBUG: No custom labels found - LLM may not have been called")
-        else:
-            logger.warning("🔥 REPR_DEBUG: No representation model attached")
-        
+        # Show initial keyword-based topic names
         if not topic_info.empty and 'Name' in topic_info.columns:
             sample_names = topic_info['Name'].head(3).tolist()
-            logger.info(f"🎯 Sample topic names: {sample_names}")
+            logger.info(f"🎯 Initial keyword-based topic names: {sample_names}")
             
-            # Check if names look like LLM-generated vs keyword concatenation
+            # These should be keyword concatenation at this stage
             for i, name in enumerate(sample_names):
                 if '_' in name and len(name.split('_')) > 2:
-                    logger.warning(f"🔥 REPR_DEBUG: Topic {i} name '{name}' looks like keyword concatenation")
+                    logger.info(f"🔍 REPR_DEBUG: Topic {i} name '{name}' - keyword concatenation (expected)")
                 else:
-                    logger.info(f"🔥 REPR_DEBUG: Topic {i} name '{name}' looks like LLM-generated")
+                    logger.warning(f"🔍 REPR_DEBUG: Topic {i} name '{name}' - unexpected format for initial discovery")
         
     except Exception as e:
         logger.error(f"❌ Error during BERTopic fit_transform: {e}", exc_info=True)
@@ -568,31 +539,33 @@ def analyze_topics(
     except Exception as e:
         logger.error(f"Failed to save topic info: {e}", exc_info=True)
     
-    # Reduce topics if requested
-    # CRITICAL FIX: Skip topic reduction entirely when using representation models
-    # BERTopic's reduce_topics() method discards LLM-generated topic names
-    if nr_topics is not None and n_topics > 0 and nr_topics < n_topics: # Also check n_topics > 0 before reducing
-        if topic_model.representation_model is not None:
-            logger.warning(f"🔥 SKIP_REDUCTION: Skipping topic reduction ({n_topics} -> {nr_topics}) to preserve LLM-generated topic names")
-            logger.warning("🔥 SKIP_REDUCTION: BERTopic's reduce_topics() discards representation model results")
-            logger.warning("🔥 SKIP_REDUCTION: Using original topic set with LLM names instead")
-            logger.info(f"🔥 SKIP_REDUCTION: Keeping all {n_topics} topics with LLM-generated names")
-        else:
-            logger.info(f"Reducing topics from {n_topics} to {nr_topics}")
-            try:
-                topic_model.reduce_topics(docs, nr_topics=nr_topics)
-                topics = topic_model.topics_ # Update topics after reduction
-                n_topics = len(set(topics)) - 1 # Update n_topics after reduction
-                logger.info(f"Reduced to {n_topics} topics")
-                
-            except Exception as e:
-                logger.error("Failed to reduce topics", exc_info=True)
-                # Do not re-raise here, allow to proceed with unreduced topics if reduction fails
-                logger.warning("Proceeding with unreduced topics after reduction failure.")
+    # Reduce topics if requested (safe since no representation model attached yet)
+    if nr_topics is not None and n_topics > 0 and nr_topics < n_topics:
+        logger.info(f"Reducing topics from {n_topics} to {nr_topics}")
+        try:
+            topic_model.reduce_topics(docs, nr_topics=nr_topics)
+            topics = topic_model.topics_ # Update topics after reduction
+            n_topics = len(set(topics)) - 1 # Update n_topics after reduction
+            logger.info(f"Reduced to {n_topics} topics")
+            
+        except Exception as e:
+            logger.error("Failed to reduce topics", exc_info=True)
+            # Do not re-raise here, allow to proceed with unreduced topics if reduction fails
+            logger.warning("Proceeding with unreduced topics after reduction failure.")
+
+    # Apply representation model to final topics (after reduction)
+    if saved_representation_model is not None:
+        final_topic_count = len(set(topics)) - 1  # Excluding -1 outlier topic
+        logger.info(f"🔍 REPR_DEBUG: Applying LLM representation model to {final_topic_count} final topics")
+        try:
+            topic_model.update_topics(docs, representation_model=saved_representation_model)
+            logger.info("✅ Successfully applied LLM representation model to final topics")
+        except Exception as e:
+            logger.error(f"Failed to apply representation model: {e}", exc_info=True)
+            logger.warning("Continuing with keyword-based topic names")
     
-    # SIMPLIFIED APPROACH: No complex update_topics that corrupts assignments
-    # The representation model was applied during initial fit_transform, so topic assignments are stable
-    logger.info("🔍 REPR_DEBUG: Using SIMPLIFIED approach - no post-processing update_topics")
+    # Final topic assignments are stable after optional reduction and representation model application
+    logger.info("🔍 REPR_DEBUG: Topic modeling pipeline completed")
     logger.info(f"🔍 REPR_DEBUG: Final topic assignments - total: {len(topics)}, unique: {sorted(set(topics))}")
 
     # --- Extract and Save Representative Documents ---
