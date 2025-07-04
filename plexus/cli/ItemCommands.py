@@ -10,6 +10,12 @@ from plexus.dashboard.api.models.score_result import ScoreResult
 from plexus.cli.client_utils import create_client
 from .console import console
 from plexus.cli.reports.utils import resolve_account_id_for_command
+from plexus.cli.item_logic import (
+    resolve_item, 
+    insert_items, 
+    upsert_items, 
+    _process_item_folder
+)
 import json
 
 def format_datetime(dt: Optional[datetime]) -> str:
@@ -243,6 +249,90 @@ def items():
 
 @items.command()
 @click.option('--account', help='Account key or ID (optional, uses default from environment if not provided)')
+@click.option('--evaluation-id', help='Evaluation ID for the item (required for evaluation items)')
+@click.option('--score-id', help='Score ID for the item')
+@click.option('--text', help='Text content of the item')
+@click.option('--metadata', help='Metadata for the item as a JSON string')
+@click.option('--identifiers', help='Identifiers for the item as a JSON string')
+@click.option('--external-id', help='External ID for the item')
+@click.option('--description', help='Description for the item')
+@click.option('--is-evaluation/--is-prediction', 'is_evaluation', default=False, help='Flag to mark item as for evaluation or prediction (default: prediction)')
+@click.option('--attached-files', help='Comma-separated list of attached file paths')
+def create(account: Optional[str], evaluation_id: Optional[str], score_id: Optional[str], text: Optional[str],
+           metadata: Optional[str], identifiers: Optional[str], external_id: Optional[str],
+           description: Optional[str], is_evaluation: bool, attached_files: Optional[str]):
+    """Create a new item."""
+    client = create_client()
+    account_id = resolve_account_id_for_command(client, account)
+
+    if not account_id:
+        console.print("[red]Account ID is required. Provide with --account or set PLEXUS_ACCOUNT_ID.[/red]")
+        return
+
+    if is_evaluation and not evaluation_id:
+        console.print("[red]--evaluation-id is required for evaluation items.[/red]")
+        return
+
+    # The create method in the model handles setting a default for prediction items if evaluationId is None
+    if not is_evaluation and not evaluation_id:
+        evaluation_id = None
+
+    kwargs = {
+        'accountId': account_id,
+        'isEvaluation': is_evaluation,
+    }
+
+    if score_id:
+        kwargs['scoreId'] = score_id
+    if external_id:
+        kwargs['externalId'] = external_id
+    if description:
+        kwargs['description'] = description
+
+    item_metadata = None
+    if metadata:
+        try:
+            item_metadata = json.loads(metadata)
+        except json.JSONDecodeError:
+            console.print("[red]Invalid JSON format for --metadata.[/red]")
+            return
+    
+    if identifiers:
+        try:
+            kwargs['identifiers'] = json.loads(identifiers)
+        except json.JSONDecodeError:
+            console.print("[red]Invalid JSON format for --identifiers.[/red]")
+            return
+
+    if attached_files:
+        kwargs['attachedFiles'] = [f.strip() for f in attached_files.split(',')]
+
+    try:
+        console.print(f"Creating new item...")
+        
+        new_item = Item.create(
+            client=client,
+            evaluationId=evaluation_id,
+            text=text,
+            metadata=item_metadata,
+            **kwargs
+        )
+        
+        console.print(f"[green]Successfully created item with ID: {new_item.id}[/green]")
+        panel = Panel(
+            format_item_content(new_item),
+            title=f"[bold]New Item {new_item.id[:8]}...[/bold]",
+            border_style="cyan"
+        )
+        console.print(panel)
+
+    except Exception as e:
+        console.print(f"[red]Error creating item: {e}[/red]")
+        import traceback
+        print(traceback.format_exc())
+
+@items.command()
+@click.option('--account', help='Account key or ID (optional, uses default from environment if not provided)')
 @click.option('--evaluation-id', help='Filter by evaluation ID')
 @click.option('--limit', type=int, default=10, help='Number of records to show (default: 10)')
 @click.option('--all', 'show_all', is_flag=True, help='Show all records')
@@ -343,17 +433,19 @@ def last(account: Optional[str], show_score_results: bool):
     console.print(panel)
 
 @items.command()
-@click.option('--id', required=True, help='Item ID to get information for.')
+@click.option('--item', 'item_identifier', required=True, help='Item ID, external ID, or identifier to get information for.')
+@click.option('--account', help='Account key or ID (optional, uses default from environment if not provided)')
 @click.option('--show-score-results', is_flag=True, help='Show all score results for this item')
-def info(id: str, show_score_results: bool):
-    """Get detailed information about a specific item by its ID."""
+def info(item_identifier: str, account: Optional[str], show_score_results: bool):
+    """Get detailed information about a specific item by its ID, external ID, or identifier."""
     client = create_client()
-    console.print(f"Fetching details for Item ID: [cyan]{id}[/cyan]")
+    account_id = resolve_account_id_for_command(client, account)
+    console.print(f"Fetching details for Item: [cyan]{item_identifier}[/cyan]")
     
     try:
-        item = Item.get_by_id(id, client)
+        item = resolve_item(client, account_id, item_identifier)
         if not item:
-            console.print(f"[yellow]Item not found: {id}[/yellow]")
+            console.print(f"[yellow]Item not found: {item_identifier}[/yellow]")
             return
         
         # Format item content
@@ -369,10 +461,125 @@ def info(id: str, show_score_results: bool):
         console.print(Panel(item_content, title=f"Item Details: {item.id}", border_style="cyan"))
         
     except Exception as e:
-        console.print(f"[red]Error retrieving item {id}: {e}[/red]")
+        console.print(f"[red]Error retrieving item {item_identifier}: {e}[/red]")
         # Optionally log the full traceback
         import traceback
         print(traceback.format_exc())
+
+@items.command()
+@click.option('--item', 'item_identifier', required=True, help='Item ID, external ID, or identifier to update.')
+@click.option('--account', help='Account key or ID (optional, uses default from environment if not provided)')
+@click.option('--text', help='New text content of the item')
+@click.option('--metadata', help='New metadata for the item as a JSON string')
+@click.option('--description', help='New description for the item')
+@click.option('--attached-files', help='New comma-separated list of attached file paths')
+def update(item_identifier: str, account: Optional[str], text: Optional[str], metadata: Optional[str], description: Optional[str], attached_files: Optional[str]):
+    """Update an existing item."""
+    client = create_client()
+    account_id = resolve_account_id_for_command(client, account)
+
+    item = resolve_item(client, account_id, item_identifier)
+    if not item:
+        console.print(f"[red]Item '{item_identifier}' not found.[/red]")
+        return
+
+    update_kwargs = {}
+    if text is not None:
+        update_kwargs['text'] = text
+    if description is not None:
+        update_kwargs['description'] = description
+    if attached_files is not None:
+        update_kwargs['attachedFiles'] = [f.strip() for f in attached_files.split(',')]
+    if metadata is not None:
+        try:
+            update_kwargs['metadata'] = json.loads(metadata)
+        except json.JSONDecodeError:
+            console.print("[red]Invalid JSON format for --metadata.[/red]")
+            return
+
+    if not update_kwargs:
+        console.print("[yellow]No fields to update.[/yellow]")
+        return
+
+    try:
+        updated_item = item.update(**update_kwargs)
+        console.print(f"[green]Successfully updated item {updated_item.id}[/green]")
+        panel = Panel(
+            format_item_content(updated_item),
+            title=f"[bold]Updated Item {updated_item.id[:8]}...[/bold]",
+            border_style="cyan"
+        )
+        console.print(panel)
+    except Exception as e:
+        console.print(f"[red]Error updating item: {e}[/red]")
+
+@items.command()
+@click.option('--item', 'item_identifier', required=True, help='Item ID, external ID, or identifier to delete.')
+@click.option('--account', help='Account key or ID (optional, uses default from environment if not provided)')
+@click.confirmation_option(prompt='Are you sure you want to delete this item?')
+def delete(item_identifier: str, account: Optional[str]):
+    """Delete an item."""
+    client = create_client()
+    account_id = resolve_account_id_for_command(client, account)
+
+    item = resolve_item(client, account_id, item_identifier)
+    if not item:
+        console.print(f"[red]Item '{item_identifier}' not found.[/red]")
+        return
+
+    try:
+        item.delete()
+        console.print(f"[green]Successfully deleted item {item.id}[/green]")
+    except Exception as e:
+        console.print(f"[red]Error deleting item: {e}[/red]")
+
+@items.command()
+@click.option('--item', 'item_path_glob', required=True, help='Path to item folder(s), can include wildcards.')
+@click.option('--account', help='Account key or ID (optional, uses default from environment if not provided)')
+@click.option('--evaluation-id', help='Evaluation ID for the item(s)')
+@click.option('--score-id', help='Score ID for the item(s)')
+@click.option('--is-evaluation/--is-prediction', 'is_evaluation', default=False, help='Flag to mark item as for evaluation or prediction (default: prediction)')
+def insert(item_path_glob: str, account: Optional[str], evaluation_id: Optional[str], score_id: Optional[str], is_evaluation: bool):
+    """Insert one or more items from folder paths."""
+    client = create_client()
+    account_id = resolve_account_id_for_command(client, account)
+
+    if not account_id:
+        console.print("[red]Account ID is required. Provide with --account or set PLEXUS_ACCOUNT_ID.[/red]")
+        return
+
+    results = insert_items(client, account_id, item_path_glob, evaluation_id, score_id, is_evaluation)
+
+    for result in results:
+        if result['status'] == 'success':
+            console.print(f"[green]Successfully inserted item with ID: {result['item'].id}[/green]")
+        else:
+            console.print(f"[red]Error inserting item from {result['path']}: {result['message']}[/red]")
+
+@items.command()
+@click.option('--item', 'item_path_glob', required=True, help='Path to item folder(s), can include wildcards.')
+@click.option('--account', help='Account key or ID (optional, uses default from environment if not provided)')
+@click.option('--evaluation-id', help='Evaluation ID for the item(s)')
+@click.option('--score-id', help='Score ID for the item(s)')
+@click.option('--is-evaluation/--is-prediction', 'is_evaluation', default=False, help='Flag to mark item as for evaluation or prediction (default: prediction)')
+def upsert(item_path_glob: str, account: Optional[str], evaluation_id: Optional[str], score_id: Optional[str], is_evaluation: bool):
+    """Upsert one or more items from folder paths."""
+    client = create_client()
+    account_id = resolve_account_id_for_command(client, account)
+
+    if not account_id:
+        console.print("[red]Account ID is required. Provide with --account or set PLEXUS_ACCOUNT_ID.[/red]")
+        return
+
+    results = upsert_items(client, account_id, item_path_glob, evaluation_id, score_id, is_evaluation)
+
+    for result in results:
+        if result['status'] == 'inserted':
+            console.print(f"[green]Successfully inserted item with ID: {result['item'].id}[/green]")
+        elif result['status'] == 'updated':
+            console.print(f"[green]Successfully updated item {result['item'].id}[/green]")
+        else:
+            console.print(f"[red]Error upserting item from {result['path']}: {result['message']}[/red]")
 
 # Create an alias 'item' that's synonymous with 'items'
 @click.group()
@@ -381,6 +588,11 @@ def item():
     pass
 
 # Add all the same commands to the 'item' group
+item.add_command(create)
 item.add_command(list)
 item.add_command(last)
-item.add_command(info) 
+item.add_command(info)
+item.add_command(update)
+item.add_command(delete)
+item.add_command(insert)
+item.add_command(upsert)
