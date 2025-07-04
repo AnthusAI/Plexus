@@ -278,6 +278,9 @@ def accuracy(
     """
     Evaluate the accuracy of the scorecard using the current configuration against labeled samples.
     """
+    logging.info("=== ACCURACY COMMAND STARTED ===")
+    logging.info(f"Parameters: scorecard={scorecard}, yaml={yaml}, score='{score}', number_of_samples={number_of_samples}, dry_run={dry_run}")
+    
     # If dry-run is enabled, provide a simplified successful execution path
     if dry_run:
         # Log the dry run mode message
@@ -306,8 +309,10 @@ def accuracy(
         console.print("[dim]To run with actual sample evaluation, remove the --dry-run flag.[/dim]")
         return
     
+    logging.info("=== NOT DRY RUN - PROCEEDING WITH NORMAL EXECUTION ===")
     # Original implementation for non-dry-run mode
     async def _run_accuracy():
+        logging.info("=== STARTING _run_accuracy FUNCTION ===")
         nonlocal task_id, score  # Make task_id and score accessible to modify in the async function
         
         task = None  # Track the task
@@ -819,6 +824,12 @@ def accuracy(
             
             # Fetch samples using the primary score's config
             logging.info(f"Fetching samples using data source for score: '{primary_score_name}'")
+            logging.info(f"=== CALLING get_data_driven_samples ===")
+            logging.info(f"primary_score_config: {primary_score_config}")
+            logging.info(f"primary_score_name: {primary_score_name}")
+            logging.info(f"scorecard_name_resolved: {scorecard_name_resolved}")
+            logging.info(f"fresh: {fresh}")
+            logging.info(f"=== END PRE-CALL DEBUG ===")
             labeled_samples_data = get_data_driven_samples(
                 scorecard_instance=scorecard_instance,
                 scorecard_name=scorecard_name_resolved,
@@ -940,8 +951,19 @@ def accuracy(
                 scorecard_identifier = yaml_scorecard_id
                 logging.info(f"Using integer scorecard ID for YAML-loaded scorecard: {scorecard_identifier}")
             else:
-                scorecard_identifier = scorecard_key_resolved or scorecard_name_resolved
-                logging.info(f"Using scorecard key/name for AccuracyEvaluation: {scorecard_identifier} (API-loaded scorecard uses registry key)")
+                # Ensure we get a string name for the scorecard identifier
+                if scorecard_key_resolved:
+                    scorecard_identifier = str(scorecard_key_resolved)
+                elif scorecard_name_resolved:
+                    scorecard_identifier = str(scorecard_name_resolved)
+                elif hasattr(scorecard_instance, 'name') and callable(scorecard_instance.name):
+                    scorecard_identifier = scorecard_instance.name()
+                elif hasattr(scorecard_instance, 'properties') and isinstance(scorecard_instance.properties, dict):
+                    scorecard_identifier = scorecard_instance.properties.get('name') or scorecard_instance.properties.get('key')
+                else:
+                    scorecard_identifier = str(scorecard)  # Fallback to the input parameter
+                
+                logging.info(f"Using scorecard identifier for AccuracyEvaluation: {scorecard_identifier} (type: {type(scorecard_identifier)})")
             
             accuracy_eval = AccuracyEvaluation(
                 scorecard_name=scorecard_identifier,
@@ -968,6 +990,14 @@ def accuracy(
                 tracker.advance_stage()
                 logging.info("Entered Processing stage: Running AccuracyEvaluation")
 
+            # Initialize final_metrics with default values
+            final_metrics = {
+                'accuracy': 0.0,
+                'precision': 0.0,
+                'alignment': 0.0,
+                'recall': 0.0
+            }
+            
             # Run the evaluation using the AccuracyEvaluation instance
             logging.info("Running accuracy evaluation...")
             try:
@@ -977,7 +1007,9 @@ def accuracy(
                 logging.error(error_msg)
                 if tracker:
                     tracker.fail_current_stage(error_msg)
-                raise ValueError(error_msg)
+                # Re-raise the exception to be handled by the outer try/catch
+                raise
+                
 
             # Advance to the Finalizing stage after evaluation completes
             if tracker:
@@ -1124,6 +1156,7 @@ def accuracy(
             pass # Keep simple for now
 
     # Create and run the event loop for non-dry-run mode
+    logging.info("=== ABOUT TO START EVENT LOOP AND CALL _run_accuracy ===")
     try:
         loop = asyncio.get_event_loop()
     except RuntimeError:
@@ -1131,6 +1164,7 @@ def accuracy(
         asyncio.set_event_loop(loop)
 
     try:
+        logging.info("=== CALLING loop.run_until_complete(_run_accuracy()) ===")
         loop.run_until_complete(_run_accuracy())
     except asyncio.CancelledError:
         logging.info("Task was cancelled - cleaning up...")
@@ -1159,107 +1193,185 @@ def get_data_driven_samples(
     number_of_samples=None,
     random_seed=None
 ):
-    score_class_name = score_config['class']
-    score_module_path = f'plexus.scores.{score_class_name}'
-    score_module = importlib.import_module(score_module_path)
-    score_class = getattr(score_module, score_class_name)
-
-    score_config['scorecard_name'] = scorecard_name
-    score_config['score_name'] = score_name
-    score_instance = score_class(**score_config)
-
-    score_instance.load_data(data=score_config['data'], fresh=fresh)
-    score_instance.process_data()
-
-    # Sample the dataframe if number_of_samples is specified
-    if number_of_samples and number_of_samples < len(score_instance.dataframe):
-        logging.info(f"Sampling {number_of_samples} records from {len(score_instance.dataframe)} total records")
-        score_instance.dataframe = score_instance.dataframe.sample(n=number_of_samples, random_state=random_seed)
-        actual_sample_count = number_of_samples
-        logging.info(f"Using random_seed: {random_seed if random_seed is not None else 'None (fully random)'}")
-    else:
-        actual_sample_count = len(score_instance.dataframe)
-        logging.info(f"Using all {actual_sample_count} records (no sampling needed)")
-
-    # Set the actual count as our single source of truth right when we find it
-    if progress_callback and hasattr(progress_callback, '__self__'):
-        tracker = progress_callback.__self__
-        
-        # First, set the actual total items count we just discovered
-        # This is our single source of truth for the total count
-        new_total = tracker.set_total_items(actual_sample_count)
-        
-        # Verify the total was set correctly before proceeding
-        if new_total != actual_sample_count:
-            raise RuntimeError(f"Failed to set total items to {actual_sample_count}")
-        
-        # Set the status message
-        status_message = f"Successfully loaded {actual_sample_count} samples for {score_name}"
-        if tracker.current_stage:
-            tracker.current_stage.status_message = status_message
-            # Reset processed items to 0 since we're starting fresh
-            tracker.current_stage.processed_items = 0
-            
-            # Verify stage total_items was updated
-            if tracker.current_stage.total_items != actual_sample_count:
-                raise RuntimeError(f"Stage {tracker.current_stage.name} total_items not updated correctly")
-        
-        # Now update progress - by this point total_items is set to actual_sample_count
-        tracker.update(0, status_message)
-        
-        # Final verification after update
-        if tracker.total_items != actual_sample_count:
-            raise RuntimeError("Total items not maintained after update")
-    elif progress_callback:
-        progress_callback(0)
-
-    samples = score_instance.dataframe.to_dict('records')
-
-    content_ids_to_exclude_filename = f"tuning/{scorecard_name}/{score_name}/training_ids.txt"
-    if os.path.exists(content_ids_to_exclude_filename):
-        with open(content_ids_to_exclude_filename, 'r') as file:
-            content_ids_to_exclude = file.read().splitlines()
-        samples = [sample for sample in samples if str(sample['content_id']) not in content_ids_to_exclude]
-        logging.info(f"Number of samples after filtering out training examples: {len(samples)}")
-
-    # Filter samples based on content_ids_to_sample if provided
-    if content_ids_to_sample_set:
-        content_ids_as_integers = {int(content_id) for content_id in content_ids_to_sample_set}
-        samples = [sample for sample in samples if sample['content_id'] in content_ids_as_integers]
-        logging.info(f"Number of samples after filtering by specified content IDs: {len(samples)}")
-
-    score_name_column_name = score_name
-    if score_config.get('label_score_name'):
-        score_name = score_config['label_score_name']
-    if score_config.get('label_field'):
-        score_name_column_name = f"{score_name} {score_config['label_field']}"
-
-    processed_samples = []
-    for sample in samples:
-        # Get metadata from the sample if it exists
-        metadata = sample.get('metadata', {})
-        if isinstance(metadata, str):
-            try:
-                metadata = json.loads(metadata)
-            except json.JSONDecodeError:
-                logging.warning(f"Failed to parse metadata as JSON for content_id {sample.get('content_id')}")
-                metadata = {}
-        
-        # Create the sample dictionary with metadata included
-        processed_sample = {
-            'text': sample.get('text', ''),
-            f'{score_name_column_name}_label': sample.get(score_name_column_name, ''),
-            'content_id': sample.get('content_id', ''),
-            'columns': {
-                **{k: v for k, v in sample.items() if k not in ['text', score_name, 'content_id', 'metadata']},
-                'metadata': metadata  # Include the metadata in the columns
-            }
-        }
-        processed_samples.append(processed_sample)
+    logging.info(f"=== Starting get_data_driven_samples ===")
+    logging.info(f"scorecard_name: {scorecard_name}")
+    logging.info(f"score_name: {score_name}")
+    logging.info(f"fresh: {fresh}")
+    logging.info(f"number_of_samples: {number_of_samples}")
+    logging.info(f"random_seed: {random_seed}")
     
-    # No need for a final progress update here since we're just returning the samples
-    # The actual processing/progress will happen when these samples are used
-    return processed_samples
+    try:
+        score_class_name = score_config['class']
+        score_module_path = f'plexus.scores.{score_class_name}'
+        score_module = importlib.import_module(score_module_path)
+        score_class = getattr(score_module, score_class_name)
+
+        score_config['scorecard_name'] = scorecard_name
+        score_config['score_name'] = score_name
+        score_instance = score_class(**score_config)
+
+        # ADD THESE LOGGING STATEMENTS:
+        logging.info(f"=== DEBUGGING SCORE CONFIGURATION ===")
+        logging.info(f"Score name: {score_name}")
+        logging.info(f"Score class: {score_class_name}")
+        logging.info(f"Full score_config keys: {list(score_config.keys())}")
+        
+        if 'data' in score_config:
+            logging.info(f"Data config found: {score_config['data']}")
+            data_config = score_config['data']
+            if isinstance(data_config, dict):
+                logging.info(f"Data config keys: {list(data_config.keys())}")
+                if 'queries' in data_config:
+                    logging.info(f"Queries found: {data_config['queries']}")
+                    logging.info(f"Number of queries: {len(data_config['queries']) if isinstance(data_config['queries'], list) else 'not a list'}")
+                else:
+                    logging.info("No 'queries' key found in data config")
+                if 'searches' in data_config:
+                    logging.info(f"Searches found: {data_config['searches']}")
+                    logging.info(f"Number of searches: {len(data_config['searches']) if isinstance(data_config['searches'], list) else 'not a list'}")
+                else:
+                    logging.info("No 'searches' key found in data config")
+            else:
+                logging.info(f"Data config is not a dict, type: {type(data_config)}")
+        else:
+            logging.info("No 'data' key found in score_config")
+        logging.info(f"=== END DEBUGGING SCORE CONFIGURATION ===")
+
+        # Load and process the data
+        logging.info("Loading data...")
+        score_instance.load_data(data=score_config['data'], fresh=fresh)
+        logging.info("Processing data...")
+        score_instance.process_data()
+
+        # Check if dataframe exists and has data
+        if not hasattr(score_instance, 'dataframe'):
+            error_msg = f"Score instance {score_class_name} does not have a 'dataframe' attribute after data loading"
+            logging.error(error_msg)
+            raise ValueError(error_msg)
+        
+        if score_instance.dataframe is None:
+            error_msg = f"Score instance {score_class_name} dataframe is None after data loading"
+            logging.error(error_msg)
+            raise ValueError(error_msg)
+        
+        if len(score_instance.dataframe) == 0:
+            error_msg = f"Score instance {score_class_name} dataframe is empty after data loading"
+            logging.error(error_msg)
+            logging.error("This could be caused by:")
+            logging.error("1. No data matching the specified criteria")
+            logging.error("2. Database connectivity issues")
+            logging.error("3. Invalid data configuration")
+            logging.error("4. Data cache issues when using --fresh flag")
+            raise ValueError(error_msg)
+
+        logging.info(f"Successfully loaded dataframe with {len(score_instance.dataframe)} rows")
+
+        # Sample the dataframe if number_of_samples is specified
+        if number_of_samples and number_of_samples < len(score_instance.dataframe):
+            logging.info(f"Sampling {number_of_samples} records from {len(score_instance.dataframe)} total records")
+            score_instance.dataframe = score_instance.dataframe.sample(n=number_of_samples, random_state=random_seed)
+            actual_sample_count = number_of_samples
+            logging.info(f"Using random_seed: {random_seed if random_seed is not None else 'None (fully random)'}")
+        else:
+            actual_sample_count = len(score_instance.dataframe)
+            logging.info(f"Using all {actual_sample_count} records (no sampling needed)")
+
+        # Set the actual count as our single source of truth right when we find it
+        if progress_callback and hasattr(progress_callback, '__self__'):
+            tracker = progress_callback.__self__
+            
+            # First, set the actual total items count we just discovered
+            # This is our single source of truth for the total count
+            new_total = tracker.set_total_items(actual_sample_count)
+            
+            # Verify the total was set correctly before proceeding
+            if new_total != actual_sample_count:
+                raise RuntimeError(f"Failed to set total items to {actual_sample_count}")
+            
+            # Set the status message
+            status_message = f"Successfully loaded {actual_sample_count} samples for {score_name}"
+            if tracker.current_stage:
+                tracker.current_stage.status_message = status_message
+                # Reset processed items to 0 since we're starting fresh
+                tracker.current_stage.processed_items = 0
+                
+                # Verify stage total_items was updated
+                if tracker.current_stage.total_items != actual_sample_count:
+                    raise RuntimeError(f"Stage {tracker.current_stage.name} total_items not updated correctly")
+            
+            # Now update progress - by this point total_items is set to actual_sample_count
+            tracker.update(0, status_message)
+            
+            # Final verification after update
+            if tracker.total_items != actual_sample_count:
+                raise RuntimeError("Total items not maintained after update")
+        elif progress_callback:
+            progress_callback(0)
+
+        samples = score_instance.dataframe.to_dict('records')
+        logging.info(f"Converted dataframe to {len(samples)} sample records")
+
+        content_ids_to_exclude_filename = f"tuning/{scorecard_name}/{score_name}/training_ids.txt"
+        if os.path.exists(content_ids_to_exclude_filename):
+            with open(content_ids_to_exclude_filename, 'r') as file:
+                content_ids_to_exclude = file.read().splitlines()
+            samples = [sample for sample in samples if str(sample['content_id']) not in content_ids_to_exclude]
+            logging.info(f"Number of samples after filtering out training examples: {len(samples)}")
+
+        # Filter samples based on content_ids_to_sample if provided
+        if content_ids_to_sample_set:
+            content_ids_as_integers = {int(content_id) for content_id in content_ids_to_sample_set}
+            samples = [sample for sample in samples if sample['content_id'] in content_ids_as_integers]
+            logging.info(f"Number of samples after filtering by specified content IDs: {len(samples)}")
+
+        score_name_column_name = score_name
+        if score_config.get('label_score_name'):
+            score_name = score_config['label_score_name']
+        if score_config.get('label_field'):
+            score_name_column_name = f"{score_name} {score_config['label_field']}"
+
+        processed_samples = []
+        for sample in samples:
+            # Get metadata from the sample if it exists
+            metadata = sample.get('metadata', {})
+            if isinstance(metadata, str):
+                try:
+                    metadata = json.loads(metadata)
+                except json.JSONDecodeError:
+                    logging.warning(f"Failed to parse metadata as JSON for content_id {sample.get('content_id')}")
+                    metadata = {}
+            
+            # Create the sample dictionary with metadata included
+            processed_sample = {
+                'text': sample.get('text', ''),
+                f'{score_name_column_name}_label': sample.get(score_name_column_name, ''),
+                'content_id': sample.get('content_id', ''),
+                'columns': {
+                    **{k: v for k, v in sample.items() if k not in ['text', score_name, 'content_id', 'metadata']},
+                    'metadata': metadata  # Include the metadata in the columns
+                }
+            }
+            processed_samples.append(processed_sample)
+        
+        logging.info(f"=== Completed get_data_driven_samples successfully ===")
+        logging.info(f"Returning {len(processed_samples)} processed samples")
+        
+        # No need for a final progress update here since we're just returning the samples
+        # The actual processing/progress will happen when these samples are used
+        return processed_samples
+        
+    except Exception as e:
+        logging.error(f"=== Error in get_data_driven_samples ===")
+        logging.error(f"Error type: {type(e).__name__}")
+        logging.error(f"Error message: {str(e)}")
+        logging.error("This error occurred while trying to load labeled samples for evaluation")
+        if hasattr(e, '__traceback__'):
+            import traceback
+            logging.error(f"Full traceback: {traceback.format_exc()}")
+        
+        # Return empty list on error to prevent further issues
+        logging.error("Returning empty list due to error")
+        return []
 
 def get_csv_samples(csv_filename):
     if not os.path.exists(csv_filename):

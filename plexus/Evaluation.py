@@ -967,12 +967,19 @@ class Evaluation:
 
         # Determine the correct report folder
         if self.subset_of_score_names and len(self.subset_of_score_names) == 1:
-            score_instance = Score.from_name(self.scorecard_name, self.subset_of_score_names[0])
-            report_folder_path = score_instance.report_directory_path()
-            report_folder_path = report_folder_path.rstrip('/')
+            try:
+                score_instance = self.get_score_instance(self.subset_of_score_names[0])
+                report_folder_path = score_instance.report_directory_path()
+                report_folder_path = report_folder_path.rstrip('/')
+            except ValueError as e:
+                self.logging.info(f"Could not get score instance for report folder: {e}")
+                # Fallback to default report folder structure
+                scorecard_name = self.scorecard.name.replace(' ', '_') if hasattr(self.scorecard, 'name') and callable(self.scorecard.name) else str(self.scorecard_name).replace(' ', '_')
+                score_name = self.subset_of_score_names[0].replace(' ', '_')
+                report_folder_path = f"./score_results/{scorecard_name}/{score_name}"
         else:
             scorecard_name = self.scorecard.name.replace(' ', '_')
-            report_folder_path = f"./reports/{scorecard_name}/combined"
+            report_folder_path = f"./score_results/{scorecard_name}/combined"
 
         # Ensure the report folder exists
         os.makedirs(report_folder_path, exist_ok=True)
@@ -993,8 +1000,12 @@ class Evaluation:
         is_dataset_balanced = True  # Track overall dataset balance
         
         for score_name in self.score_names():
-            score_instance = Score.from_name(self.scorecard_name, score_name)
-            label_score_name = score_instance.get_label_score_name()
+            try:
+                score_instance = self.get_score_instance(score_name)
+                label_score_name = score_instance.get_label_score_name()
+            except ValueError as e:
+                self.logging.info(f"Could not get score instance for label distribution: {e}, skipping {score_name}")
+                continue
             
             # Try both possible column names for labels
             label_column = label_score_name + '_label'
@@ -1950,13 +1961,16 @@ Total cost:       ${expenses['total_cost']:.6f}
                             {}
                         )
                         if score_config.get('class') == 'LangGraphScore':
-                            score_instance = Score.from_name(self.scorecard_name, score_to_process)
-                            if isinstance(score_instance, LangGraphScore):
-                                await score_instance.async_setup()  # Ensure the graph is built
-                                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                                output_path = os.path.join('tmp', f'graph_{score_to_process}_{timestamp}.png')
-                                score_instance.generate_graph_visualization(output_path)
-                                logging.info(f"Generated graph visualization at {output_path}")
+                            try:
+                                score_instance = self.get_score_instance(score_to_process)
+                                if isinstance(score_instance, LangGraphScore):
+                                    await score_instance.async_setup()  # Ensure the graph is built
+                                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                                    output_path = os.path.join('tmp', f'graph_{score_to_process}_{timestamp}.png')
+                                    score_instance.generate_graph_visualization(output_path)
+                                    logging.info(f"Generated graph visualization at {output_path}")
+                            except ValueError as e:
+                                self.logging.info(f"Could not get score instance for visualization: {e}, skipping {score_to_process}")
                 
                 scorecard_results = await self.scorecard.score_entire_text(
                     text=text,
@@ -2712,8 +2726,32 @@ class AccuracyEvaluation(Evaluation):
             import pandas as pd
             if self.labeled_samples:
                 df = pd.DataFrame(self.labeled_samples)
-            else:
+            elif self.labeled_samples_filename:
                 df = pd.read_csv(self.labeled_samples_filename)
+            else:
+                # Handle the case where labeled_samples is empty/None and no filename provided
+                if self.labeled_samples is not None:
+                    # labeled_samples was provided but is empty
+                    error_msg = f"No labeled samples data available. The labeled_samples list is empty ({len(self.labeled_samples)} items). This usually indicates a data loading issue."
+                else:
+                    # Neither labeled_samples nor filename provided
+                    error_msg = "No labeled samples data available. Both labeled_samples and labeled_samples_filename are None."
+                
+                self.logging.error(error_msg)
+                self.logging.error("This error typically occurs when:")
+                self.logging.error("1. The --fresh flag causes data cache issues")
+                self.logging.error("2. The score configuration doesn't have proper data sources")
+                self.logging.error("3. Database connectivity issues prevent data loading")
+                self.logging.error("4. No matching data is found for the specified criteria")
+                
+                # Provide troubleshooting suggestions
+                self.logging.error("Troubleshooting suggestions:")
+                self.logging.error("- Try running without the --fresh flag to use cached data")
+                self.logging.error("- Verify the scorecard configuration has proper data sources")
+                self.logging.error("- Check database connectivity and credentials")
+                self.logging.error("- Verify that data exists for the specified score criteria")
+                
+                raise ValueError(error_msg)
 
             # Adjust the sample size if necessary
             self.number_of_texts_to_sample = min(len(df), self.requested_sample_size)
@@ -2813,7 +2851,7 @@ class AccuracyEvaluation(Evaluation):
                 # Try to get score instance for report generation, but skip if not found in registry
                 # (This can happen with API-loaded scorecards that aren't registered)
                 try:
-                    score_instance = Score.from_name(self.scorecard_name, primary_score_name)
+                    score_instance = self.get_score_instance(primary_score_name)
                     
                     # Calculate overall_accuracy from the counters we just updated
                     overall_accuracy = (self.total_correct / self.total_questions * 100) if self.total_questions > 0 else 0
@@ -2831,12 +2869,22 @@ class AccuracyEvaluation(Evaluation):
 
                 # Generate reports - determine the correct report folder
                 if self.subset_of_score_names and len(self.subset_of_score_names) == 1:
-                    score_instance = Score.from_name(self.scorecard_name, self.subset_of_score_names[0])
-                    report_folder_path = score_instance.report_directory_path()
-                    report_folder_path = report_folder_path.rstrip('/')
+                    try:
+                        score_instance = self.get_score_instance(self.subset_of_score_names[0])
+                        report_folder_path = score_instance.report_directory_path()
+                        report_folder_path = report_folder_path.rstrip('/')
+                    except ValueError as e:
+                        if "not found" in str(e):
+                            self.logging.info(f"Scorecard not found in registry, using default report folder: {e}")
+                            # Use default report folder when scorecard not found in registry
+                            scorecard_name = self.scorecard.name.replace(' ', '_') if hasattr(self.scorecard, 'name') and callable(self.scorecard.name) else str(self.scorecard_name).replace(' ', '_')
+                            score_name = self.subset_of_score_names[0].replace(' ', '_')
+                            report_folder_path = f"./score_results/{scorecard_name}/{score_name}"
+                        else:
+                            raise
                 else:
                     scorecard_name = self.scorecard.name.replace(' ', '_')
-                    report_folder_path = f"./reports/{scorecard_name}/combined"
+                    report_folder_path = f"./score_results/{scorecard_name}/combined"
 
                 # Ensure the report folder exists
                 os.makedirs(report_folder_path, exist_ok=True)
@@ -2874,4 +2922,48 @@ class AccuracyEvaluation(Evaluation):
             raise e
         finally:
             pass
+
+    def get_score_instance(self, score_name: str):
+        """
+        Safely get a Score instance that works with both YAML-loaded and API-loaded scorecards.
+        
+        For YAML-loaded scorecards: Uses Score.from_name() with global scorecard_registry
+        For API-loaded scorecards: Uses the scorecard instance's own score_registry
+        """
+        try:
+            # First try the traditional Score.from_name() approach (for YAML-loaded scorecards)
+            return Score.from_name(self.scorecard_name, score_name)
+        except ValueError as e:
+            if "not found" in str(e):
+                # Scorecard not found in global registry - try instance registry (for API-loaded scorecards)
+                self.logging.info(f"Scorecard '{self.scorecard_name}' not found in global registry, trying instance registry")
+                
+                # Get the score from the scorecard instance's registry
+                if hasattr(self.scorecard, 'score_registry'):
+                    score_class = self.scorecard.score_registry.get(score_name)
+                    if score_class:
+                        score_properties = self.scorecard.score_registry.get_properties(score_name)
+                        if score_properties:
+                            # Ensure scorecard_name is set in properties
+                            score_properties = score_properties.copy()
+                            if 'scorecard_name' not in score_properties:
+                                # Use the actual scorecard name from the instance
+                                actual_scorecard_name = None
+                                if hasattr(self.scorecard, 'name') and callable(self.scorecard.name):
+                                    actual_scorecard_name = self.scorecard.name()
+                                elif hasattr(self.scorecard, 'properties') and isinstance(self.scorecard.properties, dict):
+                                    actual_scorecard_name = self.scorecard.properties.get('name')
+                                
+                                score_properties['scorecard_name'] = actual_scorecard_name or str(self.scorecard_name)
+                            
+                            return score_class(**score_properties)
+                        else:
+                            raise ValueError(f"Score properties for '{score_name}' not found in scorecard instance registry")
+                    else:
+                        raise ValueError(f"Score '{score_name}' not found in scorecard instance registry")
+                else:
+                    raise ValueError(f"Scorecard instance has no score_registry attribute")
+            else:
+                # Re-raise if it's a different error
+                raise
 
