@@ -17,36 +17,38 @@ from plexus.Scorecard import Scorecard
 from plexus.scores.Score import Score
 from plexus.dashboard.api.client import PlexusDashboardClient
 from plexus.cli.shared import get_scoring_jobs_for_batch
+from plexus.cli.identifier_resolution import resolve_scorecard_identifier, resolve_score_identifier, resolve_item_identifier
+from plexus.cli.memoized_resolvers import memoized_resolve_scorecard_identifier, memoized_resolve_item_identifier
 
 
 @click.command(help="Predict a scorecard or specific score(s) within a scorecard.")
-@click.option('--scorecard-name', required=True, help='The name of the scorecard.')
-@click.option('--score-name', '--score-names', help='The name(s) of the score(s) to predict, separated by commas.')
-@click.option('--item-id', help='The ID of a specific item to use from the Plexus API, or an identifier value to search for.')
+@click.option('--scorecard', required=True, help='The scorecard to use (accepts ID, name, key, or external ID).')
+@click.option('--score', '--scores', help='The score(s) to predict (accepts ID, name, key, or external ID), separated by commas.')
+@click.option('--item', help='The item to use (accepts ID or any identifier value).')
 @click.option('--number', type=int, default=1, help='Number of times to iterate over the list of scores.')
 @click.option('--excel', is_flag=True, help='Output results to an Excel file.')
 @click.option('--use-langsmith-trace', is_flag=True, default=False, help='Activate LangSmith trace client for LangChain components')
 @click.option('--fresh', is_flag=True, help='Pull fresh, non-cached data from the data lake.')
 @click.option('--task-id', default=None, type=str, help='Task ID for progress tracking')
 @click.option('--format', type=click.Choice(['fixed', 'json']), default='fixed', help='Output format: fixed (human-readable) or json (parseable JSON)')
-def predict(scorecard_name, score_name, item_id, number, excel, use_langsmith_trace, fresh, task_id, format):
+def predict(scorecard, score, item, number, excel, use_langsmith_trace, fresh, task_id, format):
     """Predict scores for a scorecard"""
     try:
         # Configure event loop with custom exception handler
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         loop.set_exception_handler(
-            lambda l, c: handle_exception(l, c, scorecard_name, score_name)
+            lambda l, c: handle_exception(l, c, scorecard, score)
         )
 
         # Create and run coroutine
-        if score_name:
-            score_names = [name.strip() for name in score_name.split(',')]
+        if score:
+            score_names = [name.strip() for name in score.split(',')]
         else:
             score_names = []
         
         coro = predict_impl(
-            scorecard_name, score_names, item_id, excel, 
+            scorecard, score_names, item, excel, 
             use_langsmith_trace, fresh, task_id, format
         )
         try:
@@ -75,9 +77,9 @@ def predict(scorecard_name, score_name, item_id, number, excel, use_langsmith_tr
         sys.exit(1)
 
 async def predict_impl(
-    scorecard_name: str,
+    scorecard_identifier: str,
     score_names: list,
-    item_id: str = None,
+    item_identifier: str = None,
     excel: bool = False,
     use_langsmith_trace: bool = False,
     fresh: bool = False,
@@ -87,11 +89,11 @@ async def predict_impl(
     """Implementation of predict command"""
     try:
         results = []
-        scorecard_class = get_scorecard_class(scorecard_name)
+        scorecard_class = get_scorecard_class(scorecard_identifier)
         
         for score_name in score_names:
             sample_row, used_item_id = select_sample(
-                scorecard_class, score_name, item_id, fresh
+                scorecard_class, score_name, item_identifier, fresh
             )
             
             row_result = {'item_id': used_item_id}
@@ -156,7 +158,7 @@ async def predict_impl(
                 results.append(row_result)
 
         if excel and results:
-            output_excel(results, score_names, scorecard_name)
+            output_excel(results, score_names, scorecard_identifier)
         elif results:
             if format == 'json':
                 # JSON format: only output parseable JSON
@@ -234,7 +236,7 @@ async def predict_impl(
             if not task.done() and task != asyncio.current_task():
                 task.cancel()
 
-def output_excel(results, score_names, scorecard_name):
+def output_excel(results, score_names, scorecard_identifier):
     df = pd.DataFrame(results)
     
     logging.info(f"Available DataFrame columns: {df.columns.tolist()}")
@@ -256,7 +258,7 @@ def output_excel(results, score_names, scorecard_name):
     
     df = df[existing_columns]
     
-    filename = f"{scorecard_name}_predictions.xlsx"
+    filename = f"{scorecard_identifier}_predictions.xlsx"
     with pd.ExcelWriter(filename, engine='openpyxl') as writer:
         df.to_excel(writer, index=False, sheet_name='Predictions')
         workbook = writer.book
@@ -279,8 +281,8 @@ def output_excel(results, score_names, scorecard_name):
 
     logging.info(f"Excel file '{filename}' has been created with the prediction results.")
 
-def select_sample(scorecard_class, score_name, item_id, fresh):
-    """Select an item from the Plexus API instead of from score datasets."""
+def select_sample(scorecard_class, score_name, item_identifier, fresh):
+    """Select an item from the Plexus API using flexible identifier resolution."""
     from plexus.cli.client_utils import create_client
     from plexus.dashboard.api.models.item import Item
     from plexus.cli.reports.utils import resolve_account_id_for_command
@@ -289,11 +291,16 @@ def select_sample(scorecard_class, score_name, item_id, fresh):
     client = create_client()
     account_id = resolve_account_id_for_command(client, None)
     
-    if item_id:
-        # First try to fetch specific item by ID
+    if item_identifier:
+        # Use the flexible item identifier resolution
+        item_id = memoized_resolve_item_identifier(client, item_identifier, account_id)
+        if not item_id:
+            raise ValueError(f"No item found matching identifier: {item_identifier}")
+        
+        # Get the item
         try:
             item = Item.get_by_id(item_id, client)
-            logging.info(f"Fetched item {item_id} from API by direct ID lookup")
+            logging.info(f"Found item {item_id} from identifier '{item_identifier}'")
             
             # Create a pandas-like row structure for compatibility
             sample_data = {
@@ -313,40 +320,9 @@ def select_sample(scorecard_class, score_name, item_id, fresh):
             
             return sample_row, item.id
             
-        except ValueError as e:
-            logging.info(f"Item {item_id} not found by direct ID lookup, trying identifier search: {e}")
-            
-            # Fallback: try to find by identifier value
-            try:
-                from plexus.utils.identifier_search import find_item_by_identifier
-                
-                item = find_item_by_identifier(item_id, account_id, client)
-                if item:
-                    logging.info(f"Found item {item.id} by identifier value '{item_id}'")
-                    
-                    # Create a pandas-like row structure for compatibility
-                    sample_data = {
-                        'text': item.text or '',
-                        'item_id': item.id,
-                        'metadata': json.dumps({
-                            "item_id": item.id,
-                            "account_key": os.getenv('PLEXUS_ACCOUNT_KEY', 'call-criteria'),
-                            "scorecard_key": scorecard_class.properties.get('key'),
-                            "score_name": score_name
-                        })
-                    }
-                    
-                    # Convert to DataFrame-like structure for compatibility
-                    import pandas as pd
-                    sample_row = pd.DataFrame([sample_data])
-                    
-                    return sample_row, item.id
-                else:
-                    raise ValueError(f"No item found with ID '{item_id}' or identifier value '{item_id}'")
-                    
-            except Exception as identifier_error:
-                logging.error(f"Identifier search also failed: {identifier_error}")
-                raise ValueError(f"No item found with ID '{item_id}' or identifier value '{item_id}'")
+        except Exception as e:
+            logging.error(f"Error retrieving item {item_id}: {e}")
+            raise ValueError(f"Could not retrieve item {item_id}: {e}")
     else:
         # Get the most recent item for the account
         query = f"""
@@ -387,8 +363,6 @@ def select_sample(scorecard_class, score_name, item_id, fresh):
         sample_row = pd.DataFrame([sample_data])
         
         return sample_row, item.id
-
-
 
 async def predict_score(score_name, scorecard_class, sample_row, used_item_id):
     """Predict a single score."""
@@ -465,7 +439,7 @@ async def predict_score_impl(
         await score_instance.cleanup()
         raise
 
-def handle_exception(loop, context, scorecard_name=None, score_name=None):
+def handle_exception(loop, context, scorecard_identifier=None, score_identifier=None):
     """Custom exception handler for the event loop"""
     exception = context.get('exception')
     message = context.get('message', '')
@@ -485,12 +459,12 @@ def handle_exception(loop, context, scorecard_name=None, score_name=None):
         print("2. Either:")
         print("   a. Set PLEXUS_ENABLE_LLM_BREAKPOINTS=false to run without stopping")
         print("   b. Keep PLEXUS_ENABLE_LLM_BREAKPOINTS=true to continue stopping at breakpoints")
-        print(f"3. Run the same command with --item-id {exception.thread_id}")
+        print(f"3. Run the same command with --item {exception.thread_id}")
         print("\nExample:")
-        print(f"  plexus predict --scorecard-name {scorecard_name}", end="")
-        if score_name:
-            print(f" --score-name {score_name}", end="")
-        print(f" --item-id {exception.thread_id}")
+        print(f"  plexus predict --scorecard {scorecard_identifier}", end="")
+        if score_identifier:
+            print(f" --score {score_identifier}", end="")
+        print(f" --item {exception.thread_id}")
         print("=" * 80 + "\n")
         
         # Stop the event loop gracefully
@@ -501,14 +475,57 @@ def handle_exception(loop, context, scorecard_name=None, score_name=None):
         loop.default_exception_handler(context)
         loop.stop()
 
-def get_scorecard_class(scorecard_name: str):
-    """Get the scorecard class from the registry."""
+def get_scorecard_class(scorecard_identifier: str):
+    """Get the scorecard class from the registry using flexible identifier resolution."""
+    from plexus.cli.client_utils import create_client
+    
+    # First try to resolve the scorecard identifier to get the actual scorecard details
+    client = create_client()
+    scorecard_id = memoized_resolve_scorecard_identifier(client, scorecard_identifier)
+    
+    if scorecard_id:
+        # Get the scorecard details to get the key which is used for registry lookup
+        query = f"""
+        query GetScorecard {{
+            getScorecard(id: "{scorecard_id}") {{
+                id
+                name
+                key
+            }}
+        }}
+        """
+        
+        try:
+            result = client.execute(query)
+            scorecard_data = result.get('getScorecard', {})
+            scorecard_key = scorecard_data.get('key')
+            scorecard_name = scorecard_data.get('name')
+            
+            if scorecard_key:
+                # Load scorecards and try to get by key
+                Scorecard.load_and_register_scorecards('scorecards/')
+                scorecard_class = scorecard_registry.get(scorecard_key)
+                if scorecard_class is not None:
+                    logging.info(f"Found scorecard class for key '{scorecard_key}' (name: '{scorecard_name}')")
+                    return scorecard_class
+                
+                # If key didn't work, try by name as fallback
+                scorecard_class = scorecard_registry.get(scorecard_name)
+                if scorecard_class is not None:
+                    logging.info(f"Found scorecard class for name '{scorecard_name}' (key: '{scorecard_key}')")
+                    return scorecard_class
+        except Exception as e:
+            logging.warning(f"Error getting scorecard details: {e}")
+    
+    # Fallback: try direct registry lookup with the original identifier
     Scorecard.load_and_register_scorecards('scorecards/')
-    scorecard_class = scorecard_registry.get(scorecard_name)
-    if scorecard_class is None:
-        logging.error(f"Scorecard with name '{scorecard_name}' not found.")
-        raise ValueError(f"Scorecard with name '{scorecard_name}' not found.")
-    return scorecard_class
+    scorecard_class = scorecard_registry.get(scorecard_identifier)
+    if scorecard_class is not None:
+        logging.info(f"Found scorecard class for identifier '{scorecard_identifier}' (direct registry lookup)")
+        return scorecard_class
+    
+    logging.error(f"Scorecard with identifier '{scorecard_identifier}' not found in registry.")
+    raise ValueError(f"Scorecard with identifier '{scorecard_identifier}' not found in registry.")
 
 def create_score_input(sample_row, item_id, scorecard_class, score_name):
     """Create a Score.Input object from sample data."""
