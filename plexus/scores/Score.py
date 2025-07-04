@@ -289,7 +289,7 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
             logging.error(message)
 
     def report_directory_path(self):
-        return f"./reports/{self.parameters.scorecard_name}/{self.parameters.name}/".replace(' ', '_')
+        return f"./score_results/{self.parameters.scorecard_name}/{self.parameters.name}/".replace(' ', '_')
     def model_directory_path(self):
         return f"./models/{self.parameters.scorecard_name}/{self.parameters.name}/".replace(' ', '_')
 
