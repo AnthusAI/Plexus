@@ -1125,8 +1125,6 @@ class Evaluation:
             except ValueError as e:
                 logging.error(f"Sampling error: {e}")
                 selected_sample_rows = df
-        elif self.sampling_method == 'all':
-            selected_sample_rows = df
         elif self.sampling_method == 'sequential':
             logging.info(f"DataFrame shape before sampling: {df.shape}")
             logging.info(f"First few DataFrame indices: {df.index[:5].tolist()}")
@@ -1138,6 +1136,10 @@ class Evaluation:
             logging.info(f"Sampled DataFrame shape: {selected_sample_rows.shape}")
             logging.info(f"First few sampled indices: {selected_sample_rows.index[:5].tolist()}")
             logging.info(f"First few sampled session IDs: {selected_sample_rows['Session ID'].head(5).tolist()}")
+        elif self.sampling_method == 'provided':
+            # Samples are already provided and pre-processed, use them as-is
+            selected_sample_rows = df
+            self.logging.info(f"Using {len(df)} provided samples without additional sampling")
         else:
             logging.warning(f"Unknown sampling method '{self.sampling_method}'. Defaulting to random.")
             selected_sample_rows = df.sample(
@@ -2762,6 +2764,10 @@ class AccuracyEvaluation(Evaluation):
                 selected_sample_rows = df.sample(n=self.number_of_texts_to_sample, random_state=self.random_seed)
             elif self.sampling_method == 'sequential':
                 selected_sample_rows = df.head(self.number_of_texts_to_sample)
+            elif self.sampling_method == 'provided':
+                # Samples are already provided and pre-processed, use them as-is
+                selected_sample_rows = df
+                self.logging.info(f"Using {len(df)} provided samples without additional sampling")
             else:
                 selected_sample_rows = df
 
