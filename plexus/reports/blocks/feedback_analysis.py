@@ -1243,6 +1243,49 @@ class FeedbackAnalysis(BaseReportBlock):
             # Add the item to the appropriate list
             indexed_structure[initial_value][final_value].append(item_dict)
         
+        # Sort each list of items by edit date (newest first)
+        for initial_value, final_values_dict in indexed_structure.items():
+            for final_value, items_list in final_values_dict.items():
+                # Sort by editedAt first (if available), then by updatedAt, then by createdAt
+                # Using reverse=True to get newest first
+                def sort_key(item):
+                    # Try editedAt first, then updatedAt, then createdAt
+                    # For reverse chronological order, we want the newest items first
+                    date_val = item.get('editedAt') or item.get('updatedAt') or item.get('createdAt')
+                    if date_val is None:
+                        # Items without dates should sort to the end (return a very old date)
+                        return datetime.min.replace(tzinfo=timezone.utc)
+                    
+                    # Convert string dates to datetime objects for proper comparison
+                    if isinstance(date_val, str):
+                        try:
+                            # Parse ISO format date strings
+                            return datetime.fromisoformat(date_val.replace('Z', '+00:00'))
+                        except ValueError:
+                            # Fallback to string comparison if parsing fails
+                            return date_val
+                    
+                    # If it's already a datetime object, return as-is
+                    if hasattr(date_val, 'isoformat'):
+                        return date_val
+                    
+                    # Fallback to string conversion
+                    return str(date_val)
+                
+                # Log before sorting
+                self._log(f"Before sorting {len(items_list)} items for initial={initial_value}, final={final_value}")
+                for i, item in enumerate(items_list[:3]):  # Show first 3 items before sorting
+                    date_val = item.get('editedAt') or item.get('updatedAt') or item.get('createdAt')
+                    self._log(f"BEFORE - Item {i+1}: ID={item.get('id')}, sort_date={date_val}")
+                
+                items_list.sort(key=sort_key, reverse=True)
+                
+                # Log after sorting
+                self._log(f"After sorting {len(items_list)} items for initial={initial_value}, final={final_value}")
+                for i, item in enumerate(items_list[:3]):  # Show first 3 items after sorting
+                    date_val = item.get('editedAt') or item.get('updatedAt') or item.get('createdAt')
+                    self._log(f"AFTER - Item {i+1}: ID={item.get('id')}, sort_date={date_val}")
+        
         # Add summary count of items with identifiers
         items_with_identifiers = 0
         total_indexed = 0
