@@ -102,12 +102,11 @@ export class YamlLinter {
 
       // Stage 4: Generate success message if no issues
       if (result.is_valid && result.messages.length === 0) {
-        result.success_message = "✅ No issues found – nice work! Your YAML is well-formed and follows all domain rules."
         this.addMessage(result, {
           level: 'success',
           code: 'VALIDATION_SUCCESS',
           title: 'Validation Successful',
-          message: result.success_message,
+          message: "✅ No issues found – nice work! Your YAML is well-formed and follows all domain rules.",
           doc_url: `${this.docBaseUrl}/best-practices`
         })
       }
@@ -349,6 +348,7 @@ export class RequiredFieldRule implements ValidationRule {
       }
       
     } catch (error) {
+      // Field navigation failed - field is missing
       messages.push({
         level: this.severity,
         code: this.rule_id,

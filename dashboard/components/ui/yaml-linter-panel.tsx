@@ -6,18 +6,15 @@
  */
 
 import React from 'react'
-import { AlertCircle, CheckCircle, Info, AlertTriangle, ExternalLink, ChevronDown, ChevronRight } from 'lucide-react'
+import { AlertCircle, CheckCircle, Info, AlertTriangle, ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import type { LintResult, LintMessage } from '@/lib/yaml-linter'
 
 interface YamlLinterPanelProps {
   /** Linting results to display */
   result?: LintResult
-  /** Whether to show the panel in expanded state by default */
-  defaultExpanded?: boolean
   /** Additional CSS class */
   className?: string
   /** Callback when user clicks on a message with line/column info */
@@ -28,19 +25,10 @@ interface YamlLinterPanelProps {
 
 export function YamlLinterPanel({
   result,
-  defaultExpanded = false,
   className,
   onMessageClick,
   showLineNumbers = true
 }: YamlLinterPanelProps) {
-  const [isExpanded, setIsExpanded] = React.useState(defaultExpanded)
-
-  // Auto-expand if there are errors
-  React.useEffect(() => {
-    if (result && result.error_count > 0) {
-      setIsExpanded(true)
-    }
-  }, [result])
 
   if (!result) {
     return null
@@ -74,16 +62,7 @@ export function YamlLinterPanel({
   }
 
   const getVariantClasses = () => {
-    switch (variant) {
-      case 'error':
-        return 'border-destructive/50 bg-destructive/5 text-destructive'
-      case 'warning':
-        return 'border-yellow-500/50 bg-yellow-500/5 text-yellow-700 dark:text-yellow-400'
-      case 'success':
-        return 'border-green-500/50 bg-green-500/5 text-green-700 dark:text-green-400'
-      default:
-        return 'border-blue-500/50 bg-blue-500/5 text-blue-700 dark:text-blue-400'
-    }
+    return 'text-foreground'
   }
 
   const getSummaryText = () => {
@@ -104,65 +83,47 @@ export function YamlLinterPanel({
   }
 
   return (
-    <div className={cn('border rounded-lg', getVariantClasses(), className)}>
-      <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
-        <CollapsibleTrigger asChild>
-          <Button
-            variant="ghost"
-            className="w-full justify-between p-3 h-auto font-normal hover:bg-transparent"
-          >
-            <div className="flex items-center gap-2">
-              {getIcon()}
-              <span className="text-sm font-medium">
-                {getSummaryText()}
-              </span>
-              {hasMessages && (
-                <div className="flex gap-1">
-                  {hasErrors && (
-                    <Badge variant="destructive" className="h-5 text-xs">
-                      {result.error_count}
-                    </Badge>
-                  )}
-                  {hasWarnings && (
-                    <Badge variant="secondary" className="h-5 text-xs bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300">
-                      {result.warning_count}
-                    </Badge>
-                  )}
-                  {result.info_count > 0 && (
-                    <Badge variant="outline" className="h-5 text-xs">
-                      {result.info_count}
-                    </Badge>
-                  )}
-                </div>
-              )}
-            </div>
-            {hasMessages && (
-              <div className="flex items-center">
-                {isExpanded ? (
-                  <ChevronDown className="h-4 w-4" />
-                ) : (
-                  <ChevronRight className="h-4 w-4" />
-                )}
-              </div>
-            )}
-          </Button>
-        </CollapsibleTrigger>
-
+    <div className={cn(getVariantClasses(), className)}>
+      {/* Simple header */}
+      <div className="flex items-center gap-2 mb-2">
+        {getIcon()}
+        <span className="text-sm font-medium">
+          {getSummaryText()}
+        </span>
         {hasMessages && (
-          <CollapsibleContent>
-            <div className="px-3 pb-3 space-y-2">
-              {result.messages.map((message, index) => (
-                <LintMessageItem
-                  key={index}
-                  message={message}
-                  onClick={onMessageClick}
-                  showLineNumber={showLineNumbers}
-                />
-              ))}
-            </div>
-          </CollapsibleContent>
+          <div className="flex gap-1">
+            {hasErrors && (
+              <Badge variant="destructive" className="h-5 text-xs">
+                {result.error_count}
+              </Badge>
+            )}
+            {hasWarnings && (
+              <Badge variant="secondary" className="h-5 text-xs bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300">
+                {result.warning_count}
+              </Badge>
+            )}
+            {result.info_count > 0 && (
+              <Badge variant="outline" className="h-5 text-xs">
+                {result.info_count}
+              </Badge>
+            )}
+          </div>
         )}
-      </Collapsible>
+      </div>
+
+      {/* Always visible messages */}
+      {hasMessages && (
+        <div className="space-y-2">
+          {result.messages.map((message, index) => (
+            <LintMessageItem
+              key={index}
+              message={message}
+              onClick={onMessageClick}
+              showLineNumber={showLineNumbers}
+            />
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -188,16 +149,7 @@ function LintMessageItem({ message, onClick, showLineNumber = true }: LintMessag
   }
 
   const getMessageClasses = () => {
-    switch (message.level) {
-      case 'error':
-        return 'text-destructive'
-      case 'warning':
-        return 'text-yellow-700 dark:text-yellow-400'
-      case 'success':
-        return 'text-green-700 dark:text-green-400'
-      default:
-        return 'text-blue-700 dark:text-blue-400'
-    }
+    return 'text-foreground'
   }
 
   const hasLocation = message.line !== undefined && message.line !== null
@@ -206,7 +158,7 @@ function LintMessageItem({ message, onClick, showLineNumber = true }: LintMessag
   return (
     <div
       className={cn(
-        'flex gap-2 p-2 rounded text-xs',
+        'flex gap-2 text-xs',
         isClickable && 'cursor-pointer hover:bg-black/5 dark:hover:bg-white/5'
       )}
       onClick={isClickable ? () => onClick(message) : undefined}
@@ -227,7 +179,7 @@ function LintMessageItem({ message, onClick, showLineNumber = true }: LintMessag
               {message.message}
             </div>
             {message.suggestion && (
-              <div className={cn('mt-1 text-xs italic', getMessageClasses())}>
+              <div className="mt-1 text-xs italic text-foreground">
                 💡 {message.suggestion}
               </div>
             )}
