@@ -78,11 +78,16 @@ interface TopicAnalysisData {
     representation_model_provider?: string;
     representation_model_name?: string;
     topics_before?: Array<{
-      id: number;
+      topic_id: number;
       name: string;
-      count: number;
-      representation: string;
-      words: Array<{ word: string; weight: number }>;
+      keywords: string[];
+    }>;
+    before_after_comparison?: Array<{
+      topic_id: number;
+      before_keywords: string[];
+      before_name: string;
+      after_name: string;
+      enhanced: boolean;
     }>;
   };
   topics?: Array<{
@@ -90,7 +95,7 @@ interface TopicAnalysisData {
     name: string;
     count: number;
     representation: string;
-    words: Array<{ word: string; weight: number }>;
+    keywords: string[];
     examples?: TopicExample[];
   }>;
   visualization_notes?: {
@@ -373,7 +378,7 @@ const TopicAnalysisResults: React.FC<{
     name: string;
     count: number;
     representation: string;
-    words: Array<{ word: string; weight: number }>;
+    keywords: string[];
     examples?: TopicExample[];
   }>;
   summary?: string;
@@ -447,29 +452,25 @@ const TopicAnalysisResults: React.FC<{
                   </AccordionTrigger>
                 <AccordionContent>
                   <div className="space-y-3 p-1">
-                    {topic.words && topic.words.length > 0 && (
+                    {topic.keywords && topic.keywords.length > 0 && (
                       <div className="flex flex-wrap gap-1">
-                        {topic.words
-                          .filter(word => {
-                            // Ensure word is a non-empty string
-                            if (!word.word || typeof word.word !== 'string' || word.word.trim() === '') {
+                        {topic.keywords
+                          .filter(keyword => {
+                            // Ensure keyword is a non-empty string
+                            if (!keyword || typeof keyword !== 'string' || keyword.trim() === '') {
                               return false;
                             }
                             // Also filter out the main topic name itself
-                            const normalizedWord = word.word.toLowerCase().replace(/_/g, ' ').trim();
+                            const normalizedKeyword = keyword.toLowerCase().replace(/_/g, ' ').trim();
                             const normalizedTopicName = cleanTopicName(topic.name).toLowerCase().trim();
-                            return normalizedWord !== normalizedTopicName;
+                            return normalizedKeyword !== normalizedTopicName;
                           })
-                          .slice(0, bertopicAnalysis.top_n_words || 6)
-                          .map((word, i) => {
-                            const wordText = typeof word.word === 'string' ? word.word : 
-                              (typeof word.word === 'object' ? JSON.stringify(word.word) : String(word.word));
-                            return (
-                              <Badge key={i} variant="secondary" className="text-xs">
-                                {wordText}
-                              </Badge>
-                            );
-                          })}
+                          .slice(0, bertopicAnalysis.top_n_words || 8)
+                          .map((keyword, i) => (
+                            <Badge key={i} variant="secondary" className="text-xs">
+                              {keyword}
+                            </Badge>
+                          ))}
                       </div>
                     )}
                     {topic.examples && topic.examples.length > 0 && (
@@ -1108,7 +1109,7 @@ const BERTopicSection: React.FC<{
     name: string;
     count: number;
     representation: string;
-    words: Array<{ word: string; weight: number }>;
+    keywords: string[];
     examples?: TopicExample[];
   }>;
   bertopicAnalysis: any;
@@ -1163,17 +1164,13 @@ const BERTopicSection: React.FC<{
                   <h5 className="font-medium">Topic {topic.id}</h5>
                   <span className="text-sm text-muted-foreground">{topic.count} items</span>
                 </div>
-                {topic.words && topic.words.length > 0 && (
+                {topic.keywords && topic.keywords.length > 0 && (
                   <div className="flex flex-wrap gap-1">
-                    {topic.words.slice(0, bertopicAnalysis?.top_n_words || 8).map((word, i) => {
-                      const wordText = typeof word.word === 'string' ? word.word : 
-                        (typeof word.word === 'object' ? JSON.stringify(word.word) : String(word.word));
-                      return (
-                        <Badge key={i} variant="outline" className="text-xs">
-                          {wordText} ({word.weight.toFixed(3)})
-                        </Badge>
-                      );
-                    })}
+                    {topic.keywords.slice(0, bertopicAnalysis?.top_n_words || 8).map((keyword, i) => (
+                      <Badge key={i} variant="outline" className="text-xs">
+                        {keyword}
+                      </Badge>
+                    ))}
                   </div>
                 )}
               </div>
@@ -1230,13 +1227,11 @@ const FineTuningSection: React.FC<{
     name: string;
     count: number;
     representation: string;
-    words: Array<{ word: string; weight: number }>;
+    keywords: string[];
     examples?: TopicExample[];
   }>;
   bertopicAnalysis?: any;
 }> = ({ fineTuning, topics, bertopicAnalysis }) => {
-  const topicsBefore = fineTuning.topics_before || [];
-  const hasBeforeAfterData = topicsBefore.length > 0 && topics.length > 0;
 
   return (
     <div className="space-y-4 pt-2">
@@ -1262,24 +1257,22 @@ const FineTuningSection: React.FC<{
         </div>
       )}
       
-      {hasBeforeAfterData && fineTuning.use_representation_model && (
+      {fineTuning.before_after_comparison && fineTuning.before_after_comparison.length > 0 && (
         <div className="space-y-3">
           <h4 className="font-medium">Before & After Fine-tuning Comparison</h4>
           <p className="text-sm text-muted-foreground">
             See how the LLM transformed keyword-based topic names into human-readable labels.
           </p>
           <div className="grid gap-3">
-            {topics.map((afterTopic) => {
-              // Find the corresponding "before" topic by ID
-              const beforeTopic = topicsBefore.find((bt: any) => bt.id === afterTopic.id);
-              
-              if (!beforeTopic) return null;
+            {fineTuning.before_after_comparison.map((comparison: any) => {
+              const afterTopic = topics.find(t => t.id === comparison.topic_id);
+              if (!afterTopic) return null;
               
               return (
-                <div key={afterTopic.id} className="border rounded-lg p-4 bg-card">
+                <div key={comparison.topic_id} className="border rounded-lg p-4 bg-card">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
-                      <span className="font-medium">Topic {afterTopic.id + 1}</span>
+                      <span className="font-medium">Topic {comparison.topic_id}</span>
                       <Badge variant="outline" className="text-xs">
                         {afterTopic.count} items
                       </Badge>
@@ -1296,15 +1289,11 @@ const FineTuningSection: React.FC<{
                         <h5 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Original Keywords</h5>
                         <div className="p-3 bg-muted/30 rounded border-l-2 border-primary/20">
                           <div className="flex flex-wrap gap-1">
-                            {beforeTopic.words.slice(0, bertopicAnalysis?.top_n_words || 6).map((word: any, i: number) => {
-                              const wordText = typeof word.word === 'string' ? word.word : 
-                                (typeof word.word === 'object' ? JSON.stringify(word.word) : String(word.word));
-                              return (
-                                <Badge key={i} variant="outline" className="text-xs">
-                                  {wordText}
-                                </Badge>
-                              );
-                            })}
+                            {comparison.before_keywords.slice(0, bertopicAnalysis?.top_n_words || 8).map((keyword: string, i: number) => (
+                              <Badge key={i} variant="outline" className="text-xs">
+                                {keyword}
+                              </Badge>
+                            ))}
                           </div>
                         </div>
                       </div>
@@ -1319,7 +1308,7 @@ const FineTuningSection: React.FC<{
                         <h5 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">LLM Refined</h5>
                         <div className="p-3 bg-primary/5 rounded border-l-2 border-primary/20">
                           <p className="text-sm font-medium">
-                            {cleanTopicName(afterTopic.name)}
+                            {comparison.after_name}
                           </p>
                         </div>
                       </div>
@@ -1332,8 +1321,8 @@ const FineTuningSection: React.FC<{
         </div>
       )}
 
-      {/* Fallback: Show only refined names if no before data */}
-      {!hasBeforeAfterData && topics.length > 0 && fineTuning.use_representation_model && (
+      {/* Fallback: Show only refined names if no before/after comparison data */}
+      {(!fineTuning.before_after_comparison || fineTuning.before_after_comparison.length === 0) && topics.length > 0 && fineTuning.use_representation_model && (
         <div className="space-y-3">
           <h4 className="font-medium">Refined Topic Names</h4>
           <div className="grid gap-2">

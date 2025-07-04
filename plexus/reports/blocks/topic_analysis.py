@@ -642,66 +642,24 @@ class TopicAnalysis(BaseReportBlock):
                                     # Only store first 20 topics to reduce DynamoDB record size
                                     if len(topics_list) >= 20:
                                         continue
-                                    # Get the topic words and weights - use original keywords if available
-                                    topic_words = []
+                                    # Get simple keywords list (no weights)
+                                    keywords = []
                                     
-                                    # If we have before_topics_data, use the original keywords instead of the LLM-refined ones
+                                    # If we have before_topics_data, use the original keywords
                                     if before_topics_data and str(topic_id) in before_topics_data:
                                         before_topic = before_topics_data[str(topic_id)]
-                                        if before_topic.get('words'):
-                                            topic_words = before_topic['words']
+                                        keywords = before_topic.get('keywords', [])
                                     else:
-                                        # Get the raw c-TF-IDF keywords from the topic model's internal matrix
-                                        # We need to bypass the representation model results and get original keywords
+                                        # Get keywords from BERTopic's get_topic method
                                         try:
-                                            # Access the original c-TF-IDF matrix directly
-                                            if hasattr(topic_model, 'c_tf_idf_') and topic_model.c_tf_idf_ is not None:
-                                                # Find the row index in the c-TF-IDF matrix for this topic_id
-                                                # BERTopic stores topics with -1 as first row, then 0, 1, 2, etc.
-                                                matrix_row_index = topic_id + 1  # Offset by 1 because -1 topic is at index 0
-                                                
-                                                if matrix_row_index < topic_model.c_tf_idf_.shape[0]:
-                                                    # Get feature names (words) from vectorizer
-                                                    feature_names = topic_model.vectorizer_model.get_feature_names_out()
-                                                    
-                                                    # Get c-TF-IDF scores for this topic
-                                                    topic_c_tf_idf = topic_model.c_tf_idf_[matrix_row_index]
-                                                    
-                                                    # Convert sparse matrix to dense array for processing
-                                                    if hasattr(topic_c_tf_idf, 'toarray'):
-                                                        topic_c_tf_idf_dense = topic_c_tf_idf.toarray().flatten()
-                                                    else:
-                                                        topic_c_tf_idf_dense = topic_c_tf_idf
-                                                    
-                                                    # Get top words
-                                                    top_n_words = topic_model.top_n_words or 10
-                                                    if len(topic_c_tf_idf_dense) > 0:
-                                                        top_indices = topic_c_tf_idf_dense.argsort()[-top_n_words:][::-1]
-                                                        
-                                                        # Extract words and weights
-                                                        for idx in top_indices:
-                                                            if idx < len(feature_names):
-                                                                word = feature_names[idx]
-                                                                weight = float(topic_c_tf_idf_dense[idx])
-                                                                if weight > 0:  # Only include words with positive weights
-                                                                    topic_words.append({"word": word, "weight": weight})
-                                                        
-                                                        self._log(f"🔍 KEYWORDS_DEBUG: Topic {topic_id} extracted {len(topic_words)} raw c-TF-IDF keywords: {[w['word'] for w in topic_words[:5]]}")
-                                                else:
-                                                    self._log(f"🔍 KEYWORDS_DEBUG: Topic {topic_id} matrix row index {matrix_row_index} out of range {topic_model.c_tf_idf_.shape[0]}")
-                                            else:
-                                                self._log(f"🔍 KEYWORDS_DEBUG: Topic {topic_id} - no c_tf_idf_ matrix available")
-                                                
-                                        except Exception as e:
-                                            self._log(f"🔍 KEYWORDS_DEBUG: Failed to extract raw keywords for topic {topic_id}: {e}")
-                                            # Fallback to get_topic() method (will return LLM names if representation model is used)
                                             if hasattr(topic_model, 'get_topic'):
                                                 words_weights = topic_model.get_topic(topic_id)
                                                 if words_weights:
-                                                    topic_words = [{"word": word, "weight": float(weight)} for word, weight in words_weights]
-                                                    self._log(f"🔍 KEYWORDS_DEBUG: Topic {topic_id} fallback extracted {len(topic_words)} keywords: {[w['word'] for w in topic_words[:5]]}")
-                                            else:
-                                                self._log(f"🔍 KEYWORDS_DEBUG: Topic {topic_id} - no fallback method available")
+                                                    keywords = [word for word, _ in words_weights[:8]]  # Top 8 keywords
+                                                    self._log(f"🔍 KEYWORDS_DEBUG: Topic {topic_id} extracted {len(keywords)} keywords: {keywords[:5]}")
+                                        except Exception as e:
+                                            self._log(f"🔍 KEYWORDS_DEBUG: Failed to extract keywords for topic {topic_id}: {e}")
+                                            keywords = []
                                     
                                     # Clean up topic name by removing ID prefix and quotes
                                     raw_name = row.get('Name', f'Topic {topic_id}')
@@ -726,7 +684,7 @@ class TopicAnalysis(BaseReportBlock):
                                         "name": clean_name.strip(),
                                         "count": int(row.get('Count', 0)),
                                         "representation": row.get('Representation', ''),
-                                        "words": topic_words,
+                                        "keywords": keywords,
                                         "examples": []  # Will be populated later
                                     })
                                 else:
@@ -871,36 +829,44 @@ class TopicAnalysis(BaseReportBlock):
                             
                             # Add before/after comparison to fine_tuning section
                             if before_topics_data:
-                                # Limit to first 20 topics to reduce DynamoDB record size
-                                topics_before_limited = list(before_topics_data.values())[:20]
-                                final_output_data["fine_tuning"]["topics_before"] = topics_before_limited
-                                self._log(f"✅ Added 'before' topics data to fine-tuning section ({len(topics_before_limited)} of {len(before_topics_data)} topics)")
+                                # Simplify before topics data structure - just topic name and keywords
+                                topics_before_simplified = []
+                                for topic_id, topic_data in list(before_topics_data.items())[:20]:  # Limit to 20
+                                    topics_before_simplified.append({
+                                        "topic_id": int(topic_id),
+                                        "name": topic_data.get('name', f'Topic {topic_id}'),
+                                        "keywords": topic_data.get('keywords', [])
+                                    })
+                                final_output_data["fine_tuning"]["topics_before"] = topics_before_simplified
+                                self._log(f"✅ Added 'before' topics data to fine-tuning section ({len(topics_before_simplified)} of {len(before_topics_data)} topics)")
                                 
                                 # Create before/after comparison
                                 comparison = []
                                 for topic in topics_list[:10]:  # Show first 10 topics
                                     topic_id_str = str(topic["id"])
+                                    before_keywords = []
                                     before_name = "N/A"
+                                    
                                     if topic_id_str in before_topics_data:
                                         before_topic = before_topics_data[topic_id_str]
-                                        if isinstance(before_topic, dict) and 'name' in before_topic:
-                                            before_name = before_topic['name']
-                                        elif isinstance(before_topic, dict) and 'keywords' in before_topic:
-                                            # Create name from keywords if no name field
-                                            keywords = before_topic['keywords'][:3]  # First 3 keywords
-                                            before_name = "_".join(keywords) if keywords else "N/A"
+                                        if isinstance(before_topic, dict):
+                                            before_keywords = before_topic.get('keywords', [])[:5]  # Top 5 keywords
+                                            before_name = before_topic.get('name', 'N/A')
                                     
                                     comparison.append({
                                         "topic_id": topic["id"],
-                                        "before": before_name,
-                                        "after": topic["name"],
-                                        "improvement": "✅ LLM Enhanced" if before_name != topic["name"] else "⚠️ Same"
+                                        "before_keywords": before_keywords,
+                                        "before_name": before_name,
+                                        "after_name": topic["name"],
+                                        "enhanced": before_name != topic["name"] and not topic["name"].startswith(str(topic["id"]) + "_")
                                     })
                                 
                                 final_output_data["fine_tuning"]["before_after_comparison"] = comparison
                                 self._log("🔄 FINE-TUNING COMPARISON (Before vs After):")
                                 for comp in comparison:
-                                    self._log(f"   Topic {comp['topic_id']}: '{comp['before']}' → '{comp['after']}' ({comp['improvement']})")
+                                    keywords_str = ", ".join(comp['before_keywords'][:3]) if comp['before_keywords'] else "N/A"
+                                    enhancement = "✅ Enhanced" if comp['enhanced'] else "⚠️ Not Enhanced"
+                                    self._log(f"   Topic {comp['topic_id']}: [{keywords_str}] → '{comp['after_name']}' ({enhancement})")
                             else:
                                 self._log("⚠️  No 'before' topics data available for comparison - this may indicate the representation model didn't save before/after states")
 
@@ -914,10 +880,10 @@ class TopicAnalysis(BaseReportBlock):
                                 sorted_topics = sorted(topics_list, key=lambda t: t.get('count', 0), reverse=True)
                                 self._log("📊 TOP TOPICS SUMMARY:")
                                 for i, topic in enumerate(sorted_topics[:5]):  # Top 5 topics
-                                    top_words = [w['word'] for w in topic.get('words', [])[:8]]  # Top 8 words
+                                    keywords = topic.get('keywords', [])[:8]  # Top 8 keywords
                                     self._log(f"   {i+1}. Topic {topic['id']}: {topic['count']} items")
                                     self._log(f"      Name: {topic.get('name', 'Unnamed')}")
-                                    self._log(f"      Keywords: {', '.join(top_words)}")
+                                    self._log(f"      Keywords: {', '.join(keywords)}")
                                 
                                 self._log("-" * 40)
                             
