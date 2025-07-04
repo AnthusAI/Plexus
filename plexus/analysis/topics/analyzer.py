@@ -557,6 +557,38 @@ def analyze_topics(
     if saved_representation_model is not None:
         final_topic_count = len(set(topics)) - 1  # Excluding -1 outlier topic
         logger.info(f"🔍 REPR_DEBUG: Applying LLM representation model to {final_topic_count} final topics")
+        
+        # Capture "before" state for fine-tuning comparison
+        try:
+            before_topic_info = topic_model.get_topic_info()
+            before_topics_data = {}
+            
+            # Store keyword-based topic info for comparison
+            for _, row in before_topic_info.iterrows():
+                topic_id = row.get('Topic', -1)
+                if topic_id != -1:  # Skip outlier topic
+                    # Get the keyword-based words for this topic
+                    topic_words = topic_model.get_topic(topic_id)
+                    if topic_words:
+                        keywords = [word for word, _ in topic_words[:8]]  # Top 8 keywords
+                        before_topics_data[str(topic_id)] = {
+                            "name": row.get('Name', f'Topic {topic_id}'),
+                            "keywords": keywords
+                        }
+            
+            logger.info(f"🔍 REPR_DEBUG: Captured 'before' state for {len(before_topics_data)} topics")
+            
+            # Save before state to JSON file for later use
+            before_topics_path = os.path.join(output_dir, "topics_before_fine_tuning.json")
+            with open(before_topics_path, 'w', encoding='utf-8') as f:
+                json.dump(before_topics_data, f, indent=2, ensure_ascii=False)
+            logger.info(f"🔍 REPR_DEBUG: Saved 'before' topics to {before_topics_path}")
+            
+        except Exception as e:
+            logger.error(f"Failed to capture 'before' state: {e}", exc_info=True)
+            before_topics_data = {}
+        
+        # Apply the representation model
         try:
             topic_model.update_topics(docs, representation_model=saved_representation_model)
             logger.info("✅ Successfully applied LLM representation model to final topics")
