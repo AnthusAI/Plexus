@@ -31,7 +31,7 @@ def test_ollama_chat(
     except ImportError as e:
         error_msg = (
             "The 'ollama' package is not installed. Install it with: pip install ollama\n"
-            "Make sure you're using the correct Python environment (e.g., py39)"
+            "Make sure you're using the correct Python environment (e.g., py311)"
         )
         logger.error(error_msg)
         return f"ERROR: {error_msg}"
