@@ -15,7 +15,6 @@ import {
 // Score Configuration Schema
 export const SCORE_YAML_SCHEMA = {
   type: 'object',
-  required: ['name', 'key'],
   properties: {
     name: {
       type: 'string',
@@ -133,10 +132,11 @@ export function createScoreValidationRules(): ValidationRule[] {
   return [
     // Required fields
     new RequiredFieldRule('name'),
-    new RequiredFieldRule('key'),
+    new RequiredFieldRule('class'),
 
     // Type validation
     new TypeValidationRule('name', 'string'),
+    new TypeValidationRule('class', 'string'),
     new TypeValidationRule('key', 'string'),
     new TypeValidationRule('description', 'string'),
 
