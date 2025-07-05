@@ -29,7 +29,7 @@ Use that with the GitHub MCP.
 ## Tech Stack
 ### Python AI/ML
 - Python with LangChain/LangGraph
-- Miniconda environment `py39`
+- Miniconda environment `py311`
 
 ### Dashboard
 - Next.js 14.1

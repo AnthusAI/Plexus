@@ -20,6 +20,8 @@ import Editor, { Monaco } from '@monaco-editor/react'
 import * as monaco from 'monaco-editor'
 import type { editor } from 'monaco-editor'
 import { defineCustomMonacoThemes, applyMonacoTheme, setupMonacoThemeWatcher, getCommonMonacoOptions } from '@/lib/monaco-theme'
+import { useYamlLinter, useLintMessageHandler } from '@/hooks/use-yaml-linter'
+import YamlLinterPanel from '@/components/ui/yaml-linter-panel'
 import { amplifyClient } from "@/utils/amplify-client"
 import { useAccount } from "../../app/contexts/AccountContext"
 import { FileAttachments } from "@/components/items/FileAttachments"
@@ -142,6 +144,14 @@ const DetailContent = React.memo(function DetailContent({
   // Add state for component-specific datasets
   const [componentDataSets, setComponentDataSets] = useState<Schema['DataSet']['type'][]>([])
   const { selectedAccount } = useAccount()
+  
+  // YAML Linting integration
+  const { lintResult, setupMonacoIntegration, jumpToLine } = useYamlLinter({
+    context: 'data-source',
+    debounceMs: 500,
+    showMonacoMarkers: true
+  })
+  const handleLintMessageClick = useLintMessageHandler(jumpToLine)
   
   // Fetch datasets specific to this data source
   const fetchComponentDataSets = async () => {
@@ -381,6 +391,9 @@ const DetailContent = React.memo(function DetailContent({
               defineCustomMonacoThemes(monaco)
               applyMonacoTheme(monaco)
               
+              // Set up YAML linting integration
+              setupMonacoIntegration(editor, monaco)
+              
               // Force immediate layout to ensure correct sizing
               editor.layout()
               
@@ -413,6 +426,17 @@ const DetailContent = React.memo(function DetailContent({
             options={getCommonMonacoOptions(isMobileDevice)}
           />
         </div>
+
+        {/* YAML Linter Panel - show linting results */}
+        {lintResult && (
+          <div className="mt-3 flex-shrink-0">
+            <YamlLinterPanel
+              result={lintResult}
+              onMessageClick={handleLintMessageClick}
+              className="text-sm"
+            />
+          </div>
+        )}
 
         {/* Save/Cancel buttons - fixed size */}
         {hasChanges && (
