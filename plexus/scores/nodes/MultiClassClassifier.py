@@ -177,7 +177,8 @@ class MultiClassClassifier(BaseNode):
                         explanation = explanation_model.invoke(explanation_prompt.format_prompt().to_messages())
                         result["explanation"] = explanation.content
                     else:
-                        result["explanation"] = current_completion
+                        # When no explanation_message is provided, the explanation is simply the classification.
+                        result["explanation"] = result["classification"]
 
                     final_state = {**state.dict(), **result, "retry_count": retry_count}
                     logging.debug(f"Classifier returning state: {truncate_dict_strings(final_state, max_length=80)}")
