@@ -5,7 +5,8 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { editor, Monaco } from 'monaco-editor'
+import type { editor } from 'monaco-editor'
+import type { Monaco } from '@monaco-editor/react'
 import { createLinterForContext } from '@/lib/yaml-linter-schemas'
 import type { LintResult, LintMessage } from '@/lib/yaml-linter'
 
