@@ -79,6 +79,37 @@ Nodes are executed sequentially unless redirected by conditions:
 2. Results flow to the next node unless conditions redirect
 3. Special node name `"END"` terminates processing
 
+### Combining Conditions and Edge Clauses
+
+You can use both `conditions:` and `edge:` clauses in the same node to provide more flexible routing:
+
+```yaml
+- name: classifier_node
+  class: Classifier
+  conditions:
+    - value: "Yes"
+      node: END
+      output:
+        value: "Yes"
+        explanation: "None"
+    - value: "Maybe"
+      node: maybe_handler
+      output:
+        value: "Unclear"
+        explanation: "Needs review"
+  edge:
+    node: fallback_handler  # Used when no conditions match
+    output:
+      good_call: classification
+      good_call_explanation: explanation
+```
+
+In this configuration:
+- If `classification` is "Yes" → routes to END with specific output
+- If `classification` is "Maybe" → routes to `maybe_handler` with specific output  
+- If `classification` is anything else (e.g., "No") → routes to `fallback_handler` with edge output aliasing
+- The `edge:` clause provides both the fallback target and output aliasing for unmatched conditions
+
 ## Node Types
 
 Common node types:

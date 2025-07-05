@@ -261,9 +261,27 @@ class Classifier(BaseNode):
                 explanation=result['explanation']
             )
 
-            logging.info(f"  - Output state for {self.node_name} has classification: {new_state.classification!r}")
+            # Enhanced debugging for classification setting
+            logging.info(f"🔍 CLASSIFICATION SETTING DEBUG for {self.node_name}:")
+            logging.info(f"  - Setting classification to: {result['classification']!r}")
+            logging.info(f"  - Setting explanation to: {result['explanation']!r}")
+            logging.info(f"  - Output state classification: {new_state.classification!r}")
+            logging.info(f"  - Output state type: {type(new_state)}")
+            logging.info(f"  - Output state has classification attr: {hasattr(new_state, 'classification')}")
             
-            return new_state
+            # Also log to trace for debugging
+            output_state = {
+                "classification": result['classification'],
+                "explanation": result['explanation']
+            }
+            
+            # Log the state and get a new state object with updated node_results
+            final_state = self.log_state(new_state, None, output_state)
+            
+            logging.info(f"  - Final state classification: {final_state.classification!r}")
+            logging.info(f"  - Final state type: {type(final_state)}")
+            
+            return final_state
 
         return parse_completion
 

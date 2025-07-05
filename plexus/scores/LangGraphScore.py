@@ -274,8 +274,117 @@ class LangGraphScore(Score, LangChainUser):
                         logging.info(f"Added output mapping: {previous_node} -> {value_setter_name} -> {node_name}")
                         continue  # Skip other edge processing for this node
                         
-                    # Handle edge clause - direct routing with output aliasing
-                    if 'edge' in node_config:
+                    # Handle conditions clause - conditional routing
+                    # Note: Process conditions first - if present, it takes precedence over edge clause
+                    if 'conditions' in node_config:
+                        conditions = node_config['conditions']
+                        if isinstance(conditions, list):
+                            value_setters = {}
+                            # Create value setter nodes for each condition
+                            for j, condition in enumerate(conditions):
+                                value_setter_name = f"{previous_node}_value_setter_{j}"
+                                value_setters[condition['value'].lower()] = value_setter_name
+                                workflow.add_node(
+                                    value_setter_name, 
+                                    LangGraphScore.create_value_setter_node(
+                                        condition.get('output', {})
+                                    )
+                                )
+
+                            # Determine the default fallback target
+                            # If there's an edge clause, use its target; otherwise use next node
+                            if 'edge' in node_config:
+                                edge = node_config['edge']
+                                edge_target = edge.get('node', node_name)
+                                
+                                # If edge has output aliasing, create a value setter for the fallback
+                                if 'output' in edge:
+                                    fallback_value_setter_name = f"{previous_node}_edge_fallback_value_setter"
+                                    workflow.add_node(
+                                        fallback_value_setter_name,
+                                        LangGraphScore.create_value_setter_node(edge['output'])
+                                    )
+                                    # The fallback routes to the value setter, which then routes to the edge target
+                                    workflow.add_edge(fallback_value_setter_name, edge_target if edge_target != 'END' else (end_node or END))
+                                    default_target = fallback_value_setter_name
+                                    logging.info(f"Created edge fallback value setter '{fallback_value_setter_name}' -> '{edge_target}' with output aliasing")
+                                else:
+                                    default_target = edge_target
+                                
+                                logging.info(f"Using edge target '{edge_target}' as fallback for unmatched conditions")
+                            else:
+                                default_target = node_name
+                                logging.info(f"Using next node '{default_target}' as fallback for unmatched conditions")
+
+                            def create_routing_function(conditions, value_setters, fallback_target):
+                                def routing_function(state):
+                                    # Enhanced debugging for classification routing
+                                    logging.info(f"🔍 CONDITIONAL ROUTING DEBUG for {previous_node}:")
+                                    logging.info(f"  - State type: {type(state)}")
+                                    logging.info(f"  - Has classification attr: {hasattr(state, 'classification')}")
+                                    
+                                    if hasattr(state, 'classification'):
+                                        classification_value = getattr(state, 'classification')
+                                        logging.info(f"  - classification value: {classification_value!r} (type: {type(classification_value)})")
+                                    else:
+                                        logging.info(f"  - classification attribute NOT found")
+                                    
+                                    # Log all available state attributes for debugging
+                                    if hasattr(state, 'model_dump'):
+                                        state_dict = state.model_dump()
+                                        logging.info(f"  - Available state fields: {list(state_dict.keys())}")
+                                        for key, value in state_dict.items():
+                                            if key in ['classification', 'explanation', 'completion', 'value']:
+                                                logging.info(f"    {key}: {value!r}")
+                                    
+                                    # Original routing logic
+                                    if hasattr(state, 'classification') and state.classification is not None:
+                                        state_value = state.classification.lower()
+                                        logging.info(f"  - Normalized state_value: {state_value!r}")
+                                        logging.info(f"  - Available value_setters: {list(value_setters.keys())}")
+                                        
+                                        # Check if we have a value setter for this classification
+                                        if state_value in value_setters:
+                                            target = value_setters[state_value]
+                                            logging.info(f"  ✅ CONDITION MATCH: {state_value} -> {target}")
+                                            return target
+                                        else:
+                                            logging.info(f"  ❌ NO CONDITION MATCH for {state_value}")
+                                    else:
+                                        logging.info(f"  ❌ NO CLASSIFICATION FIELD or is None")
+                                    
+                                    # Default case - route to fallback target
+                                    logging.info(f"  🔄 FALLBACK: -> {fallback_target}")
+                                    return fallback_target
+                                return routing_function
+
+                            # Create a list of valid targets for conditional edges
+                            valid_targets = list(value_setters.values()) + [default_target]
+                            
+                            # Add conditional routing
+                            workflow.add_conditional_edges(
+                                previous_node,
+                                create_routing_function(conditions, value_setters, default_target),
+                                valid_targets
+                            )
+
+                            # Add edges from value setters to their target nodes
+                            for condition in conditions:
+                                value_setter_name = value_setters[condition['value'].lower()]
+                                target_node = condition.get('node', node_name)
+                                if target_node == 'END':
+                                    final_target = end_node or END
+                                    workflow.add_edge(value_setter_name, final_target)
+                                else:
+                                    workflow.add_edge(value_setter_name, target_node)
+                            
+                            logging.info(f"Added conditional routing from {previous_node} with {len(conditions)} conditions and fallback to {default_target}")
+                        else:
+                            logging.error(f"Conditions is not a list: {conditions}")
+                            workflow.add_edge(previous_node, node_name)
+                    
+                    # Handle edge clause - direct routing with output aliasing (only if no conditions)
+                    elif 'edge' in node_config:
                         edge = node_config['edge']
                         value_setter_name = f"{previous_node}_value_setter"
                         # Create value setter node for the edge
@@ -296,64 +405,6 @@ class LangGraphScore(Score, LangChainUser):
                         else:
                             workflow.add_edge(value_setter_name, target_node)
                             logging.info(f"Added edge routing: {previous_node} -> {target_node}")
-                    
-                    # Handle conditions clause - conditional routing
-                    elif 'conditions' in node_config:
-                        conditions = node_config['conditions']
-                        if isinstance(conditions, list):
-                            value_setters = {}
-                            # Create value setter nodes for each condition
-                            for j, condition in enumerate(conditions):
-                                value_setter_name = f"{previous_node}_value_setter_{j}"
-                                value_setters[condition['value'].lower()] = value_setter_name
-                                workflow.add_node(
-                                    value_setter_name, 
-                                    LangGraphScore.create_value_setter_node(
-                                        condition.get('output', {})
-                                    )
-                                )
-
-                            def create_routing_function(conditions, value_setters, next_node):
-                                def routing_function(state):
-                                    logging.info(f"Routing from {previous_node}: classification={getattr(state, 'classification', None)}")
-                                    
-                                    if hasattr(state, 'classification') and state.classification is not None:
-                                        state_value = state.classification.lower()
-                                        # Check if we have a value setter for this classification
-                                        if state_value in value_setters:
-                                            target = value_setters[state_value]
-                                            logging.info(f"  -> {target} (condition: {state_value})")
-                                            return target
-                                    
-                                    # Default case - route to next node
-                                    logging.info(f"  -> {next_node} (default)")
-                                    return next_node
-                                return routing_function
-
-                            # Create a list of valid targets for conditional edges
-                            valid_targets = list(value_setters.values()) + [node_name]
-                            
-                            # Add conditional routing only to valid targets
-                            workflow.add_conditional_edges(
-                                previous_node,
-                                create_routing_function(conditions, value_setters, node_name),
-                                valid_targets
-                            )
-
-                            # Add edges from value setters to their target nodes
-                            for condition in conditions:
-                                value_setter_name = value_setters[condition['value'].lower()]
-                                target_node = condition.get('node', node_name)
-                                if target_node == 'END':
-                                    final_target = end_node or END
-                                    workflow.add_edge(value_setter_name, final_target)
-                                else:
-                                    workflow.add_edge(value_setter_name, target_node)
-                            
-                            logging.info(f"Added conditional routing from {previous_node} with {len(conditions)} conditions")
-                        else:
-                            logging.error(f"Conditions is not a list: {conditions}")
-                            workflow.add_edge(previous_node, node_name)
                     
                     # No edge or conditions clause - add direct edge to next node
                     else:
