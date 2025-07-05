@@ -825,9 +825,15 @@ class LangGraphScore(Score, LangChainUser):
             # Create a new dict with all current state values
             new_state = state.model_dump()
             
-            # Add aliased values
+            # Add aliased values, but only if the target field is not already meaningfully set
             for alias, original in output_mapping.items():
                 logging.info(f"DEBUG: Processing alias '{alias}' -> '{original}'")
+                
+                # Check if the target alias field already has a meaningful value
+                current_alias_value = getattr(state, alias, None)
+                if current_alias_value is not None and current_alias_value != "":
+                    logging.info(f"DEBUG: Preserving existing {alias} = {current_alias_value!r}, not overwriting with {original}")
+                    continue  # Skip this alias - preserve the existing value
                 
                 if hasattr(state, original):
                     original_value = getattr(state, original)
@@ -1045,22 +1051,22 @@ class LangGraphScore(Score, LangChainUser):
             logging.info(f"DEBUG: graph_result['value'] = {graph_result.get('value')!r} (type: {type(graph_result.get('value'))})")
             logging.info(f"DEBUG: Full graph_result: {graph_result}")
             
-            # Convert graph result to LangGraphScore.Result with first-class fields
+            # Convert graph result to Score.Result
             value_for_result = graph_result.get('value', 'Error')
             if value_for_result is None:
                 logging.warning("DEBUG: graph_result['value'] is None, defaulting to 'No'")
                 value_for_result = 'No'
             
-            result = LangGraphScore.Result(
+            result = Score.Result(
                 parameters=self.parameters,
                 value=value_for_result,
-                explanation=graph_result.get('explanation'),
-                confidence=graph_result.get('confidence'),
                 metadata={
+                    'explanation': graph_result.get('explanation'),
                     'good_call': graph_result.get('good_call'),
                     'good_call_explanation': graph_result.get('good_call_explanation'),
                     'non_qualifying_reason': graph_result.get('non_qualifying_reason'),
                     'non_qualifying_explanation': graph_result.get('non_qualifying_explanation'),
+                    'confidence': graph_result.get('confidence'),
                     'classification': graph_result.get('classification'),
                     'source': graph_result.get('source')
                 }
