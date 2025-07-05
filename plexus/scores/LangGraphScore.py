@@ -154,10 +154,9 @@ class LangGraphScore(Score, LangChainUser):
         """
         Model output containing the validation result.
 
-        :param explanation: Detailed explanation of the validation result.
+        Inherits explanation and confidence fields from Score.Result base class.
         """
-        ...
-        explanation: str
+        pass
 
     class GraphState(BaseModel):
         text: str
@@ -830,14 +829,6 @@ class LangGraphScore(Score, LangChainUser):
             for alias, original in output_mapping.items():
                 logging.info(f"DEBUG: Processing alias '{alias}' -> '{original}'")
                 
-                # Check if the alias field already has a meaningful value from conditions
-                existing_alias_value = new_state.get(alias)
-                if existing_alias_value is not None and existing_alias_value != "":
-                    logging.info(f"DEBUG: Preserving existing {alias} = {existing_alias_value!r}")
-                    # Also directly set on the state object to ensure it's accessible
-                    setattr(state, alias, existing_alias_value)
-                    continue
-                
                 if hasattr(state, original):
                     original_value = getattr(state, original)
                     logging.info(f"DEBUG: Found {original} = {original_value!r} (type: {type(original_value)})")
@@ -1054,22 +1045,22 @@ class LangGraphScore(Score, LangChainUser):
             logging.info(f"DEBUG: graph_result['value'] = {graph_result.get('value')!r} (type: {type(graph_result.get('value'))})")
             logging.info(f"DEBUG: Full graph_result: {graph_result}")
             
-            # Convert graph result to Score.Result
+            # Convert graph result to LangGraphScore.Result with first-class fields
             value_for_result = graph_result.get('value', 'Error')
             if value_for_result is None:
                 logging.warning("DEBUG: graph_result['value'] is None, defaulting to 'No'")
                 value_for_result = 'No'
             
-            result = Score.Result(
+            result = LangGraphScore.Result(
                 parameters=self.parameters,
                 value=value_for_result,
+                explanation=graph_result.get('explanation'),
+                confidence=graph_result.get('confidence'),
                 metadata={
-                    'explanation': graph_result.get('explanation'),
                     'good_call': graph_result.get('good_call'),
                     'good_call_explanation': graph_result.get('good_call_explanation'),
                     'non_qualifying_reason': graph_result.get('non_qualifying_reason'),
                     'non_qualifying_explanation': graph_result.get('non_qualifying_explanation'),
-                    'confidence': graph_result.get('confidence'),
                     'classification': graph_result.get('classification'),
                     'source': graph_result.get('source')
                 }

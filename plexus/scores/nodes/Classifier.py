@@ -152,7 +152,7 @@ class Classifier(BaseNode):
             
             return {
                 "classification": classification,
-                "explanation": output.strip() or "No explanation provided"
+                "explanation": classification or "No classification found"
             }
 
     def get_llm_prompt_node(self):

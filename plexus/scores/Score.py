@@ -194,6 +194,8 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         Attributes:
             parameters: Configuration used for this classification
             value: The classification result (e.g., "Yes"/"No" or class label)
+            explanation: Detailed explanation of why this result was chosen
+            confidence: Confidence score for the classification (0.0 to 1.0)
             metadata: Additional context about the classification
             error: Optional error message if classification failed
 
@@ -203,21 +205,21 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         - __eq__: Compare results (case-insensitive)
 
         Common usage:
-        1. Basic classification:
+        1. Basic classification with explanation:
             result = Score.Result(
                 parameters=self.parameters,
                 value="Yes",
-                metadata={"confidence": 0.95}
+                explanation="Clear greeting found at beginning of transcript",
+                confidence=0.95
             )
 
-        2. With explanation:
+        2. Classification with metadata:
             result = Score.Result(
                 parameters=self.parameters,
                 value="No",
-                metadata={
-                    "confidence": 0.88,
-                    "explanation": "No greeting found in transcript"
-                }
+                explanation="No greeting found in transcript",
+                confidence=0.88,
+                metadata={"source": "phone_call"}
             )
 
         3. Error case:
@@ -230,6 +232,8 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         model_config = ConfigDict(protected_namespaces=())
         parameters: 'Score.Parameters'
         value:      Union[str, bool]
+        explanation: Optional[str] = None
+        confidence:  Optional[float] = None
         metadata:   dict = {}
         error:      Optional[str] = None
 
@@ -245,6 +249,16 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
 
         def is_no(self):
             return self.value.lower() == 'no'
+        
+        @property
+        def explanation_from_metadata(self) -> Optional[str]:
+            """Backwards compatibility: explanation from metadata"""
+            return self.metadata.get('explanation') if self.metadata else None
+        
+        @property
+        def confidence_from_metadata(self) -> Optional[float]:
+            """Backwards compatibility: confidence from metadata"""
+            return self.metadata.get('confidence') if self.metadata else None
         
     def __init__(self, **parameters):
         """

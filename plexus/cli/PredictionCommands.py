@@ -125,12 +125,12 @@ async def predict_impl(
                         # Handle Score.Result object
                         if hasattr(predictions, 'value') and predictions.value is not None:
                             row_result[f'{score_name}_value'] = predictions.value
-                            # Try to get explanation from the result object
-                            explanation = None
-                            if hasattr(predictions, 'explanation'):
-                                explanation = predictions.explanation
-                            elif hasattr(predictions, 'metadata') and predictions.metadata:
-                                explanation = predictions.metadata.get('explanation')
+                            # ✅ ENHANCED: Get explanation from direct field first, then metadata
+                            explanation = (
+                                getattr(predictions, 'explanation', None) or
+                                predictions.metadata.get('explanation', '') if hasattr(predictions, 'metadata') and predictions.metadata else
+                                ''
+                            )
                             row_result[f'{score_name}_explanation'] = explanation
                             row_result[f'{score_name}_cost'] = costs
                             # Extract trace information
