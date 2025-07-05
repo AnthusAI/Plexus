@@ -48,8 +48,15 @@ def predict(scorecard, score, item, number, excel, use_langsmith_trace, fresh, t
             score_names = []
         
         coro = predict_impl(
-            scorecard, score_names, item, excel, 
-            use_langsmith_trace, fresh, task_id, format
+            scorecard_identifier=scorecard, 
+            score_names=score_names, 
+            item_identifier=item, 
+            number_of_times=number,
+            excel=excel, 
+            use_langsmith_trace=use_langsmith_trace, 
+            fresh=fresh, 
+            task_id=task_id, 
+            format=format
         )
         try:
             loop.run_until_complete(coro)
@@ -80,6 +87,7 @@ async def predict_impl(
     scorecard_identifier: str,
     score_names: list,
     item_identifier: str = None,
+    number_of_times: int = 1,
     excel: bool = False,
     use_langsmith_trace: bool = False,
     fresh: bool = False,
@@ -91,71 +99,72 @@ async def predict_impl(
         results = []
         scorecard_class = get_scorecard_class(scorecard_identifier)
         
-        for score_name in score_names:
-            sample_row, used_item_id = select_sample(
-                scorecard_class, score_name, item_identifier, fresh
-            )
-            
-            row_result = {'item_id': used_item_id}
-            if sample_row is not None:
-                row_result['text'] = sample_row.iloc[0].get('text', '')
-            
-            try:
-                transcript, predictions, costs = await predict_score(
-                    score_name, scorecard_class, sample_row, used_item_id
+        for _ in range(number_of_times):
+            for score_name in score_names:
+                sample_row, used_item_id = select_sample(
+                    scorecard_class, score_name, item_identifier, fresh
                 )
                 
-                if predictions:
-                    if isinstance(predictions, list):
-                        # Handle list of results
-                        prediction = predictions[0] if predictions else None
-                        if prediction:
-                            row_result[f'{score_name}_value'] = prediction.value
-                            row_result[f'{score_name}_explanation'] = prediction.explanation
-                            row_result[f'{score_name}_cost'] = costs
-                            # Extract trace information
-                            if hasattr(prediction, 'trace'):
-                                row_result[f'{score_name}_trace'] = prediction.trace
-                            elif hasattr(prediction, 'metadata') and prediction.metadata:
-                                row_result[f'{score_name}_trace'] = prediction.metadata.get('trace')
-                            else:
-                                row_result[f'{score_name}_trace'] = None
-                            logging.info(f"Got predictions: {predictions}")
-                    else:
-                        # Handle Score.Result object
-                        if hasattr(predictions, 'value') and predictions.value is not None:
-                            row_result[f'{score_name}_value'] = predictions.value
-                            # ✅ ENHANCED: Get explanation from direct field first, then metadata
-                            explanation = (
-                                getattr(predictions, 'explanation', None) or
-                                predictions.metadata.get('explanation', '') if hasattr(predictions, 'metadata') and predictions.metadata else
-                                ''
-                            )
-                            row_result[f'{score_name}_explanation'] = explanation
-                            row_result[f'{score_name}_cost'] = costs
-                            # Extract trace information
-                            trace = None
-                            if hasattr(predictions, 'trace'):
-                                trace = predictions.trace
-                            elif hasattr(predictions, 'metadata') and predictions.metadata:
-                                trace = predictions.metadata.get('trace')
-                            row_result[f'{score_name}_trace'] = trace
-                            logging.info(f"Got predictions: {predictions}")
-                else:
-                    row_result[f'{score_name}_value'] = None
-                    row_result[f'{score_name}_explanation'] = None
-                    row_result[f'{score_name}_cost'] = None
-                    row_result[f'{score_name}_trace'] = None
+                row_result = {'item_id': used_item_id}
+                if sample_row is not None:
+                    row_result['text'] = sample_row.iloc[0].get('text', '')
                 
-            except BatchProcessingPause:
-                raise
-            except Exception as e:
-                logging.error(f"Error processing score {score_name}: {e}")
-                logging.error(f"Full traceback: {traceback.format_exc()}")
-                raise
-            
-            if any(row_result.get(f'{name}_value') is not None for name in score_names):
-                results.append(row_result)
+                try:
+                    transcript, predictions, costs = await predict_score(
+                        score_name, scorecard_class, sample_row, used_item_id
+                    )
+                    
+                    if predictions:
+                        if isinstance(predictions, list):
+                            # Handle list of results
+                            prediction = predictions[0] if predictions else None
+                            if prediction:
+                                row_result[f'{score_name}_value'] = prediction.value
+                                row_result[f'{score_name}_explanation'] = prediction.explanation
+                                row_result[f'{score_name}_cost'] = costs
+                                # Extract trace information
+                                if hasattr(prediction, 'trace'):
+                                    row_result[f'{score_name}_trace'] = prediction.trace
+                                elif hasattr(prediction, 'metadata') and prediction.metadata:
+                                    row_result[f'{score_name}_trace'] = prediction.metadata.get('trace')
+                                else:
+                                    row_result[f'{score_name}_trace'] = None
+                                logging.info(f"Got predictions: {predictions}")
+                        else:
+                            # Handle Score.Result object
+                            if hasattr(predictions, 'value') and predictions.value is not None:
+                                row_result[f'{score_name}_value'] = predictions.value
+                                # ✅ ENHANCED: Get explanation from direct field first, then metadata
+                                explanation = (
+                                    getattr(predictions, 'explanation', None) or
+                                    predictions.metadata.get('explanation', '') if hasattr(predictions, 'metadata') and predictions.metadata else
+                                    ''
+                                )
+                                row_result[f'{score_name}_explanation'] = explanation
+                                row_result[f'{score_name}_cost'] = costs
+                                # Extract trace information
+                                trace = None
+                                if hasattr(predictions, 'trace'):
+                                    trace = predictions.trace
+                                elif hasattr(predictions, 'metadata') and predictions.metadata:
+                                    trace = predictions.metadata.get('trace')
+                                row_result[f'{score_name}_trace'] = trace
+                                logging.info(f"Got predictions: {predictions}")
+                    else:
+                        row_result[f'{score_name}_value'] = None
+                        row_result[f'{score_name}_explanation'] = None
+                        row_result[f'{score_name}_cost'] = None
+                        row_result[f'{score_name}_trace'] = None
+                    
+                except BatchProcessingPause:
+                    raise
+                except Exception as e:
+                    logging.error(f"Error processing score {score_name}: {e}")
+                    logging.error(f"Full traceback: {traceback.format_exc()}")
+                    raise
+                
+                if any(row_result.get(f'{name}_value') is not None for name in score_names):
+                    results.append(row_result)
 
         if excel and results:
             output_excel(results, score_names, scorecard_identifier)

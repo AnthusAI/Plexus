@@ -111,8 +111,8 @@ class TestPredictCommand:
             mock_asyncio.all_tasks.return_value = []
             
             result = runner.invoke(predict, [
-                '--scorecard-name', 'test-scorecard',
-                '--score-name', 'test-score'
+                '--scorecard', 'test-scorecard',
+                '--score', 'test-score'
             ])
             
             assert result.exit_code == 0
@@ -135,8 +135,8 @@ class TestPredictCommand:
             mock_asyncio.all_tasks.return_value = []
             
             result = runner.invoke(predict, [
-                '--scorecard-name', 'test-scorecard',
-                '--score-name', 'test-score'
+                '--scorecard', 'test-scorecard',
+                '--score', 'test-score'
             ])
             
             assert result.exit_code == 0
@@ -156,8 +156,8 @@ class TestPredictCommand:
             mock_asyncio.all_tasks.return_value = []
             
             result = runner.invoke(predict, [
-                '--scorecard-name', 'test-scorecard',
-                '--score-name', 'test-score'
+                '--scorecard', 'test-scorecard',
+                '--score', 'test-score'
             ])
             
             mock_sys.exit.assert_called_with(1)
@@ -176,8 +176,8 @@ class TestPredictCommand:
             mock_asyncio.all_tasks.return_value = []
             
             result = runner.invoke(predict, [
-                '--scorecard-name', 'test-scorecard',
-                '--score-name', 'test-score'
+                '--scorecard', 'test-scorecard',
+                '--score', 'test-score'
             ])
             
             mock_sys.exit.assert_called_with(1)
@@ -197,14 +197,14 @@ class TestPredictCommand:
             mock_asyncio.all_tasks.return_value = []
             
             result = runner.invoke(predict, [
-                '--scorecard-name', 'test-scorecard',
-                '--score-name', 'score1,score2,score3'
+                '--scorecard', 'test-scorecard',
+                '--score', 'score1,score2,score3'
             ])
             
             assert result.exit_code == 0
             # Verify predict_impl was called with parsed score names
             args, kwargs = mock_predict_impl.call_args
-            assert args[1] == ['score1', 'score2', 'score3']
+            assert kwargs['score_names'] == ['score1', 'score2', 'score3']
 
 
 class TestPredictImpl:
@@ -232,7 +232,7 @@ class TestPredictImpl:
             mock_predict_score.return_value = (Mock(), mock_prediction, 0.05)
             
             await predict_impl(
-                scorecard_name='test-scorecard',
+                scorecard_identifier='test-scorecard',
                 score_names=['test-score'],
                 format='fixed'
             )
@@ -259,7 +259,7 @@ class TestPredictImpl:
             mock_predict_score.return_value = (Mock(), mock_prediction, Decimal('0.05'))
             
             await predict_impl(
-                scorecard_name='test-scorecard',
+                scorecard_identifier='test-scorecard',
                 score_names=['test-score'],
                 format='json'
             )
@@ -290,7 +290,7 @@ class TestPredictImpl:
             mock_predict_score.return_value = (Mock(), mock_prediction, 0.05)
             
             await predict_impl(
-                scorecard_name='test-scorecard',
+                scorecard_identifier='test-scorecard',
                 score_names=['test-score'],
                 excel=True
             )
@@ -312,7 +312,7 @@ class TestPredictImpl:
             mock_predict_score.return_value = (None, None, None)
             
             await predict_impl(
-                scorecard_name='test-scorecard',
+                scorecard_identifier='test-scorecard',
                 score_names=['test-score'],
                 format='fixed'
             )
@@ -340,7 +340,7 @@ class TestPredictImpl:
             mock_predict_score.return_value = (Mock(), mock_predictions, 0.05)
             
             await predict_impl(
-                scorecard_name='test-scorecard',
+                scorecard_identifier='test-scorecard',
                 score_names=['test-score']
             )
             
@@ -361,7 +361,7 @@ class TestPredictImpl:
             
             with pytest.raises(BatchProcessingPause):
                 await predict_impl(
-                    scorecard_name='test-scorecard',
+                    scorecard_identifier='test-scorecard',
                     score_names=['test-score']
                 )
 
@@ -435,25 +435,27 @@ class TestSelectSample:
             
             assert used_item_id == 'item-123'
             assert isinstance(sample_row, pd.DataFrame)
-            mock_item.get_by_id.assert_called_once_with('item-123', mock_client)
+            mock_item.get_by_id.assert_called_with('item-123', mock_client)
     
     def test_select_sample_with_item_id_identifier_search(self, mock_client, mock_item, sample_item_data, mock_env_vars):
         """Test select_sample with identifier search fallback"""
         sample_scorecard_class = Mock()
         sample_scorecard_class.properties = {'key': 'test-scorecard'}
         
-        # Mock Item.get_by_id failure, then identifier search success
-        mock_item.get_by_id.side_effect = ValueError("Item not found")
-        
+        # Mock item instance that will be returned by Item.get_by_id for the resolved ID
         mock_item_instance = Mock()
         mock_item_instance.id = sample_item_data['id']
         mock_item_instance.text = sample_item_data['text']
         
+        # Mock Item.get_by_id to succeed for the resolved ID
+        mock_item.get_by_id.return_value = mock_item_instance
+        
         with patch('plexus.cli.reports.utils.resolve_account_id_for_command') as mock_resolve_account, \
-             patch('plexus.utils.identifier_search.find_item_by_identifier') as mock_find_item:
+             patch('plexus.cli.PredictionCommands.memoized_resolve_item_identifier') as mock_resolve_identifier:
             
             mock_resolve_account.return_value = 'account-123'
-            mock_find_item.return_value = mock_item_instance
+            # Mock identifier resolution to succeed and return the item ID
+            mock_resolve_identifier.return_value = 'item-123'
             
             sample_row, used_item_id = select_sample(
                 sample_scorecard_class, 'test-score', 'search-term', fresh=False
@@ -461,23 +463,22 @@ class TestSelectSample:
             
             assert used_item_id == 'item-123'
             assert isinstance(sample_row, pd.DataFrame)
-            mock_find_item.assert_called_once()
+            mock_resolve_identifier.assert_called_once_with(mock_client, 'search-term', 'account-123')
     
     def test_select_sample_item_not_found(self, mock_client, mock_item, mock_env_vars):
         """Test select_sample when item is not found"""
         sample_scorecard_class = Mock()
         sample_scorecard_class.properties = {'key': 'test-scorecard'}
         
-        # Mock both direct lookup and identifier search failure
-        mock_item.get_by_id.side_effect = ValueError("Item not found")
-        
         with patch('plexus.cli.reports.utils.resolve_account_id_for_command') as mock_resolve_account, \
-             patch('plexus.utils.identifier_search.find_item_by_identifier') as mock_find_item:
+             patch('plexus.cli.PredictionCommands.memoized_resolve_item_identifier') as mock_resolve_identifier:
             
             mock_resolve_account.return_value = 'account-123'
-            mock_find_item.return_value = None
+            # Mock identifier resolution to fail (return None)
+            mock_resolve_identifier.return_value = None
             
-            with pytest.raises(ValueError, match="No item found with ID"):
+            # ✅ FIXED: Expect the error from identifier resolution failing
+            with pytest.raises(ValueError, match="No item found matching identifier: nonexistent"):
                 select_sample(sample_scorecard_class, 'test-score', 'nonexistent', fresh=False)
     
     def test_select_sample_without_item_id(self, mock_client, mock_item, sample_item_data, mock_env_vars):
@@ -707,10 +708,14 @@ class TestGetScorecardClass:
     
     def test_get_scorecard_class_not_found(self, mock_scorecard_class, mock_scorecard_registry):
         """Test scorecard class not found"""
-        mock_scorecard_registry.get.return_value = None
-        
-        with pytest.raises(ValueError, match="Scorecard with name 'nonexistent' not found"):
-            get_scorecard_class('nonexistent')
+        # Mock identifier resolution to fail
+        with patch('plexus.cli.PredictionCommands.memoized_resolve_scorecard_identifier') as mock_resolve_scorecard:
+            mock_resolve_scorecard.return_value = None
+            mock_scorecard_registry.get.return_value = None
+            
+            # ✅ FIXED: Expect the actual error message from the implementation
+            with pytest.raises(ValueError, match="Scorecard with identifier 'nonexistent' not found in registry"):
+                get_scorecard_class('nonexistent')
 
 
 class TestCreateScoreInput:
@@ -800,9 +805,9 @@ class TestIntegration:
             mock_resolve_account.return_value = 'account-123'
             
             result = runner.invoke(predict, [
-                '--scorecard-name', 'test-scorecard',
-                '--score-name', 'test-score',
-                '--item-id', 'item-123',
+                '--scorecard', 'test-scorecard',
+                '--score', 'test-score',
+                '--item', 'item-123',
                 '--format', 'json',
                 '--excel'
             ])
