@@ -29,6 +29,9 @@ class Task(BaseModel):
     errorDetails: Optional[Dict] = None
     stdout: Optional[str] = None
     stderr: Optional[str] = None
+    output: Optional[str] = None  # Universal Code YAML output
+    error: Optional[str] = None   # Structured error message
+    attachedFiles: Optional[List[str]] = None  # Array of S3 file keys
     currentStageId: Optional[str] = None
     workerNodeId: Optional[str] = None
     dispatchStatus: Optional[str] = None
@@ -56,6 +59,9 @@ class Task(BaseModel):
         errorDetails: Optional[Dict] = None,
         stdout: Optional[str] = None,
         stderr: Optional[str] = None,
+        output: Optional[str] = None,
+        error: Optional[str] = None,
+        attachedFiles: Optional[List[str]] = None,
         currentStageId: Optional[str] = None,
         workerNodeId: Optional[str] = None,
         dispatchStatus: Optional[str] = None,
@@ -80,6 +86,9 @@ class Task(BaseModel):
         self.errorDetails = errorDetails
         self.stdout = stdout
         self.stderr = stderr
+        self.output = output
+        self.error = error
+        self.attachedFiles = attachedFiles
         self.currentStageId = currentStageId
         self.workerNodeId = workerNodeId
         self.dispatchStatus = dispatchStatus
@@ -106,6 +115,9 @@ class Task(BaseModel):
             errorDetails
             stdout
             stderr
+            output
+            error
+            attachedFiles
             currentStageId
             workerNodeId
             dispatchStatus
