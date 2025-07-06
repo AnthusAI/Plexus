@@ -46,3 +46,14 @@ export const scoreResultAttachments = defineStorage({
     ]
   })
 }); 
+
+// Define a storage bucket for task attachments
+export const taskAttachments = defineStorage({
+  name: 'taskAttachments',
+  access: (allow) => ({
+    'tasks/*': [
+      allow.guest.to(['read']),
+      allow.authenticated.to(['read', 'write', 'delete'])
+    ]
+  })
+});
