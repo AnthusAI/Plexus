@@ -19,6 +19,7 @@ from plexus.dashboard.api.client import PlexusDashboardClient
 from plexus.cli.shared import get_scoring_jobs_for_batch
 from plexus.cli.identifier_resolution import resolve_scorecard_identifier, resolve_score_identifier, resolve_item_identifier
 from plexus.cli.memoized_resolvers import memoized_resolve_scorecard_identifier, memoized_resolve_item_identifier
+from plexus.cli.command_output import write_json_output, should_write_json_output
 
 
 @click.command(help="Predict a scorecard or specific score(s) within a scorecard.")
@@ -195,7 +196,14 @@ async def predict_impl(
                             return float(obj)
                         return super(DecimalEncoder, self).default(obj)
                 
-                print(json.dumps(json_results, indent=2, cls=DecimalEncoder))
+                # Output JSON to stdout (for backward compatibility)
+                json_output = json.dumps(json_results, indent=2, cls=DecimalEncoder)
+                print(json_output)
+                
+                # Also write to output file if we're in task dispatch mode
+                if should_write_json_output():
+                    write_json_output(json_results, "output.json")
+                    logging.info("Written structured prediction results to output.json")
             else:
                 # Fixed format: human-readable output
                 rich.print("\n[bold green]Prediction Results:[/bold green]")
@@ -488,6 +496,50 @@ def get_scorecard_class(scorecard_identifier: str):
     """Get the scorecard class from the registry using flexible identifier resolution."""
     from plexus.cli.client_utils import create_client
     
+    # Helper function to load scorecards with robust path resolution
+    def load_scorecards_if_needed():
+        """Load scorecards if registry is empty, trying multiple paths."""
+        # Check if registry has any items by checking the items() method
+        if len(list(scorecard_registry.items())) > 0:
+            logging.info("Scorecard registry already loaded")
+            return
+            
+        # Try multiple potential scorecard directories
+        scorecard_paths = [
+            'scorecards/',  # Current working directory
+            os.path.join(os.getcwd(), 'scorecards/'),  # Explicit current dir  
+            os.path.join(os.path.dirname(os.path.dirname(__file__)), '..', '..', 'scorecards/'),  # Relative to this file
+        ]
+        
+        # Look for common project directory patterns
+        common_projects = ['Call-Criteria-Python', 'Plexus']
+        for project in common_projects:
+            # Try common parent directory patterns
+            parent_dirs = ['/home/ryan/projects', os.path.expanduser('~/projects'), '/projects']
+            for parent_dir in parent_dirs:
+                project_path = os.path.join(parent_dir, project, 'scorecards')
+                if project_path not in scorecard_paths:
+                    scorecard_paths.append(project_path)
+        
+        # Also try environment variable if set
+        if os.getenv('PLEXUS_SCORECARDS_PATH'):
+            scorecard_paths.insert(0, os.getenv('PLEXUS_SCORECARDS_PATH'))
+            
+        for path in scorecard_paths:
+            abs_path = os.path.abspath(path)
+            logging.info(f"Trying to load scorecards from: {abs_path}")
+            if os.path.exists(abs_path) and os.path.isdir(abs_path):
+                try:
+                    Scorecard.load_and_register_scorecards(abs_path)
+                    loaded_count = len(list(scorecard_registry.items()))
+                    logging.info(f"Successfully loaded {loaded_count} scorecards from {abs_path}")
+                    return
+                except Exception as e:
+                    logging.warning(f"Failed to load scorecards from {abs_path}: {e}")
+                    continue
+        
+        logging.warning("Could not find any scorecard directories to load from")
+    
     # First try to resolve the scorecard identifier to get the actual scorecard details
     client = create_client()
     scorecard_id = memoized_resolve_scorecard_identifier(client, scorecard_identifier)
@@ -512,7 +564,7 @@ def get_scorecard_class(scorecard_identifier: str):
             
             if scorecard_key:
                 # Load scorecards and try to get by key
-                Scorecard.load_and_register_scorecards('scorecards/')
+                load_scorecards_if_needed()
                 scorecard_class = scorecard_registry.get(scorecard_key)
                 if scorecard_class is not None:
                     logging.info(f"Found scorecard class for key '{scorecard_key}' (name: '{scorecard_name}')")
@@ -527,7 +579,7 @@ def get_scorecard_class(scorecard_identifier: str):
             logging.warning(f"Error getting scorecard details: {e}")
     
     # Fallback: try direct registry lookup with the original identifier
-    Scorecard.load_and_register_scorecards('scorecards/')
+    load_scorecards_if_needed()
     scorecard_class = scorecard_registry.get(scorecard_identifier)
     if scorecard_class is not None:
         logging.info(f"Found scorecard class for identifier '{scorecard_identifier}' (direct registry lookup)")
