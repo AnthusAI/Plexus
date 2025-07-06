@@ -84,7 +84,7 @@ packages = { find = { include = ["plexus*"] } }
 package-data = { plexus = ["templates/*", "__main__.py", "py.typed", "scores/*.py"] }
 
 [tool.setuptools.dynamic]
-version = {attr = "plexus.__version__"}
+version = {attr = "plexus._version.__version__"}
 
 [tool.pytest.ini_options]
 filterwarnings = [
@@ -112,7 +112,7 @@ exclude_lines = [
 ]
 
 [tool.semantic_release]
-version_variable = ["plexus/__init__.py:__version__"]
+version_variable = ["plexus/_version.py:__version__"]
 version_toml = []
 version_pattern = []
 commit_message = "chore: release {version}"
