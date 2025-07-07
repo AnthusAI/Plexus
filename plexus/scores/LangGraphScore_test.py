@@ -104,38 +104,39 @@ async def test_create_instance(basic_graph_config, mock_azure_openai, mock_yes_n
         assert instance.parameters.model_provider == "AzureChatOpenAI"
         assert instance.parameters.model_name == "gpt-4"
 
-@pytest.mark.skip(reason="Needs update: state handling has changed significantly")
 @pytest.mark.asyncio
 async def test_predict_basic_flow(basic_graph_config, mock_azure_openai):
-    """Test basic prediction flow"""
-    with patch('plexus.LangChainUser.LangChainUser._initialize_model', 
-               return_value=mock_azure_openai):
-        instance = await LangGraphScore.create(**basic_graph_config)
+    """Test basic prediction flow with current API"""
+    with patch('plexus.LangChainUser.LangChainUser._ainitialize_model', return_value=mock_azure_openai):
+        # Create instance using direct instantiation since create() may have changed
+        instance = LangGraphScore(**basic_graph_config)
+        await instance.async_setup()
         
-        # Mock workflow with ainvoke instead of astream
+        # Mock workflow with current ainvoke method
         mock_workflow = AsyncMock()
         mock_workflow.ainvoke = AsyncMock(return_value={
             "value": "Yes",
-            "explanation": "Test explanation"
+            "explanation": "Test explanation",
+            "text": "This is a test text"
         })
         instance.workflow = mock_workflow
         
+        # Use current predict() signature - no context parameter
         input_data = Score.Input(
             text="This is a test text",
             metadata={
-                "account_key": "test-account",
                 "scorecard_key": "test-scorecard",
-                "score_name": "test-score",
-                "evaluation_mode": True  # Allow missing account_key
+                "score_name": "test-score"
             },
             results=[]
         )
         
-        results = await instance.predict(None, input_data)
+        result = await instance.predict(input_data)
         
-        assert len(results) == 1
-        assert results[0].value == "Yes"
-        assert results[0].explanation == "Test explanation"
+        # Check result structure matches current implementation
+        assert isinstance(result, Score.Result)
+        assert result.value == "Yes"
+        assert "Test explanation" in str(result.metadata.get('explanation', ''))
         
         # Verify workflow was called with correct initial state
         mock_workflow.ainvoke.assert_called_once()
@@ -143,7 +144,6 @@ async def test_predict_basic_flow(basic_graph_config, mock_azure_openai):
         assert len(call_args) >= 1
         initial_state = call_args[0]
         assert initial_state["text"] == "This is a test text"
-        assert initial_state["metadata"]["account_key"] == "test-account"
 
 @pytest.mark.skip(reason="Needs update: state handling and text preprocessing has changed")
 @pytest.mark.asyncio
@@ -521,7 +521,7 @@ async def test_batch_processing_pause_basic(basic_graph_config, mock_azure_opena
         instance.workflow = mock_workflow
         
         with pytest.raises(BatchProcessingPause) as exc_info:
-            await instance.predict(None, Score.Input(
+            await instance.predict(Score.Input(
                 text="test text",
                 metadata={
                     "account_key": "test-account",
