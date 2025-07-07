@@ -145,10 +145,70 @@ async def predict_impl(
                                 row_result[f'{score_name}_cost'] = costs
                                 # Extract trace information
                                 trace = None
+                                logging.info(f"🔍 TRACE EXTRACTION DEBUG for {score_name}:")
+                                logging.info(f"  - predictions type: {type(predictions)}")
+                                logging.info(f"  - predictions attributes: {dir(predictions)}")
+                                logging.info(f"  - has trace attr: {hasattr(predictions, 'trace')}")
+                                logging.info(f"  - has metadata attr: {hasattr(predictions, 'metadata')}")
+                                
                                 if hasattr(predictions, 'trace'):
                                     trace = predictions.trace
+                                    logging.info(f"  ✅ Found trace in direct attribute: {type(trace)}")
                                 elif hasattr(predictions, 'metadata') and predictions.metadata:
+                                    logging.info(f"  - metadata type: {type(predictions.metadata)}")
+                                    logging.info(f"  - metadata keys: {list(predictions.metadata.keys()) if isinstance(predictions.metadata, dict) else 'not a dict'}")
                                     trace = predictions.metadata.get('trace')
+                                    if trace:
+                                        logging.info(f"  ✅ Found trace in metadata: {type(trace)}")
+                                        logging.info(f"  - trace keys: {list(trace.keys()) if isinstance(trace, dict) else 'not a dict'}")
+                                        if isinstance(trace, dict) and 'node_results' in trace:
+                                            logging.info(f"  - node_results count: {len(trace['node_results'])}")
+                                            
+                                            # Add text and metadata to trace for debugging/analysis
+                                            if isinstance(trace, dict):
+                                                import json
+                                                # Get text and metadata from sample_row
+                                                input_text = sample_row.iloc[0].get('text', '') if sample_row is not None else ''
+                                                input_metadata_str = sample_row.iloc[0].get('metadata', '{}') if sample_row is not None else '{}'
+                                                try:
+                                                    input_metadata = json.loads(input_metadata_str) if input_metadata_str else {}
+                                                except json.JSONDecodeError:
+                                                    input_metadata = {}
+                                                
+                                                trace['input_text'] = input_text
+                                                trace['input_metadata'] = input_metadata
+                                                logging.info(f"  ✅ Added input text ({len(input_text)} chars) and metadata ({len(input_metadata)} keys) to trace")
+                                            
+                                            # Test JSON serialization
+                                            try:
+                                                import json
+                                                json_trace = json.dumps(trace, default=str)
+                                                logging.info(f"  ✅ Trace is JSON serializable (length: {len(json_trace)})")
+                                            except Exception as json_error:
+                                                logging.error(f"  ❌ Trace is NOT JSON serializable: {json_error}")
+                                                # Try to make a JSON-safe version
+                                                try:
+                                                    safe_trace = json.loads(json.dumps(trace, default=str))
+                                                    trace = safe_trace
+                                                    logging.info(f"  ✅ Created JSON-safe trace version")
+                                                except Exception as safe_error:
+                                                    logging.error(f"  ❌ Could not create JSON-safe trace: {safe_error}")
+                                                    trace = {"error": "Trace data could not be serialized", "original_error": str(json_error)}
+                                    else:
+                                        logging.info(f"  ❌ No trace found in metadata")
+                                        # Check for nested metadata structures
+                                        if isinstance(predictions.metadata, dict):
+                                            for key, value in predictions.metadata.items():
+                                                if isinstance(value, dict) and 'trace' in value:
+                                                    logging.info(f"  🔍 Found nested trace in metadata['{key}']['trace']")
+                                                    trace = value['trace']
+                                                    break
+                                else:
+                                    logging.info(f"  ❌ No metadata attribute found")
+                                
+                                if not trace:
+                                    logging.warning(f"  ⚠️ No trace data found anywhere in predictions object")
+                                
                                 row_result[f'{score_name}_trace'] = trace
                                 logging.info(f"Got predictions: {predictions}")
                     else:
@@ -185,6 +245,19 @@ async def predict_impl(
                             'trace': result.get(f'{name}_trace')
                         }
                     json_results.append(json_result)
+                
+                # Debug: Check what's actually in the final json_results before encoding
+                logging.info(f"🔍 FINAL JSON DEBUG: About to encode {len(json_results)} results")
+                for i, result in enumerate(json_results):
+                    logging.info(f"  Result {i}: item_id={result.get('item_id')}")
+                    for score_key in result.keys():
+                        if score_key != 'item_id':
+                            score_data = result[score_key]
+                            if isinstance(score_data, dict):
+                                trace_data = score_data.get('trace')
+                                logging.info(f"    {score_key}.trace: {type(trace_data)} = {trace_data is not None}")
+                                if trace_data is not None:
+                                    logging.info(f"      trace type: {type(trace_data)}, keys: {list(trace_data.keys()) if isinstance(trace_data, dict) else 'not a dict'}")
                 
                 import json
                 from decimal import Decimal
@@ -320,15 +393,55 @@ def select_sample(scorecard_class, score_name, item_identifier, fresh):
             logging.info(f"Found item {item_id} from identifier '{item_identifier}'")
             
             # Create a pandas-like row structure for compatibility
+            text_content = item.text or ''
+            logging.info(f"Item text length: {len(text_content)}")
+            logging.info(f"Item text preview: {text_content[:200] if text_content else 'EMPTY TEXT'}")
+            
+            # Prepare metadata by combining Item metadata with required CLI metadata
+            base_metadata = {
+                "item_id": item.id,
+                "account_key": os.getenv('PLEXUS_ACCOUNT_KEY', 'call-criteria'),
+                "scorecard_key": scorecard_class.properties.get('key'),
+                "score_name": score_name
+            }
+            
+            # Merge with Item's metadata if it exists
+            if item.metadata:
+                logging.info(f"Item has metadata: {type(item.metadata)}")
+                
+                # Parse metadata if it's a JSON string
+                parsed_metadata = None
+                if isinstance(item.metadata, str):
+                    try:
+                        parsed_metadata = json.loads(item.metadata)
+                        logging.info(f"Successfully parsed JSON metadata with keys: {list(parsed_metadata.keys())}")
+                    except json.JSONDecodeError as e:
+                        logging.warning(f"Failed to parse metadata JSON: {e}")
+                        parsed_metadata = None
+                elif isinstance(item.metadata, dict):
+                    parsed_metadata = item.metadata
+                    logging.info(f"Metadata is already a dict with keys: {list(parsed_metadata.keys())}")
+                else:
+                    logging.warning(f"Metadata is unexpected type: {type(item.metadata)}")
+                
+                if parsed_metadata and isinstance(parsed_metadata, dict):
+                    # Merge Item metadata with base metadata (base metadata takes precedence)
+                    merged_metadata = {**parsed_metadata, **base_metadata}
+                    logging.info(f"Merged metadata keys: {list(merged_metadata.keys())}")
+                    logging.info(f"Original Item metadata: {json.dumps(parsed_metadata, indent=2)}")
+                else:
+                    merged_metadata = base_metadata
+                    logging.warning(f"Could not parse Item metadata, using base metadata only")
+            else:
+                merged_metadata = base_metadata
+                logging.info("Item has no metadata, using base metadata only")
+            
+            logging.info(f"Final metadata for scoring: {json.dumps(merged_metadata, indent=2)}")
+            
             sample_data = {
-                'text': item.text or '',
+                'text': text_content,
                 'item_id': item.id,
-                'metadata': json.dumps({
-                    "item_id": item.id,
-                    "account_key": os.getenv('PLEXUS_ACCOUNT_KEY', 'call-criteria'),
-                    "scorecard_key": scorecard_class.properties.get('key'),
-                    "score_name": score_name
-                })
+                'metadata': json.dumps(merged_metadata)
             }
             
             # Convert to DataFrame-like structure for compatibility
@@ -604,6 +717,12 @@ def create_score_input(sample_row, item_id, scorecard_class, score_name):
         metadata = json.loads(metadata_str)
         if 'item_id' not in metadata:
             metadata['item_id'] = str(item_id)
+        
+        logging.info(f"Creating score input with text length: {len(text)}")
+        logging.info(f"Score input text preview: {text[:200] if text else 'NO TEXT IN SCORE INPUT'}")
+        logging.info(f"Score input metadata keys: {list(metadata.keys())}")
+        logging.info(f"Complete score input metadata: {json.dumps(metadata, indent=2)}")
+        
         return score_input_class(text=text, metadata=metadata)
     else:
         metadata = {"item_id": str(item_id)}

@@ -333,7 +333,11 @@ class LangGraphScore(Score, LangChainUser):
                                     if hasattr(state, 'model_dump'):
                                         state_dict = state.model_dump()
                                         logging.info(f"  - Available state fields: {list(state_dict.keys())}")
-                                        for key, value in state_dict.items():
+                                        
+                                        # Truncate the values before logging
+                                        truncated_state_dict = truncate_dict_strings(state_dict, 100)
+                                        
+                                        for key, value in truncated_state_dict.items():
                                             if key in ['classification', 'explanation', 'completion', 'value']:
                                                 logging.info(f"    {key}: {value!r}")
                                     
@@ -351,10 +355,10 @@ class LangGraphScore(Score, LangChainUser):
                                         else:
                                             logging.info(f"  ❌ NO CONDITION MATCH for {state_value}")
                                     else:
-                                        logging.info(f"  ❌ NO CLASSIFICATION FIELD or is None")
+                                        logging.info(f"  ❌ NO CLASSIFICATION FIELD or is None, using fallback")
                                     
                                     # Default case - route to fallback target
-                                    logging.info(f"  🔄 FALLBACK: -> {fallback_target}")
+                                    logging.info(f"  🔄 FALLBACK from {previous_node}: -> {fallback_target}")
                                     return fallback_target
                                 return routing_function
 
@@ -867,28 +871,20 @@ class LangGraphScore(Score, LangChainUser):
     @staticmethod
     def generate_output_aliasing_function(output_mapping: dict) -> FunctionType:
         def output_aliasing(state):
-            logging.info(f"Applying output aliases: {list(output_mapping.keys())}")
-            
-            # DEBUG: Log the current state before aliasing
-            logging.info(f"DEBUG: State before aliasing: {state.model_dump()}")
-            logging.info(f"DEBUG: State attributes: {[attr for attr in dir(state) if not attr.startswith('_')]}")
-            
+                        
             # Create a new dict with all current state values
             new_state = state.model_dump()
             
             # Add aliased values, but only if the target field is not already meaningfully set
             for alias, original in output_mapping.items():
-                logging.info(f"DEBUG: Processing alias '{alias}' -> '{original}'")
                 
                 # Check if the target alias field already has a meaningful value
                 current_alias_value = getattr(state, alias, None)
                 if current_alias_value is not None and current_alias_value != "":
-                    logging.info(f"DEBUG: Preserving existing {alias} = {current_alias_value!r}, not overwriting with {original}")
                     continue  # Skip this alias - preserve the existing value
                 
                 if hasattr(state, original):
                     original_value = getattr(state, original)
-                    logging.info(f"DEBUG: Found {original} = {original_value!r} (type: {type(original_value)})")
                     
                     # Defensive check: never set a field to None, provide sensible defaults
                     if original_value is None:
@@ -901,7 +897,7 @@ class LangGraphScore(Score, LangChainUser):
                         logging.warning(f"Output aliasing: {original} was None, defaulting {alias} to '{original_value}'")
                     
                     new_state[alias] = original_value
-                    logging.info(f"DEBUG: Set new_state['{alias}'] = {original_value!r}")
+
                     # Also directly set on the state object to ensure it's accessible
                     setattr(state, alias, original_value)
                 else:
@@ -911,14 +907,8 @@ class LangGraphScore(Score, LangChainUser):
                     # Also directly set on the state object
                     setattr(state, alias, original)
             
-            # DEBUG: Log the final new_state before creating combined_state
-            logging.info(f"DEBUG: Final new_state: {new_state}")
-            
             # Create new state with extra fields allowed
             combined_state = state.__class__(**new_state)
-            
-            # DEBUG: Log the combined_state after creation
-            logging.info(f"DEBUG: Combined state created: {combined_state.model_dump()}")
             
             return combined_state
             
@@ -1098,9 +1088,9 @@ class LangGraphScore(Score, LangChainUser):
             )
             
             # DEBUG: Log the graph_result before converting to Score.Result
-            logging.info(f"DEBUG: graph_result keys: {list(graph_result.keys())}")
-            logging.info(f"DEBUG: graph_result['value'] = {graph_result.get('value')!r} (type: {type(graph_result.get('value'))})")
-            logging.info(f"DEBUG: Full graph_result: {graph_result}")
+            logging.debug(f"graph_result keys: {list(graph_result.keys())}")
+            logging.debug(f"graph_result['value'] = {graph_result.get('value')!r} (type: {type(graph_result.get('value'))})")
+            logging.debug(f"Full graph_result: {truncate_dict_strings(graph_result, 200)}")
             
             # Convert graph result to Score.Result
             value_for_result = graph_result.get('value', 'Error')
@@ -1138,7 +1128,8 @@ class LangGraphScore(Score, LangChainUser):
             # Let BatchProcessingPause propagate up
             raise
         except Exception as e:
-            logging.error(f"Error in predict: {e}")
+            logging.error(f"Error in predict for thread_id {thread_id}: {e}")
+            logging.error(traceback.format_exc())
             return Score.Result(
                 parameters=self.parameters,
                 value="ERROR",
