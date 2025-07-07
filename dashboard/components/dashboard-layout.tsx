@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useState, useEffect, useRef } from "react"
-import { Activity, StickyNote, FileBarChart, FlaskConical, ListTodo, LogOut, Menu, PanelLeft, PanelRight, Settings, Sparkles, Siren, Database, Sun, Moon, Send, Mic, Headphones, MessageCircleMore, MessageSquare, Inbox, X, ArrowLeftRight, Layers3, Monitor, CircleHelp } from "lucide-react"
+import { Activity, StickyNote, FileBarChart, FlaskConical, ListChecks, LogOut, Menu, PanelLeft, PanelRight, Settings, Sparkles, Siren, HardDriveDownload, Sun, Moon, Send, Mic, Headphones, MessageCircleMore, MessageSquare, Inbox, X, ArrowLeftRight, Layers3, Monitor, CircleHelp, Gauge } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useTheme } from "next-themes"
@@ -30,6 +30,8 @@ import { ChatEvaluationCard } from "@/components/chat-evaluation-card"
 import SquareLogo, { LogoVariant } from './logo-square'
 import { useSidebar } from "@/app/contexts/SidebarContext"
 import { useAccount } from "@/app/contexts/AccountContext"
+import { DashboardDrawer } from "@/components/DashboardDrawer"
+import { Spinner } from "@/components/ui/spinner"
 
 const useMediaQuery = (query: string): boolean => {
   const [matches, setMatches] = useState(false)
@@ -63,27 +65,29 @@ const MobileHeader = ({
   toggleRightSidebar: () => void;
   rightSidebarState: 'collapsed' | 'normal' | 'expanded';
 }) => (
-  <div className="hidden max-lg:flex items-center justify-between p-1 px-2 bg-background">
+  <div className="hidden max-lg:flex items-center justify-between p-0.5 px-2 bg-background min-h-[3rem] mobile-header">
     <DashboardButton
       variant="ghost"
-      size="icon"
+      size="sm"
       onClick={toggleLeftSidebar}
-      className="lg:hidden"
+      className="h-8 w-8 p-0 ml-3"
     >
-      <Menu className="h-5 w-5" />
+      <Menu className="h-4 w-4" />
     </DashboardButton>
     
-    <Link href="/" className="flex items-center">
-      <SquareLogo variant={LogoVariant.Narrow} />
+    <Link href="/" className="flex items-center flex-1 justify-center">
+      <div className="scale-75">
+        <SquareLogo variant={LogoVariant.Narrow} />
+      </div>
     </Link>
 
     <DashboardButton
       variant="ghost"
-      size="icon"
+      size="sm"
       onClick={toggleRightSidebar}
-      className="lg:hidden"
+      className="h-8 w-8 p-0 mr-3 hidden xs:block"
     >
-      <MessageSquare className="h-5 w-5" />
+      <MessageSquare className="h-4 w-4" />
     </DashboardButton>
   </div>
 )
@@ -94,10 +98,10 @@ type Account = Schema['Account']['type']
 
 export const menuItems = [
   { name: "Items", icon: StickyNote, path: "/lab/items" },
-  { name: "Evaluations", icon: FlaskConical, path: "/lab/evaluations" },
   { name: "Reports", icon: FileBarChart, path: "/lab/reports" },
-  { name: "Scorecards", icon: ListTodo, path: "/lab/scorecards" },
-  { name: "Sources", icon: Database, path: "/lab/datasets" },
+  { name: "Evaluations", icon: FlaskConical, path: "/lab/evaluations" },
+  { name: "Scorecards", icon: ListChecks, path: "/lab/scorecards" },
+  { name: "Sources", icon: HardDriveDownload, path: "/lab/sources" },
   { name: "Batches", icon: Layers3, path: "/lab/batches" },
   { name: "Activity", icon: Activity, path: "/lab/activity" },
   { name: "Feedback", icon: MessageCircleMore, path: "/lab/feedback-queues" },
@@ -107,11 +111,43 @@ export const menuItems = [
 
 const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; signOut: () => Promise<void> }) => {
   const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState(true)
+  const [isDashboardDrawerOpen, setIsDashboardDrawerOpen] = useState(false)
+  const [isNavigating, setIsNavigating] = useState(false)
+  const [loadingRoute, setLoadingRoute] = useState<string | null>(null)
   const { rightSidebarState, setRightSidebarState } = useSidebar()
   const { theme, setTheme } = useTheme()
-  const isDesktop = useMediaQuery("(min-width: 1024px)")
-  const isMobile = useMediaQuery("(max-width: 1023px)")
+  const isDesktop = useMediaQuery("(min-width: 768px)")
+  const isMobile = useMediaQuery("(max-width: 767px)")
   const { accounts, selectedAccount, isLoadingAccounts, visibleMenuItems, setSelectedAccount } = useAccount()
+  const pathname = usePathname()
+
+  // Handle navigation loading states
+  useEffect(() => {
+    const handleRouteChangeStart = () => {
+      setIsNavigating(true)
+    }
+    
+    const handleRouteChangeComplete = () => {
+      setIsNavigating(false)
+      setLoadingRoute(null)
+    }
+
+    // Reset loading state when pathname changes (navigation complete)
+    setIsNavigating(false)
+    setLoadingRoute(null)
+  }, [pathname])
+
+  const handleNavClick = (path: string) => {
+    if (path !== pathname) {
+      setLoadingRoute(path)
+      setIsNavigating(true)
+      
+      // Auto-hide left sidebar on mobile after navigation
+      if (isMobile && isLeftSidebarOpen) {
+        setIsLeftSidebarOpen(false)
+      }
+    }
+  }
 
   useEffect(() => {    
     if (isDesktop) {
@@ -157,13 +193,43 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
     }
   }
 
-  const pathname = usePathname()
+  // Keyboard shortcut for dashboard drawer (.) - only on /lab/ paths
+  useEffect(() => {
+    const isLabPath = pathname.startsWith('/lab/')
+    if (!isLabPath) return
+
+    const handleKeydown = (event: KeyboardEvent) => {
+      if (event.key === '.' && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        // Only trigger if not focused on an input/textarea
+        const activeElement = document.activeElement
+        if (activeElement && (
+          activeElement.tagName === 'INPUT' || 
+          activeElement.tagName === 'TEXTAREA' ||
+          activeElement.getAttribute('contenteditable') === 'true'
+        )) {
+          return
+        }
+        
+        event.preventDefault()
+        setIsDashboardDrawerOpen(prev => !prev)
+      }
+    }
+    
+    document.addEventListener('keydown', handleKeydown)
+    return () => document.removeEventListener('keydown', handleKeydown)
+  }, [pathname])
+
+  const toggleDashboardDrawer = () => {
+    setIsDashboardDrawerOpen(prev => !prev)
+  }
+
+  const isActivityRoute = pathname === "/lab/activity" || pathname.startsWith("/lab/tasks/");
 
   const LeftSidebar = () => {
     return (
-      <div className={`flex flex-col h-full py-2 bg-frame ${isMobile ? 'pr-3' : 'pr-2'}`}>
+      <div className={`flex flex-col h-full py-2 bg-frame ${isMobile ? 'pr-2 mobile-compact' : ''}`}>
         <div className={`mb-4 ${isLeftSidebarOpen ? 'pl-2' : ''}`}>
-          <Link href="/" className={`block relative ${isLeftSidebarOpen ? 'w-full max-w-md' : 'w-12 pl-2'}`}>
+          <Link href="/" className={`block relative ${isLeftSidebarOpen ? 'w-full max-w-md' : 'w-12 pl-4'}`}>
             <div className="absolute -inset-1 bg-gradient-to-r from-secondary to-primary rounded-md blur-sm opacity-50"></div>
             <div className="relative">
               {isLeftSidebarOpen ? (
@@ -175,38 +241,61 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
           </Link>
         </div>
 
-        <ScrollArea className="flex-grow overflow-y-auto">
+        <div className="flex-grow">
           <div className={`${isLeftSidebarOpen ? 'pl-2' : 'px-3'} ${isMobile ? 'space-y-2' : 'space-y-1'}`}>
-            {visibleMenuItems.map((item) => (
-              <Link 
-                key={item.name}
-                href={item.path}
-                className={`flex items-center w-full px-3 py-2 group !rounded-[4px] ${
-                  (pathname === item.path ||
-                  (item.name === "Feedback" && (pathname === "/feedback-queues" || pathname.startsWith("/feedback"))) ||
-                  (item.name === "Scorecards" && pathname.startsWith(item.path)) ||
-                  (item.name === "Reports" && pathname.startsWith(item.path)))
-                    ? "bg-secondary text-secondary-foreground"
-                    : "hover:bg-accent hover:text-accent-foreground"
-                } ${isLeftSidebarOpen ? '' : 'px-2'} ${
-                  isMobile ? 'py-3' : ''
-                }`}
-              >
-                <item.icon className={`h-4 w-4 flex-shrink-0 ${
-                  (pathname === item.path ||
-                  (item.name === "Feedback" && (pathname === "/feedback-queues" || pathname.startsWith("/feedback"))) ||
-                  (item.name === "Scorecards" && pathname.startsWith(item.path)) ||
-                  (item.name === "Reports" && pathname.startsWith(item.path)))
-                    ? "text-secondary-foreground"
-                    : "text-navigation-icon"
-                }`} />
-                {isLeftSidebarOpen && (
-                  <span className="ml-3">{item.name}</span>
-                )}
-              </Link>
-            ))}
+            {visibleMenuItems.map((item) => {
+              const isCurrentPage = (pathname === item.path ||
+                (item.name === "Feedback" && (pathname === "/feedback-queues" || pathname.startsWith("/feedback"))) ||
+                (item.name === "Items" && pathname.startsWith(item.path)) ||
+                (item.name === "Evaluations" && pathname.startsWith(item.path)) ||
+                (item.name === "Scorecards" && pathname.startsWith(item.path)) ||
+                (item.name === "Reports" && pathname.startsWith(item.path)) ||
+                (item.name === "Sources" && pathname.startsWith(item.path)) ||
+                (item.name === "Activity" && isActivityRoute))
+              
+              const isLoading = loadingRoute === item.path
+              
+              return (
+                <Link 
+                  key={item.name}
+                  href={item.path}
+                  onClick={() => handleNavClick(item.path)}
+                  className={`flex items-center w-full px-3 py-2 group !rounded-[4px] relative transition-all duration-200 ${
+                    isCurrentPage
+                      ? "bg-selected text-selected-foreground"
+                      : "hover:bg-accent hover:text-accent-foreground"
+                  } ${isLeftSidebarOpen ? '' : 'px-2'} ${
+                    isMobile ? 'py-3' : ''
+                  } ${isLoading ? 'opacity-75' : ''}`}
+                >
+                  <div className={`relative ${isLoading ? 'animate-pulse' : ''}`}>
+                    <item.icon className={`h-4 w-4 flex-shrink-0 transition-all duration-200 ${
+                      isCurrentPage
+                        ? "text-selected-foreground"
+                        : "text-navigation-icon"
+                    } ${isLoading ? 'opacity-50' : ''}`} />
+                    {isLoading && (
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="w-2 h-2 bg-primary rounded-full animate-ping" />
+                      </div>
+                    )}
+                  </div>
+                  {isLeftSidebarOpen && (
+                    <span className={`ml-3 transition-all duration-200 ${isLoading ? 'opacity-75' : ''}`}>
+                      {item.name}
+                    </span>
+                  )}
+                  {/* Loading progress bar */}
+                  {isLoading && (
+                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary/20 overflow-hidden">
+                      <div className="h-full bg-primary animate-loading-bar" />
+                    </div>
+                  )}
+                </Link>
+              )
+            })}
           </div>
-        </ScrollArea>
+        </div>
 
         <div className="mt-auto pl-2 space-y-2 py-2">
           <DropdownMenu>
@@ -227,7 +316,15 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                 {isLeftSidebarOpen && <span className="text-muted-foreground">{selectedAccount?.name || 'Select Account'}</span>}
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-[200px]">
+            <DropdownMenuContent align="start" className="w-[200px] z-[9999]">
+              <DropdownMenuItem 
+                className={`cursor-pointer ${!pathname.startsWith('/lab/') ? 'opacity-50' : ''}`} 
+                onClick={pathname.startsWith('/lab/') ? toggleDashboardDrawer : undefined}
+              >
+                <Gauge className="mr-2 h-4 w-4 text-navigation-icon" />
+                Dashboard
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <Link href="/settings">
                 <DropdownMenuItem className="cursor-pointer">
                   <Settings className="mr-2 h-4 w-4 text-navigation-icon" />
@@ -242,7 +339,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                     Select Account
                   </DropdownMenuItem>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent side="right" align="start" className="w-[200px]">
+                <DropdownMenuContent side="right" align="start" className="w-[200px] z-[9999]">
                   {isLoadingAccounts ? (
                     <DropdownMenuItem>Loading accounts...</DropdownMenuItem>
                   ) : accounts.length === 0 ? (
@@ -285,7 +382,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                 {isLeftSidebarOpen && <span className="text-muted-foreground">Ryan Porter</span>}
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-[200px]">
+            <DropdownMenuContent align="end" className="w-[200px] z-[9999]">
               <DropdownMenuLabel>My Account</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <Link href="/settings">
@@ -539,57 +636,78 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
   }, [])
 
   return (
-    <div className="flex flex-col h-screen bg-frame">
+    <div className={`flex flex-col h-screen dashboard-container ${isMobile ? 'bg-background' : 'bg-frame'}`}>
       <MobileHeader 
         toggleLeftSidebar={toggleLeftSidebar}
         toggleRightSidebar={toggleRightSidebar}
         rightSidebarState={rightSidebarState}
       />
       
-      <div className="flex flex-1 overflow-hidden bg-frame">
+      <div className={`flex flex-1 min-h-0 relative ${isMobile ? 'bg-background' : 'bg-frame'}`}>
+        {/* Mobile sidebar overlay - click outside to close and darken content */}
+        {isMobile && isLeftSidebarOpen && (
+          <div 
+            className="fixed inset-0 z-30 bg-black/50 backdrop-blur-sm"
+            onClick={toggleLeftSidebar}
+          />
+        )}
+        
         <aside
           className={`
-            ${isMobile ? 'fixed top-[40px] bottom-0 left-0 z-50 bg-background/80 backdrop-blur-sm' : 
-              'fixed top-0 bottom-0 left-0 h-full'}
-            ${isLeftSidebarOpen ? 'w-40' : 'w-14'}
+            ${isMobile ? 'fixed top-0 bottom-0 left-0 z-40' : 
+              'fixed top-0 bottom-0 left-0 h-full z-10'}
+            ${isLeftSidebarOpen ? (isMobile ? 'w-[min(75vw,12rem)]' : 'w-40') : (isMobile ? 'w-12' : 'w-14')}
             transition-all duration-300 ease-in-out overflow-hidden
             ${isMobile && !isLeftSidebarOpen ? 'hidden' : ''}
           `}
         >
           <div className={`
-            ${isMobile ? 'h-full w-40 bg-frame' : 'h-full'}
+            ${isMobile ? 'h-full w-full bg-frame mobile-sidebar' : 'h-full'}
           `}>
             <LeftSidebar />
           </div>
         </aside>
 
         <main 
-          className={`flex-1 flex flex-col transition-all duration-300 ease-in-out
-            ${isMobile ? 'ml-0' : (isLeftSidebarOpen ? 'ml-40' : 'ml-14')}
-            ${isMobile && rightSidebarState === 'collapsed' ? 'mr-0' : 
-              rightSidebarState === 'normal' ? (isMobile ? 'mr-0' : 'mr-80') : 
-              rightSidebarState === 'expanded' ? (isMobile ? 'mr-0' : 'mr-[40%]') : 
-              (isMobile ? 'mr-0' : 'mr-14')}
-            ${rightSidebarState !== 'collapsed' ? 'pr-2' : 'pr-0'}
-            ${isMobile ? '' : 'py-2'}
+          className={`flex-1 flex flex-col transition-all duration-300 ease-in-out min-h-0 ${isMobile ? 'mobile-main bg-background' : ''}
+            ${isMobile ? 'ml-0 mr-0' : (isLeftSidebarOpen ? 'ml-40' : 'ml-14')}
+            ${!isMobile && rightSidebarState === 'collapsed' ? 'mr-14' : 
+              !isMobile && rightSidebarState === 'normal' ? 'mr-80' : 
+              !isMobile && rightSidebarState === 'expanded' ? 'mr-[40%]' : 'mr-0'}
+            ${rightSidebarState !== 'collapsed' ? (isMobile ? 'pr-0' : 'pr-2') : 'pr-0'}
+            ${isMobile ? 'p-0' : 'p-2'}
           `}
         >
-          <div className="flex-1 flex flex-col bg-background rounded-lg overflow-hidden">
-            <div className="flex-1 overflow-y-auto">
-              <div className={`h-full pr-2 pb-2 pl-2 ${isMobile ? '' : 'pt-2'}`}>
-                {children}
+          <div className={`flex-1 flex flex-col bg-background min-h-0 overflow-visible relative ${isMobile ? 'mobile-compact' : 'rounded-lg'}`}>
+            {/* Dashboard activation button - bottom center, height of 4 (1rem) */}
+            {pathname.startsWith('/lab/') && (
+              <button
+                onClick={toggleDashboardDrawer}
+                className="absolute bottom-0 left-1/3 right-1/3 h-4 z-10 bg-transparent border-none cursor-default opacity-0 hover:opacity-0 focus:outline-none"
+                aria-label="Activate dashboard"
+                tabIndex={-1}
+              />
+            )}
+            
+            {/* Global loading overlay */}
+            {isNavigating && (
+              <div className={`absolute inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center ${isMobile ? '' : 'rounded-lg'}`}>
+                <Spinner size="xl" variant="secondary" />
               </div>
+            )}
+            <div className="flex-1 min-h-0">
+              {children}
             </div>
           </div>
         </main>
 
         <aside
           className={`
-            ${isMobile ? 'fixed top-[40px] bottom-0 right-0 z-50 bg-background/80 backdrop-blur-sm' : 
-              'fixed top-0 bottom-0 right-0 h-full'}
+            ${isMobile ? 'fixed top-0 bottom-0 right-0 z-40 bg-background/80 backdrop-blur-sm mobile-hide-right-sidebar' : 
+              'fixed top-0 bottom-0 right-0 h-full z-10'}
             ${rightSidebarState === 'collapsed' ? (isMobile ? 'w-0' : 'w-14') :
-              rightSidebarState === 'normal' ? 'w-80' :
-              (isMobile ? 'w-full' : 'w-[40%]')}
+              rightSidebarState === 'normal' ? (isMobile ? 'w-0' : 'w-80') :
+              (isMobile ? 'w-0' : 'w-[40%]')}
             transition-all duration-300 ease-in-out overflow-hidden
           `}
         >
@@ -613,6 +731,14 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
           </div>
         </aside>
       </div>
+      
+      {/* Dashboard Drawer - only enabled on /lab/ paths */}
+      {pathname.startsWith('/lab/') && (
+        <DashboardDrawer 
+          open={isDashboardDrawerOpen} 
+          onOpenChange={setIsDashboardDrawerOpen} 
+        />
+      )}
     </div>
   )
 }

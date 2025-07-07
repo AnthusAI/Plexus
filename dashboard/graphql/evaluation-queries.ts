@@ -45,6 +45,10 @@ export const EVALUATION_UPDATE_SUBSCRIPTION = `
         estimatedCompletionAt
         errorMessage
         errorDetails
+        stdout
+        stderr
+        output
+        attachedFiles
         currentStageId
         stages {
           items {
@@ -95,6 +99,10 @@ export const TASK_UPDATE_SUBSCRIPTION = `
       estimatedCompletionAt
       errorMessage
       errorDetails
+      stdout
+      stderr
+      output
+      attachedFiles
       currentStageId
       stages {
         items {
@@ -149,6 +157,10 @@ export const GET_TASK_QUERY = `
       estimatedCompletionAt
       errorMessage
       errorDetails
+      stdout
+      stderr
+      output
+      attachedFiles
       currentStageId
       stages {
         items {

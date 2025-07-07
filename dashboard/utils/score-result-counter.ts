@@ -177,16 +177,25 @@ export class ScoreResultCountManager {
   /**
    * Force load count for a specific item (used for updates)
    */
-  async loadCountForItem(itemId: string) {
-    if (this.pendingCounts.has(itemId)) return;
+  async loadCountForItem(itemId: string, showLoading: boolean = true) {
+    // Prevent duplicate concurrent requests for the same item
+    if (this.pendingCounts.has(itemId)) {
+      return;
+    }
     
     this.pendingCounts.add(itemId);
-    this.countCache.set(itemId, {
-      itemId,
-      count: 0,
-      isLoading: true
-    });
-    this.notifyCallbacks();
+    
+    // Only show loading state if explicitly requested and we don't have existing data,
+    // or if we have no data at all
+    const existingCount = this.countCache.get(itemId);
+    if (showLoading && (!existingCount || existingCount.count === 0)) {
+      this.countCache.set(itemId, {
+        itemId,
+        count: 0,
+        isLoading: true
+      });
+      this.notifyCallbacks();
+    }
     
     try {
       const { totalCount, scorecardBreakdown } = await countScoreResultsForItem(itemId);
@@ -198,12 +207,12 @@ export class ScoreResultCountManager {
         scorecardBreakdown
       });
     } catch (error) {
-      console.error('Error loading count for item:', itemId, error);
       this.countCache.set(itemId, {
         itemId,
-        count: 0,
+        count: existingCount?.count || 0,
         isLoading: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'Unknown error',
+        scorecardBreakdown: existingCount?.scorecardBreakdown || []
       });
     } finally {
       this.pendingCounts.delete(itemId);
@@ -224,10 +233,65 @@ export class ScoreResultCountManager {
   
   /**
    * Clear count for an item (forces reload on next observation)
+   * Use this when you want the next loadCountForItem to show a loading state
    */
   clearCount(itemId: string) {
+    const wasInCache = this.countCache.has(itemId);
+    const wasInPending = this.pendingCounts.has(itemId);
+    
     this.countCache.delete(itemId);
     this.pendingCounts.delete(itemId);
+    
+    // Notify callbacks immediately so UI shows loading state
+    this.notifyCallbacks();
+  }
+
+  /**
+   * Force refresh count for a specific item immediately
+   */
+  refreshItemCount(itemId: string) {
+    // Always refresh immediately, regardless of cache status
+    // This ensures selected items get priority updates
+    this.loadCountForItem(itemId, false);
+  }
+
+  private batchedItemIds = new Set<string>();
+  private batchTimeout: NodeJS.Timeout | null = null;
+
+  /**
+   * Batch refresh multiple items efficiently
+   */
+  private processBatchedRefresh() {
+    if (this.batchedItemIds.size === 0) return;
+    
+    // Process all batched items
+    const itemIds = Array.from(this.batchedItemIds);
+    this.batchedItemIds.clear();
+    
+    // Load counts for all items in parallel without showing loading states
+    // to prevent flickering during bulk refreshes
+    Promise.all(itemIds.map(itemId => this.loadCountForItem(itemId, false)));
+  }
+
+  /**
+   * Refresh all cached item counts with batching
+   */
+  refreshAllCounts() {
+    // Add all cached items to the batch
+    for (const itemId of this.countCache.keys()) {
+      this.batchedItemIds.add(itemId);
+    }
+    
+    // Clear any existing timeout
+    if (this.batchTimeout) {
+      clearTimeout(this.batchTimeout);
+    }
+    
+    // Process the batch after a short delay to collect more items
+    this.batchTimeout = setTimeout(() => {
+      this.processBatchedRefresh();
+      this.batchTimeout = null;
+    }, 500); // Reduced from 1000ms to 500ms for better responsiveness
   }
   
   /**
@@ -255,6 +319,10 @@ export class ScoreResultCountManager {
     if (this.observer) {
       this.observer.disconnect();
       this.observer = null;
+    }
+    if (this.batchTimeout) {
+      clearTimeout(this.batchTimeout);
+      this.batchTimeout = null;
     }
     this.countCache.clear();
     this.pendingCounts.clear();

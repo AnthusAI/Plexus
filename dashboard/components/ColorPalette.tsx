@@ -32,6 +32,8 @@ const ColorPaletteContent = () => {
     ['primary-foreground', 'primary-selected-foreground'],
     ['secondary', 'secondary-selected'],
     ['secondary-foreground', 'secondary-selected-foreground'],
+    ['selected', 'selected-selected'],
+    ['selected-foreground', 'selected-selected-foreground'],
     ['accent', 'accent-selected'],
     ['accent-foreground', 'accent-selected-foreground'],
     ['destructive', 'destructive-selected'],

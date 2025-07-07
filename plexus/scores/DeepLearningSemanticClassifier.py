@@ -503,9 +503,11 @@ class DeepLearningSemanticClassifier(Score):
 
     class Result(Score.Result):
         """
-        This Score has an additional output attribute, confidence, which is a float
+        DeepLearningSemanticClassifier result.
+        
+        Inherits explanation and confidence fields from Score.Result base class.
         """
-        confidence: float
+        pass
 
     def load_weights_and_label_map(self):
         if not hasattr(self, 'model') or self.model is None:

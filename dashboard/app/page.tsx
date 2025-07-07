@@ -53,17 +53,13 @@ export default function LandingPage() {
   return (
     <Layout>
       <StandardSection
-        headline="Run AI Agents Over Your Data With No Code"
+        headline="Distributed Machine Learning Operating System"
         headlinePosition="inline"
         variant="hero"
         useWordReveal={true}
         gradientWords={{
-          "AI": { from: "primary", to: "accent" },
-          "Agents": { from: "primary", to: "accent" },
-          "Your": { from: "secondary", to: "accent" },
-          "Data": { from: "secondary", to: "accent" },
-          "No": { from: "secondary", to: "accent" },
-          "Code": { from: "secondary", to: "accent" }
+          "Machine": { from: "primary", to: "accent" },
+          "Learning": { from: "primary", to: "accent" }
         }}
         leftContent={
           <>

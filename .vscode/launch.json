@@ -1,7 +1,7 @@
 {
     "version": "0.2.0",
     "python": {
-        "pythonPath": "/Users/ryan/miniconda3/envs/py39/bin/python"
+        "python": "/Users/ryan/miniconda3/envs/py311/bin/python"
     },
     "configurations": [
 
@@ -21,7 +21,7 @@
                 "100",
                 "--sampling-method",
                 "random",
-                // "--fresh",
+                "--fresh",
                 // "--visualize",
                 // "--use-langsmith-trace",
             ],

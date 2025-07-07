@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { Clock, Timer } from 'lucide-react'
 import { formatDistanceToNow, formatDuration, intervalToDuration, format, Duration } from 'date-fns'
 import { cn } from '@/lib/utils'
+import NumberFlowWrapper from './number-flow'
 
 export interface TimestampProps {
   /**
@@ -24,40 +25,78 @@ export interface TimestampProps {
    * Additional CSS classes
    */
   className?: string
+  /**
+   * Whether to render in skeleton mode
+   */
+  skeletonMode?: boolean
 }
 
-const formatElapsedTime = (start: Date, end: Date): string => {
+const formatElapsedTime = (start: Date, end: Date): { type: 'string', value: string } | { type: 'component', value: React.ReactNode } => {
   const duration = intervalToDuration({ start, end })
   
   // Calculate total minutes to determine if we should show seconds
   const totalMinutes = (duration.hours || 0) * 60 + (duration.minutes || 0)
   
-  // If duration is over 1 minute, don't show seconds
-  let formatOptions
+  // Build components with NumberFlow
+  const parts: React.ReactNode[] = []
+  
   if (totalMinutes >= 1) {
-    formatOptions = ['hours', 'minutes']
+    // Show hours and minutes
+    if (duration.hours && duration.hours > 0) {
+      parts.push(
+        <span key="hours">
+          <NumberFlowWrapper value={duration.hours} /> hour{duration.hours === 1 ? '' : 's'}
+        </span>
+      )
+    }
+    if (duration.minutes && duration.minutes > 0) {
+      parts.push(
+        <span key="minutes"> 
+          <NumberFlowWrapper value={duration.minutes} /> minute{duration.minutes === 1 ? '' : 's'}
+        </span>
+      )
+    }
   } else {
-    formatOptions = ['minutes', 'seconds']
+    // Show minutes and seconds
+    if (duration.minutes && duration.minutes > 0) {
+      parts.push(
+        <span key="minutes">
+          <NumberFlowWrapper value={duration.minutes} /> minute{duration.minutes === 1 ? '' : 's'}
+        </span>
+      )
+    }
+    if (duration.seconds && duration.seconds > 0) {
+      parts.push(
+        <span key="seconds"> 
+          <NumberFlowWrapper value={duration.seconds} /> second{duration.seconds === 1 ? '' : 's'}
+        </span>
+      )
+    }
   }
   
-  return formatDuration(duration, {
-    format: formatOptions as any,
-    zero: false,
-    delimiter: ' '
-  }).replace(/(\d+) (\w+)/g, '$1 $2') // Convert "1 hour 2 minutes" to "1 h 2 m"
+  // If no parts, it means the duration is less than a second, so we show 0 seconds.
+  if (parts.length === 0) {
+    return {
+      type: 'component',
+      value: (
+        <span key="seconds">
+          <NumberFlowWrapper value={0} /> seconds
+        </span>
+      ),
+    }
+  }
+  
+  return { 
+    type: 'component', 
+    value: <span>{parts}</span>
+  }
 }
 
-const areDatesMeaningfullyDifferent = (start: Date, end: Date): boolean => {
-  // Return false if times are the same or within 1 second of each other
-  const diffInMs = Math.abs(end.getTime() - start.getTime())
-  return diffInMs > 1000 // More than 1 second difference
-}
-
-const formatRelativeTime = (date: Date): string => {
+const formatRelativeTime = (date: Date): { type: 'string', value: string } | { type: 'component', value: React.ReactNode } => {
   try {
     // Check if date is valid
     if (isNaN(date.getTime())) {
-      return '';
+      return { type: 'string', value: '' };
     }
     
     const now = new Date();
@@ -65,51 +104,93 @@ const formatRelativeTime = (date: Date): string => {
     
     // Handle future dates
     if (diffInSeconds < 0) {
-      return 'in the future';
+      return { type: 'string', value: 'in the future' };
     }
     
     // Less than 1 minute
     if (diffInSeconds < 60) {
-      return '<1 minute ago';
+      return { type: 'string', value: '<1 minute ago' };
     }
     
     // Minutes
     const diffInMinutes = Math.floor(diffInSeconds / 60);
     if (diffInMinutes < 60) {
-      return `${diffInMinutes} minute${diffInMinutes === 1 ? '' : 's'} ago`;
+      return { 
+        type: 'component', 
+        value: (
+          <span>
+            <NumberFlowWrapper value={diffInMinutes} /> minute{diffInMinutes === 1 ? '' : 's'} ago
+          </span>
+        )
+      };
     }
     
     // Hours
     const diffInHours = Math.floor(diffInMinutes / 60);
     if (diffInHours < 24) {
-      return `${diffInHours} hour${diffInHours === 1 ? '' : 's'} ago`;
+      return { 
+        type: 'component', 
+        value: (
+          <span>
+            <NumberFlowWrapper value={diffInHours} /> hour{diffInHours === 1 ? '' : 's'} ago
+          </span>
+        )
+      };
     }
     
     // Days
     const diffInDays = Math.floor(diffInHours / 24);
     if (diffInDays < 7) {
-      return `${diffInDays} day${diffInDays === 1 ? '' : 's'} ago`;
+      return { 
+        type: 'component', 
+        value: (
+          <span>
+            <NumberFlowWrapper value={diffInDays} /> day{diffInDays === 1 ? '' : 's'} ago
+          </span>
+        )
+      };
     }
     
     // Weeks
     const diffInWeeks = Math.floor(diffInDays / 7);
     if (diffInWeeks < 4) {
-      return `${diffInWeeks} week${diffInWeeks === 1 ? '' : 's'} ago`;
+      return { 
+        type: 'component', 
+        value: (
+          <span>
+            <NumberFlowWrapper value={diffInWeeks} /> week{diffInWeeks === 1 ? '' : 's'} ago
+          </span>
+        )
+      };
     }
     
     // Months
     const diffInMonths = Math.floor(diffInDays / 30);
     if (diffInMonths < 12) {
-      return `${diffInMonths} month${diffInMonths === 1 ? '' : 's'} ago`;
+      return { 
+        type: 'component', 
+        value: (
+          <span>
+            <NumberFlowWrapper value={diffInMonths} /> month{diffInMonths === 1 ? '' : 's'} ago
+          </span>
+        )
+      };
     }
     
     // Years
     const diffInYears = Math.floor(diffInDays / 365);
-    return `${diffInYears} year${diffInYears === 1 ? '' : 's'} ago`;
+    return { 
+      type: 'component', 
+      value: (
+        <span>
+          <NumberFlowWrapper value={diffInYears} /> year{diffInYears === 1 ? '' : 's'} ago
+        </span>
+      )
+    };
     
   } catch (e) {
     console.warn('Invalid date format:', date);
-    return '';
+    return { type: 'string', value: '' };
   }
 }
 
@@ -130,11 +211,25 @@ export function Timestamp({
   completionTime, 
   variant = 'relative',
   showIcon = true,
-  className 
+  className,
+  skeletonMode = false
 }: TimestampProps) {
-  const [displayText, setDisplayText] = useState('')
+  const [displayContent, setDisplayContent] = useState<React.ReactNode>('')
   const [showAbsolute, setShowAbsolute] = useState(false)
   const timeDate = typeof time === 'string' ? new Date(time) : time
+
+  // Skeleton mode rendering
+  if (skeletonMode) {
+    return (
+      <div className={cn(
+        "flex items-start gap-1 text-sm text-muted-foreground min-w-0", 
+        className
+      )}>
+        {showIcon && <div className="h-4 w-4 bg-muted rounded animate-pulse flex-shrink-0" />}
+        <div className="h-3 w-16 bg-muted rounded animate-pulse" />
+      </div>
+    )
+  }
 
   useEffect(() => {
     const updateTime = () => {
@@ -143,14 +238,15 @@ export function Timestamp({
           ? (typeof completionTime === 'string' ? new Date(completionTime) : completionTime)
           : new Date()
         
-        // Only show elapsed time if the dates are meaningfully different
-        if (areDatesMeaningfullyDifferent(timeDate, endTime)) {
-          setDisplayText(formatElapsedTime(timeDate, endTime))
-        } else {
-          setDisplayText('') // Return empty string if times are effectively the same
-        }
+        const result = formatElapsedTime(timeDate, endTime)
+        setDisplayContent(result.value)
       } else {
-        setDisplayText(showAbsolute ? formatAbsoluteTime(timeDate) : formatRelativeTime(timeDate))
+        if (showAbsolute) {
+          setDisplayContent(formatAbsoluteTime(timeDate))
+        } else {
+          const result = formatRelativeTime(timeDate)
+          setDisplayContent(result.type === 'component' ? result.value : result.value)
+        }
       }
     }
 
@@ -172,15 +268,15 @@ export function Timestamp({
     }
   }
 
-  // Don't render anything if there's no text to display (e.g., elapsed time with same timestamps)
-  if (!displayText) {
+  // Don't render anything if there's no content to display (e.g., elapsed time with same timestamps)
+  if (!displayContent) {
     return null
   }
 
   return (
     <div 
       className={cn(
-        "flex items-center gap-1 text-sm text-muted-foreground", 
+        "flex items-start gap-1 text-sm text-muted-foreground min-w-0", 
         variant === 'relative' && "cursor-pointer hover:text-foreground",
         className
       )}
@@ -196,11 +292,11 @@ export function Timestamp({
       title={variant === 'relative' ? (showAbsolute ? 'Click to show relative time' : 'Click to show exact time') : undefined}
     >
       {showIcon && (variant === 'elapsed' ? (
-        <Timer className="h-4 w-4" />
+        <Timer className="h-4 w-4 flex-shrink-0" />
       ) : (
-        <Clock className="h-4 w-4" />
+        <Clock className="h-4 w-4 flex-shrink-0" />
       ))}
-      <span>{displayText}</span>
+      <span className="truncate">{displayContent}</span>
     </div>
   )
 } 

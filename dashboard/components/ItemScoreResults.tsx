@@ -1,19 +1,26 @@
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, ExternalLink, ChevronDown, ChevronUp, ListTodo, IdCard } from 'lucide-react';
+import { Loader2, ExternalLink, ChevronDown, ChevronUp, ListChecks, IdCard, Box, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { motion } from 'framer-motion';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkBreaks from 'remark-breaks';
+
 import { Timestamp } from '@/components/ui/timestamp';
 import Link from 'next/link';
 import { GroupedScoreResults, ScoreResultWithDetails } from '@/hooks/useItemScoreResults';
 import { IdentifierDisplay } from '@/components/ui/identifier-display';
+import NumberFlowWrapper from '@/components/ui/number-flow';
 
 interface ItemScoreResultsProps {
   groupedResults: GroupedScoreResults;
   isLoading: boolean;
   error: string | null;
   itemId: string;
+  onScoreResultSelect?: (scoreResult: ScoreResultWithDetails) => void;
+  selectedScoreResultId?: string;
 }
 
 // Skeleton components for loading state
@@ -51,7 +58,11 @@ const ScoreResultsSkeletonLoader = () => (
   </div>
 );
 
-const ScoreResultCard: React.FC<{ result: ScoreResultWithDetails }> = ({ result }) => {
+const ScoreResultCard: React.FC<{ 
+  result: ScoreResultWithDetails;
+  onClick?: () => void;
+  isSelected?: boolean;
+}> = ({ result, onClick, isSelected }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   
   // Check if explanation is long enough to need expansion
@@ -59,27 +70,63 @@ const ScoreResultCard: React.FC<{ result: ScoreResultWithDetails }> = ({ result 
   const displayExplanation = needsExpansion && !isExpanded 
     ? result.explanation!.substring(0, 200) + '...' 
     : result.explanation;
+
+  // Extract error information from the score result
+  const errorInfo = React.useMemo(() => {
+    // Only check the code field for errors - don't look at text content
+    const hasError = result.code && /^[4-5]\d{2}$/.test(result.code);
+
+    if (!hasError) {
+      return { hasError: false, errorCode: null, errorMessage: null };
+    }
+
+    return { hasError: true, errorCode: result.code, errorMessage: null };
+  }, [result.code]);
+
+  const hasError = errorInfo.hasError;
+  
   return (
-    <div className="mb-3 bg-background rounded-lg p-4 relative overflow-visible">
-      <div className="flex items-start justify-between">
+    <motion.div
+      initial={{ opacity: result.isNew ? 0 : 1 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.5, ease: "easeOut" }}
+      className={`mb-3 rounded-lg p-4 relative overflow-visible cursor-pointer transition-colors ${
+        result.isNew ? 'new-score-result-glow' : ''
+      } ${
+        isSelected ? 'bg-card-selected selected-border-rounded' : 'bg-background hover:bg-accent'
+      } ${
+        hasError ? 'error-border-rounded' : ''
+      }`}
+      onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onClick?.()
+        }
+      }}
+    >
+      <div className="flex items-start justify-between relative z-10">
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-1">
             <h4 className="text-sm font-semibold">{result.score?.name || 'Unknown Score'}</h4>
           </div>
           <div className="text-xs text-muted-foreground mb-2">
-            <Timestamp time={result.updatedAt || result.createdAt || new Date().toISOString()} variant="relative" />
-            {result.createdAt && result.updatedAt && (
-              <div className="mt-0.5">
-                <Timestamp time={result.createdAt} completionTime={result.updatedAt} variant="elapsed" />
-              </div>
-            )}
             {result.score?.externalId && (
-              <div className="mt-1">
+              <div className="mb-1">
                 <IdentifierDisplay 
                   externalId={result.score.externalId}
-                  iconSize="sm"
+                  iconSize="md"
                   textSize="xs"
+                  displayMode="full"
                 />
+              </div>
+            )}
+            <Timestamp time={result.updatedAt || result.createdAt || new Date().toISOString()} variant="relative" className="text-xs" />
+            {result.createdAt && result.updatedAt && (
+              <div className="mt-0.5">
+                <Timestamp time={result.createdAt} completionTime={result.updatedAt} variant="elapsed" className="text-xs" />
               </div>
             )}
           </div>
@@ -95,10 +142,42 @@ const ScoreResultCard: React.FC<{ result: ScoreResultWithDetails }> = ({ result 
           )}
         </div>
       </div>
+      {hasError && (
+        <div className="mt-3 p-3 rounded-md bg-card border border-destructive">
+          <div className="flex items-center gap-2 mb-1">
+            <AlertTriangle className="h-4 w-4 text-attention" />
+            <span className="text-sm font-medium text-attention">Error {errorInfo.errorCode}</span>
+          </div>
+          {errorInfo.errorMessage && (
+            <div className="text-sm text-attention">
+              {errorInfo.errorMessage}
+            </div>
+          )}
+        </div>
+      )}
       {result.explanation && (
-        <div className="mt-3 text-sm text-muted-foreground">
-          <strong>Explanation:</strong>
-          <p className="mt-1">{displayExplanation}</p>
+        <div className="mt-3 text-sm text-muted-foreground relative z-10">
+          <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-muted-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:bg-muted prose-pre:text-foreground">
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm, remarkBreaks]}
+              components={{
+                // Customize components for better styling
+                p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                ul: ({ children }) => <ul className="mb-2 ml-4 list-disc">{children}</ul>,
+                ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal">{children}</ol>,
+                li: ({ children }) => <li className="mb-1">{children}</li>,
+                strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+                em: ({ children }) => <em className="italic">{children}</em>,
+                code: ({ children }) => <code className="bg-muted px-1 py-0.5 rounded text-xs font-mono">{children}</code>,
+                pre: ({ children }) => <pre className="bg-muted p-2 rounded overflow-x-auto text-xs">{children}</pre>,
+                h1: ({ children }) => <h1 className="text-base font-semibold mb-2 text-foreground">{children}</h1>,
+                h2: ({ children }) => <h2 className="text-sm font-semibold mb-2 text-foreground">{children}</h2>,
+                h3: ({ children }) => <h3 className="text-sm font-medium mb-1 text-foreground">{children}</h3>,
+              }}
+            >
+              {displayExplanation}
+            </ReactMarkdown>
+          </div>
           {needsExpansion && (
             <div className="flex justify-center">
               <Button
@@ -117,7 +196,7 @@ const ScoreResultCard: React.FC<{ result: ScoreResultWithDetails }> = ({ result 
           )}
         </div>
       )}
-    </div>
+    </motion.div>
   );
 };
 
@@ -125,7 +204,9 @@ const ItemScoreResults: React.FC<ItemScoreResultsProps> = ({
   groupedResults,
   isLoading,
   error,
-  itemId
+  itemId,
+  onScoreResultSelect,
+  selectedScoreResultId
 }) => {
   if (isLoading) {
     return <ScoreResultsSkeletonLoader />;
@@ -159,54 +240,67 @@ const ItemScoreResults: React.FC<ItemScoreResultsProps> = ({
   const totalResults = scorecardIds.reduce((sum, id) => sum + groupedResults[id].scores.length, 0);
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold">Score Results</h3>
-        <span className="text-sm text-muted-foreground">
-          {totalResults} result{totalResults !== 1 ? 's' : ''} across {scorecardIds.length} scorecard{scorecardIds.length !== 1 ? 's' : ''}
-        </span>
+    <div className="space-y-1">
+      <div className="flex items-end justify-between">
+        <div className="flex items-center gap-1">
+          <Box className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+          <h3 className="text-xl text-muted-foreground font-semibold">Score Results</h3>
+        </div>
+        {scorecardIds.length > 1 && (
+          <div className="flex items-center gap-1 text-sm">
+            <Box className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+            <span>
+              <span className="text-foreground font-medium"><NumberFlowWrapper value={totalResults} /></span> <span className="text-muted-foreground">score result{totalResults !== 1 ? 's' : ''} across</span> <span className="text-foreground font-medium"><NumberFlowWrapper value={scorecardIds.length} /></span> <span className="text-muted-foreground">scorecard{scorecardIds.length !== 1 ? 's' : ''}</span>
+            </span>
+          </div>
+        )}
       </div>
 
-      <Accordion type="multiple" defaultValue={scorecardIds} className="w-full">
+      <div className="w-full space-y-4">
         {scorecardIds.map((scorecardId) => {
           const group = groupedResults[scorecardId];
           return (
-            <AccordionItem key={scorecardId} value={scorecardId}>
-              <AccordionTrigger className="hover:no-underline">
-                <div className="flex items-center justify-between w-full pr-2">
+            <div key={scorecardId}>
+              <div className="mb-2">
+                <div className="flex items-end justify-between">
                   <div className="flex flex-col gap-1">
-                    <div className="flex items-center gap-2">
-                      <ListTodo className="h-4 w-4" />
-                      <span className="font-medium">{group.scorecardName}</span>
+                    <div className="flex items-center gap-1">
+                      <ListChecks className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                      <span className="font-medium text-foreground">{group.scorecardName}</span>
                     </div>
                     {group.scorecardExternalId && (
                       <div>
                         <IdentifierDisplay 
                           externalId={group.scorecardExternalId}
-                          iconSize="sm"
+                          iconSize="md"
                           textSize="xs"
+                          displayMode="full"
                         />
                       </div>
                     )}
                   </div>
-                  <span className="text-sm text-muted-foreground">
-                    {group.scores.length} score{group.scores.length !== 1 ? 's' : ''}
-                  </span>
-                </div>
-              </AccordionTrigger>
-              <AccordionContent>
-                <div className="pt-2">
-                  <div className="space-y-3">
-                    {group.scores.map((result) => (
-                      <ScoreResultCard key={result.id} result={result} />
-                    ))}
+                  <div className="flex items-center gap-1 text-sm">
+                    <Box className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                    <span>
+                      <span className="text-foreground font-medium"><NumberFlowWrapper value={group.scores.length} /></span> <span className="text-muted-foreground">score result{group.scores.length !== 1 ? 's' : ''}</span>
+                    </span>
                   </div>
                 </div>
-              </AccordionContent>
-            </AccordionItem>
+              </div>
+              <div className="space-y-3">
+                {group.scores.map((result) => (
+                  <ScoreResultCard 
+                    key={result.id} 
+                    result={result}
+                    onClick={() => onScoreResultSelect?.(result)}
+                    isSelected={selectedScoreResultId === result.id}
+                  />
+                ))}
+              </div>
+            </div>
           );
         })}
-      </Accordion>
+      </div>
     </div>
   );
 };

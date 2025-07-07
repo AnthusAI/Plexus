@@ -3,6 +3,31 @@ from unittest.mock import Mock, patch, MagicMock
 from plexus.Scorecard import Scorecard
 import pytest
 
+def create_mock_score_instance():
+    """Helper function to create a properly mocked score instance"""
+    mock_score_instance = MagicMock()
+    
+    # Set up the async predict method
+    async def mock_predict(*args, **kwargs):
+        return Mock(value='Pass')
+    mock_score_instance.predict = mock_predict
+    
+    # Set up the get_accumulated_costs method
+    def mock_get_accumulated_costs():
+        from decimal import Decimal
+        return {
+            'prompt_tokens': 100,
+            'completion_tokens': 50,
+            'cached_tokens': 0,
+            'llm_calls': 1,
+            'input_cost': Decimal('0.10'),
+            'output_cost': Decimal('0.05'),
+            'total_cost': Decimal('0.15')
+        }
+    mock_score_instance.get_accumulated_costs = mock_get_accumulated_costs
+    
+    return mock_score_instance
+
 # Remove unittest.TestCase since we're using pure pytest style
 class TestScorecard:
 
@@ -10,6 +35,7 @@ class TestScorecard:
         # Create a mock scorecard configuration
         self.mock_config = {
             'name': 'TestScorecard',
+            'id': 'test-scorecard-123',
             'scores': [
                 {'name': 'Score1', 'id': 1},
                 {'name': 'Score2', 'id': 2, 'depends_on': ['Score1']},
@@ -122,6 +148,7 @@ class TestScorecard:
         # Create a simple config without dependencies for this test
         simple_config = {
             'name': 'TestScorecard',
+            'id': 'test-scorecard-123',
             'scores': [
                 {'name': 'SimpleScore1', 'id': 1},
                 {'name': 'SimpleScore2', 'id': 2},
@@ -154,6 +181,21 @@ class TestScorecard:
             return Mock(value='Pass')
         
         mock_score_instance.predict = mock_predict
+
+        # Set up the get_accumulated_costs method
+        def mock_get_accumulated_costs():
+            from decimal import Decimal
+            return {
+                'prompt_tokens': 100,
+                'completion_tokens': 50,
+                'cached_tokens': 0,
+                'llm_calls': 1,
+                'input_cost': Decimal('0.10'),
+                'output_cost': Decimal('0.05'),
+                'total_cost': Decimal('0.15')
+            }
+        
+        mock_score_instance.get_accumulated_costs = mock_get_accumulated_costs
 
         # Set up the async create method
         async def mock_create(**kwargs):
@@ -196,6 +238,21 @@ class TestScorecard:
             return mock_results.get(score_name, Mock(value='Pass'))
         
         mock_score_instance.predict = mock_predict
+
+        # Set up the get_accumulated_costs method
+        def mock_get_accumulated_costs():
+            from decimal import Decimal
+            return {
+                'prompt_tokens': 100,
+                'completion_tokens': 50,
+                'cached_tokens': 0,
+                'llm_calls': 1,
+                'input_cost': Decimal('0.10'),
+                'output_cost': Decimal('0.05'),
+                'total_cost': Decimal('0.15')
+            }
+        
+        mock_score_instance.get_accumulated_costs = mock_get_accumulated_costs
 
         # Set up the async create method
         async def mock_create(**kwargs):
@@ -243,6 +300,21 @@ class TestScorecard:
         
         mock_score_instance.predict = mock_predict
 
+        # Set up the get_accumulated_costs method
+        def mock_get_accumulated_costs():
+            from decimal import Decimal
+            return {
+                'prompt_tokens': 100,
+                'completion_tokens': 50,
+                'cached_tokens': 0,
+                'llm_calls': 1,
+                'input_cost': Decimal('0.10'),
+                'output_cost': Decimal('0.05'),
+                'total_cost': Decimal('0.15')
+            }
+        
+        mock_score_instance.get_accumulated_costs = mock_get_accumulated_costs
+
         # Set up the async create method
         async def mock_create(**kwargs):
             mock_score_instance.score_name = kwargs.get('score_name')
@@ -275,6 +347,7 @@ class TestScorecard:
         # Create a simple config without dependencies for this test
         simple_config = {
             'name': 'TestScorecard',
+            'id': 'test-scorecard-123',
             'scores': [
                 {'name': 'SingleResultScore', 'id': 1}
             ]
@@ -306,6 +379,21 @@ class TestScorecard:
         
         mock_score_instance.predict = mock_predict
 
+        # Set up the get_accumulated_costs method
+        def mock_get_accumulated_costs():
+            from decimal import Decimal
+            return {
+                'prompt_tokens': 100,
+                'completion_tokens': 50,
+                'cached_tokens': 0,
+                'llm_calls': 1,
+                'input_cost': Decimal('0.10'),
+                'output_cost': Decimal('0.05'),
+                'total_cost': Decimal('0.15')
+            }
+        
+        mock_score_instance.get_accumulated_costs = mock_get_accumulated_costs
+
         # Set up the async create method
         async def mock_create(**kwargs):
             return mock_score_instance
@@ -335,6 +423,7 @@ class TestScorecard:
         # Create a simple config without dependencies for this test
         simple_config = {
             'name': 'TestScorecard',
+            'id': 'test-scorecard-123',
             'scores': [
                 {'name': 'ListResultScore', 'id': 1}
             ]
@@ -365,6 +454,21 @@ class TestScorecard:
             return [Mock(value='Pass')]
         
         mock_score_instance.predict = mock_predict
+
+        # Set up the get_accumulated_costs method
+        def mock_get_accumulated_costs():
+            from decimal import Decimal
+            return {
+                'prompt_tokens': 100,
+                'completion_tokens': 50,
+                'cached_tokens': 0,
+                'llm_calls': 1,
+                'input_cost': Decimal('0.10'),
+                'output_cost': Decimal('0.05'),
+                'total_cost': Decimal('0.15')
+            }
+        
+        mock_score_instance.get_accumulated_costs = mock_get_accumulated_costs
 
         # Set up the async create method
         async def mock_create(**kwargs):

@@ -246,7 +246,7 @@ export function ReportConfigurationEdit({ id }: { id: string }) {
   return (
     <div className="flex flex-col h-full">
       {/* Header Area */}
-      <div className="flex-none p-1.5">
+      <div className="flex-none p-3">
         <div className="flex justify-between items-start">
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="icon" onClick={handleBack}>
@@ -263,7 +263,7 @@ export function ReportConfigurationEdit({ id }: { id: string }) {
       </div>
 
       {/* Main Content Area - Now uses flex-1 to fill remaining space */}
-      <div className="flex-1 flex flex-col p-1.5 min-h-0">
+      <div className="flex-1 flex flex-col p-3 min-h-0">
         {/* Form Fields - Fixed height section */}
         <div className="flex-none space-y-2 mb-4">
           <Input

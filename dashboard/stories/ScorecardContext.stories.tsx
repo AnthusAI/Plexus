@@ -38,3 +38,12 @@ Loading.args = {
   setSelectedScore: () => {},
   useMockData: false,
 }
+
+export const SkeletonMode = Template.bind({})
+SkeletonMode.args = {
+  selectedScorecard: null,
+  setSelectedScorecard: () => {},
+  selectedScore: null,
+  setSelectedScore: () => {},
+  skeletonMode: true,
+}

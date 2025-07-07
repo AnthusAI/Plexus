@@ -7,6 +7,7 @@ import ReactMarkdown from 'react-markdown'
 import { BlockRenderer } from './blocks/BlockRegistry'
 import { getClient } from '@/utils/amplify-client'
 import BlockDetails from './reports/BlockDetails'
+import { parseOutputString } from '@/lib/utils'
 
 // Define the data structure for report tasks
 export interface ReportTaskData {
@@ -36,6 +37,19 @@ export interface ReportTaskData {
     name?: string;
     position: number;
     attachedFiles?: string[];
+    dataSet?: {
+      id: string;
+      name?: string;
+      description?: string;
+      dataSourceVersion?: {
+        id: string;
+        dataSource?: {
+          id: string;
+          name: string;
+          key?: string;
+        };
+      };
+    } | null;
   }>;
 }
 
@@ -54,6 +68,19 @@ interface ReportBlock {
   log?: string | null
   config?: Record<string, any>  // Add config field
   attachedFiles?: string[]  // Updated to string array
+  dataSet?: {
+    id: string;
+    name?: string;
+    description?: string;
+    dataSourceVersion?: {
+      id: string;
+      dataSource?: {
+        id: string;
+        name: string;
+        key?: string;
+      };
+    };
+  } | null;
 }
 
 interface ReportBlockDisplayProps {
@@ -77,23 +104,8 @@ const ReportTask: React.FC<ReportTaskProps> = ({
   const [isLoadingBlocks, setIsLoadingBlocks] = useState(false)
   const [blockError, setBlockError] = useState<string | null>(null)
 
-  // Add a function to parse output if it's a string
-  const parseOutput = (output: any): Record<string, any> => {
-    if (typeof output === 'string') {
-      try {
-        return JSON.parse(output);
-      } catch (err) {
-        console.error('Failed to parse output string:', err);
-        return { error: 'Failed to parse output', raw: output };
-      }
-    }
-    
-    if (output && typeof output === 'object') {
-      return output;
-    }
-    
-    return {};
-  };
+  // Use the shared parsing utility function
+  const parseOutput = parseOutputString;
 
   // Function to fetch report blocks - needed for detail view in dashboard
   const fetchReportBlocks = async (reportId: string) => {
@@ -124,7 +136,7 @@ const ReportTask: React.FC<ReportTaskProps> = ({
       if ('data' in response && response.data?.getReport?.reportBlocks?.items) {
         const blocks = response.data.getReport.reportBlocks.items.map((block: any) => ({
           ...block,
-          output: JSON.parse(block.output),
+          output: parseOutput(block.output),
           config: {},  // Add empty config object by default
           // Ensure attachedFiles is always an array
           attachedFiles: Array.isArray(block.attachedFiles) ? block.attachedFiles : []
@@ -174,7 +186,8 @@ const ReportTask: React.FC<ReportTaskProps> = ({
           output: parsedOutput,
           log: blockProp.log || null,
           config: blockProp.config || parsedOutput,
-          attachedFiles: Array.isArray(blockProp.attachedFiles) ? blockProp.attachedFiles : []
+          attachedFiles: Array.isArray(blockProp.attachedFiles) ? blockProp.attachedFiles : [],
+          dataSet: blockProp.dataSet || null
         };
         
         console.log('🔄 Transformed block:', {
@@ -532,6 +545,12 @@ const ReportTask: React.FC<ReportTaskProps> = ({
         <div className={`space-y-1.5 p-0 flex flex-col items-start w-full max-w-full ${variant === 'detail' ? 'px-1' : ''}`}>
           <div className="flex justify-between items-start w-full max-w-full gap-3 overflow-hidden">
             <div className="flex flex-col pb-1 leading-none min-w-0 flex-1 overflow-hidden">
+              {variant === 'detail' && (
+                <div className="flex items-center gap-2 mb-2">
+                  <FileBarChart className="h-5 w-5 text-muted-foreground" />
+                  <span className="text-lg font-semibold text-muted-foreground">Report</span>
+                </div>
+              )}
               {props.task.name && (
                 <div className="font-semibold text-sm truncate">{props.task.name}</div>
               )}
@@ -559,21 +578,11 @@ const ReportTask: React.FC<ReportTaskProps> = ({
             </div>
             <div className="flex flex-col items-end flex-shrink-0">
               {variant === 'grid' ? (
-                <div className="flex items-start gap-2">
-                  <div className="text-sm text-muted-foreground text-right">
-                    {(() => {
-                      const [firstWord, ...restWords] = props.task.type.split(/\s+/);
-                      return (
-                        <>
-                          {firstWord}<br />
-                          {restWords.join(' ')}
-                        </>
-                      );
-                    })()}
-                  </div>
-                  <div className="text-muted-foreground mt-[0.15rem]">
+                <div className="flex flex-col items-center gap-1">
+                  <div className="text-muted-foreground">
                     <FileBarChart className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
                   </div>
+                  <div className="text-xs text-muted-foreground text-center">Report</div>
                 </div>
               ) : (
                 <>
@@ -611,8 +620,9 @@ const ReportTask: React.FC<ReportTaskProps> = ({
       )}
       renderContent={(props) => (
         <TaskContent {...props} hideTaskStatus={true}>
-          {variant === 'detail' && task.data?.output && (
-            <div className="bg-background rounded-lg p-3 mb-3 overflow-y-auto flex-1 min-h-0">
+          <div className={variant === 'detail' ? 'px-3 pb-3 flex flex-col h-full' : ''}>
+            {variant === 'detail' && task.data?.output && (
+            <div className="bg-background rounded-lg p-3 overflow-y-auto flex-1 min-h-0">
               <div className="prose dark:prose-invert max-w-none">
                 <ReactMarkdown
                   components={{
@@ -657,6 +667,7 @@ const ReportTask: React.FC<ReportTaskProps> = ({
               No report content available.
             </div>
           )}
+          </div>
         </TaskContent>
       )}
     />

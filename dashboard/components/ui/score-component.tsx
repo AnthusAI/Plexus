@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { MoreHorizontal, X, Square, Columns2, FileStack, ChevronDown, ChevronUp, Award, FileCode, Minimize, Maximize, ArrowDownWideNarrow, Expand, Shrink, TestTube, FlaskConical, FlaskRound, TestTubes } from 'lucide-react'
+import { MoreHorizontal, X, Square, Columns2, FileStack, ChevronDown, ChevronUp, Award, FileCode, Minimize, Maximize, ArrowDownWideNarrow, Expand, Shrink, TestTube, FlaskConical, FlaskRound, TestTubes, ListCheck } from 'lucide-react'
 import { CardButton } from '@/components/CardButton'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Popover from '@radix-ui/react-popover'
@@ -22,8 +22,12 @@ import * as monaco from 'monaco-editor'
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import type { editor } from 'monaco-editor'
-import { defineCustomMonacoThemes, applyMonacoTheme, setupMonacoThemeWatcher, getCommonMonacoOptions } from '@/lib/monaco-theme'
+import { defineCustomMonacoThemes, applyMonacoTheme, setupMonacoThemeWatcher, getCommonMonacoOptions, configureYamlLanguage, validateYamlIndentation } from '@/lib/monaco-theme'
+import { useYamlLinter, useLintMessageHandler } from '@/hooks/use-yaml-linter'
+import YamlLinterPanel from '@/components/ui/yaml-linter-panel'
 import { TestScoreDialog } from '@/components/scorecards/test-score-dialog'
+import { createTask } from '@/utils/data-operations'
+import { useAccount } from '@/app/contexts/AccountContext'
 
 const client = generateClient();
 
@@ -106,6 +110,8 @@ interface ScoreComponentProps extends React.HTMLAttributes<HTMLDivElement> {
     id: string
     displayValue: string
   }>
+  scorecardName?: string
+  onTaskCreated?: (task: any) => void
 }
 
 interface DetailContentProps {
@@ -131,6 +137,9 @@ interface DetailContentProps {
     id: string
     displayValue: string
   }>
+  selectedAccount?: { id: string } | null
+  scorecardName?: string
+  onTaskCreated?: (task: any) => void
 }
 
 const GridContent = React.memo(({ 
@@ -154,8 +163,11 @@ const GridContent = React.memo(({
         <div className="text-sm">{displayData.description}</div>
       </div>
       {score.icon && (
-        <div className="text-muted-foreground">
-          {score.icon}
+        <div className="flex flex-col items-center gap-1">
+          <div className="text-muted-foreground">
+            {score.icon}
+          </div>
+          <div className="text-xs text-muted-foreground text-center">Score</div>
         </div>
       )}
     </div>
@@ -243,6 +255,9 @@ const DetailContent = React.memo(({
   resetEditingCounter,
   forceExpandHistory,
   exampleItems = [],
+  selectedAccount,
+  scorecardName,
+  onTaskCreated,
 }: DetailContentProps) => {
   // Get the current version's configuration
   const currentVersion = versions?.find(v => 
@@ -261,6 +276,14 @@ const DetailContent = React.memo(({
   
   // Track if we're currently editing to prevent useEffect from overriding changes
   const [isEditing, setIsEditing] = React.useState(false)
+  
+  // YAML Linting integration
+  const { lintResult, setupMonacoIntegration, jumpToLine } = useYamlLinter({
+    context: 'score',
+    debounceMs: 500,
+    showMonacoMarkers: true
+  })
+  const handleLintMessageClick = useLintMessageHandler(jumpToLine)
   
   // Let ScoreVersionHistory component handle its own featured filtering with smart defaults
   
@@ -444,25 +467,136 @@ const DetailContent = React.memo(({
     setIsTestDialogOpen(true);
   };
 
-  const handleTestScoreWithItem = (itemId: string) => {
+  const handleTestScoreWithItem = async (itemId: string) => {
     console.log('Testing score with item:', { scoreId: score.id, scoreName: score.name, itemId });
-    // TODO: Implement actual test logic
-    toast.success(`Testing score "${score.name}" with selected item`);
+    console.log('Account context:', { selectedAccount });
+    
+    try {
+      const command = `predict --scorecard "${scorecardName || 'Unknown'}" --score "${score.name}" --item ${itemId}`;
+      const taskInput = {
+        type: 'Score Test',
+        target: 'prediction',
+        command: command,
+        accountId: selectedAccount?.id || 'call-criteria',
+        dispatchStatus: 'PENDING',
+        status: 'PENDING'
+      };
+      
+      console.log('Creating task with input:', taskInput);
+      
+      const task = await createTask(taskInput);
+      
+      console.log('Task creation result:', task);
+      
+      if (task) {
+        toast.success("Score test dispatched", {
+          description: <span className="font-mono text-sm truncate block">{command}</span>
+        });
+        
+        // Notify parent component about task creation
+        onTaskCreated?.(task);
+      } else {
+        console.error("createTask returned null or undefined");
+        toast.error("Failed to dispatch score test - no task returned");
+      }
+    } catch (error) {
+      console.error("Error dispatching score test:", error);
+      toast.error(`Error dispatching score test: ${error}`);
+    }
   };
 
   const closeTestScoreDialog = () => {
     setIsTestDialogOpen(false);
   };
 
+  const handleEvaluateAccuracy = async () => {
+    try {
+      const command = `evaluate accuracy --score-id ${score.id}`;
+      const task = await createTask({
+        type: 'Accuracy Evaluation',
+        target: 'evaluation',
+        command: command,
+        accountId: selectedAccount?.id || 'call-criteria',
+        dispatchStatus: 'PENDING',
+        status: 'PENDING'
+      });
+      
+      if (task) {
+        toast.success("Accuracy evaluation dispatched", {
+          description: <span className="font-mono text-sm truncate block">{command}</span>
+        });
+      } else {
+        toast.error("Failed to dispatch accuracy evaluation");
+      }
+    } catch (error) {
+      console.error("Error dispatching accuracy evaluation:", error);
+      toast.error("Error dispatching accuracy evaluation");
+    }
+  };
+
+  const handleEvaluateConsistency = async () => {
+    try {
+      const command = `evaluate consistency --score-id ${score.id}`;
+      const task = await createTask({
+        type: 'Consistency Evaluation',
+        target: 'evaluation',
+        command: command,
+        accountId: selectedAccount?.id || 'call-criteria',
+        dispatchStatus: 'PENDING',
+        status: 'PENDING'
+      });
+      
+      if (task) {
+        toast.success("Consistency evaluation dispatched", {
+          description: <span className="font-mono text-sm truncate block">{command}</span>
+        });
+      } else {
+        toast.error("Failed to dispatch consistency evaluation");
+      }
+    } catch (error) {
+      console.error("Error dispatching consistency evaluation:", error);
+      toast.error("Error dispatching consistency evaluation");
+    }
+  };
+
+  const handleEvaluateAlignment = async () => {
+    try {
+      const command = `evaluate alignment --score-id ${score.id}`;
+      const task = await createTask({
+        type: 'Alignment Evaluation',
+        target: 'evaluation',
+        command: command,
+        accountId: selectedAccount?.id || 'call-criteria',
+        dispatchStatus: 'PENDING',
+        status: 'PENDING'
+      });
+      
+      if (task) {
+        toast.success("Alignment evaluation dispatched", {
+          description: <span className="font-mono text-sm truncate block">{command}</span>
+        });
+      } else {
+        toast.error("Failed to dispatch alignment evaluation");
+      }
+    } catch (error) {
+      console.error("Error dispatching alignment evaluation:", error);
+      toast.error("Error dispatching alignment evaluation");
+    }
+  };
+
   return (
     <div className={cn(
-      "w-full flex flex-col min-h-0 h-full",
+      "w-full flex flex-col overflow-y-auto max-h-full",
       isEditorFullscreen && "absolute inset-0 z-10 bg-background p-4 rounded-lg"
     )}>
       {/* Hide the header section when in fullscreen mode */}
       {!isEditorFullscreen && (
         <div className="flex justify-between items-start w-full">
           <div className="space-y-2 flex-1">
+            <div className="flex items-center gap-2 mb-3">
+              <ListCheck className="h-5 w-5 text-foreground" />
+              <span className="text-lg font-semibold">Score</span>
+            </div>
             <Input
               value={parsedConfig.name || ''}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => 
@@ -525,24 +659,15 @@ const DetailContent = React.memo(({
                   <TestTube className="mr-2 h-4 w-4" />
                   Test
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => {
-                  console.log('Evaluate Accuracy clicked');
-                  toast.success('Evaluate Accuracy action triggered');
-                }}>
+                <DropdownMenuItem onClick={handleEvaluateAccuracy}>
                   <FlaskConical className="mr-2 h-4 w-4" />
                   Evaluate Accuracy
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => {
-                  console.log('Evaluate Consistency clicked');
-                  toast.success('Evaluate Consistency action triggered');
-                }}>
+                <DropdownMenuItem onClick={handleEvaluateConsistency}>
                   <FlaskRound className="mr-2 h-4 w-4" />
                   Evaluate Consistency
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => {
-                  console.log('Evaluate Alignment clicked');
-                  toast.success('Evaluate Alignment action triggered');
-                }}>
+                <DropdownMenuItem onClick={handleEvaluateAlignment}>
                   <TestTubes className="mr-2 h-4 w-4" />
                   Evaluate Alignment
                 </DropdownMenuItem>
@@ -597,24 +722,15 @@ const DetailContent = React.memo(({
                   <TestTube className="mr-2 h-4 w-4" />
                   Test
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => {
-                  console.log('Evaluate Accuracy clicked');
-                  toast.success('Evaluate Accuracy action triggered');
-                }}>
+                <DropdownMenuItem onClick={handleEvaluateAccuracy}>
                   <FlaskConical className="mr-2 h-4 w-4" />
                   Evaluate Accuracy
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => {
-                  console.log('Evaluate Consistency clicked');
-                  toast.success('Evaluate Consistency action triggered');
-                }}>
+                <DropdownMenuItem onClick={handleEvaluateConsistency}>
                   <FlaskRound className="mr-2 h-4 w-4" />
                   Evaluate Consistency
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => {
-                  console.log('Evaluate Alignment clicked');
-                  toast.success('Evaluate Alignment action triggered');
-                }}>
+                <DropdownMenuItem onClick={handleEvaluateAlignment}>
                   <TestTubes className="mr-2 h-4 w-4" />
                   Evaluate Alignment
                 </DropdownMenuItem>
@@ -629,14 +745,14 @@ const DetailContent = React.memo(({
         </div>
       </div>
 
-      {/* YAML Editor - Make it flex to fill available space */}
+      {/* YAML Editor - Fixed height so content below is visible */}
       <div className={cn(
-        "flex-1 flex flex-col min-h-0",
-        isEditorFullscreen ? "mt-2" : "mt-2"
+        "flex flex-col",
+        isEditorFullscreen ? "mt-2 flex-1 min-h-0" : "mt-2"
       )} style={{ transition: 'none' }}>
                   {!isEditorFullscreen ? (
-          // Normal mode: flexible height container
-          <div className="flex-1 bg-background rounded-lg overflow-hidden relative min-h-[300px]">
+          // Normal mode: fixed height container
+          <div className="h-[400px] bg-background rounded-lg overflow-hidden relative">
             <Editor
               height="100%"
               defaultLanguage="yaml"
@@ -649,9 +765,25 @@ const DetailContent = React.memo(({
                 // Store the Monaco instance
                 monacoRef.current = monaco;
                 
+                // Configure YAML language support with enhanced syntax highlighting
+                console.log('Configuring YAML language support...');
+                configureYamlLanguage(monaco);
+                
                 // Apply our custom theme when the editor mounts
+                console.log('Applying Monaco themes...');
                 defineCustomMonacoThemes(monaco);
                 applyMonacoTheme(monaco);
+                
+                // Set up YAML linting integration
+                setupMonacoIntegration(editor, monaco);
+                
+                // Debug: Check if YAML language is registered
+                const registeredLanguages = monaco.languages.getLanguages();
+                const yamlLang = registeredLanguages.find((lang: any) => lang.id === 'yaml');
+                console.log('YAML language registered:', yamlLang ? 'YES' : 'NO');
+                if (yamlLang) {
+                  console.log('YAML language details:', yamlLang);
+                }
                 
                 // Force immediate layout to ensure correct sizing
                 editor.layout();
@@ -668,6 +800,15 @@ const DetailContent = React.memo(({
               }}
               onChange={(value) => {
                 if (!value) return;
+                
+                // Run YAML validation and show indentation errors
+                if (monacoRef.current && editorInstanceRef.current) {
+                  const model = editorInstanceRef.current.getModel();
+                  if (model) {
+                    const markers = validateYamlIndentation(monacoRef.current, model);
+                    monacoRef.current.editor.setModelMarkers(model, 'yaml-validation', markers);
+                  }
+                }
                 
                 try {
                   // Set editing flag to prevent useEffect from overriding our changes
@@ -708,89 +849,134 @@ const DetailContent = React.memo(({
             />
           </div>
         ) : (
-          // Fullscreen mode: use the old resizable container
-          <ResizableEditorContainer 
-            height={800}
-            onHeightChange={handleHeightChange}
-            isFullscreen={isEditorFullscreen}
-          >
-          <Editor
-            height="100%"
-            defaultLanguage="yaml"
-            value={currentConfig}
-            key={`editor-${selectedVersionId || championVersionId}`}
-            onMount={(editor, monaco) => {
-              // Store the editor instance
-              editorInstanceRef.current = editor;
-              
-              // Store the Monaco instance
-              monacoRef.current = monaco;
-              
-              // Apply our custom theme when the editor mounts
-              defineCustomMonacoThemes(monaco);
-              applyMonacoTheme(monaco);
-              
-              // Force immediate layout to ensure correct sizing
-              editor.layout();
-              
-              // Add error handling for iPad-specific issues
-              window.addEventListener('error', (event) => {
-                if (event.message === 'Canceled: Canceled' || 
-                    event.error?.message === 'Canceled: Canceled') {
-                  event.preventDefault();
-                  return true; // Prevent the error from propagating
-                }
-                return false;
-              });
-            }}
-            onChange={(value) => {
-              if (!value) return;
-              
-              try {
-                // Set editing flag to prevent useEffect from overriding our changes
-                setIsEditing(true);
-                
-                // Parse YAML to validate it and get values for form
-                const parsed = parseYaml(value)
-                
-                // Extract external ID from all possible formats
-                const externalIdValue = parsed.externalId !== undefined ? 
-                  parsed.externalId : 
-                  (parsed.external_id !== undefined ? parsed.external_id : 
-                   (parsed.id !== undefined ? parsed.id : undefined));
+          // Fullscreen mode: 2-column layout with editor on left and linter on right
+          <div className="flex gap-4 h-full">
+            {/* Monaco Editor - 2/3 width */}
+            <div className="flex-[2] bg-background rounded-lg overflow-hidden relative">
+              <Editor
+                height="100%"
+                defaultLanguage="yaml"
+                value={currentConfig}
+                key={`editor-${selectedVersionId || championVersionId}`}
+                onMount={(editor, monaco) => {
+                  // Store the editor instance
+                  editorInstanceRef.current = editor;
+                  
+                  // Store the Monaco instance
+                  monacoRef.current = monaco;
+                  
+                  // Configure YAML language support with enhanced syntax highlighting
+                  console.log('Configuring YAML language support (fullscreen)...');
+                  configureYamlLanguage(monaco);
+                  
+                  // Apply our custom theme when the editor mounts
+                  console.log('Applying Monaco themes (fullscreen)...');
+                  defineCustomMonacoThemes(monaco);
+                  applyMonacoTheme(monaco);
+                  
+                  // Set up YAML linting integration
+                  setupMonacoIntegration(editor, monaco);
+                  
+                  // Debug: Check if YAML language is registered
+                  const registeredLanguages = monaco.languages.getLanguages();
+                  const yamlLang = registeredLanguages.find((lang: any) => lang.id === 'yaml');
+                  console.log('YAML language registered (fullscreen):', yamlLang ? 'YES' : 'NO');
+                  
+                  // Force immediate layout to ensure correct sizing
+                  editor.layout();
+                  
+                  // Add error handling for iPad-specific issues
+                  window.addEventListener('error', (event) => {
+                    if (event.message === 'Canceled: Canceled' || 
+                        event.error?.message === 'Canceled: Canceled') {
+                      event.preventDefault();
+                      return true; // Prevent the error from propagating
+                    }
+                    return false;
+                  });
+                }}
+                onChange={(value) => {
+                  if (!value) return;
+                  
+                  // Run YAML validation and show indentation errors
+                  if (monacoRef.current && editorInstanceRef.current) {
+                    const model = editorInstanceRef.current.getModel();
+                    if (model) {
+                      const markers = validateYamlIndentation(monacoRef.current, model);
+                      monacoRef.current.editor.setModelMarkers(model, 'yaml-validation', markers);
+                    }
+                  }
+                  
+                  try {
+                    // Set editing flag to prevent useEffect from overriding our changes
+                    setIsEditing(true);
+                    
+                    // Parse YAML to validate it and get values for form
+                    const parsed = parseYaml(value)
+                    
+                    // Extract external ID from all possible formats
+                    const externalIdValue = parsed.externalId !== undefined ? 
+                      parsed.externalId : 
+                      (parsed.external_id !== undefined ? parsed.external_id : 
+                       (parsed.id !== undefined ? parsed.id : undefined));
 
-                
-                // Update our local state
-                setCurrentConfig(value);
-                
-                // Pass the updated configuration to the parent
-                onEditChange?.({
-                  name: parsed.name,
-                  externalId: externalIdValue !== undefined ? String(externalIdValue) : undefined,
-                  key: parsed.key,
-                  description: parsed.description,
-                  configuration: value // Store the original YAML string
-                });
-              } catch (error) {
-                // Handle cancellation errors gracefully
-                if (error instanceof Error && 
-                    (error.message === 'Canceled' || error.message === 'Canceled: Canceled')) {
-                  return; // Just ignore the error
-                }
-                
-                // Ignore other parse errors while typing
-              }
-            }}
-            options={getCommonMonacoOptions(isMobileDevice)}
-          />
-          </ResizableEditorContainer>
+                    
+                    // Update our local state
+                    setCurrentConfig(value);
+                    
+                    // Pass the updated configuration to the parent
+                    onEditChange?.({
+                      name: parsed.name,
+                      externalId: externalIdValue !== undefined ? String(externalIdValue) : undefined,
+                      key: parsed.key,
+                      description: parsed.description,
+                      configuration: value // Store the original YAML string
+                    });
+                  } catch (error) {
+                    // Handle cancellation errors gracefully
+                    if (error instanceof Error && 
+                        (error.message === 'Canceled' || error.message === 'Canceled: Canceled')) {
+                      return; // Just ignore the error
+                    }
+                    
+                    // Ignore other parse errors while typing
+                  }
+                }}
+                options={getCommonMonacoOptions(isMobileDevice)}
+              />
+            </div>
+
+            {/* YAML Linter Panel - 1/3 width on the right */}
+            {lintResult && (
+              <div className="flex-[1] bg-background rounded-lg p-4 overflow-y-auto">
+                <YamlLinterPanel
+                  result={lintResult}
+                  onMessageClick={handleLintMessageClick}
+                  className="text-sm"
+                />
+              </div>
+            )}
+          </div>
         )}
       </div>
+
+      {/* YAML Linter Panel - only show below editor in normal mode (not fullscreen) */}
+      {!isEditorFullscreen && lintResult && (
+        <div className="mt-3">
+          <div className="bg-background rounded-lg p-4">
+            <YamlLinterPanel
+              result={lintResult}
+              onMessageClick={handleLintMessageClick}
+              className="text-sm"
+            />
+          </div>
+        </div>
+      )}
 
       {/* Action buttons - show in both normal and fullscreen modes */}
       {hasChanges && (
         <div className={cn(
-          "mt-4 space-y-4",
+          "mt-3 space-y-4",
           isEditorFullscreen && "mt-4"
         )}>
           <div className={cn(
@@ -827,7 +1013,7 @@ const DetailContent = React.memo(({
 
       {/* Version history - hide in fullscreen mode */}
       {!isEditorFullscreen && versions && (
-        <div className="mt-6 overflow-hidden flex-shrink-0">
+        <div className="mt-3 overflow-hidden flex-shrink-0">
           <ScoreVersionHistory
             versions={versions}
             championVersionId={championVersionId}
@@ -862,9 +1048,12 @@ export function ScoreComponent({
   isFullWidth = false,
   onSave,
   exampleItems = [],
+  scorecardName,
+  onTaskCreated,
   className,
   ...props
 }: ScoreComponentProps) {
+  const { selectedAccount } = useAccount();
   const [editedScore, setEditedScore] = React.useState<ScoreData>(score)
   const [hasChanges, setHasChanges] = React.useState(false)
   const [versions, setVersions] = React.useState<ScoreVersion[]>([])
@@ -1389,13 +1578,18 @@ export function ScoreComponent({
   return (
     <div
       className={cn(
-        "w-full rounded-lg text-card-foreground hover:bg-accent/50 transition-colors",
+        "w-full rounded-lg text-card-foreground transition-colors",
         variant === 'grid' ? (
-          isSelected ? "bg-card-selected" : "bg-card"
+          isSelected ? "bg-card-selected" : "bg-card hover:bg-accent"
         ) : "bg-card-selected",
         variant === 'detail' && "h-full flex flex-col overflow-hidden",
         className
       )}
+      style={{
+        ...(isSelected && variant === 'grid' && {
+          boxShadow: 'inset 0 0 0 0.5rem var(--secondary)'
+        })
+      }}
       {...props}
     >
       <div className={cn(
@@ -1441,6 +1635,9 @@ export function ScoreComponent({
               resetEditingCounter={resetEditingCounter}
               forceExpandHistory={forceExpandHistory}
               exampleItems={exampleItems}
+              selectedAccount={selectedAccount}
+              scorecardName={scorecardName}
+              onTaskCreated={onTaskCreated}
             />
           )}
         </div>

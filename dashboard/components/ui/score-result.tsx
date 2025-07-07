@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { CardButton } from '@/components/CardButton'
 import { LabelBadgeComparison } from '@/components/LabelBadgeComparison'
 import { Button } from '@/components/ui/button'
-import { ScoreResultNode } from './score-result-node'
+import { ScoreResultTrace } from './score-result-trace'
 
 export interface ScoreResultData {
   id: string
@@ -31,13 +31,7 @@ export interface ScoreResultComponentProps {
   navigationControls?: React.ReactNode
 }
 
-// Define interfaces for trace data structures
-interface TraceNode {
-  name: string;
-  inputs: Record<string, any>;
-  outputs: Record<string, any>;
-  [key: string]: any;
-}
+
 
 export function ScoreResultComponent({ 
   result,
@@ -49,88 +43,7 @@ export function ScoreResultComponent({
 }: ScoreResultComponentProps) {
   const [isTextExpanded, setIsTextExpanded] = useState(false);
   
-  // Parse trace data if it exists and normalize to node format
-  const parsedTraceNodes = React.useMemo<TraceNode[] | null>(() => {
-    if (!result.trace) return null;
-    
-    try {
-      // Parse string trace if needed
-      let traceData = result.trace;
-      if (typeof result.trace === 'string') {
-        try {
-          traceData = JSON.parse(result.trace);
-        } catch (e) {
-          console.error('Error parsing trace data:', e);
-          return null;
-        }
-      }
-      
-      // Handle different trace formats
-      
-      // Format 1: node_results format (from example)
-      if (traceData && typeof traceData === 'object' && Array.isArray(traceData.node_results)) {
-        return traceData.node_results.map((node: any) => ({
-          name: node.node_name || 'Unnamed Node',
-          inputs: node.input || {},
-          outputs: node.output || {}
-        }));
-      }
-      
-      // Format 2: Array of nodes with inputs/outputs already defined
-      if (Array.isArray(traceData)) {
-        return traceData.map((node: any) => ({
-          name: node.name || 'Unnamed Node',
-          inputs: node.inputs || {},
-          outputs: node.outputs || {}
-        }));
-      }
-      
-      // Format 3: Object with 'steps' array
-      if (traceData && typeof traceData === 'object' && Array.isArray(traceData.steps)) {
-        return traceData.steps.map((step: any) => ({
-          name: step.name || 'Unnamed Step',
-          inputs: step.input || step.inputs || {},
-          outputs: step.output || step.outputs || {}
-        }));
-      }
-      
-      // Format 4: Object with nodes/steps under a different key
-      const possibleStepKeys = ['nodes', 'steps', 'traces', 'operations', 'executions'];
-      for (const key of possibleStepKeys) {
-        if (traceData && typeof traceData === 'object' && Array.isArray(traceData[key])) {
-          return traceData[key].map((item: any) => ({
-            name: item.name || `Unnamed ${key.slice(0, -1)}`,
-            inputs: item.input || item.inputs || {},
-            outputs: item.output || item.outputs || {}
-          }));
-        }
-      }
-      
-      // If we can't determine the format, return the raw data for fallback display
-      return null;
-    } catch (e) {
-      console.error('Error processing trace data:', e);
-      return null;
-    }
-  }, [result.trace]);
 
-  // Get the raw trace data for fallback display
-  const rawTraceData = React.useMemo(() => {
-    if (!result.trace) return null;
-    
-    try {
-      if (typeof result.trace === 'string') {
-        try {
-          return JSON.parse(result.trace);
-        } catch (e) {
-          return result.trace;
-        }
-      }
-      return result.trace;
-    } catch (e) {
-      return String(result.trace);
-    }
-  }, [result.trace]);
 
   // Get the first part of text for collapsed view
   const getCollapsedText = (text: string) => {
@@ -197,31 +110,7 @@ export function ScoreResultComponent({
     )
   }
 
-  // Render trace nodes
-  const renderTraceNodes = () => {
-    if (!parsedTraceNodes || parsedTraceNodes.length === 0) return null;
-    
-    return (
-      <div>
-        <div className="flex items-center mb-1">
-          <View className="w-4 h-4 mr-1 text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">Trace</p>
-        </div>
-        <div className="bg-background rounded-lg p-3">
-          <div className="space-y-3">
-            {parsedTraceNodes.map((node, index) => (
-              <ScoreResultNode
-                key={`${node.name || 'node'}-${index}`}
-                name={node.name}
-                inputs={node.inputs}
-                outputs={node.outputs}
-              />
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  };
+
 
   // Detail variant (full view)
   return (
@@ -356,23 +245,14 @@ export function ScoreResultComponent({
               </div>
             )}
 
-            {/* Trace section with nodes */}
-            {renderTraceNodes()}
-
-            {/* Fallback for raw trace data */}
-            {!parsedTraceNodes && rawTraceData && (
+            {/* Trace section */}
+            {result.trace && (
               <div>
                 <div className="flex items-center mb-1">
                   <View className="w-4 h-4 mr-1 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">Trace (Raw Data)</p>
+                  <p className="text-sm text-muted-foreground">Trace</p>
                 </div>
-                <div className="bg-background rounded-lg p-3">
-                  <pre className="text-xs whitespace-pre-wrap overflow-x-auto max-h-[400px] overflow-y-auto">
-                    {typeof rawTraceData === 'string' 
-                      ? rawTraceData 
-                      : JSON.stringify(rawTraceData, null, 2)}
-                  </pre>
-                </div>
+                <ScoreResultTrace trace={result.trace} />
               </div>
             )}
           </div>
