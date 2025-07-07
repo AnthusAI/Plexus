@@ -829,10 +829,10 @@ export default function ActivityDashboard({
                 damping: 30 
               }}
             >
-            <div className="@container space-y-3 overflow-visible">
+            <div className="@container overflow-visible">
               {/* TasksGauges at the top - only show when not in mobile selected task view */}
               {!(selectedTask && isNarrowViewport) && (
-                <TasksGauges />
+                <TasksGauges className="mb-3" />
               )}
               
               <div className={`
