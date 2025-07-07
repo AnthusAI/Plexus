@@ -30,7 +30,6 @@ import {
 } from "lucide-react"
 import { ScoreCount } from "./scorecards/score-count"
 import { CardButton } from "./CardButton"
-import { DatasetConfigFormComponent } from "./dataset-config-form"
 import { listFromModel } from "@/utils/amplify-helpers"
 import { AmplifyListResult } from '@/types/shared'
 import { graphqlRequest } from "@/utils/amplify-client"
@@ -42,6 +41,8 @@ import { ItemComponent, type ItemData } from "./ui/item-component"
 import ScorecardDetailView from "./scorecards/ScorecardDetailView"
 import { useRouter, usePathname, useParams } from "next/navigation"
 import { ScorecardDashboardSkeleton } from "./loading-skeleton"
+import { Task, TaskHeader, TaskContent } from "./Task"
+import { observeTaskUpdates, observeTaskStageUpdates } from "@/utils/subscriptions"
 
 const ACCOUNT_KEY = 'call-criteria'
 
@@ -88,8 +89,6 @@ export default function ScorecardsComponent({
   const [error, setError] = useState<Error | null>(null)
   const [isFullWidth, setIsFullWidth] = useState(!!initialSelectedScorecardId)
   const [isNarrowViewport, setIsNarrowViewport] = useState(false)
-  const [showDatasetConfig, setShowDatasetConfig] = useState(false)
-  const [selectedScorecardForDataset, setSelectedScorecardForDataset] = useState<string>("")
   const [leftPanelWidth, setLeftPanelWidth] = useState(40)
   const [scorecardScoreCounts, setScorecardScoreCounts] = useState<Record<string, number>>({})
   const [scorecardDetailWidth, setScorecardDetailWidth] = useState(50)
@@ -98,8 +97,29 @@ export default function ScorecardsComponent({
   const [isCreatingItem, setIsCreatingItem] = useState(false)
   const [scorecardExamples, setScorecardExamples] = useState<string[]>([])
   const [shouldExpandExamples, setShouldExpandExamples] = useState(false)
+  const [selectedTask, setSelectedTask] = useState<any | null>(null)
+  const [isTaskViewActive, setIsTaskViewActive] = useState(false)
   const router = useRouter()
   const pathname = usePathname()
+  
+  // Ref map to track scorecard elements for scroll-to-view functionality
+  const scorecardRefsMap = React.useRef<Map<string, HTMLDivElement | null>>(new Map())
+  
+  // Function to scroll to a selected scorecard
+  const scrollToSelectedScorecard = React.useCallback((scorecardId: string) => {
+    // Use requestAnimationFrame to ensure the layout has updated after selection
+    requestAnimationFrame(() => {
+      const scorecardElement = scorecardRefsMap.current.get(scorecardId);
+      if (scorecardElement) {
+        scorecardElement.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start', // Align to the top of the container
+          inline: 'nearest'
+        });
+      }
+    });
+  }, []);
+  
   const params = useParams()
 
   // Handle deep linking - check if we're on a specific scorecard or score page
@@ -194,10 +214,99 @@ export default function ScorecardsComponent({
     };
   }, [scorecards, selectedScorecardSections, isNarrowViewport]);
 
+  // Task monitoring with real-time subscriptions
+  useEffect(() => {
+    if (!selectedTask) return;
+
+    console.log('Setting up task subscriptions for task:', selectedTask.id);
+
+    const taskSubscription = observeTaskUpdates().subscribe({
+      next: (value: any) => {
+        const { type, data } = value;
+        if (data?.id === selectedTask.id) {
+          console.log(`Task ${type} update for ${selectedTask.id}:`, data);
+          setSelectedTask((prev: any) => prev ? { ...prev, ...data } : data);
+        }
+      },
+      error: (error: any) => {
+        console.error('Task subscription error:', error);
+      }
+    });
+
+    const stageSubscription = observeTaskStageUpdates().subscribe({
+      next: (value: any) => {
+        const { type, data } = value;
+        if (data?.taskId === selectedTask.id) {
+          console.log(`TaskStage ${type} update for task ${selectedTask.id}:`, data);
+          setSelectedTask((prev: any) => {
+            if (!prev) return prev;
+            
+            const updatedStages = prev.stages ? [...prev.stages] : [];
+            const existingStageIndex = updatedStages.findIndex((stage: any) => stage.id === data.id);
+            
+            if (existingStageIndex >= 0) {
+              updatedStages[existingStageIndex] = { ...updatedStages[existingStageIndex], ...data };
+            } else {
+              updatedStages.push(data);
+            }
+            
+            const updatedTask = {
+              ...prev,
+              stages: updatedStages.sort((a: any, b: any) => a.order - b.order),
+              currentStageName: data.status === 'RUNNING' ? data.name : prev.currentStageName
+            };
+
+            console.log('Updated task with stages:', {
+              taskId: updatedTask.id,
+              stagesCount: updatedTask.stages?.length,
+              currentStageName: updatedTask.currentStageName,
+              stages: updatedTask.stages
+            });
+
+            return updatedTask;
+          });
+        }
+      },
+      error: (error: any) => {
+        console.error('TaskStage subscription error:', error);
+      }
+    });
+
+    return () => {
+      console.log('Cleaning up task subscriptions');
+      taskSubscription.unsubscribe();
+      stageSubscription.unsubscribe();
+    };
+  }, [selectedTask?.id]);
+
+  // Handle task creation and monitoring
+  const handleTaskCreated = (task: any) => {
+    console.log('Task created in scorecard dashboard:', task);
+    setSelectedTask(task);
+    setIsTaskViewActive(true);
+    
+    // Move to two-column layout
+    if (selectedScore) {
+      // Reset score maximization to show two columns
+      setMaximizedScoreId(null);
+    }
+    
+    // If we have a selected item, clear it to make room for the task
+    if (selectedItem) {
+      setSelectedItem(null);
+      setIsCreatingItem(false);
+    }
+  };
+
+  // Handle task closure
+  const handleCloseTask = () => {
+    setSelectedTask(null);
+    setIsTaskViewActive(false);
+  };
+
   // Custom setter for selectedScorecard that handles both state and URL
   const handleSelectScorecard = async (scorecard: Schema['Scorecard']['type'] | null) => {
     console.log('🔵 handleSelectScorecard called:', {
-      newScorecardId: scorecard?.id,
       newScorecardName: scorecard?.name,
       currentScorecardId: selectedScorecard?.id,
       willUpdate: scorecard?.id !== selectedScorecard?.id
@@ -208,15 +317,34 @@ export default function ScorecardsComponent({
       console.log('🔵 Scorecard selection changed, updating state...');
       
       setSelectedScorecard(scorecard);
-      setSelectedScore(null); // Reset selected score when changing scorecard
+      // Conditionally reset selected score:
+      // If we are changing to a different scorecard OR if no initialSelectedScoreId is actively being processed
+      // (This check might need refinement based on when initialSelectedScoreId is cleared or considered 'processed')
+      if (selectedScorecard?.id !== scorecard?.id || !initialSelectedScoreId) {
+          setSelectedScore(null);
+      }
       
       // Reset scorecard examples for the new scorecard
       setScorecardExamples([]);
       setShouldExpandExamples(false); // Reset expand flag
       
-      // Update URL without triggering a navigation/re-render
-      const newPathname = scorecard ? `/lab/scorecards/${scorecard.id}` : '/lab/scorecards';
-      window.history.pushState(null, '', newPathname);
+      // Conditionally update URL:
+      // If we are selecting a scorecard AND there isn't an initialSelectedScoreId that matches the current scorecard context,
+      // then update the URL to the scorecard. Otherwise, let the score selection logic handle the final URL.
+      // This logic assumes initialSelectedScoreId is available in this component's scope.
+      if (scorecard && (!initialSelectedScoreId || initialSelectedScorecardId !== scorecard.id)) {
+        const newPathname = `/lab/scorecards/${scorecard.id}`;
+        window.history.pushState(null, '', newPathname);
+      } else if (!scorecard) { // Clearing scorecard selection
+        window.history.pushState(null, '', '/lab/scorecards');
+      }
+      
+      // Scroll to the selected scorecard after a brief delay to allow layout updates
+      if (scorecard) {
+        setTimeout(() => {
+          scrollToSelectedScorecard(scorecard.id);
+        }, 100);
+      }
       
       if (scorecard && isNarrowViewport) {
         setIsFullWidth(true);
@@ -475,9 +603,11 @@ export default function ScorecardsComponent({
           attachedFiles?: string[];
           accountId: string;
           isEvaluation: boolean;
+          createdByType?: string;
         } = {
           accountId: item.accountId || accountId!,
-          isEvaluation: item.isEvaluation || false
+          isEvaluation: item.isEvaluation || false,
+          createdByType: 'prediction' // Dashboard-created items are predictions, not evaluations
         };
 
         // Add optional fields only if they have values
@@ -880,12 +1010,15 @@ export default function ScorecardsComponent({
       examples: [...(scorecardExamples || [])]
     }
 
+    // Check if we're in scorecard + task two-column layout
+    const isInScorecardTaskLayout = selectedScorecard && selectedTask && !selectedScore;
+
     return (
       <div className={cn(
         "h-full overflow-y-auto overflow-x-hidden",
         maximizedScoreId ? "hidden" : ""
       )}
-      style={(selectedScore || selectedItem) && !maximizedScoreId ? {
+      style={!maximizedScoreId && !isInScorecardTaskLayout && (selectedScore || selectedItem || selectedTask) ? {
         width: `${scorecardDetailWidth}%`
       } : { width: '100%' }}>
         <ScorecardComponent
@@ -893,8 +1026,8 @@ export default function ScorecardsComponent({
           score={scorecardData}
           onEdit={() => handleEdit(selectedScorecard)}
           onViewData={() => {
-            setSelectedScorecardForDataset(selectedScorecard.id)
-            setShowDatasetConfig(true)
+            console.log('View data for scorecard:', selectedScorecard.id)
+            // TODO: Implement data source view
           }}
           isFullWidth={isFullWidth}
           onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
@@ -911,6 +1044,7 @@ export default function ScorecardsComponent({
           onEditItem={handleEditItem}
           shouldExpandExamples={shouldExpandExamples}
           onExamplesExpanded={() => setShouldExpandExamples(false)}
+          onTaskCreated={handleTaskCreated}
         />
       </div>
     );
@@ -935,12 +1069,16 @@ export default function ScorecardsComponent({
   const renderSelectedScore = () => {
     if (!selectedScore || !processedScore) return null;
 
+    // When in score + task layout, score component takes full width of its container
+    const isInScoreTaskLayout = selectedScore && selectedTask;
+
     return (
       <div className={cn(
         "h-full overflow-y-auto overflow-x-hidden",
-        maximizedScoreId ? "w-full" : ""
+        maximizedScoreId ? "w-full" : "",
+        isInScoreTaskLayout ? "w-full" : ""
       )}
-      style={!maximizedScoreId ? {
+      style={!maximizedScoreId && !isInScoreTaskLayout ? {
         width: `${100 - scorecardDetailWidth}%`
       } : undefined}>
         <ScoreComponent
@@ -951,7 +1089,86 @@ export default function ScorecardsComponent({
           onClose={() => {
             setSelectedScore(null);
             setMaximizedScoreId(null);
+            // If there's a task open when closing score, also close the task
+            if (selectedTask) {
+              setSelectedTask(null);
+              setIsTaskViewActive(false);
+            }
           }}
+          exampleItems={scorecardExamples.map(example => {
+            // Extract item ID from "item:uuid" format
+            const itemId = example.replace('item:', '');
+            return {
+              id: itemId,
+              displayValue: `Item ${itemId.slice(0, 8)}...` // Show first 8 chars of ID as display
+            };
+          })}
+          scorecardName={selectedScorecard?.name}
+          onTaskCreated={handleTaskCreated}
+        />
+      </div>
+    );
+  };
+
+  // Add renderSelectedTask function
+  const renderSelectedTask = () => {
+    if (!selectedTask) return null;
+
+    // When in score + task layout, task component takes full width of its container
+    const isInScoreTaskLayout = selectedScore && selectedTask;
+    // When in scorecard + task layout, task component also takes full width of its container
+    const isInScorecardTaskLayout = selectedScorecard && selectedTask && !selectedScore;
+
+    // Debug: Log the task stages to see what we're passing
+    console.log('Rendering task with stages:', {
+      taskId: selectedTask.id,
+      stages: selectedTask.stages,
+      currentStageName: selectedTask.currentStageName,
+      stagesCount: selectedTask.stages?.length || 0
+    });
+
+    const taskData = {
+      id: selectedTask.id,
+      type: selectedTask.type || 'Task',
+      name: selectedTask.name,  
+      description: selectedTask.description,
+      scorecard: selectedScorecard?.name || 'Unknown Scorecard',
+      score: selectedScore?.name || 'Unknown Score',
+      time: selectedTask.createdAt || new Date().toISOString(),
+      command: selectedTask.command,
+      output: selectedTask.output,
+      attachedFiles: selectedTask.attachedFiles,
+      stdout: selectedTask.stdout,
+      stderr: selectedTask.stderr,
+      stages: selectedTask.stages,
+      currentStageName: selectedTask.currentStageName,
+      processedItems: selectedTask.processedItems,
+      totalItems: selectedTask.totalItems,
+      startedAt: selectedTask.startedAt,
+      estimatedCompletionAt: selectedTask.estimatedCompletionAt,
+      status: selectedTask.status,
+      dispatchStatus: selectedTask.dispatchStatus,
+      celeryTaskId: selectedTask.celeryTaskId,
+      workerNodeId: selectedTask.workerNodeId,
+      completedAt: selectedTask.completedAt,
+      errorMessage: selectedTask.errorMessage
+    };
+
+    return (
+      <div className={cn(
+        "h-full overflow-y-auto overflow-x-hidden",
+        (isInScoreTaskLayout || isInScorecardTaskLayout) ? "w-full" : ""
+      )}
+      style={!(isInScoreTaskLayout || isInScorecardTaskLayout) ? {
+        width: `${100 - scorecardDetailWidth}%`
+      } : undefined}>
+        <Task
+          variant="detail"
+          task={taskData}
+          onClose={handleCloseTask}
+          showProgress={true}
+          renderHeader={(props) => <TaskHeader {...props} />}
+          renderContent={(props) => <TaskContent {...props} />}
         />
       </div>
     );
@@ -1006,20 +1223,20 @@ export default function ScorecardsComponent({
   }
 
   return (
-    <div className="h-full flex flex-col">
-      <div className="flex h-full w-full">
+    <div className="@container flex flex-col h-full p-3 overflow-hidden">
+      <div className="flex flex-1 min-h-0">
         {/* Grid Panel */}
         <div 
           className={cn(
-            "h-full overflow-y-auto overflow-x-hidden",
-            selectedScore || (selectedScorecard && isFullWidth) ? "hidden" : selectedScorecard ? "flex" : "w-full",
+            "h-full overflow-auto",
+            selectedScore || (selectedScorecard && isFullWidth) || (selectedScorecard && selectedTask) ? "hidden" : selectedScorecard ? "flex" : "w-full",
             "transition-all duration-200"
           )}
-          style={selectedScorecard && !isFullWidth ? {
+          style={selectedScorecard && !isFullWidth && !selectedTask ? {
             width: `${leftPanelWidth}%`
           } : undefined}
         >
-          <div className="space-y-3 p-1.5 w-full">
+          <div className="space-y-3 w-full">
             <div className="flex justify-end">
               <Button 
                 onClick={handleCreate} 
@@ -1047,14 +1264,20 @@ export default function ScorecardsComponent({
                     }
 
                     return (
-                      <ScorecardComponent
+                      <div
                         key={scorecard.id}
-                        variant="grid"
-                        score={scorecardData}
-                        isSelected={selectedScorecard?.id === scorecard.id}
-                        onClick={() => handleSelectScorecard(scorecard)}
-                        onEdit={() => handleEdit(scorecard)}
-                      />
+                        ref={(el) => {
+                          scorecardRefsMap.current.set(scorecard.id, el);
+                        }}
+                      >
+                        <ScorecardComponent
+                          variant="grid"
+                          score={scorecardData}
+                          isSelected={selectedScorecard?.id === scorecard.id}
+                          onClick={() => handleSelectScorecard(scorecard)}
+                          onEdit={() => handleEdit(scorecard)}
+                        />
+                      </div>
                     )
                   })}
               </div>
@@ -1063,7 +1286,7 @@ export default function ScorecardsComponent({
         </div>
 
         {/* Resize Handle between Grid and Detail */}
-        {selectedScorecard && !isFullWidth && !selectedScore && (
+        {selectedScorecard && !isFullWidth && !selectedScore && !selectedTask && (
           <div
             className="w-[12px] relative cursor-col-resize flex-shrink-0 group"
             onMouseDown={handleDragStart}
@@ -1075,59 +1298,88 @@ export default function ScorecardsComponent({
 
         {/* Detail Panel Container */}
         <div className="flex-1 flex overflow-hidden">
-          {renderSelectedScorecard()}
-          
-          {/* Resize Handle between Scorecard and Score/Item */}
-          {(selectedScore || selectedItem) && !maximizedScoreId && (
-            <div
-              className="w-[12px] relative cursor-col-resize flex-shrink-0 group mx-1"
-              onMouseDown={(e: React.MouseEvent<HTMLDivElement>) => {
-                e.preventDefault()
-                const startX = e.pageX
-                const startDetailWidth = scorecardDetailWidth
-                const container = e.currentTarget.parentElement
-                if (!container) return
+          {/* When we have a selected score and task, show score + task layout */}
+          {selectedScore && selectedTask ? (
+            <>
+              {/* Score Component (Left Column) */}
+              <div className="flex-1 overflow-hidden">
+                {renderSelectedScore()}
+              </div>
+              
+              {/* Gap between columns */}
+              <div className="w-3 flex-shrink-0" />
+              
+              {/* Task Component (Right Column) */}
+              <div className="flex-1 overflow-hidden">
+                {renderSelectedTask()}
+              </div>
+            </>
+          ) : selectedScorecard && selectedTask && !selectedScore ? (
+            <>
+              {/* Scorecard + Task Layout: Scorecard (Left Column) */}
+              <div className="flex-1 overflow-hidden">
+                {renderSelectedScorecard()}
+              </div>
+              
+              {/* Gap between columns */}
+              <div className="w-3 flex-shrink-0" />
+              
+              {/* Task Component (Right Column) */}
+              <div className="flex-1 overflow-hidden">
+                {renderSelectedTask()}
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Default layout: Scorecard + (Score/Item/Task) */}
+              {renderSelectedScorecard()}
+              
+              {/* Resize Handle between Scorecard and Score/Item/Task */}
+              {(selectedScore || selectedItem || selectedTask) && !maximizedScoreId && (
+                <div
+                  className="w-[12px] relative cursor-col-resize flex-shrink-0 group mx-1"
+                  onMouseDown={(e: React.MouseEvent<HTMLDivElement>) => {
+                    e.preventDefault()
+                    const startX = e.pageX
+                    const startDetailWidth = scorecardDetailWidth
+                    const container = e.currentTarget.parentElement
+                    if (!container) return
 
-                const handleDrag = (e: MouseEvent) => {
-                  const deltaX = e.pageX - startX
-                  const containerWidth = container.getBoundingClientRect().width
-                  const deltaPercent = (deltaX / containerWidth) * 100
-                  const newDetailWidth = Math.min(Math.max(startDetailWidth + deltaPercent, 30), 70)
-                  requestAnimationFrame(() => {
-                    setScorecardDetailWidth(newDetailWidth)
-                  })
-                }
+                    const handleDrag = (e: MouseEvent) => {
+                      const deltaX = e.pageX - startX
+                      const containerWidth = container.getBoundingClientRect().width
+                      const deltaPercent = (deltaX / containerWidth) * 100
+                      const newDetailWidth = Math.min(Math.max(startDetailWidth + deltaPercent, 30), 70)
+                      requestAnimationFrame(() => {
+                        setScorecardDetailWidth(newDetailWidth)
+                      })
+                    }
 
-                const handleDragEnd = () => {
-                  document.removeEventListener('mousemove', handleDrag)
-                  document.removeEventListener('mouseup', handleDragEnd)
-                  document.body.style.cursor = ''
-                }
+                    const handleDragEnd = () => {
+                      document.removeEventListener('mousemove', handleDrag)
+                      document.removeEventListener('mouseup', handleDragEnd)
+                      document.body.style.cursor = ''
+                    }
 
-                document.body.style.cursor = 'col-resize'
-                document.addEventListener('mousemove', handleDrag)
-                document.addEventListener('mouseup', handleDragEnd)
-              }}
-            >
-              <div className="absolute inset-0 rounded-full transition-colors duration-150 
-                group-hover:bg-accent" />
-            </div>
+                    document.body.style.cursor = 'col-resize'
+                    document.addEventListener('mousemove', handleDrag)
+                    document.addEventListener('mouseup', handleDragEnd)
+                  }}
+                >
+                  <div className="absolute inset-0 rounded-full transition-colors duration-150 
+                    group-hover:bg-accent" />
+                </div>
+              )}
+              
+              {/* Only render these when not in two-column layout */}
+              {!selectedTask && renderSelectedScore()}
+              {!selectedTask && renderSelectedItem()}
+              {!selectedScore && !selectedScorecard && renderSelectedTask()}
+            </>
           )}
-          
-          {renderSelectedScore()}
-          {renderSelectedItem()}
         </div>
       </div>
 
-      {showDatasetConfig && selectedScorecardForDataset && (
-        <DatasetConfigFormComponent
-          scorecardId={selectedScorecardForDataset}
-          onClose={() => {
-            setShowDatasetConfig(false)
-            setSelectedScorecardForDataset("")
-          }}
-        />
-      )}
     </div>
   )
 }

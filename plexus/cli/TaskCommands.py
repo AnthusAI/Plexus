@@ -7,13 +7,10 @@ from rich.text import Text
 from datetime import datetime
 from plexus.dashboard.api.models.task import Task
 from plexus.dashboard.api.models.task_stage import TaskStage
-from plexus.dashboard.api.client import PlexusDashboardClient
+from plexus.cli.client_utils import create_client
 from .console import console
+from plexus.cli.reports.utils import resolve_account_id_for_command
 import json
-
-def create_client() -> PlexusDashboardClient:
-    """Create a client and log its configuration"""
-    return PlexusDashboardClient()
 
 def format_datetime(dt: Optional[datetime]) -> str:
     """Format datetime with proper handling of None values"""
@@ -168,15 +165,67 @@ def format_task_content(task: Task) -> Text:
         console.print(error_table)
         content.append(buffer.getvalue())
     
-    # Output if present
+    # Universal Code Output if present
+    if task.output:
+        content.append("\nUniversal Code Output:\n", style="bold green")
+        
+        # Check if output is too long and provide a summary instead
+        if len(task.output) > 800:
+            # Show just the header and structure for long outputs
+            lines = task.output.split('\n')
+            
+            # Take header comments and first few data lines
+            header_lines = []
+            data_lines = []
+            in_header = True
+            
+            for line in lines:
+                if line.strip().startswith('#') or line.strip() == '':
+                    if in_header:
+                        header_lines.append(line)
+                elif in_header:
+                    in_header = False
+                    data_lines.append(line)
+                elif len(data_lines) < 10:  # Show first 10 data lines
+                    data_lines.append(line)
+                else:
+                    break
+            
+            # Combine header and limited data
+            preview_content = '\n'.join(header_lines + data_lines)
+            if len(data_lines) >= 10:
+                preview_content += '\n\n# ... (output truncated - see attached files for complete data)\n'
+                preview_content += f'# Total output size: {len(task.output)} characters\n'
+                preview_content += f'# Full output available in attached files\n'
+            
+            content.append(f"{preview_content}\n")
+        else:
+            # Show full output for shorter content
+            content.append(f"{task.output}\n")
+    
+    # Error output if present  
+    if task.error:
+        content.append("\nError Details:\n", style="bold red")
+        error_preview = task.error[:1000] + "..." if len(task.error) > 1000 else task.error
+        content.append(f"{error_preview}\n")
+    
+    # File attachments if present
+    if task.attachedFiles:
+        content.append("\nAttached Files:\n", style="bold cyan")
+        for file_key in task.attachedFiles:
+            content.append(f"  • {file_key}\n", style="dim")
+    
+    # Raw Output if present (stdout/stderr)
     if task.stdout or task.stderr:
-        content.append("\nOutput:\n", style="bold")
+        content.append("\nRaw Output:\n", style="bold")
         if task.stdout:
             content.append("  stdout:\n", style="dim")
-            content.append(f"{task.stdout}\n")
+            stdout_preview = task.stdout[:500] + "..." if len(task.stdout) > 500 else task.stdout
+            content.append(f"{stdout_preview}\n")
         if task.stderr:
             content.append("  stderr:\n", style="dim")
-            content.append(f"{task.stderr}\n")
+            stderr_preview = task.stderr[:500] + "..." if len(task.stderr) > 500 else task.stderr
+            content.append(f"{stderr_preview}\n")
     
     return content
 
@@ -186,38 +235,17 @@ def tasks():
     pass
 
 @tasks.command()
-@click.option('--account', required=True, help='Account key or ID')
+@click.option('--account', help='Account key or ID (optional, uses default from environment if not provided)')
 @click.option('--status', help='Filter by status (PENDING, RUNNING, COMPLETED, FAILED)')
 @click.option('--type', help='Filter by task type')
 @click.option('--limit', type=int, default=10, help='Number of records to show (default: 10)')
 @click.option('--all', 'show_all', is_flag=True, help='Show all records')
-def list(account: str, status: Optional[str], type: Optional[str], limit: int, show_all: bool):
+def list(account: Optional[str], status: Optional[str], type: Optional[str], limit: int, show_all: bool):
     """List tasks with optional filtering"""
     client = create_client()
     
-    # Determine if account is a key or ID and get the ID if needed
-    if len(account) < 20:  # Simple heuristic: IDs are longer than keys
-        # Treat as account key
-        response = client.execute(
-            """
-            query ListAccountByKey($key: String!) {
-                listAccountByKey(key: $key) {
-                    items {
-                        id
-                    }
-                }
-            }
-            """,
-            {'key': account}
-        )
-
-        if not response.get('listAccountByKey', {}).get('items'):
-            raise ValueError(f"No account found with key: {account}")
-            
-        account_id = response['listAccountByKey']['items'][0]['id']
-    else:
-        # Treat as account ID
-        account_id = account
+    # Resolve account ID using the same pattern as feedback commands
+    account_id = resolve_account_id_for_command(client, account)
     
     # Use the GSI for proper ordering
     query = f"""
@@ -265,8 +293,50 @@ def list(account: str, status: Optional[str], type: Optional[str], limit: int, s
         console.print()  # Add spacing between panels
 
 @tasks.command()
+@click.option('--account', help='Account key or ID (optional, uses default from environment if not provided)')
+def last(account: Optional[str]):
+    """Show the most recent task for an account"""
+    client = create_client()
+    
+    # Resolve account ID using the same pattern as feedback commands
+    account_id = resolve_account_id_for_command(client, account)
+    
+    # Use the GSI for proper ordering to get the most recent task
+    query = f"""
+    query ListTaskByAccountIdAndUpdatedAt($accountId: String!) {{
+        listTaskByAccountIdAndUpdatedAt(accountId: $accountId, sortDirection: DESC, limit: 1) {{
+            items {{
+                {Task.fields()}
+            }}
+        }}
+    }}
+    """
+    
+    result = client.execute(query, {'accountId': account_id})
+    tasks = result.get('listTaskByAccountIdAndUpdatedAt', {}).get('items', [])
+    
+    if not tasks:
+        console.print("[yellow]No tasks found for this account[/yellow]")
+        return
+    
+    # Get the most recent task
+    task_data = tasks[0]
+    task = Task.from_dict(task_data, client)
+    
+    # Display the task details
+    panel = Panel(
+        format_task_content(task),
+        title=f"[bold]Most Recent Task: {task.type} - {task.status}[/bold]",
+        border_style="blue" if task.status == "RUNNING" else 
+                    "green" if task.status == "COMPLETED" else
+                    "red" if task.status == "FAILED" else
+                    "yellow"
+    )
+    console.print(panel)
+
+@tasks.command()
 @click.option('--task-id', help='Delete a specific task by ID')
-@click.option('--account', help='Account key or ID (optional when using --all)')
+@click.option('--account', help='Account key or ID (optional, uses default from environment if not provided)')
 @click.option('--status', help='Delete tasks with specific status (PENDING, RUNNING, COMPLETED, FAILED)')
 @click.option('--type', help='Delete tasks of specific type')
 @click.option('--all', 'delete_all', is_flag=True, help='Delete all tasks (across all accounts if --account not specified)')
@@ -285,36 +355,10 @@ def delete(task_id: Optional[str], account: Optional[str], status: Optional[str]
         console.print("[red]Error: Must specify either --task-id, --status, --type, or --all[/red]")
         return click.get_current_context().exit(1)
     
-    # Require account parameter unless using --all
-    if not delete_all and not account:
-        console.print("[red]Error: --account is required unless using --all[/red]")
-        return click.get_current_context().exit(1)
-    
     account_id = None
-    if account:
-        # Determine if account is a key or ID and get the ID if needed
-        if len(account) < 20:  # Simple heuristic: IDs are longer than keys
-            # Treat as account key
-            response = client.execute(
-                """
-                query ListAccountByKey($key: String!) {
-                    listAccountByKey(key: $key) {
-                        items {
-                            id
-                        }
-                    }
-                }
-                """,
-                {'key': account}
-            )
-
-            if not response.get('listAccountByKey', {}).get('items'):
-                raise ValueError(f"No account found with key: {account}")
-                
-            account_id = response['listAccountByKey']['items'][0]['id']
-        else:
-            # Treat as account ID
-            account_id = account
+    if not delete_all or account:
+        # Resolve account ID if we need to filter by account
+        account_id = resolve_account_id_for_command(client, account)
     
     # Query tasks based on account
     if account_id:
@@ -344,7 +388,7 @@ def delete(task_id: Optional[str], account: Optional[str], status: Optional[str]
         tasks = result.get('listTasks', {}).get('items', [])
     
     if not tasks:
-        message = "No tasks found for the account" if account else "No tasks found"
+        message = "No tasks found for the account" if account_id else "No tasks found"
         console.print(f"[yellow]{message}[/yellow]")
         return
     
@@ -383,7 +427,7 @@ def delete(task_id: Optional[str], account: Optional[str], status: Optional[str]
     
     # Show warning for all tasks deletion
     if delete_all:
-        scope = "ALL accounts" if not account else f"account {account}"
+        scope = "ALL accounts" if not account else f"account {account or 'default'}"
         console.print(f"\n[bold red]⚠️  WARNING: You are about to delete ALL tasks for {scope}![/bold red]")
         console.print("[red]This action cannot be undone.[/red]\n")
     
@@ -455,4 +499,16 @@ def info(id: str):
         console.print(f"[red]Error retrieving task {id}: {e}[/red]")
         # Optionally log the full traceback
         import traceback
-        print(traceback.format_exc()) 
+        print(traceback.format_exc())
+
+# Create an alias 'task' that's synonymous with 'tasks'
+@click.group()
+def task():
+    """Manage task records in the dashboard (alias for 'tasks')"""
+    pass
+
+# Add all the same commands to the 'task' group
+task.add_command(list)
+task.add_command(last)
+task.add_command(delete)
+task.add_command(info) 

@@ -3,7 +3,7 @@ import ItemScoreResults from '@/components/ItemScoreResults';
 import { GroupedScoreResults } from '@/hooks/useItemScoreResults';
 
 const meta: Meta<typeof ItemScoreResults> = {
-  title: 'Components/ItemScoreResults',
+  title: 'Content/ItemScoreResults',
   component: ItemScoreResults,
   parameters: {
     layout: 'padded',

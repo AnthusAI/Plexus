@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useState } from 'react';
 import { ReportBlockProps } from './ReportBlock';
 import ReportBlock from './ReportBlock';
@@ -6,8 +8,31 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ChevronDown, ChevronRight, Eye, EyeOff, MessagesSquare } from 'lucide-react';
+import { ChevronDown, ChevronUp, ChevronRight, Eye, EyeOff, MessagesSquare, Microscope, FileText, PocketKnife } from 'lucide-react';
 import * as yaml from 'js-yaml';
+import { PieChart, Pie, Cell, Tooltip, Label, ResponsiveContainer, Sector } from 'recharts';
+import { PieSectorDataItem } from 'recharts/types/polar/Pie';
+import { TopicAnalysisViewer } from '@/components/diagrams';
+import { TemplateVariables } from '@/components/diagrams/topic-analysis-diagram';
+import { 
+  formatPreprocessor, 
+  formatLLM, 
+  formatBERTopic, 
+  formatFineTuning 
+} from '@/components/diagrams/text-formatting-utils';
+import { IdentifierDisplay } from '../ui/identifier-display';
+
+interface Identifier {
+  id: string;
+  name: string;
+  url?: string;
+}
+
+interface TopicExample {
+  id?: Identifier[] | string;
+  text: string;
+  [key: string]: any; // Allow other properties
+}
 
 interface TopicAnalysisData {
   summary?: string;
@@ -31,8 +56,14 @@ interface TopicAnalysisData {
     llm_model?: string;
     method?: string;
     prompt_used?: string;
-    examples?: string[];
+    examples?: TopicExample[];
     llm_provider?: string;
+    hit_rate_stats?: {
+      total_processed: number;
+      successful_extractions: number;
+      failed_extractions: number;
+      hit_rate_percentage: number;
+    };
   };
   bertopic_analysis?: {
     num_topics_requested?: number;
@@ -46,13 +77,26 @@ interface TopicAnalysisData {
     use_representation_model?: boolean;
     representation_model_provider?: string;
     representation_model_name?: string;
+    topics_before?: Array<{
+      topic_id: number;
+      name: string;
+      keywords: string[];
+    }>;
+    before_after_comparison?: Array<{
+      topic_id: number;
+      before_keywords: string[];
+      before_name: string;
+      after_name: string;
+      enhanced: boolean;
+    }>;
   };
   topics?: Array<{
     id: number;
     name: string;
     count: number;
     representation: string;
-    words: Array<{ word: string; weight: number }>;
+    keywords: string[];
+    examples?: TopicExample[];
   }>;
   visualization_notes?: {
     topics_visualization?: string;
@@ -87,6 +131,7 @@ interface TopicAnalysisData {
 const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
   const [promptExpanded, setPromptExpanded] = useState(false);
   const [examplesExpanded, setExamplesExpanded] = useState(false);
+  const [selectedTopicIndex, setSelectedTopicIndex] = useState<number>(-1);
   
   // Debug logging to see what we're receiving
   console.log('🔍 TopicAnalysis component received props:', {
@@ -117,6 +162,27 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
       // Legacy format: use object directly
       data = props.output as TopicAnalysisData;
     }
+    
+    // Debug the parsed data structure
+    console.log('🔍 TopicAnalysis: Parsed data structure:', {
+      dataType: typeof data,
+      dataKeys: data ? Object.keys(data) : 'none',
+      dataKeysCount: data ? Object.keys(data).length : 0,
+      hasTopics: !!(data && data.topics),
+      topicsType: data && data.topics ? typeof data.topics : 'none',
+      topicsLength: data && data.topics && Array.isArray(data.topics) ? data.topics.length : 'not array'
+    });
+    
+    // Safety check: if the parsed data looks like a massive array-like object, it's probably malformed
+    if (data && Object.keys(data).length > 1000) {
+      console.error('❌ TopicAnalysis: Parsed data has too many keys, likely malformed YAML:', Object.keys(data).length);
+      return (
+        <div className="p-4 text-center text-destructive">
+          Error: Topic analysis data appears to be malformed (too many keys: {Object.keys(data).length}). Please regenerate the report.
+        </div>
+      );
+    }
+    
   } catch (error) {
     console.error('❌ TopicAnalysis: Failed to parse output data:', error);
     return (
@@ -131,6 +197,47 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
   const fineTuning = data.fine_tuning || {};
   const topics = data.topics || [];
   const errors = data.errors || [];
+  const summary = data.summary;
+  
+  // Debug logging for topics data
+  console.log('🔍 TopicAnalysis: Topics data received:', {
+    topicsCount: topics.length,
+    topicsWithExamples: topics.filter(t => t.examples && t.examples.length > 0).length,
+    sampleTopic: topics[0] ? {
+      id: topics[0].id,
+      name: topics[0].name,
+      hasExamples: !!(topics[0].examples && topics[0].examples.length > 0),
+      examplesCount: topics[0].examples?.length || 0
+    } : 'No topics'
+  });
+
+  // Extract configuration summaries for the pipeline diagram
+  const getDiagramVariables = (): TemplateVariables => {
+    return {
+      preprocessor: formatPreprocessor(
+        preprocessing.method || 'Standard',
+        preprocessing.sample_size
+      ),
+      LLM: formatLLM(
+        llmExtraction.llm_provider || 'LLM',
+        llmExtraction.llm_model,
+        llmExtraction.prompt_used
+      ),
+      BERTopic: formatBERTopic({
+        minTopicSize: bertopicAnalysis.min_topic_size,
+        requestedTopics: bertopicAnalysis.num_topics_requested,
+        minNgram: bertopicAnalysis.min_ngram,
+        maxNgram: bertopicAnalysis.max_ngram,
+        topNWords: bertopicAnalysis.top_n_words,
+        discoveredTopics: topics.length
+      }),
+      finetune: formatFineTuning({
+        useRepresentationModel: fineTuning.use_representation_model || false,
+        provider: fineTuning.representation_model_provider,
+        model: fineTuning.representation_model_name
+      })
+    };
+  };
 
 
 
@@ -150,102 +257,115 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
         )}
 
         {/* Main Topic Analysis Results */}
-        <TopicAnalysisResults topics={topics} />
+        <TopicAnalysisResults topics={topics} summary={summary} bertopicAnalysis={bertopicAnalysis} />
 
-        {/* Process Details Sections */}
-        <Accordion type="multiple" defaultValue={["llm-extraction"]} className="w-full">
-          {/* Pre-processing Section */}
-          <AccordionItem value="preprocessing">
-            <AccordionTrigger className="text-base font-medium">
-              Pre-processing
-              <div className="ml-2 px-2 py-1 text-xs bg-card rounded">
-                {preprocessing.method || 'itemize'}
-              </div>
-            </AccordionTrigger>
-            <AccordionContent>
-              <PreprocessingSection preprocessing={preprocessing} />
-            </AccordionContent>
-          </AccordionItem>
-
-          {/* LLM Extraction Section */}
-          <AccordionItem value="llm-extraction">
-            <AccordionTrigger className="text-base font-medium">
-              LLM Extraction
-              {llmExtraction.examples && (
-                <div className="ml-2 px-2 py-1 text-xs bg-card rounded">
-                  {llmExtraction.examples.length} examples
-                </div>
-              )}
-            </AccordionTrigger>
-            <AccordionContent>
-              <LLMExtractionSection 
-                llmExtraction={llmExtraction}
-                promptExpanded={promptExpanded}
-                setPromptExpanded={setPromptExpanded}
-                examplesExpanded={examplesExpanded}
-                setExamplesExpanded={setExamplesExpanded}
+        {/* Pipeline Setup */}
+        <div className="w-full">
+          <div className="text-lg font-medium mb-4">
+            <div className="flex items-center gap-2">
+              <PocketKnife className="h-5 w-5" />
+              Pipeline Setup
+            </div>
+          </div>
+          <Card>
+            <CardContent className="p-0">
+              <TopicAnalysisViewer 
+                variables={getDiagramVariables()}
+                className="rounded-lg"
+                viewModeEnabled={true}
+                height={600}
               />
-            </AccordionContent>
-          </AccordionItem>
+            </CardContent>
+          </Card>
+        </div>
 
-          {/* BERTopic Analysis Section */}
-          <AccordionItem value="bertopic">
-            <AccordionTrigger className="text-base font-medium">
-              BERTopic Analysis
-              {topics.length > 0 && (
-                <div className="ml-2 px-2 py-1 text-xs bg-card rounded">
-                  {topics.length} topics
-                </div>
-              )}
-            </AccordionTrigger>
-            <AccordionContent>
-              <BERTopicSection 
-                topics={topics}
-                bertopicAnalysis={bertopicAnalysis}
-                visualizationNotes={data.visualization_notes}
-                attachedFiles={props.attachedFiles || undefined}
-              />
-            </AccordionContent>
-          </AccordionItem>
+        {/* Analysis Details Section */}
+        <div className="w-full">
+          <div className="text-lg font-medium mb-6">
+            <div className="flex items-center gap-2">
+              <Microscope className="h-5 w-5" />
+              Analysis Details
+            </div>
+          </div>
+          <div className="space-y-6 [&>*:last-child]:border-b-0">
+            {/* Pre-processing Section */}
+            <Accordion type="multiple" defaultValue={[]} className="w-full">
+              <AccordionItem value="preprocessing">
+                <AccordionTrigger className="text-base font-medium">
+                  Pre-processing
+                </AccordionTrigger>
+                <AccordionContent>
+                  <PreprocessingSection preprocessing={preprocessing} />
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
 
-          {/* Fine-tuning Section */}
-          <AccordionItem value="fine-tuning">
-            <AccordionTrigger className="text-base font-medium">
-              Fine-tuning
-              {fineTuning.representation_model_provider && (
-                <div className="ml-2 px-2 py-1 text-xs bg-card rounded">
-                  {fineTuning.representation_model_name || fineTuning.representation_model_provider}
-                </div>
-              )}
-            </AccordionTrigger>
-            <AccordionContent>
-              <FineTuningSection 
-                fineTuning={fineTuning}
-                topics={topics}
-              />
-            </AccordionContent>
-          </AccordionItem>
+            {/* LLM Extraction Section */}
+            <Accordion type="multiple" defaultValue={[]} className="w-full">
+              <AccordionItem value="llm-extraction">
+                <AccordionTrigger className="text-base font-medium">
+                  LLM Extraction
+                </AccordionTrigger>
+                <AccordionContent>
+                  <LLMExtractionSection 
+                    llmExtraction={llmExtraction}
+                    promptExpanded={promptExpanded}
+                    setPromptExpanded={setPromptExpanded}
+                    examplesExpanded={examplesExpanded}
+                    setExamplesExpanded={setExamplesExpanded}
+                  />
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
 
-          {/* Debug Information Section */}
-          {data.debug_info && (
-            <AccordionItem value="debug-info">
-              <AccordionTrigger className="text-base font-medium">
-                Debug Information
-                {data.debug_info.repetition_detected && (
-                  <Badge variant="destructive" className="ml-2">
-                    Repetition Detected
-                  </Badge>
-                )}
-              </AccordionTrigger>
-              <AccordionContent>
-                <DebugInfoSection debugInfo={data.debug_info} />
-              </AccordionContent>
-            </AccordionItem>
-          )}
-        </Accordion>
+            {/* BERTopic Analysis Section */}
+            <Accordion type="multiple" defaultValue={[]} className="w-full">
+              <AccordionItem value="bertopic">
+                <AccordionTrigger className="text-base font-medium">
+                  BERTopic Analysis
+                </AccordionTrigger>
+                <AccordionContent>
+                  <BERTopicSection 
+                    topics={topics}
+                    bertopicAnalysis={bertopicAnalysis}
+                    visualizationNotes={data.visualization_notes}
+                    attachedFiles={props.attachedFiles || undefined}
+                  />
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+
+            {/* Fine-tuning Section */}
+            <Accordion type="multiple" defaultValue={[]} className="w-full">
+              <AccordionItem value="fine-tuning">
+                <AccordionTrigger className="text-base font-medium">
+                  Fine-tuning
+                </AccordionTrigger>
+                <AccordionContent>
+                  <FineTuningSection 
+                    fineTuning={fineTuning}
+                    topics={topics}
+                    bertopicAnalysis={bertopicAnalysis}
+                  />
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+          </div>
+        </div>
       </div>
     </ReportBlock>
   );
+};
+
+/**
+ * Helper function to clean topic names by removing prefixes like "0_"
+ */
+const cleanTopicName = (name: string): string => {
+  // Remove prefixes like "0_", "1_", etc., replace underscores, and capitalize
+  const cleaned = name.replace(/^\d+_/, '');
+  return cleaned
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, char => char.toUpperCase());
 };
 
 /**
@@ -258,9 +378,14 @@ const TopicAnalysisResults: React.FC<{
     name: string;
     count: number;
     representation: string;
-    words: Array<{ word: string; weight: number }>;
+    keywords: string[];
+    examples?: TopicExample[];
   }>;
-}> = ({ topics }) => {
+  summary?: string;
+  bertopicAnalysis?: any;
+}> = ({ topics, summary, bertopicAnalysis }) => {
+  const [selectedTopicIndex, setSelectedTopicIndex] = useState<number>(-1);
+
   if (topics.length === 0) {
     return (
       <div className="space-y-4">
@@ -268,67 +393,208 @@ const TopicAnalysisResults: React.FC<{
           <MessagesSquare className="h-5 w-5" />
           <h3 className="text-lg font-medium">Topic Analysis Results</h3>
         </div>
-        <div className="space-y-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base text-muted-foreground">Analyzing topics...</CardTitle>
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-muted border-t-foreground"></div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                <div className="h-4 bg-muted rounded animate-pulse w-3/4"></div>
-                <div className="space-y-2">
-                  <div className="flex flex-wrap gap-1">
-                    {[1, 2, 3, 4, 5, 6].map((j) => (
-                      <div key={j} className="h-6 bg-muted rounded animate-pulse w-16"></div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>No Topics Discovered</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              {summary || "The analysis completed, but no distinct topics were found in the data. You could try adjusting the analysis parameters, like 'min_topic_size', or increasing the sample size."}
+            </p>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <MessagesSquare className="h-5 w-5" />
-          <h3 className="text-lg font-medium">Topic Analysis Results</h3>
-        </div>
-        <span className="text-sm text-muted-foreground">{topics.length} topics discovered</span>
+      <div className="flex items-center gap-2">
+        <MessagesSquare className="h-5 w-5" />
+        <h3 className="text-lg font-medium">Topic Analysis Results</h3>
       </div>
       
-      <div className="space-y-4">
-        {topics.map((topic) => (
-          <Card key={topic.id} className="shadow-none border">
-            <CardContent className="p-4">
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-muted-foreground">#{topic.id + 1}</span>
-                    <h4 className="font-medium">{topic.name}</h4>
+      <div className="grid grid-cols-1 sm:grid-cols-5 gap-8 items-start">
+        <div className="sticky top-4 sm:col-span-2">
+          <TopicDistributionChart 
+            topics={topics} 
+            selectedIndex={selectedTopicIndex}
+            onTopicSelect={setSelectedTopicIndex}
+          />
+        </div>
+        
+        <div className="sm:col-span-3">
+          <Accordion 
+            type="single" 
+            collapsible 
+            className="w-full" 
+            value={selectedTopicIndex >= 0 ? `item-${selectedTopicIndex}` : ""}
+            onValueChange={(value) => {
+              if (value && value !== "") {
+                const index = parseInt(value.replace('item-', ''));
+                setSelectedTopicIndex(index);
+              } else {
+                setSelectedTopicIndex(-1);
+              }
+            }}
+          >
+            {topics.map((topic, index) => {
+              const isSelected = selectedTopicIndex === index;
+              return (
+                <AccordionItem key={topic.id} value={`item-${index}`} className="mb-4">
+                  <AccordionTrigger className={`py-2 px-3 rounded-lg transition-colors ${
+                    isSelected ? 'bg-primary text-primary-foreground' : 'hover:bg-muted/50'
+                  }`}>
+                    <div className="flex items-center justify-between w-full pr-4">
+                      <span className="font-medium text-left">{cleanTopicName(topic.name)}</span>
+                      <Badge variant="secondary" className="border-none bg-card font-normal">{topic.count} items</Badge>
+                    </div>
+                  </AccordionTrigger>
+                <AccordionContent>
+                  <div className="space-y-3 p-1">
+                    {topic.keywords && topic.keywords.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {topic.keywords
+                          .filter(keyword => {
+                            // Ensure keyword is a non-empty string
+                            if (!keyword || typeof keyword !== 'string' || keyword.trim() === '') {
+                              return false;
+                            }
+                            // Also filter out the main topic name itself
+                            const normalizedKeyword = keyword.toLowerCase().replace(/_/g, ' ').trim();
+                            const normalizedTopicName = cleanTopicName(topic.name).toLowerCase().trim();
+                            return normalizedKeyword !== normalizedTopicName;
+                          })
+                          .slice(0, bertopicAnalysis.top_n_words || 8)
+                          .map((keyword, i) => (
+                            <Badge key={i} variant="secondary" className="text-xs">
+                              {keyword}
+                            </Badge>
+                          ))}
+                      </div>
+                    )}
+                    {topic.examples && topic.examples.length > 0 && (
+                      <TopicExamplesSection examples={topic.examples} />
+                    )}
+                    {(!topic.examples || topic.examples.length === 0) && (
+                      <div className="text-xs text-muted-foreground italic">
+                        No examples available for this topic
+                      </div>
+                    )}
                   </div>
-                  <span className="text-sm text-muted-foreground">{topic.count} items</span>
+                </AccordionContent>
+              </AccordionItem>
+              );
+            })}
+          </Accordion>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/**
+ * Topic Examples Section Component
+ * Shows representative example texts for a topic with collapsible display
+ */
+const TopicExamplesSection: React.FC<{
+  examples: TopicExample[];
+}> = ({ examples }) => {
+  if (!examples || examples.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2 mt-2">
+        <FileText className="h-4 w-4 text-muted-foreground" />
+        <h5 className="text-sm font-medium">Examples</h5>
+      </div>
+      <div className="space-y-2 pl-6">
+        {examples.map((example, index) => {
+          // Debug: Log the structure of example objects to see what metadata is available
+          if (index === 0 && typeof example === 'object') {
+            console.log('🔍 TopicAnalysis: Example object structure:', {
+              keys: Object.keys(example),
+              example: example,
+              hasIds: 'ids' in example,
+              hasId: 'id' in example,
+              hasText: 'text' in example
+            });
+          }
+          
+          // Extract text and metadata from object or use as string
+          let displayText: string;
+          let metadata: any = null;
+          
+          if (typeof example === 'string') {
+            displayText = example;
+          } else if (typeof example === 'object' && example !== null) {
+            // If it's an object with a 'text' property, extract that
+            const exampleObj = example as any;
+            if ('text' in exampleObj && typeof exampleObj.text === 'string') {
+              displayText = exampleObj.text;
+              metadata = exampleObj; // Store the full object for metadata access
+            } else {
+              // Fallback to stringifying the whole object
+              displayText = JSON.stringify(example);
+            }
+          } else {
+            displayText = String(example);
+          }
+          
+          return (
+            <div key={index} className="p-2 bg-muted/20 rounded-md border-l-2 border-muted-foreground/40">
+              {/* Display identifier/metadata if available */}
+              {(metadata?.id || metadata?.ids) && (
+                <div className="mb-2">
+                  {(() => {
+                    let identifierArray: Identifier[] = [];
+                    
+                    // Check both 'id' and 'ids' fields for backward compatibility
+                    const idField = metadata?.id || metadata?.ids;
+                    
+                    // Handle different formats of the id field
+                    if (Array.isArray(idField)) {
+                      identifierArray = idField;
+                    } else if (typeof idField === 'string') {
+                      try {
+                        const parsed = JSON.parse(idField);
+                        if (Array.isArray(parsed)) {
+                          identifierArray = parsed;
+                        }
+                      } catch (e) {
+                        // If parsing fails, treat as a simple string ID
+                        identifierArray = [{ id: idField, name: 'ID' }];
+                      }
+                    }
+                    
+                    // Only render if we have valid identifiers
+                    if (identifierArray.length > 0) {
+                      return (
+                        <IdentifierDisplay 
+                          identifiers={
+                            identifierArray.map(identifier => ({
+                                name: identifier.name || 'ID',
+                                value: identifier.id,
+                                url: identifier.url
+                            }))
+                          }
+                          iconSize="sm"
+                          textSize="xs"
+                        />
+                      );
+                    }
+                    return null;
+                  })()}
                 </div>
-                {topic.words && topic.words.length > 0 && (
-                  <div className="flex flex-wrap gap-1">
-                    {topic.words.slice(0, 6).map((word, i) => (
-                      <Badge key={i} variant="outline" className="text-xs font-mono px-0 py-0">
-                        {word.word}
-                      </Badge>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+              )}
+              <p className="text-sm text-foreground whitespace-pre-wrap break-words">
+                {displayText}
+              </p>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -424,6 +690,132 @@ const PreprocessingSection: React.FC<{
 };
 
 /**
+ * LLM Extraction Hit Rate Chart Component
+ * Shows the success rate of LLM extraction as a pie chart
+ */
+const LLMExtractionHitRateChart: React.FC<{
+  hitRateStats: {
+    total_processed: number;
+    successful_extractions: number;
+    failed_extractions: number;
+    hit_rate_percentage: number;
+  };
+}> = ({ hitRateStats }) => {
+  // Get the computed CSS custom property values for true/false colors
+  const trueColor = React.useMemo(() => {
+    if (typeof window !== 'undefined') {
+      const style = getComputedStyle(document.documentElement);
+      return style.getPropertyValue('--true').trim();
+    }
+    return 'hsl(142 76% 36%)'; // fallback
+  }, []);
+
+  const falseColor = React.useMemo(() => {
+    if (typeof window !== 'undefined') {
+      const style = getComputedStyle(document.documentElement);
+      return style.getPropertyValue('--false').trim();
+    }
+    return 'hsl(358 75% 59%)'; // fallback
+  }, []);
+
+  const chartData = [
+    {
+      name: "Successful",
+      value: hitRateStats.successful_extractions,
+      percentage: hitRateStats.hit_rate_percentage,
+    },
+    {
+      name: "Failed", 
+      value: hitRateStats.failed_extractions,
+      percentage: 100 - hitRateStats.hit_rate_percentage,
+    }
+  ];
+
+  return (
+    <div className="space-y-3">
+      <h4 className="font-medium">Extraction Hit Rate</h4>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+        <div className="w-full aspect-square max-w-[200px] mx-auto" style={{ pointerEvents: 'none' }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={chartData}
+                dataKey="value"
+                nameKey="name"
+                innerRadius="50%"
+                outerRadius="80%"
+                strokeWidth={2}
+                stroke="hsl(var(--background))"
+                paddingAngle={2}
+                onClick={() => {}}
+                onMouseEnter={() => {}}
+                onMouseLeave={() => {}}
+              >
+                <Cell fill={trueColor} style={{ outline: 'none', cursor: 'default' }} />
+                <Cell fill={falseColor} style={{ outline: 'none', cursor: 'default' }} />
+                <Label
+                  content={({ viewBox }) => {
+                    if (viewBox && "cx" in viewBox && "cy" in viewBox) {
+                      return (
+                        <text
+                          x={viewBox.cx}
+                          y={viewBox.cy}
+                          textAnchor="middle"
+                          dominantBaseline="middle"
+                        >
+                          <tspan
+                            x={viewBox.cx}
+                            y={viewBox.cy}
+                            className="fill-foreground text-2xl font-bold"
+                          >
+                            {hitRateStats.hit_rate_percentage}%
+                          </tspan>
+                        </text>
+                      );
+                    }
+                    return null;
+                  }}
+                  position="center"
+                />
+              </Pie>
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+        
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-true"></div>
+              <span className="text-sm font-medium">Successful</span>
+            </div>
+            <span className="text-sm text-muted-foreground">
+              {hitRateStats.successful_extractions} items
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-false"></div>
+              <span className="text-sm font-medium">Failed</span>
+            </div>
+            <span className="text-sm text-muted-foreground">
+              {hitRateStats.failed_extractions} items
+            </span>
+          </div>
+          <div className="pt-2 border-t">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Total Processed</span>
+              <span className="text-sm text-muted-foreground">
+                {hitRateStats.total_processed} items
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/**
  * LLM Extraction Section Component
  * Displays the prompt and extracted examples with collapsible/expandable sections
  */
@@ -438,7 +830,7 @@ const LLMExtractionSection: React.FC<{
   const [showAllExamples, setShowAllExamples] = useState(false);
   
   const examples = llmExtraction.examples || [];
-  const displayedExamples = showAllExamples ? examples : examples.slice(0, 5);
+  const displayedExamples = showAllExamples ? examples : examples.slice(0, 20);
   
   const toggleExampleSelection = (index: number) => {
     const newSelection = new Set(selectedExamples);
@@ -511,6 +903,29 @@ const LLMExtractionSection: React.FC<{
         </div>
       )}
 
+      {/* Hit Rate Section */}
+      {llmExtraction.hit_rate_stats && (
+        <>
+          {llmExtraction.hit_rate_stats.total_processed > 0 ? (
+            <LLMExtractionHitRateChart hitRateStats={llmExtraction.hit_rate_stats} />
+          ) : (
+            <div className="space-y-3">
+              <h4 className="font-medium">Extraction Hit Rate</h4>
+              <div className="p-3 bg-muted/20 rounded-md border-l-2 border-primary/20">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-3 h-3 rounded-full bg-primary"></div>
+                  <span className="text-sm font-medium">Using Cached Results</span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  This analysis used previously processed data for faster results. 
+                  Hit rate statistics are only available when processing fresh data.
+                </p>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
       {/* Examples Section */}
       {examples.length > 0 && (
         <div className="space-y-3">
@@ -526,7 +941,7 @@ const LLMExtractionSection: React.FC<{
                   Clear ({selectedExamples.size})
                 </Button>
               )}
-              {examples.length > 5 && (
+              {examples.length > 20 && (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -539,9 +954,9 @@ const LLMExtractionSection: React.FC<{
           </div>
           
           <div className="grid gap-2">
-            {displayedExamples.map((example: string, index: number) => {
+            {displayedExamples.map((example: TopicExample, index: number) => {
               const isSelected = selectedExamples.has(index);
-              const actualIndex = showAllExamples ? index : (index < 5 ? index : examples.indexOf(example));
+              const actualIndex = showAllExamples ? index : (index < 20 ? index : examples.indexOf(example));
               
               return (
                 <ExampleCard
@@ -555,9 +970,9 @@ const LLMExtractionSection: React.FC<{
             })}
           </div>
           
-          {!showAllExamples && examples.length > 5 && (
+          {!showAllExamples && examples.length > 20 && (
             <div className="text-center text-sm text-muted-foreground">
-              Showing 5 of {examples.length} examples
+              Showing 20 of {examples.length} examples
             </div>
           )}
         </div>
@@ -571,15 +986,54 @@ const LLMExtractionSection: React.FC<{
  * Compact display with click to expand, defensive design for long content
  */
 const ExampleCard: React.FC<{
-  example: string;
+  example: TopicExample;
   index: number;
   isSelected: boolean;
   onToggle: () => void;
 }> = ({ example, index, isSelected, onToggle }) => {
   const [expanded, setExpanded] = useState(false);
   const maxPreviewLength = 120;
-  const isLong = example.length > maxPreviewLength;
-  const displayText = expanded || !isLong ? example : `${example.slice(0, maxPreviewLength)}...`;
+  
+  // Extract text and metadata from object or use as string
+  let safeExample: string;
+  let metadata: any = null;
+  
+  if (typeof example === 'string') {
+    safeExample = example;
+  } else if (typeof example === 'object' && example !== null) {
+    // If it's an object with a 'text' property, extract that
+    const exampleObj = example as any;
+    if ('text' in exampleObj && typeof exampleObj.text === 'string') {
+      safeExample = exampleObj.text;
+      metadata = exampleObj; // Store the full object for metadata access
+    } else {
+      // Fallback to stringifying the whole object
+      safeExample = JSON.stringify(example);
+    }
+  } else {
+    safeExample = String(example);
+  }
+  
+  const isLong = safeExample.length > maxPreviewLength;
+  const displayText = expanded || !isLong ? safeExample : `${safeExample.slice(0, maxPreviewLength)}...`;
+
+  // Safely parse the ID field if it's a string
+  let parsedId: Identifier[] | null = null;
+  if (metadata?.id) {
+    if (Array.isArray(metadata.id)) {
+      parsedId = metadata.id;
+    } else if (typeof metadata.id === 'string') {
+      try {
+        const parsed = JSON.parse(metadata.id);
+        if (Array.isArray(parsed)) {
+          parsedId = parsed;
+        }
+      } catch (e) {
+        // Not a valid JSON string, so we can't parse it.
+        // It will be handled as a plain string below.
+      }
+    }
+  }
 
   return (
     <div
@@ -591,9 +1045,36 @@ const ExampleCard: React.FC<{
       onClick={onToggle}
     >
       <div className="flex items-start justify-between mb-2">
-        <span className="text-xs font-mono text-muted-foreground">#{index}</span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-mono text-muted-foreground">#{index}</span>
+          {/* Display identifier if available */}
+          {parsedId ? (
+            parsedId.map((identifier: Identifier) => (
+              identifier.url ? (
+                <a 
+                  href={identifier.url} 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  key={identifier.id} 
+                  onClick={(e) => e.stopPropagation()}
+                  className="text-xs font-mono bg-muted px-1 py-0.5 rounded text-muted-foreground hover:bg-primary/20 hover:text-primary-foreground"
+                >
+                  {identifier.name}: {identifier.id}
+                </a>
+              ) : (
+                <span key={identifier.id} className="text-xs font-mono bg-muted px-1 py-0.5 rounded text-muted-foreground">
+                  {identifier.name}: {identifier.id}
+                </span>
+              )
+            ))
+          ) : metadata?.id ? (
+            <span className="text-xs font-mono bg-muted px-1 py-0.5 rounded text-muted-foreground">
+              ID: {String(metadata.id)}
+            </span>
+          ) : null}
+        </div>
         <div className="flex items-center gap-1">
-          {example.length > maxPreviewLength && (
+          {safeExample.length > maxPreviewLength && (
             <Button
               variant="ghost"
               size="sm"
@@ -607,7 +1088,7 @@ const ExampleCard: React.FC<{
             </Button>
           )}
           <span className="text-xs text-muted-foreground">
-            {example.length} chars
+            {safeExample.length} chars
           </span>
         </div>
       </div>
@@ -628,7 +1109,8 @@ const BERTopicSection: React.FC<{
     name: string;
     count: number;
     representation: string;
-    words: Array<{ word: string; weight: number }>;
+    keywords: string[];
+    examples?: TopicExample[];
   }>;
   bertopicAnalysis: any;
   visualizationNotes?: {
@@ -682,12 +1164,11 @@ const BERTopicSection: React.FC<{
                   <h5 className="font-medium">Topic {topic.id}</h5>
                   <span className="text-sm text-muted-foreground">{topic.count} items</span>
                 </div>
-                <p className="text-sm mb-2">{topic.name}</p>
-                {topic.words && topic.words.length > 0 && (
+                {topic.keywords && topic.keywords.length > 0 && (
                   <div className="flex flex-wrap gap-1">
-                    {topic.words.slice(0, 8).map((word, i) => (
+                    {topic.keywords.slice(0, bertopicAnalysis?.top_n_words || 8).map((keyword, i) => (
                       <Badge key={i} variant="outline" className="text-xs">
-                        {word.word} ({word.weight.toFixed(3)})
+                        {keyword}
                       </Badge>
                     ))}
                   </div>
@@ -736,99 +1217,6 @@ const BERTopicSection: React.FC<{
 };
 
 /**
- * Debug Information Section Component
- * Displays debugging information about the transformed text and processing
- */
-const DebugInfoSection: React.FC<{
-  debugInfo: {
-    transformed_text_lines_count?: number;
-    transformed_text_sample?: string[];
-    unique_lines_count?: number;
-    repetition_detected?: boolean;
-    most_common_lines?: Array<{
-      line: string;
-      count: number;
-    }>;
-    error_reading_transformed_file?: string;
-  };
-}> = ({ debugInfo }) => {
-  return (
-    <div className="space-y-4 pt-2">
-      <p className="text-sm text-muted-foreground">
-        Debugging information about the LLM-transformed text and processing pipeline.
-      </p>
-      
-      {debugInfo.error_reading_transformed_file && (
-        <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-md">
-          <p className="text-sm text-destructive">
-            Error reading transformed file: {debugInfo.error_reading_transformed_file}
-          </p>
-        </div>
-      )}
-      
-      <div className="grid gap-3">
-        {debugInfo.transformed_text_lines_count !== undefined && (
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium">Total Lines Generated:</span>
-            <div className="px-2 py-1 text-xs bg-card rounded">{debugInfo.transformed_text_lines_count.toLocaleString()}</div>
-          </div>
-        )}
-        
-        {debugInfo.unique_lines_count !== undefined && (
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium">Unique Lines:</span>
-            <div className="px-2 py-1 text-xs bg-card rounded">{debugInfo.unique_lines_count.toLocaleString()}</div>
-          </div>
-        )}
-        
-        {debugInfo.repetition_detected !== undefined && (
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium">Repetition Detected:</span>
-            <div className="px-2 py-1 text-xs bg-card rounded">
-              {debugInfo.repetition_detected ? "Yes" : "No"}
-            </div>
-          </div>
-        )}
-      </div>
-      
-      {debugInfo.transformed_text_sample && debugInfo.transformed_text_sample.length > 0 && (
-        <div className="space-y-2">
-          <h4 className="font-medium text-sm">Sample of Transformed Text</h4>
-          <div className="p-3 bg-muted/20 rounded-md border font-mono text-xs">
-            {debugInfo.transformed_text_sample.map((line, index) => (
-              <div key={index} className="py-1 border-b border-muted/30 last:border-b-0">
-                <span className="text-muted-foreground mr-2">{index + 1}:</span>
-                {line.trim()}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-      
-      {debugInfo.most_common_lines && debugInfo.most_common_lines.length > 0 && (
-        <div className="space-y-2">
-          <h4 className="font-medium text-sm">Most Repeated Lines</h4>
-          <div className="space-y-2">
-            {debugInfo.most_common_lines.map((item, index) => (
-              <div key={index} className="p-2 bg-muted/20 rounded border">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-medium text-muted-foreground">
-                    Repeated {item.count} times
-                  </span>
-                </div>
-                <div className="text-sm font-mono">
-                  {item.line}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
-/**
  * Fine-tuning Section Component  
  * Displays representation model configuration and topic refinement
  */
@@ -839,9 +1227,12 @@ const FineTuningSection: React.FC<{
     name: string;
     count: number;
     representation: string;
-    words: Array<{ word: string; weight: number }>;
+    keywords: string[];
+    examples?: TopicExample[];
   }>;
-}> = ({ fineTuning, topics }) => {
+  bertopicAnalysis?: any;
+}> = ({ fineTuning, topics, bertopicAnalysis }) => {
+
   return (
     <div className="space-y-4 pt-2">
       <p className="text-sm text-muted-foreground">
@@ -866,15 +1257,79 @@ const FineTuningSection: React.FC<{
         </div>
       )}
       
-      {topics.length > 0 && fineTuning.use_representation_model && (
+      {fineTuning.before_after_comparison && fineTuning.before_after_comparison.length > 0 && (
+        <div className="space-y-3">
+          <h4 className="font-medium">Before & After Fine-tuning Comparison</h4>
+          <p className="text-sm text-muted-foreground">
+            See how the LLM transformed keyword-based topic names into human-readable labels.
+          </p>
+          <div className="grid gap-3">
+            {fineTuning.before_after_comparison.map((comparison: any) => {
+              const afterTopic = topics.find(t => t.id === comparison.topic_id);
+              if (!afterTopic) return null;
+              
+              return (
+                <div key={comparison.topic_id} className="border rounded-lg p-4 bg-card">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">Topic {comparison.topic_id}</span>
+                      <Badge variant="outline" className="text-xs">
+                        {afterTopic.count} items
+                      </Badge>
+                    </div>
+                  </div>
+                  
+                  <div className="grid md:grid-cols-2 gap-4">
+                    {/* Before (Original Keywords) */}
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-muted-foreground">Before</span>
+                      </div>
+                      <div className="space-y-2">
+                        <h5 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Original Keywords</h5>
+                        <div className="p-3 bg-muted/30 rounded border-l-2 border-primary/20">
+                          <div className="flex flex-wrap gap-1">
+                            {comparison.before_keywords.slice(0, bertopicAnalysis?.top_n_words || 8).map((keyword: string, i: number) => (
+                              <Badge key={i} variant="outline" className="text-xs">
+                                {keyword}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* After (LLM Refined) */}
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-muted-foreground">After</span>
+                      </div>
+                      <div className="space-y-2">
+                        <h5 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">LLM Refined</h5>
+                        <div className="p-3 bg-primary/5 rounded border-l-2 border-primary/20">
+                          <p className="text-sm font-medium">
+                            {comparison.after_name}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Fallback: Show only refined names if no before/after comparison data */}
+      {(!fineTuning.before_after_comparison || fineTuning.before_after_comparison.length === 0) && topics.length > 0 && fineTuning.use_representation_model && (
         <div className="space-y-3">
           <h4 className="font-medium">Refined Topic Names</h4>
           <div className="grid gap-2">
             {topics.map((topic) => (
               <div key={topic.id} className="flex items-center justify-between p-2 bg-card rounded">
                 <div>
-                  <span className="font-medium">Topic {topic.id}:</span>
-                  <span className="ml-2">{topic.name}</span>
+                  <span className="font-medium">Topic {topic.id}</span>
                 </div>
                 <span className="text-sm text-muted-foreground">{topic.count}</span>
               </div>
@@ -888,6 +1343,100 @@ const FineTuningSection: React.FC<{
           No representation model was used for topic refinement.
         </div>
       )}
+    </div>
+  );
+};
+
+/**
+ * Topic Distribution Chart Component
+ * Displays a pie chart for topic distribution
+ */
+const TopicDistributionChart: React.FC<{
+  topics: Array<{
+    id: number;
+    name: string;
+    count: number;
+  }>;
+  selectedIndex: number;
+  onTopicSelect: (index: number) => void;
+}> = ({ topics, selectedIndex, onTopicSelect }) => {
+  const chartData = topics.map(topic => ({
+    name: cleanTopicName(topic.name),
+    value: topic.count,
+  }));
+
+  const handlePieClick = (data: any, index: number) => {
+    // Toggle selection - if clicking the same segment, deselect it
+    if (selectedIndex === index) {
+      onTopicSelect(-1);
+    } else {
+      onTopicSelect(index);
+    }
+  };
+
+  return (
+    <div className="w-full mx-auto aspect-square">
+      <ResponsiveContainer width="100%" height="100%">
+        <PieChart>
+          <Pie
+            data={chartData}
+            dataKey="value"
+            nameKey="name"
+            innerRadius="60%"
+            outerRadius="80%"
+            strokeWidth={2}
+            stroke="hsl(var(--background))"
+            paddingAngle={2}
+            activeIndex={selectedIndex >= 0 ? selectedIndex : undefined}
+            activeShape={({
+              outerRadius = 0,
+              ...props
+            }: PieSectorDataItem) => (
+              <Sector {...props} outerRadius={outerRadius + 20} />
+            )}
+            onClick={handlePieClick}
+          >
+            {chartData.map((entry, index) => (
+              <Cell 
+                key={`cell-${index}`} 
+                fill={`var(--chart-${(index % 7) + 1})`}
+                style={{ cursor: 'pointer', outline: 'none' }}
+              />
+            ))}
+            <Label
+              content={({ viewBox }) => {
+                if (viewBox && "cx" in viewBox && "cy" in viewBox) {
+                  return (
+                    <text
+                      x={viewBox.cx}
+                      y={viewBox.cy}
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                    >
+                      <tspan
+                        x={viewBox.cx}
+                        y={viewBox.cy}
+                        className="fill-foreground text-3xl font-bold"
+                      >
+                        {topics.length.toLocaleString()}
+                      </tspan>
+                      <tspan
+                        x={viewBox.cx}
+                        y={(viewBox.cy || 0) + 24}
+                        className="fill-muted-foreground"
+                      >
+                        Topics
+                      </tspan>
+                    </text>
+                  );
+                }
+                return null;
+              }}
+              position="center"
+            />
+          </Pie>
+        </PieChart>
+      </ResponsiveContainer>
     </div>
   );
 };

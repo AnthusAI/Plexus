@@ -2,6 +2,7 @@
 import React from "react"
 import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { useInView } from 'react-intersection-observer'
+import { motion, AnimatePresence } from "framer-motion"
 import type { Schema } from "@/amplify/data/resource"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -63,6 +64,7 @@ import { toast } from "sonner"
 import { shareLinkClient, ShareLinkViewOptions } from "@/utils/share-link-client"
 import { fetchAuthSession } from 'aws-amplify/auth'
 import { ShareResourceModal } from "@/components/share-resource-modal"
+import { EvaluationTasksGauges } from './EvaluationTasksGauges'
 
 type TaskResponse = {
   items: Evaluation[]
@@ -250,6 +252,17 @@ interface ListEvaluationResponse {
   };
 }
 
+interface ScoreResult {
+  id: string;
+  value: string | number;
+  confidence: number | null;
+  metadata: any;
+  explanation?: string | null;
+  trace?: any | null;
+  itemId: string | null;
+  createdAt?: string;
+}
+
 export function transformEvaluation(evaluation: Schema['Evaluation']['type']) {
   console.debug('transformEvaluation input:', {
     evaluationId: evaluation?.id,
@@ -345,7 +358,12 @@ export function transformEvaluation(evaluation: Schema['Evaluation']['type']) {
     taskKeys: taskData ? Object.keys(taskData) : [],
     hasScoreResults: !!scoreResults?.items?.length,
     rawStages,
-    transformedStages
+    rawStagesType: typeof rawStages,
+    rawStagesKeys: rawStages ? Object.keys(rawStages) : [],
+    rawStagesData: rawStages?.data,
+    rawStagesItems: rawStages?.items,
+    transformedStages,
+    transformedStagesCount: transformedStages?.items?.length
   });
 
   // Transform the evaluation into the format expected by components
@@ -421,9 +439,25 @@ export default function EvaluationsDashboard({
   const [selectedScoreResultId, setSelectedScoreResultId] = useState<string | null>(initialSelectedScoreResultId)
   const [isShareModalOpen, setIsShareModalOpen] = useState(false)
   const [shareUrl, setShareUrl] = useState<string | null>(null)
-  // Use a ref to track if this is the initial render for URL updates
-  const isInitialUrlUpdateRef = useRef(true);
-
+  
+  // Ref map to track evaluation elements for scroll-to-view functionality
+  const evaluationRefsMap = useRef<Map<string, HTMLDivElement | null>>(new Map())
+  
+  // Function to scroll to a selected evaluation
+  const scrollToSelectedEvaluation = useCallback((evaluationId: string) => {
+    // Use requestAnimationFrame to ensure the layout has updated after selection
+    requestAnimationFrame(() => {
+      const evaluationElement = evaluationRefsMap.current.get(evaluationId);
+      if (evaluationElement) {
+        evaluationElement.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start', // Align to the top of the container
+          inline: 'nearest'
+        });
+      }
+    });
+  }, []);
+  
   // Add this handler
   const handleScoreResultSelect = useCallback((id: string | null) => {
     setSelectedScoreResultId(id);
@@ -746,69 +780,6 @@ export default function EvaluationsDashboard({
     setShareUrl(null); // Clear the share URL when closing the modal
   }, []);
 
-  interface EvaluationsGridProps {
-    evaluations: Evaluation[];
-    selectedEvaluationId: string | null;
-    setSelectedEvaluationId: (id: string | null) => void;
-    isNarrowViewport: boolean;
-    setIsFullWidth: (isFullWidth: boolean) => void;
-    selectedScoreResultId: string | null;
-    onSelectScoreResult: (id: string | null) => void;
-  }
-
-  const EvaluationsGrid: React.FC<EvaluationsGridProps> = React.memo(({ 
-    evaluations, 
-    selectedEvaluationId, 
-    setSelectedEvaluationId, 
-    isNarrowViewport, 
-    setIsFullWidth,
-    selectedScoreResultId,
-    onSelectScoreResult
-  }) => {
-    return (
-      <div className={`
-        grid gap-3
-        ${selectedEvaluationId && !isNarrowViewport && !isFullWidth ? 'grid-cols-1' : 'grid-cols-1 @[640px]:grid-cols-2'}
-      `}>
-        {evaluations.map((evaluation) => (
-          <div 
-            key={evaluation.id} 
-            onClick={() => {
-              setSelectedEvaluationId(evaluation.id)
-              if (isNarrowViewport) {
-                setIsFullWidth(true)
-              }
-            }}
-          >
-            <TaskDisplay
-              variant="grid"
-              task={evaluation.task}
-              evaluationData={evaluation}
-              isSelected={evaluation.id === selectedEvaluationId}
-              onClick={() => {
-                setSelectedEvaluationId(evaluation.id)
-                if (isNarrowViewport) {
-                  setIsFullWidth(true)
-                }
-              }}
-              extra={true}
-              selectedScoreResultId={selectedScoreResultId}
-              onSelectScoreResult={onSelectScoreResult}
-            />
-          </div>
-        ))}
-      </div>
-    );
-  }, (prevProps, nextProps) => {
-    // Custom comparison to prevent unnecessary re-renders
-    return (
-      prevProps.evaluations === nextProps.evaluations &&
-      prevProps.selectedEvaluationId === nextProps.selectedEvaluationId &&
-      prevProps.isNarrowViewport === nextProps.isNarrowViewport &&
-      prevProps.selectedScoreResultId === nextProps.selectedScoreResultId
-    );
-  });
-
   // Memoize the click handler for each evaluation to prevent unnecessary re-renders
   const getEvaluationClickHandler = useCallback((evaluationId: string) => {
     return (e?: React.MouseEvent | React.SyntheticEvent | any) => {
@@ -828,12 +799,17 @@ export default function EvaluationsDashboard({
         const newPathname = `/lab/evaluations/${evaluationId}`;
         window.history.pushState(null, '', newPathname);
         
+        // Scroll to the selected evaluation after a brief delay to allow layout updates
+        setTimeout(() => {
+          scrollToSelectedEvaluation(evaluationId);
+        }, 100);
+        
         if (isNarrowViewport) {
           setIsFullWidth(true);
         }
       }
     };
-  }, [selectedEvaluationId, isNarrowViewport]);
+  }, [selectedEvaluationId, isNarrowViewport, scrollToSelectedEvaluation]);
 
   if (showLoading) {
     return (
@@ -858,91 +834,149 @@ export default function EvaluationsDashboard({
   }
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex-none p-1.5">
-        <div className="flex justify-between items-start">
+    <div className="@container flex flex-col h-full p-3 overflow-hidden">
+      {/* Fixed header */}
+      <div className="flex @[600px]:flex-row flex-col @[600px]:items-center @[600px]:justify-between items-stretch gap-3 pb-3 flex-shrink-0">
+        <div className="@[600px]:flex-grow w-full">
           <ScorecardContext 
             selectedScorecard={selectedScorecard}
             setSelectedScorecard={setSelectedScorecard}
             selectedScore={selectedScore}
             setSelectedScore={setSelectedScore}
+            skeletonMode={showLoading}
           />
+        </div>
+        
+        {/* TaskDispatchButton on top right */}
+        <div className="flex-shrink-0">
           <TaskDispatchButton config={evaluationsConfig} />
         </div>
       </div>
       
-      <div className="flex-1 flex min-h-0 p-1.5">
-        <div 
-          className={`
-            ${selectedEvaluationId && !isNarrowViewport && !isFullWidth ? '' : 'w-full'}
-            ${selectedEvaluationId && !isNarrowViewport && isFullWidth ? 'hidden' : ''}
-            h-full overflow-y-auto overflow-x-hidden @container
-          `}
-          style={selectedEvaluationId && !isNarrowViewport && !isFullWidth ? {
-            width: `${leftPanelWidth}%`
-          } : undefined}
-        >
-          {filteredEvaluations.length === 0 ? (
-            <div className="text-sm text-muted-foreground">No evaluations found</div>
-          ) : (
-            <div className={`
-              grid gap-3
-              ${selectedEvaluationId && !isNarrowViewport && !isFullWidth ? 'grid-cols-1' : 'grid-cols-1 @[640px]:grid-cols-2'}
-            `}>
-              {filteredEvaluations.map((evaluation: any) => {
-                const clickHandler = getEvaluationClickHandler(evaluation.id);
-                return (
-                  <div 
-                    key={evaluation.id} 
-                    onClick={clickHandler}
-                  >
-                    <TaskDisplay
-                      variant="grid"
-                      task={evaluation.task}
-                      evaluationData={{
-                        ...evaluation,
-                        // Pass the raw score results - they will be standardized in the components
-                        scoreResults: evaluation.scoreResults
-                      }}
-                      isSelected={evaluation.id === selectedEvaluationId}
-                      onClick={clickHandler}
-                      extra={true}
-                      selectedScoreResultId={selectedScoreResultId}
-                      onSelectScoreResult={handleScoreResultSelect}
-                    />
-                  </div>
-                );
-              })}
-              <div ref={ref} className="h-4" />
+      <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+        <AnimatePresence mode="popLayout">
+          <motion.div 
+            key="evaluations-layout"
+            className="flex flex-1 min-h-0"
+            layout
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ 
+              type: "spring", 
+              stiffness: 300, 
+              damping: 30,
+              opacity: { duration: 0.2 }
+            }}
+          >
+            {/* Left panel - grid content */}
+            <motion.div 
+              className={`${selectedEvaluationId && !isNarrowViewport && isFullWidth ? 'hidden' : 'flex-1'} h-full overflow-auto`}
+              style={selectedEvaluationId && !isNarrowViewport && !isFullWidth ? {
+                width: `${leftPanelWidth}%`
+              } : undefined}
+              layout
+              transition={{ 
+                type: "spring", 
+                stiffness: 300, 
+                damping: 30 
+              }}
+            >
+            <div className="@container space-y-3 overflow-visible">
+              {/* EvaluationTasksGauges at the top - only show when not in mobile selected evaluation view */}
+              {!(selectedEvaluationId && isNarrowViewport) && (
+                <EvaluationTasksGauges />
+              )}
+              
+              {filteredEvaluations.length === 0 ? (
+                <div className="text-sm text-muted-foreground">No evaluations found</div>
+              ) : (
+                <div className={`
+                  grid gap-3
+                  ${selectedEvaluationId && !isNarrowViewport && !isFullWidth ? 'grid-cols-1' : 'grid-cols-1 @[640px]:grid-cols-2'}
+                `}>
+                  {filteredEvaluations.map((evaluation: any) => {
+                    const clickHandler = getEvaluationClickHandler(evaluation.id);
+                    return (
+                      <div 
+                        key={evaluation.id} 
+                        onClick={clickHandler}
+                        ref={(el) => {
+                          evaluationRefsMap.current.set(evaluation.id, el);
+                        }}
+                      >
+                        <TaskDisplay
+                          variant="grid"
+                          task={evaluation.task}
+                          evaluationData={{
+                            ...evaluation,
+                            // Pass the raw score results - they will be standardized in the components
+                            scoreResults: evaluation.scoreResults
+                          }}
+                          isSelected={evaluation.id === selectedEvaluationId}
+                          onClick={clickHandler}
+                          extra={true}
+                          selectedScoreResultId={selectedScoreResultId}
+                          onSelectScoreResult={handleScoreResultSelect}
+                        />
+                      </div>
+                    );
+                  })}
+                  <div ref={ref} className="h-4" />
+                </div>
+              )}
             </div>
-          )}
-        </div>
+            </motion.div>
 
-        {selectedEvaluationId && !isNarrowViewport && !isFullWidth && (
-          <div
-            className="w-[12px] relative cursor-col-resize flex-shrink-0 group"
-            onMouseDown={handleDragStart}
-          >
-            <div className="absolute inset-0 rounded-full transition-colors duration-150 
-              group-hover:bg-accent" />
-          </div>
-        )}
+            {/* Divider for split view */}
+            {selectedEvaluationId && !isNarrowViewport && !isFullWidth && (
+              <div
+                className="w-[12px] relative cursor-col-resize flex-shrink-0 group"
+                onMouseDown={handleDragStart}
+              >
+                <div className="absolute inset-0 rounded-full transition-colors duration-150 
+                  group-hover:bg-accent" />
+              </div>
+            )}
 
-        {selectedEvaluationId && !isNarrowViewport && !isFullWidth && (
-          <div 
-            className="h-full overflow-hidden flex-shrink-0"
-            style={{ width: `${100 - leftPanelWidth}%` }}
-          >
-            {renderSelectedTask}
-          </div>
-        )}
+            {/* Right panel - evaluation detail view */}
+            <AnimatePresence>
+              {selectedEvaluationId && !isNarrowViewport && !isFullWidth && (
+                <motion.div 
+                  key={`evaluation-detail-${selectedEvaluationId}`}
+                  className="h-full overflow-hidden flex-shrink-0"
+                  style={{ width: `${100 - leftPanelWidth}%` }}
+                  initial={{ width: 0, opacity: 0 }}
+                  animate={{ 
+                    width: `${100 - leftPanelWidth}%`, 
+                    opacity: 1 
+                  }}
+                  exit={{ 
+                    width: 0, 
+                    opacity: 0 
+                  }}
+                  transition={{ 
+                    type: "spring", 
+                    stiffness: 300, 
+                    damping: 30 
+                  }}
+                >
+                  {renderSelectedTask}
+                </motion.div>
+              )}
+            </AnimatePresence>
 
+          </motion.div>
+        </AnimatePresence>
+        
+        {/* Full-screen view for mobile or full-width mode */}
         {selectedEvaluationId && (isNarrowViewport || isFullWidth) && (
           <div className="fixed inset-0 z-50 overflow-y-auto">
             {renderSelectedTask}
           </div>
         )}
       </div>
+      
       <ShareResourceModal 
         isOpen={isShareModalOpen}
         onClose={handleCloseShareModal}
@@ -952,18 +986,6 @@ export default function EvaluationsDashboard({
       />
     </div>
   )
-}
-
-// Add the ScoreResult type
-interface ScoreResult {
-  id: string;
-  value: string | number;
-  confidence: number | null;
-  metadata: any;
-  explanation?: string | null;
-  trace?: any | null;
-  itemId: string | null;
-  createdAt?: string;
 }
 
 // Add TaskStageSubscriptionEvent type

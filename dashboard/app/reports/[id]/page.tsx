@@ -11,11 +11,12 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { getValueFromLazyLoader } from '@/utils/data-operations'
+import { parseOutputString } from '@/lib/utils'
 import { GraphQLResult } from '@aws-amplify/api'
-import BlockRegistryInitializer from '@/components/blocks/BlockRegistryInitializer'
 import SquareLogo, { LogoVariant } from '@/components/logo-square';
 import { format, parseISO } from 'date-fns';
 import { Timestamp } from '@/components/ui/timestamp';
+import { Spinner } from '@/components/ui/spinner';
 
 // Share link data type
 type ShareLinkData = {
@@ -61,10 +62,10 @@ export class ReportService {
         authMode = 'apiKey';
       }
 
-      // Use the graphql API directly with auth mode instead of safeGet
+      // Use the graphql API directly with a single, comprehensive query
       const response = await this.client.graphql({
         query: `
-          query GetReport($id: ID!) {
+          query GetReportWithBlocks($id: ID!) {
             getReport(id: $id) {
               id
               name
@@ -80,6 +81,18 @@ export class ReportService {
                 description
               }
               taskId
+              reportBlocks {
+                items {
+                  id
+                  name
+                  position
+                  type
+                  output
+                  log
+                  attachedFiles
+                }
+                nextToken
+              }
             }
           }
         `,
@@ -95,100 +108,15 @@ export class ReportService {
         throw new Error('Report not found');
       }
       
-      // Return report data with blocks
-      const reportWithBlocks = await this.fetchReportBlocks(reportData);
-      return reportWithBlocks;
+      // The report and its blocks are now fetched in a single query
+      return reportData;
+
     } catch (error) {
       console.error('Error fetching report by ID:', error);
       throw error;
     }
   }
 
-  // Fetch report blocks
-  async fetchReportBlocks(report: any): Promise<any> {
-    try {
-      // Determine auth mode for unauthenticated access
-      let authMode: 'userPool' | 'apiKey' | undefined = undefined;
-      try {
-        const session = await fetchAuthSession();
-        if (session.tokens?.idToken) {
-          authMode = 'userPool';
-        } else {
-          authMode = 'apiKey';
-        }
-      } catch (error) {
-        authMode = 'apiKey';
-      }
-
-      // Condition to (re-)fetch blocks:
-      // Simplified check: if reportBlocks or its items are missing, or if the first block lacks a type.
-      const shouldFetchBlocks = 
-        !report.reportBlocks || 
-        !report.reportBlocks.items || 
-        report.reportBlocks.items.length === 0 ||
-        (report.reportBlocks.items.length > 0 && typeof report.reportBlocks.items[0].type === 'undefined');
-
-      if (shouldFetchBlocks) {
-        const blockResponse = await this.client.graphql({
-          query: `
-            query GetReportAndItsBlocks($reportId: ID!) {
-              getReport(id: $reportId) {
-                id
-                reportBlocks {
-                  items {
-                    id
-                    name
-                    position
-                    type
-                    output
-                    log
-                    attachedFiles
-                  }
-                  nextToken
-                }
-              }
-            }
-          `,
-          variables: { reportId: report.id },
-          authMode
-        }) as GraphQLResult<{
-          getReport: {
-            id: string;
-            reportBlocks: {
-              items: Array<{
-                id: string;
-                name?: string;
-                position: number;
-                type: string; // Ensure type is requested
-                output: any;
-                log?: string;
-                attachedFiles?: string;
-              }>;
-              nextToken?: string;
-            };
-          };
-        }>;
-
-        if (blockResponse.data?.getReport?.reportBlocks?.items) {
-          report.reportBlocks = {
-            items: blockResponse.data.getReport.reportBlocks.items
-          };
-          // If you implement pagination, you'd also store blockResponse.data.getReport.reportBlocks.nextToken
-        } else {
-          report.reportBlocks = { items: [] };
-        }
-      }
-      
-      return report;
-    } catch (error) {
-      console.error('Error fetching report blocks:', error);
-      // Ensure reportBlocks.items is at least an empty array on error to prevent further issues
-      if (report && !report.reportBlocks) report.reportBlocks = {};
-      if (report && !report.reportBlocks.items) report.reportBlocks.items = [];
-      return report; // Return the report even if blocks fetch fails
-    }
-  }
-  
   // Fetch report by share token
   async fetchReportByShareToken(token: string): Promise<any> {
     try {
@@ -338,8 +266,9 @@ export class ReportService {
         }
       }
       
-      // Fetch any additional blocks if needed
-      return this.fetchReportBlocks(reportData);
+      // The full report data, including blocks, is now fetched in the GetFullReport query.
+      // No need to call fetchReportBlocks separately.
+      return reportData;
     } catch (error) {
       console.error('Error fetching report by share token:', error);
       throw error;
@@ -421,8 +350,7 @@ export function PublicReport({
       <div className="px-4 w-full">
         <div className="bg-background p-6 rounded-md">
           <div className="flex flex-col items-center justify-center min-h-[200px]">
-            <div className="w-10 h-10 border-t-[8px] border-secondary rounded-full animate-spin mb-4"></div>
-            <p className="text-muted-foreground">Loading report...</p>
+            <Spinner size="xl" variant="secondary" />
           </div>
         </div>
       </div>
@@ -456,12 +384,7 @@ export function PublicReport({
     
     // Parse report blocks
     const reportBlocks = report.reportBlocks?.items?.map((block: any) => {
-      let outputData;
-      try {
-        outputData = typeof block.output === 'string' ? JSON.parse(block.output) : block.output;
-      } catch (err) {
-        outputData = block.output || {}; // Fallback to an empty object or raw output
-      }
+      const outputData = parseOutputString(block.output);
 
       // Prioritize block.type from API, then outputData.class, then 'unknown'
       const blockType = block.type || outputData.class || 'unknown'; 
@@ -518,7 +441,6 @@ export function PublicReport({
     return (
       <div className="flex flex-col flex-1 min-h-0">
         <div className="px-3 sm:px-4 md:px-5 lg:px-6 xl:px-8 w-full mt-4 flex-1">
-          <BlockRegistryInitializer />
           <ReportTask
             variant={isShareView ? "bare" : "detail"}
             task={{

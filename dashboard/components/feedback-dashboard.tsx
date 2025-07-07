@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import { Square, Columns2, X, ChevronDown, ChevronUp, Info, MessageCircleMore, Plus, ThumbsUp, ThumbsDown, ChevronLeft } from "lucide-react"
+import { ChevronDown, ChevronUp, Info, MessageCircleMore, Plus, ThumbsUp, ThumbsDown, ChevronLeft } from "lucide-react"
 import { formatDistanceToNow, parseISO } from "date-fns"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -24,7 +24,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import Link from 'next/link'
 import { FilterControl, FilterConfig } from "@/components/filter-control"
-import ItemDetail from './ItemDetail'
+import ItemCard from './items/ItemCard'
 import { ProgressBar } from "@/components/ui/progress-bar"
 import type { FeedbackItem } from '@/types/feedback'
 
@@ -89,7 +89,7 @@ const scorecardScoreCounts = {
   "SelectQuote Term Life v1": 42,
 };
 
-// Local data structure for feedback dashboard - has different structure from the ItemDetail FeedbackItem
+// Local data structure for feedback dashboard - has different structure from the ItemCard ItemData
 export interface FeedbackDashboardItem {
   id: number
   scorecard: string
@@ -560,18 +560,24 @@ export default function FeedbackDashboard() {
     toggleNewAnnotationForm(scoreName, false);
   };
 
-  // Helper function to convert FeedbackDashboardItem to FeedbackItem for ItemDetail
-  const convertToFeedbackItem = (dashboardItem: FeedbackDashboardItem): FeedbackItem => ({
-    id: dashboardItem.id.toString(),
-    scorecard: dashboardItem.scorecard,
-    inferences: dashboardItem.inferences,
-    results: dashboardItem.results,
-    cost: dashboardItem.cost,
+  // Helper function to convert FeedbackDashboardItem to ItemData for ItemCard
+  const convertToItemData = (dashboardItem: FeedbackDashboardItem) => ({
+    id: dashboardItem.id,
+    timestamp: dashboardItem.date,
+    scorecards: [{
+      scorecardId: 'feedback-scorecard',
+      scorecardName: dashboardItem.scorecard,
+      resultCount: dashboardItem.scoreCount || 0
+    }],
+    externalId: `FEEDBACK-${dashboardItem.id}`,
+    description: `Feedback item ${dashboardItem.id}`,
+    isNew: false,
+    isLoadingResults: false,
     status: dashboardItem.status,
-    date: dashboardItem.date,
-    sampleMetadata: dashboardItem.sampleMetadata,
-    sampleTranscript: dashboardItem.sampleTranscript,
-    sampleScoreResults: dashboardItem.sampleScoreResults || []
+    isEvaluation: false,
+    accountId: 'feedback-account',
+    createdAt: dashboardItem.date,
+    updatedAt: dashboardItem.lastUpdated
   });
 
   const renderSelectedItem = () => {
@@ -580,50 +586,12 @@ export default function FeedbackDashboard() {
     const selectedItemData = feedbackItems.find(item => item.id === selectedItem);
     if (!selectedItemData) return null;
 
-    const DetailViewControlButtons = (
-      <>
-        {!isNarrowViewport && (
-          <Button variant="outline" size="icon" onClick={() => setIsFullWidth(!isFullWidth)}>
-            {isFullWidth ? <Columns2 className="h-4 w-4" /> : <Square className="h-4 w-4" />}
-          </Button>
-        )}
-        <Button variant="outline" size="icon" onClick={() => {
-          setSelectedItem(null)
-          setIsFullWidth(false)
-        }} className="ml-2">
-          <X className="h-4 w-4" />
-        </Button>
-      </>
-    );
-
     return (
-      <ItemDetail
-        item={convertToFeedbackItem(selectedItemData)}
-        controlButtons={DetailViewControlButtons}
+      <ItemCard
+        item={convertToItemData(selectedItemData)}
+        variant="detail"
         getBadgeVariant={getBadgeVariant}
-        getRelativeTime={getRelativeTime}
-        isMetadataExpanded={isMetadataExpanded}
-        setIsMetadataExpanded={setIsMetadataExpanded}
-        isDataExpanded={isDataExpanded}
-        setIsDataExpanded={setIsDataExpanded}
-        isErrorExpanded={isErrorExpanded}
-        setIsErrorExpanded={setIsErrorExpanded}
-        sampleMetadata={sampleMetadata}
-        sampleTranscript={sampleTranscript}
-        sampleScoreResults={scoreResults}
-        handleThumbsUp={handleThumbsUp}
-        handleThumbsDown={handleThumbsDown}
-        handleNewAnnotationSubmit={handleNewAnnotationSubmit}
-        toggleAnnotations={toggleAnnotations}
-        showNewAnnotationForm={showNewAnnotationForm}
-        newAnnotation={newAnnotation}
-        setNewAnnotation={setNewAnnotation}
-        expandedAnnotations={expandedAnnotations}
-        thumbedUpScores={thumbedUpScores}
-        setShowNewAnnotationForm={setShowNewAnnotationForm}
-        setThumbedUpScores={setThumbedUpScores}
         isFullWidth={isFullWidth}
-        isFeedbackMode={true}
         onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
         onClose={() => setSelectedItem(null)}
       />

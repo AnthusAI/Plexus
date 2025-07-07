@@ -82,6 +82,9 @@ function AuthWrapper({ children }: { children: React.ReactNode }) {
     '/documentation/advanced/sdk',
     '/documentation/advanced/universal-code',
     '/documentation/advanced/mcp-server',
+    '/documentation/report-blocks',
+    '/documentation/report-blocks/feedback-analysis',
+    '/documentation/report-blocks/topic-analysis',
     '/login',
     '/signup',
   ];

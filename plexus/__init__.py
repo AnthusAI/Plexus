@@ -14,4 +14,4 @@ from .Scorecard import Scorecard
 from .ScorecardResults import ScorecardResults
 from .ScorecardResultsAnalysis import ScorecardResultsAnalysis
 
-__version__ = "0.0.0"
+from ._version import __version__

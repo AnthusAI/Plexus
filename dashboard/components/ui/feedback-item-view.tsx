@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import { Code, List, X, CheckCircle, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { CardButton } from '@/components/CardButton';
+import { IdentifierDisplay } from '@/components/ui/identifier-display';
 
 export interface FeedbackItem {
   id: string;
@@ -49,22 +50,6 @@ export const FeedbackItemView: React.FC<FeedbackItemViewProps> = ({
       return dateString;
     }
   };
-
-  const parsedIdentifiers = useMemo(() => {
-    if (item.item?.identifiers) {
-      try {
-        return JSON.parse(item.item.identifiers) as Array<{
-          name: string;
-          id: string;
-          url?: string;
-        }>;
-      } catch (error) {
-        console.error('Failed to parse identifiers JSON string:', error);
-        return [];
-      }
-    }
-    return [];
-  }, [item.item?.identifiers]);
 
   return (
     <div className={cn("p-3 mb-3 bg-muted rounded-md", className)}>
@@ -130,41 +115,15 @@ export const FeedbackItemView: React.FC<FeedbackItemViewProps> = ({
               )}
             </div>
             
-            {/* Item identifiers if available - now in right column */}
+            {/* Item identifiers using the reusable IdentifierDisplay component */}
             <div>
-              {parsedIdentifiers.length > 0 && (
-                <div>
-                  <div className="text-xs text-muted-foreground mb-1">Identifiers</div>
-                  <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
-                    {parsedIdentifiers.map((identifier, index) => (
-                      <React.Fragment key={`${identifier.name}-${index}`}>
-                        <div className="text-muted-foreground">{identifier.name}:</div>
-                        <div className="text-muted-foreground">
-                          {identifier.url ? (
-                            <a 
-                              href={identifier.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-primary hover:underline"
-                              title={identifier.id}
-                            >
-                              {identifier.id.length > 10 
-                                ? `${identifier.id.substring(0, 10)}...` 
-                                : identifier.id}
-                            </a>
-                          ) : (
-                            <span title={identifier.id}>
-                              {identifier.id.length > 10 
-                                ? `${identifier.id.substring(0, 10)}...` 
-                                : identifier.id}
-                            </span>
-                          )}
-                        </div>
-                      </React.Fragment>
-                    ))}
-                  </div>
-                </div>
-              )}
+              <IdentifierDisplay 
+                identifiers={item.item?.identifiers}
+                externalId={item.item?.externalId}
+                iconSize="sm"
+                textSize="xs"
+                displayMode="full"
+              />
             </div>
           </div>
         </div>

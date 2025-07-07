@@ -1,20 +1,23 @@
 import { defineBackend } from '@aws-amplify/backend';
-import { data } from './data/resource';
-import { auth } from './auth/resource';
-import { reportBlockDetails } from './storage/resource';
-import { TaskDispatcherStack } from './functions/taskDispatcher/resource';
+import { data } from './data/resource.js';
+import { auth } from './auth/resource.js';
+import { reportBlockDetails, dataSources, scoreResultAttachments, taskAttachments } from './storage/resource.js';
+import { TaskDispatcherStack } from './functions/taskDispatcher/resource.js';
 import { Stack } from 'aws-cdk-lib';
-import { PolicyStatement } from 'aws-cdk-lib/aws-iam';
+import { PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 
 // Create the backend
 const backend = defineBackend({
     auth,
     data,
-    reportBlockDetails
+    reportBlockDetails,
+    dataSources,
+    scoreResultAttachments,
+    taskAttachments
 });
 
-// Get access to the getResourceByShareToken function
+// Get access to the functions
 const getResourceByShareTokenFunction = backend.data.resources.functions.getResourceByShareToken;
 
 // Add AppSync permissions to the getResourceByShareToken function
@@ -26,11 +29,6 @@ if (getResourceByShareTokenFunction) {
         })
     );
 }
-
-// // Force backend to generate an identity pool with unauthenticated access
-// if (backend.auth.resources.cfnResources?.cfnIdentityPool) {
-//     backend.auth.resources.cfnResources.cfnIdentityPool.allowUnauthenticatedIdentities = true;
-// }
 
 // Get reference to the Task table and enable streams
 const taskTable = backend.data.resources.tables.Task;
@@ -44,7 +42,7 @@ if (cfnTable) {
 // Create the TaskDispatcher stack with the table reference
 const taskDispatcherStack = new TaskDispatcherStack(
     backend.createStack('TaskDispatcherStack'),
-    'taskDispatcher',
+    'TaskDispatcher',
     {
         taskTable,
         // These will be set in the Lambda function's environment variables after deployment

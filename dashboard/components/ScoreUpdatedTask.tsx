@@ -1,6 +1,6 @@
 import React from 'react'
 import { Task, TaskHeader, TaskContent, BaseTaskProps } from './Task'
-import { ListTodo, MoveUpRight } from 'lucide-react'
+import { ListChecks, MoveUpRight } from 'lucide-react'
 import BeforeAfterGauges from './BeforeAfterGauges'
 import { BaseTaskData } from '@/types/base'
 
@@ -53,7 +53,7 @@ const ScoreUpdatedTask: React.FC<ScoreUpdatedTaskProps> = ({
       renderHeader={(props) => (
         <TaskHeader {...props}>
           <div className="flex justify-end w-full">
-            <ListTodo className="h-6 w-6" />
+                            <ListChecks className="h-6 w-6" />
           </div>
         </TaskHeader>
       )}

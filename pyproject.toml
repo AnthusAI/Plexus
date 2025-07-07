@@ -16,6 +16,7 @@ dependencies = [
     "pytest==8.2.2",
     "flake8==7.1.1",
     "pytest-cov==5.0.0",
+    "pyfakefs>=5.0.0",
     "python-dotenv>=1.1.0",
     "pytest-watch==4.2.0",
     "pytest-asyncio==0.23.5",
@@ -83,7 +84,7 @@ packages = { find = { include = ["plexus*"] } }
 package-data = { plexus = ["templates/*", "__main__.py", "py.typed", "scores/*.py"] }
 
 [tool.setuptools.dynamic]
-version = {attr = "plexus.__version__"}
+version = {attr = "plexus._version.__version__"}
 
 [tool.pytest.ini_options]
 filterwarnings = [
@@ -111,7 +112,7 @@ exclude_lines = [
 ]
 
 [tool.semantic_release]
-version_variable = ["plexus/__init__.py:__version__"]
+version_variable = ["plexus/_version.py:__version__"]
 version_toml = []
 version_pattern = []
 commit_message = "chore: release {version}"

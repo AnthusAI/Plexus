@@ -10,11 +10,17 @@ import { SidebarProvider } from "./contexts/SidebarContext"
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Plexus - No-Code AI Agents at Scale",
-  description: "Run AI agents over your data with no code. Plexus is a battle-tested platform for building agent-based AI workflows that analyze streams of content and take action.",
+  title: "Plexus - Distributed Machine Learning Operating System",
+  description: "A distributed machine learning operating system. Plexus is a battle-tested platform for building AI workflows that analyze streams of content and take action.",
+  viewport: {
+    width: 'device-width',
+    initialScale: 1,
+    maximumScale: 1,
+    userScalable: false,
+  },
   openGraph: {
-    title: "Plexus - No-Code AI Agents at Scale",
-    description: "Run AI agents over your data with no code. Plexus is a battle-tested platform for building agent-based AI workflows that analyze streams of content and take action.",
+    title: "Plexus - Distributed Machine Learning Operating System",
+    description: "A distributed machine learning operating system. Plexus is a battle-tested platform for building AI workflows that analyze streams of content and take action.",
     url: "https://plexus.anth.us",
     siteName: "Plexus",
     images: [
@@ -22,7 +28,7 @@ export const metadata: Metadata = {
         url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: "Plexus - No-Code AI Agents at Scale"
+        alt: "Plexus - Distributed Machine Learning Operating System"
       }
     ],
     locale: "en_US",
@@ -30,8 +36,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Plexus - No-Code AI Agents at Scale",
-    description: "Run AI agents over your data with no code. Plexus is a battle-tested platform for building agent-based AI workflows that analyze streams of content and take action.",
+    title: "Plexus - Distributed Machine Learning Operating System",
+    description: "A distributed machine learning operating system. Plexus is a battle-tested platform for building AI workflows that analyze streams of content and take action.",
     creator: "@Anthus_AI",
     images: ["/og-image.png"],
   }

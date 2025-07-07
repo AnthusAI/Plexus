@@ -42,7 +42,7 @@ const MobileHeader = ({
   toggleLeftSidebar: () => void;
   toggleRightSidebar: () => void;
 }) => (
-  <div className="hidden max-lg:flex items-center justify-between p-1 px-2 bg-background">
+  <div className="hidden max-lg:flex items-center justify-between p-1 px-4 bg-background">
     <DocButton
       variant="ghost"
       size="icon"
@@ -122,6 +122,14 @@ const docSections: DocSidebarItem[] = [
     ],
   },
   {
+    name: "Report Blocks",
+    href: "/documentation/report-blocks",
+    items: [
+      { name: "FeedbackAnalysis", href: "/documentation/report-blocks/feedback-analysis" },
+      { name: "TopicAnalysis", href: "/documentation/report-blocks/topic-analysis" },
+    ],
+  },
+  {
     name: "Advanced",
     href: "/documentation/advanced",
     items: [
@@ -168,7 +176,7 @@ export default function DocumentationLayout({ children, tableOfContents }: Docum
     return (
       <div className="flex flex-col h-full py-2 bg-muted">
         <div className={`mb-4 ${isLeftSidebarOpen ? 'pl-2' : ''}`}>
-          <Link href="/" className={`block relative ${isLeftSidebarOpen ? 'w-[140px] ml-4' : 'w-12 pl-2'}`}>
+          <Link href="/" className={`block relative ${isLeftSidebarOpen ? 'w-[140px] ml-4' : 'w-12 pl-4'}`}>
             <div className="absolute -inset-1 bg-gradient-to-r from-secondary to-primary rounded-md blur-sm opacity-50"></div>
             <div className="relative">
               {isLeftSidebarOpen ? (

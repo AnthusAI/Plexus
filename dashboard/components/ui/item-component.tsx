@@ -64,11 +64,17 @@ const GridContent = React.memo(({
   isSelected?: boolean
 }) => {
   // Pre-compute all displayed values to ensure stable rendering
-  const displayData = React.useMemo(() => ({
-    externalId: item.externalId || 'No ID',
-    description: item.description || 'No description',
-    text: item.text ? `${item.text.substring(0, 100)}${item.text.length > 100 ? '...' : ''}` : 'No content'
-  }), [item.externalId, item.description, item.text]);
+  const displayData = React.useMemo(() => {
+    // Safety check: ensure text is a string before processing
+    const safeText = typeof item.text === 'string' ? item.text : 
+      (typeof item.text === 'object' ? JSON.stringify(item.text) : String(item.text || ''));
+    
+    return {
+      externalId: item.externalId || 'No ID',
+      description: item.description || 'No description',
+      text: safeText ? `${safeText.substring(0, 100)}${safeText.length > 100 ? '...' : ''}` : 'No content'
+    };
+  }, [item.externalId, item.description, item.text]);
   
   return (
     <div className="flex justify-between items-start">

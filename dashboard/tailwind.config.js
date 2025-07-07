@@ -11,7 +11,9 @@ module.exports = {
         { pattern: /^text-.*-foreground$/ },
         'grid',
         'bg-progress-background',
-        'bg-progress-background-selected'
+        'bg-progress-background-selected',
+        'border-3',
+        'border-secondary'
     ],
     theme: {
         extend: {
@@ -19,6 +21,9 @@ module.exports = {
                 lg: 'var(--radius)',
                 md: 'calc(var(--radius) - 2px)',
                 sm: 'calc(var(--radius) - 4px)'
+            },
+            borderWidth: {
+                '3': '0.75rem'
             },
             colors: {
                 background: 'var(--background)',
@@ -53,6 +58,12 @@ module.exports = {
                     foreground: 'var(--secondary-foreground)',
                     selected: 'var(--secondary-selected)',
                     'selected-foreground': 'var(--secondary-selected-foreground)'
+                },
+                selected: {
+                    DEFAULT: 'var(--selected)',
+                    foreground: 'var(--selected-foreground)',
+                    selected: 'var(--selected-selected)',
+                    'selected-foreground': 'var(--selected-selected-foreground)'
                 },
                 muted: {
                     DEFAULT: 'var(--muted)',
@@ -182,12 +193,13 @@ module.exports = {
             }
         },
         screens: {
-            'xs': '414px',
-            'sm': '640px',
-            'md': '768px',
-            'lg': '1024px',
-            'xl': '1280px',
-            '2xl': '1536px',
+            'xs': '320px',
+            'sm': '414px',
+            'md': '640px',
+            'lg': '768px',
+            'xl': '1024px',
+            '2xl': '1280px',
+            '3xl': '1536px',
         }
     },
     plugins: [

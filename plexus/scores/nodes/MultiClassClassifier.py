@@ -10,6 +10,7 @@ from plexus.CustomLogging import logging
 from plexus.utils.dict_utils import truncate_dict_strings
 from rapidfuzz import process, fuzz
 from time import sleep
+from jinja2 import Template
 
 class MultiClassClassifier(BaseNode):
     """
@@ -156,10 +157,17 @@ class MultiClassClassifier(BaseNode):
 
                 if result["classification"] is not None:
                     if self.parameters.explanation_message:
+                        # Create state dict with classification for template formatting
+                        template_state = {**state.dict(), **result}
+                        
+                        # Format the explanation message using Jinja2 template
+                        template = Template(self.parameters.explanation_message)
+                        formatted_explanation_message = template.render(**template_state)
+                        
                         explanation_prompt = ChatPromptTemplate.from_messages([
                             *chat_history,
                             AIMessage(content=current_completion),
-                            HumanMessage(content=self.parameters.explanation_message)
+                            HumanMessage(content=formatted_explanation_message)
                         ])
                         explanation_model = (
                             self._initialize_model(self.parameters.explanation_model)
@@ -169,7 +177,8 @@ class MultiClassClassifier(BaseNode):
                         explanation = explanation_model.invoke(explanation_prompt.format_prompt().to_messages())
                         result["explanation"] = explanation.content
                     else:
-                        result["explanation"] = current_completion
+                        # When no explanation_message is provided, the explanation is simply the classification.
+                        result["explanation"] = result["classification"]
 
                     final_state = {**state.dict(), **result, "retry_count": retry_count}
                     logging.debug(f"Classifier returning state: {truncate_dict_strings(final_state, max_length=80)}")

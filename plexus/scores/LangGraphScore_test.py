@@ -837,3 +837,228 @@ async def test_edge_routing(graph_config_with_edge, mock_azure_openai, mock_yes_
         
         # Check that the value setter connects to revenue_classifier
         assert "revenue_classifier" in workflow.graph.nodes
+
+@pytest.mark.asyncio
+async def test_conditions_with_edge_fallback():
+    """Test that both conditions and edge clauses work together correctly"""
+    
+    # Create a graph config that mimics the CS3ServicesV2 pattern
+    config = {
+        "graph": [
+            {
+                "name": "main_classifier",
+                "class": "Classifier",
+                "valid_classes": ["Yes", "No", "Maybe"],
+                "system_message": "Classify the input",
+                "user_message": "{{text}}",
+                "conditions": [
+                    {
+                        "value": "Yes",
+                        "node": "END",
+                        "output": {
+                            "value": "Yes",
+                            "explanation": "None"
+                        }
+                    }
+                ],
+                "edge": {
+                    "node": "fallback_classifier",
+                    "output": {
+                        "good_call": "classification",
+                        "good_call_explanation": "explanation"
+                    }
+                }
+            },
+            {
+                "name": "fallback_classifier", 
+                "class": "Classifier",
+                "valid_classes": ["NQ - Parts Call", "NQ - Other"],
+                "system_message": "Classify the reason for non-qualification",
+                "user_message": "Previous: {{good_call}} - {{good_call_explanation}}",
+                "edge": {
+                    "node": "END",
+                    "output": {
+                        "non_qualifying_reason": "classification",
+                        "non_qualifying_explanation": "explanation"
+                    }
+                }
+            }
+        ],
+        "model_provider": "AzureChatOpenAI", 
+        "model_name": "gpt-4",
+        "temperature": 0.0,
+        "openai_api_version": "2023-05-15",
+        "openai_api_base": "https://test.openai.azure.com",
+        "openai_api_key": "test-key",
+        "output": {
+            "value": "good_call",
+            "explanation": "non_qualifying_reason"
+        }
+    }
+    
+    # Mock the node classes
+    with patch('plexus.scores.LangGraphScore.LangGraphScore._import_class') as mock_import:
+        # Create mock classifier class
+        mock_classifier_class = MagicMock()
+        mock_classifier_instance = MagicMock()
+        
+        # Set up GraphState annotations
+        mock_classifier_instance.GraphState = MagicMock()
+        mock_classifier_instance.GraphState.__annotations__ = {
+            'text': str,
+            'metadata': Optional[dict],
+            'results': Optional[dict],
+            'classification': Optional[str],
+            'explanation': Optional[str],
+            'good_call': Optional[str],
+            'good_call_explanation': Optional[str],
+            'non_qualifying_reason': Optional[str],
+            'non_qualifying_explanation': Optional[str],
+            'value': Optional[str]
+        }
+        
+        # Set up parameters
+        mock_classifier_instance.parameters = MagicMock()
+        mock_classifier_instance.parameters.output = None
+        mock_classifier_instance.parameters.edge = None
+        mock_classifier_instance.parameters.conditions = None
+        
+        # Mock build_compiled_workflow method
+        mock_classifier_instance.build_compiled_workflow = MagicMock(
+            return_value=lambda state: state
+        )
+        
+        mock_classifier_class.return_value = mock_classifier_instance
+        mock_import.return_value = mock_classifier_class
+        
+        # Mock the model initialization
+        with patch('plexus.LangChainUser.LangChainUser._initialize_model') as mock_init_model:
+            mock_model = AsyncMock()
+            mock_init_model.return_value = mock_model
+            
+            # Create the LangGraphScore instance
+            instance = await LangGraphScore.create(**config)
+            
+            # Test 1: Condition match - "Yes" should route to END with specific output
+            mock_workflow_yes = AsyncMock()
+            mock_workflow_yes.ainvoke = AsyncMock(return_value={
+                "text": "test positive case",
+                "metadata": {},
+                "classification": "Yes",
+                "explanation": "This is a good call",
+                "value": "Yes",  # Set by condition output
+                "explanation": "None",  # Set by condition output 
+                "good_call": "Yes",
+                "good_call_explanation": "This is a good call"
+            })
+            instance.workflow = mock_workflow_yes
+            
+            input_data = Score.Input(
+                text="test positive case",
+                metadata={},
+                results=[]
+            )
+            
+            result = await instance.predict(input_data)
+            
+            # Verify the "Yes" condition worked correctly
+            assert result.value == "Yes"
+            assert result.metadata.get('explanation') == "None"
+            
+            # Test 2: Edge fallback - "No" should route to fallback_classifier
+            mock_workflow_no = AsyncMock()
+            mock_workflow_no.ainvoke = AsyncMock(return_value={
+                "text": "test negative case",
+                "metadata": {},
+                "classification": "No",
+                "explanation": "This is not a good call",
+                "good_call": "No",  # Set by edge output aliasing
+                "good_call_explanation": "This is not a good call",  # Set by edge output aliasing
+                "non_qualifying_reason": "NQ - Parts Call",  # Set by fallback classifier
+                "non_qualifying_explanation": "Customer wants to buy parts",
+                "value": "No",  # Final output aliasing
+                "explanation": "NQ - Parts Call"  # Final output aliasing
+            })
+            instance.workflow = mock_workflow_no
+            
+            input_data = Score.Input(
+                text="test negative case", 
+                metadata={},
+                results=[]
+            )
+            
+            result = await instance.predict(input_data)
+            
+            # Verify the edge fallback worked correctly
+            assert result.value == "No"
+            assert result.metadata.get('explanation') == "NQ - Parts Call"
+            assert result.metadata.get('good_call') == "No"
+            assert result.metadata.get('good_call_explanation') == "This is not a good call"
+            assert result.metadata.get('non_qualifying_reason') == "NQ - Parts Call"
+            
+            # Test 3: Edge fallback with different classification - "Maybe" should also route to fallback
+            mock_workflow_maybe = AsyncMock()
+            mock_workflow_maybe.ainvoke = AsyncMock(return_value={
+                "text": "test unclear case",
+                "metadata": {},
+                "classification": "Maybe",
+                "explanation": "This is unclear",
+                "good_call": "Maybe",  # Set by edge output aliasing
+                "good_call_explanation": "This is unclear",  # Set by edge output aliasing
+                "non_qualifying_reason": "NQ - Other",  # Set by fallback classifier
+                "non_qualifying_explanation": "Unclear intent",
+                "value": "Maybe",  # Final output aliasing  
+                "explanation": "NQ - Other"  # Final output aliasing
+            })
+            instance.workflow = mock_workflow_maybe
+            
+            input_data = Score.Input(
+                text="test unclear case",
+                metadata={},
+                results=[]
+            )
+            
+            result = await instance.predict(input_data)
+            
+            # Verify the edge fallback also works for "Maybe"
+            assert result.value == "Maybe"
+            assert result.metadata.get('explanation') == "NQ - Other"
+            assert result.metadata.get('good_call') == "Maybe"
+            assert result.metadata.get('non_qualifying_reason') == "NQ - Other"
+
+@pytest.mark.asyncio
+async def test_condition_output_preservation_with_end_routing():
+    """Test that condition outputs are preserved when routing to END with final output aliasing"""
+    # This test verifies the fix for the issue where condition outputs 
+    # were being overwritten by final output aliasing
+    
+    # Test the output aliasing function directly
+    from plexus.scores.LangGraphScore import LangGraphScore
+    
+    # Create a mock state that simulates what happens after a condition runs
+    class MockState:
+        def __init__(self, **kwargs):
+            self.value = kwargs.get("value", "NA")  # Set by condition
+            self.explanation = kwargs.get("explanation", "Customer did not mention the criteria.")  # Set by condition  
+            self.classification = kwargs.get("classification", "No")  # Original classifier result
+            # Accept any additional kwargs to handle aliasing
+            for key, val in kwargs.items():
+                setattr(self, key, val)
+            
+        def model_dump(self):
+            return {attr: getattr(self, attr) for attr in dir(self) 
+                   if not attr.startswith('_') and not callable(getattr(self, attr))}
+    
+    # Test the output aliasing with scorecard config that maps value->classification
+    output_mapping = {"value": "classification", "explanation": "explanation"}
+    aliasing_func = LangGraphScore.generate_output_aliasing_function(output_mapping)
+    
+    # Create state where condition has set value="NA" but classification="No"
+    state = MockState()
+    
+    # Run output aliasing 
+    result = aliasing_func(state)
+    
+    # Verify that condition output is preserved (should NOT be overwritten by classification)
+    assert result.value == "NA"  # Should preserve condition output, not overwrite with "No"
+    assert result.explanation == "Customer did not mention the criteria."
