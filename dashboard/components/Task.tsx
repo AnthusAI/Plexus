@@ -171,7 +171,10 @@ const Task = <TData extends BaseTaskData = BaseTaskData>({
       <div className="flex-none p-3 w-full max-w-full overflow-hidden relative z-10">
         {renderHeader(childProps)}
       </div>
-      <div className="flex-1 min-h-0 relative z-10">
+      <div className={cn(
+        "flex-1 min-h-0 relative z-10",
+        variant === 'detail' && "overflow-y-auto"
+      )}>
         {error ? (
           <div className="flex flex-col items-center justify-center h-full text-center p-4">
             <div className="text-destructive mb-2">{error}</div>
