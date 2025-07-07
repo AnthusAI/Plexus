@@ -875,13 +875,8 @@ class LangGraphScore(Score, LangChainUser):
             # Create a new dict with all current state values
             new_state = state.model_dump()
             
-            # Add aliased values, but only if the target field is not already meaningfully set
+            # Apply aliased values - final output aliasing should always override existing values
             for alias, original in output_mapping.items():
-                
-                # Check if the target alias field already has a meaningful value
-                current_alias_value = getattr(state, alias, None)
-                if current_alias_value is not None and current_alias_value != "":
-                    continue  # Skip this alias - preserve the existing value
                 
                 if hasattr(state, original):
                     original_value = getattr(state, original)

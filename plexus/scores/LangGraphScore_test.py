@@ -1062,3 +1062,442 @@ async def test_condition_output_preservation_with_end_routing():
     # Verify that condition output is preserved (should NOT be overwritten by classification)
     assert result.value == "NA"  # Should preserve condition output, not overwrite with "No"
     assert result.explanation == "Customer did not mention the criteria."
+
+@pytest.mark.asyncio
+async def test_na_output_aliasing_bug_replication():
+    """Test that replicates the bug where NA classification and explanation are incorrectly overwritten"""
+    
+    # Test the output aliasing function directly to isolate the bug
+    from plexus.scores.LangGraphScore import LangGraphScore
+    
+    # Create a mock state that simulates the problematic scenario
+    class MockState:
+        def __init__(self, **kwargs):
+            # This simulates the state after a node has run and set its output
+            self.classification = "NA"  # Node classified as NA
+            self.explanation = "Customer only wants cosmetic changes"  # Node's explanation
+            self.value = "NA"  # Node's output aliasing set this 
+            self.text = "I just want to change the style"
+            self.metadata = {}
+            self.results = {}
+            # Accept any additional kwargs
+            for key, val in kwargs.items():
+                setattr(self, key, val)
+            
+        def model_dump(self):
+            return {attr: getattr(self, attr) for attr in dir(self) 
+                   if not attr.startswith('_') and not callable(getattr(self, attr))}
+    
+    # Test the final output aliasing that maps value->classification, explanation->explanation  
+    output_mapping = {"value": "classification", "explanation": "explanation"}
+    aliasing_func = LangGraphScore.generate_output_aliasing_function(output_mapping)
+    
+    # Create state where:
+    # - classification = "NA" (what we want to map to value)
+    # - explanation = "Customer only wants cosmetic changes" (what we want to preserve)
+    # - value = "NA" (already set by node, should be preserved)
+    state = MockState()
+    
+    print(f"BEFORE aliasing:")
+    print(f"  state.value = {getattr(state, 'value', 'NOT_SET')!r}")
+    print(f"  state.explanation = {getattr(state, 'explanation', 'NOT_SET')!r}")
+    print(f"  state.classification = {getattr(state, 'classification', 'NOT_SET')!r}")
+    
+    # Run output aliasing 
+    result = aliasing_func(state)
+    
+    print(f"AFTER aliasing:")
+    print(f"  result.value = {getattr(result, 'value', 'NOT_SET')!r}")
+    print(f"  result.explanation = {getattr(result, 'explanation', 'NOT_SET')!r}")
+    print(f"  result.classification = {getattr(result, 'classification', 'NOT_SET')!r}")
+    
+    # These should be the correct behaviors:
+    assert result.value == "NA", f"Expected value='NA' but got value='{result.value}'"
+    assert result.explanation == "Customer only wants cosmetic changes", \
+        f"Expected explanation='Customer only wants cosmetic changes' but got explanation='{result.explanation}'"
+
+
+@pytest.mark.asyncio  
+async def test_na_output_aliasing_bug_when_original_is_none():
+    """Test the specific case where the original field is None, triggering the default logic"""
+    
+    from plexus.scores.LangGraphScore import LangGraphScore
+    
+    # Create a mock state where classification is None (this might trigger the bug)
+    class MockState:
+        def __init__(self, **kwargs):
+            self.classification = None  # This is None, should trigger default logic
+            self.explanation = "Customer only wants cosmetic changes"  # This should be preserved
+            self.value = "NA"  # This was set by node output aliasing and should be preserved
+            self.text = "I just want to change the style"
+            self.metadata = {}
+            self.results = {}
+            
+        def model_dump(self):
+            return {attr: getattr(self, attr) for attr in dir(self) 
+                   if not attr.startswith('_') and not callable(getattr(self, attr))}
+    
+    # Test the final output aliasing
+    output_mapping = {"value": "classification", "explanation": "explanation"}
+    aliasing_func = LangGraphScore.generate_output_aliasing_function(output_mapping)
+    
+    state = MockState()
+    
+    print(f"BEFORE aliasing (None case):")
+    print(f"  state.value = {getattr(state, 'value', 'NOT_SET')!r}")
+    print(f"  state.explanation = {getattr(state, 'explanation', 'NOT_SET')!r}")
+    print(f"  state.classification = {getattr(state, 'classification', 'NOT_SET')!r}")
+    
+    # Run output aliasing 
+    result = aliasing_func(state)
+    
+    print(f"AFTER aliasing (None case):")
+    print(f"  result.value = {getattr(result, 'value', 'NOT_SET')!r}")
+    print(f"  result.explanation = {getattr(result, 'explanation', 'NOT_SET')!r}")
+    print(f"  result.classification = {getattr(result, 'classification', 'NOT_SET')!r}")
+    
+    # BUG: When classification is None, the function defaults value to "No" 
+    # instead of preserving the existing value="NA"
+    
+    # This assertion should pass (preserve existing value):
+    assert result.value == "NA", f"Expected value='NA' but got value='{result.value}' - BUG: defaults to 'No' when classification is None"
+    
+    # This should also pass (preserve explanation):
+    assert result.explanation == "Customer only wants cosmetic changes", \
+        f"Expected explanation='Customer only wants cosmetic changes' but got explanation='{result.explanation}'"
+
+
+@pytest.mark.asyncio
+async def test_value_setter_node_bug_replication():
+    """Test that replicates the exact bug scenario with value setter nodes"""
+    
+    from plexus.scores.LangGraphScore import LangGraphScore
+    from pydantic import BaseModel, ConfigDict
+    from typing import Optional
+    
+    # This test simulates the exact flow from your scorecard:
+    # 1. Node outputs classification="NA", explanation="Customer only wants cosmetic changes"
+    # 2. Node's output clause creates a value setter that should set value="NA", explanation="Customer only wants cosmetic changes"
+    # 3. Final output aliasing should preserve these values
+    
+    # Create a proper Pydantic model like the real GraphState
+    class MockGraphState(BaseModel):
+        model_config = ConfigDict(extra='allow', arbitrary_types_allowed=True)
+        
+        text: str
+        metadata: Optional[dict] = None
+        results: Optional[dict] = None
+        classification: Optional[str] = None
+        explanation: Optional[str] = None
+        value: Optional[str] = None
+    
+    # First, test the value setter node function
+    output_mapping = {"value": "classification", "explanation": "explanation"}
+    value_setter_func = LangGraphScore.create_value_setter_node(output_mapping)
+    
+    # Create state as it would be after the classifier node runs
+    state_after_classifier = MockGraphState(
+        text="I just want to change the style",
+        metadata={},
+        results={},
+        classification="NA",  # Node classified as NA
+        explanation="Customer only wants cosmetic changes",  # Node's explanation
+        # value is not set yet - this is key
+    )
+    
+    print(f"AFTER classifier node:")
+    print(f"  state.classification = {getattr(state_after_classifier, 'classification', 'NOT_SET')!r}")
+    print(f"  state.explanation = {getattr(state_after_classifier, 'explanation', 'NOT_SET')!r}")
+    print(f"  state.value = {getattr(state_after_classifier, 'value', 'NOT_SET')!r}")
+    
+    # Run the value setter (this should set value="NA", explanation remains the same)
+    state_after_value_setter = value_setter_func(state_after_classifier)
+    
+    print(f"AFTER value setter node:")
+    print(f"  state.classification = {getattr(state_after_value_setter, 'classification', 'NOT_SET')!r}")
+    print(f"  state.explanation = {getattr(state_after_value_setter, 'explanation', 'NOT_SET')!r}")
+    print(f"  state.value = {getattr(state_after_value_setter, 'value', 'NOT_SET')!r}")
+    
+    # Now test the final output aliasing (this should preserve the values)
+    final_output_mapping = {"value": "classification", "explanation": "explanation"}
+    final_aliasing_func = LangGraphScore.generate_output_aliasing_function(final_output_mapping)
+    
+    final_result = final_aliasing_func(state_after_value_setter)
+    
+    print(f"AFTER final output aliasing:")
+    print(f"  result.classification = {getattr(final_result, 'classification', 'NOT_SET')!r}")
+    print(f"  result.explanation = {getattr(final_result, 'explanation', 'NOT_SET')!r}")
+    print(f"  result.value = {getattr(final_result, 'value', 'NOT_SET')!r}")
+    
+    # These should be the correct behaviors:
+    assert final_result.value == "NA", f"Expected final value='NA' but got value='{final_result.value}'"
+    assert final_result.explanation == "Customer only wants cosmetic changes", \
+        f"Expected final explanation='Customer only wants cosmetic changes' but got explanation='{final_result.explanation}'"
+
+
+@pytest.mark.asyncio
+async def test_output_aliasing_bug_with_empty_value():
+    """Test the bug when value field is empty/None and gets overwritten"""
+    
+    from plexus.scores.LangGraphScore import LangGraphScore
+    
+    # This might be the actual bug: when value is None/empty, it gets overwritten incorrectly
+    class MockState:
+        def __init__(self, **kwargs):
+            self.classification = "NA"
+            self.explanation = "Customer only wants cosmetic changes"
+            # value is None/not set - this might trigger the bug
+            self.value = None  # or could be missing entirely
+            self.text = "I just want to change the style"
+            self.metadata = {}
+            self.results = {}
+            
+        def model_dump(self):
+            return {attr: getattr(self, attr) for attr in dir(self) 
+                   if not attr.startswith('_') and not callable(getattr(self, attr))}
+    
+    # Test the final output aliasing
+    output_mapping = {"value": "classification", "explanation": "explanation"}
+    aliasing_func = LangGraphScore.generate_output_aliasing_function(output_mapping)
+    
+    state = MockState()
+    
+    print(f"BEFORE aliasing (empty value case):")
+    print(f"  state.value = {getattr(state, 'value', 'NOT_SET')!r}")
+    print(f"  state.explanation = {getattr(state, 'explanation', 'NOT_SET')!r}")
+    print(f"  state.classification = {getattr(state, 'classification', 'NOT_SET')!r}")
+    
+    # Run output aliasing 
+    result = aliasing_func(state)
+    
+    print(f"AFTER aliasing (empty value case):")
+    print(f"  result.value = {getattr(result, 'value', 'NOT_SET')!r}")
+    print(f"  result.explanation = {getattr(result, 'explanation', 'NOT_SET')!r}")
+    print(f"  result.classification = {getattr(result, 'classification', 'NOT_SET')!r}")
+    
+    # When value is None/empty, it should be set to classification value
+    assert result.value == "NA", f"Expected value='NA' but got value='{result.value}'"
+    assert result.explanation == "Customer only wants cosmetic changes", \
+        f"Expected explanation='Customer only wants cosmetic changes' but got explanation='{result.explanation}'"
+
+
+@pytest.mark.asyncio
+async def test_output_aliasing_bug_preserves_old_value():
+    """Test the actual bug: previous node's 'No' value is preserved instead of being updated to 'NA'"""
+    
+    from plexus.scores.LangGraphScore import LangGraphScore
+    from pydantic import BaseModel, ConfigDict
+    from typing import Optional
+    
+    # This replicates the exact bug scenario:
+    # 1. Previous node set value="No" 
+    # 2. Final node outputs classification="NA", explanation="Customer only wants cosmetic changes"
+    # 3. Final output aliasing should update value to "NA" but incorrectly preserves "No"
+    # 4. Final output aliasing overwrites explanation with "NA" instead of preserving the actual explanation
+    
+    class MockGraphState(BaseModel):
+        model_config = ConfigDict(extra='allow', arbitrary_types_allowed=True)
+        
+        text: str
+        metadata: Optional[dict] = None
+        results: Optional[dict] = None
+        classification: Optional[str] = None
+        explanation: Optional[str] = None
+        value: Optional[str] = None
+    
+    # Create state as it would be after the final node runs, but with a previous value set
+    state_with_previous_value = MockGraphState(
+        text="I just want to change the style",
+        metadata={},
+        results={},
+        classification="NA",  # Final node classified as NA
+        explanation="Customer only wants cosmetic changes",  # Final node's explanation
+        value="No",  # THIS IS THE BUG: Previous node set this to "No", should be updated to "NA"
+    )
+    
+    print(f"BEFORE final output aliasing (bug scenario):")
+    print(f"  state.classification = {state_with_previous_value.classification!r}")
+    print(f"  state.explanation = {state_with_previous_value.explanation!r}")
+    print(f"  state.value = {state_with_previous_value.value!r}")
+    
+    # Test the final output aliasing that should update value and preserve explanation
+    final_output_mapping = {"value": "classification", "explanation": "explanation"}
+    final_aliasing_func = LangGraphScore.generate_output_aliasing_function(final_output_mapping)
+    
+    final_result = final_aliasing_func(state_with_previous_value)
+    
+    print(f"AFTER final output aliasing (bug scenario):")
+    print(f"  result.classification = {final_result.classification!r}")
+    print(f"  result.explanation = {final_result.explanation!r}")
+    print(f"  result.value = {final_result.value!r}")
+    
+    # BUG DETECTION: These assertions should fail if the bug exists
+    # The bug is that the function preserves existing "No" value instead of updating to "NA"
+    assert final_result.value == "NA", f"BUG: Expected value='NA' but got value='{final_result.value}' - function preserved old 'No' value"
+    
+    # BUG DETECTION: The explanation should be preserved, not overwritten with "NA"
+    assert final_result.explanation == "Customer only wants cosmetic changes", \
+        f"BUG: Expected explanation='Customer only wants cosmetic changes' but got explanation='{final_result.explanation}' - explanation was overwritten"
+
+
+@pytest.mark.asyncio
+async def test_output_aliasing_with_same_field_mapping():
+    """Test the edge case where both value and explanation map to the same source field"""
+    
+    from plexus.scores.LangGraphScore import LangGraphScore
+    from pydantic import BaseModel, ConfigDict
+    from typing import Optional
+    
+    # This might reveal another bug: what happens when multiple aliases point to the same source?
+    
+    class MockGraphState(BaseModel):
+        model_config = ConfigDict(extra='allow', arbitrary_types_allowed=True)
+        
+        text: str
+        metadata: Optional[dict] = None
+        results: Optional[dict] = None
+        classification: Optional[str] = None
+        explanation: Optional[str] = None
+        value: Optional[str] = None
+    
+    # Create state where classification="NA" and explanation="Customer explanation"
+    state = MockGraphState(
+        text="I just want to change the style",
+        metadata={},
+        results={},
+        classification="NA",
+        explanation="Customer only wants cosmetic changes",
+        value="No",  # Previous value
+    )
+    
+    # Test what happens if both value and explanation map to classification
+    # This might cause the explanation to be overwritten with "NA"
+    problematic_mapping = {"value": "classification", "explanation": "classification"}
+    aliasing_func = LangGraphScore.generate_output_aliasing_function(problematic_mapping)
+    
+    print(f"BEFORE problematic aliasing:")
+    print(f"  state.classification = {state.classification!r}")
+    print(f"  state.explanation = {state.explanation!r}")
+    print(f"  state.value = {state.value!r}")
+    
+    result = aliasing_func(state)
+    
+    print(f"AFTER problematic aliasing:")
+    print(f"  result.classification = {result.classification!r}")
+    print(f"  result.explanation = {result.explanation!r}")
+    print(f"  result.value = {result.value!r}")
+    
+    # In this case, both value and explanation should be set to "NA"
+    # But this might reveal how the explanation gets overwritten in the real bug
+    assert result.value == "NA", f"Expected value='NA' but got value='{result.value}'"
+    assert result.explanation == "NA", f"Expected explanation='NA' but got explanation='{result.explanation}'"
+
+
+@pytest.mark.asyncio
+async def test_output_aliasing_fix_verification():
+    """Test that verifies the fix: final output aliasing now properly updates values"""
+    
+    from plexus.scores.LangGraphScore import LangGraphScore
+    from pydantic import BaseModel, ConfigDict
+    from typing import Optional
+    
+    # This test verifies that the fix works correctly:
+    # 1. Previous node set value="No" 
+    # 2. Final node outputs classification="NA", explanation="Customer only wants cosmetic changes"
+    # 3. Final output aliasing should now UPDATE value to "NA" (not preserve "No")
+    # 4. Final output aliasing should preserve the actual explanation
+    
+    class MockGraphState(BaseModel):
+        model_config = ConfigDict(extra='allow', arbitrary_types_allowed=True)
+        
+        text: str
+        metadata: Optional[dict] = None
+        results: Optional[dict] = None
+        classification: Optional[str] = None
+        explanation: Optional[str] = None
+        value: Optional[str] = None
+    
+    # Create state as it would be after the final node runs, but with a previous value set
+    state_with_previous_value = MockGraphState(
+        text="I just want to change the style",
+        metadata={},
+        results={},
+        classification="NA",  # Final node classified as NA
+        explanation="Customer only wants cosmetic changes",  # Final node's explanation
+        value="No",  # Previous node set this to "No", should be updated to "NA"
+    )
+    
+    print(f"BEFORE final output aliasing (fix verification):")
+    print(f"  state.classification = {state_with_previous_value.classification!r}")
+    print(f"  state.explanation = {state_with_previous_value.explanation!r}")
+    print(f"  state.value = {state_with_previous_value.value!r}")
+    
+    # Test the final output aliasing that should update value and preserve explanation
+    final_output_mapping = {"value": "classification", "explanation": "explanation"}
+    final_aliasing_func = LangGraphScore.generate_output_aliasing_function(final_output_mapping)
+    
+    final_result = final_aliasing_func(state_with_previous_value)
+    
+    print(f"AFTER final output aliasing (fix verification):")
+    print(f"  result.classification = {final_result.classification!r}")
+    print(f"  result.explanation = {final_result.explanation!r}")
+    print(f"  result.value = {final_result.value!r}")
+    
+    # FIXED: These assertions should now pass
+    assert final_result.value == "NA", f"FIXED: Expected value='NA' and got value='{final_result.value}' - function now properly updates value"
+    assert final_result.explanation == "Customer only wants cosmetic changes", \
+        f"FIXED: Expected explanation='Customer only wants cosmetic changes' and got explanation='{final_result.explanation}' - explanation is preserved"
+
+
+@pytest.mark.asyncio
+async def test_output_aliasing_fix_with_multiple_scenarios():
+    """Test the fix with multiple scenarios to ensure it works correctly"""
+    
+    from plexus.scores.LangGraphScore import LangGraphScore
+    from pydantic import BaseModel, ConfigDict
+    from typing import Optional
+    
+    class MockGraphState(BaseModel):
+        model_config = ConfigDict(extra='allow', arbitrary_types_allowed=True)
+        
+        text: str
+        metadata: Optional[dict] = None
+        results: Optional[dict] = None
+        classification: Optional[str] = None
+        explanation: Optional[str] = None
+        value: Optional[str] = None
+    
+    # Test scenario 1: NA classification should update No value
+    state1 = MockGraphState(
+        text="test", metadata={}, results={},
+        classification="NA", explanation="Customer wants cosmetic changes", value="No"
+    )
+    
+    mapping = {"value": "classification", "explanation": "explanation"}
+    aliasing_func = LangGraphScore.generate_output_aliasing_function(mapping)
+    result1 = aliasing_func(state1)
+    
+    assert result1.value == "NA", f"Scenario 1: Expected 'NA' but got '{result1.value}'"
+    assert result1.explanation == "Customer wants cosmetic changes"
+    
+    # Test scenario 2: Yes classification should update No value  
+    state2 = MockGraphState(
+        text="test", metadata={}, results={},
+        classification="Yes", explanation="Customer meets criteria", value="No"
+    )
+    
+    result2 = aliasing_func(state2)
+    assert result2.value == "Yes", f"Scenario 2: Expected 'Yes' but got '{result2.value}'"
+    assert result2.explanation == "Customer meets criteria"
+    
+    # Test scenario 3: No classification should update Yes value
+    state3 = MockGraphState(
+        text="test", metadata={}, results={},
+        classification="No", explanation="Customer doesn't meet criteria", value="Yes"
+    )
+    
+    result3 = aliasing_func(state3)
+    assert result3.value == "No", f"Scenario 3: Expected 'No' but got '{result3.value}'"
+    assert result3.explanation == "Customer doesn't meet criteria"
+    
+    print("✅ All scenarios passed - the fix works correctly!")
