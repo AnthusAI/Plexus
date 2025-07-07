@@ -145,19 +145,21 @@ async def test_predict_basic_flow(basic_graph_config, mock_azure_openai):
         initial_state = call_args[0]
         assert initial_state["text"] == "This is a test text"
 
-@pytest.mark.skip(reason="Needs update: state handling and text preprocessing has changed")
 @pytest.mark.asyncio
 async def test_predict_with_list_text(basic_graph_config, mock_azure_openai):
     """Test processing with list text input"""
-    with patch('plexus.LangChainUser.LangChainUser._initialize_model', 
+    with patch('plexus.LangChainUser.LangChainUser._ainitialize_model', 
                return_value=mock_azure_openai):
-        instance = await LangGraphScore.create(**basic_graph_config)
+        # Create instance using direct instantiation since create() may have changed
+        instance = LangGraphScore(**basic_graph_config)
+        await instance.async_setup()
         
         # Mock workflow
         mock_workflow = AsyncMock()
         mock_workflow.ainvoke = AsyncMock(return_value={
             "value": "No",
-            "explanation": "Test explanation"
+            "explanation": "Test explanation",
+            "text": "This is a test text"
         })
         instance.workflow = mock_workflow
         
@@ -165,17 +167,18 @@ async def test_predict_with_list_text(basic_graph_config, mock_azure_openai):
         input_data = Score.Input(
             text=text_list,
             metadata={
-                "account_key": "test-account",
                 "scorecard_key": "test-scorecard",
                 "score_name": "test-score"
             },
             results=[]
         )
         
-        results = await instance.predict(None, input_data)
+        # Use current predict() signature - no context parameter
+        result = await instance.predict(input_data)
         
-        assert len(results) == 1
-        assert results[0].value == "No"
+        # Check result structure matches current implementation
+        assert isinstance(result, Score.Result)
+        assert result.value == "No"
         
         # Verify text was properly joined
         mock_workflow.ainvoke.assert_called_once()
@@ -580,7 +583,7 @@ async def test_batch_processing_resume(basic_graph_config, mock_azure_openai):
         
         # First call should pause
         with pytest.raises(BatchProcessingPause) as exc_info:
-            await instance.predict(None, Score.Input(
+            await instance.predict(Score.Input(
                 text="test text",
                 metadata={
                     "account_key": "test-account",
