@@ -295,6 +295,10 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
     errorDetails: processedTask?.errorDetails || (task ? (task.errorDetails || evaluationData?.errorDetails) : evaluationData?.errorDetails) || undefined,
     celeryTaskId: (processedTask?.celeryTaskId || task?.celeryTaskId) ?? undefined,
     workerNodeId: (processedTask?.workerNodeId || task?.workerNodeId) ?? undefined,
+    output: processedTask?.output || task?.output || undefined, // Universal Code YAML output
+    attachedFiles: processedTask?.attachedFiles || task?.attachedFiles || undefined, // File attachments
+    stdout: processedTask?.stdout || task?.stdout || undefined, // Task stdout
+    stderr: processedTask?.stderr || task?.stderr || undefined, // Task stderr
   };
 
   // Conditionally render EvaluationTask or ReportTask
