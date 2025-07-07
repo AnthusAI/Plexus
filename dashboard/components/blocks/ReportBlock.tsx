@@ -404,12 +404,12 @@ const ReportBlock: BlockComponent = ({
         <div className="w-full overflow-hidden">
           {isLoadingLog && <p className="text-sm text-muted-foreground">Loading log content...</p>}
           {!isLoadingLog && logText && (
-            <pre className="whitespace-pre-wrap text-xs bg-white overflow-y-auto overflow-x-auto font-mono max-h-[300px] px-2 py-2 max-w-full">
+            <pre className="whitespace-pre-wrap text-xs bg-card text-foreground overflow-y-auto overflow-x-auto font-mono max-h-[300px] px-2 py-2 max-w-full">
               {logText}
             </pre>
           )}
           {!isLoadingLog && !logText && log && (
-            <pre className="whitespace-pre-wrap text-xs bg-white overflow-y-auto overflow-x-auto font-mono max-h-[300px] px-2 py-2 max-w-full">
+            <pre className="whitespace-pre-wrap text-xs bg-card text-foreground overflow-y-auto overflow-x-auto font-mono max-h-[300px] px-2 py-2 max-w-full">
               {log}
             </pre>
           )}
@@ -462,7 +462,7 @@ const ReportBlock: BlockComponent = ({
                       {!isLoadingFile && (
                         <>
                           {selectedFileIsImage === true && selectedFileUrl && (
-                            <div className="p-2 flex justify-center items-center bg-white rounded">
+                            <div className="p-2 flex justify-center items-center bg-card rounded">
                               <img 
                                 src={selectedFileUrl} 
                                 alt={selectedFileName || 'Attached image'} 
@@ -471,7 +471,7 @@ const ReportBlock: BlockComponent = ({
                             </div>
                           )}
                           {selectedFileIsHtml === true && selectedFileContent && (
-                            <div className="p-2 bg-white rounded">
+                            <div className="p-2 bg-card rounded">
                               <iframe 
                                 srcDoc={selectedFileContent}
                                 title={selectedFileName || 'HTML content'}
@@ -481,20 +481,20 @@ const ReportBlock: BlockComponent = ({
                             </div>
                           )}
                           {selectedFileIsImage === false && selectedFileIsHtml === false && selectedFileContent && (
-                            <pre className="whitespace-pre-wrap text-xs overflow-y-auto overflow-x-auto font-mono max-h-[200px] px-2 py-2 bg-white max-w-full rounded">
+                            <pre className="whitespace-pre-wrap text-xs overflow-y-auto overflow-x-auto font-mono max-h-[200px] px-2 py-2 bg-card text-foreground max-w-full rounded">
                               {selectedFileContent}
                             </pre>
                           )}
                           {/* Error display or specific messages */}
                           {selectedFileIsImage === null && selectedFileIsHtml === null && selectedFileContent && ( // Error message for either type
-                            <p className="text-sm text-red-500 px-2 py-2 bg-white rounded">{selectedFileContent}</p>
+                            <p className="text-sm text-red-500 px-2 py-2 bg-card rounded">{selectedFileContent}</p>
                           )}
                           {/* Fallback for no content, no error message, and not explicitly an image or text, or if it's an image but URL failed silently */}
                           {selectedFileIsImage === null && selectedFileIsHtml === null && !selectedFileContent && (
-                            <p className="text-sm text-muted-foreground px-2 py-2 bg-white rounded">Preview not available or file is empty.</p>
+                            <p className="text-sm text-muted-foreground px-2 py-2 bg-card rounded">Preview not available or file is empty.</p>
                           )}
                           {!selectedFileContent && selectedFileIsImage === true && !selectedFileUrl && ( // Image detected, but URL fetch failed and no error message set
-                            <p className="text-sm text-red-500 px-2 py-2 bg-white rounded">Could not load image preview.</p>
+                            <p className="text-sm text-red-500 px-2 py-2 bg-card rounded">Could not load image preview.</p>
                           )}
                         </>
                       )}
@@ -585,7 +585,7 @@ ${Object.entries(config).map(([key, value]) => `${key}: ${formatValue(value)}`).
           />
         </div>
         <div className="w-full overflow-hidden">
-          <pre className="whitespace-pre-wrap text-xs bg-white overflow-y-auto overflow-x-auto font-mono max-h-[400px] px-2 py-2 max-w-full">
+          <pre className="whitespace-pre-wrap text-xs bg-card text-foreground overflow-y-auto overflow-x-auto font-mono max-h-[400px] px-2 py-2 max-w-full rounded">
             {displayOutput}
           </pre>
         </div>

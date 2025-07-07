@@ -7,6 +7,7 @@ import { TaskStatus, TaskStageConfig } from './ui/task-status'
 import { BaseTaskData } from '@/types/base'
 import { cn } from '@/lib/utils'
 import { Timestamp } from './ui/timestamp'
+import { TaskOutputDisplay } from './TaskOutputDisplay'
 
 export interface BaseTaskProps<TData extends BaseTaskData = BaseTaskData> {
   variant: 'grid' | 'detail' | 'nested' | 'bare'
@@ -19,6 +20,10 @@ export interface BaseTaskProps<TData extends BaseTaskData = BaseTaskData> {
     score: string
     time: string
     command?: string
+    output?: string // Universal Code YAML output
+    attachedFiles?: string[] // Array of S3 file keys for attachments
+    stdout?: string // Task stdout output
+    stderr?: string // Task stderr output
     data?: TData
     stages?: TaskStageConfig[]
     currentStageName?: string
@@ -358,6 +363,18 @@ const TaskContent = <TData extends BaseTaskData = BaseTaskData>({
         </div>
       )}
       {children}
+      {/* Task Output Display */}
+      <div className="px-3 pb-3">
+        <TaskOutputDisplay
+          output={task.output}
+          attachedFiles={task.attachedFiles}
+          stdout={task.stdout}
+          stderr={task.stderr}
+          command={task.command}
+          taskType={task.type}
+          variant={variant === 'nested' || variant === 'bare' ? 'detail' : variant}
+        />
+      </div>
     </CardContent>
   )
 }
