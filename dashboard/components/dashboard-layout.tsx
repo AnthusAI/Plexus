@@ -241,7 +241,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
           </Link>
         </div>
 
-        <ScrollArea className="flex-grow overflow-y-auto">
+        <div className="flex-grow">
           <div className={`${isLeftSidebarOpen ? 'pl-2' : 'px-3'} ${isMobile ? 'space-y-2' : 'space-y-1'}`}>
             {visibleMenuItems.map((item) => {
               const isCurrentPage = (pathname === item.path ||
@@ -295,7 +295,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
               )
             })}
           </div>
-        </ScrollArea>
+        </div>
 
         <div className="mt-auto pl-2 space-y-2 py-2">
           <DropdownMenu>
