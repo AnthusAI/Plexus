@@ -53,6 +53,10 @@ const LIST_TASKS = `
         estimatedCompletionAt
         errorMessage
         errorDetails
+        stdout
+        stderr
+        output
+        attachedFiles
         currentStageId
         scorecardId
         scoreId
@@ -102,6 +106,7 @@ const LIST_TASKS = `
           isDatasetClassDistributionBalanced
           predictedClassDistribution
           isPredictedClassDistributionBalanced
+          universalCode
           scoreResults {
             items {
               id
@@ -337,13 +342,31 @@ function transformTaskToActivity(task: ProcessedTask) {
     }
   }
 
-  const result: EvaluationTaskProps['task'] = {
+
+  // Debug logging to see task data after transformation
+  console.log('transformTaskToActivity - Task data after processing:', {
+    id: task.id,
+    type: task.type,
+    output: task.output ? `${task.output.substring(0, 100)}...` : null,
+    outputLength: task.output?.length,
+    attachedFiles: task.attachedFiles,
+    stdout: task.stdout ? `${task.stdout.substring(0, 50)}...` : null,
+    stderr: task.stderr ? `${task.stderr.substring(0, 50)}...` : null,
+    command: task.command
+  });
+
+  const result = {
     id: task.id,
     type: 'Task',
     scorecard,
     score,
     time: timeStr,
     description: task.command,
+    command: task.command,
+    output: task.output,
+    attachedFiles: task.attachedFiles,
+    stdout: task.stdout,
+    stderr: task.stderr,
     data: evaluationData || {
       id: task.id,
       title: `${scorecard} - ${score}`,
@@ -412,7 +435,7 @@ function transformTaskToActivity(task: ProcessedTask) {
     workerNodeId: task.workerNodeId
   }
 
-  return result
+  return result as EvaluationTaskProps['task']
 }
 
 export default function ActivityDashboard({ 
