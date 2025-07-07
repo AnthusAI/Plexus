@@ -31,6 +31,10 @@ export const dataSources = defineStorage({
       allow.guest.to(['read']),
       allow.authenticated.to(['read', 'write', 'delete'])
     ],
+    'tasks/*': [
+      allow.guest.to(['read']),
+      allow.authenticated.to(['read', 'write', 'delete'])
+    ],
   })
 });
 

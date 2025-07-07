@@ -734,6 +734,10 @@ const onCreateTaskSubscriptionQuery = /* GraphQL */ `
       estimatedCompletionAt
       errorMessage
       errorDetails
+      stdout
+      stderr
+      output
+      attachedFiles
       currentStageId
       celeryTaskId
       workerNodeId
@@ -759,6 +763,10 @@ const onUpdateTaskSubscriptionQuery = /* GraphQL */ `
       estimatedCompletionAt
       errorMessage
       errorDetails
+      stdout
+      stderr
+      output
+      attachedFiles
       currentStageId
       celeryTaskId
       workerNodeId
