@@ -469,7 +469,7 @@ const DetailContent = React.memo(({
     console.log('Account context:', { selectedAccount });
     
     try {
-      const command = `predict --scorecard-name "${scorecardName || 'Unknown'}" --score-name "${score.name}" --item-id ${itemId}`;
+      const command = `predict --scorecard "${scorecardName || 'Unknown'}" --score "${score.name}" --item ${itemId}`;
       const taskInput = {
         type: 'Score Test',
         target: 'prediction',
