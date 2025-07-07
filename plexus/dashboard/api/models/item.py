@@ -59,6 +59,7 @@ class Item(BaseModel):
             id
             externalId
             description
+            text
             accountId
             evaluationId
             scoreId
