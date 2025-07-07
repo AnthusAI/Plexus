@@ -47,3 +47,103 @@ For detailed documentation on task stage configuration, see the docstrings in:
 2. Routes checked against `publicPaths` in `client-layout.tsx`
 3. Protected routes redirect to landing
 4. Data operations flow through `amplify-client.ts`
+
+# Plexus Project Cursor Rules
+
+## Python Environment Requirements
+
+**CRITICAL: This project uses Python 3.11, NOT 3.13 or other versions.**
+
+### Python Version
+- **Required:** Python 3.11 (py311)
+- **Environment:** Miniconda environment `py311` 
+- **Source:** Specified in pyproject.toml `requires-python = ">=3.11"`
+- **DO NOT USE:** Python 3.13 or other versions (causes dependency compatibility issues)
+
+### Environment Setup Process
+1. **Check for existing py311 environment:**
+   ```bash
+   conda env list | grep py311
+   ```
+
+2. **If py311 exists, activate it:**
+   ```bash
+   conda activate py311
+   ```
+
+3. **If py311 doesn't exist, create it:**
+   ```bash
+   conda create -n py311 python=3.11
+   conda activate py311
+   ```
+
+4. **Install dependencies:**
+   ```bash
+   pip install -e .
+   ```
+
+### Testing and Coverage
+- **Test framework:** pytest with pytest-cov
+- **Coverage command:** `python -m pytest --cov=plexus --cov-report=term --cov-report=html`
+- **TypeScript tests:** `cd dashboard && npm run test:coverage`
+
+## Project Structure
+
+### Key Directories
+- `plexus/`: Python modules (AI/ML, CLI)
+- `dashboard/`: Next.js/React dashboard
+- `dashboard/app/`: Next.js routes
+- `dashboard/components/`: React components
+- `dashboard/amplify/`: AWS config
+
+### Critical Files
+- `pyproject.toml`: Python dependencies and version requirements
+- `dashboard/package.json`: TypeScript dependencies
+- `pytest.ini`: Python test configuration
+- `dashboard/jest.config.js`: TypeScript test configuration
+
+## Dependencies
+
+### Core Python Dependencies (from pyproject.toml)
+- pytest, pytest-cov, pytest-asyncio
+- pandas==2.1.4 (use exactly this version for compatibility)
+- mlflow, celery, rich, langchain
+- boto3, pyyaml, click
+- All versions specified in pyproject.toml
+
+### Known Compatibility Issues
+- **pandas 2.1.4:** Compatible with Python 3.11, NOT 3.13
+- **mlflow:** Required for many CLI modules
+- **rich:** Required for CLI formatting
+- **celery:** Required for task dispatch
+
+## Development Guidelines
+
+### Environment Checks
+- **Always verify Python version:** `python --version` should show 3.11.x
+- **Check environment:** `conda info --envs` should show active py311
+- **Verify dependencies:** `pip list | grep pandas` should show 2.1.4
+
+### Common Issues
+- **Import errors:** Usually means wrong Python version or missing dependencies
+- **Test failures:** Often due to Python 3.13 vs 3.11 compatibility issues
+- **Coverage failures:** Ensure pytest-cov is installed in py311 environment
+
+### Before Starting Development
+1. Activate py311 environment
+2. Verify Python version is 3.11.x
+3. Install/update dependencies with `pip install -e .`
+4. Run basic test to verify setup: `python -c "import plexus; print('OK')"`
+
+## Task Automation
+- **Never ask about Python version** - always use 3.11
+- **Never create new virtual environments** - use existing py311
+- **Always check environment first** before installing dependencies
+- **Reference this file** when setting up development environment
+
+## Coverage Testing
+- **TypeScript:** Use Jest (`npm run test:coverage`)
+- **Python:** Use pytest with coverage (`pytest --cov=plexus`)
+- **Environment:** Must be in py311 for Python tests to work
+
+This file should be consulted FIRST before any environment setup or dependency installation.

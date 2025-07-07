@@ -48,43 +48,39 @@ This report provides an analysis of the current code coverage status for both th
 
 ## Python Core Coverage
 
-**Status:** Partial measurement completed - 19.1% of modules importable ⚠️
+**Status:** Cannot measure - Python version incompatibility ❌
 
-### Coverage Results
-- **Successfully imported:** 9 out of 47 tested CLI modules (19.1%)
-- **Testing infrastructure:** ✅ pytest, pytest-cov, pytest-asyncio installed
-- **Dependencies resolved:** ✅ pandas 2.3.0 (Python 3.13 compatible), requests, boto3
+### Critical Issue
+- **Project requires:** Python 3.11 (py311 conda environment)
+- **Current system:** Python 3.13.3
+- **Incompatibility:** pandas 2.1.4 (specified in pyproject.toml) doesn't compile with Python 3.13
 
-### Working Modules (Successfully Imported)
-- `DataLakeCommands` - Data lake operations
-- `TaskTargeting` - Task targeting logic
-- `cli_wrapper` - CLI wrapper utilities
-- `command_output` - Command output handling  
-- `file_editor` - File editing utilities
-- `utils` - General utilities
-- `universal_code` - Universal code components
-- `_version` - Version information
-- `plexus_logging.__init__` - Logging infrastructure
+### Project Requirements (from pyproject.toml)
+- **Python version:** `>=3.11` (designed for 3.11)
+- **Environment:** Miniconda environment `py311`
+- **pandas version:** 2.1.4 (not compatible with Python 3.13)
 
-### Blocked Dependencies Analysis
-| Dependency | Modules Blocked | Impact |
-|-----------|-----------------|---------|
-| **mlflow** | 26 modules | AI/ML tracking & experiments |
-| **rich** | 15 modules | CLI formatting & display |
-| **celery** | 4 modules | Distributed task queue |
-| **pyarrow** | 1 module | Data processing |
-| **langchain-anthropic** | 1 module | LLM integration |
+### System Status
+❌ **Python 3.11** not available on current system  
+❌ **conda/miniconda** not installed  
+❌ **py311 environment** cannot be created  
+❌ **Coverage measurement** blocked by version incompatibility  
+
+### Solutions Required
+1. **Install Python 3.11** via deadsnakes PPA or pyenv
+2. **Install Miniconda** and create py311 environment
+3. **Install dependencies** with `pip install -e .` in correct environment
+
+### What Was Attempted
+- Created Python 3.13 virtual environment (incorrect)
+- Installed pytest, pytest-cov, pandas 2.3.0 (wrong versions)
+- Attempted module imports (failed due to missing mlflow, rich, celery)
 
 ### Codebase Analysis
 - **Total Python files:** 161 files (~10,340 lines)
-- **CLI modules tested:** 47 out of 52 modules
-- **Test files available:** 2 Python test files in `plexus/tests/cli/`
-
-### Current Environment Status
-✅ **Virtual environment** created and functional  
-✅ **Core dependencies** installed (pytest, pandas 2.3.0, requests, boto3, pyyaml)  
-❌ **Full test execution** blocked by missing heavy dependencies  
-❌ **Module imports** limited by circular dependency in `plexus/__init__.py`
+- **CLI modules:** 52 files in plexus/cli/
+- **Test files:** 2 Python test files in plexus/tests/cli/
+- **Dependencies:** mlflow, rich, celery, langchain (all require proper Python version)
 
 ## Recommendations
 
@@ -97,15 +93,14 @@ This report provides an analysis of the current code coverage status for both th
 3. **Maintain:** Keep high coverage areas (landing pages, contexts, types) well-tested
 
 ### Python/Core
-1. **Immediate:** Install missing dependencies for full coverage measurement
-   - Install mlflow (blocks 26 modules - highest impact)
-   - Install rich (blocks 15 modules - CLI formatting)
-   - Install celery, pyarrow, langchain-anthropic
-   - Resolve circular import in `plexus/__init__.py`
+1. **Critical:** Install Python 3.11 environment (see ENVIRONMENT_SETUP.md)
+   - Install Python 3.11 via deadsnakes PPA: `sudo add-apt-repository ppa:deadsnakes/ppa`
+   - Create py311 environment: `python3.11 -m venv py311`
+   - Install all dependencies: `pip install -e .` (includes mlflow, rich, celery)
 2. **Coverage Goals:**
-   - Current baseline: 19.1% of modules importable
-   - Target: 70%+ coverage for critical CLI components
-   - Focus on the 9 working modules for immediate test expansion
+   - Current status: Cannot measure due to version incompatibility
+   - Target: 70%+ coverage for critical CLI components once environment is fixed
+   - Full test suite execution with proper Python 3.11 + pandas 2.1.4
 
 ### Overall Project
 1. **CI/CD Integration:** Set up automated coverage reporting in build pipeline
@@ -119,18 +114,20 @@ This report provides an analysis of the current code coverage status for both th
 | Component | Coverage Status | Action Required |
 |-----------|----------------|-----------------|
 | TypeScript Dashboard | ✅ 48% measured | 🔧 Improve hooks & utils |
-| Python Core | ⚠️ 19.1% modules importable | � Install mlflow, rich, celery |
-| Total Project | ⚠️ Partial visibility | 🔧 Complete Python dependencies |
+| Python Core | ❌ Cannot measure | 🚨 Install Python 3.11 + py311 environment |
+| Total Project | ⚠️ Partial visibility | � Fix Python version incompatibility |
 
 ## Next Steps
 
-1. **Week 1:** Resolve Python dependency issues and get baseline coverage measurement
-2. **Week 2:** Focus on improving TypeScript hooks coverage (critical gap)
-3. **Week 3:** Implement automated coverage reporting in CI/CD
-4. **Ongoing:** Regular coverage monitoring and incremental improvements
+1. **Immediate:** Install Python 3.11 environment (see ENVIRONMENT_SETUP.md for instructions)
+2. **Week 1:** Get baseline Python coverage measurement with proper environment
+3. **Week 2:** Focus on improving TypeScript hooks coverage (critical gap)
+4. **Week 3:** Implement automated coverage reporting in CI/CD
+5. **Ongoing:** Regular coverage monitoring and incremental improvements
 
 ---
 *Report generated on: Monday, July 7, 2025 at 13:11 UTC*
 *TypeScript coverage: Measured via Jest (HTML report available at `dashboard/coverage/lcov-report/`)*
-*Python coverage: Partial measurement completed - 9/47 CLI modules (19.1%) successfully imported*
-*Environment: Python 3.13 virtual environment with pytest, pandas 2.3.0, requests, boto3*
+*Python coverage: Cannot measure - requires Python 3.11 environment (py311)*
+*Critical issue: Python version incompatibility (current: 3.13, required: 3.11)*
+*Solution: See ENVIRONMENT_SETUP.md for installation instructions*
