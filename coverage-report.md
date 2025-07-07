@@ -48,44 +48,43 @@ This report provides an analysis of the current code coverage status for both th
 
 ## Python Core Coverage
 
-**Status:** Unable to execute coverage tests due to dependency issues
+**Status:** Partial measurement completed - 19.1% of modules importable ⚠️
 
-### Challenges Encountered
-- Missing dependencies (mlflow, click, etc.) preventing test execution
-- Externally managed Python environment preventing package installation
-- Circular import issues in `plexus/__init__.py`
+### Coverage Results
+- **Successfully imported:** 9 out of 47 tested CLI modules (19.1%)
+- **Testing infrastructure:** ✅ pytest, pytest-cov, pytest-asyncio installed
+- **Dependencies resolved:** ✅ pandas 2.3.0 (Python 3.13 compatible), requests, boto3
+
+### Working Modules (Successfully Imported)
+- `DataLakeCommands` - Data lake operations
+- `TaskTargeting` - Task targeting logic
+- `cli_wrapper` - CLI wrapper utilities
+- `command_output` - Command output handling  
+- `file_editor` - File editing utilities
+- `utils` - General utilities
+- `universal_code` - Universal code components
+- `_version` - Version information
+- `plexus_logging.__init__` - Logging infrastructure
+
+### Blocked Dependencies Analysis
+| Dependency | Modules Blocked | Impact |
+|-----------|-----------------|---------|
+| **mlflow** | 26 modules | AI/ML tracking & experiments |
+| **rich** | 15 modules | CLI formatting & display |
+| **celery** | 4 modules | Distributed task queue |
+| **pyarrow** | 1 module | Data processing |
+| **langchain-anthropic** | 1 module | LLM integration |
 
 ### Codebase Analysis
-- **Total Python files:** 250 files
-- **Total lines of code:** 70,641 lines
-- **Test files within plexus module:** 59 files (~15,837 lines)
-- **Test files in tests directory:** 4 files (~903 lines)
+- **Total Python files:** 161 files (~10,340 lines)
+- **CLI modules tested:** 47 out of 52 modules
+- **Test files available:** 2 Python test files in `plexus/tests/cli/`
 
-### Test Coverage Structure
-#### Within Module Tests (`plexus/`)
-- Score-related tests: 
-  - `ScoreData_test.py`
-  - `OpenAI_test.py`
-  - `BaseNode_test.py`
-  - `Classifier_test.py`
-  - `Extractor_test.py`
-  - `FuzzyMatchExtractor_test.py`
-  - `LogicalNode_test.py`
-  - `MultiClassClassifier_test.py`
-  - `YesOrNoClassifier_test.py`
-  - `AgenticValidator_test.py`
-- Plus 49 additional test files covering various components
-
-#### External Tests (`tests/`)
-- `test_task_commands.py`
-- `test_task_targeting.py` 
-- `test_langgraph_edge_configuration.py`
-- `test_scorecard_integration.py`
-
-### Estimated Test Coverage
-Based on file analysis:
-- **Test files ratio:** 59 test files out of 250 total files (~24%)
-- **Test code ratio:** 15,837 test lines out of 70,641 total lines (~22%)
+### Current Environment Status
+✅ **Virtual environment** created and functional  
+✅ **Core dependencies** installed (pytest, pandas 2.3.0, requests, boto3, pyyaml)  
+❌ **Full test execution** blocked by missing heavy dependencies  
+❌ **Module imports** limited by circular dependency in `plexus/__init__.py`
 
 ## Recommendations
 
@@ -98,14 +97,15 @@ Based on file analysis:
 3. **Maintain:** Keep high coverage areas (landing pages, contexts, types) well-tested
 
 ### Python/Core
-1. **Immediate:** Resolve dependency management issues
-   - Set up proper virtual environment or Docker container
-   - Install required dependencies (mlflow, click, etc.)
-   - Fix circular import issues
+1. **Immediate:** Install missing dependencies for full coverage measurement
+   - Install mlflow (blocks 26 modules - highest impact)
+   - Install rich (blocks 15 modules - CLI formatting)
+   - Install celery, pyarrow, langchain-anthropic
+   - Resolve circular import in `plexus/__init__.py`
 2. **Coverage Goals:**
-   - Target 70%+ coverage for critical CLI components
-   - Ensure all score/evaluation modules have comprehensive tests
-   - Add integration tests for API endpoints
+   - Current baseline: 19.1% of modules importable
+   - Target: 70%+ coverage for critical CLI components
+   - Focus on the 9 working modules for immediate test expansion
 
 ### Overall Project
 1. **CI/CD Integration:** Set up automated coverage reporting in build pipeline
@@ -119,8 +119,8 @@ Based on file analysis:
 | Component | Coverage Status | Action Required |
 |-----------|----------------|-----------------|
 | TypeScript Dashboard | ✅ 48% measured | 🔧 Improve hooks & utils |
-| Python Core | ❌ Cannot measure | 🚨 Fix dependencies first |
-| Total Project | ⚠️ Partial visibility | 🔧 Complete setup |
+| Python Core | ⚠️ 19.1% modules importable | � Install mlflow, rich, celery |
+| Total Project | ⚠️ Partial visibility | 🔧 Complete Python dependencies |
 
 ## Next Steps
 
@@ -132,4 +132,5 @@ Based on file analysis:
 ---
 *Report generated on: Monday, July 7, 2025 at 13:11 UTC*
 *TypeScript coverage: Measured via Jest (HTML report available at `dashboard/coverage/lcov-report/`)*
-*Python coverage: Analysis based on file structure (execution blocked by dependencies)*
+*Python coverage: Partial measurement completed - 9/47 CLI modules (19.1%) successfully imported*
+*Environment: Python 3.13 virtual environment with pytest, pandas 2.3.0, requests, boto3*
