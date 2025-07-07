@@ -132,20 +132,20 @@ This report provides an analysis of the current code coverage status for both th
 | Component | Coverage Status | Action Required |
 |-----------|----------------|-----------------|
 | TypeScript Dashboard | ✅ 48% measured | 🔧 Improve hooks & utils |
-| Python Core | ❌ Cannot measure | 🚨 Install Python 3.11 + py311 environment |
+| Python Core | ✅ 37% measured | � Focus on ML components |
 | Total Project | ⚠️ Partial visibility | � Fix Python version incompatibility |
 
 ## Next Steps
 
-1. **Immediate:** Install Python 3.11 environment (see ENVIRONMENT_SETUP.md for instructions)
-2. **Week 1:** Get baseline Python coverage measurement with proper environment
-3. **Week 2:** Focus on improving TypeScript hooks coverage (critical gap)
+1. **Immediate:** Expand Python ML component tests (focus on `Evaluation.py` for biggest impact)
+2. **Week 1:** Increase TypeScript hooks coverage from 2% to >50%
+3. **Week 2:** Add integration tests for end-to-end scorecard workflows
 4. **Week 3:** Implement automated coverage reporting in CI/CD
-5. **Ongoing:** Regular coverage monitoring and incremental improvements
+5. **Ongoing:** Target 65% Python coverage and 60% TypeScript coverage
 
 ---
 *Report generated on: Monday, July 7, 2025 at 19:24 UTC*
 *TypeScript coverage: ✅ 48% measured via Jest (HTML report: `dashboard/coverage/lcov-report/`)*
-*Python coverage: ⚠️ Environment setup successful, blocked by circular imports*
-*Environment: Python 3.11.13 in py311 conda environment with essential testing dependencies*
-*Next step: Fix circular import issues to enable comprehensive Python coverage measurement*
+*Python coverage: ✅ 37% measured via pytest (553/557 tests passed, HTML report: `htmlcov-python/`)*
+*Environment: Python 3.11.13 with full ML stack (mlflow, pandas 2.1.4, langchain, pytorch)*
+*Both coverage measurements successful - ready for incremental improvements*
