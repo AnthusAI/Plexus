@@ -237,7 +237,7 @@ Evaluation complete! Results saved to output.json`,
     stderr: `2025-01-06 15:30:12 [WARNING] Item 47 has missing metadata field 'source'
 2025-01-06 15:30:15 [WARNING] Score confidence low (0.3) for item 82
 2025-01-06 15:30:18 [INFO] Batch processing completed with 2 warnings`,
-    command: 'plexus evaluate accuracy --scorecard-name "termlifev1" --number-of-samples 100',
+    command: 'plexus evaluate accuracy --scorecard "termlifev1" --number-of-samples 100',
     taskType: 'Accuracy Evaluation'
   },
   parameters: {

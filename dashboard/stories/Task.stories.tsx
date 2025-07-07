@@ -610,7 +610,7 @@ export const WithAttachmentsAndOutput: Story = {
     variant: 'detail',
     task: createTask('with-attachments-output', {
       type: 'Evaluation Report',
-      command: 'plexus evaluate accuracy --scorecard-name "termlifev1" --number-of-samples 100',
+      command: 'plexus evaluate accuracy --scorecard "termlifev1" --number-of-samples 100',
       status: 'COMPLETED',
       stages: sampleStages.map(stage => ({ ...stage, status: 'COMPLETED' as const })),
       output: `# ====================================
