@@ -1129,7 +1129,6 @@ async def test_classifier_message_handling_between_nodes(turnip_classifier_confi
         assert first_call_messages != second_call_messages, \
             "Each node should use its own distinct messages"
 
-@pytest.mark.xfail(reason="Investigating CI vs Dev behavior differences in mock response ordering")
 @pytest.mark.asyncio
 async def test_multi_node_condition_routing():
     """Test routing between multiple nodes where middle node has conditions."""
@@ -1358,6 +1357,6 @@ async def test_multi_node_condition_routing():
         
         # Verify workflow continued to third node
         assert final_state_dict['classification'] == "No"  # From third node
-        # Check that the "No" condition output wasn't set
-        assert 'value' not in final_state_dict  # Value setter node wasn't triggered
+        # Check that the "No" condition output wasn't set (value should remain None)
+        assert final_state_dict.get('value') is None  # Value setter node wasn't triggered
         assert final_state_dict['explanation'] == "No"  # This comes from the parser, not the value setter
