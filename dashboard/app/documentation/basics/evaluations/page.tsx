@@ -268,7 +268,7 @@ export default function EvaluationsPage() {
                   <code>{`plexus \\
   evaluate \\
   accuracy \\
-  --scorecard-name "Lead Qualification" \\
+  --scorecard "Lead Qualification" \\
   --number-of-samples 100 \\
   --visualize`}</code>
                 </div>

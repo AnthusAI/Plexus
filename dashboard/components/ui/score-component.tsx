@@ -111,6 +111,7 @@ interface ScoreComponentProps extends React.HTMLAttributes<HTMLDivElement> {
     displayValue: string
   }>
   scorecardName?: string
+  onTaskCreated?: (task: any) => void
 }
 
 interface DetailContentProps {
@@ -138,6 +139,7 @@ interface DetailContentProps {
   }>
   selectedAccount?: { id: string } | null
   scorecardName?: string
+  onTaskCreated?: (task: any) => void
 }
 
 const GridContent = React.memo(({ 
@@ -255,6 +257,7 @@ const DetailContent = React.memo(({
   exampleItems = [],
   selectedAccount,
   scorecardName,
+  onTaskCreated,
 }: DetailContentProps) => {
   // Get the current version's configuration
   const currentVersion = versions?.find(v => 
@@ -469,7 +472,7 @@ const DetailContent = React.memo(({
     console.log('Account context:', { selectedAccount });
     
     try {
-      const command = `predict --scorecard-name "${scorecardName || 'Unknown'}" --score-name "${score.name}" --item-id ${itemId}`;
+      const command = `predict --scorecard "${scorecardName || 'Unknown'}" --score "${score.name}" --item ${itemId}`;
       const taskInput = {
         type: 'Score Test',
         target: 'prediction',
@@ -489,6 +492,9 @@ const DetailContent = React.memo(({
         toast.success("Score test dispatched", {
           description: <span className="font-mono text-sm truncate block">{command}</span>
         });
+        
+        // Notify parent component about task creation
+        onTaskCreated?.(task);
       } else {
         console.error("createTask returned null or undefined");
         toast.error("Failed to dispatch score test - no task returned");
@@ -1043,6 +1049,7 @@ export function ScoreComponent({
   onSave,
   exampleItems = [],
   scorecardName,
+  onTaskCreated,
   className,
   ...props
 }: ScoreComponentProps) {
@@ -1630,6 +1637,7 @@ export function ScoreComponent({
               exampleItems={exampleItems}
               selectedAccount={selectedAccount}
               scorecardName={scorecardName}
+              onTaskCreated={onTaskCreated}
             />
           )}
         </div>

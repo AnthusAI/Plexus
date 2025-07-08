@@ -87,7 +87,7 @@ Use `plexus-dashboard` to interact with the API:
 # Create a score result
 plexus-dashboard score-result create \
   --value 0.95 \
-  --item-id call_20240309_123 \
+  --item call_20240309_123 \
   --account-id acc-123 \
   --scoring-job-id job-123 \
   --scorecard-id card-123 \
