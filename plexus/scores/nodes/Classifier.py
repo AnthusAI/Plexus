@@ -152,7 +152,7 @@ class Classifier(BaseNode):
             
             # Extract explanation from the full output text
             # The explanation should be the entire output, not just the classification
-            explanation = output.strip() if output else (classification or "No classification found")
+            explanation = output if output else (classification or "No classification found")
             
             return {
                 "classification": classification,
