@@ -392,7 +392,7 @@ class Classifier(BaseNode):
 
                 if not state.messages:
                     logging.error("No messages found in state")
-                    logging.info(f"Available keys: {state.keys()}")
+                    logging.info(f"Available keys: {list(state.model_dump().keys())}")
                     raise ValueError("No messages found in state")
 
                 # If batch mode is enabled, use batch processing
