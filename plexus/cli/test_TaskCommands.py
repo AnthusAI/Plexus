@@ -133,6 +133,9 @@ class TestHelperFunctions:
         mock_task.errorDetails = sample_task_data['errorDetails']
         mock_task.stdout = sample_task_data['stdout']
         mock_task.stderr = sample_task_data['stderr']
+        mock_task.output = "Test output content"
+        mock_task.error = None
+        mock_task.attachedFiles = None
         
         # Mock stages
         mock_stages = []
@@ -157,6 +160,66 @@ class TestHelperFunctions:
         assert 'COMPLETED' in result_str
         assert 'Setup' in result_str
         assert 'Processing' in result_str
+    
+    def test_format_task_content_with_additional_fields(self, sample_task_data, sample_task_stages):
+        """Test format_task_content function with additional optional fields"""
+        # Mock Task object
+        mock_task = Mock()
+        mock_task.id = sample_task_data['id']
+        mock_task.accountId = sample_task_data['accountId']
+        mock_task.scorecardId = sample_task_data['scorecardId']
+        mock_task.scoreId = sample_task_data['scoreId']
+        mock_task.type = sample_task_data['type']
+        mock_task.status = sample_task_data['status']
+        mock_task.target = sample_task_data['target']
+        mock_task.command = sample_task_data['command']
+        mock_task.currentStageId = sample_task_data['currentStageId']
+        mock_task.workerNodeId = sample_task_data['workerNodeId']
+        mock_task.dispatchStatus = sample_task_data['dispatchStatus']
+        mock_task.description = sample_task_data['description']
+        mock_task.metadata = sample_task_data['metadata']
+        mock_task.createdAt = datetime.fromisoformat(sample_task_data['createdAt'].replace('Z', '+00:00'))
+        mock_task.updatedAt = datetime.fromisoformat(sample_task_data['updatedAt'].replace('Z', '+00:00'))
+        mock_task.startedAt = datetime.fromisoformat(sample_task_data['startedAt'].replace('Z', '+00:00'))
+        mock_task.completedAt = datetime.fromisoformat(sample_task_data['completedAt'].replace('Z', '+00:00'))
+        mock_task.estimatedCompletionAt = datetime.fromisoformat(sample_task_data['estimatedCompletionAt'].replace('Z', '+00:00'))
+        mock_task.errorMessage = sample_task_data['errorMessage']
+        mock_task.errorDetails = sample_task_data['errorDetails']
+        mock_task.stdout = sample_task_data['stdout']
+        mock_task.stderr = sample_task_data['stderr']
+        
+        # Add optional fields that the function checks for
+        mock_task.output = "Test output content"
+        mock_task.error = "Test error message"
+        mock_task.attachedFiles = ["file1.txt", "file2.csv"]
+        
+        # Mock stages
+        mock_stages = []
+        for stage_data in sample_task_stages:
+            mock_stage = Mock()
+            for key, value in stage_data.items():
+                if key in ['startedAt', 'completedAt'] and value:
+                    setattr(mock_stage, key, datetime.fromisoformat(value.replace('Z', '+00:00')))
+                else:
+                    setattr(mock_stage, key, value)
+            mock_stages.append(mock_stage)
+        
+        mock_task.get_stages.return_value = mock_stages
+        
+        result = format_task_content(mock_task)
+        
+        # Verify result is a Text object with content
+        assert hasattr(result, 'append')  # Text objects have append method
+        # Convert to string to check content
+        result_str = str(result)
+        assert 'task-123' in result_str
+        assert 'COMPLETED' in result_str
+        assert 'Universal Code Output' in result_str
+        assert 'Error Details' in result_str
+        assert 'Attached Files' in result_str
+        assert 'file1.txt' in result_str
+        assert 'Test error message' in result_str
+        assert 'Test output content' in result_str
 
 
 class TestTasksGroup:
