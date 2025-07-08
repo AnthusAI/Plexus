@@ -150,9 +150,13 @@ class Classifier(BaseNode):
             else:
                 classification = None
             
+            # Extract explanation from the full output text
+            # The explanation should be the entire output, not just the classification
+            explanation = output if output else (classification or "No classification found")
+            
             return {
                 "classification": classification,
-                "explanation": classification or "No classification found"
+                "explanation": explanation
             }
 
     def get_llm_prompt_node(self):
