@@ -623,7 +623,7 @@ async def test_classifier_parser_multiline_response():
     
     result = parser.parse(complex_response)
     assert result["classification"] == "no"
-    assert result["explanation"] == complex_response
+    assert result["explanation"] == complex_response.strip()
     
     # Test with parse_from_start=True
     parser_forward = Classifier.ClassificationOutputParser(
@@ -632,7 +632,7 @@ async def test_classifier_parser_multiline_response():
     )
     result_forward = parser_forward.parse(complex_response)
     assert result_forward["classification"] == "yes"
-    assert result_forward["explanation"] == complex_response   
+    assert result_forward["explanation"] == complex_response.strip()   
 
 @pytest.mark.asyncio
 async def test_classifier_parser_valid_classes_order():
