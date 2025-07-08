@@ -74,6 +74,7 @@ interface ScorecardComponentProps extends React.HTMLAttributes<HTMLDivElement> {
   onEditItem?: (itemId: string) => void
   shouldExpandExamples?: boolean
   onExamplesExpanded?: () => void
+  onTaskCreated?: (task: any) => void
 }
 
 const GridContent = React.memo(({ 
@@ -126,6 +127,7 @@ interface DetailContentProps {
   onEditItem?: (itemId: string) => void
   shouldExpandExamples?: boolean
   onExamplesExpanded?: () => void
+  onTaskCreated?: (task: any) => void
 }
 
 export const DetailContent = React.memo(function DetailContent({
@@ -146,7 +148,8 @@ export const DetailContent = React.memo(function DetailContent({
   onCreateItem,
   onEditItem,
   shouldExpandExamples,
-  onExamplesExpanded
+  onExamplesExpanded,
+  onTaskCreated
 }: DetailContentProps) {
   const { selectedAccount } = useAccount()
   const [sectionNameChanges, setSectionNameChanges] = React.useState<Record<string, string>>({})
@@ -458,6 +461,9 @@ export const DetailContent = React.memo(function DetailContent({
         toast.success("Prediction test task created", {
           description: <span className="font-mono text-sm truncate block">{command}</span>
         });
+        
+        // Notify parent component about task creation
+        onTaskCreated?.(task);
       } else {
         toast.error("Failed to create prediction test task");
       }
@@ -853,6 +859,8 @@ export const DetailContent = React.memo(function DetailContent({
                               displayValue
                             };
                           }) || []}
+                          scorecardName={score.name}
+                          onTaskCreated={onTaskCreated}
                         />
                       ))}
                     </div>
@@ -922,6 +930,7 @@ export default function ScorecardComponent({
   onEditItem,
   shouldExpandExamples,
   onExamplesExpanded,
+  onTaskCreated,
   className, 
   ...props 
 }: ScorecardComponentProps) {
@@ -1077,6 +1086,7 @@ export default function ScorecardComponent({
               onEditItem={onEditItem}
               shouldExpandExamples={shouldExpandExamples}
               onExamplesExpanded={onExamplesExpanded}
+              onTaskCreated={onTaskCreated}
             />
           )}
         </div>

@@ -342,6 +342,7 @@ const TaskContent = <TData extends BaseTaskData = BaseTaskData>({
           <TaskStatus
             showStages={showProgress}
             stages={task.stages || []}
+            stageConfigs={task.stages || []}
             currentStageName={task.currentStageName}
             processedItems={task.processedItems}
             totalItems={task.totalItems}
