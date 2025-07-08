@@ -124,7 +124,7 @@ Then ask the user what they would like to change about the scorecard."""
 
         # Load documentation
         try:
-            doc_path = Path(__file__).parent.parent / "documentation" / "plexus-score-configuration-yaml-format.md"
+            doc_path = Path(__file__).parent.parent / "docs" / "score-yaml-format.md"
             with open(doc_path) as f:
                 self.documentation = f.read()
         except Exception as e:
