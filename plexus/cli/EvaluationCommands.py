@@ -53,6 +53,7 @@ from plexus.dashboard.api.models.task import Task
 from plexus.dashboard.api.client import PlexusDashboardClient
 from plexus.cli.CommandProgress import CommandProgress
 from plexus.cli.task_progress_tracker import TaskProgressTracker, StageConfig
+from plexus.cli.stage_configurations import get_evaluation_stage_configs
 
 from plexus.utils import truncate_dict_strings_inner
 
@@ -143,22 +144,8 @@ def accuracy(
                 api_key = os.environ.get('PLEXUS_API_KEY')
                 if api_url and api_key:
                     try:
-                        # Initialize TaskProgressTracker with proper stage configs
-                        stage_configs = {
-                            "Setup": StageConfig(
-                                order=1,
-                                status_message="Setting up evaluation..."
-                            ),
-                            "Processing": StageConfig(
-                                order=2,
-                                total_items=number_of_samples,
-                                status_message="Starting processing..."
-                            ),
-                            "Finalizing": StageConfig(
-                                order=3,
-                                status_message="Starting finalization..."
-                            )
-                        }
+                        # Initialize TaskProgressTracker with evaluation-specific stage configs
+                        stage_configs = get_evaluation_stage_configs(total_items=number_of_samples)
 
                         # Create tracker with proper task configuration
                         tracker = TaskProgressTracker(
@@ -172,7 +159,7 @@ def accuracy(
                             metadata={
                                 "type": "Accuracy Evaluation",
                                 "scorecard": scorecard_name,
-                                "task_type": "Accuracy Evaluation"  # Move type to metadata
+                                "task_type": "Accuracy Evaluation"
                             },
                             account_id=account.id
                         )
@@ -332,21 +319,8 @@ def accuracy(
 
             # If we have a task but no tracker yet (Celery path), create the tracker now
             if task and not tracker:
-                stage_configs = {
-                    "Setup": StageConfig(
-                        order=1,
-                        status_message="Setting up evaluation..."
-                    ),
-                    "Processing": StageConfig(
-                        order=2,
-                        total_items=number_of_samples,
-                        status_message="Waiting to start processing..."
-                    ),
-                    "Finalizing": StageConfig(
-                        order=3,
-                        status_message="Waiting to start finalization..."
-                    )
-                }
+                # Use evaluation-specific stage configs
+                stage_configs = get_evaluation_stage_configs(total_items=number_of_samples)
                 
                 # Create tracker with existing task
                 tracker = TaskProgressTracker(

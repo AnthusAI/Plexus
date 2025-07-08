@@ -8,6 +8,9 @@ from openpyxl.styles import Font
 import asyncio
 import sys
 import traceback
+import socket
+from datetime import datetime, timezone
+from typing import Optional
 
 from plexus.CustomLogging import logging
 from plexus.Registries import scorecard_registry
@@ -20,6 +23,10 @@ from plexus.cli.shared import get_scoring_jobs_for_batch
 from plexus.cli.identifier_resolution import resolve_scorecard_identifier, resolve_score_identifier, resolve_item_identifier
 from plexus.cli.memoized_resolvers import memoized_resolve_scorecard_identifier, memoized_resolve_item_identifier
 from plexus.cli.command_output import write_json_output, should_write_json_output
+from plexus.cli.stage_configurations import get_prediction_stage_configs
+from plexus.cli.task_progress_tracker import TaskProgressTracker
+from plexus.dashboard.api.models.account import Account
+from plexus.dashboard.api.models.task import Task
 
 
 @click.command(help="Predict a scorecard or specific score(s) within a scorecard.")
@@ -96,21 +103,145 @@ async def predict_impl(
     format: str = 'fixed'
 ):
     """Implementation of predict command"""
+    tracker: Optional[TaskProgressTracker] = None
+    task: Optional[Task] = None
+    client: Optional[PlexusDashboardClient] = None
+    
     try:
+        # Initialize task progress tracking if task_id is provided
+        if task_id:
+            try:
+                client = PlexusDashboardClient()
+                
+                # Get the account ID
+                logging.info("Looking up call-criteria account...")
+                account = Account.list_by_key(key="call-criteria", client=client)
+                if not account:
+                    raise Exception("Could not find account with key: call-criteria")
+                logging.info(f"Found account: {account.name} ({account.id})")
+                
+                # Get existing task if task_id provided
+                task = Task.get_by_id(task_id, client)
+                if not task:
+                    logging.error(f"Failed to get existing task {task_id}")
+                    raise Exception(f"Could not find task with ID: {task_id}")
+                logging.info(f"Using existing task: {task_id}")
+                
+                # Calculate total items for progress tracking
+                total_predictions = len(score_names) * number_of_times
+                
+                # Initialize TaskProgressTracker with prediction-specific stages
+                stage_configs = get_prediction_stage_configs(total_items=total_predictions)
+                
+                tracker = TaskProgressTracker(
+                    total_items=total_predictions,
+                    stage_configs=stage_configs,
+                    task_id=task.id,
+                    target=f"prediction/{scorecard_identifier}",
+                    command=f"predict --scorecard {scorecard_identifier}",
+                    description=f"Prediction for {scorecard_identifier}",
+                    dispatch_status="DISPATCHED",
+                    prevent_new_task=True,
+                    metadata={
+                        "type": "Prediction",
+                        "scorecard": scorecard_identifier,
+                        "task_type": "Prediction"
+                    },
+                    account_id=account.id,
+                    client=client
+                )
+                
+                # Set worker ID immediately to show task as claimed
+                worker_id = f"{socket.gethostname()}-{os.getpid()}"
+                task.update(
+                    accountId=task.accountId,
+                    type=task.type,
+                    status='RUNNING',
+                    target=task.target,
+                    command=task.command,
+                    workerNodeId=worker_id,
+                    startedAt=datetime.now(timezone.utc).isoformat(),
+                    updatedAt=datetime.now(timezone.utc).isoformat()
+                )
+                logging.info(f"Successfully claimed task {task.id} with worker ID {worker_id}")
+                
+                # Start with Querying stage
+                tracker.current_stage.status_message = "Starting prediction setup..."
+                tracker.update(current_items=0)
+                logging.info("Entered Querying stage: Starting prediction setup")
+                
+                # Log all configured stages for debugging
+                all_stages = tracker.get_all_stages()
+                logging.info(f"TaskProgressTracker configured with stages: {list(all_stages.keys())}")
+                logging.info(f"Current stage: {tracker.current_stage.name if tracker.current_stage else 'None'}")
+                
+            except Exception as e:
+                logging.error(f"Failed to initialize task progress tracking: {str(e)}")
+                logging.error(f"Full traceback: {traceback.format_exc()}")
+                # Continue without tracking if setup fails
+                tracker = None
+                task = None
+        
         results = []
+        
+        # Querying stage: Looking up scorecard configuration
+        if tracker:
+            tracker.current_stage.status_message = "Looking up scorecard configuration..."
+            tracker.update(current_items=0)
+        
         scorecard_class = get_scorecard_class(scorecard_identifier)
         
-        for _ in range(number_of_times):
-            for score_name in score_names:
+        # Querying stage: Scorecard configuration loaded
+        if tracker:
+            tracker.current_stage.status_message = "Scorecard configuration loaded successfully"
+            tracker.update(current_items=0)
+            
+            # Complete the Querying stage
+            tracker.current_stage.status_message = "Querying completed - scorecard configuration ready"
+            tracker.update(current_items=0)
+            logging.info("Querying stage completed")
+            
+            # Advance to Predicting stage
+            tracker.advance_stage()
+            tracker.current_stage.status_message = "Starting predictions..."
+            tracker.update(current_items=0)
+            logging.info(f"Entered Predicting stage (current stage: {tracker.current_stage.name})")
+        
+        current_prediction = 0
+        total_predictions = len(score_names) * number_of_times
+        
+        for iteration in range(number_of_times):
+            for score_idx, score_name in enumerate(score_names):
+                # Update progress for current prediction
+                if tracker:
+                    prediction_num = iteration * len(score_names) + score_idx + 1
+                    tracker.current_stage.status_message = f"Processing prediction {prediction_num}/{total_predictions} for score: {score_name}"
+                    tracker.update(current_items=current_prediction)
+                
+                # Step 1: Look up item text and metadata
+                if tracker:
+                    tracker.current_stage.status_message = f"Looking up item text and metadata for prediction {prediction_num}/{total_predictions}"
+                    tracker.update(current_items=current_prediction)
+                
                 sample_row, used_item_id = select_sample(
                     scorecard_class, score_name, item_identifier, fresh
                 )
+                
+                # Step 2: Item lookup completed
+                if tracker:
+                    tracker.current_stage.status_message = f"Item data loaded - running prediction {prediction_num}/{total_predictions} for score: {score_name}"
+                    tracker.update(current_items=current_prediction)
                 
                 row_result = {'item_id': used_item_id}
                 if sample_row is not None:
                     row_result['text'] = sample_row.iloc[0].get('text', '')
                 
                 try:
+                    # Update progress: Running prediction
+                    if tracker:
+                        tracker.current_stage.status_message = f"Running prediction for score: {score_name}"
+                        tracker.update(current_items=current_prediction)
+                    
                     transcript, predictions, costs = await predict_score(
                         score_name, scorecard_class, sample_row, used_item_id
                     )
@@ -226,9 +357,33 @@ async def predict_impl(
                 
                 if any(row_result.get(f'{name}_value') is not None for name in score_names):
                     results.append(row_result)
+                
+                # Update progress: Prediction completed
+                current_prediction += 1
+                if tracker:
+                    tracker.current_stage.status_message = f"Completed prediction {current_prediction}/{total_predictions}"
+                    tracker.update(current_items=current_prediction)
 
+        # Complete the Predicting stage
+        if tracker:
+            tracker.current_stage.status_message = "All predictions completed successfully"
+            tracker.update(current_items=total_predictions)
+            logging.info("Predicting stage completed")
+            
+            # Advance to Archiving stage
+            tracker.advance_stage()
+            tracker.current_stage.status_message = "Starting result archiving..."
+            tracker.update(current_items=total_predictions)
+            logging.info(f"Entered Archiving stage (current stage: {tracker.current_stage.name})")
+        
         if excel and results:
+            if tracker:
+                tracker.current_stage.status_message = "Generating Excel output file..."
+                tracker.update(current_items=total_predictions)
             output_excel(results, score_names, scorecard_identifier)
+            if tracker:
+                tracker.current_stage.status_message = "Excel file generated successfully"
+                tracker.update(current_items=total_predictions)
         elif results:
             if format == 'json':
                 # JSON format: only output parseable JSON
@@ -275,8 +430,18 @@ async def predict_impl(
                 
                 # Also write to output file if we're in task dispatch mode
                 if should_write_json_output():
+                    if tracker:
+                        tracker.current_stage.status_message = "Writing structured results to output file..."
+                        tracker.update(current_items=total_predictions)
                     write_json_output(json_results, "output.json")
                     logging.info("Written structured prediction results to output.json")
+                    if tracker:
+                        tracker.current_stage.status_message = "Output file written successfully"
+                        tracker.update(current_items=total_predictions)
+                
+                if tracker:
+                    tracker.current_stage.status_message = "JSON results processed successfully"
+                    tracker.update(current_items=total_predictions)
             else:
                 # Fixed format: human-readable output
                 rich.print("\n[bold green]Prediction Results:[/bold green]")
@@ -313,12 +478,60 @@ async def predict_impl(
                 rich.print("[yellow]No prediction results to display.[/yellow]")
             else:
                 print("[]")  # Empty JSON array for no results
+                
+        # Complete the Archiving stage
+        if tracker:
+            tracker.current_stage.status_message = "Archiving completed successfully"
+            tracker.update(current_items=total_predictions)
+            logging.info("Archiving stage completed")
+            
+            # Mark task as completed
+            if task:
+                task.update(
+                    accountId=task.accountId,
+                    type=task.type,
+                    status='COMPLETED',
+                    target=task.target,
+                    command=task.command,
+                    completedAt=datetime.now(timezone.utc).isoformat(),
+                    updatedAt=datetime.now(timezone.utc).isoformat()
+                )
+                logging.info(f"Successfully marked task {task.id} as completed")
+            
+            # Complete all tracking
+            tracker.complete()
+            logging.info("All stages completed - prediction task finished successfully")
     except BatchProcessingPause:
         # Let it propagate up to be handled by the event loop handler
         raise
     except Exception as e:
-        logging.error(f"Unexpected error: {e}")
+        error_msg = f"Prediction failed: {str(e)}"
+        logging.error(error_msg)
         logging.error(f"Full traceback: {traceback.format_exc()}")
+        
+        # Update task and tracker with error information
+        if tracker:
+            tracker.current_stage.status_message = error_msg
+            tracker.update(current_items=tracker.current_items)
+            tracker.fail(str(e))
+        
+        if task:
+            try:
+                task.update(
+                    accountId=task.accountId,
+                    type=task.type,
+                    status='FAILED',
+                    target=task.target,
+                    command=task.command,
+                    errorMessage=error_msg,
+                    errorDetails=traceback.format_exc(),
+                    completedAt=datetime.now(timezone.utc).isoformat(),
+                    updatedAt=datetime.now(timezone.utc).isoformat()
+                )
+                logging.info(f"Updated task {task.id} with error information")
+            except Exception as task_update_error:
+                logging.error(f"Failed to update task with error information: {str(task_update_error)}")
+        
         raise
     finally:
         # Final cleanup of any remaining tasks
