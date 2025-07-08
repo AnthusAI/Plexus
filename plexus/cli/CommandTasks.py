@@ -99,56 +99,12 @@ def register_tasks(app):
                         )
                         logging.info(f"Successfully claimed task {task_id} with worker ID {worker_id}")
 
-                        # Initialize stages if they don't exist
+                        # Check existing stages - let individual commands create their own stages
                         stages = task.get_stages()
-                        if not stages:
-                            logging.info("No stages found for task, creating standard stages...")
-                            # Create the three standard stages
-                            mutation = """
-                            mutation CreateTaskStage($input: CreateTaskStageInput!) {
-                                createTaskStage(input: $input) {
-                                    id
-                                    taskId
-                                    name
-                                    order
-                                    status
-                                    statusMessage
-                                }
-                            }
-                            """
-                            
-                            # Create each stage in order
-                            stage_configs = [
-                                {
-                                    "name": "Setup",
-                                    "order": 1,
-                                    "status": "PENDING",
-                                    "statusMessage": "Setting up evaluation...",
-                                    "taskId": task.id
-                                },
-                                {
-                                    "name": "Processing",
-                                    "order": 2,
-                                    "status": "PENDING",
-                                    "statusMessage": "Waiting to start processing...",
-                                    "taskId": task.id
-                                },
-                                {
-                                    "name": "Finalizing",
-                                    "order": 3,
-                                    "status": "PENDING",
-                                    "statusMessage": "Waiting to start finalization...",
-                                    "taskId": task.id
-                                }
-                            ]
-                            
-                            for stage_config in stage_configs:
-                                try:
-                                    client.execute(mutation, {'input': stage_config})
-                                    logging.info(f"Created {stage_config['name']} stage for task {task.id}")
-                                except Exception as e:
-                                    logging.error(f"Failed to create {stage_config['name']} stage: {str(e)}")
-                                    raise
+                        if stages:
+                            logging.info(f"Task {task.id} already has {len(stages)} stages: {[s.name for s in stages]}")
+                        else:
+                            logging.info(f"Task {task.id} has no stages yet - individual command will create appropriate stages")
                         
                         # Second update - start processing
                         task.update(
@@ -179,8 +135,11 @@ def register_tasks(app):
                 
                 # Now proceed with task processing
                 if task_id:
-                    # Get the task for further updates
+                    # Get the task for further updates  
                     task = Task.get_by_id(task_id, client)
+                    # Log the task info for debugging
+                    existing_stages = task.get_stages()
+                    logging.info(f"Task {task_id} has {len(existing_stages)} existing stages: {[s.name for s in existing_stages]}")
                     # Ensure command is set
                     task.update(
                         accountId=task.accountId,
