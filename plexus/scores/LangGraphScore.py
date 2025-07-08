@@ -512,7 +512,10 @@ class LangGraphScore(Score, LangChainUser):
             output_aliasing_node_name = None
             if hasattr(self.parameters, 'output') and self.parameters.output:
                 output_aliasing_node_name = 'output_aliasing'
-                output_aliasing_function = self.generate_output_aliasing_function(self.parameters.output)
+                output_aliasing_function = self.generate_output_aliasing_function(
+                    self.parameters.output, 
+                    self.parameters.graph
+                )
                 workflow.add_node(output_aliasing_node_name, output_aliasing_function)
                 workflow.add_edge(output_aliasing_node_name, END)
                 logging.info("Added final output aliasing node, which will connect to END.")
@@ -869,19 +872,33 @@ class LangGraphScore(Score, LangChainUser):
         return input_aliasing
 
     @staticmethod
-    def generate_output_aliasing_function(output_mapping: dict) -> FunctionType:
+    def generate_output_aliasing_function(output_mapping: dict, graph_config: list = None) -> FunctionType:
         def output_aliasing(state):
                         
             # Create a new dict with all current state values
             new_state = state.model_dump()
             
-            # Add aliased values, but only if the target field is not already meaningfully set
+            # Apply aliased values, but preserve conditional outputs
             for alias, original in output_mapping.items():
                 
-                # Check if the target alias field already has a meaningful value
-                current_alias_value = getattr(state, alias, None)
-                if current_alias_value is not None and current_alias_value != "":
-                    continue  # Skip this alias - preserve the existing value
+                # Check if this field was set by conditional routing - if so, preserve it
+                skip_alias = False
+                if graph_config:
+                    for node_config in graph_config:
+                        if 'conditions' in node_config:
+                            for condition in node_config['conditions']:
+                                if 'output' in condition and alias in condition['output']:
+                                    # This field is set by a condition - preserve existing value
+                                    current_value = getattr(state, alias, None)
+                                    if current_value is not None and current_value != "":
+                                        logging.debug(f"Preserving conditional output {alias} = {current_value!r}")
+                                        skip_alias = True
+                                        break
+                            if skip_alias:
+                                break
+                
+                if skip_alias:
+                    continue  # Skip this alias - preserve the conditional output
                 
                 if hasattr(state, original):
                     original_value = getattr(state, original)

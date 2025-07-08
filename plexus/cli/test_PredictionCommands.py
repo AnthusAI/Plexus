@@ -697,20 +697,83 @@ class TestGetScorecardClass:
     """Test the get_scorecard_class function"""
     
     def test_get_scorecard_class_success(self, mock_scorecard_class, mock_scorecard_registry):
-        """Test successful scorecard class retrieval"""
-        mock_scorecard_registry.get.return_value = Mock()
+        """Test successful scorecard class retrieval via direct registry lookup"""
+        # Mock the scorecard registry to return a scorecard class on the first call (fallback path)
+        expected_scorecard = Mock()
         
-        result = get_scorecard_class('test-scorecard')
+        # Set up the registry mock to return None for API-resolved keys but the scorecard for the original identifier
+        def mock_get(identifier):
+            if identifier == 'test-scorecard':
+                return expected_scorecard
+            return None
         
-        assert result is not None
-        mock_scorecard_class.load_and_register_scorecards.assert_called_once_with('scorecards/')
-        mock_scorecard_registry.get.assert_called_once_with('test-scorecard')
+        mock_scorecard_registry.get.side_effect = mock_get
+        
+        # Mock to force the fallback path by making API resolution fail
+        with patch('plexus.cli.client_utils.create_client') as mock_create_client, \
+             patch('plexus.cli.memoized_resolvers.memoized_resolve_scorecard_identifier') as mock_resolve_scorecard:
+            
+            # Mock client
+            mock_client = Mock()
+            mock_create_client.return_value = mock_client
+            
+            # Mock identifier resolution to fail (so it falls back to direct registry lookup)
+            mock_resolve_scorecard.return_value = None
+            
+            # Call the function
+            result = get_scorecard_class('test-scorecard')
+            
+            # Verify the result
+            assert result == expected_scorecard
+            assert result is not None
+    
+    def test_get_scorecard_class_success_with_api_resolution(self, mock_scorecard_class, mock_scorecard_registry):
+        """Test successful scorecard class retrieval with API resolution"""
+        # Mock the scorecard registry to return a scorecard class
+        expected_scorecard = Mock()
+        mock_scorecard_registry.get.return_value = expected_scorecard
+        
+        # Mock the API client and related functions that get_scorecard_class uses
+        with patch('plexus.cli.client_utils.create_client') as mock_create_client, \
+             patch('plexus.cli.memoized_resolvers.memoized_resolve_scorecard_identifier') as mock_resolve_scorecard:
+            
+            # Mock client
+            mock_client = Mock()
+            mock_create_client.return_value = mock_client
+            
+            # Mock identifier resolution to succeed
+            mock_resolve_scorecard.return_value = 'scorecard-id-123'
+            
+            # Mock the GraphQL response
+            mock_client.execute.return_value = {
+                'getScorecard': {
+                    'id': 'scorecard-id-123',
+                    'name': 'Test Scorecard',
+                    'key': 'test-scorecard-key'
+                }
+            }
+            
+            # Call the function
+            result = get_scorecard_class('test-scorecard')
+            
+            # Verify the result
+            assert result == expected_scorecard
+            assert result is not None
     
     def test_get_scorecard_class_not_found(self, mock_scorecard_class, mock_scorecard_registry):
         """Test scorecard class not found"""
         # Mock identifier resolution to fail
-        with patch('plexus.cli.PredictionCommands.memoized_resolve_scorecard_identifier') as mock_resolve_scorecard:
+        with patch('plexus.cli.client_utils.create_client') as mock_create_client, \
+             patch('plexus.cli.memoized_resolvers.memoized_resolve_scorecard_identifier') as mock_resolve_scorecard:
+            
+            # Mock client
+            mock_client = Mock()
+            mock_create_client.return_value = mock_client
+            
+            # Mock identifier resolution to fail (return None)
             mock_resolve_scorecard.return_value = None
+            
+            # Mock the registry to return None (scorecard not found)
             mock_scorecard_registry.get.return_value = None
             
             # ✅ FIXED: Expect the actual error message from the implementation
