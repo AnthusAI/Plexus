@@ -234,17 +234,16 @@ mcp = FastMCP(
     Access Plexus Dashboard functionality, run evaluations, and manage scorecards.
     
     ## Scorecard Management
-    - list_plexus_scorecards: List available scorecards with optional filtering by name or key
-    - get_plexus_scorecard_info: Get detailed information about a specific scorecard, including sections and scores
-    - get_plexus_score_details: Get configuration and version details for a specific score within a scorecard
+    - plexus_scorecards_list: List available scorecards with optional filtering by name or key
+    - plexus_scorecard_info: Get detailed information about a specific scorecard, including sections and scores
     
-    ## Score Configuration Management
-    - find_plexus_score: Intelligent search to find a specific score within scorecards using flexible identifiers (supports pattern matching)
-    - get_plexus_score_configuration: Get the YAML configuration for a specific score version
-    - pull_plexus_score_configuration: Pull a score's champion version YAML configuration to a local file
-    - push_plexus_score_configuration: Push a score's local YAML configuration file to create a new version
-    - update_plexus_score_configuration: Update a score's configuration by creating a new version with provided YAML content
-    - delete_plexus_score: Delete a specific score by ID (uses shared ScoreService - includes safety confirmation step)
+    ## Score Management
+    - plexus_score_info: Get detailed information about a specific score, including location, configuration, and optionally all versions. Supports intelligent search across scorecards.
+    - plexus_score_configuration: Get the YAML configuration for a specific score version
+    - plexus_score_pull: Pull a score's champion version YAML configuration to a local file
+    - plexus_score_push: Push a score's local YAML configuration file to create a new version
+    - plexus_score_update: Update a score's configuration by creating a new version with provided YAML content
+    - plexus_score_delete: Delete a specific score by ID (uses shared ScoreService - includes safety confirmation step)
     
     ## Evaluation Tools
     - run_plexus_evaluation: Dispatches a scorecard evaluation to run in the background. 
@@ -252,18 +251,18 @@ mcp = FastMCP(
       Monitor evaluation status via Plexus Dashboard or system logs.
     
     ## Report Tools
-    - list_plexus_reports: List available reports with optional filtering by report configuration
-    - get_plexus_report_details: Get detailed information about a specific report
-    - get_latest_plexus_report: Get the most recent report, optionally filtered by report configuration
-    - list_plexus_report_configurations: List available report configurations
+    - plexus_reports_list: List available reports with optional filtering by report configuration
+    - plexus_report_info: Get detailed information about a specific report
+    - plexus_report_last: Get the most recent report, optionally filtered by report configuration
+    - plexus_report_configurations_list: List available report configurations
     
     ## Item Tools
-    - get_latest_plexus_item: Get the most recent item for an account, with optional score results
-    - get_plexus_item_details: Get detailed information about a specific item by its ID, with optional score results
+    - plexus_item_last: Get the most recent item for an account, with optional score results
+    - plexus_item_info: Get detailed information about a specific item by its ID, with optional score results
     
     ## Task Tools
-    - get_latest_plexus_task: Get the most recent task for an account, with optional filtering by task type
-    - get_plexus_task_details: Get detailed information about a specific task by its ID, including task stages
+    - plexus_task_last: Get the most recent task for an account, with optional filtering by task type
+    - plexus_task_info: Get detailed information about a specific task by its ID, including task stages
     
     ## Feedback Analysis & Score Testing Tools
     - plexus_feedback_summary: Generate comprehensive feedback summary with confusion matrix, accuracy, and AC1 agreement - RUN THIS FIRST to understand overall performance before using find
@@ -496,7 +495,7 @@ async def think(thought: str) -> str:
         sys.stdout = old_stdout
 
 @mcp.tool()
-async def list_plexus_scorecards(
+async def plexus_scorecards_list(
     identifier: Optional[str] = None, 
     limit: Optional[int] = None
 ) -> Union[str, List[Dict]]:
@@ -740,7 +739,7 @@ async def run_plexus_evaluation(
             f"Monitor logs or Plexus Dashboard for status and results.")
 
 @mcp.tool()
-async def get_plexus_scorecard_info(scorecard_identifier: str) -> Union[str, Dict[str, Any]]:
+async def plexus_scorecard_info(scorecard_identifier: str) -> Union[str, Dict[str, Any]]:
     """
     Gets detailed information about a specific scorecard, including its sections and scores.
     
@@ -854,195 +853,10 @@ async def get_plexus_scorecard_info(scorecard_identifier: str) -> Union[str, Dic
         # Restore original stdout
         sys.stdout = old_stdout
 
-@mcp.tool()
-async def get_plexus_score_details(
-    scorecard_identifier: str,
-    score_identifier: str,
-    version_id: Optional[str] = None
-) -> Union[str, Dict[str, Any]]:
-    """
-    Gets detailed information for a specific score, including its versions and configuration.
-    
-    Parameters:
-    - scorecard_identifier: Identifier for the parent scorecard (ID, name, key, or external ID)
-    - score_identifier: Identifier for the score (ID, name, key, or external ID)
-    - version_id: Optional specific version ID of the score to fetch configuration for. If omitted, defaults to champion or latest
-    
-    Returns:
-    - Detailed information about the score and its configuration
-    """
-    # Temporarily redirect stdout to capture any unexpected output
-    old_stdout = sys.stdout
-    temp_stdout = StringIO()
-    sys.stdout = temp_stdout
-    
-    try:
-        # Import plexus CLI inside function to keep startup fast
-        try:
-            # Fix the import to use the correct modules
-            from plexus.cli.client_utils import create_client as create_dashboard_client 
-            from plexus.cli.ScorecardCommands import resolve_scorecard_identifier
-            from plexus.dashboard.api.client import PlexusDashboardClient
-        except ImportError as e:
-            logger.error(f"ImportError: {str(e)}", exc_info=True)
-            return f"Error: Failed to import Plexus modules: {str(e)}"
 
-        # Check if we have the necessary credentials
-        api_url = os.environ.get('PLEXUS_API_URL', '')
-        api_key = os.environ.get('PLEXUS_API_KEY', '')
-
-        if not api_url or not api_key:
-            logger.warning("Missing API credentials for get_score_details. Ensure .env file is loaded.")
-            return "Error: Missing API credentials for get_score_details."
-
-        # Create the client directly
-        client = create_dashboard_client()
-        if not client:
-            return "Error: Could not create dashboard client for get_score_details."
-
-        # 1. Resolve scorecard_identifier to scorecard_id
-        actual_scorecard_id = resolve_scorecard_identifier(client, scorecard_identifier)
-        if not actual_scorecard_id:
-            return f"Error: Scorecard '{scorecard_identifier}' not found."
-
-        # 2. Fetch scorecard to find the score_id and its details (including championVersionId)
-        scorecard_query = f"""
-        query GetScorecardForScoreResolution {{
-            getScorecard(id: "{actual_scorecard_id}") {{
-                id
-                name
-                sections {{
-                    items {{
-                        id
-                        name
-                        scores {{
-                            items {{
-                                id
-                                name
-                                key
-                                externalId
-                                championVersionId
-                            }}
-                        }}
-                    }}
-                }}
-            }}
-        }}
-        """
-        logger.debug(f"Fetching scorecard '{actual_scorecard_id}' to resolve score '{score_identifier}'")
-        scorecard_response = client.execute(scorecard_query)
-        if 'errors' in scorecard_response:
-            return f"Error fetching scorecard details for score resolution: {json.dumps(scorecard_response['errors'])}"
-        
-        scorecard_data = scorecard_response.get('getScorecard')
-        if not scorecard_data:
-            return f"Error: Scorecard '{actual_scorecard_id}' data not found after query."
-
-        found_score_details = None
-        for section in scorecard_data.get('sections', {}).get('items', []):
-            for s_item in section.get('scores', {}).get('items', []):
-                if (s_item.get('id') == score_identifier or 
-                    s_item.get('key') == score_identifier or 
-                    s_item.get("name") == score_identifier or 
-                    s_item.get("externalId") == score_identifier):
-                    found_score_details = s_item
-                    break
-            if found_score_details:
-                break
-        
-        if not found_score_details:
-            return f"Error: Score '{score_identifier}' not found within scorecard '{scorecard_identifier} (ID: {actual_scorecard_id})'."
-
-        actual_score_id = found_score_details.get('id')
-        champion_version_id_from_score = found_score_details.get('championVersionId')
-
-        # 3. Fetch all versions for the identified score
-        score_versions_query = f"""
-        query GetScoreVersions {{
-            getScore(id: "{actual_score_id}") {{
-                id
-                name
-                key
-                externalId
-                championVersionId # Confirm champion ID at score level
-                versions(sortDirection: DESC, limit: 50) {{ # Get a decent number of recent versions
-                    items {{
-                        id
-                        configuration
-                        createdAt
-                        updatedAt
-                        isFeatured
-                        parentVersionId
-                        note
-                    }}
-                }}
-            }}
-        }}
-        """
-        logger.info(f"Fetching versions for score ID: {actual_score_id}")
-        versions_response = client.execute(score_versions_query)
-
-        if 'errors' in versions_response:
-            error_details = json.dumps(versions_response['errors'], indent=2)
-            logger.error(f"Dashboard query for score versions returned errors: {error_details}")
-            return f"Error from Dashboard query for score versions: {error_details}"
-
-        score_data_with_versions = versions_response.get('getScore')
-        if not score_data_with_versions:
-            return f"Error: Score data with versions for ID '{actual_score_id}' not found."
-
-        all_versions = score_data_with_versions.get('versions', {}).get('items', [])
-        if not all_versions:
-            return f"No versions found for score '{score_identifier}' (ID: {actual_score_id})."
-
-        target_version_data = None
-        if version_id:
-            # User specified a version_id
-            for v in all_versions:
-                if v.get('id') == version_id:
-                    target_version_data = v
-                    break
-            if not target_version_data:
-                return f"Error: Specified version ID '{version_id}' not found for score '{actual_score_id}'."
-        else:
-            # No specific version_id, try champion, then most recent
-            effective_champion_id = score_data_with_versions.get('championVersionId') or champion_version_id_from_score
-            if effective_champion_id:
-                for v in all_versions:
-                    if v.get('id') == effective_champion_id:
-                        target_version_data = v
-                        break
-            if not target_version_data and all_versions: # Fallback to most recent if champion not found or not set
-                target_version_data = all_versions[0] # Assumes versions are sorted DESC by createdAt
-        
-        if not target_version_data:
-            return f"Could not determine target version for score '{actual_score_id}'."
-
-        # Return the full score details along with all its versions, and specifically the target version's config
-        output = {
-            "scoreId": score_data_with_versions.get("id"),
-            "scoreName": score_data_with_versions.get("name"),
-            "scoreKey": score_data_with_versions.get("key"),
-            "scoreExternalId": score_data_with_versions.get("externalId"),
-            "currentChampionVersionId": score_data_with_versions.get("championVersionId"),
-            "targetedVersionDetails": target_version_data, # This includes the configuration string
-            "allVersions": all_versions # List of all version metadata (config included in each)
-        }
-        return output
-
-    except Exception as e:
-        logger.error(f"Error getting score details for scorecard '{scorecard_identifier}', score '{score_identifier}': {str(e)}", exc_info=True)
-        return f"Error getting score details: {str(e)}"
-    finally:
-        # Check if anything was written to stdout
-        captured_output = temp_stdout.getvalue()
-        if captured_output:
-            logger.warning(f"Captured unexpected stdout during get_plexus_score_details: {captured_output}")
-        # Restore original stdout
-        sys.stdout = old_stdout
 
 @mcp.tool()
-async def list_plexus_reports(
+async def plexus_reports_list(
     report_configuration_id: Optional[str] = None,
     limit: Optional[int] = 10
 ) -> Union[str, List[Dict]]:
@@ -1210,7 +1024,7 @@ async def list_plexus_reports(
         sys.stdout = old_stdout
 
 @mcp.tool()
-async def get_plexus_report_details(report_id: str) -> Union[str, Dict[str, Any]]:
+async def plexus_report_info(report_id: str) -> Union[str, Dict[str, Any]]:
     """
     Gets detailed information for a specific report, including its output and any generated blocks.
     
@@ -1304,7 +1118,7 @@ async def get_plexus_report_details(report_id: str) -> Union[str, Dict[str, Any]
         sys.stdout = old_stdout
 
 @mcp.tool()
-async def get_latest_plexus_report(
+async def plexus_report_last(
     report_configuration_id: Optional[str] = None
 ) -> Union[str, Dict[str, Any]]:
     """
@@ -1323,7 +1137,7 @@ async def get_latest_plexus_report(
     
     try:
         # First, list reports to find the latest one's ID
-        reports = await list_plexus_reports(
+        reports = await plexus_reports_list(
             report_configuration_id=report_configuration_id,
             limit=1
         )
@@ -1351,7 +1165,7 @@ async def get_latest_plexus_report(
         logger.info(f"Found latest report ID: {latest_report_id}")
         
         # Get the full report details
-        report_details = await get_plexus_report_details(report_id=latest_report_id)
+        report_details = await plexus_report_info(report_id=latest_report_id)
         
         # If report_details is already a string (error message), return it directly
         if isinstance(report_details, str):
@@ -1375,7 +1189,7 @@ async def get_latest_plexus_report(
         sys.stdout = old_stdout
 
 @mcp.tool()
-async def list_plexus_report_configurations() -> Union[str, List[Dict]]:
+async def plexus_report_configurations_list() -> Union[str, List[Dict]]:
     """
     List all report configurations in reverse chronological order.
     
@@ -1484,7 +1298,7 @@ async def list_plexus_report_configurations() -> Union[str, List[Dict]]:
         sys.stdout = old_stdout
 
 @mcp.tool()
-async def get_latest_plexus_item(
+async def plexus_item_last(
     include_score_results: bool = False
 ) -> Union[str, Dict[str, Any]]:
     """
@@ -1595,7 +1409,7 @@ async def get_latest_plexus_item(
         sys.stdout = old_stdout
 
 @mcp.tool()
-async def get_plexus_item_details(
+async def plexus_item_info(
     item_id: str,
     include_score_results: bool = False
 ) -> Union[str, Dict[str, Any]]:
@@ -1684,7 +1498,7 @@ async def get_plexus_item_details(
         sys.stdout = old_stdout
 
 @mcp.tool()
-async def get_latest_plexus_task(
+async def plexus_task_last(
     task_type: Optional[str] = None
 ) -> Union[str, Dict[str, Any]]:
     """
@@ -1854,7 +1668,7 @@ async def get_latest_plexus_task(
         sys.stdout = old_stdout
 
 @mcp.tool()
-async def get_plexus_task_details(task_id: str) -> Union[str, Dict[str, Any]]:
+async def plexus_task_info(task_id: str) -> Union[str, Dict[str, Any]]:
     """
     Gets detailed information about a specific task by its ID, including task stages.
     
@@ -2005,20 +1819,24 @@ async def get_plexus_task_details(task_id: str) -> Union[str, Dict[str, Any]]:
         sys.stdout = old_stdout
 
 @mcp.tool()
-async def find_plexus_score(
+async def plexus_score_info(
     score_identifier: str,
-    scorecard_identifier: Optional[str] = None
+    scorecard_identifier: Optional[str] = None,
+    version_id: Optional[str] = None,
+    include_versions: bool = False
 ) -> Union[str, Dict[str, Any]]:
     """
-    Intelligent search to find a specific score within a scorecard using flexible identifiers.
-    Supports complex queries like "X score on Y scorecard" by searching across scorecard names and score names.
+    Get detailed information about a specific score, including its location, configuration, and optionally all versions.
+    Supports intelligent search across scorecards when scorecard_identifier is omitted.
     
     Parameters:
     - score_identifier: Identifier for the score (ID, name, key, or external ID)
     - scorecard_identifier: Optional identifier for the parent scorecard to narrow search. If omitted, searches across all scorecards.
+    - version_id: Optional specific version ID to show configuration for. If omitted, uses champion version.
+    - include_versions: If True, include detailed version information and all versions list
     
     Returns:
-    - Information about the found score including its location, configuration summary, and dashboard URL
+    - Information about the found score including its location, configuration, and optionally version details
     """
     # Temporarily redirect stdout to capture any unexpected output
     old_stdout = sys.stdout
@@ -2183,49 +2001,121 @@ async def find_plexus_score(
             score = match['score']
             section = match['section']
             scorecard = match['scorecard']
+            score_id = score['id']
+            scorecard_id = scorecard['id']
             
-            # Get configuration preview if champion version exists
-            config_preview = "No configuration available"
-            champion_version_id = score.get('championVersionId')
-            if champion_version_id:
-                try:
-                    version_query = f"""
-                    query GetScoreVersion {{
-                        getScoreVersion(id: "{champion_version_id}") {{
-                            configuration
-                        }}
-                    }}
-                    """
-                    version_result = client.execute(version_query)
-                    version_data = version_result.get('getScoreVersion')
-                    if version_data and version_data.get('configuration'):
-                        config = version_data['configuration']
-                        # Show first few lines as preview
-                        config_lines = config.split('\n')[:5]
-                        config_preview = '\n'.join(config_lines)
-                        if len(config.split('\n')) > 5:
-                            config_preview += '\n... (truncated)'
-                except Exception as e:
-                    config_preview = f"Error loading configuration: {str(e)}"
-            
-            return {
+            # Base response object
+            response = {
                 "found": True,
-                "scoreId": score['id'],
+                "scoreId": score_id,
                 "scoreName": score['name'],
                 "scoreKey": score.get('key'),
                 "externalId": score.get('externalId'),
                 "description": score.get('description'),
                 "type": score.get('type'),
-                "championVersionId": champion_version_id,
+                "championVersionId": score.get('championVersionId'),
                 "location": {
-                    "scorecardId": scorecard['id'],
+                    "scorecardId": scorecard_id,
                     "scorecardName": scorecard['name'],
                     "sectionId": section['id'],
                     "sectionName": section['name']
                 },
-                "configurationPreview": config_preview,
-                "dashboardUrl": get_plexus_url(f"lab/scorecards/{scorecard['id']}/scores/{score['id']}")
+                "dashboardUrl": get_plexus_url(f"lab/scorecards/{scorecard_id}/scores/{score_id}")
             }
+            
+            if include_versions or version_id:
+                # Get detailed version information like get_plexus_score_details
+                try:
+                    score_versions_query = f"""
+                    query GetScoreVersions {{
+                        getScore(id: "{score_id}") {{
+                            id
+                            name
+                            key
+                            externalId
+                            championVersionId
+                            versions(sortDirection: DESC, limit: 50) {{
+                                items {{
+                                    id
+                                    configuration
+                                    createdAt
+                                    updatedAt
+                                    isFeatured
+                                    parentVersionId
+                                    note
+                                }}
+                            }}
+                        }}
+                    }}
+                    """
+                    
+                    versions_response = client.execute(score_versions_query)
+                    if 'errors' in versions_response:
+                        logger.error(f"Error fetching versions: {versions_response['errors']}")
+                        response["versionsError"] = f"Error fetching versions: {versions_response['errors']}"
+                    else:
+                        score_data_with_versions = versions_response.get('getScore')
+                        if score_data_with_versions:
+                            all_versions = score_data_with_versions.get('versions', {}).get('items', [])
+                            
+                            # Find target version
+                            target_version_data = None
+                            if version_id:
+                                for v in all_versions:
+                                    if v.get('id') == version_id:
+                                        target_version_data = v
+                                        break
+                                if not target_version_data:
+                                    response["versionError"] = f"Specified version ID '{version_id}' not found"
+                            else:
+                                # Use champion version
+                                effective_champion_id = score_data_with_versions.get('championVersionId') or score.get('championVersionId')
+                                if effective_champion_id:
+                                    for v in all_versions:
+                                        if v.get('id') == effective_champion_id:
+                                            target_version_data = v
+                                            break
+                                if not target_version_data and all_versions:
+                                    target_version_data = all_versions[0]  # Most recent
+                            
+                            if target_version_data:
+                                response["targetedVersionDetails"] = target_version_data
+                                response["configuration"] = target_version_data.get('configuration')
+                                
+                            if include_versions:
+                                response["allVersions"] = all_versions
+                                
+                except Exception as e:
+                    logger.error(f"Error fetching version details: {str(e)}", exc_info=True)
+                    response["versionsError"] = f"Error fetching version details: {str(e)}"
+            else:
+                # Get configuration preview if champion version exists (original behavior)
+                config_preview = "No configuration available"
+                champion_version_id = score.get('championVersionId')
+                if champion_version_id:
+                    try:
+                        version_query = f"""
+                        query GetScoreVersion {{
+                            getScoreVersion(id: "{champion_version_id}") {{
+                                configuration
+                            }}
+                        }}
+                        """
+                        version_result = client.execute(version_query)
+                        version_data = version_result.get('getScoreVersion')
+                        if version_data and version_data.get('configuration'):
+                            config = version_data['configuration']
+                            # Show first few lines as preview
+                            config_lines = config.split('\n')[:5]
+                            config_preview = '\n'.join(config_lines)
+                            if len(config.split('\n')) > 5:
+                                config_preview += '\n... (truncated)'
+                    except Exception as e:
+                        config_preview = f"Error loading configuration: {str(e)}"
+                
+                response["configurationPreview"] = config_preview
+            
+            return response
         else:
             # Multiple matches - return summary list
             matches = []
@@ -2370,7 +2260,7 @@ async def _find_score_instance(scorecard_identifier: str, score_identifier: str,
         }
 
 @mcp.tool()
-async def get_plexus_score_configuration(
+async def plexus_score_configuration(
     scorecard_identifier: str,
     score_identifier: str,
     version_id: Optional[str] = None
@@ -2559,7 +2449,7 @@ async def get_plexus_score_configuration(
         sys.stdout = old_stdout
 
 @mcp.tool()
-async def pull_plexus_score_configuration(
+async def plexus_score_pull(
     scorecard_identifier: str,
     score_identifier: str
 ) -> Union[str, Dict[str, Any]]:
@@ -2652,7 +2542,7 @@ async def pull_plexus_score_configuration(
         sys.stdout = old_stdout
 
 @mcp.tool()
-async def push_plexus_score_configuration(
+async def plexus_score_push(
     scorecard_identifier: str,
     score_identifier: str,
     version_note: Optional[str] = None
@@ -2787,7 +2677,7 @@ async def push_plexus_score_configuration(
         sys.stdout = old_stdout
 
 @mcp.tool()
-async def update_plexus_score_configuration(
+async def plexus_score_update(
     scorecard_identifier: str,
     score_identifier: str,
     yaml_configuration: str,
@@ -4017,7 +3907,7 @@ def get_task_url(task_id: str) -> str:
     return get_plexus_url(f"lab/tasks/{task_id}")
 
 @mcp.tool()
-async def delete_plexus_score(
+async def plexus_score_delete(
     score_id: str,
     confirm: Optional[bool] = False
 ) -> Union[str, Dict[str, Any]]:
