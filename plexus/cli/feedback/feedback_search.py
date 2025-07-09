@@ -64,6 +64,7 @@ def format_feedback_item_yaml(item: FeedbackItem, include_metadata: bool = False
     """Format a FeedbackItem as a dictionary for YAML output."""
     result = {
         'item_id': item.itemId,
+        'external_id': item.item.externalId if item.item else None,
         'initial_value': item.initialAnswerValue,
         'final_value': item.finalAnswerValue,
         'initial_explanation': item.initialCommentValue,
@@ -149,7 +150,8 @@ def find_feedback(
             client=client,
             limit=1000,  # Use a large limit to get all matching items for filtering
             filter=filter_condition,
-            fields=FeedbackItem.GRAPHQL_BASE_FIELDS
+            fields=FeedbackItem.GRAPHQL_BASE_FIELDS,
+            relationship_fields={'item': ['id', 'externalId']}
         )
         
         if not feedback_items:
@@ -230,6 +232,7 @@ def find_feedback(
             for i, item in enumerate(feedback_items, 1):
                 console.print(f"\n[bold cyan]Feedback Item {i}:[/bold cyan]")
                 console.print(f"  [bold]Item ID:[/bold] {item.itemId}")
+                console.print(f"  [bold]External ID:[/bold] {item.item.externalId if item.item else 'N/A'}")
                 console.print(f"  [bold]Cache Key:[/bold] {item.cacheKey}")
                 
                 console.print(f"  [bold]Initial Value:[/bold] {item.initialAnswerValue or 'N/A'}")
