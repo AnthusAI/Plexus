@@ -6,6 +6,7 @@ import click
 import logging
 import random
 import traceback
+import asyncio
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone, timedelta
 import yaml
@@ -68,14 +69,14 @@ def format_feedback_item_yaml(item: FeedbackItem, include_metadata: bool = False
         'final_value': item.finalAnswerValue,
         'initial_explanation': item.initialCommentValue,
         'final_explanation': item.finalCommentValue,
-        'edit_comment': item.editCommentValue
+        'edit_comment': item.editCommentValue,
+        'isAgreement': item.isAgreement
     }
     
     if include_metadata:
         result['metadata'] = {
             'feedback_id': item.id,
             'cache_key': item.cacheKey,
-            'is_agreement': item.isAgreement,
             'edited_at': item.editedAt.isoformat() if item.editedAt else None,
             'editor_name': item.editorName,
             'created_at': item.createdAt.isoformat() if item.createdAt else None,
@@ -84,14 +85,166 @@ def format_feedback_item_yaml(item: FeedbackItem, include_metadata: bool = False
     
     return result
 
+async def fetch_feedback_items_with_gsi(client, account_id: str, scorecard_id: str, score_id: str, 
+                                       start_date: datetime, end_date: datetime) -> List[FeedbackItem]:
+    """
+    Fetch feedback items using the same GSI query approach as feedback_summary.py.
+    This ensures we get all available data.
+    """
+    all_items_for_score = []
+    
+    try:
+        # Use the optimized GSI directly with GraphQL (same approach as FeedbackAnalysis report block)
+        query = """
+        query ListFeedbackItemsByGSI(
+            $accountId: String!,
+            $composite_sk_condition: ModelFeedbackItemByAccountScorecardScoreUpdatedAtCompositeKeyConditionInput,
+            $limit: Int,
+            $nextToken: String,
+            $sortDirection: ModelSortDirection
+        ) {
+            listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt(
+                accountId: $accountId,
+                scorecardIdScoreIdUpdatedAt: $composite_sk_condition,
+                limit: $limit,
+                nextToken: $nextToken,
+                sortDirection: $sortDirection
+            ) {
+                items {
+                    id
+                    accountId
+                    scorecardId
+                    scoreId
+                    itemId
+                    cacheKey
+                    initialAnswerValue
+                    finalAnswerValue
+                    initialCommentValue
+                    finalCommentValue
+                    editCommentValue
+                    editedAt
+                    editorName
+                    isAgreement
+                    createdAt
+                    updatedAt
+                    item {
+                        id
+                        identifiers
+                        externalId
+                    }
+                }
+                nextToken
+            }
+        }
+        """
+        
+        # Prepare variables for the query
+        variables = {
+            "accountId": account_id,
+            "composite_sk_condition": {
+                "between": [
+                    {
+                        "scorecardId": str(scorecard_id),
+                        "scoreId": str(score_id),
+                        "updatedAt": start_date.isoformat()
+                    },
+                    {
+                        "scorecardId": str(scorecard_id),
+                        "scoreId": str(score_id),
+                        "updatedAt": end_date.isoformat()
+                    }
+                ]
+            },
+            "limit": 100,
+            "nextToken": None,
+            "sortDirection": "DESC"
+        }
+        
+        next_token = None
+        
+        while True:
+            if next_token:
+                variables["nextToken"] = next_token
+            
+            try:
+                response = await asyncio.to_thread(client.execute, query, variables)
+                
+                if response and 'errors' in response:
+                    logger.warning(f"GraphQL errors: {response.get('errors')}")
+                    # Fall back to the original simple filter approach if GSI fails
+                    return await fetch_feedback_items_fallback(client, account_id, scorecard_id, score_id, start_date, end_date)
+                
+                if response and 'listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt' in response:
+                    result = response['listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt']
+                    item_dicts = result.get('items', [])
+                    
+                    # Convert to FeedbackItem objects
+                    items = [FeedbackItem.from_dict(item_dict, client=client) for item_dict in item_dicts]
+                    all_items_for_score.extend(items)
+                    
+                    logger.debug(f"Fetched {len(items)} items using GSI query (total: {len(all_items_for_score)})")
+                    
+                    # Get next token for pagination
+                    next_token = result.get('nextToken')
+                    if not next_token:
+                        break
+                else:
+                    logger.warning("Unexpected response format from GSI query")
+                    # Fall back to the original approach
+                    return await fetch_feedback_items_fallback(client, account_id, scorecard_id, score_id, start_date, end_date)
+                    
+            except Exception as e:
+                logger.warning(f"Error during GSI query execution: {e}. Falling back to simple filter approach.")
+                return await fetch_feedback_items_fallback(client, account_id, scorecard_id, score_id, start_date, end_date)
+                
+    except Exception as e:
+        logger.error(f"Error during feedback item fetch for score {score_id}: {str(e)}")
+        return await fetch_feedback_items_fallback(client, account_id, scorecard_id, score_id, start_date, end_date)
+    
+    logger.debug(f"Total items fetched for score {score_id}: {len(all_items_for_score)}")
+    return all_items_for_score
+
+async def fetch_feedback_items_fallback(client, account_id: str, scorecard_id: str, score_id: str, 
+                                       start_date: datetime, end_date: datetime) -> List[FeedbackItem]:
+    """
+    Fallback method using the simple filter approach (original implementation).
+    """
+    logger.warning("Using fallback simple filter approach")
+    
+    filter_condition = {
+        "and": [
+            {"accountId": {"eq": account_id}},
+            {"scorecardId": {"eq": scorecard_id}},
+            {"scoreId": {"eq": score_id}},
+            {"updatedAt": {"ge": start_date.isoformat()}},
+            {"updatedAt": {"le": end_date.isoformat()}}
+        ]
+    }
+    
+    try:
+        feedback_items, _ = FeedbackItem.list(
+            client=client,
+            limit=1000,  # Use a large limit to get all matching items
+            filter=filter_condition,
+            fields=FeedbackItem.GRAPHQL_BASE_FIELDS
+        )
+        
+        logger.debug(f"Retrieved {len(feedback_items)} feedback items using fallback approach")
+        return feedback_items
+        
+    except Exception as e:
+        logger.error(f"Error fetching feedback items with fallback: {e}")
+        return []
+
 @click.command(name="find")
 @click.option('--scorecard', required=True, help='The scorecard to search feedback for (accepts ID, name, key, or external ID).')
 @click.option('--score', required=True, help='The score to search feedback for (accepts ID, name, key, or external ID).')
 @click.option('--days', type=int, default=30, help='Number of days to look back for feedback items.')
-@click.option('--limit', type=int, help='Maximum number of feedback items to return (randomly shuffled, prioritizing items with edit comments).')
+@click.option('--limit', type=int, help='Maximum number of feedback items to return (automatically randomized, prioritizing items with edit comments).')
 @click.option('--initial-value', 'initial_value', help='Filter by initial answer value (e.g., "Yes", "No").')
 @click.option('--final-value', 'final_value', help='Filter by final answer value (e.g., "Yes", "No").')
 @click.option('--format', type=click.Choice(['fixed', 'yaml']), default='fixed', help='Output format: fixed (human-readable) or yaml (structured data).')
+@click.option('--verbose', is_flag=True, help='Include detailed metadata in output (feedback IDs, timestamps, etc.).')
 @click.option('--account', 'account_identifier', help='Optional account key or ID to filter by.', default=None)
 def find_feedback(
     scorecard: str,
@@ -101,6 +254,7 @@ def find_feedback(
     initial_value: Optional[str],
     final_value: Optional[str],
     format: str,
+    verbose: bool,
     account_identifier: Optional[str]
 ):
     """
@@ -125,8 +279,9 @@ def find_feedback(
             console.print(f"[bold red]Error:[/bold red] No score found with identifier: {score} in scorecard: {scorecard}")
             return
         
-        # Build date filter for the last N days
-        cutoff_date = build_date_filter(days)
+        # Calculate date range  
+        end_date = datetime.now(timezone.utc)
+        start_date = end_date - timedelta(days=days)
         
         if format != 'yaml':
             console.print(f"[dim]Searching for feedback items from the last {days} days...[/dim]")
@@ -134,23 +289,10 @@ def find_feedback(
             console.print(f"[dim]Score: {score} (ID: {score_id})[/dim]")
             console.print(f"[dim]Account: {account_id}[/dim]")
         
-        # Fall back to using the standard list method with filters instead of the GSI for now
-        # This will be less efficient but will work correctly
-        filter_condition = {
-            "and": [
-                {"accountId": {"eq": account_id}},
-                {"scorecardId": {"eq": scorecard_id}},
-                {"scoreId": {"eq": score_id}},
-                {"updatedAt": {"ge": cutoff_date}}
-            ]
-        }
-        
-        feedback_items, _ = FeedbackItem.list(
-            client=client,
-            limit=1000,  # Use a large limit to get all matching items for filtering
-            filter=filter_condition,
-            fields=FeedbackItem.GRAPHQL_BASE_FIELDS
-        )
+        # Use the same GSI query approach as feedback_summary.py
+        feedback_items = asyncio.run(fetch_feedback_items_with_gsi(
+            client, account_id, scorecard_id, score_id, start_date, end_date
+        ))
         
         if not feedback_items:
             if format == 'yaml':
@@ -181,15 +323,15 @@ def find_feedback(
                 console.print("[yellow]No feedback items found after applying value filters.[/yellow]")
             return
         
-        # Apply limit with prioritization if specified
+        # Apply limit with prioritization and randomization if specified
         if limit:
             feedback_items = prioritize_feedback_with_edit_comments(feedback_items, limit)
-        
-        # Sort by updated date descending (most recent first)
-        feedback_items.sort(
-            key=lambda item: item.updatedAt if item.updatedAt else datetime.min.replace(tzinfo=timezone.utc),
-            reverse=True
-        )
+        else:
+            # Sort by updated date descending (most recent first) when no limit is applied
+            feedback_items.sort(
+                key=lambda item: item.updatedAt if item.updatedAt else datetime.min.replace(tzinfo=timezone.utc),
+                reverse=True
+            )
         
         if format == 'yaml':
             # Build YAML output
@@ -208,7 +350,7 @@ def find_feedback(
                     'total_found': len(feedback_items)
                 },
                 'feedback_items': [
-                    format_feedback_item_yaml(item, include_metadata=True)
+                    format_feedback_item_yaml(item, include_metadata=verbose)
                     for item in feedback_items
                 ]
             }

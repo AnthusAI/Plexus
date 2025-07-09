@@ -1,4 +1,4 @@
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from .base import BaseModel
@@ -71,6 +71,135 @@ class Item(BaseModel):
             metadata
             attachedFiles
         """
+
+    @classmethod
+    def list(
+        cls,
+        client: _BaseAPIClient,
+        filter: Optional[Dict[str, Any]] = None,
+        sort: Optional[Dict[str, str]] = None,
+        limit: Optional[int] = None,
+        next_token: Optional[str] = None
+    ) -> List['Item']:
+        """
+        List items with optional filtering and sorting.
+        
+        Args:
+            client: The API client to use
+            filter: Filter conditions (e.g., {'accountId': {'eq': 'account123'}})
+            sort: Sort configuration (e.g., {'createdAt': 'DESC'})
+            limit: Maximum number of items to return
+            next_token: Pagination token
+            
+        Returns:
+            List of Item objects
+        """
+        
+        # Build the GraphQL query
+        query_vars = []
+        query_args = []
+        variables = {}
+        
+        if filter:
+            query_vars.append("$filter: ModelItemFilterInput")
+            query_args.append("filter: $filter")
+            variables["filter"] = filter
+            
+        if limit:
+            query_vars.append("$limit: Int")
+            query_args.append("limit: $limit")
+            variables["limit"] = limit
+            
+        if next_token:
+            query_vars.append("$nextToken: String")
+            query_args.append("nextToken: $nextToken")
+            variables["nextToken"] = next_token
+            
+        # Check if we should use a GSI for sorting
+        use_gsi = False
+        if sort and 'createdAt' in sort and filter and 'accountId' in filter:
+            # Use the byAccountIdAndCreatedAt GSI for efficient sorting
+            use_gsi = True
+            sort_direction = sort.get('createdAt', 'ASC')
+            
+            # Extract accountId from filter
+            account_id_filter = filter.get('accountId', {})
+            if 'eq' in account_id_filter:
+                account_id = account_id_filter['eq']
+                
+                query_vars = ["$accountId: String!", "$sortDirection: ModelSortDirection"]
+                query_args = ["accountId: $accountId", "sortDirection: $sortDirection"]
+                variables = {
+                    "accountId": account_id,
+                    "sortDirection": sort_direction
+                }
+                
+                if limit:
+                    query_vars.append("$limit: Int")
+                    query_args.append("limit: $limit")
+                    variables["limit"] = limit
+                    
+                query_name = "listItemByAccountIdAndCreatedAt"
+        
+        if not use_gsi:
+            query_name = "listItems"
+            
+        # Build the complete query
+        query_vars_str = ", ".join(query_vars) if query_vars else ""
+        query_args_str = ", ".join(query_args) if query_args else ""
+        
+        if query_vars_str:
+            query_signature = f"({query_vars_str})"
+        else:
+            query_signature = ""
+            
+        if query_args_str:
+            query_call = f"({query_args_str})"
+        else:
+            query_call = ""
+        
+        query = f"""
+        query ListItems{query_signature} {{
+            {query_name}{query_call} {{
+                items {{
+                    {cls.fields()}
+                }}
+                nextToken
+            }}
+        }}
+        """
+        
+        result = client.execute(query, variables)
+        items_data = result.get(query_name, {}).get('items', [])
+        
+        return [cls.from_dict(item_data, client) for item_data in items_data]
+
+    @classmethod
+    def get_by_id(cls, item_id: str, client: _BaseAPIClient) -> Optional['Item']:
+        """
+        Get a single item by its ID.
+        
+        Args:
+            item_id: The ID of the item to retrieve
+            client: The API client to use
+            
+        Returns:
+            Item object if found, None otherwise
+        """
+        query = f"""
+        query GetItem($id: ID!) {{
+            getItem(id: $id) {{
+                {cls.fields()}
+            }}
+        }}
+        """
+        
+        result = client.execute(query, {'id': item_id})
+        item_data = result.get('getItem')
+        
+        if item_data:
+            return cls.from_dict(item_data, client)
+        return None
 
     @classmethod
     def create(cls, client: _BaseAPIClient, evaluationId: str, text: Optional[str] = None, 
