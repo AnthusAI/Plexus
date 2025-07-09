@@ -528,8 +528,24 @@ class LangGraphScore(Score, LangChainUser):
                 last_node_name = node_instances[-1][0]
                 last_node_config = next((n for n in self.parameters.graph if n['name'] == last_node_name), None)
                 
-                # Only add a fall-through edge if the last node doesn't have its own explicit routing
-                if not (last_node_config and ('edge' in last_node_config or 'conditions' in last_node_config)):
+                # Check if the final node has a regular output clause that needs a value setter
+                if last_node_config and 'output' in last_node_config and not ('edge' in last_node_config or 'conditions' in last_node_config):
+                    # Final node has regular output clause - create value setter
+                    value_setter_name = f"{last_node_name}_value_setter"
+                    workflow.add_node(
+                        value_setter_name,
+                        LangGraphScore.create_value_setter_node(
+                            last_node_config['output']
+                        )
+                    )
+                    # Connect: final_node -> value_setter -> end_target
+                    workflow.add_edge(last_node_name, value_setter_name)
+                    end_target = output_aliasing_node_name or END
+                    workflow.add_edge(value_setter_name, end_target)
+                    logging.info(f"Connected final node '{last_node_name}' with output aliasing: {last_node_name} -> {value_setter_name} -> {end_target}")
+                
+                # Only add a fall-through edge if the last node doesn't have any explicit routing or output
+                elif not (last_node_config and ('edge' in last_node_config or 'conditions' in last_node_config or 'output' in last_node_config)):
                     end_target = output_aliasing_node_name or END
                     workflow.add_edge(last_node_name, end_target)
                     logging.info(f"Connected final sequential node '{last_node_name}' to '{end_target}'.")
