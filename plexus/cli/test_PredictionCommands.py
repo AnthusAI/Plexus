@@ -196,7 +196,8 @@ class TestPredictCommand:
         assert result.exit_code != 0
         
         # Check for the error message in output first (preferred method)
-        output_text = result.output + (result.stderr or "")
+        # Note: stderr is not separately captured, so we only check result.output
+        output_text = result.output
         if "Cannot specify both --item and --items" in output_text:
             # Success - error message found in output
             return
