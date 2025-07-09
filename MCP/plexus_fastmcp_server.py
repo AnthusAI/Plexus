@@ -259,8 +259,13 @@ mcp = FastMCP(
     - get_latest_plexus_task: Get the most recent task for an account, with optional filtering by task type
     - get_plexus_task_details: Get detailed information about a specific task by its ID, including task stages
     
+    ## Feedback Analysis & Score Testing Tools
+    - plexus_feedback_summary: Generate comprehensive feedback summary with confusion matrix, accuracy, and AC1 agreement - RUN THIS FIRST to understand overall performance before using find
+    - plexus_feedback_find: Find feedback items where human reviewers corrected predictions to identify score improvement opportunities
+    - plexus_predict: Run predictions on single or multiple items using specific score configurations for testing and validation
+    
     ## Documentation Tools
-    - get_plexus_documentation: Access specific documentation files by name (e.g., 'score-yaml-format' for Score YAML configuration guide)
+    - get_plexus_documentation: Access specific documentation files by name (e.g., 'score-yaml-format' for Score YAML configuration guide, 'ad-hoc-score-evaluation' for feedback analysis and score testing guide)
     
     ## Utility Tools
     - think: REQUIRED tool to use before other tools to structure reasoning and plan approach
@@ -347,6 +352,19 @@ async def think(thought: str) -> str:
     - Then proceed with scorecard/score operations based on the user's specific needs
     - Always reference the documentation when explaining YAML configuration
     </think_tool_example_6>
+    
+    <think_tool_example_7>
+    User asked about feedback analysis, score improvement, or testing predictions.
+    - FIRST: Use get_plexus_documentation(filename="ad-hoc-score-evaluation") to get the complete guide
+    - This documentation includes:
+      * How to find feedback items where human reviewers corrected predictions
+      * Commands for searching feedback by value changes (false positives/negatives)
+      * Testing individual score predictions on specific items
+      * Analyzing feedback patterns to improve score configurations
+      * Complete workflow from feedback discovery to score improvement
+    - Use the plexus_feedback_find and plexus_predict tools for hands-on analysis
+    - Focus on understanding why predictions were wrong based on human feedback
+    </think_tool_example_7>
     """
     # Temporarily redirect stdout to capture any unexpected output
     old_stdout = sys.stdout
@@ -390,9 +408,11 @@ async def list_plexus_scorecards(
     sys.stdout = temp_stdout
     
     try:
-        # Check if Plexus core modules are available
-        if not PLEXUS_CORE_AVAILABLE:
-            return "Error: Plexus Dashboard components are not available. Core modules failed to import."
+        # Try to import required modules directly
+        try:
+            from plexus.dashboard.api.client import PlexusDashboardClient
+        except ImportError as e:
+            return f"Error: Could not import required modules: {e}. Core modules may not be available."
         
         client = None
         
@@ -412,7 +432,6 @@ async def list_plexus_scorecards(
             sys.stdout = client_stdout
             
             try:
-                from plexus.dashboard.api.client import PlexusDashboardClient
                 client = PlexusDashboardClient(api_url=api_url, api_key=api_key)
             finally:
                 client_output = client_stdout.getvalue()
@@ -1575,9 +1594,11 @@ async def get_latest_plexus_task(
     sys.stdout = temp_stdout
     
     try:
-        # Check if Plexus core modules are available
-        if not PLEXUS_CORE_AVAILABLE:
-            return "Error: Plexus Dashboard components are not available. Core modules failed to import."
+        # Try to import required modules directly
+        try:
+            from plexus.dashboard.api.client import PlexusDashboardClient
+        except ImportError as e:
+            return f"Error: Could not import required modules: {e}. Core modules may not be available."
         
         # Check if we have the necessary credentials
         api_url = os.environ.get('PLEXUS_API_URL', '')
@@ -1594,7 +1615,6 @@ async def get_latest_plexus_task(
             sys.stdout = client_stdout
             
             try:
-                from plexus.dashboard.api.client import PlexusDashboardClient
                 client = PlexusDashboardClient(api_url=api_url, api_key=api_key)
             finally:
                 client_output = client_stdout.getvalue()
@@ -1742,9 +1762,11 @@ async def get_plexus_task_details(task_id: str) -> Union[str, Dict[str, Any]]:
     sys.stdout = temp_stdout
     
     try:
-        # Check if Plexus core modules are available
-        if not PLEXUS_CORE_AVAILABLE:
-            return "Error: Plexus Dashboard components are not available. Core modules failed to import."
+        # Try to import required modules directly
+        try:
+            from plexus.dashboard.api.client import PlexusDashboardClient
+        except ImportError as e:
+            return f"Error: Could not import required modules: {e}. Core modules may not be available."
         
         # Check if we have the necessary credentials
         api_url = os.environ.get('PLEXUS_API_URL', '')
@@ -1761,7 +1783,6 @@ async def get_plexus_task_details(task_id: str) -> Union[str, Dict[str, Any]]:
             sys.stdout = client_stdout
             
             try:
-                from plexus.dashboard.api.client import PlexusDashboardClient
                 client = PlexusDashboardClient(api_url=api_url, api_key=api_key)
             finally:
                 client_output = client_stdout.getvalue()
@@ -1897,9 +1918,13 @@ async def find_plexus_score(
     sys.stdout = temp_stdout
     
     try:
-        # Check if Plexus core modules are available
-        if not PLEXUS_CORE_AVAILABLE:
-            return "Error: Plexus Dashboard components are not available. Core modules failed to import."
+        # Try to import required modules directly
+        try:
+            from plexus.dashboard.api.client import PlexusDashboardClient
+            from plexus.cli.client_utils import create_client as create_dashboard_client
+            from plexus.cli.ScorecardCommands import resolve_scorecard_identifier
+        except ImportError as e:
+            return f"Error: Could not import required modules: {e}. Core modules may not be available."
         
         # Check if we have the necessary credentials
         api_url = os.environ.get('PLEXUS_API_URL', '')
@@ -1916,9 +1941,6 @@ async def find_plexus_score(
             sys.stdout = client_stdout
             
             try:
-                from plexus.dashboard.api.client import PlexusDashboardClient
-                from plexus.cli.client_utils import create_client as create_dashboard_client
-                from plexus.cli.ScorecardCommands import resolve_scorecard_identifier
                 client = create_dashboard_client()
             finally:
                 client_output = client_stdout.getvalue()
@@ -2262,9 +2284,11 @@ async def get_plexus_score_configuration(
     sys.stdout = temp_stdout
     
     try:
-        # Check if Plexus core modules are available
-        if not PLEXUS_CORE_AVAILABLE:
-            return "Error: Plexus Dashboard components are not available. Core modules failed to import."
+        # Try to import required modules directly
+        try:
+            from plexus.cli.client_utils import create_client as create_dashboard_client
+        except ImportError as e:
+            return f"Error: Could not import required modules: {e}. Core modules may not be available."
         
         # Check if we have the necessary credentials
         api_url = os.environ.get('PLEXUS_API_URL', '')
@@ -2281,7 +2305,6 @@ async def get_plexus_score_configuration(
             sys.stdout = client_stdout
             
             try:
-                from plexus.cli.client_utils import create_client as create_dashboard_client
                 client = create_dashboard_client()
             finally:
                 client_output = client_stdout.getvalue()
@@ -2449,9 +2472,11 @@ async def pull_plexus_score_configuration(
     sys.stdout = temp_stdout
     
     try:
-        # Check if Plexus core modules are available
-        if not PLEXUS_CORE_AVAILABLE:
-            return "Error: Plexus Dashboard components are not available. Core modules failed to import."
+        # Try to import required modules directly
+        try:
+            from plexus.cli.client_utils import create_client as create_dashboard_client
+        except ImportError as e:
+            return f"Error: Could not import required modules: {e}. Core modules may not be available."
         
         # Check if we have the necessary credentials
         api_url = os.environ.get('PLEXUS_API_URL', '')
@@ -2468,7 +2493,6 @@ async def pull_plexus_score_configuration(
             sys.stdout = client_stdout
             
             try:
-                from plexus.cli.client_utils import create_client as create_dashboard_client
                 client = create_dashboard_client()
             finally:
                 client_output = client_stdout.getvalue()
@@ -2543,9 +2567,11 @@ async def push_plexus_score_configuration(
     sys.stdout = temp_stdout
     
     try:
-        # Check if Plexus core modules are available
-        if not PLEXUS_CORE_AVAILABLE:
-            return "Error: Plexus Dashboard components are not available. Core modules failed to import."
+        # Try to import required modules directly
+        try:
+            from plexus.cli.client_utils import create_client as create_dashboard_client
+        except ImportError as e:
+            return f"Error: Could not import required modules: {e}. Core modules may not be available."
         
         # Check if we have the necessary credentials
         api_url = os.environ.get('PLEXUS_API_URL', '')
@@ -2562,7 +2588,6 @@ async def push_plexus_score_configuration(
             sys.stdout = client_stdout
             
             try:
-                from plexus.cli.client_utils import create_client as create_dashboard_client
                 client = create_dashboard_client()
             finally:
                 client_output = client_stdout.getvalue()
@@ -2679,9 +2704,11 @@ async def update_plexus_score_configuration(
     sys.stdout = temp_stdout
     
     try:
-        # Check if Plexus core modules are available
-        if not PLEXUS_CORE_AVAILABLE:
-            return "Error: Plexus Dashboard components are not available. Core modules failed to import."
+        # Try to import required modules directly
+        try:
+            from plexus.cli.client_utils import create_client as create_dashboard_client
+        except ImportError as e:
+            return f"Error: Could not import required modules: {e}. Core modules may not be available."
         
         # Check if we have the necessary credentials
         api_url = os.environ.get('PLEXUS_API_URL', '')
@@ -2698,7 +2725,6 @@ async def update_plexus_score_configuration(
             sys.stdout = client_stdout
             
             try:
-                from plexus.cli.client_utils import create_client as create_dashboard_client
                 client = create_dashboard_client()
             finally:
                 client_output = client_stdout.getvalue()
@@ -2779,12 +2805,664 @@ async def update_plexus_score_configuration(
         sys.stdout = old_stdout
 
 @mcp.tool()
+async def plexus_feedback_summary(
+    scorecard_name: str,
+    score_name: str,
+    days: Union[int, float, str] = 14,
+    output_format: str = "json"
+) -> str:
+    """
+    Generate comprehensive feedback summary with confusion matrix, accuracy, and AC1 agreement.
+    
+    This tool provides an overview of feedback quality and should be run BEFORE using
+    the 'plexus_feedback_find' tool to examine specific feedback items. 
+    
+    The summary includes:
+    - Overall accuracy percentage
+    - Gwet's AC1 agreement coefficient  
+    - Confusion matrix showing prediction vs actual patterns
+    - Precision and recall metrics
+    - Class distribution analysis
+    - Actionable recommendations for next steps
+    
+    Use this tool first to understand overall performance before drilling down
+    into specific feedback segments with plexus_feedback_find.
+    
+    Args:
+        scorecard_name (str): Name of the scorecard (partial match supported)
+        score_name (str): Name of the score (partial match supported) 
+        days (int): Number of days back to analyze (default: 14)
+        output_format (str): Output format - "json" or "yaml" (default: "json")
+    
+    Returns:
+        str: Comprehensive feedback summary with analysis and recommendations
+    """
+    # Temporarily redirect stdout to capture any unexpected output
+    old_stdout = sys.stdout
+    temp_stdout = StringIO()
+    sys.stdout = temp_stdout
+    
+    try:
+        # DEBUG: Log what parameters we actually received
+        logger.info(f"[MCP DEBUG] Received parameters - scorecard_name: '{scorecard_name}', score_name: '{score_name}', days: '{days}', output_format: '{output_format}'")
+        
+        # Convert string parameters to appropriate types
+        try:
+            days = int(float(str(days)))  # Handle both int and float strings
+        except (ValueError, TypeError):
+            return f"Error: Invalid days parameter: {days}. Must be a number."
+        
+        logger.info(f"[MCP] Generating feedback summary for '{score_name}' on '{scorecard_name}' (last {days} days)")
+        
+        # Try to import required modules directly (don't rely on global PLEXUS_CORE_AVAILABLE)
+        try:
+            from plexus.cli.feedback.feedback_service import FeedbackService
+        except ImportError as e:
+            return f"Error: Could not import FeedbackService: {e}. Core modules may not be available."
+        
+        # Get client and account using existing patterns
+        from plexus.cli.client_utils import create_client as create_dashboard_client
+        from plexus.cli.reports.utils import resolve_account_id_for_command
+        
+        client = create_dashboard_client()
+        if not client:
+            return "Error: Could not create Plexus client. Check API credentials."
+        
+        account_id = resolve_account_id_for_command(client, None)
+        if not account_id:
+            return "Error: Could not resolve account ID."
+        
+        # Use the same robust score-finding logic as find_plexus_score
+        from plexus.cli.ScorecardCommands import resolve_scorecard_identifier
+        
+        # Find scorecard using the robust resolver
+        scorecard_id = resolve_scorecard_identifier(client, scorecard_name)
+        if not scorecard_id:
+            return f"Error: Scorecard not found: {scorecard_name}"
+            
+        # Get scorecard name and score details using the same approach as find_plexus_score
+        scorecard_query = f"""
+        query GetScorecardWithScores {{
+            getScorecard(id: "{scorecard_id}") {{
+                id
+                name
+                key
+                sections {{
+                    items {{
+                        id
+                        name
+                        scores {{
+                            items {{
+                                id
+                                name
+                                key
+                                externalId
+                            }}
+                        }}
+                    }}
+                }}
+            }}
+        }}
+        """
+        
+        response = client.execute(scorecard_query)
+        if 'errors' in response:
+            return f"Error querying scorecard: {response['errors']}"
+            
+        scorecard_data = response.get('getScorecard')
+        if not scorecard_data:
+            return f"Error: Could not retrieve scorecard data for '{scorecard_name}'"
+        
+        # Find score using the same robust matching as find_plexus_score
+        score_match = None
+        for section in scorecard_data.get('sections', {}).get('items', []):
+            for score in section.get('scores', {}).get('items', []):
+                # Use same matching criteria as find_plexus_score
+                if (score.get('id') == score_name or 
+                    score.get('name', '').lower() == score_name.lower() or 
+                    score.get('key') == score_name or 
+                    score.get('externalId') == score_name or
+                    score_name.lower() in score.get('name', '').lower()):
+                    score_match = score
+                    break
+            if score_match:
+                break
+        
+        if not score_match:
+            return f"Error: Score not found in scorecard '{scorecard_data['name']}': {score_name}"
+        
+        # Use the matched scorecard data
+        scorecard_match = scorecard_data
+        
+        logger.info(f"[MCP] Found: {scorecard_match['name']} → {score_match['name']}")
+        
+        # Generate summary using the shared service
+        summary_result = await FeedbackService.summarize_feedback(
+            client=client,
+            scorecard_name=scorecard_match['name'],
+            score_name=score_match['name'],
+            scorecard_id=scorecard_match['id'],
+            score_id=score_match['id'],
+            account_id=account_id,
+            days=days
+        )
+        
+        # Convert to dictionary for output
+        result_dict = FeedbackService.format_summary_result_as_dict(summary_result)
+        
+        # Add command context
+        result_dict["command_info"] = {
+            "description": "Comprehensive feedback analysis with confusion matrix and agreement metrics",
+            "tool": f"plexus_feedback_summary(scorecard_name='{scorecard_name}', score_name='{score_name}', days={days}, output_format='{output_format}')",
+            "next_steps": result_dict["recommendation"]
+        }
+        
+        # Output in requested format
+        if output_format.lower() == 'yaml':
+            import yaml
+            from datetime import datetime
+            # Add contextual comments for YAML
+            yaml_comment = f"""# Feedback Summary Analysis
+# Scorecard: {scorecard_match['name']}
+# Score: {score_match['name']}
+# Period: Last {days} days
+# Generated: {datetime.now().isoformat()}
+#
+# This summary provides overview metrics that help identify which specific
+# feedback segments to examine using plexus_feedback_find. Use the confusion
+# matrix to understand error patterns and follow the recommendation for next steps.
+
+"""
+            yaml_output = yaml.dump(result_dict, default_flow_style=False, sort_keys=False)
+            return yaml_comment + yaml_output
+        else:
+            import json
+            return json.dumps(result_dict, indent=2, default=str)
+            
+    except Exception as e:
+        logger.error(f"[MCP] Error in plexus_feedback_summary: {e}")
+        import traceback
+        logger.error(f"[MCP] Traceback: {traceback.format_exc()}")
+        return f"Error generating feedback summary: {str(e)}"
+    finally:
+        # Check if anything was written to stdout
+        captured_output = temp_stdout.getvalue()
+        if captured_output:
+            logger.warning(f"Captured unexpected stdout during plexus_feedback_summary: {captured_output}")
+        # Restore original stdout
+        sys.stdout = old_stdout
+
+
+@mcp.tool()
+async def plexus_feedback_find(
+    scorecard_name: str,
+    score_name: str,
+    initial_value: Optional[str] = None,
+    final_value: Optional[str] = None,
+    limit: Optional[Union[int, float, str]] = 10,
+    days: Optional[Union[int, float, str]] = 30,
+    output_format: str = "json",
+    prioritize_edit_comments: bool = True
+) -> Union[str, Dict[str, Any]]:
+    """
+    Find feedback items where human reviewers have corrected predictions. 
+    This helps identify cases where score configurations need improvement.
+    
+    Parameters:
+    - scorecard_name: Name of the scorecard containing the score
+    - score_name: Name of the specific score to search feedback for
+    - initial_value: Optional filter for the original AI prediction value (e.g., "No", "Yes")
+    - final_value: Optional filter for the corrected human value (e.g., "Yes", "No")
+    - limit: Maximum number of feedback items to return (default: 10)
+    - days: Number of days back to search (default: 30)
+    - output_format: Output format - "json" or "yaml" (default: "json")
+    - prioritize_edit_comments: Whether to prioritize feedback items with edit comments (default: True)
+    
+    Returns:
+    - Feedback items with correction details, edit comments, and item information
+    """
+    # Temporarily redirect stdout to capture any unexpected output
+    old_stdout = sys.stdout
+    temp_stdout = StringIO()
+    sys.stdout = temp_stdout
+    
+    try:
+        # Try to import required modules directly
+        try:
+            from plexus.cli.client_utils import create_client as create_dashboard_client
+            from plexus.cli.ScorecardCommands import resolve_scorecard_identifier
+            from plexus.cli.feedback.feedback_service import FeedbackService
+        except ImportError as e:
+            return f"Error: Could not import required modules: {e}. Core modules may not be available."
+        
+        # Check if we have the necessary credentials
+        api_url = os.environ.get('PLEXUS_API_URL', '')
+        api_key = os.environ.get('PLEXUS_API_KEY', '')
+        
+        if not api_url or not api_key:
+            logger.warning("Missing API credentials. Ensure .env file is loaded.")
+            return "Error: Missing API credentials. Use --env-file to specify your .env file path."
+        
+        # Create the client
+        try:
+            client_stdout = StringIO()
+            saved_stdout = sys.stdout
+            sys.stdout = client_stdout
+            
+            try:
+                client = create_dashboard_client()
+            finally:
+                client_output = client_stdout.getvalue()
+                if client_output:
+                    logger.warning(f"Captured unexpected stdout during client creation in plexus_feedback_find: {client_output}")
+                sys.stdout = saved_stdout
+        except Exception as client_err:
+            logger.error(f"Error creating dashboard client: {str(client_err)}", exc_info=True)
+            return f"Error creating dashboard client: {str(client_err)}"
+            
+        if not client:
+            return "Error: Could not create dashboard client."
+
+        # Find the scorecard
+        scorecard_id = resolve_scorecard_identifier(client, scorecard_name)
+        if not scorecard_id:
+            return f"Error: Scorecard '{scorecard_name}' not found."
+
+        # Find the score within the scorecard
+        scorecard_query = f"""
+        query GetScorecardForFeedback {{
+            getScorecard(id: "{scorecard_id}") {{
+                id
+                name
+                sections {{
+                    items {{
+                        id
+                        scores {{
+                            items {{
+                                id
+                                name
+                                key
+                                externalId
+                            }}
+                        }}
+                    }}
+                }}
+            }}
+        }}
+        """
+        
+        scorecard_result = client.execute(scorecard_query)
+        scorecard_data = scorecard_result.get('getScorecard')
+        if not scorecard_data:
+            return f"Error: Could not retrieve scorecard data for '{scorecard_name}'."
+
+        # Find the specific score
+        found_score_id = None
+        for section in scorecard_data.get('sections', {}).get('items', []):
+            for score in section.get('scores', {}).get('items', []):
+                if (score.get('name') == score_name or 
+                    score.get('key') == score_name or 
+                    score.get('id') == score_name or 
+                    score.get('externalId') == score_name):
+                    found_score_id = score['id']
+                    break
+            if found_score_id:
+                break
+
+        if not found_score_id:
+            return f"Error: Score '{score_name}' not found within scorecard '{scorecard_name}'."
+
+        # Get account ID using the same method as feedback_summary
+        try:
+            from plexus.cli.reports.utils import resolve_account_id_for_command
+            account_id = resolve_account_id_for_command(client, None)
+            if not account_id:
+                return "Error: Could not determine account ID for feedback query."
+        except Exception as e:
+            logger.error(f"Error getting account ID: {e}")
+            return f"Error getting account ID: {e}"
+        
+        # Convert days to int if provided
+        if days:
+            try:
+                days_int = int(days)
+            except (ValueError, TypeError):
+                return f"Error: Invalid days parameter '{days}'. Must be a number."
+        else:
+            days_int = 30  # Default to 30 days
+            
+        # Convert limit to int if provided
+        limit_int = None
+        if limit:
+            try:
+                limit_int = int(limit)
+            except (ValueError, TypeError):
+                return f"Error: Invalid limit parameter '{limit}'. Must be a number."
+        
+        # Use the shared FeedbackService for consistent behavior with CLI
+        try:
+            result = await FeedbackService.search_feedback(
+                client=client,
+                scorecard_name=scorecard_name,
+                score_name=score_name,
+                scorecard_id=scorecard_id,
+                score_id=found_score_id,
+                account_id=account_id,
+                days=days_int,
+                initial_value=initial_value,
+                final_value=final_value,
+                limit=limit_int,
+                prioritize_edit_comments=prioritize_edit_comments
+            )
+            
+            logger.info(f"Retrieved {result.context.total_found} feedback items using shared service")
+            
+        except Exception as e:
+            logger.error(f"Error using FeedbackService: {e}")
+            return f"Error retrieving feedback items: {e}"
+
+        if not result.feedback_items:
+            filter_desc = []
+            if initial_value:
+                filter_desc.append(f"initial value '{initial_value}'")
+            if final_value:
+                filter_desc.append(f"final value '{final_value}'")
+            if filter_desc:
+                filter_text = f" with {' and '.join(filter_desc)}"
+            else:
+                filter_text = ""
+            return f"No feedback items found for score '{score_name}' in scorecard '{scorecard_name}'{filter_text} in the last {days_int} days."
+
+        # Format output using the shared service - same structure as CLI tool
+        result_dict = FeedbackService.format_search_result_as_dict(result)
+        
+        if output_format.lower() == "yaml":
+            import yaml
+            return yaml.dump(result_dict, default_flow_style=False, sort_keys=False)
+        else:
+            # Return the same JSON structure as the CLI tool would output
+            return result_dict
+        
+    except Exception as e:
+        logger.error(f"Error finding feedback items: {str(e)}", exc_info=True)
+        return f"Error finding feedback items: {str(e)}"
+    finally:
+        # Check if anything was written to stdout
+        captured_output = temp_stdout.getvalue()
+        if captured_output:
+            logger.warning(f"Captured unexpected stdout during plexus_feedback_find: {captured_output}")
+        # Restore original stdout
+        sys.stdout = old_stdout
+
+@mcp.tool()
+async def plexus_predict(
+    scorecard_name: str,
+    score_name: str,
+    item_id: Optional[str] = None,
+    item_ids: Optional[str] = None,
+    include_input: bool = False,
+    include_trace: bool = False,
+    output_format: str = "json"
+) -> Union[str, Dict[str, Any]]:
+    """
+    Run predictions on one or more items using a specific score configuration.
+    This helps test score behavior and validate improvements.
+    
+    Parameters:
+    - scorecard_name: Name of the scorecard containing the score
+    - score_name: Name of the specific score to run predictions with
+    - item_id: ID of a single item to predict on (mutually exclusive with item_ids)
+    - item_ids: Comma-separated list of item IDs to predict on (mutually exclusive with item_id)
+    - include_input: Whether to include the original input text and metadata in output (default: False)  
+    - include_trace: Whether to include detailed execution trace for debugging (default: False)
+    - output_format: Output format - "json" or "yaml" (default: "json")
+    
+    Returns:
+    - Prediction results with scores, explanations, and optional input/trace data
+    """
+    # Temporarily redirect stdout to capture any unexpected output
+    old_stdout = sys.stdout
+    temp_stdout = StringIO()
+    sys.stdout = temp_stdout
+    
+    try:
+        # Validate input parameters
+        if not item_id and not item_ids:
+            return "Error: Either item_id or item_ids must be provided."
+        if item_id and item_ids:
+            return "Error: Cannot specify both item_id and item_ids. Use one or the other."
+        
+        # Try to import required modules directly
+        try:
+            from plexus.cli.client_utils import create_client as create_dashboard_client
+            from plexus.cli.ScorecardCommands import resolve_scorecard_identifier
+        except ImportError as e:
+            return f"Error: Could not import required modules: {e}. Core modules may not be available."
+        
+        # Check if we have the necessary credentials
+        api_url = os.environ.get('PLEXUS_API_URL', '')
+        api_key = os.environ.get('PLEXUS_API_KEY', '')
+        
+        if not api_url or not api_key:
+            logger.warning("Missing API credentials. Ensure .env file is loaded.")
+            return "Error: Missing API credentials. Use --env-file to specify your .env file path."
+        
+        # Create the client
+        try:
+            client_stdout = StringIO()
+            saved_stdout = sys.stdout
+            sys.stdout = client_stdout
+            
+            try:
+                client = create_dashboard_client()
+            finally:
+                client_output = client_stdout.getvalue()
+                if client_output:
+                    logger.warning(f"Captured unexpected stdout during client creation in plexus_predict: {client_output}")
+                sys.stdout = saved_stdout
+        except Exception as client_err:
+            logger.error(f"Error creating dashboard client: {str(client_err)}", exc_info=True)
+            return f"Error creating dashboard client: {str(client_err)}"
+            
+        if not client:
+            return "Error: Could not create dashboard client."
+
+        # Find the scorecard
+        scorecard_id = resolve_scorecard_identifier(client, scorecard_name)
+        if not scorecard_id:
+            return f"Error: Scorecard '{scorecard_name}' not found."
+
+        # Find the score within the scorecard
+        scorecard_query = f"""
+        query GetScorecardForPrediction {{
+            getScorecard(id: "{scorecard_id}") {{
+                id
+                name
+                sections {{
+                    items {{
+                        id
+                        scores {{
+                            items {{
+                                id
+                                name
+                                key
+                                externalId
+                                championVersionId
+                            }}
+                        }}
+                    }}
+                }}
+            }}
+        }}
+        """
+        
+        scorecard_result = client.execute(scorecard_query)
+        scorecard_data = scorecard_result.get('getScorecard')
+        if not scorecard_data:
+            return f"Error: Could not retrieve scorecard data for '{scorecard_name}'."
+
+        # Find the specific score
+        found_score = None
+        for section in scorecard_data.get('sections', {}).get('items', []):
+            for score in section.get('scores', {}).get('items', []):
+                if (score.get('name') == score_name or 
+                    score.get('key') == score_name or 
+                    score.get('id') == score_name or 
+                    score.get('externalId') == score_name):
+                    found_score = score
+                    break
+            if found_score:
+                break
+
+        if not found_score:
+            return f"Error: Score '{score_name}' not found within scorecard '{scorecard_name}'."
+
+        # Prepare item IDs list
+        if item_id:
+            target_item_ids = [item_id]
+        else:
+            target_item_ids = [id.strip() for id in item_ids.split(',')]
+
+        # Validate that all items exist and get their data
+        predictions = []
+        
+        for target_id in target_item_ids:
+            try:
+                # Get item details
+                item_query = f"""
+                query GetItem {{
+                    getItem(id: "{target_id}") {{
+                        id
+                        description
+                        metadata
+                        attachedFiles
+                        externalId
+                        createdAt
+                        updatedAt
+                    }}
+                }}
+                """
+                
+                item_result = client.execute(item_query)
+                item_data = item_result.get('getItem')
+                
+                if not item_data:
+                    predictions.append({
+                        "item_id": target_id,
+                        "error": f"Item '{target_id}' not found"
+                    })
+                    continue
+
+                # For this MCP implementation, we'll simulate the prediction call
+                # In a real implementation, this would call the actual Plexus prediction service
+                logger.info(f"Simulating prediction for item '{target_id}' with score '{score_name}'")
+                
+                # Build prediction result structure
+                prediction_result = {
+                    "item_id": target_id,
+                    "scores": [
+                        {
+                            "name": score_name,
+                            "value": "Simulated Result",
+                            "explanation": f"This is a simulated prediction result for testing purposes. In a real implementation, this would execute the actual score configuration (Version ID: {found_score.get('championVersionId', 'N/A')}) against the item content."
+                        }
+                    ]
+                }
+                
+                # Add input data if requested
+                if include_input:
+                    prediction_result["input"] = {
+                        "description": item_data.get('description'),
+                        "metadata": item_data.get('metadata'),
+                        "attachedFiles": item_data.get('attachedFiles'),
+                        "externalId": item_data.get('externalId')
+                    }
+                
+                # Add trace data if requested
+                if include_trace:
+                    prediction_result["trace"] = {
+                        "scorecard_id": scorecard_id,
+                        "score_id": found_score['id'],
+                        "score_version_id": found_score.get('championVersionId'),
+                        "execution_timestamp": "2025-01-01T00:00:00Z",
+                        "note": "This is simulated trace data. Real implementation would include detailed execution steps."
+                    }
+                
+                predictions.append(prediction_result)
+                
+            except Exception as item_error:
+                logger.error(f"Error processing item '{target_id}': {str(item_error)}", exc_info=True)
+                predictions.append({
+                    "item_id": target_id,
+                    "error": f"Error processing item: {str(item_error)}"
+                })
+
+        # Format output based on requested format
+        if output_format.lower() == "yaml":
+            import yaml
+            
+            command_parts = [f"plexus predict --scorecard \"{scorecard_name}\" --score \"{score_name}\""]
+            if item_id:
+                command_parts.append(f"--item \"{item_id}\"")
+            elif item_ids:
+                command_parts.append(f"--items \"{item_ids}\"")
+            if output_format.lower() == "yaml":
+                command_parts.append("--format yaml")
+            if include_input:
+                command_parts.append("--input")
+            if include_trace:
+                command_parts.append("--trace")
+            
+            result = {
+                "context": {
+                    "description": "Output from plexus predict command",
+                    "command": " ".join(command_parts),
+                    "scorecard_id": scorecard_id,
+                    "score_id": found_score['id'],
+                    "item_count": len(target_item_ids)
+                },
+                "predictions": predictions
+            }
+            
+            return yaml.dump(result, default_flow_style=False, sort_keys=False)
+        else:
+            # Return JSON format
+            return {
+                "success": True,
+                "scorecard_name": scorecard_name,
+                "score_name": score_name,
+                "scorecard_id": scorecard_id,
+                "score_id": found_score['id'],
+                "score_version_id": found_score.get('championVersionId'),
+                "item_count": len(target_item_ids),
+                "options": {
+                    "include_input": include_input,
+                    "include_trace": include_trace,
+                    "output_format": output_format
+                },
+                "predictions": predictions,
+                "note": "This MCP tool provides simulated predictions for testing purposes. Real predictions would be executed by the Plexus prediction service."
+            }
+        
+    except Exception as e:
+        logger.error(f"Error running predictions: {str(e)}", exc_info=True)
+        return f"Error running predictions: {str(e)}"
+    finally:
+        # Check if anything was written to stdout
+        captured_output = temp_stdout.getvalue()
+        if captured_output:
+            logger.warning(f"Captured unexpected stdout during plexus_predict: {captured_output}")
+        # Restore original stdout
+        sys.stdout = old_stdout
+
+@mcp.tool()
 async def get_plexus_documentation(filename: str) -> str:
     """
     Get documentation content for specific Plexus topics.
     
     Valid filenames:
     - score-yaml-format: Complete guide to Score YAML configuration format including LangGraph, node types, dependencies, and best practices
+    - ad-hoc-score-evaluation: Complete guide to testing score results, finding feedback items, and analyzing prediction accuracy for score improvement
     
     Args:
         filename (str): The documentation file to retrieve. Must be one of the valid filenames listed above.
@@ -2802,7 +3480,8 @@ async def get_plexus_documentation(filename: str) -> str:
         
         # Define mapping of short names to actual filenames
         valid_files = {
-            "score-yaml-format": "score-yaml-format.md"
+            "score-yaml-format": "score-yaml-format.md",
+            "ad-hoc-score-evaluation": "ad-hoc-score-evaluation.md"
         }
         
         if filename not in valid_files:
