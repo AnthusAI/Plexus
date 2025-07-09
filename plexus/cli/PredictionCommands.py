@@ -625,8 +625,22 @@ async def predict_impl(
                             else:
                                 logging.info(f"No feedback available for item {used_item_id}, score {score_name}")
                         
-                        if any(row_result.get(f'{name}_value') is not None for name in score_names):
+                        # Debug: check what's in row_result
+                        logging.info(f"🔍 DEBUG: Checking if result should be added")
+                        logging.info(f"  score_names: {score_names}")
+                        logging.info(f"  row_result keys: {list(row_result.keys())}")
+                        for name in score_names:
+                            value = row_result.get(f'{name}_value')
+                            logging.info(f"  {name}_value: {value} (type: {type(value)}, is_not_none: {value is not None})")
+                        
+                        condition_result = any(row_result.get(f'{name}_value') is not None for name in score_names)
+                        logging.info(f"  condition result: {condition_result}")
+                        
+                        if condition_result:
                             results.append(row_result)
+                            logging.info(f"  ✅ Added result to results list (now {len(results)} results)")
+                        else:
+                            logging.info(f"  ❌ Result not added - no valid values found")
                         
                         # Update progress: Prediction completed
                         current_prediction += 1
@@ -676,9 +690,14 @@ async def predict_impl(
                         if feedback_comparison:
                             score_data['feedback_comparison'] = feedback_comparison
                         json_result['scores'].append(score_data)
+                    
+                    json_results.append(json_result)
                 
                 # Debug: Check what's actually in the final json_results before encoding
                 logging.info(f"🔍 FINAL JSON DEBUG: About to encode {len(json_results)} results")
+                logging.info(f"🔍 RAW RESULTS DEBUG: results list has {len(results)} items")
+                for i, result in enumerate(results):
+                    logging.info(f"  Raw result {i}: keys={list(result.keys())}, item_id={result.get('item_id')}")
                 for i, result in enumerate(json_results):
                     logging.info(f"  Result {i}: item_id={result.get('item_id')}")
                     for score_key in result.keys():
