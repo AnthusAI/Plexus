@@ -10,8 +10,8 @@ import { SidebarProvider } from "./contexts/SidebarContext"
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Plexus - Distributed Machine Learning Operating System",
-  description: "A distributed machine learning operating system. Plexus is a battle-tested platform for building AI workflows that analyze streams of content and take action.",
+  title: "Distributed Machine Learning Operating System",
+  description: "Plexus is a battle-tested platform for building AI workflows that analyze streams of content and take action.",
   viewport: {
     width: 'device-width',
     initialScale: 1,
@@ -19,8 +19,8 @@ export const metadata: Metadata = {
     userScalable: false,
   },
   openGraph: {
-    title: "Plexus - Distributed Machine Learning Operating System",
-    description: "A distributed machine learning operating system. Plexus is a battle-tested platform for building AI workflows that analyze streams of content and take action.",
+    title: "istributed Machine Learning Operating System",
+    description: "Plexus is a battle-tested platform for building AI workflows that analyze streams of content and take action.",
     url: "https://plexus.anth.us",
     siteName: "Plexus",
     images: [
@@ -36,8 +36,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Plexus - Distributed Machine Learning Operating System",
-    description: "A distributed machine learning operating system. Plexus is a battle-tested platform for building AI workflows that analyze streams of content and take action.",
+    title: "Distributed Machine Learning Operating System",
+    description: "Plexus is a battle-tested platform for building AI workflows that analyze streams of content and take action.",
     creator: "@Anthus_AI",
     images: ["/og-image.png"],
   }

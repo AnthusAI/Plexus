@@ -590,6 +590,7 @@ class FeedbackService:
                             identifiers
                             externalId
                             description
+                            text
                         }
                     }
                     nextToken
