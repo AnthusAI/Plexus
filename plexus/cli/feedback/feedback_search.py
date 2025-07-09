@@ -19,7 +19,86 @@ from plexus.cli.feedback.feedback_service import FeedbackService
 
 logger = logging.getLogger(__name__)
 
-async def find_feedback_async(
+import random
+from typing import List, Dict, Any
+
+def build_date_filter(days: int) -> str:
+    """Build a date filter for the last N days."""
+    cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
+    return cutoff_date.isoformat()
+
+def prioritize_feedback_with_edit_comments(feedback_items: List["FeedbackItem"], limit: int) -> List["FeedbackItem"]:
+    """
+    Prioritize feedback items that have edit comments when applying a limit.
+    
+    Args:
+        feedback_items: List of FeedbackItem objects
+        limit: Maximum number of items to return
+        
+    Returns:
+        List of prioritized and limited feedback items
+    """
+    if len(feedback_items) <= limit:
+        return feedback_items
+    
+    # Separate items with and without edit comments
+    items_with_comments = [item for item in feedback_items if getattr(item, "editCommentValue", None)]
+    items_without_comments = [item for item in feedback_items if not getattr(item, "editCommentValue", None)]
+    
+    # Shuffle both groups for randomness when applying limits
+    random.shuffle(items_with_comments)
+    random.shuffle(items_without_comments)
+    
+    # Prioritize items with edit comments
+    result = []
+    
+    # Add as many items with comments as possible
+    comments_to_add = min(len(items_with_comments), limit)
+    result.extend(items_with_comments[:comments_to_add])
+    
+    # Fill remaining slots with items without comments
+    remaining_slots = limit - len(result)
+    if remaining_slots > 0:
+        result.extend(items_without_comments[:remaining_slots])
+    
+    return result
+
+def format_feedback_item_yaml(item: "FeedbackItem", include_metadata: bool = False) -> Dict[str, Any]:
+    """Format a FeedbackItem as a dictionary for YAML output."""
+    result = {
+        'item_id': getattr(item, "itemId", None),
+        'external_id': getattr(getattr(item, "item", None), "externalId", None) if getattr(item, "item", None) else None,
+        'initial_value': getattr(item, "initialAnswerValue", None),
+        'final_value': getattr(item, "finalAnswerValue", None),
+        'initial_explanation': getattr(item, "initialCommentValue", None),
+        'final_explanation': getattr(item, "finalCommentValue", None),
+        'edit_comment': getattr(item, "editCommentValue", None)
+    }
+    
+    if include_metadata:
+        result['metadata'] = {
+            'feedback_id': getattr(item, "id", None),
+            'cache_key': getattr(item, "cacheKey", None),
+            'is_agreement': getattr(item, "isAgreement", None),
+            'edited_at': item.editedAt.isoformat() if getattr(item, "editedAt", None) else None,
+            'editor_name': getattr(item, "editorName", None),
+            'created_at': item.createdAt.isoformat() if getattr(item, "createdAt", None) else None,
+            'updated_at': item.updatedAt.isoformat() if getattr(item, "updatedAt", None) else None
+        }
+    
+    return result
+
+@click.command(name="find")
+@click.option('--scorecard', required=True, help='The scorecard to search feedback for (accepts ID, name, key, or external ID).')
+@click.option('--score', required=True, help='The score to search feedback for (accepts ID, name, key, or external ID).')
+@click.option('--days', type=int, default=30, help='Number of days to look back for feedback items.')
+@click.option('--limit', type=int, help='Maximum number of feedback items to return (randomly shuffled, prioritizing items with edit comments).')
+@click.option('--initial-value', 'initial_value', help='Filter by initial answer value (e.g., "Yes", "No").')
+@click.option('--final-value', 'final_value', help='Filter by final answer value (e.g., "Yes", "No").')
+@click.option('--format', type=click.Choice(['fixed', 'yaml']), default='fixed', help='Output format: fixed (human-readable) or yaml (structured data).')
+@click.option('--account', 'account_identifier', help='Optional account key or ID to filter by.', default=None)
+@click.option('--prioritize-edit-comments/--no-prioritize-edit-comments', default=True, help='Whether to prioritize feedback items with edit comments when limiting results.')
+def find_feedback(
     scorecard: str,
     score: str,
     days: int,
@@ -35,6 +114,33 @@ async def find_feedback_async(
     
     This command searches for feedback items based on the specified criteria and can filter
     by initial/final values, apply limits with smart prioritization, and output in multiple formats.
+    """
+    asyncio.run(find_feedback_async(
+        scorecard=scorecard,
+        score=score,
+        days=days,
+        limit=limit,
+        initial_value=initial_value,
+        final_value=final_value,
+        format=format,
+        account_identifier=account_identifier,
+        prioritize_edit_comments=prioritize_edit_comments
+    ))
+
+
+async def find_feedback_async(
+    scorecard: str,
+    score: str,
+    days: int,
+    limit: Optional[int],
+    initial_value: Optional[str],
+    final_value: Optional[str],
+    format: str,
+    account_identifier: Optional[str],
+    prioritize_edit_comments: bool
+):
+    """
+    Async implementation of find_feedback command.
     """
     client = create_client()
     account_id = resolve_account_id_for_command(client, account_identifier)
@@ -99,12 +205,13 @@ async def find_feedback_async(
             yaml_output = yaml.dump(result_dict, default_flow_style=False, allow_unicode=True, sort_keys=False, indent=2)
             print(yaml_output)
         else:
-            # Human-readable output using the consistent field names
+            # Human-readable output using the consistent field names, including external ID
             console.print(f"\n[bold green]Found {result.context.total_found} feedback items:[/bold green]")
             
             for i, item in enumerate(result.feedback_items, 1):
                 console.print(f"\n[bold cyan]Feedback Item {i}:[/bold cyan]")
                 console.print(f"  [bold]Item ID:[/bold] {item.item_id}")
+                console.print(f"  [bold]External ID:[/bold] {item.external_id or 'N/A'}")
                 
                 console.print(f"  [bold]Initial Value:[/bold] {item.initial_value or 'N/A'}")
                 console.print(f"  [bold]Final Value:[/bold] {item.final_value or 'N/A'}")
@@ -144,43 +251,3 @@ async def find_feedback_async(
             print(yaml_output)
         else:
             console.print(f"[bold red]{error_msg}[/bold red]")
-
-
-@click.command(name="find")
-@click.option('--scorecard', required=True, help='The scorecard to search feedback for (accepts ID, name, key, or external ID).')
-@click.option('--score', required=True, help='The score to search feedback for (accepts ID, name, key, or external ID).')
-@click.option('--days', type=int, default=30, help='Number of days to look back for feedback items.')
-@click.option('--limit', type=int, help='Maximum number of feedback items to return (with smart prioritization).')
-@click.option('--initial-value', 'initial_value', help='Filter by initial answer value (e.g., "Yes", "No").')
-@click.option('--final-value', 'final_value', help='Filter by final answer value (e.g., "Yes", "No").')
-@click.option('--format', type=click.Choice(['fixed', 'yaml']), default='fixed', help='Output format: fixed (human-readable) or yaml (structured data).')
-@click.option('--account', 'account_identifier', help='Optional account key or ID to filter by.', default=None)
-@click.option('--prioritize-edit-comments/--no-prioritize-edit-comments', default=True, help='Whether to prioritize feedback items with edit comments when limiting results.')
-def find_feedback(
-    scorecard: str,
-    score: str,
-    days: int,
-    limit: Optional[int],
-    initial_value: Optional[str],
-    final_value: Optional[str],
-    format: str,
-    account_identifier: Optional[str],
-    prioritize_edit_comments: bool
-):
-    """
-    Find feedback items for a given scorecard and score from the last N days.
-    
-    This command searches for feedback items based on the specified criteria and can filter
-    by initial/final values, apply limits with smart prioritization, and output in multiple formats.
-    """
-    asyncio.run(find_feedback_async(
-        scorecard=scorecard,
-        score=score,
-        days=days,
-        limit=limit,
-        initial_value=initial_value,
-        final_value=final_value,
-        format=format,
-        account_identifier=account_identifier,
-        prioritize_edit_comments=prioritize_edit_comments
-    ))

@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 class FeedbackItemSummary:
     """Token-efficient summary of a feedback item for alignment work."""
     item_id: str
+    external_id: Optional[str]
     initial_value: Optional[str]
     final_value: Optional[str]
     initial_explanation: Optional[str]
@@ -74,8 +75,14 @@ class FeedbackService:
         Returns:
             FeedbackItemSummary with only the fields needed for alignment work
         """
+        # Extract external_id from the related item if available
+        external_id = None
+        if hasattr(item, 'item') and item.item and hasattr(item.item, 'externalId'):
+            external_id = item.item.externalId
+        
         return FeedbackItemSummary(
             item_id=item.itemId,
+            external_id=external_id,
             initial_value=item.initialAnswerValue,
             final_value=item.finalAnswerValue,
             initial_explanation=item.initialCommentValue,
@@ -788,6 +795,7 @@ class FeedbackService:
             "feedback_items": [
                 {
                     "item_id": item.item_id,
+                    "external_id": item.external_id,
                     "initial_value": item.initial_value,
                     "final_value": item.final_value,
                     "initial_explanation": item.initial_explanation,
