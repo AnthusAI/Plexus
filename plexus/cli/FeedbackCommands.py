@@ -23,7 +23,7 @@ def feedback():
     pass
 
 # Register individual commands
-feedback.add_command(purge_command, name="purge")
-feedback.add_command(info_command, name="info")
+feedback.add_command(summary_command, name="summary")  # Add summary first - it should be the primary command
 feedback.add_command(find_command, name="find")
-feedback.add_command(summary_command, name="summary") 
+feedback.add_command(info_command, name="info")
+feedback.add_command(purge_command, name="purge")

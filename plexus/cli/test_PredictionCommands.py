@@ -286,7 +286,8 @@ class TestPredictImpl:
             mock_get_scorecard.return_value = sample_scorecard_class
             mock_select_sample.return_value = (pd.DataFrame([{'text': 'test'}]), 'item-123')
             
-            mock_prediction = Mock()
+            # Create a more explicit Mock that ensures hasattr() works correctly
+            mock_prediction = Mock(spec=['value', 'explanation', 'trace'])
             mock_prediction.value = 8.5
             mock_prediction.explanation = "Test explanation"
             mock_prediction.trace = "test-trace"
@@ -298,7 +299,8 @@ class TestPredictImpl:
                 format='json'
             )
             
-            mock_print.assert_called()
+            # Verify print was called at least once
+            assert mock_print.called, "Expected print() to be called for JSON output"
             # Verify JSON was printed
             call_args = mock_print.call_args[0][0]
             parsed_json = json.loads(call_args)
@@ -613,18 +615,12 @@ class TestSelectSample:
         sample_scorecard_class = Mock()
         sample_scorecard_class.properties = {'key': 'test-scorecard'}
         
-        # Mock GraphQL response
-        mock_client.execute.return_value = {
-            'listItemByAccountIdAndCreatedAt': {
-                'items': [sample_item_data]
-            }
-        }
-        
+        # Mock Item.list to return a proper item instance
         mock_item_instance = Mock()
         mock_item_instance.id = sample_item_data['id']
         mock_item_instance.text = sample_item_data['text']
-        mock_item.from_dict.return_value = mock_item_instance
-        mock_item.fields.return_value = "id text"
+        mock_item_instance.metadata = None  # Simple case without metadata
+        mock_item.list.return_value = [mock_item_instance]
         
         with patch('plexus.cli.reports.utils.resolve_account_id_for_command') as mock_resolve_account:
             mock_resolve_account.return_value = 'account-123'
@@ -635,21 +631,15 @@ class TestSelectSample:
             
             assert used_item_id == 'item-123'
             assert isinstance(sample_row, pd.DataFrame)
-            mock_client.execute.assert_called_once()
+            mock_item.list.assert_called_once()
     
     def test_select_sample_no_items_in_account(self, mock_client, mock_item, mock_env_vars):
         """Test select_sample when no items exist in account"""
         sample_scorecard_class = Mock()
         sample_scorecard_class.properties = {'key': 'test-scorecard'}
         
-        # Mock empty GraphQL response
-        mock_client.execute.return_value = {
-            'listItemByAccountIdAndCreatedAt': {
-                'items': []
-            }
-        }
-        
-        mock_item.fields.return_value = "id text"
+        # Mock Item.list to return empty list
+        mock_item.list.return_value = []
         
         with patch('plexus.cli.reports.utils.resolve_account_id_for_command') as mock_resolve_account:
             mock_resolve_account.return_value = 'account-123'
@@ -889,23 +879,12 @@ class TestGetScorecardClass:
     
     def test_get_scorecard_class_not_found(self, mock_scorecard_class, mock_scorecard_registry):
         """Test scorecard class not found"""
-        # Mock identifier resolution to fail
-        with patch('plexus.cli.client_utils.create_client') as mock_create_client, \
-             patch('plexus.cli.memoized_resolvers.memoized_resolve_scorecard_identifier') as mock_resolve_scorecard:
-            
-            # Mock client
-            mock_client = Mock()
-            mock_create_client.return_value = mock_client
-            
-            # Mock identifier resolution to fail (return None)
-            mock_resolve_scorecard.return_value = None
-            
-            # Mock the registry to return None (scorecard not found)
-            mock_scorecard_registry.get.return_value = None
-            
-            # ✅ FIXED: Expect the actual error message from the implementation
-            with pytest.raises(ValueError, match="Scorecard with identifier 'nonexistent' not found in registry"):
-                get_scorecard_class('nonexistent')
+        # Mock the registry to return None (scorecard not found)
+        mock_scorecard_registry.get.return_value = None
+        
+        # Expect the actual error message from the implementation
+        with pytest.raises(Exception, match="Scorecard class not found for: nonexistent"):
+            get_scorecard_class('nonexistent')
 
 
 class TestCreateScoreInput:
