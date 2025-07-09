@@ -106,7 +106,7 @@ export class YamlLinter {
           level: 'success',
           code: 'VALIDATION_SUCCESS',
           title: 'Validation Successful',
-          message: "✅ No issues found – nice work! Your YAML is well-formed and follows all domain rules.",
+          message: "Great job!",
           doc_url: `${this.docBaseUrl}/best-practices`
         })
       }

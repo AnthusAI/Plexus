@@ -174,7 +174,7 @@ class YamlLinter:
             
             # Stage 4: Generate success message if no issues
             if result.is_valid and not result.messages:
-                result.success_message = "✅ No issues found – nice work! Your YAML is well-formed and follows all domain rules."
+                result.success_message = "Great job!"
                 result.add_message(LintMessage(
                     level='success',
                     code='VALIDATION_SUCCESS',
