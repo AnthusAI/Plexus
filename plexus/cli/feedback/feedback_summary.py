@@ -42,12 +42,139 @@ class FeedbackSummaryAnalyzer:
                                            start_date: datetime, end_date: datetime) -> List[FeedbackItem]:
         """
         Fetch feedback items for a specific score within a date range.
-        Uses the same logic as the FeedbackAnalysis report block.
+        Uses the same GSI query approach as the FeedbackAnalysis report block.
         """
         self._log(f"Fetching feedback items for Scorecard ID: {scorecard_id}, Score ID: {score_id}")
         self._log(f"Date range: {start_date.isoformat()} to {end_date.isoformat()}")
         
-        # Use the standard list method with filters (fallback from GSI approach)
+        all_items_for_score = []
+        
+        try:
+            # Use the optimized GSI directly with GraphQL (same approach as FeedbackAnalysis report block)
+            self._log("Using direct GraphQL query with GSI", level="DEBUG")
+            
+            # Construct a direct GraphQL query using the GSI
+            query = """
+            query ListFeedbackItemsByGSI(
+                $accountId: String!,
+                $composite_sk_condition: ModelFeedbackItemByAccountScorecardScoreUpdatedAtCompositeKeyConditionInput,
+                $limit: Int,
+                $nextToken: String,
+                $sortDirection: ModelSortDirection
+            ) {
+                listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt(
+                    accountId: $accountId,
+                    scorecardIdScoreIdUpdatedAt: $composite_sk_condition,
+                    limit: $limit,
+                    nextToken: $nextToken,
+                    sortDirection: $sortDirection
+                ) {
+                    items {
+                        id
+                        accountId
+                        scorecardId
+                        scoreId
+                        itemId
+                        cacheKey
+                        initialAnswerValue
+                        finalAnswerValue
+                        initialCommentValue
+                        finalCommentValue
+                        editCommentValue
+                        editedAt
+                        editorName
+                        isAgreement
+                        createdAt
+                        updatedAt
+                        item {
+                            id
+                            identifiers
+                            externalId
+                        }
+                    }
+                    nextToken
+                }
+            }
+            """
+            
+            # Prepare variables for the query
+            variables = {
+                "accountId": account_id,
+                "composite_sk_condition": {
+                    "between": [
+                        {
+                            "scorecardId": str(scorecard_id),
+                            "scoreId": str(score_id),
+                            "updatedAt": start_date.isoformat()
+                        },
+                        {
+                            "scorecardId": str(scorecard_id),
+                            "scoreId": str(score_id),
+                            "updatedAt": end_date.isoformat()
+                        }
+                    ]
+                },
+                "limit": 100,
+                "nextToken": None,
+                "sortDirection": "DESC"
+            }
+            
+            self._log(f"GraphQL variables: {variables}", level="DEBUG")
+            
+            next_token = None
+            
+            while True:
+                if next_token:
+                    variables["nextToken"] = next_token
+                
+                try:
+                    response = await asyncio.to_thread(self.api_client.execute, query, variables)
+                    
+                    if response and 'errors' in response:
+                        self._log(f"GraphQL errors: {response.get('errors')}", level="ERROR")
+                        # Fall back to the original simple filter approach if GSI fails
+                        return await self._fetch_feedback_items_fallback(account_id, scorecard_id, score_id, start_date, end_date)
+                    
+                    if response and 'listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt' in response:
+                        result = response['listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt']
+                        item_dicts = result.get('items', [])
+                        
+                        # Convert to FeedbackItem objects
+                        items = [FeedbackItem.from_dict(item_dict, client=self.api_client) for item_dict in item_dicts]
+                        all_items_for_score.extend(items)
+                        
+                        self._log(f"Fetched {len(items)} items using GSI query (total: {len(all_items_for_score)})")
+                        
+                        # Get next token for pagination
+                        next_token = result.get('nextToken')
+                        if not next_token:
+                            break
+                    else:
+                        if response and 'errors' in response:
+                            self._log(f"GraphQL errors with GSI query: {response.get('errors')}", level="WARNING")
+                        else:
+                            self._log("Unexpected response format from GSI query", level="WARNING")
+                        # Fall back to the original approach
+                        return await self._fetch_feedback_items_fallback(account_id, scorecard_id, score_id, start_date, end_date)
+                        
+                except Exception as e:
+                    self._log(f"Error during GSI query execution: {e}. Falling back to simple filter approach.", level="WARNING")
+                    return await self._fetch_feedback_items_fallback(account_id, scorecard_id, score_id, start_date, end_date)
+                    
+        except Exception as e:
+            self._log(f"Error during feedback item fetch for score {score_id}: {str(e)}", level="ERROR")
+            return await self._fetch_feedback_items_fallback(account_id, scorecard_id, score_id, start_date, end_date)
+        
+        self._log(f"Total items fetched for score {score_id}: {len(all_items_for_score)}")
+        return all_items_for_score
+
+    async def _fetch_feedback_items_fallback(self, account_id: str, scorecard_id: str, score_id: str, 
+                                           start_date: datetime, end_date: datetime) -> List[FeedbackItem]:
+        """
+        Fallback method using the simple filter approach (original implementation).
+        """
+        self._log("Using fallback simple filter approach", level="WARNING")
+        
         filter_condition = {
             "and": [
                 {"accountId": {"eq": account_id}},
@@ -66,11 +193,11 @@ class FeedbackSummaryAnalyzer:
                 fields=FeedbackItem.GRAPHQL_BASE_FIELDS
             )
             
-            self._log(f"Retrieved {len(feedback_items)} feedback items")
+            self._log(f"Retrieved {len(feedback_items)} feedback items using fallback approach")
             return feedback_items
             
         except Exception as e:
-            self._log(f"Error fetching feedback items: {e}", level="ERROR")
+            self._log(f"Error fetching feedback items with fallback: {e}", level="ERROR")
             return []
     
     def analyze_feedback_data_gwet(self, feedback_items: List[FeedbackItem], score_id: str) -> Dict[str, Any]:

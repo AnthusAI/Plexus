@@ -27,6 +27,7 @@ from plexus.cli.stage_configurations import get_prediction_stage_configs
 from plexus.cli.task_progress_tracker import TaskProgressTracker
 from plexus.dashboard.api.models.account import Account
 from plexus.dashboard.api.models.task import Task
+from plexus.dashboard.api.models.feedback_item import FeedbackItem
 
 
 @click.command(help="Predict a scorecard or specific score(s) within a scorecard.")
@@ -42,7 +43,8 @@ from plexus.dashboard.api.models.task import Task
 @click.option('--format', type=click.Choice(['fixed', 'json', 'yaml']), default='fixed', help='Output format: fixed (human-readable), json (parseable JSON), or yaml (token-efficient YAML)')
 @click.option('--input', is_flag=True, help='Include input text and metadata in YAML output (only for --format=yaml)')
 @click.option('--trace', is_flag=True, help='Include full execution trace in YAML output (only for --format=yaml)')
-def predict(scorecard, score, item, items, number, excel, use_langsmith_trace, fresh, task_id, format, input, trace):
+@click.option('--compare-to-feedback', is_flag=True, help='Compare current prediction to historical feedback corrections for this item and score')
+def predict(scorecard, score, item, items, number, excel, use_langsmith_trace, fresh, task_id, format, input, trace, compare_to_feedback):
     """Predict scores for a scorecard"""
     try:
         # Configure event loop with custom exception handler
@@ -81,7 +83,8 @@ def predict(scorecard, score, item, items, number, excel, use_langsmith_trace, f
             task_id=task_id, 
             format=format,
             include_input=input,
-            include_trace=trace
+            include_trace=trace,
+            compare_to_feedback=compare_to_feedback
         )
         try:
             loop.run_until_complete(coro)
@@ -119,7 +122,8 @@ async def predict_impl(
     task_id: str = None,
     format: str = 'fixed',
     include_input: bool = False,
-    include_trace: bool = False
+    include_trace: bool = False,
+    compare_to_feedback: bool = False
 ):
     """Implementation of predict command"""
     tracker: Optional[TaskProgressTracker] = None
@@ -226,6 +230,35 @@ async def predict_impl(
             tracker.update(current_items=0)
             logging.info(f"Entered Predicting stage (current stage: {tracker.current_stage.name})")
         
+        # Initialize feedback comparison variables
+        scorecard_id = None
+        score_ids = {}
+        
+        # If compare_to_feedback is enabled, we need to resolve scorecard and score IDs
+        if compare_to_feedback:
+            # Ensure we have a client for feedback comparison
+            if client is None:
+                from plexus.cli.client_utils import create_client
+                client = create_client()
+            
+            # Resolve scorecard ID
+            scorecard_id = resolve_scorecard_identifier(client, scorecard_identifier)
+            if scorecard_id:
+                logging.info(f"Resolved scorecard ID: {scorecard_id}")
+            
+            # Resolve score IDs for each score
+            for score_name in score_names:
+                score_id = resolve_score_identifier(client, scorecard_id, score_name)
+                if score_id:
+                    score_ids[score_name] = score_id
+                    logging.info(f"Resolved score ID for {score_name}: {score_id}")
+                else:
+                    logging.warning(f"Could not resolve score ID for {score_name}")
+            
+            if not scorecard_id:
+                logging.warning(f"Could not resolve scorecard ID for {scorecard_identifier}")
+                logging.warning("Feedback comparison will be disabled for this run")
+        
         # Track current prediction for progress
         current_prediction = 0
         results = []
@@ -255,7 +288,7 @@ async def predict_impl(
                     tracker.current_stage.status_message = f"Looking up item text and metadata for prediction {prediction_num}/{total_predictions}"
                 
                 sample_row, used_item_id = select_sample(
-                    scorecard_class, score_name, item_identifier, fresh
+                    scorecard_class, score_name, item_identifier, fresh, compare_to_feedback=compare_to_feedback, scorecard_id=scorecard_id, score_id=score_ids.get(score_name)
                 )
                 
                 # Step 2: Item lookup completed
@@ -377,6 +410,16 @@ async def predict_impl(
                         row_result[f'{score_name}_cost'] = None
                         row_result[f'{score_name}_trace'] = None
                     
+                    # Add feedback comparison if requested and available
+                    if compare_to_feedback and sample_row is not None:
+                        feedback_item = sample_row.iloc[0].get('feedback_item')
+                        if feedback_item:
+                            feedback_comparison = create_feedback_comparison(row_result, feedback_item, score_name)
+                            row_result[f'{score_name}_feedback_comparison'] = feedback_comparison
+                            logging.info(f"Added feedback comparison for {score_name}")
+                        else:
+                            logging.info(f"No feedback available for item {used_item_id}, score {score_name}")
+                    
                 except BatchProcessingPause:
                     raise
                 except Exception as e:
@@ -441,7 +484,7 @@ async def predict_impl(
                             tracker.update(current_items=current_prediction)
                         
                         sample_row, used_item_id = select_sample(
-                            scorecard_class, score_name, item_identifier, fresh
+                            scorecard_class, score_name, item_identifier, fresh, compare_to_feedback=compare_to_feedback, scorecard_id=scorecard_id, score_id=score_ids.get(score_name)
                         )
                         
                         # Step 2: Item lookup completed
@@ -572,6 +615,16 @@ async def predict_impl(
                             logging.error(f"Full traceback: {traceback.format_exc()}")
                             raise
                         
+                        # Add feedback comparison if requested and available
+                        if compare_to_feedback and sample_row is not None:
+                            feedback_item = sample_row.iloc[0].get('feedback_item')
+                            if feedback_item:
+                                feedback_comparison = create_feedback_comparison(row_result, feedback_item, score_name)
+                                row_result[f'{score_name}_feedback_comparison'] = feedback_comparison
+                                logging.info(f"Added feedback comparison for {score_name}")
+                            else:
+                                logging.info(f"No feedback available for item {used_item_id}, score {score_name}")
+                        
                         if any(row_result.get(f'{name}_value') is not None for name in score_names):
                             results.append(row_result)
                         
@@ -618,8 +671,11 @@ async def predict_impl(
                             'cost': result.get(f'{name}_cost'),
                             'trace': result.get(f'{name}_trace')
                         }
+                        # Add feedback comparison if available
+                        feedback_comparison = result.get(f'{name}_feedback_comparison')
+                        if feedback_comparison:
+                            score_data['feedback_comparison'] = feedback_comparison
                         json_result['scores'].append(score_data)
-                    json_results.append(json_result)
                 
                 # Debug: Check what's actually in the final json_results before encoding
                 logging.info(f"🔍 FINAL JSON DEBUG: About to encode {len(json_results)} results")
@@ -819,10 +875,11 @@ def output_excel(results, score_names, scorecard_identifier):
 
     logging.info(f"Excel file '{filename}' has been created with the prediction results.")
 
-def select_sample(scorecard_class, score_name, item_identifier, fresh):
+def select_sample(scorecard_class, score_name, item_identifier, fresh, compare_to_feedback=False, scorecard_id=None, score_id=None):
     """Select an item from the Plexus API using flexible identifier resolution."""
     from plexus.cli.client_utils import create_client
     from plexus.dashboard.api.models.item import Item
+    from plexus.dashboard.api.models.feedback_item import FeedbackItem
     from plexus.cli.reports.utils import resolve_account_id_for_command
     
     # Create API client
@@ -835,9 +892,69 @@ def select_sample(scorecard_class, score_name, item_identifier, fresh):
         if not item_id:
             raise ValueError(f"No item found matching identifier: {item_identifier}")
         
-        # Get the item
+        # Get the item using the standard model method
         try:
             item = Item.get_by_id(item_id, client)
+            feedback_item = None
+            
+            # If feedback comparison is requested, fetch feedback separately
+            if compare_to_feedback and scorecard_id and score_id:
+                try:
+                    # Use the Item's feedbackItems relationship instead of complex filtering
+                    # This is more reliable and matches the working GraphQL query
+                    query = """
+                    query GetItemWithFeedback($id: ID!) {
+                        getItem(id: $id) {
+                            feedbackItems {
+                                items {
+                                    id
+                                    scorecardId
+                                    scoreId
+                                    initialAnswerValue
+                                    finalAnswerValue
+                                    initialCommentValue
+                                    finalCommentValue
+                                    editCommentValue
+                                    editedAt
+                                    editorName
+                                    isAgreement
+                                    createdAt
+                                    updatedAt
+                                }
+                            }
+                        }
+                    }
+                    """
+                    
+                    variables = {"id": item_id}
+                    response = client.execute(query=query, variables=variables)
+                    
+                    if response and 'getItem' in response and response['getItem']:
+                        feedback_data = response['getItem'].get('feedbackItems', {})
+                        feedback_items = feedback_data.get('items', [])
+                        
+                        # Filter for the specific scorecard and score
+                        matching_feedback = None
+                        for feedback_data in feedback_items:
+                            if (feedback_data.get('scorecardId') == scorecard_id and 
+                                feedback_data.get('scoreId') == score_id):
+                                # Create a FeedbackItem object from the data
+                                feedback_item = FeedbackItem.from_dict(feedback_data, client=client)
+                                matching_feedback = feedback_item
+                                break
+                        
+                        if matching_feedback:
+                            feedback_item = matching_feedback
+                            logging.info(f"Found feedback for item {item_id}, score {score_name}: initial_value={feedback_item.initialAnswerValue}, final_value={feedback_item.finalAnswerValue}")
+                        else:
+                            logging.info(f"No feedback available for item {item_id}, score {score_name} (scorecard: {scorecard_id}, score_id: {score_id})")
+                    else:
+                        logging.info(f"No feedback available for item {item_id}, score {score_name}")
+                        
+                except Exception as e:
+                    logging.warning(f"Failed to fetch feedback for item {item_id}: {e}")
+                    feedback_item = None
+            
             logging.info(f"Found item {item_id} from identifier '{item_identifier}'")
             
             # Create a pandas-like row structure for compatibility
@@ -889,7 +1006,8 @@ def select_sample(scorecard_class, score_name, item_identifier, fresh):
             sample_data = {
                 'text': text_content,
                 'item_id': item.id,
-                'metadata': json.dumps(merged_metadata)
+                'metadata': json.dumps(merged_metadata),
+                'feedback_item': feedback_item  # Add feedback data to the sample
             }
             
             # Convert to DataFrame-like structure for compatibility
@@ -902,25 +1020,18 @@ def select_sample(scorecard_class, score_name, item_identifier, fresh):
             logging.error(f"Error retrieving item {item_id}: {e}")
             raise ValueError(f"Could not retrieve item {item_id}: {e}")
     else:
-        # Get the most recent item for the account
-        query = f"""
-        query ListItemByAccountIdAndCreatedAt($accountId: String!) {{
-            listItemByAccountIdAndCreatedAt(accountId: $accountId, sortDirection: DESC, limit: 1) {{
-                items {{
-                    {Item.fields()}
-                }}
-            }}
-        }}
-        """
-        
-        response = client.execute(query, {'accountId': account_id})
-        items = response.get('listItemByAccountIdAndCreatedAt', {}).get('items', [])
+        # Get the most recent item for the account (no feedback comparison for random items)
+        items = Item.list(
+            client=client,
+            filter={'accountId': {'eq': account_id}},
+            sort={'createdAt': 'DESC'},
+            limit=1
+        )
         
         if not items:
             raise ValueError("No items found in the account")
         
-        item_data = items[0]
-        item = Item.from_dict(item_data, client)
+        item = items[0]
         
         logging.info(f"Selected most recent item {item.id} from API")
         
@@ -933,7 +1044,8 @@ def select_sample(scorecard_class, score_name, item_identifier, fresh):
                 "account_key": os.getenv('PLEXUS_ACCOUNT_KEY', 'call-criteria'),
                 "scorecard_key": scorecard_class.properties.get('key'),
                 "score_name": score_name
-            })
+            }),
+            'feedback_item': None  # No feedback for random items
         }
         
         # Convert to DataFrame-like structure for compatibility
@@ -1054,100 +1166,53 @@ def handle_exception(loop, context, scorecard_identifier=None, score_identifier=
         loop.stop()
 
 def get_scorecard_class(scorecard_identifier: str):
-    """Get the scorecard class from the registry using flexible identifier resolution."""
-    from plexus.cli.client_utils import create_client
-    
-    # Helper function to load scorecards with robust path resolution
+    """Get scorecard class by identifier"""
     def load_scorecards_if_needed():
-        """Load scorecards if registry is empty, trying multiple paths."""
-        # Check if registry has any items by checking the items() method
-        if len(list(scorecard_registry.items())) > 0:
-            logging.info("Scorecard registry already loaded")
-            return
-            
-        # Try multiple potential scorecard directories
-        scorecard_paths = [
-            'scorecards/',  # Current working directory
-            os.path.join(os.getcwd(), 'scorecards/'),  # Explicit current dir  
-            os.path.join(os.path.dirname(os.path.dirname(__file__)), '..', '..', 'scorecards/'),  # Relative to this file
-        ]
-        
-        # Look for common project directory patterns
-        common_projects = ['Call-Criteria-Python', 'Plexus']
-        for project in common_projects:
-            # Try common parent directory patterns
-            parent_dirs = ['/home/ryan/projects', os.path.expanduser('~/projects'), '/projects']
-            for parent_dir in parent_dirs:
-                project_path = os.path.join(parent_dir, project, 'scorecards')
-                if project_path not in scorecard_paths:
-                    scorecard_paths.append(project_path)
-        
-        # Also try environment variable if set
-        if os.getenv('PLEXUS_SCORECARDS_PATH'):
-            scorecard_paths.insert(0, os.getenv('PLEXUS_SCORECARDS_PATH'))
-            
-        for path in scorecard_paths:
-            abs_path = os.path.abspath(path)
-            logging.info(f"Trying to load scorecards from: {abs_path}")
-            if os.path.exists(abs_path) and os.path.isdir(abs_path):
-                try:
-                    Scorecard.load_and_register_scorecards(abs_path)
-                    loaded_count = len(list(scorecard_registry.items()))
-                    logging.info(f"Successfully loaded {loaded_count} scorecards from {abs_path}")
-                    return
-                except Exception as e:
-                    logging.warning(f"Failed to load scorecards from {abs_path}: {e}")
-                    continue
-        
-        logging.warning("Could not find any scorecard directories to load from")
+        # Check if registry has any items by checking if items() returns anything
+        if not list(scorecard_registry.items()):
+            Scorecard.load_and_register_scorecards('scorecards/')
     
-    # First try to resolve the scorecard identifier to get the actual scorecard details
-    client = create_client()
-    scorecard_id = memoized_resolve_scorecard_identifier(client, scorecard_identifier)
-    
-    if scorecard_id:
-        # Get the scorecard details to get the key which is used for registry lookup
-        query = f"""
-        query GetScorecard {{
-            getScorecard(id: "{scorecard_id}") {{
-                id
-                name
-                key
-            }}
-        }}
-        """
-        
-        try:
-            result = client.execute(query)
-            scorecard_data = result.get('getScorecard', {})
-            scorecard_key = scorecard_data.get('key')
-            scorecard_name = scorecard_data.get('name')
-            
-            if scorecard_key:
-                # Load scorecards and try to get by key
-                load_scorecards_if_needed()
-                scorecard_class = scorecard_registry.get(scorecard_key)
-                if scorecard_class is not None:
-                    logging.info(f"Found scorecard class for key '{scorecard_key}' (name: '{scorecard_name}')")
-                    return scorecard_class
-                
-                # If key didn't work, try by name as fallback
-                scorecard_class = scorecard_registry.get(scorecard_name)
-                if scorecard_class is not None:
-                    logging.info(f"Found scorecard class for name '{scorecard_name}' (key: '{scorecard_key}')")
-                    return scorecard_class
-        except Exception as e:
-            logging.warning(f"Error getting scorecard details: {e}")
-    
-    # Fallback: try direct registry lookup with the original identifier
     load_scorecards_if_needed()
-    scorecard_class = scorecard_registry.get(scorecard_identifier)
-    if scorecard_class is not None:
-        logging.info(f"Found scorecard class for identifier '{scorecard_identifier}' (direct registry lookup)")
-        return scorecard_class
     
-    logging.error(f"Scorecard with identifier '{scorecard_identifier}' not found in registry.")
-    raise ValueError(f"Scorecard with identifier '{scorecard_identifier}' not found in registry.")
+    # Try to get the scorecard class directly from the registry using the identifier
+    scorecard_class = scorecard_registry.get(scorecard_identifier)
+    if scorecard_class is None:
+        raise Exception(f"Scorecard class not found for: {scorecard_identifier}")
+    
+    return scorecard_class
+
+
+def create_feedback_comparison(
+    current_prediction: dict,
+    feedback_item: FeedbackItem,
+    score_name: str
+) -> dict:
+    """
+    Create a comparison between current prediction and historical feedback.
+    
+    Args:
+        current_prediction: Current prediction result dict
+        feedback_item: FeedbackItem object from GraphQL
+        score_name: Name of the score being compared
+        
+    Returns:
+        Dictionary with comparison data
+    """
+    current_value = current_prediction.get(f'{score_name}_value')
+    final_value = feedback_item.finalAnswerValue
+    
+    # Compute isAgreement: true if current prediction matches the final corrected value
+    is_agreement = str(current_value).lower() == str(final_value).lower() if current_value and final_value else False
+    
+    return {
+        "current_prediction": {
+            "value": current_value,
+            "explanation": current_prediction.get(f'{score_name}_explanation'),
+        },
+        "ground_truth": final_value,
+        "isAgreement": is_agreement
+    }
+
 
 def create_score_input(sample_row, item_id, scorecard_class, score_name):
     """Create a Score.Input object from sample data."""
@@ -1267,6 +1332,11 @@ def output_yaml_prediction_results(
                 trace_data = result.get(f'{score_name}_trace')
                 if trace_data is not None:
                     score_data['trace'] = trace_data
+            
+            # Include feedback comparison if available
+            feedback_comparison = result.get(f'{score_name}_feedback_comparison')
+            if feedback_comparison:
+                score_data['feedback_comparison'] = feedback_comparison
             
             # Only add if we have data beyond just the name
             if len(score_data) > 1:  # More than just 'name'
