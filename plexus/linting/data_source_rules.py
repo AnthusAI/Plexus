@@ -9,12 +9,12 @@ from .rules import ValidationRule
 
 
 class DataSourceQueriesOrSearchesRule(ValidationRule):
-    """Rule that ensures either queries or searches is present."""
+    """Rule that ensures either queries or searches is present for CallCriteriaDBCache."""
     
     def __init__(self):
         super().__init__(
             rule_id='DATA_SOURCE_QUERIES_OR_SEARCHES_REQUIRED',
-            description='Data source must have either queries or searches defined',
+            description='CallCriteriaDBCache data source must have either queries or searches defined',
             severity='error'
         )
     
@@ -22,6 +22,10 @@ class DataSourceQueriesOrSearchesRule(ValidationRule):
         from .yaml_linter import LintMessage
         
         messages = []
+        
+        # Only apply this rule to CallCriteriaDBCache
+        if data.get('class') != 'CallCriteriaDBCache':
+            return messages
         
         has_queries = (
             'queries' in data and 
@@ -173,6 +177,100 @@ class DataSourceSearchStructureRule(ValidationRule):
         return messages
 
 
+class FeedbackItemsValidationRule(ValidationRule):
+    """Rule that validates FeedbackItems data source parameters."""
+    
+    def __init__(self):
+        super().__init__(
+            rule_id='FEEDBACK_ITEMS_VALIDATION',
+            description='FeedbackItems data source must have required parameters',
+            severity='error'
+        )
+    
+    def validate(self, data: Dict[str, Any]) -> List['LintMessage']:
+        from .yaml_linter import LintMessage
+        
+        messages = []
+        
+        # Only apply this rule to FeedbackItems
+        if data.get('class') != 'FeedbackItems':
+            return messages
+        
+        # Required fields for FeedbackItems
+        required_fields = ['scorecard', 'score', 'days']
+        
+        for field in required_fields:
+            if field not in data:
+                messages.append(LintMessage(
+                    level=self.severity,
+                    code=f'FEEDBACK_ITEMS_MISSING_{field.upper()}',
+                    title=f'Missing {field.title()} Field',
+                    message=f'FeedbackItems data source is missing required "{field}" field.',
+                    suggestion=f'Add a "{field}" field to specify the {field} parameter.',
+                    doc_url='https://docs.plexus.ai/yaml-dsl/data-sources#feedback-items',
+                    context={'field': field}
+                ))
+        
+        # Validate days is positive integer
+        if 'days' in data:
+            days = data['days']
+            if not isinstance(days, int) or days <= 0:
+                messages.append(LintMessage(
+                    level=self.severity,
+                    code='FEEDBACK_ITEMS_INVALID_DAYS',
+                    title='Invalid Days Value',
+                    message='FeedbackItems "days" must be a positive integer.',
+                    suggestion='Set "days" to a positive integer (e.g., 7, 14, 30).',
+                    doc_url='https://docs.plexus.ai/yaml-dsl/data-sources#feedback-items',
+                    context={'current_value': days}
+                ))
+        
+        # Validate limit is positive integer if present
+        if 'limit' in data:
+            limit = data['limit']
+            if not isinstance(limit, int) or limit <= 0:
+                messages.append(LintMessage(
+                    level=self.severity,
+                    code='FEEDBACK_ITEMS_INVALID_LIMIT',
+                    title='Invalid Limit Value',
+                    message='FeedbackItems "limit" must be a positive integer.',
+                    suggestion='Set "limit" to a positive integer (e.g., 100, 500, 1000).',
+                    doc_url='https://docs.plexus.ai/yaml-dsl/data-sources#feedback-items',
+                    context={'current_value': limit}
+                ))
+        
+        # Validate limit_per_cell is positive integer if present
+        if 'limit_per_cell' in data:
+            limit_per_cell = data['limit_per_cell']
+            if not isinstance(limit_per_cell, int) or limit_per_cell <= 0:
+                messages.append(LintMessage(
+                    level=self.severity,
+                    code='FEEDBACK_ITEMS_INVALID_LIMIT_PER_CELL',
+                    title='Invalid Limit Per Cell Value',
+                    message='FeedbackItems "limit_per_cell" must be a positive integer.',
+                    suggestion='Set "limit_per_cell" to a positive integer (e.g., 10, 50, 100).',
+                    doc_url='https://docs.plexus.ai/yaml-dsl/data-sources#feedback-items',
+                    context={'current_value': limit_per_cell}
+                ))
+        
+        # Validate scorecard and score are strings
+        for field in ['scorecard', 'score']:
+            if field in data:
+                value = data[field]
+                if not isinstance(value, (str, int)):
+                    messages.append(LintMessage(
+                        level=self.severity,
+                        code=f'FEEDBACK_ITEMS_INVALID_{field.upper()}',
+                        title=f'Invalid {field.title()} Value',
+                        message=f'FeedbackItems "{field}" must be a string or integer.',
+                        suggestion=f'Set "{field}" to a string name, key, or integer ID.',
+                        doc_url='https://docs.plexus.ai/yaml-dsl/data-sources#feedback-items',
+                        context={'field': field, 'current_value': value}
+                    ))
+        
+        return messages
+
+
 def create_data_source_validation_rules() -> List[ValidationRule]:
     """Create the complete set of data source validation rules."""
     from .rules import RequiredFieldRule, AllowedValuesRule, TypeValidationRule
@@ -185,12 +283,13 @@ def create_data_source_validation_rules() -> List[ValidationRule]:
         TypeValidationRule('class', str),
         
         # Allowed data source classes
-        AllowedValuesRule('class', ['CallCriteriaDBCache']),
+        AllowedValuesRule('class', ['CallCriteriaDBCache', 'FeedbackItems']),
         
         # Custom data source rules
         DataSourceQueriesOrSearchesRule(),
         DataSourceQueryStructureRule(),
         DataSourceSearchStructureRule(),
+        FeedbackItemsValidationRule(),
         
         # Validate balance field
         TypeValidationRule('balance', bool)
