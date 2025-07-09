@@ -203,8 +203,6 @@ async def predict_impl(
                 tracker = None
                 task = None
         
-        results = []
-        
         # Querying stage: Looking up scorecard configuration
         if tracker:
             tracker.current_stage.status_message = "Looking up scorecard configuration..."
@@ -228,7 +226,11 @@ async def predict_impl(
             tracker.update(current_items=0)
             logging.info(f"Entered Predicting stage (current stage: {tracker.current_stage.name})")
         
+        # Track current prediction for progress
         current_prediction = 0
+        results = []
+        
+        # Calculate total predictions and set up item identifiers
         item_count = len(item_identifiers) if item_identifiers else 1
         total_predictions = item_count * len(score_names) * number_of_times
         
@@ -236,160 +238,348 @@ async def predict_impl(
         if not item_identifiers:
             item_identifiers = [None]
         
-        for iteration in range(number_of_times):
-            for item_idx, item_identifier in enumerate(item_identifiers):
-                for score_idx, score_name in enumerate(score_names):
-                    # Update progress for current prediction
+        # If we have multiple items, process them in parallel
+        if len(item_identifiers) > 1:
+            # Create async tasks for each item-score combination
+            async def process_single_prediction(iteration, item_idx, item_identifier, score_idx, score_name, prediction_num):
+                """Process a single prediction asynchronously"""
+                nonlocal current_prediction
+                
+                # Update progress for current prediction
+                if tracker:
+                    tracker.current_stage.status_message = f"Processing prediction {prediction_num}/{total_predictions} for item {item_identifier or 'random'}, score: {score_name}"
+                    # Note: We don't update current_items here since it's handled by the parallel coordinator
+                
+                # Step 1: Look up item text and metadata
+                if tracker:
+                    tracker.current_stage.status_message = f"Looking up item text and metadata for prediction {prediction_num}/{total_predictions}"
+                
+                sample_row, used_item_id = select_sample(
+                    scorecard_class, score_name, item_identifier, fresh
+                )
+                
+                # Step 2: Item lookup completed
+                if tracker:
+                    tracker.current_stage.status_message = f"Item data loaded - running prediction {prediction_num}/{total_predictions} for score: {score_name}"
+                
+                row_result = {'item_id': used_item_id}
+                if sample_row is not None:
+                    row_result['text'] = sample_row.iloc[0].get('text', '')
+                
+                try:
+                    # Update progress: Running prediction
                     if tracker:
-                        prediction_num = iteration * len(item_identifiers) * len(score_names) + item_idx * len(score_names) + score_idx + 1
-                        tracker.current_stage.status_message = f"Processing prediction {prediction_num}/{total_predictions} for item {item_identifier or 'random'}, score: {score_name}"
-                        tracker.update(current_items=current_prediction)
+                        tracker.current_stage.status_message = f"Running prediction for score: {score_name}"
                     
-                    # Step 1: Look up item text and metadata
-                    if tracker:
-                        tracker.current_stage.status_message = f"Looking up item text and metadata for prediction {prediction_num}/{total_predictions}"
-                        tracker.update(current_items=current_prediction)
-                    
-                    sample_row, used_item_id = select_sample(
-                        scorecard_class, score_name, item_identifier, fresh
+                    transcript, predictions, costs = await predict_score(
+                        score_name, scorecard_class, sample_row, used_item_id
                     )
                     
-                    # Step 2: Item lookup completed
-                    if tracker:
-                        tracker.current_stage.status_message = f"Item data loaded - running prediction {prediction_num}/{total_predictions} for score: {score_name}"
-                        tracker.update(current_items=current_prediction)
+                    if predictions:
+                        if isinstance(predictions, list):
+                            # Handle list of results
+                            prediction = predictions[0] if predictions else None
+                            if prediction:
+                                row_result[f'{score_name}_value'] = prediction.value
+                                row_result[f'{score_name}_explanation'] = prediction.explanation
+                                row_result[f'{score_name}_cost'] = costs
+                                # Extract trace information
+                                if hasattr(prediction, 'trace'):
+                                    row_result[f'{score_name}_trace'] = prediction.trace
+                                elif hasattr(prediction, 'metadata') and prediction.metadata:
+                                    row_result[f'{score_name}_trace'] = prediction.metadata.get('trace')
+                                else:
+                                    row_result[f'{score_name}_trace'] = None
+                                logging.info(f"Got predictions: {predictions}")
+                        else:
+                            # Handle Score.Result object
+                            if hasattr(predictions, 'value') and predictions.value is not None:
+                                row_result[f'{score_name}_value'] = predictions.value
+                                # ✅ ENHANCED: Get explanation from direct field first, then metadata
+                                explanation = (
+                                    getattr(predictions, 'explanation', None) or
+                                    predictions.metadata.get('explanation', '') if hasattr(predictions, 'metadata') and predictions.metadata else
+                                    ''
+                                )
+                                row_result[f'{score_name}_explanation'] = explanation
+                                row_result[f'{score_name}_cost'] = costs
+                                # Extract trace information
+                                trace = None
+                                logging.info(f"🔍 TRACE EXTRACTION DEBUG for {score_name}:")
+                                logging.info(f"  - predictions type: {type(predictions)}")
+                                logging.info(f"  - predictions attributes: {dir(predictions)}")
+                                logging.info(f"  - has trace attr: {hasattr(predictions, 'trace')}")
+                                logging.info(f"  - has metadata attr: {hasattr(predictions, 'metadata')}")
+                                
+                                if hasattr(predictions, 'trace'):
+                                    trace = predictions.trace
+                                    logging.info(f"  ✅ Found trace in direct attribute: {type(trace)}")
+                                elif hasattr(predictions, 'metadata') and predictions.metadata:
+                                    logging.info(f"  - metadata type: {type(predictions.metadata)}")
+                                    logging.info(f"  - metadata keys: {list(predictions.metadata.keys()) if isinstance(predictions.metadata, dict) else 'not a dict'}")
+                                    trace = predictions.metadata.get('trace')
+                                    if trace:
+                                        logging.info(f"  ✅ Found trace in metadata: {type(trace)}")
+                                        logging.info(f"  - trace keys: {list(trace.keys()) if isinstance(trace, dict) else 'not a dict'}")
+                                        if isinstance(trace, dict) and 'node_results' in trace:
+                                            logging.info(f"  - node_results count: {len(trace['node_results'])}")
+                                            
+                                            # Add text and metadata to trace for debugging/analysis
+                                            if isinstance(trace, dict):
+                                                import json
+                                                # Get text and metadata from sample_row
+                                                input_text = sample_row.iloc[0].get('text', '') if sample_row is not None else ''
+                                                input_metadata_str = sample_row.iloc[0].get('metadata', '{}') if sample_row is not None else '{}'
+                                                try:
+                                                    input_metadata = json.loads(input_metadata_str) if input_metadata_str else {}
+                                                except json.JSONDecodeError:
+                                                    input_metadata = {}
+                                                
+                                                trace['input_text'] = input_text
+                                                trace['input_metadata'] = input_metadata
+                                                logging.info(f"  ✅ Added input text ({len(input_text)} chars) and metadata ({len(input_metadata)} keys) to trace")
+                                            
+                                            # Test JSON serialization
+                                            try:
+                                                import json
+                                                json_trace = json.dumps(trace, default=str)
+                                                logging.info(f"  ✅ Trace is JSON serializable (length: {len(json_trace)})")
+                                            except Exception as json_error:
+                                                logging.error(f"  ❌ Trace is NOT JSON serializable: {json_error}")
+                                                # Try to make a JSON-safe version
+                                                try:
+                                                    safe_trace = json.loads(json.dumps(trace, default=str))
+                                                    trace = safe_trace
+                                                    logging.info(f"  ✅ Created JSON-safe trace version")
+                                                except Exception as safe_error:
+                                                    logging.error(f"  ❌ Could not create JSON-safe trace: {safe_error}")
+                                                    trace = {"error": "Trace data could not be serialized", "original_error": str(json_error)}
+                                    else:
+                                        logging.info(f"  ❌ No trace found in metadata")
+                                        # Check for nested metadata structures
+                                        if isinstance(predictions.metadata, dict):
+                                            for key, value in predictions.metadata.items():
+                                                if isinstance(value, dict) and 'trace' in value:
+                                                    logging.info(f"  🔍 Found nested trace in metadata['{key}']['trace']")
+                                                    trace = value['trace']
+                                                    break
+                                else:
+                                    logging.info(f"  ❌ No metadata attribute found")
+                                
+                                if not trace:
+                                    logging.warning(f"  ⚠️ No trace data found anywhere in predictions object")
+                                
+                                row_result[f'{score_name}_trace'] = trace
+                                logging.info(f"Got predictions: {predictions}")
+                    else:
+                        row_result[f'{score_name}_value'] = None
+                        row_result[f'{score_name}_explanation'] = None
+                        row_result[f'{score_name}_cost'] = None
+                        row_result[f'{score_name}_trace'] = None
                     
-                    row_result = {'item_id': used_item_id}
-                    if sample_row is not None:
-                        row_result['text'] = sample_row.iloc[0].get('text', '')
-                    
-                    try:
-                        # Update progress: Running prediction
+                except BatchProcessingPause:
+                    raise
+                except Exception as e:
+                    logging.error(f"Error processing score {score_name}: {e}")
+                    logging.error(f"Full traceback: {traceback.format_exc()}")
+                    raise
+                
+                return row_result
+            
+            # Create all prediction tasks
+            tasks = []
+            for iteration in range(number_of_times):
+                for item_idx, item_identifier in enumerate(item_identifiers):
+                    for score_idx, score_name in enumerate(score_names):
+                        prediction_num = iteration * len(item_identifiers) * len(score_names) + item_idx * len(score_names) + score_idx + 1
+                        task = process_single_prediction(iteration, item_idx, item_identifier, score_idx, score_name, prediction_num)
+                        tasks.append(task)
+            
+            # Run all predictions in parallel
+            logging.info(f"Running {len(tasks)} predictions in parallel for {len(item_identifiers)} items")
+            if tracker:
+                tracker.current_stage.status_message = f"Running {len(tasks)} predictions in parallel..."
+                tracker.update(current_items=0)
+            
+            # Execute all tasks concurrently
+            prediction_results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Process results and handle any exceptions
+            for i, result in enumerate(prediction_results):
+                if isinstance(result, Exception):
+                    logging.error(f"Prediction task {i+1} failed: {result}")
+                    if isinstance(result, BatchProcessingPause):
+                        raise result  # Re-raise BatchProcessingPause
+                    # For other exceptions, we could either fail completely or continue with other results
+                    # For now, let's continue but log the error
+                    continue
+                
+                # Add successful results
+                if any(result.get(f'{name}_value') is not None for name in score_names):
+                    results.append(result)
+                
+                # Update progress
+                current_prediction += 1
+                if tracker:
+                    tracker.current_stage.status_message = f"Completed prediction {current_prediction}/{total_predictions}"
+                    tracker.update(current_items=current_prediction)
+        
+        else:
+            # Single item or no specific item - use original sequential processing
+            for iteration in range(number_of_times):
+                for item_idx, item_identifier in enumerate(item_identifiers):
+                    for score_idx, score_name in enumerate(score_names):
+                        # Update progress for current prediction
                         if tracker:
-                            tracker.current_stage.status_message = f"Running prediction for score: {score_name}"
+                            prediction_num = iteration * len(item_identifiers) * len(score_names) + item_idx * len(score_names) + score_idx + 1
+                            tracker.current_stage.status_message = f"Processing prediction {prediction_num}/{total_predictions} for item {item_identifier or 'random'}, score: {score_name}"
                             tracker.update(current_items=current_prediction)
                         
-                        transcript, predictions, costs = await predict_score(
-                            score_name, scorecard_class, sample_row, used_item_id
+                        # Step 1: Look up item text and metadata
+                        if tracker:
+                            tracker.current_stage.status_message = f"Looking up item text and metadata for prediction {prediction_num}/{total_predictions}"
+                            tracker.update(current_items=current_prediction)
+                        
+                        sample_row, used_item_id = select_sample(
+                            scorecard_class, score_name, item_identifier, fresh
                         )
                         
-                        if predictions:
-                            if isinstance(predictions, list):
-                                # Handle list of results
-                                prediction = predictions[0] if predictions else None
-                                if prediction:
-                                    row_result[f'{score_name}_value'] = prediction.value
-                                    row_result[f'{score_name}_explanation'] = prediction.explanation
-                                    row_result[f'{score_name}_cost'] = costs
-                                    # Extract trace information
-                                    if hasattr(prediction, 'trace'):
-                                        row_result[f'{score_name}_trace'] = prediction.trace
-                                    elif hasattr(prediction, 'metadata') and prediction.metadata:
-                                        row_result[f'{score_name}_trace'] = prediction.metadata.get('trace')
-                                    else:
-                                        row_result[f'{score_name}_trace'] = None
-                                    logging.info(f"Got predictions: {predictions}")
-                            else:
-                                # Handle Score.Result object
-                                if hasattr(predictions, 'value') and predictions.value is not None:
-                                    row_result[f'{score_name}_value'] = predictions.value
-                                    # ✅ ENHANCED: Get explanation from direct field first, then metadata
-                                    explanation = (
-                                        getattr(predictions, 'explanation', None) or
-                                        predictions.metadata.get('explanation', '') if hasattr(predictions, 'metadata') and predictions.metadata else
-                                        ''
-                                    )
-                                    row_result[f'{score_name}_explanation'] = explanation
-                                    row_result[f'{score_name}_cost'] = costs
-                                    # Extract trace information
-                                    trace = None
-                                    logging.info(f"🔍 TRACE EXTRACTION DEBUG for {score_name}:")
-                                    logging.info(f"  - predictions type: {type(predictions)}")
-                                    logging.info(f"  - predictions attributes: {dir(predictions)}")
-                                    logging.info(f"  - has trace attr: {hasattr(predictions, 'trace')}")
-                                    logging.info(f"  - has metadata attr: {hasattr(predictions, 'metadata')}")
-                                    
-                                    if hasattr(predictions, 'trace'):
-                                        trace = predictions.trace
-                                        logging.info(f"  ✅ Found trace in direct attribute: {type(trace)}")
-                                    elif hasattr(predictions, 'metadata') and predictions.metadata:
-                                        logging.info(f"  - metadata type: {type(predictions.metadata)}")
-                                        logging.info(f"  - metadata keys: {list(predictions.metadata.keys()) if isinstance(predictions.metadata, dict) else 'not a dict'}")
-                                        trace = predictions.metadata.get('trace')
-                                        if trace:
-                                            logging.info(f"  ✅ Found trace in metadata: {type(trace)}")
-                                            logging.info(f"  - trace keys: {list(trace.keys()) if isinstance(trace, dict) else 'not a dict'}")
-                                            if isinstance(trace, dict) and 'node_results' in trace:
-                                                logging.info(f"  - node_results count: {len(trace['node_results'])}")
-                                                
-                                                # Add text and metadata to trace for debugging/analysis
-                                                if isinstance(trace, dict):
-                                                    import json
-                                                    # Get text and metadata from sample_row
-                                                    input_text = sample_row.iloc[0].get('text', '') if sample_row is not None else ''
-                                                    input_metadata_str = sample_row.iloc[0].get('metadata', '{}') if sample_row is not None else '{}'
-                                                    try:
-                                                        input_metadata = json.loads(input_metadata_str) if input_metadata_str else {}
-                                                    except json.JSONDecodeError:
-                                                        input_metadata = {}
-                                                    
-                                                    trace['input_text'] = input_text
-                                                    trace['input_metadata'] = input_metadata
-                                                    logging.info(f"  ✅ Added input text ({len(input_text)} chars) and metadata ({len(input_metadata)} keys) to trace")
-                                                
-                                                # Test JSON serialization
-                                                try:
-                                                    import json
-                                                    json_trace = json.dumps(trace, default=str)
-                                                    logging.info(f"  ✅ Trace is JSON serializable (length: {len(json_trace)})")
-                                                except Exception as json_error:
-                                                    logging.error(f"  ❌ Trace is NOT JSON serializable: {json_error}")
-                                                    # Try to make a JSON-safe version
-                                                    try:
-                                                        safe_trace = json.loads(json.dumps(trace, default=str))
-                                                        trace = safe_trace
-                                                        logging.info(f"  ✅ Created JSON-safe trace version")
-                                                    except Exception as safe_error:
-                                                        logging.error(f"  ❌ Could not create JSON-safe trace: {safe_error}")
-                                                        trace = {"error": "Trace data could not be serialized", "original_error": str(json_error)}
-                                        else:
-                                            logging.info(f"  ❌ No trace found in metadata")
-                                            # Check for nested metadata structures
-                                            if isinstance(predictions.metadata, dict):
-                                                for key, value in predictions.metadata.items():
-                                                    if isinstance(value, dict) and 'trace' in value:
-                                                        logging.info(f"  🔍 Found nested trace in metadata['{key}']['trace']")
-                                                        trace = value['trace']
-                                                        break
-                                    else:
-                                        logging.info(f"  ❌ No metadata attribute found")
-                                    
-                                    if not trace:
-                                        logging.warning(f"  ⚠️ No trace data found anywhere in predictions object")
-                                    
-                                    row_result[f'{score_name}_trace'] = trace
-                                    logging.info(f"Got predictions: {predictions}")
-                        else:
-                            row_result[f'{score_name}_value'] = None
-                            row_result[f'{score_name}_explanation'] = None
-                            row_result[f'{score_name}_cost'] = None
-                            row_result[f'{score_name}_trace'] = None
+                        # Step 2: Item lookup completed
+                        if tracker:
+                            tracker.current_stage.status_message = f"Item data loaded - running prediction {prediction_num}/{total_predictions} for score: {score_name}"
+                            tracker.update(current_items=current_prediction)
                         
-                    except BatchProcessingPause:
-                        raise
-                    except Exception as e:
-                        logging.error(f"Error processing score {score_name}: {e}")
-                        logging.error(f"Full traceback: {traceback.format_exc()}")
-                        raise
-                    
-                    if any(row_result.get(f'{name}_value') is not None for name in score_names):
-                        results.append(row_result)
-                    
-                    # Update progress: Prediction completed
-                    current_prediction += 1
-                    if tracker:
-                        tracker.current_stage.status_message = f"Completed prediction {current_prediction}/{total_predictions}"
-                        tracker.update(current_items=current_prediction)
+                        row_result = {'item_id': used_item_id}
+                        if sample_row is not None:
+                            row_result['text'] = sample_row.iloc[0].get('text', '')
+                        
+                        try:
+                            # Update progress: Running prediction
+                            if tracker:
+                                tracker.current_stage.status_message = f"Running prediction for score: {score_name}"
+                                tracker.update(current_items=current_prediction)
+                            
+                            transcript, predictions, costs = await predict_score(
+                                score_name, scorecard_class, sample_row, used_item_id
+                            )
+                            
+                            if predictions:
+                                if isinstance(predictions, list):
+                                    # Handle list of results
+                                    prediction = predictions[0] if predictions else None
+                                    if prediction:
+                                        row_result[f'{score_name}_value'] = prediction.value
+                                        row_result[f'{score_name}_explanation'] = prediction.explanation
+                                        row_result[f'{score_name}_cost'] = costs
+                                        # Extract trace information
+                                        if hasattr(prediction, 'trace'):
+                                            row_result[f'{score_name}_trace'] = prediction.trace
+                                        elif hasattr(prediction, 'metadata') and prediction.metadata:
+                                            row_result[f'{score_name}_trace'] = prediction.metadata.get('trace')
+                                        else:
+                                            row_result[f'{score_name}_trace'] = None
+                                        logging.info(f"Got predictions: {predictions}")
+                                else:
+                                    # Handle Score.Result object
+                                    if hasattr(predictions, 'value') and predictions.value is not None:
+                                        row_result[f'{score_name}_value'] = predictions.value
+                                        # ✅ ENHANCED: Get explanation from direct field first, then metadata
+                                        explanation = (
+                                            getattr(predictions, 'explanation', None) or
+                                            predictions.metadata.get('explanation', '') if hasattr(predictions, 'metadata') and predictions.metadata else
+                                            ''
+                                        )
+                                        row_result[f'{score_name}_explanation'] = explanation
+                                        row_result[f'{score_name}_cost'] = costs
+                                        # Extract trace information
+                                        trace = None
+                                        logging.info(f"🔍 TRACE EXTRACTION DEBUG for {score_name}:")
+                                        logging.info(f"  - predictions type: {type(predictions)}")
+                                        logging.info(f"  - predictions attributes: {dir(predictions)}")
+                                        logging.info(f"  - has trace attr: {hasattr(predictions, 'trace')}")
+                                        logging.info(f"  - has metadata attr: {hasattr(predictions, 'metadata')}")
+                                        
+                                        if hasattr(predictions, 'trace'):
+                                            trace = predictions.trace
+                                            logging.info(f"  ✅ Found trace in direct attribute: {type(trace)}")
+                                        elif hasattr(predictions, 'metadata') and predictions.metadata:
+                                            logging.info(f"  - metadata type: {type(predictions.metadata)}")
+                                            logging.info(f"  - metadata keys: {list(predictions.metadata.keys()) if isinstance(predictions.metadata, dict) else 'not a dict'}")
+                                            trace = predictions.metadata.get('trace')
+                                            if trace:
+                                                logging.info(f"  ✅ Found trace in metadata: {type(trace)}")
+                                                logging.info(f"  - trace keys: {list(trace.keys()) if isinstance(trace, dict) else 'not a dict'}")
+                                                if isinstance(trace, dict) and 'node_results' in trace:
+                                                    logging.info(f"  - node_results count: {len(trace['node_results'])}")
+                                                    
+                                                    # Add text and metadata to trace for debugging/analysis
+                                                    if isinstance(trace, dict):
+                                                        import json
+                                                        # Get text and metadata from sample_row
+                                                        input_text = sample_row.iloc[0].get('text', '') if sample_row is not None else ''
+                                                        input_metadata_str = sample_row.iloc[0].get('metadata', '{}') if sample_row is not None else '{}'
+                                                        try:
+                                                            input_metadata = json.loads(input_metadata_str) if input_metadata_str else {}
+                                                        except json.JSONDecodeError:
+                                                            input_metadata = {}
+                                                        
+                                                        trace['input_text'] = input_text
+                                                        trace['input_metadata'] = input_metadata
+                                                        logging.info(f"  ✅ Added input text ({len(input_text)} chars) and metadata ({len(input_metadata)} keys) to trace")
+                                                    
+                                                    # Test JSON serialization
+                                                    try:
+                                                        import json
+                                                        json_trace = json.dumps(trace, default=str)
+                                                        logging.info(f"  ✅ Trace is JSON serializable (length: {len(json_trace)})")
+                                                    except Exception as json_error:
+                                                        logging.error(f"  ❌ Trace is NOT JSON serializable: {json_error}")
+                                                        # Try to make a JSON-safe version
+                                                        try:
+                                                            safe_trace = json.loads(json.dumps(trace, default=str))
+                                                            trace = safe_trace
+                                                            logging.info(f"  ✅ Created JSON-safe trace version")
+                                                        except Exception as safe_error:
+                                                            logging.error(f"  ❌ Could not create JSON-safe trace: {safe_error}")
+                                                            trace = {"error": "Trace data could not be serialized", "original_error": str(json_error)}
+                                            else:
+                                                logging.info(f"  ❌ No trace found in metadata")
+                                                # Check for nested metadata structures
+                                                if isinstance(predictions.metadata, dict):
+                                                    for key, value in predictions.metadata.items():
+                                                        if isinstance(value, dict) and 'trace' in value:
+                                                            logging.info(f"  🔍 Found nested trace in metadata['{key}']['trace']")
+                                                            trace = value['trace']
+                                                            break
+                                        else:
+                                            logging.info(f"  ❌ No metadata attribute found")
+                                        
+                                        if not trace:
+                                            logging.warning(f"  ⚠️ No trace data found anywhere in predictions object")
+                                        
+                                        row_result[f'{score_name}_trace'] = trace
+                                        logging.info(f"Got predictions: {predictions}")
+                            else:
+                                row_result[f'{score_name}_value'] = None
+                                row_result[f'{score_name}_explanation'] = None
+                                row_result[f'{score_name}_cost'] = None
+                                row_result[f'{score_name}_trace'] = None
+                            
+                        except BatchProcessingPause:
+                            raise
+                        except Exception as e:
+                            logging.error(f"Error processing score {score_name}: {e}")
+                            logging.error(f"Full traceback: {traceback.format_exc()}")
+                            raise
+                        
+                        if any(row_result.get(f'{name}_value') is not None for name in score_names):
+                            results.append(row_result)
+                        
+                        # Update progress: Prediction completed
+                        current_prediction += 1
+                        if tracker:
+                            tracker.current_stage.status_message = f"Completed prediction {current_prediction}/{total_predictions}"
+                            tracker.update(current_items=current_prediction)
 
         # Complete the Predicting stage
         if tracker:
