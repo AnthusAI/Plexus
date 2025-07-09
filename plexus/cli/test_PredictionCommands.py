@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import Mock, patch, MagicMock, AsyncMock
+from unittest.mock import Mock, patch, MagicMock, AsyncMock, ANY
 from click.testing import CliRunner
 import pandas as pd
 import asyncio
@@ -182,6 +182,39 @@ class TestPredictCommand:
             
             mock_sys.exit.assert_called_with(1)
     
+    def test_predict_command_item_items_conflict(self, runner):
+        """Test that --item and --items cannot be used together"""
+        result = runner.invoke(predict, [
+            '--scorecard', 'test-scorecard',
+            '--score', 'test-score',
+            '--item', 'item-1',
+            '--items', 'item-1,item-2',
+            '--format', 'yaml'
+        ])
+        
+        # The command should fail with a non-zero exit code
+        assert result.exit_code != 0
+        
+        # Check for the error message in output first (preferred method)
+        output_text = result.output + (result.stderr or "")
+        if "Cannot specify both --item and --items" in output_text:
+            # Success - error message found in output
+            return
+        
+        # Fallback: Check the exception if output capture failed
+        if result.exception:
+            # Check if it's a SystemExit with code 1 (which is what we expect)
+            assert isinstance(result.exception, SystemExit)
+            assert result.exception.code == 1
+            
+            # The original BadParameter exception should be in the traceback
+            import traceback
+            tb_str = ''.join(traceback.format_exception(type(result.exception), result.exception, result.exception.__traceback__))
+            assert "Cannot specify both --item and --items" in tb_str
+        else:
+            # If neither output nor exception contains the error, fail the test
+            pytest.fail(f"Expected error message not found. Output: {repr(output_text)}, Exception: {result.exception}")
+
     def test_predict_command_multiple_scores(self, runner, mock_scorecard_registry, sample_scorecard_class):
         """Test predict command with multiple score names"""
         mock_scorecard_registry.get.return_value = sample_scorecard_class
@@ -270,7 +303,45 @@ class TestPredictImpl:
             parsed_json = json.loads(call_args)
             assert len(parsed_json) == 1
             assert parsed_json[0]['item_id'] == 'item-123'
-            assert parsed_json[0]['test-score']['value'] == 8.5
+            assert parsed_json[0]['scores'][0]['name'] == 'test-score'
+            assert parsed_json[0]['scores'][0]['value'] == 8.5
+
+    @pytest.mark.asyncio
+    async def test_predict_impl_success_yaml_format(self, mock_scorecard_registry, sample_scorecard_class):
+        """Test predict_impl with successful prediction in YAML format"""
+        mock_scorecard_registry.get.return_value = sample_scorecard_class
+        
+        with patch('plexus.cli.PredictionCommands.get_scorecard_class') as mock_get_scorecard, \
+             patch('plexus.cli.PredictionCommands.select_sample') as mock_select_sample, \
+             patch('plexus.cli.PredictionCommands.predict_score') as mock_predict_score, \
+             patch('plexus.cli.PredictionCommands.output_yaml_prediction_results') as mock_yaml_output:
+            
+            mock_get_scorecard.return_value = sample_scorecard_class
+            mock_select_sample.return_value = (pd.DataFrame([{'text': 'test'}]), 'item-123')
+            
+            mock_prediction = Mock()
+            mock_prediction.value = 8.5
+            mock_prediction.explanation = "Test explanation"
+            mock_prediction.trace = "test-trace"
+            mock_predict_score.return_value = (Mock(), mock_prediction, Decimal('0.05'))
+            
+            await predict_impl(
+                scorecard_identifier='test-scorecard',
+                score_names=['test-score'],
+                format='yaml',
+                include_input=True,
+                include_trace=True
+            )
+            
+            mock_yaml_output.assert_called_once_with(
+                results=ANY,
+                score_names=['test-score'],
+                scorecard_identifier='test-scorecard',
+                score_identifier='test-score',
+                item_identifiers=[None],
+                include_input=True,
+                include_trace=True
+            )
     
     @pytest.mark.asyncio
     async def test_predict_impl_excel_output(self, mock_scorecard_registry, sample_scorecard_class):
@@ -364,6 +435,61 @@ class TestPredictImpl:
                     scorecard_identifier='test-scorecard',
                     score_names=['test-score']
                 )
+
+    @pytest.mark.asyncio
+    async def test_predict_impl_multiple_items(self, mock_scorecard_registry, sample_scorecard_class):
+        """Test predict_impl with multiple items"""
+        mock_scorecard_registry.get.return_value = sample_scorecard_class
+        
+        with patch('plexus.cli.PredictionCommands.get_scorecard_class') as mock_get_scorecard, \
+             patch('plexus.cli.PredictionCommands.select_sample') as mock_select_sample, \
+             patch('plexus.cli.PredictionCommands.predict_score') as mock_predict_score, \
+             patch('plexus.cli.PredictionCommands.output_yaml_prediction_results') as mock_yaml_output:
+            
+            mock_get_scorecard.return_value = sample_scorecard_class
+            
+            # Mock different samples for each item
+            mock_select_sample.side_effect = [
+                (pd.DataFrame([{'text': 'test1'}]), 'item-1'),
+                (pd.DataFrame([{'text': 'test2'}]), 'item-2'),
+                (pd.DataFrame([{'text': 'test3'}]), 'item-3')
+            ]
+            
+            # Mock predictions for each item
+            mock_predictions = []
+            for i in range(3):
+                mock_prediction = Mock()
+                mock_prediction.value = f"prediction-{i+1}"
+                mock_prediction.explanation = f"Test explanation {i+1}"
+                mock_prediction.trace = f"test-trace-{i+1}"
+                mock_predictions.append((Mock(), mock_prediction, Decimal('0.05')))
+            
+            mock_predict_score.side_effect = mock_predictions
+            
+            await predict_impl(
+                scorecard_identifier='test-scorecard',
+                score_names=['test-score'],
+                item_identifiers=['item-1', 'item-2', 'item-3'],
+                format='yaml',
+                include_input=True,
+                include_trace=True
+            )
+            
+            # Verify all items were processed
+            assert mock_select_sample.call_count == 3
+            assert mock_predict_score.call_count == 3
+            
+            # Verify YAML output was called with correct parameters
+            mock_yaml_output.assert_called_once()
+            call_args = mock_yaml_output.call_args
+            assert call_args[1]['item_identifiers'] == ['item-1', 'item-2', 'item-3']
+            assert len(call_args[1]['results']) == 3
+            
+            # Verify each result has the correct item_id
+            results = call_args[1]['results']
+            assert results[0]['item_id'] == 'item-1'
+            assert results[1]['item_id'] == 'item-2'
+            assert results[2]['item_id'] == 'item-3'
 
 
 class TestOutputExcel:
