@@ -67,8 +67,8 @@ export const DATA_SOURCE_YAML_SCHEMA = {
   properties: {
     class: {
       type: 'string',
-      enum: ['CallCriteriaDBCache'],
-      description: 'Data source class - currently only CallCriteriaDBCache is supported'
+      enum: ['CallCriteriaDBCache', 'FeedbackItems'],
+      description: 'Data source class - CallCriteriaDBCache or FeedbackItems'
     },
     queries: {
       type: 'array',
@@ -118,12 +118,53 @@ export const DATA_SOURCE_YAML_SCHEMA = {
     balance: {
       type: 'boolean',
       description: 'Whether to balance the dataset (defaults to true)'
+    },
+    // FeedbackItems specific fields
+    scorecard: {
+      oneOf: [
+        { type: 'string' },
+        { type: 'number' }
+      ],
+      description: 'Scorecard identifier (name, key, ID, or external ID)'
+    },
+    score: {
+      oneOf: [
+        { type: 'string' },
+        { type: 'number' }
+      ],
+      description: 'Score identifier (name, key, ID, or external ID)'
+    },
+    days: {
+      type: 'number',
+      minimum: 1,
+      description: 'Number of days back to search for feedback items'
+    },
+    limit: {
+      type: 'number',
+      minimum: 1,
+      description: 'Maximum total number of items in the dataset'
+    },
+    limit_per_cell: {
+      type: 'number',
+      minimum: 1,
+      description: 'Maximum number of items to sample from each confusion matrix cell'
     }
   },
   additionalProperties: false,
   anyOf: [
-    { required: ['queries'] },
-    { required: ['searches'] }
+    { 
+      // CallCriteriaDBCache requirements
+      properties: { class: { const: 'CallCriteriaDBCache' } },
+      anyOf: [
+        { required: ['queries'] },
+        { required: ['searches'] }
+      ]
+    },
+    {
+      // FeedbackItems requirements
+      properties: { class: { const: 'FeedbackItems' } },
+      required: ['scorecard', 'score', 'days']
+    }
   ]
 }
 
@@ -205,15 +246,21 @@ export function createDataSourceValidationRules(): ValidationRule[] {
     new TypeValidationRule('class', 'string'),
 
     // Allowed data source classes
-    new AllowedValuesRule('class', ['CallCriteriaDBCache']),
+    new AllowedValuesRule('class', ['CallCriteriaDBCache', 'FeedbackItems']),
 
-    // Ensure either queries or searches is present
+    // Ensure either queries or searches is present (only for CallCriteriaDBCache)
     {
       rule_id: 'DATA_SOURCE_QUERIES_OR_SEARCHES_REQUIRED',
-      description: 'Data source must have either queries or searches defined',
+      description: 'CallCriteriaDBCache data source must have either queries or searches defined',
       severity: 'error',
       validate: (data: Record<string, any>) => {
         const messages: any[] = []
+        
+        // Only apply this rule to CallCriteriaDBCache
+        if (data.class !== 'CallCriteriaDBCache') {
+          return messages
+        }
+        
         const hasQueries = data.queries && Array.isArray(data.queries) && data.queries.length > 0
         const hasSearches = data.searches && Array.isArray(data.searches) && data.searches.length > 0
         
@@ -340,6 +387,106 @@ export function createDataSourceValidationRules(): ValidationRule[] {
               }
             }
           })
+        }
+        
+        return messages
+      }
+    },
+
+    // FeedbackItems validation rules
+    {
+      rule_id: 'FEEDBACK_ITEMS_VALIDATION',
+      description: 'FeedbackItems data source must have required parameters',
+      severity: 'error',
+      validate: (data: Record<string, any>) => {
+        const messages: any[] = []
+        
+        // Only apply this rule to FeedbackItems
+        if (data.class !== 'FeedbackItems') {
+          return messages
+        }
+        
+        // Required fields for FeedbackItems
+        const requiredFields = ['scorecard', 'score', 'days']
+        
+        for (const field of requiredFields) {
+          if (!(field in data) || data[field] === null || data[field] === '') {
+            messages.push({
+              level: 'error' as const,
+              code: `FEEDBACK_ITEMS_MISSING_${field.toUpperCase()}`,
+              title: `Missing ${field.charAt(0).toUpperCase() + field.slice(1)} Field`,
+              message: `FeedbackItems data source is missing required "${field}" field.`,
+              suggestion: `Add a "${field}" field to specify the ${field} parameter.`,
+              doc_url: 'https://docs.plexus.ai/yaml-dsl/data-sources#feedback-items',
+              context: { field }
+            })
+          }
+        }
+        
+        // Validate days is positive integer
+        if ('days' in data) {
+          const days = data.days
+          if (typeof days !== 'number' || days <= 0 || !Number.isInteger(days)) {
+            messages.push({
+              level: 'error' as const,
+              code: 'FEEDBACK_ITEMS_INVALID_DAYS',
+              title: 'Invalid Days Value',
+              message: 'FeedbackItems "days" must be a positive integer.',
+              suggestion: 'Set "days" to a positive integer (e.g., 7, 14, 30).',
+              doc_url: 'https://docs.plexus.ai/yaml-dsl/data-sources#feedback-items',
+              context: { current_value: days }
+            })
+          }
+        }
+        
+        // Validate limit is positive integer if present
+        if ('limit' in data) {
+          const limit = data.limit
+          if (typeof limit !== 'number' || limit <= 0 || !Number.isInteger(limit)) {
+            messages.push({
+              level: 'error' as const,
+              code: 'FEEDBACK_ITEMS_INVALID_LIMIT',
+              title: 'Invalid Limit Value',
+              message: 'FeedbackItems "limit" must be a positive integer.',
+              suggestion: 'Set "limit" to a positive integer (e.g., 100, 500, 1000).',
+              doc_url: 'https://docs.plexus.ai/yaml-dsl/data-sources#feedback-items',
+              context: { current_value: limit }
+            })
+          }
+        }
+        
+        // Validate limit_per_cell is positive integer if present
+        if ('limit_per_cell' in data) {
+          const limitPerCell = data.limit_per_cell
+          if (typeof limitPerCell !== 'number' || limitPerCell <= 0 || !Number.isInteger(limitPerCell)) {
+            messages.push({
+              level: 'error' as const,
+              code: 'FEEDBACK_ITEMS_INVALID_LIMIT_PER_CELL',
+              title: 'Invalid Limit Per Cell Value',
+              message: 'FeedbackItems "limit_per_cell" must be a positive integer.',
+              suggestion: 'Set "limit_per_cell" to a positive integer (e.g., 10, 50, 100).',
+              doc_url: 'https://docs.plexus.ai/yaml-dsl/data-sources#feedback-items',
+              context: { current_value: limitPerCell }
+            })
+          }
+        }
+        
+        // Validate scorecard and score are strings or numbers
+        for (const field of ['scorecard', 'score']) {
+          if (field in data) {
+            const value = data[field]
+            if (typeof value !== 'string' && typeof value !== 'number') {
+              messages.push({
+                level: 'error' as const,
+                code: `FEEDBACK_ITEMS_INVALID_${field.toUpperCase()}`,
+                title: `Invalid ${field.charAt(0).toUpperCase() + field.slice(1)} Value`,
+                message: `FeedbackItems "${field}" must be a string or number.`,
+                suggestion: `Set "${field}" to a string name, key, or numeric ID.`,
+                doc_url: 'https://docs.plexus.ai/yaml-dsl/data-sources#feedback-items',
+                context: { field, current_value: value }
+              })
+            }
+          }
         }
         
         return messages

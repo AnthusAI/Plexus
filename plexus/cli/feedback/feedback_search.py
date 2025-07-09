@@ -134,6 +134,7 @@ async def fetch_feedback_items_with_gsi(client, account_id: str, scorecard_id: s
                         id
                         identifiers
                         externalId
+                        text
                     }
                 }
                 nextToken

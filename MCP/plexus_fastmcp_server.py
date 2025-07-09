@@ -270,7 +270,7 @@ mcp = FastMCP(
     - plexus_predict: Run predictions on single or multiple items using specific score configurations for testing and validation
     
     ## Documentation Tools
-    - get_plexus_documentation: Access specific documentation files by name (e.g., 'score-yaml-format' for Score YAML configuration guide, 'ad-hoc-score-evaluation' for feedback analysis and score testing guide)
+    - get_plexus_documentation: Access specific documentation files by name (e.g., 'score-yaml-format' for Score YAML configuration guide, 'feedback-alignment' for feedback analysis and score testing guide)
     
     ## Utility Tools
     - think: REQUIRED tool to use before other tools to structure reasoning and plan approach
@@ -462,7 +462,7 @@ async def think(thought: str) -> str:
     
     <think_tool_example_7>
     User asked about feedback analysis, score improvement, or testing predictions.
-    - FIRST: Use get_plexus_documentation(filename="ad-hoc-score-evaluation") to get the complete guide
+    - FIRST: Use get_plexus_documentation(filename="feedback-alignment") to get the complete guide
     - This documentation includes:
       * How to find feedback items where human reviewers corrected predictions
       * Commands for searching feedback by value changes (false positives/negatives)
@@ -3460,7 +3460,7 @@ async def get_plexus_documentation(filename: str) -> str:
     
     Valid filenames:
     - score-yaml-format: Complete guide to Score YAML configuration format including LangGraph, node types, dependencies, and best practices
-    - ad-hoc-score-evaluation: Complete guide to testing score results, finding feedback items, and analyzing prediction accuracy for score improvement
+    - feedback-alignment: Complete guide to testing score results, finding feedback items, and analyzing prediction accuracy for score improvement
     
     Args:
         filename (str): The documentation file to retrieve. Must be one of the valid filenames listed above.
@@ -3479,7 +3479,7 @@ async def get_plexus_documentation(filename: str) -> str:
         # Define mapping of short names to actual filenames
         valid_files = {
             "score-yaml-format": "score-yaml-format.md",
-            "ad-hoc-score-evaluation": "ad-hoc-score-evaluation.md"
+            "feedback-alignment": "feedback-alignment.md"
         }
         
         if filename not in valid_files:

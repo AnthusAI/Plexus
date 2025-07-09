@@ -193,8 +193,34 @@ export class YamlLinter {
   }
 
   private validateObject(data: any, schema: any, path: string, result: LintResult): void {
-    // Simple schema validation implementation
-    if (schema.type) {
+    // Handle oneOf union types
+    if (schema.oneOf && Array.isArray(schema.oneOf)) {
+      const actualType = Array.isArray(data) ? 'array' : typeof data
+      let matchesAny = false
+      
+      for (const subSchema of schema.oneOf) {
+        if (subSchema.type && subSchema.type === actualType) {
+          matchesAny = true
+          break
+        }
+      }
+      
+      if (!matchesAny) {
+        const allowedTypes = schema.oneOf.map((s: any) => s.type).join(' or ')
+        this.addMessage(result, {
+          level: 'error',
+          code: 'SCHEMA_TYPE_ERROR',
+          title: 'Schema Type Error',
+          message: `Field '${path}' should be ${allowedTypes}, but got ${actualType}.`,
+          suggestion: `Please ensure '${path}' is a ${allowedTypes}.`,
+          doc_url: `${this.docBaseUrl}/schema-validation`,
+          context: { field_path: path, expected_type: allowedTypes, actual_type: actualType }
+        })
+        return
+      }
+    }
+    // Handle simple type validation
+    else if (schema.type) {
       const expectedType = schema.type
       const actualType = Array.isArray(data) ? 'array' : typeof data
       
