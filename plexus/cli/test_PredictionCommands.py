@@ -193,7 +193,26 @@ class TestPredictCommand:
         ])
         
         assert result.exit_code != 0
-        assert "Cannot specify both --item and --items" in result.output
+        
+        # Check for the error message in output first (preferred method)
+        output_text = result.output + (result.stderr or "")
+        if "Cannot specify both --item and --items" in output_text:
+            # Success - error message found in output
+            return
+        
+        # Fallback: Check the exception if output capture failed
+        if result.exception:
+            # Check if it's a SystemExit with code 1 (which is what we expect)
+            assert isinstance(result.exception, SystemExit)
+            assert result.exception.code == 1
+            
+            # The original BadParameter exception should be in the traceback
+            import traceback
+            tb_str = ''.join(traceback.format_exception(type(result.exception), result.exception, result.exception.__traceback__))
+            assert "Cannot specify both --item and --items" in tb_str
+        else:
+            # If neither output nor exception contains the error, fail the test
+            pytest.fail(f"Expected error message not found. Output: {repr(output_text)}, Exception: {result.exception}")
 
     def test_predict_command_multiple_scores(self, runner, mock_scorecard_registry, sample_scorecard_class):
         """Test predict command with multiple score names"""
