@@ -1043,7 +1043,7 @@ class LangGraphScore(Score, LangChainUser):
         model_input: Score.Input,
         thread_id: Optional[str] = None,
         batch_data: Optional[Dict[str, Any]] = None,
-        **kwargs
+        **_kwargs: Any
     ) -> Score.Result:
         """
         Make predictions using the LangGraph workflow.
@@ -1195,7 +1195,7 @@ class LangGraphScore(Score, LangChainUser):
         await self.async_setup()
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(self, _exc_type: Any, _exc_val: Any, _exc_tb: Any):
         """Async context manager exit."""
         await self.cleanup()
 
