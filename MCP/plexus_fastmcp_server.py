@@ -97,13 +97,18 @@ try:
     sys.stdout = path_stdout
     
     # Add Plexus project root to Python path if necessary
-    plexus_root = os.path.dirname(os.path.abspath(__file__))
-    if plexus_root not in sys.path:
-        sys.path.append(plexus_root)
-    # Also add parent if running from within Plexus directory structure
-    parent_dir = os.path.dirname(plexus_root)
-    if parent_dir not in sys.path:
-        sys.path.append(parent_dir)
+    # The MCP server is in MCP/ directory, but plexus package is in the parent directory
+    mcp_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(mcp_dir)  # Go up one level to project root
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)  # Insert at beginning for priority
+        logger.info(f"Added project root to Python path: {project_root}")
+    
+    # Log the paths for debugging
+    logger.info(f"MCP directory: {mcp_dir}")
+    logger.info(f"Project root: {project_root}")
+    logger.info(f"Looking for plexus package at: {os.path.join(project_root, 'plexus')}")
+    logger.info(f"Plexus package exists: {os.path.exists(os.path.join(project_root, 'plexus'))}")
     
     # Check if anything was written during path setup
     path_output = path_stdout.getvalue()
@@ -234,11 +239,12 @@ mcp = FastMCP(
     - get_plexus_score_details: Get configuration and version details for a specific score within a scorecard
     
     ## Score Configuration Management
-    - find_plexus_score: Intelligent search to find a specific score within scorecards using flexible identifiers
-    - get_plexus_score_configuration: Get the YAML configuration for a specific score version (REFACTORED to use reusable Score methods)
-    - pull_plexus_score_configuration: Pull a score's champion version YAML configuration to a local file (NEW - uses Score.pull_configuration())
-    - push_plexus_score_configuration: Push a score's local YAML configuration file to create a new version (NEW - uses Score.push_configuration())
-    - update_plexus_score_configuration: Update a score's configuration by creating a new version with provided YAML content (REFACTORED to use Score.push_configuration())
+    - find_plexus_score: Intelligent search to find a specific score within scorecards using flexible identifiers (supports pattern matching)
+    - get_plexus_score_configuration: Get the YAML configuration for a specific score version
+    - pull_plexus_score_configuration: Pull a score's champion version YAML configuration to a local file
+    - push_plexus_score_configuration: Push a score's local YAML configuration file to create a new version
+    - update_plexus_score_configuration: Update a score's configuration by creating a new version with provided YAML content
+    - delete_plexus_score: Delete a specific score by ID (uses shared ScoreService - includes safety confirmation step)
     
     ## Evaluation Tools
     - run_plexus_evaluation: Dispatches a scorecard evaluation to run in the background. 
@@ -274,6 +280,108 @@ mcp = FastMCP(
 )
 
 # --- Tool Implementations ---
+
+@mcp.tool()
+async def debug_plexus_imports() -> str:
+    """
+    Diagnostic tool to debug Plexus import issues.
+    
+    Returns detailed information about:
+    - Python path setup
+    - File system structure
+    - Import errors
+    - Environment information
+    """
+    import sys
+    import os
+    import traceback
+    
+    debug_info = []
+    
+    # Basic environment info
+    debug_info.append("=== ENVIRONMENT INFO ===")
+    debug_info.append(f"Python executable: {sys.executable}")
+    debug_info.append(f"Python version: {sys.version}")
+    debug_info.append(f"Current working directory: {os.getcwd()}")
+    
+    # Path info
+    debug_info.append("\n=== PYTHON PATH ===")
+    for i, path in enumerate(sys.path[:10]):  # Show first 10 paths
+        debug_info.append(f"{i}: {path}")
+    
+    # MCP server location info
+    debug_info.append("\n=== MCP SERVER LOCATION ===")
+    mcp_file = os.path.abspath(__file__)
+    mcp_dir = os.path.dirname(mcp_file)
+    project_root = os.path.dirname(mcp_dir)
+    
+    debug_info.append(f"MCP server file: {mcp_file}")
+    debug_info.append(f"MCP directory: {mcp_dir}")
+    debug_info.append(f"Project root: {project_root}")
+    
+    # Check for plexus package
+    debug_info.append("\n=== PLEXUS PACKAGE DETECTION ===")
+    plexus_dir = os.path.join(project_root, "plexus")
+    debug_info.append(f"Looking for plexus at: {plexus_dir}")
+    debug_info.append(f"Plexus directory exists: {os.path.exists(plexus_dir)}")
+    
+    if os.path.exists(plexus_dir):
+        debug_info.append(f"Plexus directory contents:")
+        try:
+            for item in os.listdir(plexus_dir)[:10]:  # First 10 items
+                item_path = os.path.join(plexus_dir, item)
+                debug_info.append(f"  {item} ({'dir' if os.path.isdir(item_path) else 'file'})")
+        except Exception as e:
+            debug_info.append(f"  Error listing contents: {e}")
+    
+    # Check specific plexus modules
+    debug_info.append("\n=== PLEXUS MODULE IMPORT TESTS ===")
+    
+    # Test basic plexus import
+    try:
+        import plexus
+        debug_info.append("✓ Successfully imported 'plexus'")
+        debug_info.append(f"  plexus.__file__: {getattr(plexus, '__file__', 'Not available')}")
+    except Exception as e:
+        debug_info.append(f"✗ Failed to import 'plexus': {e}")
+        debug_info.append(f"  Traceback: {traceback.format_exc()}")
+    
+    # Test dashboard client import
+    try:
+        from plexus.dashboard.api.client import PlexusDashboardClient
+        debug_info.append("✓ Successfully imported PlexusDashboardClient")
+    except Exception as e:
+        debug_info.append(f"✗ Failed to import PlexusDashboardClient: {e}")
+    
+    # Test CLI imports
+    try:
+        from plexus.cli.client_utils import create_client
+        debug_info.append("✓ Successfully imported create_client from cli.client_utils")
+    except Exception as e:
+        debug_info.append(f"✗ Failed to import create_client: {e}")
+    
+    try:
+        from plexus.cli.score import ScoreService
+        debug_info.append("✓ Successfully imported ScoreService")
+    except Exception as e:
+        debug_info.append(f"✗ Failed to import ScoreService: {e}")
+    
+    # Environment variables
+    debug_info.append("\n=== ENVIRONMENT VARIABLES ===")
+    plexus_vars = {k: v for k, v in os.environ.items() if 'PLEXUS' in k.upper()}
+    if plexus_vars:
+        for key, value in plexus_vars.items():
+            # Don't show full API keys for security
+            display_value = value[:10] + "..." if len(value) > 10 else value
+            debug_info.append(f"{key}: {display_value}")
+    else:
+        debug_info.append("No PLEXUS_* environment variables found")
+    
+    # Global state
+    debug_info.append(f"\n=== GLOBAL STATE ===")
+    debug_info.append(f"PLEXUS_CORE_AVAILABLE: {PLEXUS_CORE_AVAILABLE}")
+    
+    return "\n".join(debug_info)
 
 @mcp.tool()
 async def think(thought: str) -> str:
@@ -3907,6 +4015,78 @@ def get_task_url(task_id: str) -> str:
     - Full URL to the task in the dashboard
     """
     return get_plexus_url(f"lab/tasks/{task_id}")
+
+@mcp.tool()
+async def delete_plexus_score(
+    score_id: str,
+    confirm: Optional[bool] = False
+) -> Union[str, Dict[str, Any]]:
+    """
+    Deletes a specific score by its ID.
+    
+    Parameters:
+    - score_id: The ID of the score to delete
+    - confirm: Whether to skip confirmation (default: False for safety)
+    
+    Returns:
+    - Confirmation of deletion or error message
+    """
+    import sys
+    import os
+    
+    # Temporarily redirect stdout to capture any unexpected output
+    old_stdout = sys.stdout
+    temp_stdout = StringIO()
+    sys.stdout = temp_stdout
+    
+    try:
+        # Check if Plexus core modules are available
+        if not PLEXUS_CORE_AVAILABLE:
+            return "Error: Plexus Dashboard components are not available. Core modules failed to import."
+        
+        # Ensure project root is in Python path for ScoreService import
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if project_root not in sys.path:
+            sys.path.insert(0, project_root)
+            logger.info(f"Added project root to Python path: {project_root}")
+        
+        try:
+            # Use the shared score service
+            from plexus.cli.score import ScoreService
+            logger.info("Successfully imported ScoreService")
+            
+            score_service = ScoreService()
+            result = score_service.delete_score(score_id, confirm)
+            
+            return result
+            
+        except ImportError as import_err:
+            logger.error(f"Failed to import ScoreService: {import_err}")
+            # Add more detailed debugging
+            logger.error(f"Current working directory: {os.getcwd()}")
+            logger.error(f"Python path first 3 entries: {sys.path[:3]}")
+            score_init_path = os.path.join(project_root, "plexus", "cli", "score", "__init__.py")
+            score_service_path = os.path.join(project_root, "plexus", "cli", "score", "score_service.py")
+            logger.error(f"Score __init__.py exists: {os.path.exists(score_init_path)}")
+            logger.error(f"Score service exists: {os.path.exists(score_service_path)}")
+            return f"Error: Failed to import ScoreService. {import_err}"
+            
+        except Exception as service_err:
+            logger.error(f"Error using ScoreService: {service_err}")
+            return f"Error using ScoreService: {service_err}"
+        
+    except Exception as e:
+        logger.error(f"Unexpected error in delete_plexus_score: {str(e)}", exc_info=True)
+        return f"Unexpected error: {str(e)}"
+    finally:
+        # Check if anything was written to stdout
+        captured_output = temp_stdout.getvalue()
+        if captured_output:
+            logger.warning(f"Captured unexpected stdout during delete_plexus_score: {captured_output}")
+        # Restore original stdout
+        sys.stdout = old_stdout
+
+
 
 # Main function to run the server
 if __name__ == "__main__":
