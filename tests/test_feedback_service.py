@@ -24,6 +24,7 @@ class TestFeedbackItemSummary:
         """Test creating a FeedbackItemSummary with all fields."""
         summary = FeedbackItemSummary(
             item_id="item123",
+            external_id="EXT123",
             initial_value="No",
             final_value="Yes", 
             initial_explanation="AI thought this was negative",
@@ -32,6 +33,7 @@ class TestFeedbackItemSummary:
         )
         
         assert summary.item_id == "item123"
+        assert summary.external_id == "EXT123"
         assert summary.initial_value == "No"
         assert summary.final_value == "Yes"
         assert summary.initial_explanation == "AI thought this was negative"
@@ -42,6 +44,7 @@ class TestFeedbackItemSummary:
         """Test creating a FeedbackItemSummary with None values."""
         summary = FeedbackItemSummary(
             item_id="item123",
+            external_id=None,
             initial_value=None,
             final_value=None,
             initial_explanation=None,
@@ -50,6 +53,7 @@ class TestFeedbackItemSummary:
         )
         
         assert summary.item_id == "item123"
+        assert summary.external_id is None
         assert summary.initial_value is None
         assert summary.final_value is None
         assert summary.initial_explanation is None
@@ -98,6 +102,7 @@ class TestFeedbackSearchResult:
         
         items = [FeedbackItemSummary(
             item_id="item123",
+            external_id="EXT123",
             initial_value="No",
             final_value="Yes",
             initial_explanation="Initial explanation",
@@ -117,9 +122,13 @@ class TestFeedbackService:
     
     def test_convert_feedback_item_to_summary(self):
         """Test conversion of FeedbackItem to summary format."""
-        # Create mock feedback item
+        # Create mock feedback item with related item
+        mock_item = Mock()
+        mock_item.externalId = "EXT-456"
+        
         feedback_item = Mock(spec=FeedbackItem)
         feedback_item.itemId = "test-item-123"
+        feedback_item.item = mock_item
         feedback_item.initialAnswerValue = "No"
         feedback_item.finalAnswerValue = "Yes"
         feedback_item.initialCommentValue = "Initial explanation"
@@ -132,6 +141,7 @@ class TestFeedbackService:
         # Verify conversion
         assert isinstance(summary, FeedbackItemSummary)
         assert summary.item_id == "test-item-123"
+        assert summary.external_id == "EXT-456"
         assert summary.initial_value == "No"
         assert summary.final_value == "Yes"
         assert summary.initial_explanation == "Initial explanation"

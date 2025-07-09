@@ -123,8 +123,10 @@ class FeedbackItem(BaseModel):
         query_parts = list(fields)
         
         for rel_name, rel_fields in relationship_fields.items():
-            # Add handling for relationships like account, scorecard, score if needed
-            pass
+            # Add handling for relationships like item, account, scorecard, score
+            if rel_fields:
+                rel_query = f"{rel_name} {{ {' '.join(rel_fields)} }}"
+                query_parts.append(rel_query)
             
         return f"{{ {' '.join(query_parts)} }}"
 
