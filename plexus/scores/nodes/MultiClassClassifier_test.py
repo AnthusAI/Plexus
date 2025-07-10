@@ -13,7 +13,8 @@ pytest_plugins = ('pytest_asyncio',)
 def basic_classifier_config():
     return {
         "name": "test_classifier",
-        "prompt_template": "Classify this text: {text}",
+        "system_message": "You are a classifier that categorizes text as positive, negative, or neutral.",
+        "user_message": "Classify this text: {text}",
         "model_provider": "AzureChatOpenAI",
         "model_name": "gpt-4",
         "temperature": 0.0,
@@ -76,7 +77,6 @@ def test_output_parser_no_valid_classes():
     with pytest.raises(RuntimeError, match="No valid classes provided"):
         parser.parse("This is positive")
 
-@pytest.mark.xfail(reason="GraphState validation needs to be fixed")
 @pytest.mark.asyncio
 async def test_classifier_basic_flow(basic_classifier_config, mock_model):
     with patch('plexus.LangChainUser.LangChainUser._initialize_model',
@@ -105,7 +105,6 @@ async def test_classifier_basic_flow(basic_classifier_config, mock_model):
         assert result["classification"] == "positive"
         assert result["retry_count"] == 0
 
-@pytest.mark.xfail(reason="GraphState validation needs to be fixed")
 @pytest.mark.asyncio
 async def test_classifier_with_retries(basic_classifier_config, mock_model):
     with patch('plexus.LangChainUser.LangChainUser._initialize_model',
@@ -137,7 +136,6 @@ async def test_classifier_with_retries(basic_classifier_config, mock_model):
         assert result["classification"] == "positive"
         assert result["retry_count"] == 1
 
-@pytest.mark.xfail(reason="GraphState validation needs to be fixed")
 @pytest.mark.asyncio
 async def test_classifier_max_retries(basic_classifier_config, mock_model):
     with patch('plexus.LangChainUser.LangChainUser._initialize_model',
@@ -163,10 +161,9 @@ async def test_classifier_max_retries(basic_classifier_config, mock_model):
         classifier_node = classifier.get_classifier_node()
         result = classifier_node(state)
 
-        assert result["classification"] is None
+        assert result["classification"] == "unknown"
         assert result["retry_count"] == basic_classifier_config["maximum_retry_count"]
 
-@pytest.mark.xfail(reason="GraphState validation needs to be fixed")
 @pytest.mark.asyncio
 async def test_classifier_with_explanation_message(basic_classifier_config, mock_model):
     config = basic_classifier_config.copy()
@@ -204,7 +201,6 @@ async def test_classifier_with_explanation_message(basic_classifier_config, mock
         assert result["classification"] == "positive"
         assert result["explanation"] == "The text is positive because..."
 
-@pytest.mark.xfail(reason="GraphState validation needs to be fixed")
 @pytest.mark.asyncio
 async def test_classifier_with_existing_completion(basic_classifier_config, mock_model):
     with patch('plexus.LangChainUser.LangChainUser._initialize_model',
