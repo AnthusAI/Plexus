@@ -3322,12 +3322,13 @@ async def plexus_predict(
             target_item_ids = [id.strip() for id in item_ids.split(',')]
 
         # Validate that all items exist and get their data
-        predictions = []
+        prediction_results_list = []
         
-        for target_id in target_item_ids:
-            try:
-                # Get item details
-                item_query = f"""
+        try:
+            for target_id in target_item_ids:
+                try:
+                    # Get item details
+                    item_query = f"""
                 query GetItem {{
                     getItem(id: "{target_id}") {{
                         id
@@ -3340,60 +3341,140 @@ async def plexus_predict(
                     }}
                 }}
                 """
-                
-                item_result = client.execute(item_query)
-                item_data = item_result.get('getItem')
-                
-                if not item_data:
-                    predictions.append({
-                        "item_id": target_id,
-                        "error": f"Item '{target_id}' not found"
-                    })
-                    continue
+                    
+                    item_result = client.execute(item_query)
+                    item_data = item_result.get('getItem')
+                    
+                    if not item_data:
+                        prediction_results_list.append({
+                            "item_id": target_id,
+                            "error": f"Item '{target_id}' not found"
+                        })
+                        continue
 
-                # For this MCP implementation, we'll simulate the prediction call
-                # In a real implementation, this would call the actual Plexus prediction service
-                logger.info(f"Simulating prediction for item '{target_id}' with score '{score_name}'")
-                
-                # Build prediction result structure
-                prediction_result = {
-                    "item_id": target_id,
-                    "scores": [
-                        {
-                            "name": score_name,
-                            "value": "Simulated Result",
-                            "explanation": f"This is a simulated prediction result for testing purposes. In a real implementation, this would execute the actual score configuration (Version ID: {found_score.get('championVersionId', 'N/A')}) against the item content."
+                    # Call the actual prediction service using the shared CLI implementation
+                    logger.info(f"Running actual prediction for item '{target_id}' with score '{score_name}'")
+                    
+                    try:
+                        # Import the CLI prediction components  
+                        from plexus.cli.PredictionCommands import select_sample, predict_score, get_scorecard_class
+                        
+                        # Get the scorecard class (same as CLI does)
+                        scorecard_class = get_scorecard_class(scorecard_name)
+                        
+                        # Get the sample data for the item (same as CLI does)
+                        sample_row, used_item_id = select_sample(
+                            scorecard_class, score_name, target_id, fresh=False, 
+                            compare_to_feedback=False, scorecard_id=scorecard_id, score_id=found_score['id']
+                        )
+                        
+                        # Run the actual prediction (same as CLI does)
+                        _, prediction_results, costs = await predict_score(
+                            score_name, scorecard_class, sample_row, used_item_id
+                        )
+                        
+                        # Process the results same as CLI does
+                        if prediction_results:
+                            if isinstance(prediction_results, list):
+                                prediction = prediction_results[0] if prediction_results else None
+                                if prediction:
+                                    prediction_result = {
+                                        "item_id": target_id,
+                                        "scores": [
+                                            {
+                                                "name": score_name,
+                                                "value": prediction.value,
+                                                "explanation": prediction.explanation,
+                                                "cost": costs
+                                            }
+                                        ]
+                                    }
+                                    # Extract trace information if available
+                                    if hasattr(prediction, 'trace') and include_trace:
+                                        prediction_result["scores"][0]["trace"] = prediction.trace
+                                    elif hasattr(prediction, 'metadata') and prediction.metadata and include_trace:
+                                        prediction_result["scores"][0]["trace"] = prediction.metadata.get('trace')
+                                else:
+                                    raise Exception("No prediction result returned")
+                            else:
+                                # Handle Score.Result object
+                                if hasattr(prediction_results, 'value') and prediction_results.value is not None:
+                                    explanation = (
+                                        getattr(prediction_results, 'explanation', None) or
+                                        prediction_results.metadata.get('explanation', '') if hasattr(prediction_results, 'metadata') and prediction_results.metadata else
+                                        ''
+                                    )
+                                    prediction_result = {
+                                        "item_id": target_id,
+                                        "scores": [
+                                            {
+                                                "name": score_name,
+                                                "value": prediction_results.value,
+                                                "explanation": explanation,
+                                                "cost": costs
+                                            }
+                                        ]
+                                    }
+                                    # Extract trace information if available
+                                    if include_trace:
+                                        trace = None
+                                        if hasattr(prediction_results, 'trace'):
+                                            trace = prediction_results.trace
+                                        elif hasattr(prediction_results, 'metadata') and prediction_results.metadata:
+                                            trace = prediction_results.metadata.get('trace')
+                                        
+                                        if trace:
+                                            prediction_result["scores"][0]["trace"] = trace
+                                else:
+                                    raise Exception("No valid prediction value returned")
+                        else:
+                            raise Exception("No predictions returned from score")
+                        
+                    except Exception as pred_error:
+                        logger.error(f"Error running actual prediction: {str(pred_error)}", exc_info=True)
+                        # Fall back to indicating the error
+                        prediction_result = {
+                            "item_id": target_id,
+                            "scores": [
+                                {
+                                    "name": score_name,
+                                    "value": "Error",
+                                    "explanation": f"Failed to execute prediction: {str(pred_error)}"
+                                }
+                            ]
                         }
-                    ]
-                }
-                
-                # Add input data if requested
-                if include_input:
-                    prediction_result["input"] = {
-                        "description": item_data.get('description'),
-                        "metadata": item_data.get('metadata'),
-                        "attachedFiles": item_data.get('attachedFiles'),
-                        "externalId": item_data.get('externalId')
-                    }
-                
-                # Add trace data if requested
-                if include_trace:
-                    prediction_result["trace"] = {
-                        "scorecard_id": scorecard_id,
-                        "score_id": found_score['id'],
-                        "score_version_id": found_score.get('championVersionId'),
-                        "execution_timestamp": "2025-01-01T00:00:00Z",
-                        "note": "This is simulated trace data. Real implementation would include detailed execution steps."
-                    }
-                
-                predictions.append(prediction_result)
-                
-            except Exception as item_error:
-                logger.error(f"Error processing item '{target_id}': {str(item_error)}", exc_info=True)
-                predictions.append({
-                    "item_id": target_id,
-                    "error": f"Error processing item: {str(item_error)}"
-                })
+                    
+                    # Add input data if requested
+                    if include_input:
+                        prediction_result["input"] = {
+                            "description": item_data.get('description'),
+                            "metadata": item_data.get('metadata'),
+                            "attachedFiles": item_data.get('attachedFiles'),
+                            "externalId": item_data.get('externalId')
+                        }
+                    
+                    # Add trace data if requested
+                    if include_trace:
+                        prediction_result["trace"] = {
+                            "scorecard_id": scorecard_id,
+                            "score_id": found_score['id'],
+                            "score_version_id": found_score.get('championVersionId'),
+                            "execution_timestamp": "2025-01-01T00:00:00Z",
+                            "note": "This is simulated trace data. Real implementation would include detailed execution steps."
+                        }
+                    
+                    prediction_results_list.append(prediction_result)
+                    
+                except Exception as item_error:
+                    logger.error(f"Error processing item '{target_id}': {str(item_error)}", exc_info=True)
+                    prediction_results_list.append({
+                        "item_id": target_id,
+                        "error": f"Error processing item: {str(item_error)}"
+                    })
+        
+        except Exception as loop_error:
+            logger.error(f"Error in prediction loop: {str(loop_error)}", exc_info=True)
+            return f"Error running predictions: {str(loop_error)}"
 
         # Format output based on requested format
         if output_format.lower() == "yaml":
@@ -3419,7 +3500,7 @@ async def plexus_predict(
                     "score_id": found_score['id'],
                     "item_count": len(target_item_ids)
                 },
-                "predictions": predictions
+                "predictions": prediction_results_list
             }
             
             return yaml.dump(result, default_flow_style=False, sort_keys=False)
@@ -3438,8 +3519,8 @@ async def plexus_predict(
                     "include_trace": include_trace,
                     "output_format": output_format
                 },
-                "predictions": predictions,
-                "note": "This MCP tool provides simulated predictions for testing purposes. Real predictions would be executed by the Plexus prediction service."
+                "predictions": prediction_results_list,
+                "note": "This MCP tool executes real predictions using the shared Plexus prediction service."
             }
         
     except Exception as e:
