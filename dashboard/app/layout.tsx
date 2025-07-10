@@ -19,7 +19,7 @@ export const metadata: Metadata = {
     userScalable: false,
   },
   openGraph: {
-    title: "istributed Machine Learning Operating System",
+    title: "Distributed Machine Learning Operating System",
     description: "Plexus is a battle-tested platform for building AI workflows that analyze streams of content and take action.",
     url: "https://plexus.anth.us",
     siteName: "Plexus",
