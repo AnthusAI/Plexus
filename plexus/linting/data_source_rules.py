@@ -4,8 +4,11 @@ Data source specific validation rules for YAML DSL linter.
 These rules validate the CallCriteriaDBCache data source schema.
 """
 
-from typing import List, Dict, Any
+from typing import List, Dict, Any, TYPE_CHECKING
 from .rules import ValidationRule
+
+if TYPE_CHECKING:
+    from .yaml_linter import LintMessage
 
 
 class DataSourceQueriesOrSearchesRule(ValidationRule):

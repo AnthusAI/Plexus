@@ -9,7 +9,8 @@ from decimal import Decimal
 
 from plexus.cli.PredictionCommands import (
     predict, predict_impl, output_excel, select_sample, predict_score,
-    predict_score_impl, handle_exception, get_scorecard_class, create_score_input
+    predict_score_impl, handle_exception, get_scorecard_class, create_score_input,
+    create_feedback_comparison
 )
 from plexus.scores.LangGraphScore import BatchProcessingPause
 
@@ -987,3 +988,263 @@ class TestIntegration:
             args, kwargs = mock_predict_impl.call_args
             # The coroutine was created with these args, so just verify it was called
             assert mock_predict_impl.called
+
+
+class TestFeedbackComparison:
+    """Test class for feedback comparison functionality."""
+    
+    def setup_method(self):
+        """Setup for each test method."""
+        self.mock_feedback_item = Mock()
+        self.mock_feedback_item.finalAnswerValue = "Yes"
+        self.mock_feedback_item.initialAnswerValue = "No"
+        self.mock_feedback_item.editCommentValue = "Corrected after review"
+        self.mock_feedback_item.editorName = "human_reviewer"
+        
+    def test_create_feedback_comparison_agreement(self):
+        """Test create_feedback_comparison when prediction matches ground truth."""
+        current_prediction = {
+            'test_score_value': 'Yes',
+            'test_score_explanation': 'AI determined this is positive'
+        }
+        
+        result = create_feedback_comparison(
+            current_prediction, 
+            self.mock_feedback_item, 
+            'test_score'
+        )
+        
+        expected = {
+            "current_prediction": {
+                "value": "Yes",
+                "explanation": "AI determined this is positive"
+            },
+            "ground_truth": "Yes",
+            "isAgreement": True
+        }
+        
+        assert result == expected
+        assert result["isAgreement"] is True
+    
+    def test_create_feedback_comparison_disagreement(self):
+        """Test create_feedback_comparison when prediction doesn't match ground truth."""
+        current_prediction = {
+            'test_score_value': 'No',
+            'test_score_explanation': 'AI determined this is negative'
+        }
+        
+        result = create_feedback_comparison(
+            current_prediction, 
+            self.mock_feedback_item, 
+            'test_score'
+        )
+        
+        expected = {
+            "current_prediction": {
+                "value": "No",
+                "explanation": "AI determined this is negative"
+            },
+            "ground_truth": "Yes",
+            "isAgreement": False
+        }
+        
+        assert result == expected
+        assert result["isAgreement"] is False
+    
+    def test_create_feedback_comparison_case_insensitive(self):
+        """Test that comparison is case-insensitive."""
+        current_prediction = {
+            'test_score_value': 'yes',  # lowercase
+            'test_score_explanation': 'AI says yes'
+        }
+        
+        # Ground truth is "Yes" (uppercase from mock)
+        result = create_feedback_comparison(
+            current_prediction, 
+            self.mock_feedback_item, 
+            'test_score'
+        )
+        
+        assert result["isAgreement"] is True
+    
+    def test_create_feedback_comparison_none_values(self):
+        """Test create_feedback_comparison with None values."""
+        current_prediction = {
+            'test_score_value': None,
+            'test_score_explanation': None
+        }
+        
+        self.mock_feedback_item.finalAnswerValue = None
+        
+        result = create_feedback_comparison(
+            current_prediction, 
+            self.mock_feedback_item, 
+            'test_score'
+        )
+        
+        assert result["current_prediction"]["value"] is None
+        assert result["ground_truth"] is None
+        assert result["isAgreement"] is False  # None values should not agree
+    
+    def test_create_feedback_comparison_missing_explanation(self):
+        """Test create_feedback_comparison when explanation is missing."""
+        current_prediction = {
+            'test_score_value': 'Yes'
+            # No explanation field
+        }
+        
+        result = create_feedback_comparison(
+            current_prediction, 
+            self.mock_feedback_item, 
+            'test_score'
+        )
+        
+        assert result["current_prediction"]["explanation"] is None
+        assert result["current_prediction"]["value"] == "Yes"
+        assert result["isAgreement"] is True
+
+
+class TestPredictCommandWithFeedback:
+    """Test class for predict command with feedback comparison integration."""
+    
+    @pytest.fixture
+    def mock_scorecard_class(self):
+        """Mock scorecard class."""
+        scorecard = Mock()
+        scorecard.properties = {'key': 'test_scorecard'}
+        scorecard.scores = [{'name': 'test_score', 'id': 1}]
+        return scorecard
+    
+    def test_predict_command_with_feedback_comparison_flag(self, mock_scorecard_class):
+        """Test that predict command accepts and passes through compare_to_feedback flag."""
+        runner = CliRunner()
+        
+        with patch('plexus.cli.PredictionCommands.predict_impl') as mock_predict_impl:
+            # Mock the async predict_impl function
+            mock_predict_impl.return_value = None
+            
+            result = runner.invoke(predict, [
+                '--scorecard', 'test-scorecard',
+                '--score', 'test-score',
+                '--item', 'item-123',
+                '--compare-to-feedback'  # Test the new flag
+            ])
+            
+            # Should complete without error
+            assert result.exit_code == 0
+            
+            # Verify predict_impl was called with compare_to_feedback=True
+            mock_predict_impl.assert_called_once()
+            # Get the arguments passed to predict_impl
+            args, kwargs = mock_predict_impl.call_args
+            # The compare_to_feedback should be passed as a keyword argument
+            assert kwargs.get('compare_to_feedback') is True
+    
+    def test_predict_command_without_feedback_comparison_flag(self, mock_scorecard_class):
+        """Test that predict command defaults compare_to_feedback to False."""
+        runner = CliRunner()
+        
+        with patch('plexus.cli.PredictionCommands.predict_impl') as mock_predict_impl:
+            mock_predict_impl.return_value = None
+            
+            result = runner.invoke(predict, [
+                '--scorecard', 'test-scorecard',  
+                '--score', 'test-score',
+                '--item', 'item-123'
+                # No --compare-to-feedback flag
+            ])
+            
+            assert result.exit_code == 0
+            
+            # Verify predict_impl was called with compare_to_feedback=False (default)
+            mock_predict_impl.assert_called_once()
+            args, kwargs = mock_predict_impl.call_args
+            assert kwargs.get('compare_to_feedback') is False
+
+
+class TestFeedbackComparisonIntegration:
+    """Test class for end-to-end feedback comparison integration."""
+    
+    def test_create_feedback_comparison_with_real_structure(self):
+        """Test create_feedback_comparison with realistic prediction structure."""
+        # Simulate a realistic prediction result structure
+        current_prediction = {
+            'agent_helpfulness_value': 'Helpful',
+            'agent_helpfulness_explanation': 'The agent provided clear guidance and resolved the issue',
+            'agent_helpfulness_confidence': 0.85
+        }
+        
+        mock_feedback_item = Mock()
+        mock_feedback_item.finalAnswerValue = 'Helpful'  # Agreement case
+        mock_feedback_item.initialAnswerValue = 'Not Helpful'
+        
+        result = create_feedback_comparison(
+            current_prediction, 
+            mock_feedback_item, 
+            'agent_helpfulness'
+        )
+        
+        # Verify the structure matches expected output format
+        assert 'current_prediction' in result
+        assert 'ground_truth' in result
+        assert 'isAgreement' in result
+        
+        assert result['current_prediction']['value'] == 'Helpful'
+        assert result['current_prediction']['explanation'] == 'The agent provided clear guidance and resolved the issue'
+        assert result['ground_truth'] == 'Helpful'
+        assert result['isAgreement'] is True
+    
+    def test_feedback_comparison_with_numeric_values(self):
+        """Test feedback comparison with numeric score values."""
+        current_prediction = {
+            'satisfaction_score_value': 8.5,
+            'satisfaction_score_explanation': 'High satisfaction based on positive indicators'
+        }
+        
+        mock_feedback_item = Mock()
+        mock_feedback_item.finalAnswerValue = '8.5'  # String representation
+        
+        result = create_feedback_comparison(
+            current_prediction, 
+            mock_feedback_item, 
+            'satisfaction_score'
+        )
+        
+        # Should handle numeric to string comparison  
+        assert result['current_prediction']['value'] == 8.5
+        assert result['ground_truth'] == '8.5'
+        assert result['isAgreement'] is True  # str(8.5) == str('8.5') after lowercasing
+    
+    def test_feedback_comparison_edge_cases(self):
+        """Test edge cases in feedback comparison logic."""
+        test_cases = [
+            # Case 1: Empty string vs None
+            ({
+                'test_score_value': '',
+                'test_score_explanation': 'Empty prediction'
+            }, None, False),
+            
+            # Case 2: Whitespace differences
+            ({
+                'test_score_value': ' Yes ',
+                'test_score_explanation': 'With whitespace'
+            }, 'Yes', False),  # Current implementation doesn't strip whitespace
+            
+            # Case 3: Boolean-like strings  
+            ({
+                'test_score_value': 'true',
+                'test_score_explanation': 'Boolean string'
+            }, 'True', True),  # Case insensitive due to .lower()
+        ]
+        
+        for prediction, ground_truth, expected_agreement in test_cases:
+            mock_feedback_item = Mock()
+            mock_feedback_item.finalAnswerValue = ground_truth
+            
+            result = create_feedback_comparison(
+                prediction, 
+                mock_feedback_item, 
+                'test_score'
+            )
+            
+            assert result['isAgreement'] is expected_agreement
