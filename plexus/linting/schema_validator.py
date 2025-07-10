@@ -4,8 +4,11 @@ JSON Schema validation for YAML DSL linter.
 Provides schema-based validation using JSON Schema.
 """
 
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, TYPE_CHECKING
 import json
+
+if TYPE_CHECKING:
+    from .yaml_linter import LintMessage
 
 try:
     import jsonschema

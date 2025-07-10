@@ -46,7 +46,6 @@ def test_output_parser_no_match():
     result = parser.parse("This is something else")
     assert result["classification"] is None
 
-@pytest.mark.xfail(reason="Fuzzy matching needs to be improved")
 def test_output_parser_fuzzy_match():
     parser = MultiClassClassifier.ClassificationOutputParser(
         valid_classes=["positive", "negative", "neutral"],
@@ -70,7 +69,6 @@ def test_output_parser_multi_word_class():
     result = parser.parse("This is very positive")
     assert result["classification"] == "very positive"
 
-@pytest.mark.xfail(reason="Empty valid_classes handling needs to be improved")
 def test_output_parser_no_valid_classes():
     parser = MultiClassClassifier.ClassificationOutputParser(
         valid_classes=[]

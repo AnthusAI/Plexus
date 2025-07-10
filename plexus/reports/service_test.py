@@ -266,22 +266,3 @@ def test_generate_report_config_not_found(
     assert isinstance(fail_args[0], str)
     assert "ReportConfiguration not found" in fail_args[0]
 
-@pytest.mark.skip(reason="Not implemented yet")
-def test_generate_report_empty_config_content():
-    """Tests behavior when the config exists but has no/empty markdown."""
-    pass
-
-@pytest.mark.skip(reason="Not implemented yet")
-def test_generate_report_invalid_yaml():
-    """Tests behavior when a block contains invalid YAML."""
-    pass
-
-@pytest.mark.skip(reason="Not implemented yet")
-def test_generate_report_block_class_not_found():
-    """Tests behavior when pythonClass refers to a non-existent block."""
-    pass
-
-@pytest.mark.skip(reason="Not implemented yet")
-def test_generate_report_block_generate_error():
-    """Tests behavior when a block's generate() method raises an exception."""
-    pass 
