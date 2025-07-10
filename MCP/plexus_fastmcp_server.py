@@ -274,7 +274,6 @@ mcp = FastMCP(
     
     ## Utility Tools
     - think: REQUIRED tool to use before other tools to structure reasoning and plan approach
-    - get_score_yaml_documentation: Comprehensive documentation about score YAML configuration format (legacy - use get_plexus_documentation instead)
     """
 )
 
@@ -472,6 +471,19 @@ async def think(thought: str) -> str:
     - Use the plexus_feedback_find and plexus_predict tools for hands-on analysis
     - Focus on understanding why predictions were wrong based on human feedback
     </think_tool_example_7>
+    
+    <think_tool_example_8>
+    User asked about data configuration, dataset setup, or data queries for scores.
+    - FIRST: Use get_plexus_documentation(filename="dataset-yaml-format") to get the complete guide
+    - This documentation includes:
+      * CallCriteriaDBCache configuration
+      * Queries section for database searches
+      * Searches section for working with specific item lists
+      * Balancing positive/negative examples
+      * Data retrieval and preparation methods
+    - Then proceed with configuring the data section of score configurations
+    - Always reference the documentation when explaining dataset YAML configuration
+    </think_tool_example_8>
     """
     # Temporarily redirect stdout to capture any unexpected output
     old_stdout = sys.stdout
@@ -3542,6 +3554,7 @@ async def get_plexus_documentation(filename: str) -> str:
     Valid filenames:
     - score-yaml-format: Complete guide to Score YAML configuration format including LangGraph, node types, dependencies, and best practices
     - feedback-alignment: Complete guide to testing score results, finding feedback items, and analyzing prediction accuracy for score improvement
+    - dataset-yaml-format: Complete guide to dataset YAML configuration format for data sources
     
     Args:
         filename (str): The documentation file to retrieve. Must be one of the valid filenames listed above.
@@ -3560,7 +3573,8 @@ async def get_plexus_documentation(filename: str) -> str:
         # Define mapping of short names to actual filenames
         valid_files = {
             "score-yaml-format": "score-yaml-format.md",
-            "feedback-alignment": "feedback-alignment.md"
+            "feedback-alignment": "feedback-alignment.md",
+            "dataset-yaml-format": "dataset-yaml-format.md"
         }
         
         if filename not in valid_files:
@@ -3603,170 +3617,6 @@ async def get_plexus_documentation(filename: str) -> str:
         # Restore original stdout
         sys.stdout = old_stdout
 
-@mcp.tool()
-async def get_score_yaml_documentation() -> str:
-    """
-    Provides comprehensive documentation about the YAML configuration format for scores,
-    including examples and field descriptions. Use this tool when working with score configurations
-    to understand the expected format and available options.
-    
-    Returns:
-    - Detailed documentation about score YAML configuration format
-    """
-    return """# Score YAML Configuration Documentation
-
-## Overview
-Score configurations in Plexus use YAML format to define how scores are calculated, what prompts are used, and how results are interpreted.
-
-## Basic Structure
-```yaml
-name: "Score Name"
-key: "score-key"
-external_id: "score_123"  # or externalId (both formats supported)
-description: "Description of what this score measures"
-type: "LangGraphScore"
-section: "Section Name"
-
-# Core scoring configuration
-system_message: |
-  You are an expert evaluator. Please assess the following content
-  according to the specified criteria.
-
-user_message: |
-  Content to evaluate: {item_text}
-  
-  Please provide a score from 0-100 and explain your reasoning.
-
-# Model configuration  
-model_provider: "anthropic"  # or "openai", "azure", etc.
-model_name: "claude-3-sonnet-20240229"
-temperature: 0.1
-max_tokens: 1000
-
-# Scoring parameters
-min_score: 0
-max_score: 100
-threshold: 70
-weight: 1.0
-
-# Advanced options
-parameters:
-  check_grammar: true
-  check_style: true
-  min_word_count: 50
-  
-validation_rules:
-  - rule: "score >= 0 and score <= 100"
-    message: "Score must be between 0 and 100"
-```
-
-## Field Descriptions
-
-### Identity Fields
-- `name`: Human-readable name for the score
-- `key`: Unique identifier (alphanumeric with dashes/underscores)
-- `external_id` or `externalId`: External system identifier
-- `description`: Brief description of the score's purpose
-
-### Message Templates
-- `system_message`: System prompt sent to the AI model (supports multi-line with `|`)
-- `user_message`: User prompt template (can include variables like `{item_text}`)
-
-### Model Configuration
-- `model_provider`: AI provider ("anthropic", "openai", "azure", etc.)
-- `model_name`: Specific model to use
-- `temperature`: Randomness (0.0-1.0, lower = more consistent)
-- `max_tokens`: Maximum response length
-
-### Scoring Parameters
-- `min_score`/`max_score`: Score range bounds
-- `threshold`: Minimum passing score
-- `weight`: Relative importance in composite scores
-
-### Variable Substitution
-Use `{variable_name}` in messages to include dynamic content:
-- `{item_text}`: The content being evaluated
-- `{item_metadata}`: Additional item information
-- `{context}`: Additional evaluation context
-
-## Common Examples
-
-### Binary Classification Score
-```yaml
-name: "Content Safety"
-system_message: |
-  Determine if the content is safe for general audiences.
-  Respond with either "SAFE" or "UNSAFE" followed by reasoning.
-user_message: |
-  Content: {item_text}
-min_score: 0
-max_score: 1
-```
-
-### Quality Assessment Score
-```yaml
-name: "Writing Quality"
-system_message: |
-  Evaluate writing quality on grammar, clarity, and style.
-  Provide a score from 1-10 with detailed feedback.
-user_message: |
-  Text to evaluate: {item_text}
-  
-  Consider:
-  - Grammar and spelling
-  - Clarity of communication
-  - Writing style and flow
-min_score: 1
-max_score: 10
-threshold: 7
-```
-
-### Custom Parameters Score
-```yaml
-name: "Technical Accuracy"
-parameters:
-  domain: "software engineering"
-  check_citations: true
-  require_examples: true
-system_message: |
-  You are a technical expert in {domain}.
-  Evaluate the technical accuracy of the content.
-```
-
-## Best Practices
-
-1. **Use Clear Names**: Make score names descriptive and unique
-2. **Multi-line Strings**: Use `|` for multi-line system/user messages
-3. **Consistent Scoring**: Define clear min/max ranges and stick to them
-4. **Validation**: Include validation rules for complex scores
-5. **Documentation**: Add descriptions explaining the score's purpose
-6. **Testing**: Test scores with sample content before deployment
-
-## Common Issues
-
-### YAML Syntax Errors
-- Ensure proper indentation (2 spaces recommended)
-- Quote strings containing special characters
-- Use `|` for multi-line strings to preserve formatting
-
-### Field Format Issues
-- Use either `external_id` or `externalId` consistently
-- Ensure numeric fields (scores, weights) are not quoted
-- Boolean values should be `true`/`false` (lowercase)
-
-### Variable Substitution
-- Variables in messages must match exactly: `{item_text}` not `{item-text}`
-- Undefined variables will be left as-is in the final prompt
-
-## Migration Notes
-
-When updating existing scores:
-- New versions preserve the existing format preferences
-- Both `external_id` and `externalId` formats are supported
-- Changes create new versions; previous versions remain accessible
-- Champion version determines which configuration is used for evaluations
-
-For additional help or advanced use cases, consult the Plexus documentation or contact support."""
 
 async def _get_score_results_for_item(item_id: str, client) -> List[Dict[str, Any]]:
     """
