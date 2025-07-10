@@ -894,27 +894,94 @@ class LangGraphScore(Score, LangChainUser):
             # Create a new dict with all current state values
             new_state = state.model_dump()
             
-            # Apply aliased values, but preserve conditional outputs
+            # Apply aliased values, but preserve conditional outputs that actually fired
             for alias, original in output_mapping.items():
                 
-                # Check if this field was set by conditional routing - if so, preserve it
+                # Check if this field was set by a condition that actually fired
                 skip_alias = False
                 if graph_config:
                     for node_config in graph_config:
                         if 'conditions' in node_config:
+                            node_name = node_config.get('name', 'unknown_node')
+                            
+                            # Get node classification for future use if needed
+                            # node_classification = None
+                            # if hasattr(state, 'classification'):
+                            #     node_classification = getattr(state, 'classification')
+                            
                             for condition in node_config['conditions']:
                                 if 'output' in condition and alias in condition['output']:
-                                    # This field is set by a condition - preserve existing value
-                                    current_value = getattr(state, alias, None)
-                                    if current_value is not None and current_value != "":
-                                        logging.debug(f"Preserving conditional output {alias} = {current_value!r}")
+                                    # condition_value = condition.get('value', '').lower()  # Not used currently
+                                    current_alias_value = getattr(state, alias, None)
+                                    expected_output_value = condition['output'].get(alias)
+                                    
+                                    # Only preserve if this condition actually fired:
+                                    # The sophisticated approach: check if this specific condition 
+                                    # actually executed by examining the trace/metadata.
+                                    # 
+                                    # For now, we implement a simple heuristic:
+                                    # - A condition fired if the workflow actually went to END from this node
+                                    # - We can detect this by checking if the trace shows this node 
+                                    #   completed its execution early (routed to END)
+                                    
+                                    routes_to_end = condition.get('node') == 'END'
+                                    values_match = current_alias_value == expected_output_value
+                                    has_value = current_alias_value is not None and current_alias_value != ""
+                                    
+                                    # Check if this node actually routed to END by examining metadata
+                                    node_routed_to_end = False
+                                    trace_available = False
+                                    
+                                    if hasattr(state, 'metadata') and state.metadata:
+                                        trace = state.metadata.get('trace', {})
+                                        node_results = trace.get('node_results', [])
+                                        
+                                        if node_results:  # Trace information is available
+                                            trace_available = True
+                                            
+                                            # Look for this specific node in the trace
+                                            for node_result in node_results:
+                                                if node_result.get('node_name') == node_name:
+                                                    # If the node's output matches the condition trigger, 
+                                                    # and the condition routes to END, then it fired
+                                                    node_output = node_result.get('output', {})
+                                                    node_classification = node_output.get('classification', '').lower()
+                                                    condition_trigger = condition.get('value', '').lower()
+                                                    
+                                                    if node_classification == condition_trigger and routes_to_end:
+                                                        node_routed_to_end = True
+                                                    break
+                                    
+                                    # If trace is available, use sophisticated logic
+                                    # If trace is not available, fall back to conservative preservation
+                                    if trace_available:
+                                        condition_fired = (
+                                            routes_to_end and
+                                            values_match and 
+                                            has_value and
+                                            node_routed_to_end  # Only preserve if the node actually routed to END
+                                        )
+                                    else:
+                                        # Fallback: preserve if routes to END and values match
+                                        # This maintains backward compatibility with existing tests
+                                        condition_fired = (
+                                            routes_to_end and
+                                            values_match and 
+                                            has_value
+                                        )
+                                    
+                                    if condition_fired:
+                                        logging.info(f"Preserving conditional output {alias} = {current_alias_value!r} from node {node_name} (condition fired)")
                                         skip_alias = True
                                         break
+                                    else:
+                                        logging.debug(f"Not preserving {alias} from node {node_name}: condition did not fire (current={current_alias_value}, expected={expected_output_value}, routes_to_end={condition.get('node') == 'END'})")
+                            
                             if skip_alias:
                                 break
                 
                 if skip_alias:
-                    continue  # Skip this alias - preserve the conditional output
+                    continue  # Skip this alias - preserve the conditional output that actually fired
                 
                 if hasattr(state, original):
                     original_value = getattr(state, original)
@@ -930,6 +997,7 @@ class LangGraphScore(Score, LangChainUser):
                         logging.warning(f"Output aliasing: {original} was None, defaulting {alias} to '{original_value}'")
                     
                     new_state[alias] = original_value
+                    logging.info(f"Output aliasing: {original} = {original_value!r} -> {alias}")
 
                     # Also directly set on the state object to ensure it's accessible
                     setattr(state, alias, original_value)
