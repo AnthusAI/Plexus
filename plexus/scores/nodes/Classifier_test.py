@@ -1129,7 +1129,6 @@ async def test_classifier_message_handling_between_nodes(turnip_classifier_confi
         assert first_call_messages != second_call_messages, \
             "Each node should use its own distinct messages"
 
-@pytest.mark.xfail(reason="Investigating CI vs Dev behavior differences in mock response ordering")
 @pytest.mark.asyncio
 async def test_multi_node_condition_routing():
     """Test routing between multiple nodes where middle node has conditions."""

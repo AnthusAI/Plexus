@@ -279,9 +279,9 @@ async def test_conditional_graph_flow(basic_graph_config, mock_azure_openai):
         }]))
         instance.workflow = mock_workflow
         
-        result = await instance.predict(None, Score.Input(
+        result = await instance.predict(Score.Input(
             text="test",
-            metadata={},
+            metadata={"account_key": "test-account"},
             results=[]
         ))
         assert result[0].value == "Positive"
@@ -293,9 +293,9 @@ async def test_conditional_graph_flow(basic_graph_config, mock_azure_openai):
             "explanation": "Terminated on negative"
         }]))
         
-        result = await instance.predict(None, Score.Input(
+        result = await instance.predict(Score.Input(
             text="test",
-            metadata={},
+            metadata={"account_key": "test-account"},
             results=[]
         ))
         assert result[0].value == "Negative"
