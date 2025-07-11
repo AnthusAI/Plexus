@@ -1183,9 +1183,15 @@ class LangGraphScore(Score, LangChainUser):
         try:
             logging.info(f"Starting workflow execution with thread_id: {thread_id}")
             
-            graph_result = await self.workflow.ainvoke(
-                initial_state,
-                config=thread
+            # Add timeout protection to prevent infinite hangs
+            timeout_seconds = int(os.getenv('LANGGRAPH_TIMEOUT', '300'))  # Default 5 minutes
+            
+            graph_result = await asyncio.wait_for(
+                self.workflow.ainvoke(
+                    initial_state,
+                    config=thread
+                ),
+                timeout=timeout_seconds
             )
             
             # DEBUG: Log the graph_result before converting to Score.Result
@@ -1228,6 +1234,28 @@ class LangGraphScore(Score, LangChainUser):
         except BatchProcessingPause:
             # Let BatchProcessingPause propagate up
             raise
+        except TimeoutError as e:
+            # Handle timeout errors - distinguish between asyncio.wait_for() and other timeouts
+            timeout_seconds = int(os.getenv('LANGGRAPH_TIMEOUT', '300'))
+            
+            # If this looks like our asyncio.wait_for() timeout (no custom message)
+            if str(e) == '' or 'asyncio' in str(e).lower():
+                logging.error(f"Workflow execution timed out after {timeout_seconds} seconds for thread_id {thread_id}")
+                return Score.Result(
+                    parameters=self.parameters,
+                    value="ERROR",
+                    error=f"Workflow execution timed out after {timeout_seconds} seconds",
+                    explanation="The workflow took too long to complete and was terminated to prevent system hangs"
+                )
+            else:
+                # This is likely a timeout from within the workflow (network, etc.) - preserve message
+                logging.error(f"Timeout error in workflow execution for thread_id {thread_id}: {e}")
+                return Score.Result(
+                    parameters=self.parameters,
+                    value="ERROR",
+                    error=str(e),
+                    explanation="A timeout occurred during workflow execution"
+                )
         except Exception as e:
             logging.error(f"Error in predict for thread_id {thread_id}: {e}")
             logging.error(traceback.format_exc())
