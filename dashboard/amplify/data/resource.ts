@@ -687,6 +687,7 @@ const schema = a.schema({
             idx("accountId").sortKeys(["editedAt"]),
             idx("accountId").sortKeys(["scorecardId", "scoreId", "updatedAt"]).name("byAccountScorecardScoreUpdatedAt"),
             idx("accountId").sortKeys(["scorecardId", "scoreId", "editedAt"]).name("byAccountScorecardScoreEditedAt"),
+            idx("cacheKey").name("byCacheKey"), // GSI for FeedbackItem deduplication
             idx("itemId")
         ]),
 
