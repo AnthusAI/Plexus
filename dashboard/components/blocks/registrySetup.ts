@@ -15,8 +15,6 @@ import ScoreInfo from './ScoreInfo';
 import TopicAnalysis from './TopicAnalysis';
 
 // Register all block components
-console.log("Running Block Registry Setup...");
-
 // Register the default block handler first
 registerBlock('default', ReportBlock);
 
@@ -25,8 +23,4 @@ registerBlock('ScorecardReport', ScorecardReport as BlockComponent);
 registerBlock('FeedbackAnalysis', FeedbackAnalysis as BlockComponent);
 registerBlock('text', TextBlock as BlockComponent);
 registerBlock('ScoreInfo', ScoreInfo as BlockComponent);
-registerBlock('TopicAnalysis', TopicAnalysis as BlockComponent);
-
-// Log all registered block types
-import { getRegisteredBlockTypes } from './BlockRegistry';
-console.log("Registered block types:", getRegisteredBlockTypes()); 
+registerBlock('TopicAnalysis', TopicAnalysis as BlockComponent); 

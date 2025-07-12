@@ -23,6 +23,8 @@ import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import type { editor } from 'monaco-editor'
 import { defineCustomMonacoThemes, applyMonacoTheme, setupMonacoThemeWatcher, getCommonMonacoOptions, configureYamlLanguage, validateYamlIndentation } from '@/lib/monaco-theme'
+import { useYamlLinter, useLintMessageHandler } from '@/hooks/use-yaml-linter'
+import YamlLinterPanel from '@/components/ui/yaml-linter-panel'
 import { TestScoreDialog } from '@/components/scorecards/test-score-dialog'
 import { createTask } from '@/utils/data-operations'
 import { useAccount } from '@/app/contexts/AccountContext'
@@ -109,6 +111,7 @@ interface ScoreComponentProps extends React.HTMLAttributes<HTMLDivElement> {
     displayValue: string
   }>
   scorecardName?: string
+  onTaskCreated?: (task: any) => void
 }
 
 interface DetailContentProps {
@@ -136,6 +139,7 @@ interface DetailContentProps {
   }>
   selectedAccount?: { id: string } | null
   scorecardName?: string
+  onTaskCreated?: (task: any) => void
 }
 
 const GridContent = React.memo(({ 
@@ -253,6 +257,7 @@ const DetailContent = React.memo(({
   exampleItems = [],
   selectedAccount,
   scorecardName,
+  onTaskCreated,
 }: DetailContentProps) => {
   // Get the current version's configuration
   const currentVersion = versions?.find(v => 
@@ -271,6 +276,14 @@ const DetailContent = React.memo(({
   
   // Track if we're currently editing to prevent useEffect from overriding changes
   const [isEditing, setIsEditing] = React.useState(false)
+  
+  // YAML Linting integration
+  const { lintResult, setupMonacoIntegration, jumpToLine } = useYamlLinter({
+    context: 'score',
+    debounceMs: 500,
+    showMonacoMarkers: true
+  })
+  const handleLintMessageClick = useLintMessageHandler(jumpToLine)
   
   // Let ScoreVersionHistory component handle its own featured filtering with smart defaults
   
@@ -459,7 +472,7 @@ const DetailContent = React.memo(({
     console.log('Account context:', { selectedAccount });
     
     try {
-      const command = `predict --scorecard-name "${scorecardName || 'Unknown'}" --score-name "${score.name}" --item-id ${itemId}`;
+      const command = `predict --scorecard "${scorecardName || 'Unknown'}" --score "${score.name}" --item ${itemId}`;
       const taskInput = {
         type: 'Score Test',
         target: 'prediction',
@@ -479,6 +492,9 @@ const DetailContent = React.memo(({
         toast.success("Score test dispatched", {
           description: <span className="font-mono text-sm truncate block">{command}</span>
         });
+        
+        // Notify parent component about task creation
+        onTaskCreated?.(task);
       } else {
         console.error("createTask returned null or undefined");
         toast.error("Failed to dispatch score test - no task returned");
@@ -570,7 +586,7 @@ const DetailContent = React.memo(({
 
   return (
     <div className={cn(
-      "w-full flex flex-col min-h-0 h-full",
+      "w-full flex flex-col overflow-y-auto max-h-full",
       isEditorFullscreen && "absolute inset-0 z-10 bg-background p-4 rounded-lg"
     )}>
       {/* Hide the header section when in fullscreen mode */}
@@ -729,14 +745,14 @@ const DetailContent = React.memo(({
         </div>
       </div>
 
-      {/* YAML Editor - Make it flex to fill available space */}
+      {/* YAML Editor - Fixed height so content below is visible */}
       <div className={cn(
-        "flex-1 flex flex-col min-h-0",
-        isEditorFullscreen ? "mt-2" : "mt-2"
+        "flex flex-col",
+        isEditorFullscreen ? "mt-2 flex-1 min-h-0" : "mt-2"
       )} style={{ transition: 'none' }}>
                   {!isEditorFullscreen ? (
-          // Normal mode: flexible height container
-          <div className="flex-1 bg-background rounded-lg overflow-hidden relative min-h-[300px]">
+          // Normal mode: fixed height container
+          <div className="h-[400px] bg-background rounded-lg overflow-hidden relative">
             <Editor
               height="100%"
               defaultLanguage="yaml"
@@ -757,6 +773,9 @@ const DetailContent = React.memo(({
                 console.log('Applying Monaco themes...');
                 defineCustomMonacoThemes(monaco);
                 applyMonacoTheme(monaco);
+                
+                // Set up YAML linting integration
+                setupMonacoIntegration(editor, monaco);
                 
                 // Debug: Check if YAML language is registered
                 const registeredLanguages = monaco.languages.getLanguages();
@@ -830,108 +849,134 @@ const DetailContent = React.memo(({
             />
           </div>
         ) : (
-          // Fullscreen mode: use the old resizable container
-          <ResizableEditorContainer 
-            height={800}
-            onHeightChange={handleHeightChange}
-            isFullscreen={isEditorFullscreen}
-          >
-          <Editor
-            height="100%"
-            defaultLanguage="yaml"
-            value={currentConfig}
-            key={`editor-${selectedVersionId || championVersionId}`}
-            onMount={(editor, monaco) => {
-              // Store the editor instance
-              editorInstanceRef.current = editor;
-              
-              // Store the Monaco instance
-              monacoRef.current = monaco;
-              
-              // Configure YAML language support with enhanced syntax highlighting
-              console.log('Configuring YAML language support (fullscreen)...');
-              configureYamlLanguage(monaco);
-              
-              // Apply our custom theme when the editor mounts
-              console.log('Applying Monaco themes (fullscreen)...');
-              defineCustomMonacoThemes(monaco);
-              applyMonacoTheme(monaco);
-              
-              // Debug: Check if YAML language is registered
-              const registeredLanguages = monaco.languages.getLanguages();
-              const yamlLang = registeredLanguages.find((lang: any) => lang.id === 'yaml');
-              console.log('YAML language registered (fullscreen):', yamlLang ? 'YES' : 'NO');
-              
-              // Force immediate layout to ensure correct sizing
-              editor.layout();
-              
-              // Add error handling for iPad-specific issues
-              window.addEventListener('error', (event) => {
-                if (event.message === 'Canceled: Canceled' || 
-                    event.error?.message === 'Canceled: Canceled') {
-                  event.preventDefault();
-                  return true; // Prevent the error from propagating
-                }
-                return false;
-              });
-            }}
-            onChange={(value) => {
-              if (!value) return;
-              
-              // Run YAML validation and show indentation errors
-              if (monacoRef.current && editorInstanceRef.current) {
-                const model = editorInstanceRef.current.getModel();
-                if (model) {
-                  const markers = validateYamlIndentation(monacoRef.current, model);
-                  monacoRef.current.editor.setModelMarkers(model, 'yaml-validation', markers);
-                }
-              }
-              
-              try {
-                // Set editing flag to prevent useEffect from overriding our changes
-                setIsEditing(true);
-                
-                // Parse YAML to validate it and get values for form
-                const parsed = parseYaml(value)
-                
-                // Extract external ID from all possible formats
-                const externalIdValue = parsed.externalId !== undefined ? 
-                  parsed.externalId : 
-                  (parsed.external_id !== undefined ? parsed.external_id : 
-                   (parsed.id !== undefined ? parsed.id : undefined));
+          // Fullscreen mode: 2-column layout with editor on left and linter on right
+          <div className="flex gap-4 h-full">
+            {/* Monaco Editor - 2/3 width */}
+            <div className="flex-[2] bg-background rounded-lg overflow-hidden relative">
+              <Editor
+                height="100%"
+                defaultLanguage="yaml"
+                value={currentConfig}
+                key={`editor-${selectedVersionId || championVersionId}`}
+                onMount={(editor, monaco) => {
+                  // Store the editor instance
+                  editorInstanceRef.current = editor;
+                  
+                  // Store the Monaco instance
+                  monacoRef.current = monaco;
+                  
+                  // Configure YAML language support with enhanced syntax highlighting
+                  console.log('Configuring YAML language support (fullscreen)...');
+                  configureYamlLanguage(monaco);
+                  
+                  // Apply our custom theme when the editor mounts
+                  console.log('Applying Monaco themes (fullscreen)...');
+                  defineCustomMonacoThemes(monaco);
+                  applyMonacoTheme(monaco);
+                  
+                  // Set up YAML linting integration
+                  setupMonacoIntegration(editor, monaco);
+                  
+                  // Debug: Check if YAML language is registered
+                  const registeredLanguages = monaco.languages.getLanguages();
+                  const yamlLang = registeredLanguages.find((lang: any) => lang.id === 'yaml');
+                  console.log('YAML language registered (fullscreen):', yamlLang ? 'YES' : 'NO');
+                  
+                  // Force immediate layout to ensure correct sizing
+                  editor.layout();
+                  
+                  // Add error handling for iPad-specific issues
+                  window.addEventListener('error', (event) => {
+                    if (event.message === 'Canceled: Canceled' || 
+                        event.error?.message === 'Canceled: Canceled') {
+                      event.preventDefault();
+                      return true; // Prevent the error from propagating
+                    }
+                    return false;
+                  });
+                }}
+                onChange={(value) => {
+                  if (!value) return;
+                  
+                  // Run YAML validation and show indentation errors
+                  if (monacoRef.current && editorInstanceRef.current) {
+                    const model = editorInstanceRef.current.getModel();
+                    if (model) {
+                      const markers = validateYamlIndentation(monacoRef.current, model);
+                      monacoRef.current.editor.setModelMarkers(model, 'yaml-validation', markers);
+                    }
+                  }
+                  
+                  try {
+                    // Set editing flag to prevent useEffect from overriding our changes
+                    setIsEditing(true);
+                    
+                    // Parse YAML to validate it and get values for form
+                    const parsed = parseYaml(value)
+                    
+                    // Extract external ID from all possible formats
+                    const externalIdValue = parsed.externalId !== undefined ? 
+                      parsed.externalId : 
+                      (parsed.external_id !== undefined ? parsed.external_id : 
+                       (parsed.id !== undefined ? parsed.id : undefined));
 
-                
-                // Update our local state
-                setCurrentConfig(value);
-                
-                // Pass the updated configuration to the parent
-                onEditChange?.({
-                  name: parsed.name,
-                  externalId: externalIdValue !== undefined ? String(externalIdValue) : undefined,
-                  key: parsed.key,
-                  description: parsed.description,
-                  configuration: value // Store the original YAML string
-                });
-              } catch (error) {
-                // Handle cancellation errors gracefully
-                if (error instanceof Error && 
-                    (error.message === 'Canceled' || error.message === 'Canceled: Canceled')) {
-                  return; // Just ignore the error
-                }
-                
-                // Ignore other parse errors while typing
-              }
-            }}
-            options={getCommonMonacoOptions(isMobileDevice)}
-          />
-          </ResizableEditorContainer>
+                    
+                    // Update our local state
+                    setCurrentConfig(value);
+                    
+                    // Pass the updated configuration to the parent
+                    onEditChange?.({
+                      name: parsed.name,
+                      externalId: externalIdValue !== undefined ? String(externalIdValue) : undefined,
+                      key: parsed.key,
+                      description: parsed.description,
+                      configuration: value // Store the original YAML string
+                    });
+                  } catch (error) {
+                    // Handle cancellation errors gracefully
+                    if (error instanceof Error && 
+                        (error.message === 'Canceled' || error.message === 'Canceled: Canceled')) {
+                      return; // Just ignore the error
+                    }
+                    
+                    // Ignore other parse errors while typing
+                  }
+                }}
+                options={getCommonMonacoOptions(isMobileDevice)}
+              />
+            </div>
+
+            {/* YAML Linter Panel - 1/3 width on the right */}
+            {lintResult && (
+              <div className="flex-[1] bg-background rounded-lg p-4 overflow-y-auto">
+                <YamlLinterPanel
+                  result={lintResult}
+                  onMessageClick={handleLintMessageClick}
+                  className="text-sm"
+                />
+              </div>
+            )}
+          </div>
         )}
       </div>
+
+      {/* YAML Linter Panel - only show below editor in normal mode (not fullscreen) */}
+      {!isEditorFullscreen && lintResult && (
+        <div className="mt-3">
+          <div className="bg-background rounded-lg p-4">
+            <YamlLinterPanel
+              result={lintResult}
+              onMessageClick={handleLintMessageClick}
+              className="text-sm"
+            />
+          </div>
+        </div>
+      )}
 
       {/* Action buttons - show in both normal and fullscreen modes */}
       {hasChanges && (
         <div className={cn(
-          "mt-4 space-y-4",
+          "mt-3 space-y-4",
           isEditorFullscreen && "mt-4"
         )}>
           <div className={cn(
@@ -968,7 +1013,7 @@ const DetailContent = React.memo(({
 
       {/* Version history - hide in fullscreen mode */}
       {!isEditorFullscreen && versions && (
-        <div className="mt-6 overflow-hidden flex-shrink-0">
+        <div className="mt-3 overflow-hidden flex-shrink-0">
           <ScoreVersionHistory
             versions={versions}
             championVersionId={championVersionId}
@@ -1004,6 +1049,7 @@ export function ScoreComponent({
   onSave,
   exampleItems = [],
   scorecardName,
+  onTaskCreated,
   className,
   ...props
 }: ScoreComponentProps) {
@@ -1591,6 +1637,7 @@ export function ScoreComponent({
               exampleItems={exampleItems}
               selectedAccount={selectedAccount}
               scorecardName={scorecardName}
+              onTaskCreated={onTaskCreated}
             />
           )}
         </div>

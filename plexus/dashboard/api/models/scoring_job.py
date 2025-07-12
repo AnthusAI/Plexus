@@ -6,7 +6,7 @@ from .batch_job import BatchJob
 from ..client import _BaseAPIClient
 import json
 import logging
-from plexus.utils import truncate_dict_strings_inner
+from plexus.utils.dict_utils import truncate_dict_strings_inner
 
 @dataclass
 class ScoringJob(BaseModel):

@@ -8,7 +8,7 @@ const blockRegistry = new Map<string, BlockComponent>()
  * Register a block component
  */
 export function registerBlock(type: string, component: BlockComponent) {
-  console.log(`Registering block component: ${type}`);
+  // console.log(`Registering block component: ${type}`);
   blockRegistry.set(type, component)
 }
 
@@ -17,7 +17,7 @@ export function registerBlock(type: string, component: BlockComponent) {
  */
 export function getBlock(type: string): BlockComponent | undefined {
   const blockComponent = blockRegistry.get(type);
-  console.log(`Getting block component for type: ${type}, Found: ${!!blockComponent}`);
+  // console.log(`Getting block component for type: ${type}, Found: ${!!blockComponent}`);
   return blockComponent;
 }
 
@@ -44,16 +44,16 @@ export type BlockRendererProps = ReportBlockProps
  * Block component that renders the appropriate block based on type.
  * Only uses a container for the default block type or error states.
  */
-export function BlockRenderer(props: BlockRendererProps) {
+export function BlockRenderer(props: ReportBlockProps) {
   const { type = 'default' } = props  // Use type from props, fallback to default
   
-  console.log('🔧 BlockRenderer called with:', {
-    type,
-    hasOutput: !!props.output,
-    outputKeys: props.output ? Object.keys(props.output) : 'none',
-    name: props.name,
-    position: props.position
-  });
+  // console.log('🔧 BlockRenderer called with:', {
+  //   type,
+  //   hasOutput: !!props.output,
+  //   outputKeys: props.output ? Object.keys(props.output) : 'none',
+  //   name: props.name,
+  //   position: props.position
+  // });
   
   let BlockComponent = getBlock(type)
   let componentProps = { ...props } // Create a copy to potentially modify

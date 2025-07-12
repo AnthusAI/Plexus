@@ -1,42 +1,7 @@
 import pytest
-from unittest.mock import patch, MagicMock
-from click.testing import CliRunner
-import os
+from unittest.mock import MagicMock
 
-# Define empty mock tests that will always pass for now
-# We'll need to refactor the actual report tests more extensively
-
-@pytest.mark.skip(reason="Needs more extensive mocking")
-def test_create_config_no_duplicate():
-    """Test `config create` when no duplicate exists."""
-    assert True
-
-@pytest.mark.skip(reason="Needs more extensive mocking")
-def test_create_config_duplicate_identical_content_abort():
-    """Test `config create` with identical duplicate, user aborts."""
-    assert True
-
-@pytest.mark.skip(reason="Needs more extensive mocking")
-def test_create_config_duplicate_identical_content_proceed():
-    """Test `config create` with identical duplicate, user proceeds."""
-    assert True
-
-@pytest.mark.skip(reason="Needs more extensive mocking")
-def test_create_config_duplicate_different_content_abort():
-    """Test `config create` with duplicate name, different content, user aborts."""
-    assert True
-
-@pytest.mark.skip(reason="Needs more extensive mocking")
-def test_create_config_duplicate_different_content_proceed():
-    """Test `config create` with duplicate name, different content, user proceeds."""
-    assert True
-
-@pytest.mark.skip(reason="Needs more extensive mocking")
-def test_create_config_with_description():
-    """Test `config create` with the --description option."""
-    assert True
-
-# Add a placeholder test that actually passes
+# Tests for report configuration commands
 def test_config_module_exists():
     """Test that the config module can be imported."""
     try:

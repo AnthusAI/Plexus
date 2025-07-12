@@ -428,6 +428,9 @@ export default function TopicAnalysisPage() {
                   output={exampleOutput}
                   name="Topic Analysis Example"
                   type="TopicAnalysis"
+                  config={{}}
+                  position={0}
+                  id="topic-analysis-example"
                 />
               </div>
             </CardContent>

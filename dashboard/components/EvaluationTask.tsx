@@ -120,6 +120,7 @@ export interface EvaluationTaskData extends BaseTaskData {
 
 export interface EvaluationTaskProps extends Omit<BaseTaskProps<EvaluationTaskData>, 'variant'> {
   variant?: 'grid' | 'detail'
+  // Added task output display support
   task: {
     id: string
     type: string
@@ -128,6 +129,11 @@ export interface EvaluationTaskProps extends Omit<BaseTaskProps<EvaluationTaskDa
     time: string
     summary?: string
     description?: string
+    command?: string
+    output?: string // Universal Code YAML output
+    attachedFiles?: string[] // Array of S3 file keys for attachments
+    stdout?: string // Task stdout output
+    stderr?: string // Task stderr output
     data: EvaluationTaskData
     stages?: TaskStageConfig[]
     currentStageName?: string

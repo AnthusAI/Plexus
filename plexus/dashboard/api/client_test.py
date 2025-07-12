@@ -463,3 +463,75 @@ def test_batch_scoring_job_handles_none_values(mock_client):
         assert create_call_kwargs['metadata'] is None
         assert 'parameters' in create_call_kwargs
         assert create_call_kwargs['parameters'] is None
+
+
+def test_flush_prevents_duplicate_cleanup():
+    """Test that flush() can be called multiple times safely and prevents resource leaks"""
+    client = PlexusDashboardClient(api_url="http://test", api_key="test")
+    
+    # Verify thread is initially running
+    assert client._log_thread.is_alive()
+    assert not client._stop_logging.is_set()
+    
+    # First flush should stop the thread
+    client.flush()
+    
+    # Verify cleanup happened
+    assert client._stop_logging.is_set()
+    # Give thread time to finish
+    import time
+    time.sleep(0.1)
+    assert not client._log_thread.is_alive()
+    
+    # Second flush should return early without error
+    client.flush()  # Should not raise an exception
+    
+    # Verify state is still correct
+    assert client._stop_logging.is_set()
+
+
+def test_flush_handles_initialization_failure():
+    """Test that flush() handles cases where initialization failed"""
+    # Simulate failed initialization by creating an object without proper setup
+    client = object.__new__(PlexusDashboardClient)
+    
+    # flush() should handle missing attributes gracefully
+    client.flush()  # Should not raise AttributeError
+    
+    # Test with None _stop_logging
+    client._stop_logging = None
+    client.flush()  # Should not raise AttributeError
+
+
+def test_resource_leak_bug_reproduction():
+    """Test that demonstrates the original resource leak bug (would fail with old logic)"""
+    client = PlexusDashboardClient(api_url="http://test", api_key="test")
+    
+    # Log some items
+    for i in range(3):
+        client.log_score(0.9, f"item-{i}", 
+                        accountId="acc-1",
+                        scoringJobId="job-1", 
+                        scorecardId="card-1")
+    
+    # With the OLD buggy logic: `if not self._stop_logging:` 
+    # - _stop_logging is an Event() object, which is always truthy
+    # - So `not self._stop_logging` would always be False
+    # - flush() would ALWAYS return early without doing cleanup
+    
+    # Verify thread is running before flush
+    assert client._log_thread.is_alive()
+    assert not client._stop_logging.is_set()
+    
+    # Call flush - with the fix, this should actually clean up
+    client.flush()
+    
+    # After the fix: thread should be stopped
+    assert client._stop_logging.is_set()
+    
+    # Give thread time to finish  
+    import time
+    time.sleep(0.1)
+    assert not client._log_thread.is_alive()
+    
+    # This is what the old buggy code would NOT have achieved:

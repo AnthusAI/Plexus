@@ -270,6 +270,9 @@ export default function FeedbackAnalysisPage() {
                   output={exampleOutput}
                   name="Feedback Analysis Example"
                   type="FeedbackAnalysis"
+                  config={{}}
+                  position={0}
+                  id="feedback-analysis-example"
                 />
               </div>
             </CardContent>

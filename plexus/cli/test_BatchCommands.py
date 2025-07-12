@@ -443,11 +443,7 @@ class TestGenerateBatchImpl:
             
             mock_get_jobs.assert_called_once()
     
-    # Skip the complex test that requires extensive database mocking
-    @pytest.mark.skip(reason="Too complex for unit testing - requires extensive database mocking")
-    async def test_generate_batch_with_jobs(self):
-        """Skip complex batch generation test"""
-        pass
+    # Complex batch generation test removed - would require extensive database mocking
 
 
 class TestIntegration:
