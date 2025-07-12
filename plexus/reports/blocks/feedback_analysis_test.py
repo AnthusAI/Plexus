@@ -109,9 +109,11 @@ def mock_feedback_items():
         item.finalAnswerValue = "No" if is_mismatch else "No"
         item.isMismatch = is_mismatch
         
-        # Add updatedAt attribute with a timezone-aware timestamp within the test range
+        # Add timestamp attributes with timezone-aware timestamps within the test range
         now = datetime.now(timezone.utc)
         item.updatedAt = now - timedelta(days=5)  # Within the default 14 days
+        item.createdAt = now - timedelta(days=10)  # Created earlier
+        item.editedAt = None  # Not edited
         
         items.append(item)
     
@@ -128,9 +130,11 @@ def mock_feedback_items():
         item.finalAnswerValue = "Better" if is_mismatch else "Better"
         item.isMismatch = is_mismatch
         
-        # Add updatedAt attribute with a timezone-aware timestamp within the test range
+        # Add timestamp attributes with timezone-aware timestamps within the test range
         now = datetime.now(timezone.utc)
         item.updatedAt = now - timedelta(days=5)  # Within the default 14 days
+        item.createdAt = now - timedelta(days=10)  # Created earlier
+        item.editedAt = None  # Not edited
         
         items.append(item)
     
@@ -153,8 +157,12 @@ class TestFeedbackAnalysis:
         
         # Mock Scorecard get_by_external_id
         with patch('plexus.dashboard.api.models.scorecard.Scorecard.get_by_external_id', return_value=MagicMock(id="test-scorecard-id", name="Test Scorecard")):
-            # Mock _fetch_feedback_items_for_score to return test items
-            with patch.object(block, '_fetch_feedback_items_for_score', return_value=mock_feedback_items):
+            # Mock _fetch_feedback_items_for_score to return filtered items based on score
+            def mock_fetch_items(plexus_scorecard_id, plexus_score_id, start_date=None, end_date=None):
+                # Filter items by the requested score ID
+                return [item for item in mock_feedback_items if item.scoreId == plexus_score_id]
+            
+            with patch.object(block, '_fetch_feedback_items_for_score', side_effect=mock_fetch_items):
                 # Call the generate method
                 output, logs = await block.generate()
                 
@@ -166,10 +174,9 @@ class TestFeedbackAnalysis:
                 assert "overall_ac1" in parsed_output
                 assert "scores" in parsed_output
                 
-                # The actual total items will be 30 because the implementation processes 
-                # the same 15 mock_feedback_items for both score1 and score2
-                assert parsed_output["total_items"] == 30
-                assert parsed_output["total_mismatches"] == 8  # 4 mismatches for each score
+                # Now with proper filtering: score1 has 10 items, score2 has 5 items = 15 total
+                assert parsed_output["total_items"] == 15
+                assert parsed_output["total_mismatches"] == 4  # 3 mismatches for score1 + 1 mismatch for score2
                 
                 # Check that AC1 values are reasonable
                 assert parsed_output["overall_ac1"] is not None

@@ -536,9 +536,22 @@ class Evaluation:
                 "alignment": 0,  # Changed from sensitivity to alignment
                 "precision": 0,
                 "recall": 0,      # Changed from specificity to recall
-                "predicted_distribution": [],
-                "actual_distribution": [],
-                "confusion_matrices": []
+                "confusionMatrix": {
+                    "matrix": [[0, 0], [0, 0]],
+                    "labels": ['yes', 'no']
+                },
+                "predictedClassDistribution": [{
+                    "score": "no_data",
+                    "label": "no_data",
+                    "count": 0,
+                    "percentage": 0
+                }],
+                "datasetClassDistribution": [{
+                    "score": "no_data", 
+                    "label": "no_data",
+                    "count": 0,
+                    "percentage": 0
+                }]
             }
         # --- END NEW LOGGING ---
 
