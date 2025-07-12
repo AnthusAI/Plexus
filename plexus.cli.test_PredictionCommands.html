@@ -1,0 +1,656 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.cli.test_PredictionCommands module &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.cli.test_ScoreChatCommands module" href="plexus.cli.test_ScoreChatCommands.html" />
+    <link rel="prev" title="plexus.cli.test_DatasetCommands module" href="plexus.cli.test_DatasetCommands.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.html">plexus.analysis package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="plexus.cli.html#subpackages">Subpackages</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.cli.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.linting.html">plexus.linting package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.metrics.html">plexus.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.reports.html">plexus.reports package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.html">plexus.utils package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.html#subpackages">Subpackages</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.cli.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.AnalyzeCommands.html">plexus.cli.AnalyzeCommands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.BatchCommands.html">plexus.cli.BatchCommands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.CommandDispatch.html">plexus.cli.CommandDispatch module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.CommandLineInterface.html">plexus.cli.CommandLineInterface module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.CommandProgress.html">plexus.cli.CommandProgress module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.CommandTasks.html">plexus.cli.CommandTasks module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.DataCommands.html">plexus.cli.DataCommands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.DataLakeCommands.html">plexus.cli.DataLakeCommands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.DatasetCommands.html">plexus.cli.DatasetCommands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.EvaluationCommands.html">plexus.cli.EvaluationCommands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.FeedbackCommands.html">plexus.cli.FeedbackCommands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.ItemCommands.html">plexus.cli.ItemCommands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.PredictionCommands.html">plexus.cli.PredictionCommands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.RecordCountCommands.html">plexus.cli.RecordCountCommands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.ReportCommands.html">plexus.cli.ReportCommands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.ResultCommands.html">plexus.cli.ResultCommands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.ScoreChatCommands.html">plexus.cli.ScoreChatCommands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.ScoreCommands.html">plexus.cli.ScoreCommands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.ScorecardCommands.html">plexus.cli.ScorecardCommands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.TaskCommands.html">plexus.cli.TaskCommands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.TaskTargeting.html">plexus.cli.TaskTargeting module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.TrainingCommands.html">plexus.cli.TrainingCommands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.TuningCommands.html">plexus.cli.TuningCommands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.cli_wrapper.html">plexus.cli.cli_wrapper module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.client_utils.html">plexus.cli.client_utils module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.command_output.html">plexus.cli.command_output module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.console.html">plexus.cli.console module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.file_editor.html">plexus.cli.file_editor module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.identifier_resolution.html">plexus.cli.identifier_resolution module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.memoized_resolvers.html">plexus.cli.memoized_resolvers module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.plexus_tool.html">plexus.cli.plexus_tool module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.score_chat_celery.html">plexus.cli.score_chat_celery module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.score_chat_repl.html">plexus.cli.score_chat_repl module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.score_chat_service.html">plexus.cli.score_chat_service module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.html">plexus.cli.shared module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.stage_configurations.html">plexus.cli.stage_configurations module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.task_progress_tracker.html">plexus.cli.task_progress_tracker module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.test_AnalyzeCommands.html">plexus.cli.test_AnalyzeCommands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.test_BatchCommands.html">plexus.cli.test_BatchCommands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.test_DatasetCommands.html">plexus.cli.test_DatasetCommands module</a></li>
+<li class="toctree-l3 current"><a class="current reference internal" href="#">plexus.cli.test_PredictionCommands module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.cli.test_PredictionCommands.TestCreateScoreInput"><code class="docutils literal notranslate"><span class="pre">TestCreateScoreInput</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.cli.test_PredictionCommands.TestFeedbackComparison"><code class="docutils literal notranslate"><span class="pre">TestFeedbackComparison</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.cli.test_PredictionCommands.TestFeedbackComparisonIntegration"><code class="docutils literal notranslate"><span class="pre">TestFeedbackComparisonIntegration</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.cli.test_PredictionCommands.TestGetScorecardClass"><code class="docutils literal notranslate"><span class="pre">TestGetScorecardClass</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.cli.test_PredictionCommands.TestHandleException"><code class="docutils literal notranslate"><span class="pre">TestHandleException</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.cli.test_PredictionCommands.TestIntegration"><code class="docutils literal notranslate"><span class="pre">TestIntegration</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.cli.test_PredictionCommands.TestOutputExcel"><code class="docutils literal notranslate"><span class="pre">TestOutputExcel</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.cli.test_PredictionCommands.TestPredictCommand"><code class="docutils literal notranslate"><span class="pre">TestPredictCommand</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.cli.test_PredictionCommands.TestPredictCommandWithFeedback"><code class="docutils literal notranslate"><span class="pre">TestPredictCommandWithFeedback</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.cli.test_PredictionCommands.TestPredictImpl"><code class="docutils literal notranslate"><span class="pre">TestPredictImpl</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.cli.test_PredictionCommands.TestPredictScore"><code class="docutils literal notranslate"><span class="pre">TestPredictScore</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.cli.test_PredictionCommands.TestPredictScoreImpl"><code class="docutils literal notranslate"><span class="pre">TestPredictScoreImpl</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.cli.test_PredictionCommands.TestSelectSample"><code class="docutils literal notranslate"><span class="pre">TestSelectSample</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.cli.test_PredictionCommands.mock_client"><code class="docutils literal notranslate"><span class="pre">mock_client()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.cli.test_PredictionCommands.mock_env_vars"><code class="docutils literal notranslate"><span class="pre">mock_env_vars()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.cli.test_PredictionCommands.mock_item"><code class="docutils literal notranslate"><span class="pre">mock_item()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.cli.test_PredictionCommands.mock_score_class"><code class="docutils literal notranslate"><span class="pre">mock_score_class()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.cli.test_PredictionCommands.mock_scorecard_class"><code class="docutils literal notranslate"><span class="pre">mock_scorecard_class()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.cli.test_PredictionCommands.mock_scorecard_registry"><code class="docutils literal notranslate"><span class="pre">mock_scorecard_registry()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.cli.test_PredictionCommands.runner"><code class="docutils literal notranslate"><span class="pre">runner()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.cli.test_PredictionCommands.sample_item_data"><code class="docutils literal notranslate"><span class="pre">sample_item_data()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.cli.test_PredictionCommands.sample_scorecard_class"><code class="docutils literal notranslate"><span class="pre">sample_scorecard_class()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.test_ScoreChatCommands.html">plexus.cli.test_ScoreChatCommands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.test_TaskCommands.html">plexus.cli.test_TaskCommands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.test_record_count_commands.html">plexus.cli.test_record_count_commands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.test_report_commands_integration.html">plexus.cli.test_report_commands_integration module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.test_task_progress_tracker_comprehensive.html">plexus.cli.test_task_progress_tracker_comprehensive module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.universal_code.html">plexus.cli.universal_code module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.utils.html">plexus.cli.utils module</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.cli.html">plexus.cli package</a></li>
+      <li class="breadcrumb-item active">plexus.cli.test_PredictionCommands module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.cli.test_PredictionCommands.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.cli.test_PredictionCommands">
+<span id="plexus-cli-test-predictioncommands-module"></span><h1>plexus.cli.test_PredictionCommands module<a class="headerlink" href="#module-plexus.cli.test_PredictionCommands" title="Link to this heading"></a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestCreateScoreInput">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">plexus.cli.test_PredictionCommands.</span></span><span class="sig-name descname"><span class="pre">TestCreateScoreInput</span></span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestCreateScoreInput" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Test the create_score_input function</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestCreateScoreInput.test_create_score_input_no_input_class">
+<span class="sig-name descname"><span class="pre">test_create_score_input_no_input_class</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_score_class</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestCreateScoreInput.test_create_score_input_no_input_class" title="Link to this definition"></a></dt>
+<dd><p>Test create_score_input when Input class is not available</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestCreateScoreInput.test_create_score_input_with_sample_row">
+<span class="sig-name descname"><span class="pre">test_create_score_input_with_sample_row</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_score_class</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestCreateScoreInput.test_create_score_input_with_sample_row" title="Link to this definition"></a></dt>
+<dd><p>Test create_score_input with sample row data</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestCreateScoreInput.test_create_score_input_without_sample_row">
+<span class="sig-name descname"><span class="pre">test_create_score_input_without_sample_row</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_score_class</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestCreateScoreInput.test_create_score_input_without_sample_row" title="Link to this definition"></a></dt>
+<dd><p>Test create_score_input without sample row data</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestFeedbackComparison">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">plexus.cli.test_PredictionCommands.</span></span><span class="sig-name descname"><span class="pre">TestFeedbackComparison</span></span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestFeedbackComparison" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Test class for feedback comparison functionality.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestFeedbackComparison.setup_method">
+<span class="sig-name descname"><span class="pre">setup_method</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestFeedbackComparison.setup_method" title="Link to this definition"></a></dt>
+<dd><p>Setup for each test method.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestFeedbackComparison.test_create_feedback_comparison_agreement">
+<span class="sig-name descname"><span class="pre">test_create_feedback_comparison_agreement</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestFeedbackComparison.test_create_feedback_comparison_agreement" title="Link to this definition"></a></dt>
+<dd><p>Test create_feedback_comparison when prediction matches ground truth.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestFeedbackComparison.test_create_feedback_comparison_case_insensitive">
+<span class="sig-name descname"><span class="pre">test_create_feedback_comparison_case_insensitive</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestFeedbackComparison.test_create_feedback_comparison_case_insensitive" title="Link to this definition"></a></dt>
+<dd><p>Test that comparison is case-insensitive.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestFeedbackComparison.test_create_feedback_comparison_disagreement">
+<span class="sig-name descname"><span class="pre">test_create_feedback_comparison_disagreement</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestFeedbackComparison.test_create_feedback_comparison_disagreement" title="Link to this definition"></a></dt>
+<dd><p>Test create_feedback_comparison when prediction doesn’t match ground truth.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestFeedbackComparison.test_create_feedback_comparison_missing_explanation">
+<span class="sig-name descname"><span class="pre">test_create_feedback_comparison_missing_explanation</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestFeedbackComparison.test_create_feedback_comparison_missing_explanation" title="Link to this definition"></a></dt>
+<dd><p>Test create_feedback_comparison when explanation is missing.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestFeedbackComparison.test_create_feedback_comparison_none_values">
+<span class="sig-name descname"><span class="pre">test_create_feedback_comparison_none_values</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestFeedbackComparison.test_create_feedback_comparison_none_values" title="Link to this definition"></a></dt>
+<dd><p>Test create_feedback_comparison with None values.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestFeedbackComparisonIntegration">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">plexus.cli.test_PredictionCommands.</span></span><span class="sig-name descname"><span class="pre">TestFeedbackComparisonIntegration</span></span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestFeedbackComparisonIntegration" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Test class for end-to-end feedback comparison integration.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestFeedbackComparisonIntegration.test_create_feedback_comparison_with_real_structure">
+<span class="sig-name descname"><span class="pre">test_create_feedback_comparison_with_real_structure</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestFeedbackComparisonIntegration.test_create_feedback_comparison_with_real_structure" title="Link to this definition"></a></dt>
+<dd><p>Test create_feedback_comparison with realistic prediction structure.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestFeedbackComparisonIntegration.test_feedback_comparison_edge_cases">
+<span class="sig-name descname"><span class="pre">test_feedback_comparison_edge_cases</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestFeedbackComparisonIntegration.test_feedback_comparison_edge_cases" title="Link to this definition"></a></dt>
+<dd><p>Test edge cases in feedback comparison logic.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestFeedbackComparisonIntegration.test_feedback_comparison_with_numeric_values">
+<span class="sig-name descname"><span class="pre">test_feedback_comparison_with_numeric_values</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestFeedbackComparisonIntegration.test_feedback_comparison_with_numeric_values" title="Link to this definition"></a></dt>
+<dd><p>Test feedback comparison with numeric score values.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestGetScorecardClass">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">plexus.cli.test_PredictionCommands.</span></span><span class="sig-name descname"><span class="pre">TestGetScorecardClass</span></span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestGetScorecardClass" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Test the get_scorecard_class function</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestGetScorecardClass.test_get_scorecard_class_not_found">
+<span class="sig-name descname"><span class="pre">test_get_scorecard_class_not_found</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_scorecard_class</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mock_scorecard_registry</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestGetScorecardClass.test_get_scorecard_class_not_found" title="Link to this definition"></a></dt>
+<dd><p>Test scorecard class not found</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestGetScorecardClass.test_get_scorecard_class_success">
+<span class="sig-name descname"><span class="pre">test_get_scorecard_class_success</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_scorecard_class</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mock_scorecard_registry</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestGetScorecardClass.test_get_scorecard_class_success" title="Link to this definition"></a></dt>
+<dd><p>Test successful scorecard class retrieval via direct registry lookup</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestGetScorecardClass.test_get_scorecard_class_success_with_api_resolution">
+<span class="sig-name descname"><span class="pre">test_get_scorecard_class_success_with_api_resolution</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_scorecard_class</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mock_scorecard_registry</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestGetScorecardClass.test_get_scorecard_class_success_with_api_resolution" title="Link to this definition"></a></dt>
+<dd><p>Test successful scorecard class retrieval with API resolution</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestHandleException">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">plexus.cli.test_PredictionCommands.</span></span><span class="sig-name descname"><span class="pre">TestHandleException</span></span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestHandleException" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Test the handle_exception function</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestHandleException.test_handle_exception_batch_processing_pause">
+<span class="sig-name descname"><span class="pre">test_handle_exception_batch_processing_pause</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestHandleException.test_handle_exception_batch_processing_pause" title="Link to this definition"></a></dt>
+<dd><p>Test exception handler with BatchProcessingPause</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestHandleException.test_handle_exception_general_exception">
+<span class="sig-name descname"><span class="pre">test_handle_exception_general_exception</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestHandleException.test_handle_exception_general_exception" title="Link to this definition"></a></dt>
+<dd><p>Test exception handler with general exception</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestIntegration">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">plexus.cli.test_PredictionCommands.</span></span><span class="sig-name descname"><span class="pre">TestIntegration</span></span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestIntegration" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Integration tests combining multiple components</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestIntegration.test_predict_command_full_workflow">
+<span class="sig-name descname"><span class="pre">test_predict_command_full_workflow</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">runner</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mock_scorecard_registry</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mock_client</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mock_env_vars</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestIntegration.test_predict_command_full_workflow" title="Link to this definition"></a></dt>
+<dd><p>Test complete predict command workflow</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestOutputExcel">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">plexus.cli.test_PredictionCommands.</span></span><span class="sig-name descname"><span class="pre">TestOutputExcel</span></span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestOutputExcel" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Test the output_excel function</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestOutputExcel.test_output_excel_success">
+<span class="sig-name descname"><span class="pre">test_output_excel_success</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestOutputExcel.test_output_excel_success" title="Link to this definition"></a></dt>
+<dd><p>Test Excel output generation</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestPredictCommand">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">plexus.cli.test_PredictionCommands.</span></span><span class="sig-name descname"><span class="pre">TestPredictCommand</span></span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestPredictCommand" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Test the main predict command</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestPredictCommand.test_predict_command_basic_success">
+<span class="sig-name descname"><span class="pre">test_predict_command_basic_success</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">runner</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mock_scorecard_registry</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_scorecard_class</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestPredictCommand.test_predict_command_basic_success" title="Link to this definition"></a></dt>
+<dd><p>Test basic predict command success</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestPredictCommand.test_predict_command_batch_processing_pause">
+<span class="sig-name descname"><span class="pre">test_predict_command_batch_processing_pause</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">runner</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mock_scorecard_registry</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_scorecard_class</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestPredictCommand.test_predict_command_batch_processing_pause" title="Link to this definition"></a></dt>
+<dd><p>Test predict command with BatchProcessingPause exception</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestPredictCommand.test_predict_command_general_exception">
+<span class="sig-name descname"><span class="pre">test_predict_command_general_exception</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">runner</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mock_scorecard_registry</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_scorecard_class</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestPredictCommand.test_predict_command_general_exception" title="Link to this definition"></a></dt>
+<dd><p>Test predict command with general exception</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestPredictCommand.test_predict_command_item_items_conflict">
+<span class="sig-name descname"><span class="pre">test_predict_command_item_items_conflict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">runner</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestPredictCommand.test_predict_command_item_items_conflict" title="Link to this definition"></a></dt>
+<dd><p>Test that –item and –items cannot be used together</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestPredictCommand.test_predict_command_keyboard_interrupt">
+<span class="sig-name descname"><span class="pre">test_predict_command_keyboard_interrupt</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">runner</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mock_scorecard_registry</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_scorecard_class</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestPredictCommand.test_predict_command_keyboard_interrupt" title="Link to this definition"></a></dt>
+<dd><p>Test predict command with KeyboardInterrupt</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestPredictCommand.test_predict_command_missing_scorecard_name">
+<span class="sig-name descname"><span class="pre">test_predict_command_missing_scorecard_name</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">runner</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestPredictCommand.test_predict_command_missing_scorecard_name" title="Link to this definition"></a></dt>
+<dd><p>Test predict command without required scorecard name</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestPredictCommand.test_predict_command_multiple_scores">
+<span class="sig-name descname"><span class="pre">test_predict_command_multiple_scores</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">runner</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mock_scorecard_registry</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_scorecard_class</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestPredictCommand.test_predict_command_multiple_scores" title="Link to this definition"></a></dt>
+<dd><p>Test predict command with multiple score names</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestPredictCommandWithFeedback">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">plexus.cli.test_PredictionCommands.</span></span><span class="sig-name descname"><span class="pre">TestPredictCommandWithFeedback</span></span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestPredictCommandWithFeedback" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Test class for predict command with feedback comparison integration.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestPredictCommandWithFeedback.mock_scorecard_class">
+<span class="sig-name descname"><span class="pre">mock_scorecard_class</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestPredictCommandWithFeedback.mock_scorecard_class" title="Link to this definition"></a></dt>
+<dd><p>Mock scorecard class.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestPredictCommandWithFeedback.test_predict_command_with_feedback_comparison_flag">
+<span class="sig-name descname"><span class="pre">test_predict_command_with_feedback_comparison_flag</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_scorecard_class</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestPredictCommandWithFeedback.test_predict_command_with_feedback_comparison_flag" title="Link to this definition"></a></dt>
+<dd><p>Test that predict command accepts and passes through compare_to_feedback flag.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestPredictCommandWithFeedback.test_predict_command_without_feedback_comparison_flag">
+<span class="sig-name descname"><span class="pre">test_predict_command_without_feedback_comparison_flag</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_scorecard_class</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestPredictCommandWithFeedback.test_predict_command_without_feedback_comparison_flag" title="Link to this definition"></a></dt>
+<dd><p>Test that predict command defaults compare_to_feedback to False.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestPredictImpl">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">plexus.cli.test_PredictionCommands.</span></span><span class="sig-name descname"><span class="pre">TestPredictImpl</span></span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestPredictImpl" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Test the predict_impl async function</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestPredictImpl.test_predict_impl_batch_processing_pause">
+<em class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">test_predict_impl_batch_processing_pause</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_scorecard_registry</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_scorecard_class</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestPredictImpl.test_predict_impl_batch_processing_pause" title="Link to this definition"></a></dt>
+<dd><p>Test predict_impl with BatchProcessingPause exception</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestPredictImpl.test_predict_impl_excel_output">
+<em class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">test_predict_impl_excel_output</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_scorecard_registry</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_scorecard_class</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestPredictImpl.test_predict_impl_excel_output" title="Link to this definition"></a></dt>
+<dd><p>Test predict_impl with Excel output</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestPredictImpl.test_predict_impl_list_predictions">
+<em class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">test_predict_impl_list_predictions</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_scorecard_registry</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_scorecard_class</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestPredictImpl.test_predict_impl_list_predictions" title="Link to this definition"></a></dt>
+<dd><p>Test predict_impl with list of predictions</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestPredictImpl.test_predict_impl_multiple_items">
+<em class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">test_predict_impl_multiple_items</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_scorecard_registry</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_scorecard_class</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestPredictImpl.test_predict_impl_multiple_items" title="Link to this definition"></a></dt>
+<dd><p>Test predict_impl with multiple items</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestPredictImpl.test_predict_impl_no_results">
+<em class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">test_predict_impl_no_results</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_scorecard_registry</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_scorecard_class</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestPredictImpl.test_predict_impl_no_results" title="Link to this definition"></a></dt>
+<dd><p>Test predict_impl with no prediction results</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestPredictImpl.test_predict_impl_success_fixed_format">
+<em class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">test_predict_impl_success_fixed_format</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_scorecard_registry</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_scorecard_class</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestPredictImpl.test_predict_impl_success_fixed_format" title="Link to this definition"></a></dt>
+<dd><p>Test predict_impl with successful prediction in fixed format</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestPredictImpl.test_predict_impl_success_json_format">
+<em class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">test_predict_impl_success_json_format</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_scorecard_registry</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_scorecard_class</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestPredictImpl.test_predict_impl_success_json_format" title="Link to this definition"></a></dt>
+<dd><p>Test predict_impl with successful prediction in JSON format</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestPredictImpl.test_predict_impl_success_yaml_format">
+<em class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">test_predict_impl_success_yaml_format</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_scorecard_registry</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_scorecard_class</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestPredictImpl.test_predict_impl_success_yaml_format" title="Link to this definition"></a></dt>
+<dd><p>Test predict_impl with successful prediction in YAML format</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestPredictScore">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">plexus.cli.test_PredictionCommands.</span></span><span class="sig-name descname"><span class="pre">TestPredictScore</span></span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestPredictScore" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Test the predict_score async function</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestPredictScore.test_predict_score_batch_processing_pause">
+<em class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">test_predict_score_batch_processing_pause</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sample_scorecard_class</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestPredictScore.test_predict_score_batch_processing_pause" title="Link to this definition"></a></dt>
+<dd><p>Test predict_score with BatchProcessingPause</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestPredictScore.test_predict_score_general_error">
+<em class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">test_predict_score_general_error</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sample_scorecard_class</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestPredictScore.test_predict_score_general_error" title="Link to this definition"></a></dt>
+<dd><p>Test predict_score with general error</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestPredictScore.test_predict_score_success">
+<em class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">test_predict_score_success</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sample_scorecard_class</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestPredictScore.test_predict_score_success" title="Link to this definition"></a></dt>
+<dd><p>Test successful score prediction</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestPredictScoreImpl">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">plexus.cli.test_PredictionCommands.</span></span><span class="sig-name descname"><span class="pre">TestPredictScoreImpl</span></span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestPredictScoreImpl" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Test the predict_score_impl async function</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestPredictScoreImpl.test_predict_score_impl_batch_processing_pause">
+<em class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">test_predict_score_impl_batch_processing_pause</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_score_class</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_scorecard_class</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestPredictScoreImpl.test_predict_score_impl_batch_processing_pause" title="Link to this definition"></a></dt>
+<dd><p>Test score implementation with BatchProcessingPause</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestPredictScoreImpl.test_predict_score_impl_error_with_cleanup">
+<em class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">test_predict_score_impl_error_with_cleanup</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_score_class</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_scorecard_class</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestPredictScoreImpl.test_predict_score_impl_error_with_cleanup" title="Link to this definition"></a></dt>
+<dd><p>Test score implementation with error and cleanup</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestPredictScoreImpl.test_predict_score_impl_no_costs">
+<em class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">test_predict_score_impl_no_costs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_score_class</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_scorecard_class</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestPredictScoreImpl.test_predict_score_impl_no_costs" title="Link to this definition"></a></dt>
+<dd><p>Test score implementation when costs are not available</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestPredictScoreImpl.test_predict_score_impl_success">
+<em class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">test_predict_score_impl_success</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_score_class</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_scorecard_class</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestPredictScoreImpl.test_predict_score_impl_success" title="Link to this definition"></a></dt>
+<dd><p>Test successful score implementation</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestSelectSample">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">plexus.cli.test_PredictionCommands.</span></span><span class="sig-name descname"><span class="pre">TestSelectSample</span></span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestSelectSample" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Test the select_sample function</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestSelectSample.test_select_sample_item_not_found">
+<span class="sig-name descname"><span class="pre">test_select_sample_item_not_found</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_client</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mock_item</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mock_env_vars</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestSelectSample.test_select_sample_item_not_found" title="Link to this definition"></a></dt>
+<dd><p>Test select_sample when item is not found</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestSelectSample.test_select_sample_no_items_in_account">
+<span class="sig-name descname"><span class="pre">test_select_sample_no_items_in_account</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_client</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mock_item</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mock_env_vars</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestSelectSample.test_select_sample_no_items_in_account" title="Link to this definition"></a></dt>
+<dd><p>Test select_sample when no items exist in account</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestSelectSample.test_select_sample_with_item_id_direct_lookup">
+<span class="sig-name descname"><span class="pre">test_select_sample_with_item_id_direct_lookup</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_client</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mock_item</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_item_data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mock_env_vars</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestSelectSample.test_select_sample_with_item_id_direct_lookup" title="Link to this definition"></a></dt>
+<dd><p>Test select_sample with specific item ID - direct lookup</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestSelectSample.test_select_sample_with_item_id_identifier_search">
+<span class="sig-name descname"><span class="pre">test_select_sample_with_item_id_identifier_search</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_client</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mock_item</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_item_data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mock_env_vars</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestSelectSample.test_select_sample_with_item_id_identifier_search" title="Link to this definition"></a></dt>
+<dd><p>Test select_sample with identifier search fallback</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.TestSelectSample.test_select_sample_without_item_id">
+<span class="sig-name descname"><span class="pre">test_select_sample_without_item_id</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mock_client</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mock_item</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_item_data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mock_env_vars</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.TestSelectSample.test_select_sample_without_item_id" title="Link to this definition"></a></dt>
+<dd><p>Test select_sample without specific item ID - gets most recent</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.mock_client">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.test_PredictionCommands.</span></span><span class="sig-name descname"><span class="pre">mock_client</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.mock_client" title="Link to this definition"></a></dt>
+<dd><p>Mock API client</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.mock_env_vars">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.test_PredictionCommands.</span></span><span class="sig-name descname"><span class="pre">mock_env_vars</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.mock_env_vars" title="Link to this definition"></a></dt>
+<dd><p>Mock environment variables</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.mock_item">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.test_PredictionCommands.</span></span><span class="sig-name descname"><span class="pre">mock_item</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.mock_item" title="Link to this definition"></a></dt>
+<dd><p>Mock Item class</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.mock_score_class">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.test_PredictionCommands.</span></span><span class="sig-name descname"><span class="pre">mock_score_class</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.mock_score_class" title="Link to this definition"></a></dt>
+<dd><p>Mock Score class</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.mock_scorecard_class">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.test_PredictionCommands.</span></span><span class="sig-name descname"><span class="pre">mock_scorecard_class</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.mock_scorecard_class" title="Link to this definition"></a></dt>
+<dd><p>Mock scorecard class and loading</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.mock_scorecard_registry">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.test_PredictionCommands.</span></span><span class="sig-name descname"><span class="pre">mock_scorecard_registry</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.mock_scorecard_registry" title="Link to this definition"></a></dt>
+<dd><p>Mock the scorecard registry</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.runner">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.test_PredictionCommands.</span></span><span class="sig-name descname"><span class="pre">runner</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.runner" title="Link to this definition"></a></dt>
+<dd><p>Create a Click CLI runner for testing</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.sample_item_data">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.test_PredictionCommands.</span></span><span class="sig-name descname"><span class="pre">sample_item_data</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.sample_item_data" title="Link to this definition"></a></dt>
+<dd><p>Sample item data for testing</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.test_PredictionCommands.sample_scorecard_class">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.test_PredictionCommands.</span></span><span class="sig-name descname"><span class="pre">sample_scorecard_class</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.test_PredictionCommands.sample_scorecard_class" title="Link to this definition"></a></dt>
+<dd><p>Sample scorecard class for testing</p>
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.cli.test_DatasetCommands.html" class="btn btn-neutral float-left" title="plexus.cli.test_DatasetCommands module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.cli.test_ScoreChatCommands.html" class="btn btn-neutral float-right" title="plexus.cli.test_ScoreChatCommands module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
