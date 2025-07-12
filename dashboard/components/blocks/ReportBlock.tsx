@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState } from 'react'
-import { ScrollText, Download, Paperclip, AlertTriangle, AlertCircle, Code, Eye, MessageSquareCode, Copy } from 'lucide-react';
+import { ScrollText, Download, Paperclip, AlertTriangle, AlertCircle, Code, Eye, MessageSquareCode, Copy, Database, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { downloadData, getUrl } from 'aws-amplify/storage';
 import { CardButton } from '@/components/CardButton';
@@ -58,6 +58,20 @@ export interface ReportBlockProps {
     start: string;
     end: string;
   }
+  /** Associated dataset information */
+  dataSet?: {
+    id: string;
+    name?: string;
+    description?: string;
+    dataSourceVersion?: {
+      id: string;
+      dataSource?: {
+        id: string;
+        name: string;
+        key?: string;
+      };
+    };
+  } | null;
 }
 
 /**
@@ -89,7 +103,8 @@ const ReportBlock: BlockComponent = ({
   notes,
   error,
   warning,
-  dateRange
+  dateRange,
+  dataSet
 }) => {
   // State for inline log display
   const [showLog, setShowLog] = useState(false);
@@ -361,11 +376,13 @@ const ReportBlock: BlockComponent = ({
   };
 
   // Extract error and warning from output if not provided directly
-  const displayError = error || (output && typeof output === 'object' && output.error);
-  const displayWarning = warning || (output && typeof output === 'object' && output.warning);
+  const outputObject = (output && typeof output === 'object') ? output as Record<string, any> : {};
+  const outputError = outputObject.error || (Array.isArray(outputObject.errors) && outputObject.errors.length > 0 ? outputObject.errors[0] : undefined);
+  const displayError = error || outputError;
+  const displayWarning = warning || outputObject.warning;
   
   // Extract date range from output if not provided directly
-  const displayDateRange = dateRange || (output && typeof output === 'object' && output.date_range);
+  const displayDateRange = dateRange || outputObject.date_range;
 
   // Render the log details
   const renderLogDetails = () => {
@@ -387,12 +404,12 @@ const ReportBlock: BlockComponent = ({
         <div className="w-full overflow-hidden">
           {isLoadingLog && <p className="text-sm text-muted-foreground">Loading log content...</p>}
           {!isLoadingLog && logText && (
-            <pre className="whitespace-pre-wrap text-xs bg-white overflow-y-auto overflow-x-auto font-mono max-h-[300px] px-2 py-2 max-w-full">
+            <pre className="whitespace-pre-wrap text-xs bg-card text-foreground overflow-y-auto overflow-x-auto font-mono max-h-[300px] px-2 py-2 max-w-full">
               {logText}
             </pre>
           )}
           {!isLoadingLog && !logText && log && (
-            <pre className="whitespace-pre-wrap text-xs bg-white overflow-y-auto overflow-x-auto font-mono max-h-[300px] px-2 py-2 max-w-full">
+            <pre className="whitespace-pre-wrap text-xs bg-card text-foreground overflow-y-auto overflow-x-auto font-mono max-h-[300px] px-2 py-2 max-w-full">
               {log}
             </pre>
           )}
@@ -445,7 +462,7 @@ const ReportBlock: BlockComponent = ({
                       {!isLoadingFile && (
                         <>
                           {selectedFileIsImage === true && selectedFileUrl && (
-                            <div className="p-2 flex justify-center items-center bg-white rounded">
+                            <div className="p-2 flex justify-center items-center bg-card rounded">
                               <img 
                                 src={selectedFileUrl} 
                                 alt={selectedFileName || 'Attached image'} 
@@ -454,7 +471,7 @@ const ReportBlock: BlockComponent = ({
                             </div>
                           )}
                           {selectedFileIsHtml === true && selectedFileContent && (
-                            <div className="p-2 bg-white rounded">
+                            <div className="p-2 bg-card rounded">
                               <iframe 
                                 srcDoc={selectedFileContent}
                                 title={selectedFileName || 'HTML content'}
@@ -464,20 +481,20 @@ const ReportBlock: BlockComponent = ({
                             </div>
                           )}
                           {selectedFileIsImage === false && selectedFileIsHtml === false && selectedFileContent && (
-                            <pre className="whitespace-pre-wrap text-xs overflow-y-auto overflow-x-auto font-mono max-h-[200px] px-2 py-2 bg-white max-w-full rounded">
+                            <pre className="whitespace-pre-wrap text-xs overflow-y-auto overflow-x-auto font-mono max-h-[200px] px-2 py-2 bg-card text-foreground max-w-full rounded">
                               {selectedFileContent}
                             </pre>
                           )}
                           {/* Error display or specific messages */}
                           {selectedFileIsImage === null && selectedFileIsHtml === null && selectedFileContent && ( // Error message for either type
-                            <p className="text-sm text-red-500 px-2 py-2 bg-white rounded">{selectedFileContent}</p>
+                            <p className="text-sm text-red-500 px-2 py-2 bg-card rounded">{selectedFileContent}</p>
                           )}
                           {/* Fallback for no content, no error message, and not explicitly an image or text, or if it's an image but URL failed silently */}
                           {selectedFileIsImage === null && selectedFileIsHtml === null && !selectedFileContent && (
-                            <p className="text-sm text-muted-foreground px-2 py-2 bg-white rounded">Preview not available or file is empty.</p>
+                            <p className="text-sm text-muted-foreground px-2 py-2 bg-card rounded">Preview not available or file is empty.</p>
                           )}
                           {!selectedFileContent && selectedFileIsImage === true && !selectedFileUrl && ( // Image detected, but URL fetch failed and no error message set
-                            <p className="text-sm text-red-500 px-2 py-2 bg-white rounded">Could not load image preview.</p>
+                            <p className="text-sm text-red-500 px-2 py-2 bg-card rounded">Could not load image preview.</p>
                           )}
                         </>
                       )}
@@ -568,7 +585,7 @@ ${Object.entries(config).map(([key, value]) => `${key}: ${formatValue(value)}`).
           />
         </div>
         <div className="w-full overflow-hidden">
-          <pre className="whitespace-pre-wrap text-xs bg-white overflow-y-auto overflow-x-auto font-mono max-h-[400px] px-2 py-2 max-w-full">
+          <pre className="whitespace-pre-wrap text-xs bg-card text-foreground overflow-y-auto overflow-x-auto font-mono max-h-[400px] px-2 py-2 max-w-full rounded">
             {displayOutput}
           </pre>
         </div>
@@ -592,6 +609,36 @@ ${Object.entries(config).map(([key, value]) => `${key}: ${formatValue(value)}`).
                 <p className="text-sm text-muted-foreground mt-1">
                   {formattedDate(displayDateRange.start)} to {formattedDate(displayDateRange.end)}
                 </p>
+              )}
+              {dataSet && (
+                <div className="flex items-center gap-2 mt-2">
+                  <Database className="h-4 w-4 text-muted-foreground" />
+                  <div className="flex items-center gap-1 text-sm">
+                    <span className="text-muted-foreground">Dataset:</span>
+                    <a
+                      href={`/datasets/${dataSet.id}`}
+                      className="text-foreground hover:text-primary hover:underline font-medium"
+                      title={dataSet.description || `View dataset: ${dataSet.name || dataSet.id}`}
+                    >
+                      {dataSet.name || dataSet.id}
+                    </a>
+                    <ExternalLink className="h-3 w-3 text-muted-foreground" />
+                    {dataSet.dataSourceVersion?.dataSource?.name && (
+                      <>
+                        <span className="text-muted-foreground mx-1">•</span>
+                        <span className="text-muted-foreground">Source:</span>
+                        <a
+                          href={`/data-sources/${dataSet.dataSourceVersion.dataSource.id}`}
+                          className="text-foreground hover:text-primary hover:underline"
+                          title={`View data source: ${dataSet.dataSourceVersion.dataSource.name}`}
+                        >
+                          {dataSet.dataSourceVersion.dataSource.name}
+                        </a>
+                        <ExternalLink className="h-3 w-3 text-muted-foreground" />
+                      </>
+                    )}
+                  </div>
+                </div>
               )}
               {notes && (
                 <div className="text-sm text-muted-foreground mt-2 max-w-prose">

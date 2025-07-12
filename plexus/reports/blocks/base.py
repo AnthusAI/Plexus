@@ -21,6 +21,7 @@ class BaseReportBlock(ABC):
         self.params = params if params is not None else {}
         self.api_client = api_client
         self.report_block_id = None  # This will be set by the report service if available
+        self._resolved_dataset_id = None  # Track the resolved dataset ID after execution
         
         # Initialize ORM-style logging and file management
         self._orm = ReportBlockORM(api_client, self.report_block_id, config)
@@ -85,3 +86,25 @@ class BaseReportBlock(ABC):
                 - A string containing concatenated log messages, or None if no logs.
         """
         pass 
+
+    def set_resolved_dataset_id(self, dataset_id: str):
+        """
+        Set the resolved dataset ID that this block actually used.
+        
+        This should be called by blocks after they have resolved and used a dataset,
+        to record which specific dataset was actually processed.
+        
+        Args:
+            dataset_id: The ID of the dataset that was resolved and used
+        """
+        self._resolved_dataset_id = dataset_id
+        self._log(f"Block resolved dataset ID: {dataset_id}")
+    
+    def get_resolved_dataset_id(self) -> Optional[str]:
+        """
+        Get the resolved dataset ID that this block actually used.
+        
+        Returns:
+            The dataset ID if one was resolved, None otherwise
+        """
+        return self._resolved_dataset_id

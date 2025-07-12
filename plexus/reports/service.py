@@ -40,6 +40,7 @@ from plexus.cli.task_progress_tracker import TaskProgressTracker, StageConfig # 
 logger = logging.getLogger(__name__)
 
 
+
 # --- Remove Mock Data Loading ---
 # MOCK_CONFIGURATIONS = { ... } # Removed
 
@@ -304,7 +305,7 @@ def _parse_report_configuration(config_markdown: str) -> List[Dict[str, Any]]:
 
 def _instantiate_and_run_block(
     block_def: dict, report_params: dict, api_client: PlexusDashboardClient, report_block_id: Optional[str] = None
-) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+) -> Tuple[Optional[Dict[str, Any]], Optional[str], Optional[str]]:
     """
     Instantiates and runs a single report block.
 
@@ -316,8 +317,8 @@ def _instantiate_and_run_block(
                          If provided, it will be set on the block instance.
 
     Returns:
-        A tuple containing the block's output data (JSON serializable dict) and log string.
-        Returns (None, error_message_string) if the block fails.
+        A tuple containing the block's output data (JSON serializable dict), log string, and resolved dataset ID.
+        Returns (None, error_message_string, None) if the block fails.
     """
     class_name = block_def["class_name"]
     block_config = block_def["config"]
@@ -328,7 +329,7 @@ def _instantiate_and_run_block(
     if class_name not in BLOCK_CLASSES:
         error_msg = f"Block class '{class_name}' not found or not registered. Available: {list(BLOCK_CLASSES.keys())}"
         logger.error(error_msg)
-        return None, error_msg
+        return None, error_msg, None
 
     try:
         block_class = BLOCK_CLASSES[class_name]
@@ -372,14 +373,20 @@ def _instantiate_and_run_block(
 
         logger.info(f"Block '{block_display_name}' executed. Log output length: {len(log_output) if log_output else 0}")
         # logger.debug(f"Block '{block_display_name}' log output:\n{log_output}") # Can be very verbose
-        return output_data, log_output
+        
+        # Get the resolved dataset ID from the block instance
+        resolved_dataset_id = block_instance.get_resolved_dataset_id()
+        if resolved_dataset_id:
+            logger.info(f"Block '{block_display_name}' resolved dataset ID: {resolved_dataset_id}")
+        
+        return output_data, log_output, resolved_dataset_id
 
     except Exception as e:
         error_msg = f"Error running block {block_display_name} ({class_name}): {e}"
         detailed_error = traceback.format_exc()
         logger.exception(f"{error_msg}")
         # Return None for JSON output and the error message as the log string
-        return None, f"{error_msg}\nDetails:\n{detailed_error}"
+        return None, f"{error_msg}\nDetails:\n{detailed_error}", None
 
 # --- End Block Processing Logic ---
 
@@ -547,6 +554,7 @@ def _generate_report_core(
                     output=json.dumps(initial_output), # Ensure output is JSON string
                     log=initial_log,
                     attachedFiles=initial_attached_files # Renamed from detailsFiles
+                    # dataSetId will be set after block execution when we know the actual resolved dataset
                 )
                 logger.info(f"{log_prefix} Created ReportBlock ID {current_report_block.id} for {block_display_name}")
             except Exception as e:
@@ -559,7 +567,7 @@ def _generate_report_core(
             
 
             # Run the block instance, passing its report_block_id
-            output_json, log_string = _instantiate_and_run_block(
+            output_json, log_string, resolved_dataset_id = _instantiate_and_run_block(
                 block_def=block_def,
                 report_params=run_parameters,
                 api_client=client,
@@ -632,12 +640,19 @@ def _generate_report_core(
             try:
                 logger.info(f"{log_prefix} Performing final update for ReportBlock {current_report_block.id}")
                 
-                current_report_block.update(
-                    output=json.dumps(output_json if output_json is not None else {"status": "failed", "error": log_string}),
-                    log=final_log_message_for_db,
-                    attachedFiles=existing_details_files_list, # Pass array directly without JSON conversion
-                    client=client
-                )
+                update_params = {
+                    'output': json.dumps(output_json if output_json is not None else {"status": "failed", "error": log_string}),
+                    'log': final_log_message_for_db,
+                    'attachedFiles': existing_details_files_list, # Pass array directly without JSON conversion
+                    'client': client
+                }
+                
+                # Add resolved dataset ID if available
+                if resolved_dataset_id:
+                    update_params['dataSetId'] = resolved_dataset_id
+                    logger.info(f"{log_prefix} Adding resolved dataset ID {resolved_dataset_id} to ReportBlock {current_report_block.id}")
+                
+                current_report_block.update(**update_params)
                 logger.info(f"{log_prefix} Successfully finalized ReportBlock {current_report_block.id}. attachedFiles: {existing_details_files_list}")
             except Exception as e:
                  logger.exception(f"{log_prefix} Failed to finalize ReportBlock {current_report_block.id}: {e}")

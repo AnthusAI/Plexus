@@ -50,8 +50,8 @@ const createEvaluationCommand = (type: string) => {
     // Make number-of-samples one of the first arguments to ensure it's processed correctly
     const args = [
       `--number-of-samples ${options.numberOfSamples}`,
-      `--scorecard-name "${options.scorecardName}"`,
-      `--score-name "${options.scoreName}"`,
+      `--scorecard "${options.scorecardName}"`,
+      `--score "${options.scoreName}"`,
       `--sampling-method ${options.samplingMethod}`,
       options.loadFresh ? '--fresh' : '',
       options.randomSeed ? `--random-seed ${options.randomSeed}` : '',

@@ -229,25 +229,30 @@ class BaseNode(ABC, LangChainUser):
                 state_dict = state.model_dump()
             else:
                 state_dict = dict(state) # Fallback
-
+            
             final_node_state = await app.ainvoke(state_dict)
             
-            # Manually merge the classification and explanation back into the main state dict
-            if 'classification' in final_node_state:
-                state_dict['classification'] = final_node_state['classification']
-            if 'explanation' in final_node_state:
-                state_dict['explanation'] = final_node_state['explanation']
+            # ✅ CRITICAL FIX: Merge ALL fields from final_node_state, not just hardcoded ones
+            # This preserves node-level output aliases that were set during node execution
+            for key, value in final_node_state.items():
+                # Always update the main state with values from the node's final state
+                # This ensures node-level output aliases (like non_qualifying_reason) are preserved
+                state_dict[key] = value
             
-            # Also merge the metadata trace
+            # Special handling for metadata trace to avoid complete replacement
             if 'metadata' in final_node_state and final_node_state.get('metadata') and final_node_state['metadata'].get('trace'):
                 if 'metadata' not in state_dict or not state_dict.get('metadata'):
                     state_dict['metadata'] = {}
                 if 'trace' not in state_dict['metadata']:
                     state_dict['metadata']['trace'] = {'node_results': []}
                 
-                state_dict['metadata']['trace']['node_results'].extend(
-                    final_node_state['metadata']['trace']['node_results']
-                )
+                # Get existing node names to avoid duplicates
+                existing_node_names = {result.get('node_name') for result in state_dict['metadata']['trace']['node_results']}
+                
+                # Only add trace entries that don't already exist
+                for trace_entry in final_node_state['metadata']['trace']['node_results']:
+                    if trace_entry.get('node_name') not in existing_node_names:
+                        state_dict['metadata']['trace']['node_results'].append(trace_entry)
 
             return state_dict
 

@@ -37,6 +37,19 @@ export interface ReportTaskData {
     name?: string;
     position: number;
     attachedFiles?: string[];
+    dataSet?: {
+      id: string;
+      name?: string;
+      description?: string;
+      dataSourceVersion?: {
+        id: string;
+        dataSource?: {
+          id: string;
+          name: string;
+          key?: string;
+        };
+      };
+    } | null;
   }>;
 }
 
@@ -55,6 +68,19 @@ interface ReportBlock {
   log?: string | null
   config?: Record<string, any>  // Add config field
   attachedFiles?: string[]  // Updated to string array
+  dataSet?: {
+    id: string;
+    name?: string;
+    description?: string;
+    dataSourceVersion?: {
+      id: string;
+      dataSource?: {
+        id: string;
+        name: string;
+        key?: string;
+      };
+    };
+  } | null;
 }
 
 interface ReportBlockDisplayProps {
@@ -110,7 +136,7 @@ const ReportTask: React.FC<ReportTaskProps> = ({
       if ('data' in response && response.data?.getReport?.reportBlocks?.items) {
         const blocks = response.data.getReport.reportBlocks.items.map((block: any) => ({
           ...block,
-          output: JSON.parse(block.output),
+          output: parseOutput(block.output),
           config: {},  // Add empty config object by default
           // Ensure attachedFiles is always an array
           attachedFiles: Array.isArray(block.attachedFiles) ? block.attachedFiles : []
@@ -160,7 +186,8 @@ const ReportTask: React.FC<ReportTaskProps> = ({
           output: parsedOutput,
           log: blockProp.log || null,
           config: blockProp.config || parsedOutput,
-          attachedFiles: Array.isArray(blockProp.attachedFiles) ? blockProp.attachedFiles : []
+          attachedFiles: Array.isArray(blockProp.attachedFiles) ? blockProp.attachedFiles : [],
+          dataSet: blockProp.dataSet || null
         };
         
         console.log('🔄 Transformed block:', {

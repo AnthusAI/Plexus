@@ -13,6 +13,7 @@ import type { Schema } from '@/amplify/data/resource'
 import { ScoreComponent } from '@/components/ui/score-component'
 import { toast } from "sonner"
 import { EditableHeader } from '@/components/ui/editable-header'
+import { createTask } from '@/utils/data-operations'
 import { 
   AlertDialog,
   AlertDialogAction,
@@ -73,6 +74,7 @@ interface ScorecardComponentProps extends React.HTMLAttributes<HTMLDivElement> {
   onEditItem?: (itemId: string) => void
   shouldExpandExamples?: boolean
   onExamplesExpanded?: () => void
+  onTaskCreated?: (task: any) => void
 }
 
 const GridContent = React.memo(({ 
@@ -125,6 +127,7 @@ interface DetailContentProps {
   onEditItem?: (itemId: string) => void
   shouldExpandExamples?: boolean
   onExamplesExpanded?: () => void
+  onTaskCreated?: (task: any) => void
 }
 
 export const DetailContent = React.memo(function DetailContent({
@@ -145,7 +148,8 @@ export const DetailContent = React.memo(function DetailContent({
   onCreateItem,
   onEditItem,
   shouldExpandExamples,
-  onExamplesExpanded
+  onExamplesExpanded,
+  onTaskCreated
 }: DetailContentProps) {
   const { selectedAccount } = useAccount()
   const [sectionNameChanges, setSectionNameChanges] = React.useState<Record<string, string>>({})
@@ -418,10 +422,55 @@ export const DetailContent = React.memo(function DetailContent({
     });
   };
 
-  const handleTestItemWithScore = (scoreId: string) => {
+  const handleTestItemWithScore = async (scoreId: string) => {
     console.log('Testing item with score:', { itemId: testItemDialog.itemId, scoreId });
-    // TODO: Implement actual test logic
-    toast.success(`Testing item "${testItemDialog.displayValue}" with selected score`);
+    
+    try {
+      // Find the selected score details
+      const selectedScore = availableScores.find(s => s.id === scoreId);
+      if (!selectedScore) {
+        toast.error("Selected score not found");
+        return;
+      }
+
+      // Create the prediction command using correct CLI parameter names
+      const command = `predict --scorecard "${score.name}" --score "${selectedScore.name}" --item "${testItemDialog.itemId}" --format json`;
+      
+      // Create the task
+      const task = await createTask({
+        type: 'Prediction Test',
+        target: 'prediction',
+        command: command,
+        accountId: selectedAccount?.id || 'call-criteria',
+        dispatchStatus: 'PENDING',
+        status: 'PENDING',
+        scorecardId: score.id,
+        scoreId: scoreId
+      });
+
+      // If task was created successfully, update the command to include the task-id
+      if (task) {
+        const commandWithTaskId = `predict --scorecard "${score.name}" --score "${selectedScore.name}" --item "${testItemDialog.itemId}" --format json --task-id "${task.id}"`;
+        
+        // Update the task with the command that includes task-id for progress tracking
+        // Note: This would require an updateTask call, but for now we'll use the original command
+        // The backend can handle task tracking via the task-id parameter when implemented
+      }
+
+      if (task) {
+        toast.success("Prediction test task created", {
+          description: <span className="font-mono text-sm truncate block">{command}</span>
+        });
+        
+        // Notify parent component about task creation
+        onTaskCreated?.(task);
+      } else {
+        toast.error("Failed to create prediction test task");
+      }
+    } catch (error) {
+      console.error('Error creating prediction test task:', error);
+      toast.error("Error creating prediction test task");
+    }
   };
 
   const closeTestItemDialog = () => {
@@ -487,7 +536,7 @@ export const DetailContent = React.memo(function DetailContent({
               />
             </DropdownMenu.Trigger>
             <DropdownMenu.Portal>
-              <DropdownMenu.Content align="end" className="min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md">
+              <DropdownMenu.Content align="end" className="min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md z-50">
                 {onViewData && (
                   <DropdownMenu.Item 
                     className="relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
@@ -555,7 +604,7 @@ export const DetailContent = React.memo(function DetailContent({
                   </div>
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Portal>
-                  <DropdownMenu.Content align="end" className="min-w-[300px] overflow-hidden rounded-md border bg-popover p-2 text-popover-foreground shadow-md">
+                  <DropdownMenu.Content align="end" className="min-w-[300px] overflow-hidden rounded-md border bg-popover p-2 text-popover-foreground shadow-md z-50">
                     <DropdownMenu.Item 
                       className="relative flex cursor-default select-none items-center rounded-sm px-3 py-2 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
                       onSelect={() => {
@@ -810,6 +859,8 @@ export const DetailContent = React.memo(function DetailContent({
                               displayValue
                             };
                           }) || []}
+                          scorecardName={score.name}
+                          onTaskCreated={onTaskCreated}
                         />
                       ))}
                     </div>
@@ -879,6 +930,7 @@ export default function ScorecardComponent({
   onEditItem,
   shouldExpandExamples,
   onExamplesExpanded,
+  onTaskCreated,
   className, 
   ...props 
 }: ScorecardComponentProps) {
@@ -1034,6 +1086,7 @@ export default function ScorecardComponent({
               onEditItem={onEditItem}
               shouldExpandExamples={shouldExpandExamples}
               onExamplesExpanded={onExamplesExpanded}
+              onTaskCreated={onTaskCreated}
             />
           )}
         </div>

@@ -479,6 +479,9 @@ const schema = a.schema({
             errorDetails: a.json(),
             stdout: a.string(),
             stderr: a.string(),
+            output: a.string(), // Universal Code YAML output
+            error: a.string(), // Structured error message
+            attachedFiles: a.string().array(), // Array of S3 file keys for attachments
             currentStageId: a.string(),
             scorecardId: a.string(),
             account: a.belongsTo('Account', 'accountId'),
@@ -684,6 +687,7 @@ const schema = a.schema({
             idx("accountId").sortKeys(["editedAt"]),
             idx("accountId").sortKeys(["scorecardId", "scoreId", "updatedAt"]).name("byAccountScorecardScoreUpdatedAt"),
             idx("accountId").sortKeys(["scorecardId", "scoreId", "editedAt"]).name("byAccountScorecardScoreEditedAt"),
+            idx("cacheKey").name("byCacheKey"), // GSI for FeedbackItem deduplication
             idx("itemId")
         ]),
 

@@ -683,8 +683,7 @@ class TaskProgressTracker:
             # Construct a single batched mutation for all stage updates
             mutation = """
             mutation BatchUpdateStages(
-                $taskId: ID!
-                $estimatedCompletionAt: AWSDateTime
+                $taskInput: UpdateTaskInput!
             """ 
             
             # Add variables for each stage
@@ -696,15 +695,7 @@ class TaskProgressTracker:
             
             mutation += """) {
                 # Update task estimated completion if provided
-                updateTask(input: {
-                    id: $taskId
-                    accountId: "%s"
-                    type: "%s"
-                    status: "%s"
-                    target: "%s"
-                    command: "%s"
-                    estimatedCompletionAt: $estimatedCompletionAt
-                }) {
+                updateTask(input: $taskInput) {
                     id
                     accountId
                     type
@@ -722,13 +713,7 @@ class TaskProgressTracker:
                     errorDetails
                     currentStageId
                 }
-            """ % (
-                self.api_task.accountId,
-                self.api_task.type,
-                self.api_task.status,
-                self.api_task.target,
-                self.api_task.command
-            )
+            """
             
             # Add update operations for each stage
             for stage in stages:
@@ -754,8 +739,15 @@ class TaskProgressTracker:
             
             # Construct variables for the mutation
             variables = {
-                "taskId": self.api_task.id,
-                "estimatedCompletionAt": estimated_completion
+                "taskInput": {
+                    "id": self.api_task.id,
+                    "accountId": self.api_task.accountId,
+                    "type": self.api_task.type,
+                    "status": self.api_task.status,
+                    "target": self.api_task.target,
+                    "command": self.api_task.command,
+                    "estimatedCompletionAt": estimated_completion
+                }
             }
             
             # Add variables for each stage update
@@ -949,43 +941,238 @@ class TaskProgressTracker:
             logging.error(f"Failed to get existing stages for task {self.api_task.id}: {e}", exc_info=True)
             existing_api_stages = {}
 
+        # Collect stages that need to be created
+        stages_to_create = []
+        
         for name, stage_config in self._stages.items():
             if name in existing_api_stages:
                 self._stage_ids[name] = existing_api_stages[name].id
                 logging.debug(f"Stage '{name}' already exists in API with ID: {self._stage_ids[name]}")
             else:
-                logging.debug(f"Creating new API stage '{name}' for task {self.api_task.id}")
-                try:
-                    create_fields = {
-                        'name': name,
-                        'order': stage_config.order,
-                        'status': self._stages[name].status,
-                    }
-                    if stage_config.status_message:
-                        create_fields['statusMessage'] = stage_config.status_message
+                # Prepare stage configuration for batch creation
+                create_fields = {
+                    'name': name,
+                    'order': stage_config.order,
+                    'status': self._stages[name].status,
+                }
+                if stage_config.status_message:
+                    create_fields['statusMessage'] = stage_config.status_message
+                if stage_config.total_items is not None:
+                    create_fields['totalItems'] = stage_config.total_items
+                if self._stages[name].start_time:
+                    create_fields['startedAt'] = datetime.fromtimestamp(self._stages[name].start_time, timezone.utc).isoformat()
                     if stage_config.total_items is not None:
-                        create_fields['totalItems'] = stage_config.total_items
-                    if self._stages[name].start_time:
-                         create_fields['startedAt'] = datetime.fromtimestamp(self._stages[name].start_time, timezone.utc).isoformat()
-                         if stage_config.total_items is not None:
-                             estimated_completion = datetime.now(timezone.utc) + timedelta(seconds=20)
-                             create_fields['estimatedCompletionAt'] = estimated_completion.isoformat()
-
-                    # Pass the client correctly using the 'client' keyword argument if create_stage supports it
+                        estimated_completion = datetime.now(timezone.utc) + timedelta(seconds=20)
+                        create_fields['estimatedCompletionAt'] = estimated_completion.isoformat()
+                
+                stages_to_create.append(create_fields)
+                logging.debug(f"Queued stage '{name}' for batch creation")
+        
+        # Create all missing stages in a single batch operation
+        if stages_to_create:
+            try:
+                logging.info(f"Creating {len(stages_to_create)} stages in batch for task {self.api_task.id}")
+                created_stages = self.api_task.create_stages_batch(stages_to_create)
+                
+                # Map created stages to our internal stage IDs
+                for stage in created_stages:
+                    self._stage_ids[stage.name] = stage.id
+                    logging.debug(f"Successfully created API stage '{stage.name}' with ID: {stage.id}")
+                
+                logging.info(f"Successfully created {len(created_stages)} stages in batch")
+                
+            except Exception as e:
+                logging.error(f"Error creating stages in batch: {e}", exc_info=True)
+                # Fallback to individual creation if batch fails
+                logging.info("Falling back to individual stage creation...")
+                for stage_config in stages_to_create:
                     try:
-                         new_stage = self.api_task.create_stage(**create_fields, client=client)
-                    except TypeError:
-                         # Fallback if create_stage doesn't accept client kwarg
-                         logging.warning(f"Task.create_stage does not accept 'client' for stage '{name}', using default client resolution.")
-                         new_stage = self.api_task.create_stage(**create_fields)
-
-                    if new_stage:
-                        self._stage_ids[name] = new_stage.id
-                        logging.debug(f"Successfully created API stage '{name}' with ID: {new_stage.id}")
-                    else:
-                        logging.error(f"API call create_stage for '{name}' returned None.")
-
-                except Exception as e:
-                    logging.error(f"Error creating API stage '{name}': {e}", exc_info=True)
-
-    # ... rest of the class ... 
+                        new_stage = self.api_task.create_stage(**stage_config)
+                        if new_stage:
+                            self._stage_ids[stage_config['name']] = new_stage.id
+                            logging.debug(f"Successfully created API stage '{stage_config['name']}' with ID: {new_stage.id}")
+                        else:
+                            logging.error(f"API call create_stage for '{stage_config['name']}' returned None.")
+                    except Exception as stage_error:
+                        logging.error(f"Error creating individual stage '{stage_config['name']}': {stage_error}", exc_info=True)
+    
+    @classmethod
+    def create_for_operation_type(
+        cls,
+        operation_type: str,
+        total_items: int = 1,
+        target: Optional[str] = None,
+        command: Optional[str] = None,
+        description: Optional[str] = None,
+        task_id: Optional[str] = None,
+        account_id: Optional[str] = None,
+        metadata: Optional[Dict] = None,
+        client: Optional[PlexusDashboardClient] = None,
+        **kwargs
+    ) -> 'TaskProgressTracker':
+        """Create a TaskProgressTracker configured for a specific operation type.
+        
+        Args:
+            operation_type: Type of operation ('evaluation', 'prediction', etc.)
+            total_items: Total number of items to process
+            target: Target string for the task
+            command: Command string for the task
+            description: Description for the task
+            task_id: Optional existing task ID
+            account_id: Account ID for the task
+            metadata: Optional metadata for the task
+            client: Optional API client
+            **kwargs: Additional arguments passed to TaskProgressTracker
+        
+        Returns:
+            TaskProgressTracker: Configured tracker for the operation type
+        """
+        from plexus.cli.stage_configurations import get_stage_configs_for_operation_type
+        
+        # Get appropriate stage configuration
+        stage_configs = get_stage_configs_for_operation_type(operation_type, total_items)
+        
+        # Set default values based on operation type
+        if not target:
+            target = f"{operation_type.lower()}/task"
+        if not command:
+            command = f"{operation_type.lower()} command"
+        if not description:
+            description = f"{operation_type.title()} task"
+        if not metadata:
+            metadata = {}
+        
+        # Add operation type to metadata
+        metadata.update({
+            "operation_type": operation_type,
+            "task_type": operation_type.title()
+        })
+        
+        return cls(
+            stage_configs=stage_configs,
+            total_items=total_items,
+            target=target,
+            command=command,
+            description=description,
+            task_id=task_id,
+            account_id=account_id,
+            metadata=metadata,
+            client=client,
+            **kwargs
+        )
+    
+    @classmethod
+    def create_for_evaluation(
+        cls,
+        scorecard_name: str,
+        total_items: int,
+        task_id: Optional[str] = None,
+        account_id: Optional[str] = None,
+        client: Optional[PlexusDashboardClient] = None,
+        **kwargs
+    ) -> 'TaskProgressTracker':
+        """Create a TaskProgressTracker configured for evaluation operations.
+        
+        Args:
+            scorecard_name: Name of the scorecard being evaluated
+            total_items: Total number of items to evaluate
+            task_id: Optional existing task ID
+            account_id: Account ID for the task
+            client: Optional API client
+            **kwargs: Additional arguments passed to TaskProgressTracker
+        
+        Returns:
+            TaskProgressTracker: Configured tracker for evaluation
+        """
+        return cls.create_for_operation_type(
+            operation_type="evaluation",
+            total_items=total_items,
+            target=f"evaluation/accuracy/{scorecard_name}",
+            command=f"evaluate accuracy --scorecard-name {scorecard_name}",
+            description=f"Accuracy evaluation for {scorecard_name}",
+            task_id=task_id,
+            account_id=account_id,
+            metadata={
+                "scorecard": scorecard_name,
+                "evaluation_type": "accuracy"
+            },
+            client=client,
+            **kwargs
+        )
+    
+    @classmethod
+    def create_for_prediction(
+        cls,
+        scorecard_identifier: str,
+        score_names: list,
+        total_items: int = 1,
+        task_id: Optional[str] = None,
+        account_id: Optional[str] = None,
+        client: Optional[PlexusDashboardClient] = None,
+        **kwargs
+    ) -> 'TaskProgressTracker':
+        """Create a TaskProgressTracker configured for prediction operations.
+        
+        Args:
+            scorecard_identifier: Identifier of the scorecard
+            score_names: List of score names being predicted
+            total_items: Total number of predictions to run
+            task_id: Optional existing task ID
+            account_id: Account ID for the task
+            client: Optional API client
+            **kwargs: Additional arguments passed to TaskProgressTracker
+        
+        Returns:
+            TaskProgressTracker: Configured tracker for prediction
+        """
+        return cls.create_for_operation_type(
+            operation_type="prediction",
+            total_items=total_items,
+            target=f"prediction/{scorecard_identifier}",
+            command=f"predict --scorecard {scorecard_identifier}",
+            description=f"Prediction for {scorecard_identifier}",
+            task_id=task_id,
+            account_id=account_id,
+            metadata={
+                "scorecard": scorecard_identifier,
+                "scores": score_names,
+                "prediction_count": total_items
+            },
+            client=client,
+            **kwargs
+        )
+    
+    def get_stage_by_name(self, stage_name: str) -> Optional[Stage]:
+        """Get a stage by its name.
+        
+        Args:
+            stage_name: Name of the stage to retrieve
+            
+        Returns:
+            Stage: The stage object if found, None otherwise
+        """
+        return self._stages.get(stage_name)
+    
+    def get_all_stages(self) -> Dict[str, Stage]:
+        """Get all stages in this tracker.
+        
+        Returns:
+            Dict[str, Stage]: Dictionary mapping stage names to Stage objects
+        """
+        return self._stages.copy()
+    
+    def set_stage_message(self, stage_name: str, message: str) -> None:
+        """Set the status message for a specific stage.
+        
+        Args:
+            stage_name: Name of the stage
+            message: Status message to set
+        """
+        stage = self._stages.get(stage_name)
+        if stage:
+            stage.status_message = message
+            # Update API if this is the current stage
+            if stage_name == self._current_stage_name:
+                self._update_api_task_progress()
+        else:
+            logging.warning(f"Stage '{stage_name}' not found") 
