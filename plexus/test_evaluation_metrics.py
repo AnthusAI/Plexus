@@ -123,8 +123,8 @@ class TestMetricsCalculation:
         
         assert metrics['accuracy'] == 1.0
         assert metrics['precision'] == 1.0
-        assert metrics['sensitivity'] == 1.0
-        assert metrics['specificity'] == 1.0
+        assert metrics['alignment'] == 1.0
+        assert metrics['recall'] == 1.0
     
     def test_imperfect_binary_classification(self, mock_evaluation):
         """Test binary classification with some errors"""
@@ -140,12 +140,12 @@ class TestMetricsCalculation:
         # TP=1, TN=1, FP=1, FN=1
         # Accuracy = (TP+TN)/(TP+TN+FP+FN) = 2/4 = 0.5
         # Precision = TP/(TP+FP) = 1/2 = 0.5
-        # Sensitivity = TP/(TP+FN) = 1/2 = 0.5  
-        # Specificity = TN/(TN+FP) = 1/2 = 0.5
+        # Alignment = Gwet's AC1 coefficient
+        # Recall = TP/(TP+FN) = 1/2 = 0.5  
         assert metrics['accuracy'] == 0.5
         assert metrics['precision'] == 0.5
-        assert metrics['sensitivity'] == 0.5
-        assert metrics['specificity'] == 0.5
+        assert metrics['alignment'] >= 0  # AC1 can be negative, but gets mapped to 0
+        assert metrics['recall'] == 0.5
     
     def test_all_positive_predictions(self, mock_evaluation):
         """Test edge case where all predictions are positive"""
@@ -157,12 +157,10 @@ class TestMetricsCalculation:
         
         # TP=2, TN=0, FP=2, FN=0
         # Precision = TP/(TP+FP) = 2/4 = 0.5
-        # Sensitivity = TP/(TP+FN) = 2/2 = 1.0
-        # Specificity = TN/(TN+FP) = 0/2 = 0.0
+        # Recall = TP/(TP+FN) = 2/2 = 1.0
         assert metrics['accuracy'] == 0.5
         assert metrics['precision'] == 0.5
-        assert metrics['sensitivity'] == 1.0
-        assert metrics['specificity'] == 0.0
+        assert metrics['recall'] == 1.0
     
     def test_empty_results(self, mock_evaluation):
         """Test handling of empty results"""
@@ -170,11 +168,11 @@ class TestMetricsCalculation:
         
         assert metrics['accuracy'] == 0
         assert metrics['precision'] == 0
-        assert metrics['sensitivity'] == 0
-        assert metrics['specificity'] == 0
-        assert len(metrics['confusion_matrices']) == 1  # Should have default matrix
-        assert len(metrics['predicted_distribution']) == 1
-        assert len(metrics['actual_distribution']) == 1
+        assert metrics['alignment'] == 0
+        assert metrics['recall'] == 0
+        assert 'confusionMatrix' in metrics  # Should have default matrix
+        assert len(metrics['predictedClassDistribution']) == 1
+        assert len(metrics['datasetClassDistribution']) == 1
 
 
 class TestLabelStandardization:
@@ -235,9 +233,8 @@ class TestConfusionMatrixBuilding:
         ])
         
         metrics = mock_evaluation.calculate_metrics(results)
-        confusion_matrix = metrics['confusion_matrices'][0]
+        confusion_matrix = metrics['confusionMatrix']
         
-        assert confusion_matrix['score_name'] == 'test_score'
         assert set(confusion_matrix['labels']) == {'yes', 'no'}
         assert len(confusion_matrix['matrix']) == 2
         assert len(confusion_matrix['matrix'][0]) == 2
@@ -266,7 +263,7 @@ class TestConfusionMatrixBuilding:
         ])
         
         metrics = mock_evaluation.calculate_metrics(results)
-        confusion_matrix = metrics['confusion_matrices'][0]
+        confusion_matrix = metrics['confusionMatrix']
         
         # Should still create a matrix structure, but might be 1x1 or padded
         assert len(confusion_matrix['labels']) >= 1
@@ -281,7 +278,7 @@ class TestConfusionMatrixBuilding:
         ])
         
         metrics = mock_evaluation.calculate_metrics(results)
-        confusion_matrix = metrics['confusion_matrices'][0]
+        confusion_matrix = metrics['confusionMatrix']
         
         assert len(confusion_matrix['labels']) == 3
         assert set(confusion_matrix['labels']) == {'class_a', 'class_b', 'class_c'}
@@ -299,7 +296,7 @@ class TestDistributionCalculations:
         ])
         
         metrics = mock_evaluation.calculate_metrics(results)
-        pred_dist = {item['label']: item for item in metrics['predicted_distribution']}
+        pred_dist = {item['label']: item for item in metrics['predictedClassDistribution']}
         
         assert pred_dist['yes']['count'] == 2
         assert pred_dist['no']['count'] == 2
@@ -314,7 +311,7 @@ class TestDistributionCalculations:
         ])
         
         metrics = mock_evaluation.calculate_metrics(results)
-        actual_dist = {item['label']: item for item in metrics['actual_distribution']}
+        actual_dist = {item['label']: item for item in metrics['datasetClassDistribution']}
         
         assert actual_dist['yes']['count'] == 3
         assert actual_dist['no']['count'] == 1
@@ -329,8 +326,8 @@ class TestDistributionCalculations:
         ])
         
         metrics = mock_evaluation.calculate_metrics(results)
-        pred_dist = {item['label']: item['count'] for item in metrics['predicted_distribution']}
-        actual_dist = {item['label']: item['count'] for item in metrics['actual_distribution']}
+        pred_dist = {item['label']: item['count'] for item in metrics['predictedClassDistribution']}
+        actual_dist = {item['label']: item['count'] for item in metrics['datasetClassDistribution']}
         
         # Check standardization: only specific null values become 'na'
         assert pred_dist.get('yes', 0) == 1    # 'Yes' -> 'yes'
@@ -355,8 +352,8 @@ class TestErrorHandling:
         assert metrics['accuracy'] == 1.0  # 2 correct out of 2 non-error results
         
         # Distributions should only include non-error results
-        total_predicted = sum(item['count'] for item in metrics['predicted_distribution'])
-        total_actual = sum(item['count'] for item in metrics['actual_distribution'])
+        total_predicted = sum(item['count'] for item in metrics['predictedClassDistribution'])
+        total_actual = sum(item['count'] for item in metrics['datasetClassDistribution'])
         assert total_predicted == 2
         assert total_actual == 2
     
@@ -371,8 +368,8 @@ class TestErrorHandling:
         # Should handle gracefully with default values
         assert metrics['accuracy'] == 0
         # Should still have default distribution entries
-        assert len(metrics['predicted_distribution']) == 1
-        assert len(metrics['actual_distribution']) == 1
+        assert len(metrics['predictedClassDistribution']) == 1
+        assert len(metrics['datasetClassDistribution']) == 1
     
     def test_missing_metadata_handling(self, mock_evaluation):
         """Test handling of results with missing metadata"""
@@ -426,8 +423,8 @@ class TestMultiScoreHandling:
         # Should only process primary_score results
         assert metrics['accuracy'] == 1.0
         # All distribution entries should be for primary_score
-        assert all(item['score'] == 'primary_score' for item in metrics['predicted_distribution'])
-        assert all(item['score'] == 'primary_score' for item in metrics['actual_distribution'])
+        assert all(item['score'] == 'primary_score' for item in metrics['predictedClassDistribution'])
+        assert all(item['score'] == 'primary_score' for item in metrics['datasetClassDistribution'])
 
 
 if __name__ == '__main__':
