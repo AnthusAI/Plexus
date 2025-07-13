@@ -1,5 +1,6 @@
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass, field
+from datetime import datetime
 from .base import BaseModel
 from ..client import _BaseAPIClient
 import json
@@ -80,6 +81,8 @@ class ScoreResult(BaseModel):
     correct: Optional[bool] = None
     code: Optional[str] = None
     type: Optional[str] = None  # Type of score result: "prediction", "evaluation", etc.
+    createdAt: Optional[datetime] = None
+    updatedAt: Optional[datetime] = None
 
     def __init__(
         self,
@@ -100,6 +103,8 @@ class ScoreResult(BaseModel):
         correct: Optional[bool] = None,
         code: Optional[str] = None,
         type: Optional[str] = None,
+        createdAt: Optional[datetime] = None,
+        updatedAt: Optional[datetime] = None,
         client: Optional[_BaseAPIClient] = None
     ):
         super().__init__(id, client)
@@ -119,6 +124,8 @@ class ScoreResult(BaseModel):
         self.correct = correct
         self.code = code
         self.type = type
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
     
     @property
     def scoreName(self) -> Optional[str]:
@@ -159,6 +166,8 @@ class ScoreResult(BaseModel):
             correct
             code
             type
+            createdAt
+            updatedAt
         """
 
     @classmethod
@@ -179,6 +188,31 @@ class ScoreResult(BaseModel):
                 trace = json.loads(trace)
             except json.JSONDecodeError:
                 trace = None
+        
+        # Parse timestamp fields
+        created_at = data.get('createdAt')
+        if isinstance(created_at, str):
+            try:
+                from datetime import datetime
+                # Handle both ISO format with and without timezone
+                if created_at.endswith('Z'):
+                    created_at = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                else:
+                    created_at = datetime.fromisoformat(created_at)
+            except (ValueError, TypeError):
+                created_at = None
+        
+        updated_at = data.get('updatedAt')
+        if isinstance(updated_at, str):
+            try:
+                from datetime import datetime
+                # Handle both ISO format with and without timezone
+                if updated_at.endswith('Z'):
+                    updated_at = datetime.fromisoformat(updated_at.replace('Z', '+00:00'))
+                else:
+                    updated_at = datetime.fromisoformat(updated_at)
+            except (ValueError, TypeError):
+                updated_at = None
                 
         return cls(
             id=data['id'],
@@ -198,6 +232,8 @@ class ScoreResult(BaseModel):
             correct=data.get('correct'),
             code=data.get('code'),
             type=data.get('type'),
+            createdAt=created_at,
+            updatedAt=updated_at,
             client=client
         )
 
@@ -332,3 +368,163 @@ class ScoreResult(BaseModel):
         result = client.execute(mutation, {'inputs': mutations})
         return [cls.from_dict(item, client) 
                 for item in result['batchCreateScoreResults']['items']]
+    
+    @classmethod
+    def find_by_cache_key(
+        cls,
+        client: _BaseAPIClient,
+        item_id: str,
+        scorecard_id: str,
+        score_id: str,
+        account_id: Optional[str] = None
+    ) -> Optional['ScoreResult']:
+        """
+        Find the most recent ScoreResult using cache key components.
+        
+        This method encapsulates the cache lookup logic for finding existing
+        ScoreResults based on the standard cache key: itemId + scorecardId + scoreId.
+        It uses the time-based GSI to return the most recent result.
+        
+        Args:
+            client: API client for database operations
+            item_id: Item ID (should be resolved DynamoDB ID)
+            scorecard_id: Scorecard ID (should be resolved DynamoDB ID)
+            score_id: Score ID (should be resolved DynamoDB ID)
+            account_id: Optional account ID for additional context/validation
+            
+        Returns:
+            Most recent ScoreResult matching the cache key, or None if not found
+            
+        Example:
+            # Find cached score result
+            cached_result = ScoreResult.find_by_cache_key(
+                client=client,
+                item_id="da270073-83ab-4c43-a1e6-961851c13d92",
+                scorecard_id="f4076c72-e74b-4eaf-afd6-d4f61c9f0142", 
+                score_id="687361f7-44a9-466f-8920-7f9dc351bcd2"
+            )
+        """
+        try:
+            # Use the same GSI query logic from the existing cache implementation
+            cache_query = """
+            query GetMostRecentScoreResult(
+                $itemId: String!,
+                $scorecardId: String!,
+                $scoreId: String!
+            ) {
+                listScoreResultByItemIdAndScorecardIdAndScoreIdAndUpdatedAt(
+                    itemId: $itemId,
+                    scorecardIdScoreIdUpdatedAt: {
+                        beginsWith: {
+                            scorecardId: $scorecardId,
+                            scoreId: $scoreId
+                        }
+                    },
+                    sortDirection: DESC,
+                    limit: 1
+                ) {
+                    items {
+                        %s
+                    }
+                }
+            }
+            """ % cls.fields()
+            
+            cache_variables = {
+                "itemId": item_id,
+                "scorecardId": scorecard_id,
+                "scoreId": score_id
+            }
+            
+            # Execute the query
+            response = client.execute(cache_query, cache_variables)
+            
+            # Extract results from the response
+            items = response.get('listScoreResultByItemIdAndScorecardIdAndScoreIdAndUpdatedAt', {}).get('items', [])
+            
+            if items:
+                # Return the most recent result (first item due to DESC sort, limit 1)
+                score_result_data = items[0]
+                return cls.from_dict(score_result_data, client)
+            else:
+                # No cached result found
+                return None
+                
+        except Exception as e:
+            # Log error but don't raise - return None for cache miss
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error in ScoreResult.find_by_cache_key: {e}")
+            return None
+    
+    @classmethod
+    def _resolve_ids_for_cache_key(
+        cls,
+        client: _BaseAPIClient,
+        item_external_id: str = None,
+        item_id: str = None,
+        scorecard_external_id: str = None,
+        scorecard_id: str = None,
+        score_external_id: str = None,
+        score_id: str = None,
+        account_id: str = None
+    ) -> Optional[Dict[str, str]]:
+        """
+        Helper method to resolve external IDs to DynamoDB IDs for cache lookups.
+        
+        This method handles the ID resolution logic that's currently scattered
+        in the Call-Criteria-Python API, making it reusable.
+        
+        Args:
+            client: API client
+            item_external_id: External item ID (e.g., "277307013")  
+            item_id: Already resolved item ID
+            scorecard_external_id: External scorecard ID (e.g., "1039")
+            scorecard_id: Already resolved scorecard ID
+            score_external_id: External score ID (e.g., "45407")
+            score_id: Already resolved score ID
+            account_id: Account ID for scoped lookups
+            
+        Returns:
+            Dict with resolved IDs: {"item_id": "...", "scorecard_id": "...", "score_id": "..."}
+            or None if resolution fails
+        """
+        try:
+            resolved_ids = {}
+            
+            # Resolve item ID if needed
+            if item_id:
+                resolved_ids["item_id"] = item_id
+            elif item_external_id and account_id:
+                # Use Item.find_by_identifier to resolve item
+                from .item import Item
+                item = Item.find_by_identifier(
+                    client=client,
+                    account_id=account_id,
+                    identifier_key="reportId",  # This should be configurable per client
+                    identifier_value=item_external_id
+                )
+                if item:
+                    resolved_ids["item_id"] = item.id
+                else:
+                    return None  # Item not found
+            else:
+                return None  # Need either item_id or (item_external_id + account_id)
+            
+            # For scorecard and score IDs, we'd need similar resolution logic
+            # This is where the Call-Criteria-Python resolve_scorecard_id and resolve_score_id
+            # functions would be called. For now, assume they're already resolved.
+            resolved_ids["scorecard_id"] = scorecard_id or scorecard_external_id
+            resolved_ids["score_id"] = score_id or score_external_id
+            
+            # Validate all IDs are present
+            if all(resolved_ids.values()):
+                return resolved_ids
+            else:
+                return None
+                
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error resolving IDs for cache key: {e}")
+            return None
