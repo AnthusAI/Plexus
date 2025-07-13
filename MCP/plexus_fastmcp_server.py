@@ -1311,13 +1311,13 @@ async def plexus_report_configurations_list() -> Union[str, List[Dict]]:
 
 @mcp.tool()
 async def plexus_item_last(
-    include_score_results: bool = False
+    minimal: bool = False
 ) -> Union[str, Dict[str, Any]]:
     """
-    Gets the most recent item for the default account, with optional score results.
+    Gets the most recent item for the default account, including score results and feedback items by default.
     
     Parameters:
-    - include_score_results: Whether to include score results for the item (optional, default: False)
+    - minimal: If True, returns minimal info without score results and feedback items (optional, default: False)
     
     Returns:
     - Detailed information about the most recent item
@@ -1393,6 +1393,7 @@ async def plexus_item_last(
             'description': item.description,
             'externalId': item.externalId,
             'isEvaluation': item.isEvaluation,
+            'createdByType': item.createdByType,
             'metadata': item.metadata,
             'identifiers': item.identifiers,
             'attachedFiles': item.attachedFiles,
@@ -1401,10 +1402,13 @@ async def plexus_item_last(
             'url': get_item_url(item.id)
         }
         
-        # Get score results if requested
-        if include_score_results:
+        # Get score results and feedback items by default (unless minimal mode)
+        if not minimal:
             score_results = await _get_score_results_for_item(item.id, client)
             item_dict['scoreResults'] = score_results
+            
+            feedback_items = await _get_feedback_items_for_item(item.id, client)
+            item_dict['feedbackItems'] = feedback_items
         
         logger.info(f"Successfully retrieved latest item: {item.id}")
         return item_dict
@@ -1423,14 +1427,14 @@ async def plexus_item_last(
 @mcp.tool()
 async def plexus_item_info(
     item_id: str,
-    include_score_results: bool = False
+    minimal: bool = False
 ) -> Union[str, Dict[str, Any]]:
     """
-    Gets detailed information about a specific item by its ID or external identifier, with optional score results.
+    Gets detailed information about a specific item by its ID or external identifier, including score results and feedback items by default.
     
     Parameters:
     - item_id: The unique ID of the item OR an external identifier value (e.g., "277430500")
-    - include_score_results: Whether to include score results for the item (optional, default: False)
+    - minimal: If True, returns minimal info without score results and feedback items (optional, default: False)
     
     Returns:
     - Detailed information about the item including text content, metadata, identifiers, and timestamps
@@ -1582,6 +1586,7 @@ async def plexus_item_info(
                 'description': item.description,
                 'externalId': item.externalId,
                 'isEvaluation': item.isEvaluation,
+                'createdByType': item.createdByType,
                 'text': item.text,  # Include text content
                 'metadata': item.metadata,
                 'identifiers': item.identifiers,
@@ -1592,10 +1597,13 @@ async def plexus_item_info(
                 'lookupMethod': lookup_method  # Include how the item was found for debugging
             }
             
-            # Get score results if requested
-            if include_score_results:
+            # Get score results and feedback items by default (unless minimal mode)
+            if not minimal:
                 score_results = await _get_score_results_for_item(item.id, client)
                 item_dict['scoreResults'] = score_results
+                
+                feedback_items = await _get_feedback_items_for_item(item.id, client)
+                item_dict['feedbackItems'] = feedback_items
             
             logger.info(f"Successfully retrieved item details: {item.id} (lookup method: {lookup_method})")
             return item_dict
@@ -3799,6 +3807,59 @@ async def _get_score_results_for_item(item_id: str, client) -> List[Dict[str, An
     except Exception as e:
         logger.error(f"Error getting score results for item {item_id}: {str(e)}", exc_info=True)
         return []
+
+
+async def _get_feedback_items_for_item(item_id: str, client) -> List[Dict[str, Any]]:
+    """
+    Helper function to get all feedback items for a specific item, sorted by updatedAt descending.
+    This mirrors the functionality from the CLI ItemCommands.get_feedback_items_for_item function.
+    """
+    try:
+        from plexus.dashboard.api.models.feedback_item import FeedbackItem
+        from datetime import datetime
+        
+        # Use the FeedbackItem.list method with filtering
+        feedback_items, _ = FeedbackItem.list(
+            client=client,
+            filter={'itemId': {'eq': item_id}},
+            limit=1000
+        )
+        
+        # Convert to dictionary format and sort by updatedAt descending
+        feedback_items_list = []
+        for fi in feedback_items:
+            fi_dict = {
+                'id': fi.id,
+                'accountId': fi.accountId,
+                'scorecardId': fi.scorecardId,
+                'scoreId': fi.scoreId,
+                'itemId': fi.itemId,
+                'cacheKey': fi.cacheKey,
+                'initialAnswerValue': fi.initialAnswerValue,
+                'finalAnswerValue': fi.finalAnswerValue,
+                'initialCommentValue': fi.initialCommentValue,
+                'finalCommentValue': fi.finalCommentValue,
+                'editCommentValue': fi.editCommentValue,
+                'isAgreement': fi.isAgreement,
+                'editorName': fi.editorName,
+                'editedAt': fi.editedAt.isoformat() if hasattr(fi.editedAt, 'isoformat') and fi.editedAt else fi.editedAt,
+                'createdAt': fi.createdAt.isoformat() if hasattr(fi.createdAt, 'isoformat') and fi.createdAt else fi.createdAt,
+                'updatedAt': fi.updatedAt.isoformat() if hasattr(fi.updatedAt, 'isoformat') and fi.updatedAt else fi.updatedAt,
+            }
+            feedback_items_list.append(fi_dict)
+        
+        # Sort by updatedAt descending
+        feedback_items_list.sort(
+            key=lambda fi: fi.get('updatedAt', '1970-01-01T00:00:00'),
+            reverse=True
+        )
+        
+        return feedback_items_list
+        
+    except Exception as e:
+        logger.error(f"Error getting feedback items for item {item_id}: {str(e)}", exc_info=True)
+        return []
+
 
 # Setup dotenv support for loading environment variables
 def load_env_file(env_dir=None):
