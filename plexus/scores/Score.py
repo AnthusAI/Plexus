@@ -303,7 +303,9 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
             logging.error(message)
 
     def report_directory_path(self):
-        return f"./score_results/{self.parameters.scorecard_name}/{self.parameters.name}/".replace(' ', '_')
+        import os
+        base_dir = os.getenv('PLEXUS_REPORTS_DIR', './tmp/reports')
+        return f"{base_dir}/{self.parameters.scorecard_name}/{self.parameters.name}/".replace(' ', '_')
     def model_directory_path(self):
         return f"./models/{self.parameters.scorecard_name}/{self.parameters.name}/".replace(' ', '_')
 
