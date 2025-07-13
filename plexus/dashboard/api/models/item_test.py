@@ -148,4 +148,168 @@ def test_update_serializes_metadata_to_json(sample_item):
     
     # Verify we can parse it back to the original dict
     parsed_metadata = json.loads(mutation_input['metadata'])
-    assert parsed_metadata == new_metadata 
+    assert parsed_metadata == new_metadata
+
+
+# Tests for find_by_identifier method
+class TestFindByIdentifier:
+    """Test suite for Item.find_by_identifier method"""
+    
+    @pytest.fixture
+    def mock_item_response(self, sample_item):
+        """Mock response for successful item lookup"""
+        return sample_item
+    
+    def test_find_by_identifier_success(self, mock_client, mock_item_response):
+        """Test successful item lookup by identifier"""
+        # Mock the internal lookup methods
+        Item._lookup_item_by_identifiers = Mock(return_value="test-item-id")
+        Item.get_by_id = Mock(return_value=mock_item_response)
+        
+        # Test finding by reportId
+        result = Item.find_by_identifier(
+            client=mock_client,
+            account_id="test-account",
+            identifier_key="reportId", 
+            identifier_value="277307013"
+        )
+        
+        # Verify the result
+        assert result is not None
+        assert result == mock_item_response
+        
+        # Verify internal methods were called correctly
+        Item._lookup_item_by_identifiers.assert_called_once_with(
+            client=mock_client,
+            account_id="test-account",
+            identifiers={"reportId": "277307013"},
+            debug=False
+        )
+        Item.get_by_id.assert_called_once_with("test-item-id", mock_client)
+    
+    def test_find_by_identifier_not_found(self, mock_client):
+        """Test item not found scenario"""
+        # Mock the lookup to return None (not found)
+        Item._lookup_item_by_identifiers = Mock(return_value=None)
+        Item.get_by_id = Mock()
+        
+        result = Item.find_by_identifier(
+            client=mock_client,
+            account_id="test-account", 
+            identifier_key="formId",
+            identifier_value="nonexistent"
+        )
+        
+        # Verify no item returned
+        assert result is None
+        
+        # Verify lookup was attempted but get_by_id was not called
+        Item._lookup_item_by_identifiers.assert_called_once()
+        Item.get_by_id.assert_not_called()
+    
+    def test_find_by_identifier_different_types(self, mock_client, mock_item_response):
+        """Test finding items by different identifier types"""
+        Item._lookup_item_by_identifiers = Mock(return_value="test-item-id")
+        Item.get_by_id = Mock(return_value=mock_item_response)
+        
+        # Test different identifier types
+        identifier_types = [
+            ("reportId", "277307013"),
+            ("formId", "12345"),
+            ("sessionId", "session-abc-123"),
+            ("ccId", "cc-999")
+        ]
+        
+        for identifier_key, identifier_value in identifier_types:
+            result = Item.find_by_identifier(
+                client=mock_client,
+                account_id="test-account",
+                identifier_key=identifier_key,
+                identifier_value=identifier_value
+            )
+            
+            assert result == mock_item_response
+    
+    def test_find_by_identifier_with_debug(self, mock_client, mock_item_response):
+        """Test find_by_identifier with debug logging enabled"""
+        Item._lookup_item_by_identifiers = Mock(return_value="test-item-id")
+        Item.get_by_id = Mock(return_value=mock_item_response)
+        
+        # Test with debug=True
+        result = Item.find_by_identifier(
+            client=mock_client,
+            account_id="test-account",
+            identifier_key="reportId",
+            identifier_value="277307013",
+            debug=True
+        )
+        
+        assert result == mock_item_response
+        
+        # Verify debug was passed through to internal method
+        Item._lookup_item_by_identifiers.assert_called_once_with(
+            client=mock_client,
+            account_id="test-account", 
+            identifiers={"reportId": "277307013"},
+            debug=True
+        )
+    
+    def test_find_by_identifier_exception_handling(self, mock_client):
+        """Test exception handling in find_by_identifier"""
+        # Mock the lookup to raise an exception
+        Item._lookup_item_by_identifiers = Mock(side_effect=Exception("Database error"))
+        Item.get_by_id = Mock()
+        
+        # Should not raise exception, should return None
+        result = Item.find_by_identifier(
+            client=mock_client,
+            account_id="test-account",
+            identifier_key="reportId", 
+            identifier_value="277307013"
+        )
+        
+        assert result is None
+        Item.get_by_id.assert_not_called()
+    
+    def test_find_by_identifier_get_by_id_fails(self, mock_client):
+        """Test when _lookup_item_by_identifiers succeeds but get_by_id fails"""
+        Item._lookup_item_by_identifiers = Mock(return_value="test-item-id")
+        Item.get_by_id = Mock(return_value=None)  # get_by_id fails
+        
+        result = Item.find_by_identifier(
+            client=mock_client,
+            account_id="test-account",
+            identifier_key="reportId",
+            identifier_value="277307013"
+        )
+        
+        # Should return None when get_by_id fails
+        assert result is None
+        
+        # Verify both methods were called
+        Item._lookup_item_by_identifiers.assert_called_once()
+        Item.get_by_id.assert_called_once_with("test-item-id", mock_client)
+    
+    def test_find_by_identifier_empty_values(self, mock_client):
+        """Test find_by_identifier with empty/invalid values"""
+        Item._lookup_item_by_identifiers = Mock(return_value=None)
+        
+        # Test with empty identifier value
+        result = Item.find_by_identifier(
+            client=mock_client,
+            account_id="test-account",
+            identifier_key="reportId",
+            identifier_value=""  # empty string
+        )
+        
+        assert result is None
+        
+        # Test with None identifier value (should be handled gracefully)
+        result = Item.find_by_identifier(
+            client=mock_client, 
+            account_id="test-account",
+            identifier_key="reportId",
+            identifier_value=None
+        )
+        
+        assert result is None 
