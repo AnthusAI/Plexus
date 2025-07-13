@@ -523,7 +523,7 @@ class TestScoreUtilityMethods:
             scorecard_name="Test Scorecard"
         )
         
-        expected_path = "./score_results/Test_Scorecard/Test_Score_With_Spaces/"
+        expected_path = "./tmp/reports/Test_Scorecard/Test_Score_With_Spaces/"
         assert score.report_directory_path() == expected_path
     
     def test_model_directory_path(self):
