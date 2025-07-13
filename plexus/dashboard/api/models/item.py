@@ -236,7 +236,9 @@ class Item(BaseModel):
         if text is not None:
             input_data['text'] = text
         if metadata is not None:
-            input_data['metadata'] = metadata
+            # Convert metadata to JSON string like other SDK models
+            import json
+            input_data['metadata'] = json.dumps(metadata)
         
         mutation = """
         mutation CreateItem($input: CreateItemInput!) {
@@ -278,6 +280,11 @@ class Item(BaseModel):
     def update(self, **kwargs) -> 'Item':
         if 'createdAt' in kwargs:
             raise ValueError("createdAt cannot be modified after creation")
+        
+        # Convert metadata to JSON string like other SDK models
+        if 'metadata' in kwargs and kwargs['metadata'] is not None:
+            import json
+            kwargs['metadata'] = json.dumps(kwargs['metadata'])
             
         update_data = {
             'updatedAt': datetime.now(timezone.utc).isoformat().replace(
