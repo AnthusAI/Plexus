@@ -162,8 +162,16 @@ class TestFindByIdentifier:
     
     def test_find_by_identifier_success(self, mock_client, mock_item_response):
         """Test successful item lookup by identifier"""
-        # Mock the internal lookup methods
-        Item._lookup_item_by_identifiers = Mock(return_value="test-item-id")
+        # Mock the internal lookup methods - _lookup_item_by_identifiers now returns a dict
+        mock_item_dict = {
+            'id': 'test-item-id',
+            'externalId': 'test-external-id', 
+            'description': 'test description',
+            'accountId': 'test-account',
+            'identifiers': {},
+            'text': 'test text'
+        }
+        Item._lookup_item_by_identifiers = Mock(return_value=mock_item_dict)
         Item.get_by_id = Mock(return_value=mock_item_response)
         
         # Test finding by reportId
@@ -209,7 +217,15 @@ class TestFindByIdentifier:
     
     def test_find_by_identifier_different_types(self, mock_client, mock_item_response):
         """Test finding items by different identifier types"""
-        Item._lookup_item_by_identifiers = Mock(return_value="test-item-id")
+        mock_item_dict = {
+            'id': 'test-item-id',
+            'externalId': 'test-external-id', 
+            'description': 'test description',
+            'accountId': 'test-account',
+            'identifiers': {},
+            'text': 'test text'
+        }
+        Item._lookup_item_by_identifiers = Mock(return_value=mock_item_dict)
         Item.get_by_id = Mock(return_value=mock_item_response)
         
         # Test different identifier types
@@ -232,7 +248,15 @@ class TestFindByIdentifier:
     
     def test_find_by_identifier_with_debug(self, mock_client, mock_item_response):
         """Test find_by_identifier with debug logging enabled"""
-        Item._lookup_item_by_identifiers = Mock(return_value="test-item-id")
+        mock_item_dict = {
+            'id': 'test-item-id',
+            'externalId': 'test-external-id', 
+            'description': 'test description',
+            'accountId': 'test-account',
+            'identifiers': {},
+            'text': 'test text'
+        }
+        Item._lookup_item_by_identifiers = Mock(return_value=mock_item_dict)
         Item.get_by_id = Mock(return_value=mock_item_response)
         
         # Test with debug=True
@@ -273,7 +297,15 @@ class TestFindByIdentifier:
     
     def test_find_by_identifier_get_by_id_fails(self, mock_client):
         """Test when _lookup_item_by_identifiers succeeds but get_by_id fails"""
-        Item._lookup_item_by_identifiers = Mock(return_value="test-item-id")
+        mock_item_dict = {
+            'id': 'test-item-id',
+            'externalId': 'test-external-id', 
+            'description': 'test description',
+            'accountId': 'test-account',
+            'identifiers': {},
+            'text': 'test text'
+        }
+        Item._lookup_item_by_identifiers = Mock(return_value=mock_item_dict)
         Item.get_by_id = Mock(return_value=None)  # get_by_id fails
         
         result = Item.find_by_identifier(
