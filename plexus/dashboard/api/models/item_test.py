@@ -53,4 +53,99 @@ def test_update_prevents_modifying_created_at(sample_item):
 
 def test_create_requires_evaluation_id(mock_client):
     with pytest.raises(TypeError):
-        Item.create(client=mock_client) 
+        Item.create(client=mock_client)
+
+def test_create_serializes_metadata_to_json(mock_client):
+    """Test that Item.create properly serializes metadata dict to JSON string."""
+    metadata_dict = {
+        'source': 'test',
+        'duration': 120,
+        'schools': [{'name': 'Test School', 'type': 'Campus'}],
+        'other_data': {'key1': 'value1', 'key2': 'value2'}
+    }
+    
+    # Mock the GraphQL response
+    mock_client.execute.return_value = {
+        'createItem': {
+            'id': 'test-item-123',
+            'evaluationId': 'test-eval',
+            'text': 'test text',
+            'metadata': '{"source": "test", "duration": 120}',  # JSON string in response
+            'accountId': 'test-account',
+            'isEvaluation': False,
+            'createdAt': '2025-01-01T00:00:00Z',
+            'updatedAt': '2025-01-01T00:00:00Z',
+            'createdByType': 'prediction'
+        }
+    }
+    
+    # Call create with metadata dict
+    result = Item.create(
+        client=mock_client,
+        evaluationId='test-eval',
+        text='test text',
+        metadata=metadata_dict,
+        accountId='test-account',
+        isEvaluation=False
+    )
+    
+    # Verify the GraphQL mutation was called
+    mock_client.execute.assert_called_once()
+    call_args = mock_client.execute.call_args
+    
+    # Extract the input data from the call - should be in args[1] (variables dict)
+    variables = call_args[0][1]  # call_args[0] is args tuple, [1] is variables
+    mutation_input = variables['input']
+    
+    # Verify metadata was JSON serialized
+    import json
+    assert 'metadata' in mutation_input
+    # The metadata should be a JSON string, not a dict
+    assert isinstance(mutation_input['metadata'], str)
+    
+    # Verify we can parse it back to the original dict
+    parsed_metadata = json.loads(mutation_input['metadata'])
+    assert parsed_metadata == metadata_dict
+
+def test_update_serializes_metadata_to_json(sample_item):
+    """Test that Item.update properly serializes metadata dict to JSON string."""
+    new_metadata = {
+        'source': 'updated',
+        'version': 2,
+        'tags': ['tag1', 'tag2']
+    }
+    
+    # Mock the GraphQL response
+    sample_item._client.execute.return_value = {
+        'updateItem': {
+            'id': sample_item.id,
+            'evaluationId': sample_item.evaluationId,
+            'text': sample_item.text,
+            'metadata': '{"source": "updated", "version": 2, "tags": ["tag1", "tag2"]}',
+            'accountId': sample_item.accountId,
+            'isEvaluation': sample_item.isEvaluation,
+            'createdAt': sample_item.createdAt.isoformat(),
+            'updatedAt': datetime.now(timezone.utc).isoformat()
+        }
+    }
+    
+    # Call update with metadata dict
+    result = sample_item.update(metadata=new_metadata)
+    
+    # Verify the GraphQL mutation was called
+    sample_item._client.execute.assert_called_once()
+    call_args = sample_item._client.execute.call_args
+    
+    # Extract the input data from the call - should be in variables['input']
+    variables = call_args[0][1]  # call_args[0] is args tuple, [1] is variables  
+    mutation_input = variables['input']
+    
+    # Verify metadata was JSON serialized
+    import json
+    assert 'metadata' in mutation_input
+    # The metadata should be a JSON string, not a dict
+    assert isinstance(mutation_input['metadata'], str)
+    
+    # Verify we can parse it back to the original dict
+    parsed_metadata = json.loads(mutation_input['metadata'])
+    assert parsed_metadata == new_metadata 

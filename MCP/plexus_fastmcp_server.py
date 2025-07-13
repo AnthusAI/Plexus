@@ -1426,14 +1426,14 @@ async def plexus_item_info(
     include_score_results: bool = False
 ) -> Union[str, Dict[str, Any]]:
     """
-    Gets detailed information about a specific item by its ID, with optional score results.
+    Gets detailed information about a specific item by its ID or external identifier, with optional score results.
     
     Parameters:
-    - item_id: The unique ID of the item
+    - item_id: The unique ID of the item OR an external identifier value (e.g., "277430500")
     - include_score_results: Whether to include score results for the item (optional, default: False)
     
     Returns:
-    - Detailed information about the item
+    - Detailed information about the item including text content, metadata, identifiers, and timestamps
     """
     # Temporarily redirect stdout to capture any unexpected output
     old_stdout = sys.stdout
@@ -1446,6 +1446,7 @@ async def plexus_item_info(
             from plexus.cli.client_utils import create_client as create_dashboard_client
             from plexus.dashboard.api.models.item import Item
             from plexus.dashboard.api.models.score_result import ScoreResult
+            from plexus.utils.identifier_search import find_item_by_identifier
         except ImportError as e:
             logger.error(f"ImportError: {str(e)}", exc_info=True)
             return f"Error: Failed to import Plexus modules: {str(e)}"
@@ -1462,13 +1463,116 @@ async def plexus_item_info(
         if not client:
             return "Error: Could not create dashboard client."
 
-        logger.info(f"Getting item details for ID: {item_id}")
+        logger.info(f"Getting item details for ID/identifier: {item_id}")
         
+        item = None
+        lookup_method = "unknown"
+        
+        # Try direct ID lookup first
         try:
             item = Item.get_by_id(item_id, client)
-            if not item:
-                return f"Item not found: {item_id}"
-            
+            if item:
+                lookup_method = "direct_id"
+                logger.info(f"Found item by direct ID lookup: {item_id}")
+        except ValueError:
+            # Not found by ID, continue to identifier search
+            logger.info(f"Item not found by direct ID, trying identifier search for: {item_id}")
+        except Exception as e:
+            logger.warning(f"Error in direct ID lookup: {str(e)}")
+        
+        # If direct ID lookup failed, try identifier-based lookup
+        if not item:
+            default_account_id = get_default_account_id()
+            if default_account_id:
+                try:
+                    item = find_item_by_identifier(item_id, default_account_id, client)
+                    if item:
+                        lookup_method = "identifier_search"
+                        logger.info(f"Found item by identifier search: {item.id} (identifier: {item_id})")
+                except Exception as e:
+                    logger.warning(f"Error in identifier search: {str(e)}")
+        
+        # If still not found, try Identifiers table GSI lookup as final fallback
+        if not item:
+            default_account_id = get_default_account_id()
+            if default_account_id:
+                try:
+                    # Use the Identifiers table GSI to find items by identifier value
+                    query = """
+                    query GetIdentifierByAccountAndValue($accountId: String!, $value: String!) {
+                        listIdentifierByAccountIdAndValue(
+                            accountId: $accountId,
+                            value: {eq: $value},
+                            limit: 1
+                        ) {
+                            items {
+                                itemId
+                                name
+                                value
+                                url
+                                position
+                                item {
+                                    id
+                                    accountId
+                                    evaluationId
+                                    scoreId
+                                    description
+                                    externalId
+                                    isEvaluation
+                                    text
+                                    metadata
+                                    identifiers
+                                    attachedFiles
+                                    createdAt
+                                    updatedAt
+                                }
+                            }
+                        }
+                    }
+                    """
+                    
+                    result = client.execute(query, {
+                        'accountId': default_account_id,
+                        'value': item_id
+                    })
+                    
+                    if result and 'listIdentifierByAccountIdAndValue' in result:
+                        identifiers = result['listIdentifierByAccountIdAndValue'].get('items', [])
+                        if identifiers:
+                            identifier_data = identifiers[0]
+                            item_data = identifier_data.get('item', {})
+                            
+                            if item_data:
+                                # Create a mock Item object from the data
+                                class MockItem:
+                                    def __init__(self, data):
+                                        for key, value in data.items():
+                                            setattr(self, key, value)
+                                        # Handle datetime parsing
+                                        if hasattr(self, 'createdAt') and self.createdAt:
+                                            from datetime import datetime
+                                            try:
+                                                self.createdAt = datetime.fromisoformat(self.createdAt.replace('Z', '+00:00'))
+                                            except:
+                                                pass
+                                        if hasattr(self, 'updatedAt') and self.updatedAt:
+                                            from datetime import datetime
+                                            try:
+                                                self.updatedAt = datetime.fromisoformat(self.updatedAt.replace('Z', '+00:00'))
+                                            except:
+                                                pass
+                                
+                                item = MockItem(item_data)
+                                lookup_method = f"identifiers_table_gsi (name: {identifier_data.get('name', 'N/A')})"
+                                logger.info(f"Found item by Identifiers table GSI: {item.id} (identifier: {item_id})")
+                    
+                except Exception as e:
+                    logger.warning(f"Error in Identifiers table GSI lookup: {str(e)}")
+        
+        if not item:
+            return f"Item not found: {item_id} (tried direct ID, identifier search, and external ID lookup)"
+        
+        try:
             # Convert item to dictionary format
             item_dict = {
                 'id': item.id,
@@ -1478,12 +1582,14 @@ async def plexus_item_info(
                 'description': item.description,
                 'externalId': item.externalId,
                 'isEvaluation': item.isEvaluation,
+                'text': item.text,  # Include text content
                 'metadata': item.metadata,
                 'identifiers': item.identifiers,
                 'attachedFiles': item.attachedFiles,
-                'createdAt': item.createdAt.isoformat() if item.createdAt else None,
-                'updatedAt': item.updatedAt.isoformat() if item.updatedAt else None,
-                'url': get_item_url(item.id)
+                'createdAt': item.createdAt.isoformat() if hasattr(item.createdAt, 'isoformat') else item.createdAt,
+                'updatedAt': item.updatedAt.isoformat() if hasattr(item.updatedAt, 'isoformat') else item.updatedAt,
+                'url': get_item_url(item.id),
+                'lookupMethod': lookup_method  # Include how the item was found for debugging
             }
             
             # Get score results if requested
@@ -1491,15 +1597,15 @@ async def plexus_item_info(
                 score_results = await _get_score_results_for_item(item.id, client)
                 item_dict['scoreResults'] = score_results
             
-            logger.info(f"Successfully retrieved item details: {item_id}")
+            logger.info(f"Successfully retrieved item details: {item.id} (lookup method: {lookup_method})")
             return item_dict
             
         except Exception as e:
-            logger.error(f"Error retrieving item {item_id}: {str(e)}", exc_info=True)
-            return f"Error retrieving item {item_id}: {str(e)}"
+            logger.error(f"Error processing item {item.id}: {str(e)}", exc_info=True)
+            return f"Error processing item {item.id}: {str(e)}"
         
     except Exception as e:
-        logger.error(f"Error getting item details for ID '{item_id}': {str(e)}", exc_info=True)
+        logger.error(f"Error getting item details for ID/identifier '{item_id}': {str(e)}", exc_info=True)
         return f"Error getting item details: {str(e)}"
     finally:
         # Check if anything was written to stdout
