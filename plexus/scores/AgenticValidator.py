@@ -184,6 +184,20 @@ class AgenticValidator(LangGraphScore):
         # Generate and save the graph visualization
         # self.generate_graph_visualization()
 
+    async def build_compiled_workflow(self):
+        """
+        Build the compiled workflow for the AgenticValidator.
+        
+        This overrides the parent class method to properly handle AgenticValidator's
+        workflow creation logic.
+        """
+        if self.parameters.agent_type == "react":
+            return self._create_react_workflow()
+        elif self.parameters.agent_type == "langgraph":
+            return self._create_langgraph_workflow()
+        else:
+            raise ValueError(f"Unknown agent_type: {self.parameters.agent_type}")
+
     def _create_react_workflow(self):
         """
         Create and return the LangGraph workflow for the validation process.

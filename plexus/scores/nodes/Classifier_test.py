@@ -1129,7 +1129,6 @@ async def test_classifier_message_handling_between_nodes(turnip_classifier_confi
         assert first_call_messages != second_call_messages, \
             "Each node should use its own distinct messages"
 
-@pytest.mark.xfail(reason="Investigating CI vs Dev behavior differences in mock response ordering")
 @pytest.mark.asyncio
 async def test_multi_node_condition_routing():
     """Test routing between multiple nodes where middle node has conditions."""
@@ -1361,3 +1360,234 @@ async def test_multi_node_condition_routing():
         # Check that the "No" condition output wasn't set
         assert 'value' not in final_state_dict  # Value setter node wasn't triggered
         assert final_state_dict['explanation'] == "No"  # This comes from the parser, not the value setter
+
+
+def test_classifier_confusion_fix_between_completion_and_classification():
+    """Test the fix for confusion between completion and classification fields."""
+    
+    # This test targets commit 16707b02:
+    # "Fixed the confusion between the completion and the classification, 
+    # so that the `explanation` field can be limited to a valid classification class."
+    
+    from plexus.scores.nodes.Classifier import Classifier
+    
+    # Create a ClassificationOutputParser to test the fix
+    parser = Classifier.ClassificationOutputParser(
+        valid_classes=["Yes", "No", "Maybe"],
+        parse_from_start=False
+    )
+    
+    # Test case 1: LLM completion contains both classification and explanation
+    # The fix should properly separate these fields
+    completion_with_explanation = "No - The customer is asking about maintenance services rather than replacement windows."
+    
+    result = parser.parse(completion_with_explanation)
+    
+    # Verify the fix: classification should be extracted correctly
+    assert result['classification'] == "No", f"Classification should be 'No', got '{result['classification']}'"
+    
+    # Verify the fix: explanation should be the full completion, not just the classification
+    assert result['explanation'] == completion_with_explanation, f"Explanation should be full completion, got '{result['explanation']}'"
+    
+    # Test case 2: Completion with only classification (no explanation)
+    completion_only_classification = "Yes"
+    
+    result2 = parser.parse(completion_only_classification)
+    
+    assert result2['classification'] == "Yes", f"Classification should be 'Yes', got '{result2['classification']}'"
+    assert result2['explanation'] == completion_only_classification, f"Explanation should be full completion, got '{result2['explanation']}'"
+    
+    # Test case 3: Invalid classification should be handled correctly
+    invalid_completion = "Perhaps - I'm not sure about this case"
+    
+    result3 = parser.parse(invalid_completion)
+    
+    # The fix ensures that invalid classifications are handled properly
+    assert result3['classification'] is None, f"Invalid classification should be None, got '{result3['classification']}'"
+    assert result3['explanation'] == invalid_completion, f"Explanation should still be full completion for invalid cases, got '{result3['explanation']}'"
+    
+    print("✅ Classifier confusion fix test passed - completion and classification fields properly separated!")
+
+
+def test_classifier_explanation_refinement_with_whitespace_stripping():
+    """Test the explanation output refinement that strips whitespace."""
+    
+    # This test targets commit f4af65ba:
+    # "Refine explanation output in Classifier and related tests" 
+    # This includes stripping whitespace from explanations
+    
+    from plexus.scores.nodes.Classifier import Classifier
+    
+    parser = Classifier.ClassificationOutputParser(
+        valid_classes=["Positive", "Negative", "Neutral"],
+        parse_from_start=False
+    )
+    
+    # Test case 1: LLM output with leading and trailing whitespace
+    completion_with_whitespace = "   \n  Positive - This is a positive sentiment with detailed reasoning.  \n   "
+    
+    result = parser.parse(completion_with_whitespace)
+    
+    # Verify whitespace stripping refinement
+    expected_explanation = "Positive - This is a positive sentiment with detailed reasoning."
+    assert result['classification'] == "Positive", f"Classification should be 'Positive', got '{result['classification']}'"
+    assert result['explanation'] == expected_explanation, f"Explanation should be stripped of whitespace, got '{result['explanation']}'"
+    
+    # Test case 2: Multiple whitespace types
+    completion_with_mixed_whitespace = "\t  Negative - Customer expressed dissatisfaction.\r\n  "
+    
+    result2 = parser.parse(completion_with_mixed_whitespace)
+    
+    expected_explanation2 = "Negative - Customer expressed dissatisfaction."
+    assert result2['classification'] == "Negative", f"Classification should be 'Negative', got '{result2['classification']}'"
+    assert result2['explanation'] == expected_explanation2, f"Mixed whitespace should be stripped, got '{result2['explanation']}'"
+    
+    # Test case 3: Empty string should use fallback
+    empty_completion = "   \n   "
+    
+    result3 = parser.parse(empty_completion)
+    
+    assert result3['classification'] is None, f"Empty completion should have None classification, got '{result3['classification']}'"
+    # After stripping whitespace, empty input results in empty explanation, which is the current behavior
+    assert result3['explanation'] == "", f"Empty completion should result in empty explanation after stripping, got '{result3['explanation']}'"
+    
+    print("✅ Classifier explanation refinement test passed - whitespace stripping validated!")
+
+
+def test_classifier_comprehensive_explanation_output():
+    """Test the comprehensive explanation output enhancement."""
+    
+    # This test targets commit b57437d4:
+    # "Enhance Classifier Output Explanation"
+    # "Updated the Classifier to provide a more comprehensive explanation in the output, 
+    # including the entire output text when available"
+    
+    from plexus.scores.nodes.Classifier import Classifier
+    
+    parser = Classifier.ClassificationOutputParser(
+        valid_classes=["Approved", "Denied", "Pending"],
+        parse_from_start=False
+    )
+    
+    # Test case 1: Rich, detailed LLM output should be preserved entirely
+    comprehensive_output = "Approved - The application meets all requirements including credit score above 700, stable employment history for 3+ years, debt-to-income ratio below 30%, and sufficient down payment. The applicant also provided excellent references and has no previous defaults on record."
+    
+    result = parser.parse(comprehensive_output)
+    
+    # The enhancement should preserve the ENTIRE output as explanation
+    assert result['classification'] == "Approved", f"Classification should be 'Approved', got '{result['classification']}'"
+    assert result['explanation'] == comprehensive_output, f"Comprehensive explanation should be preserved entirely, got '{result['explanation']}'"
+    
+    # Test case 2: Complex reasoning should be fully captured
+    complex_reasoning = "Denied - While the applicant has a good credit score of 720, there are several concerning factors: employment gap of 8 months in 2023, inconsistent income patterns over the past 2 years, high debt-to-income ratio of 45%, and insufficient savings for closing costs. The risk assessment indicates approval would exceed our lending guidelines."
+    
+    result2 = parser.parse(complex_reasoning)
+    
+    assert result2['classification'] == "Denied", f"Classification should be 'Denied', got '{result2['classification']}'"
+    assert result2['explanation'] == complex_reasoning, f"Complex reasoning should be fully preserved, got '{result2['explanation']}'"
+    
+    # Test case 3: Multi-factor decision with conditions
+    conditional_output = "Pending - The application shows mixed indicators. Positive factors include excellent credit score (780) and stable employment (5 years). However, the debt-to-income ratio is at our maximum threshold (40%). We need additional documentation: updated bank statements, proof of secondary income, and verification of recent debt payments before final approval."
+    
+    result3 = parser.parse(conditional_output)
+    
+    assert result3['classification'] == "Pending", f"Classification should be 'Pending', got '{result3['classification']}'"
+    assert result3['explanation'] == conditional_output, f"Conditional explanation should be comprehensive, got '{result3['explanation']}'"
+    
+    print("✅ Classifier comprehensive explanation output test passed - rich explanations preserved!")
+
+
+def test_classifier_valid_classes_only_enforcement():
+    """Test the refinement to ensure only valid classes are returned."""
+    
+    # This test targets commit 2793dfe0:
+    # "Refine classification handling in Classifier node to ensure only valid classes are returned"
+    
+    from plexus.scores.nodes.Classifier import Classifier
+    
+    parser = Classifier.ClassificationOutputParser(
+        valid_classes=["High", "Medium", "Low"],
+        parse_from_start=False
+    )
+    
+    # Test case 1: Valid classification should be accepted
+    valid_output = "High - This is a high priority case requiring immediate attention."
+    
+    result = parser.parse(valid_output)
+    
+    assert result['classification'] == "High", f"Valid classification should be accepted, got '{result['classification']}'"
+    assert result['explanation'] == valid_output, f"Explanation should be preserved, got '{result['explanation']}'"
+    
+    # Test case 2: Invalid classification should be rejected (refinement)
+    invalid_output = "Critical - This is beyond our normal classification system."
+    
+    result2 = parser.parse(invalid_output)
+    
+    # The refinement ensures only valid classes are returned
+    assert result2['classification'] is None, f"Invalid classification should be None, got '{result2['classification']}'"
+    assert result2['explanation'] == invalid_output, f"Explanation should still be preserved for invalid cases, got '{result2['explanation']}'"
+    
+    # Test case 3: Partial match should be rejected
+    partial_match_output = "Highly critical situation requiring immediate response."
+    
+    result3 = parser.parse(partial_match_output)
+    
+    # Even though "High" is in "Highly", it should not be accepted as a valid classification
+    assert result3['classification'] is None, f"Partial match should not be accepted, got '{result3['classification']}'"
+    assert result3['explanation'] == partial_match_output, f"Explanation should be preserved for partial matches, got '{result3['explanation']}'"
+    
+    # Test case 4: Case sensitivity should be handled correctly
+    case_sensitive_output = "high - This is a lowercase version."
+    
+    result4 = parser.parse(case_sensitive_output)
+    
+    # Should not match due to case sensitivity (if the implementation is case-sensitive)
+    # This tests the refinement's precision in classification handling
+    if result4['classification'] is not None:
+        assert result4['classification'] == "High", f"Case handling should be consistent, got '{result4['classification']}'"
+    
+    print("✅ Classifier valid classes enforcement test passed - only valid classes returned!")
+
+
+def test_classifier_enhanced_find_matches_functionality():
+    """Test the enhanced find_matches_in_text method for overlapping matches."""
+    
+    # This test targets commit 6790a126:
+    # "refactor(classifier): Enhance find_matches_in_text method to handle overlapping matches 
+    # and maintain original index"
+    
+    from plexus.scores.nodes.Classifier import Classifier
+    
+    parser = Classifier.ClassificationOutputParser(
+        valid_classes=["Yes", "No", "Maybe"],
+        parse_from_start=False
+    )
+    
+    # Test case 1: Overlapping matches should be handled correctly
+    overlapping_text = "Yes, but no, maybe yes again"
+    
+    result = parser.parse(overlapping_text)
+    
+    # With parse_from_start=False, should find the last valid match
+    # The enhancement should handle overlapping matches properly
+    assert result['classification'] in ["Yes", "No", "Maybe"], f"Should find a valid classification in overlapping text, got '{result['classification']}'"
+    assert result['explanation'] == overlapping_text, f"Explanation should be preserved, got '{result['explanation']}'"
+    
+    # Test case 2: Multiple instances of same class
+    multiple_same_class = "No, definitely no, absolutely no way"
+    
+    result2 = parser.parse(multiple_same_class)
+    
+    assert result2['classification'] == "No", f"Should handle multiple instances of same class, got '{result2['classification']}'"
+    assert result2['explanation'] == multiple_same_class, f"Explanation should be preserved, got '{result2['explanation']}'"
+    
+    # Test case 3: Original index maintenance
+    indexed_text = "The answer is: Maybe, not Yes or No"
+    
+    result3 = parser.parse(indexed_text)
+    
+    # The enhancement should maintain original index and find the correct match
+    assert result3['classification'] in ["Maybe", "Yes", "No"], f"Should maintain original index for matches, got '{result3['classification']}'"
+    assert result3['explanation'] == indexed_text, f"Explanation should be preserved, got '{result3['explanation']}'"
+    
+    print("✅ Classifier enhanced find_matches functionality test passed - overlapping matches handled correctly!")

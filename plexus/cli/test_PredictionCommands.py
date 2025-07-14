@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import Mock, patch, MagicMock, AsyncMock
+from unittest.mock import Mock, patch, MagicMock, AsyncMock, ANY
 from click.testing import CliRunner
 import pandas as pd
 import asyncio
@@ -9,7 +9,8 @@ from decimal import Decimal
 
 from plexus.cli.PredictionCommands import (
     predict, predict_impl, output_excel, select_sample, predict_score,
-    predict_score_impl, handle_exception, get_scorecard_class, create_score_input
+    predict_score_impl, handle_exception, get_scorecard_class, create_score_input,
+    create_feedback_comparison
 )
 from plexus.scores.LangGraphScore import BatchProcessingPause
 
@@ -182,6 +183,40 @@ class TestPredictCommand:
             
             mock_sys.exit.assert_called_with(1)
     
+    def test_predict_command_item_items_conflict(self, runner):
+        """Test that --item and --items cannot be used together"""
+        result = runner.invoke(predict, [
+            '--scorecard', 'test-scorecard',
+            '--score', 'test-score',
+            '--item', 'item-1',
+            '--items', 'item-1,item-2',
+            '--format', 'yaml'
+        ])
+        
+        # The command should fail with a non-zero exit code
+        assert result.exit_code != 0
+        
+        # Check for the error message in output first (preferred method)
+        # Note: stderr is not separately captured, so we only check result.output
+        output_text = result.output
+        if "Cannot specify both --item and --items" in output_text:
+            # Success - error message found in output
+            return
+        
+        # Fallback: Check the exception if output capture failed
+        if result.exception:
+            # Check if it's a SystemExit with code 1 (which is what we expect)
+            assert isinstance(result.exception, SystemExit)
+            assert result.exception.code == 1
+            
+            # The original BadParameter exception should be in the traceback
+            import traceback
+            tb_str = ''.join(traceback.format_exception(type(result.exception), result.exception, result.exception.__traceback__))
+            assert "Cannot specify both --item and --items" in tb_str
+        else:
+            # If neither output nor exception contains the error, fail the test
+            pytest.fail(f"Expected error message not found. Output: {repr(output_text)}, Exception: {result.exception}")
+
     def test_predict_command_multiple_scores(self, runner, mock_scorecard_registry, sample_scorecard_class):
         """Test predict command with multiple score names"""
         mock_scorecard_registry.get.return_value = sample_scorecard_class
@@ -252,7 +287,8 @@ class TestPredictImpl:
             mock_get_scorecard.return_value = sample_scorecard_class
             mock_select_sample.return_value = (pd.DataFrame([{'text': 'test'}]), 'item-123')
             
-            mock_prediction = Mock()
+            # Create a more explicit Mock that ensures hasattr() works correctly
+            mock_prediction = Mock(spec=['value', 'explanation', 'trace'])
             mock_prediction.value = 8.5
             mock_prediction.explanation = "Test explanation"
             mock_prediction.trace = "test-trace"
@@ -264,13 +300,52 @@ class TestPredictImpl:
                 format='json'
             )
             
-            mock_print.assert_called()
+            # Verify print was called at least once
+            assert mock_print.called, "Expected print() to be called for JSON output"
             # Verify JSON was printed
             call_args = mock_print.call_args[0][0]
             parsed_json = json.loads(call_args)
             assert len(parsed_json) == 1
             assert parsed_json[0]['item_id'] == 'item-123'
-            assert parsed_json[0]['test-score']['value'] == 8.5
+            assert parsed_json[0]['scores'][0]['name'] == 'test-score'
+            assert parsed_json[0]['scores'][0]['value'] == 8.5
+
+    @pytest.mark.asyncio
+    async def test_predict_impl_success_yaml_format(self, mock_scorecard_registry, sample_scorecard_class):
+        """Test predict_impl with successful prediction in YAML format"""
+        mock_scorecard_registry.get.return_value = sample_scorecard_class
+        
+        with patch('plexus.cli.PredictionCommands.get_scorecard_class') as mock_get_scorecard, \
+             patch('plexus.cli.PredictionCommands.select_sample') as mock_select_sample, \
+             patch('plexus.cli.PredictionCommands.predict_score') as mock_predict_score, \
+             patch('plexus.cli.PredictionCommands.output_yaml_prediction_results') as mock_yaml_output:
+            
+            mock_get_scorecard.return_value = sample_scorecard_class
+            mock_select_sample.return_value = (pd.DataFrame([{'text': 'test'}]), 'item-123')
+            
+            mock_prediction = Mock()
+            mock_prediction.value = 8.5
+            mock_prediction.explanation = "Test explanation"
+            mock_prediction.trace = "test-trace"
+            mock_predict_score.return_value = (Mock(), mock_prediction, Decimal('0.05'))
+            
+            await predict_impl(
+                scorecard_identifier='test-scorecard',
+                score_names=['test-score'],
+                format='yaml',
+                include_input=True,
+                include_trace=True
+            )
+            
+            mock_yaml_output.assert_called_once_with(
+                results=ANY,
+                score_names=['test-score'],
+                scorecard_identifier='test-scorecard',
+                score_identifier='test-score',
+                item_identifiers=[None],
+                include_input=True,
+                include_trace=True
+            )
     
     @pytest.mark.asyncio
     async def test_predict_impl_excel_output(self, mock_scorecard_registry, sample_scorecard_class):
@@ -364,6 +439,61 @@ class TestPredictImpl:
                     scorecard_identifier='test-scorecard',
                     score_names=['test-score']
                 )
+
+    @pytest.mark.asyncio
+    async def test_predict_impl_multiple_items(self, mock_scorecard_registry, sample_scorecard_class):
+        """Test predict_impl with multiple items"""
+        mock_scorecard_registry.get.return_value = sample_scorecard_class
+        
+        with patch('plexus.cli.PredictionCommands.get_scorecard_class') as mock_get_scorecard, \
+             patch('plexus.cli.PredictionCommands.select_sample') as mock_select_sample, \
+             patch('plexus.cli.PredictionCommands.predict_score') as mock_predict_score, \
+             patch('plexus.cli.PredictionCommands.output_yaml_prediction_results') as mock_yaml_output:
+            
+            mock_get_scorecard.return_value = sample_scorecard_class
+            
+            # Mock different samples for each item
+            mock_select_sample.side_effect = [
+                (pd.DataFrame([{'text': 'test1'}]), 'item-1'),
+                (pd.DataFrame([{'text': 'test2'}]), 'item-2'),
+                (pd.DataFrame([{'text': 'test3'}]), 'item-3')
+            ]
+            
+            # Mock predictions for each item
+            mock_predictions = []
+            for i in range(3):
+                mock_prediction = Mock()
+                mock_prediction.value = f"prediction-{i+1}"
+                mock_prediction.explanation = f"Test explanation {i+1}"
+                mock_prediction.trace = f"test-trace-{i+1}"
+                mock_predictions.append((Mock(), mock_prediction, Decimal('0.05')))
+            
+            mock_predict_score.side_effect = mock_predictions
+            
+            await predict_impl(
+                scorecard_identifier='test-scorecard',
+                score_names=['test-score'],
+                item_identifiers=['item-1', 'item-2', 'item-3'],
+                format='yaml',
+                include_input=True,
+                include_trace=True
+            )
+            
+            # Verify all items were processed
+            assert mock_select_sample.call_count == 3
+            assert mock_predict_score.call_count == 3
+            
+            # Verify YAML output was called with correct parameters
+            mock_yaml_output.assert_called_once()
+            call_args = mock_yaml_output.call_args
+            assert call_args[1]['item_identifiers'] == ['item-1', 'item-2', 'item-3']
+            assert len(call_args[1]['results']) == 3
+            
+            # Verify each result has the correct item_id
+            results = call_args[1]['results']
+            assert results[0]['item_id'] == 'item-1'
+            assert results[1]['item_id'] == 'item-2'
+            assert results[2]['item_id'] == 'item-3'
 
 
 class TestOutputExcel:
@@ -486,18 +616,12 @@ class TestSelectSample:
         sample_scorecard_class = Mock()
         sample_scorecard_class.properties = {'key': 'test-scorecard'}
         
-        # Mock GraphQL response
-        mock_client.execute.return_value = {
-            'listItemByAccountIdAndCreatedAt': {
-                'items': [sample_item_data]
-            }
-        }
-        
+        # Mock Item.list to return a proper item instance
         mock_item_instance = Mock()
         mock_item_instance.id = sample_item_data['id']
         mock_item_instance.text = sample_item_data['text']
-        mock_item.from_dict.return_value = mock_item_instance
-        mock_item.fields.return_value = "id text"
+        mock_item_instance.metadata = None  # Simple case without metadata
+        mock_item.list.return_value = [mock_item_instance]
         
         with patch('plexus.cli.reports.utils.resolve_account_id_for_command') as mock_resolve_account:
             mock_resolve_account.return_value = 'account-123'
@@ -508,21 +632,15 @@ class TestSelectSample:
             
             assert used_item_id == 'item-123'
             assert isinstance(sample_row, pd.DataFrame)
-            mock_client.execute.assert_called_once()
+            mock_item.list.assert_called_once()
     
     def test_select_sample_no_items_in_account(self, mock_client, mock_item, mock_env_vars):
         """Test select_sample when no items exist in account"""
         sample_scorecard_class = Mock()
         sample_scorecard_class.properties = {'key': 'test-scorecard'}
         
-        # Mock empty GraphQL response
-        mock_client.execute.return_value = {
-            'listItemByAccountIdAndCreatedAt': {
-                'items': []
-            }
-        }
-        
-        mock_item.fields.return_value = "id text"
+        # Mock Item.list to return empty list
+        mock_item.list.return_value = []
         
         with patch('plexus.cli.reports.utils.resolve_account_id_for_command') as mock_resolve_account:
             mock_resolve_account.return_value = 'account-123'
@@ -762,23 +880,12 @@ class TestGetScorecardClass:
     
     def test_get_scorecard_class_not_found(self, mock_scorecard_class, mock_scorecard_registry):
         """Test scorecard class not found"""
-        # Mock identifier resolution to fail
-        with patch('plexus.cli.client_utils.create_client') as mock_create_client, \
-             patch('plexus.cli.memoized_resolvers.memoized_resolve_scorecard_identifier') as mock_resolve_scorecard:
-            
-            # Mock client
-            mock_client = Mock()
-            mock_create_client.return_value = mock_client
-            
-            # Mock identifier resolution to fail (return None)
-            mock_resolve_scorecard.return_value = None
-            
-            # Mock the registry to return None (scorecard not found)
-            mock_scorecard_registry.get.return_value = None
-            
-            # ✅ FIXED: Expect the actual error message from the implementation
-            with pytest.raises(ValueError, match="Scorecard with identifier 'nonexistent' not found in registry"):
-                get_scorecard_class('nonexistent')
+        # Mock the registry to return None (scorecard not found)
+        mock_scorecard_registry.get.return_value = None
+        
+        # Expect the actual error message from the implementation
+        with pytest.raises(Exception, match="Scorecard class not found for: nonexistent"):
+            get_scorecard_class('nonexistent')
 
 
 class TestCreateScoreInput:
@@ -881,3 +988,263 @@ class TestIntegration:
             args, kwargs = mock_predict_impl.call_args
             # The coroutine was created with these args, so just verify it was called
             assert mock_predict_impl.called
+
+
+class TestFeedbackComparison:
+    """Test class for feedback comparison functionality."""
+    
+    def setup_method(self):
+        """Setup for each test method."""
+        self.mock_feedback_item = Mock()
+        self.mock_feedback_item.finalAnswerValue = "Yes"
+        self.mock_feedback_item.initialAnswerValue = "No"
+        self.mock_feedback_item.editCommentValue = "Corrected after review"
+        self.mock_feedback_item.editorName = "human_reviewer"
+        
+    def test_create_feedback_comparison_agreement(self):
+        """Test create_feedback_comparison when prediction matches ground truth."""
+        current_prediction = {
+            'test_score_value': 'Yes',
+            'test_score_explanation': 'AI determined this is positive'
+        }
+        
+        result = create_feedback_comparison(
+            current_prediction, 
+            self.mock_feedback_item, 
+            'test_score'
+        )
+        
+        expected = {
+            "current_prediction": {
+                "value": "Yes",
+                "explanation": "AI determined this is positive"
+            },
+            "ground_truth": "Yes",
+            "isAgreement": True
+        }
+        
+        assert result == expected
+        assert result["isAgreement"] is True
+    
+    def test_create_feedback_comparison_disagreement(self):
+        """Test create_feedback_comparison when prediction doesn't match ground truth."""
+        current_prediction = {
+            'test_score_value': 'No',
+            'test_score_explanation': 'AI determined this is negative'
+        }
+        
+        result = create_feedback_comparison(
+            current_prediction, 
+            self.mock_feedback_item, 
+            'test_score'
+        )
+        
+        expected = {
+            "current_prediction": {
+                "value": "No",
+                "explanation": "AI determined this is negative"
+            },
+            "ground_truth": "Yes",
+            "isAgreement": False
+        }
+        
+        assert result == expected
+        assert result["isAgreement"] is False
+    
+    def test_create_feedback_comparison_case_insensitive(self):
+        """Test that comparison is case-insensitive."""
+        current_prediction = {
+            'test_score_value': 'yes',  # lowercase
+            'test_score_explanation': 'AI says yes'
+        }
+        
+        # Ground truth is "Yes" (uppercase from mock)
+        result = create_feedback_comparison(
+            current_prediction, 
+            self.mock_feedback_item, 
+            'test_score'
+        )
+        
+        assert result["isAgreement"] is True
+    
+    def test_create_feedback_comparison_none_values(self):
+        """Test create_feedback_comparison with None values."""
+        current_prediction = {
+            'test_score_value': None,
+            'test_score_explanation': None
+        }
+        
+        self.mock_feedback_item.finalAnswerValue = None
+        
+        result = create_feedback_comparison(
+            current_prediction, 
+            self.mock_feedback_item, 
+            'test_score'
+        )
+        
+        assert result["current_prediction"]["value"] is None
+        assert result["ground_truth"] is None
+        assert result["isAgreement"] is False  # None values should not agree
+    
+    def test_create_feedback_comparison_missing_explanation(self):
+        """Test create_feedback_comparison when explanation is missing."""
+        current_prediction = {
+            'test_score_value': 'Yes'
+            # No explanation field
+        }
+        
+        result = create_feedback_comparison(
+            current_prediction, 
+            self.mock_feedback_item, 
+            'test_score'
+        )
+        
+        assert result["current_prediction"]["explanation"] is None
+        assert result["current_prediction"]["value"] == "Yes"
+        assert result["isAgreement"] is True
+
+
+class TestPredictCommandWithFeedback:
+    """Test class for predict command with feedback comparison integration."""
+    
+    @pytest.fixture
+    def mock_scorecard_class(self):
+        """Mock scorecard class."""
+        scorecard = Mock()
+        scorecard.properties = {'key': 'test_scorecard'}
+        scorecard.scores = [{'name': 'test_score', 'id': 1}]
+        return scorecard
+    
+    def test_predict_command_with_feedback_comparison_flag(self, mock_scorecard_class):
+        """Test that predict command accepts and passes through compare_to_feedback flag."""
+        runner = CliRunner()
+        
+        with patch('plexus.cli.PredictionCommands.predict_impl') as mock_predict_impl:
+            # Mock the async predict_impl function
+            mock_predict_impl.return_value = None
+            
+            result = runner.invoke(predict, [
+                '--scorecard', 'test-scorecard',
+                '--score', 'test-score',
+                '--item', 'item-123',
+                '--compare-to-feedback'  # Test the new flag
+            ])
+            
+            # Should complete without error
+            assert result.exit_code == 0
+            
+            # Verify predict_impl was called with compare_to_feedback=True
+            mock_predict_impl.assert_called_once()
+            # Get the arguments passed to predict_impl
+            args, kwargs = mock_predict_impl.call_args
+            # The compare_to_feedback should be passed as a keyword argument
+            assert kwargs.get('compare_to_feedback') is True
+    
+    def test_predict_command_without_feedback_comparison_flag(self, mock_scorecard_class):
+        """Test that predict command defaults compare_to_feedback to False."""
+        runner = CliRunner()
+        
+        with patch('plexus.cli.PredictionCommands.predict_impl') as mock_predict_impl:
+            mock_predict_impl.return_value = None
+            
+            result = runner.invoke(predict, [
+                '--scorecard', 'test-scorecard',  
+                '--score', 'test-score',
+                '--item', 'item-123'
+                # No --compare-to-feedback flag
+            ])
+            
+            assert result.exit_code == 0
+            
+            # Verify predict_impl was called with compare_to_feedback=False (default)
+            mock_predict_impl.assert_called_once()
+            args, kwargs = mock_predict_impl.call_args
+            assert kwargs.get('compare_to_feedback') is False
+
+
+class TestFeedbackComparisonIntegration:
+    """Test class for end-to-end feedback comparison integration."""
+    
+    def test_create_feedback_comparison_with_real_structure(self):
+        """Test create_feedback_comparison with realistic prediction structure."""
+        # Simulate a realistic prediction result structure
+        current_prediction = {
+            'agent_helpfulness_value': 'Helpful',
+            'agent_helpfulness_explanation': 'The agent provided clear guidance and resolved the issue',
+            'agent_helpfulness_confidence': 0.85
+        }
+        
+        mock_feedback_item = Mock()
+        mock_feedback_item.finalAnswerValue = 'Helpful'  # Agreement case
+        mock_feedback_item.initialAnswerValue = 'Not Helpful'
+        
+        result = create_feedback_comparison(
+            current_prediction, 
+            mock_feedback_item, 
+            'agent_helpfulness'
+        )
+        
+        # Verify the structure matches expected output format
+        assert 'current_prediction' in result
+        assert 'ground_truth' in result
+        assert 'isAgreement' in result
+        
+        assert result['current_prediction']['value'] == 'Helpful'
+        assert result['current_prediction']['explanation'] == 'The agent provided clear guidance and resolved the issue'
+        assert result['ground_truth'] == 'Helpful'
+        assert result['isAgreement'] is True
+    
+    def test_feedback_comparison_with_numeric_values(self):
+        """Test feedback comparison with numeric score values."""
+        current_prediction = {
+            'satisfaction_score_value': 8.5,
+            'satisfaction_score_explanation': 'High satisfaction based on positive indicators'
+        }
+        
+        mock_feedback_item = Mock()
+        mock_feedback_item.finalAnswerValue = '8.5'  # String representation
+        
+        result = create_feedback_comparison(
+            current_prediction, 
+            mock_feedback_item, 
+            'satisfaction_score'
+        )
+        
+        # Should handle numeric to string comparison  
+        assert result['current_prediction']['value'] == 8.5
+        assert result['ground_truth'] == '8.5'
+        assert result['isAgreement'] is True  # str(8.5) == str('8.5') after lowercasing
+    
+    def test_feedback_comparison_edge_cases(self):
+        """Test edge cases in feedback comparison logic."""
+        test_cases = [
+            # Case 1: Empty string vs None
+            ({
+                'test_score_value': '',
+                'test_score_explanation': 'Empty prediction'
+            }, None, False),
+            
+            # Case 2: Whitespace differences
+            ({
+                'test_score_value': ' Yes ',
+                'test_score_explanation': 'With whitespace'
+            }, 'Yes', False),  # Current implementation doesn't strip whitespace
+            
+            # Case 3: Boolean-like strings  
+            ({
+                'test_score_value': 'true',
+                'test_score_explanation': 'Boolean string'
+            }, 'True', True),  # Case insensitive due to .lower()
+        ]
+        
+        for prediction, ground_truth, expected_agreement in test_cases:
+            mock_feedback_item = Mock()
+            mock_feedback_item.finalAnswerValue = ground_truth
+            
+            result = create_feedback_comparison(
+                prediction, 
+                mock_feedback_item, 
+                'test_score'
+            )
+            
+            assert result['isAgreement'] is expected_agreement

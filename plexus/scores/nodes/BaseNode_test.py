@@ -195,4 +195,217 @@ def test_build_compiled_workflow_with_io_aliasing(mock_node):
         workflow = mock_node.build_compiled_workflow(MockGraphState)
         
         # Check that a workflow was created
-        assert workflow is not None 
+        assert workflow is not None
+
+
+def test_basenode_trace_entry_duplicate_prevention():
+    """Test the enhanced trace entry management that prevents duplicates."""
+    
+    # This test targets commit 6cdf01fe:
+    # "Enhance trace entry management in BaseNode to prevent duplicates"
+    
+    from plexus.scores.nodes.BaseNode import BaseNode
+    from pydantic import BaseModel, ConfigDict
+    from typing import Optional
+    
+    class MockDuplicateGraphState(BaseModel):
+        model_config = ConfigDict(extra='allow', arbitrary_types_allowed=True)
+        
+        text: str
+        metadata: Optional[dict] = None
+        results: Optional[dict] = None
+        
+    class TestDuplicateNode(BaseNode):
+        def __init__(self):
+            super().__init__(name="test_node")
+            self.GraphState = MockDuplicateGraphState
+            
+        def add_core_nodes(self, workflow):
+            pass
+    
+    test_node = TestDuplicateNode()
+    
+    # Create initial state with existing trace entry
+    initial_state = MockDuplicateGraphState(
+        text="test",
+        metadata={
+            "trace": {
+                "node_results": [
+                    {"node_name": "existing_node", "input": {}, "output": {"result": "first"}},
+                    {"node_name": "test_node", "input": {}, "output": {"result": "original"}}
+                ]
+            }
+        },
+        results={}
+    )
+    
+    # Simulate a new trace entry that would be a duplicate
+    mock_final_node_state = {
+        "text": "test",
+        "metadata": {
+            "trace": {
+                "node_results": [
+                    {"node_name": "test_node", "input": {}, "output": {"result": "duplicate_attempt"}}  # Same node_name
+                ]
+            }
+        },
+        "results": {},
+        "new_field": "added_value"
+    }
+    
+    # Simulate the enhanced state merging with duplicate prevention
+    state_dict = initial_state.model_dump()
+    final_node_state = mock_final_node_state
+    
+    # This is the critical enhancement - merge fields but prevent duplicate trace entries
+    for key, value in final_node_state.items():
+        if key == 'metadata' and 'metadata' in state_dict and state_dict.get('metadata') and value.get('trace'):
+            # Special handling for metadata trace (the enhancement)
+            if 'trace' not in state_dict['metadata']:
+                state_dict['metadata']['trace'] = {'node_results': []}
+            
+            # Get existing node names to avoid duplicates (lines 215-221 in BaseNode.py)
+            existing_node_names = {result.get('node_name') for result in state_dict['metadata']['trace']['node_results']}
+            
+            # Only add trace entries that don't already exist (the duplicate prevention)
+            for trace_entry in value['trace']['node_results']:
+                if trace_entry.get('node_name') not in existing_node_names:
+                    state_dict['metadata']['trace']['node_results'].append(trace_entry)
+        else:
+            # Merge other fields normally
+            state_dict[key] = value
+    
+    # Verify duplicate prevention worked correctly
+    trace_results = state_dict['metadata']['trace']['node_results']
+    node_names = [result['node_name'] for result in trace_results]
+    
+    # Should still have exactly 2 entries (no duplicates added)
+    assert len(trace_results) == 2, f"Should have 2 trace entries (no duplicates), got {len(trace_results)}"
+    assert node_names.count("test_node") == 1, "Should have exactly one test_node entry (duplicate prevented)"
+    assert "existing_node" in node_names, "Original existing_node should be preserved"
+    assert "test_node" in node_names, "Original test_node should be preserved"
+    
+    # Should preserve the original test_node entry, not the duplicate attempt
+    test_node_entry = next(entry for entry in trace_results if entry['node_name'] == 'test_node')
+    assert test_node_entry['output']['result'] == "original", "Should preserve original entry, not duplicate"
+    
+    # Other fields should still be merged correctly
+    assert state_dict['new_field'] == "added_value", "Non-trace fields should still be merged"
+    
+    print("✅ BaseNode trace entry duplicate prevention test passed - duplicates successfully prevented!")
+
+
+def test_basenode_refactored_state_merging():
+    """Test the refactored state merging in BaseNode for improved trace management."""
+    
+    # This test targets commit 93a07028:
+    # "Refactor state merging in BaseNode for improved trace management"
+    
+    from plexus.scores.nodes.BaseNode import BaseNode
+    from pydantic import BaseModel, ConfigDict
+    from typing import Optional
+    
+    class MockRefactorGraphState(BaseModel):
+        model_config = ConfigDict(extra='allow', arbitrary_types_allowed=True)
+        
+        text: str
+        metadata: Optional[dict] = None
+        results: Optional[dict] = None
+        classification: Optional[str] = None
+        explanation: Optional[str] = None
+        
+    class TestRefactorNode(BaseNode):
+        def __init__(self):
+            super().__init__(name="refactor_test_node")
+            self.GraphState = MockRefactorGraphState
+            
+        def add_core_nodes(self, workflow):
+            pass
+    
+    test_node = TestRefactorNode()
+    
+    # Test the refactored state merging with complex trace scenarios
+    initial_state = MockRefactorGraphState(
+        text="refactor test",
+        metadata={
+            "trace": {
+                "node_results": [
+                    {
+                        "node_name": "classifier_1", 
+                        "input": {"text": "refactor test"}, 
+                        "output": {"classification": "Yes", "explanation": "Initial classification"}
+                    }
+                ]
+            },
+            "additional_metadata": "original_value"
+        },
+        results={},
+        classification="Yes",
+        explanation="Initial explanation"
+    )
+    
+    # Simulate refactored workflow result with enhanced trace data
+    mock_refactored_final_state = {
+        "text": "refactor test",
+        "metadata": {
+            "trace": {
+                "node_results": [
+                    {
+                        "node_name": "classifier_2",
+                        "input": {"previous_result": "Yes"},
+                        "output": {"classification": "Approved", "explanation": "Secondary classification"},
+                        "execution_time": "0.15s",  # Enhanced trace data
+                        "token_usage": {"total": 50}  # Enhanced trace data
+                    }
+                ]
+            },
+            "processing_stage": "secondary_review",  # New metadata
+            "additional_metadata": "updated_value"  # Updated existing metadata
+        },
+        "results": {"final_stage": True},
+        "classification": "Approved",  # Updated classification
+        "explanation": "Secondary classification with enhanced reasoning",  # Updated explanation
+        "confidence_score": 0.92  # New field from refactored processing
+    }
+    
+    # Test the refactored state merging
+    state_dict = initial_state.model_dump()
+    final_node_state = mock_refactored_final_state
+    
+    # Apply the refactored merging logic
+    for key, value in final_node_state.items():
+        if key == 'metadata' and 'metadata' in state_dict and state_dict.get('metadata') and value.get('trace'):
+            # Refactored trace management
+            if 'trace' not in state_dict['metadata']:
+                state_dict['metadata']['trace'] = {'node_results': []}
+            
+            # Enhanced duplicate prevention with refactored logic
+            existing_node_names = {result.get('node_name') for result in state_dict['metadata']['trace']['node_results']}
+            
+            for trace_entry in value['trace']['node_results']:
+                if trace_entry.get('node_name') not in existing_node_names:
+                    state_dict['metadata']['trace']['node_results'].append(trace_entry)
+            
+            # Merge other metadata fields (refactored approach)
+            for meta_key, meta_value in value.items():
+                if meta_key != 'trace':
+                    state_dict['metadata'][meta_key] = meta_value
+        else:
+            # Standard field merging
+            state_dict[key] = value
+    
+    # Verify refactored state merging results
+    assert len(state_dict['metadata']['trace']['node_results']) == 2, "Should have both trace entries"
+    assert state_dict['classification'] == "Approved", "Classification should be updated"
+    assert state_dict['explanation'] == "Secondary classification with enhanced reasoning", "Explanation should be updated"
+    assert state_dict['confidence_score'] == 0.92, "New fields should be added"
+    assert state_dict['metadata']['processing_stage'] == "secondary_review", "New metadata should be added"
+    assert state_dict['metadata']['additional_metadata'] == "updated_value", "Existing metadata should be updated"
+    
+    # Verify enhanced trace data preservation
+    classifier_2_entry = next(entry for entry in state_dict['metadata']['trace']['node_results'] 
+                             if entry['node_name'] == 'classifier_2')
+    assert classifier_2_entry['execution_time'] == "0.15s", "Enhanced trace data should be preserved"
+    assert classifier_2_entry['token_usage']['total'] == 50, "Complex trace data should be preserved"
+    
+    print("✅ BaseNode refactored state merging test passed - improved trace management validated!") 

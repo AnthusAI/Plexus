@@ -669,7 +669,7 @@ function ItemsDashboardInner() {
 
   // Wake-from-sleep detection state
   const pageHiddenTimeRef = useRef<number | null>(null);
-  const isPageVisibleRef = useRef<boolean>(!document.hidden);
+  const isPageVisibleRef = useRef<boolean>(typeof document !== 'undefined' ? !document.hidden : true);
   const WAKE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
 
   // Search state
@@ -714,7 +714,7 @@ function ItemsDashboardInner() {
       if (itemElement) {
         // Calculate the position with 12px padding (Tailwind 3)
         const elementRect = itemElement.getBoundingClientRect();
-        const currentScrollTop = window.pageYOffset || document.documentElement.scrollTop;
+        const currentScrollTop = window.pageYOffset || (typeof document !== 'undefined' ? document.documentElement.scrollTop : 0);
         const targetScrollTop = currentScrollTop + elementRect.top - 12; // 12px padding
         
         window.scrollTo({
@@ -1411,7 +1411,7 @@ function ItemsDashboardInner() {
   // Page Visibility API - detect wake from sleep
   useEffect(() => {
     const handleVisibilityChange = () => {
-      const isVisible = !document.hidden;
+      const isVisible = typeof document !== 'undefined' ? !document.hidden : true;
       const now = Date.now();
       
       if (isVisible && !isPageVisibleRef.current) {
@@ -1436,12 +1436,15 @@ function ItemsDashboardInner() {
     };
     
     // Set initial state
-    isPageVisibleRef.current = !document.hidden;
-    
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+    if (typeof document !== 'undefined') {
+      isPageVisibleRef.current = !document.hidden;
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+    }
     
     return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      }
     };
   }, [silentRefresh, restartSubscriptions]);
   
@@ -3360,17 +3363,21 @@ function ItemsDashboardInner() {
     
     // Create the cleanup function
     const handleDragEnd = () => {
-      document.removeEventListener('mousemove', handleDrag);
-      document.removeEventListener('mouseup', handleDragEnd);
-      document.body.style.cursor = '';
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('mousemove', handleDrag);
+        document.removeEventListener('mouseup', handleDragEnd);
+        document.body.style.cursor = '';
+      }
     };
     
     // Set the cursor for the entire document during dragging
-    document.body.style.cursor = 'col-resize';
-    
-    // Add the event listeners
-    document.addEventListener('mousemove', handleDrag);
-    document.addEventListener('mouseup', handleDragEnd);
+    if (typeof document !== 'undefined') {
+      document.body.style.cursor = 'col-resize';
+      
+      // Add the event listeners
+      document.addEventListener('mousemove', handleDrag);
+      document.addEventListener('mouseup', handleDragEnd);
+    }
   };
 
   // Add a useEffect for the intersection observer

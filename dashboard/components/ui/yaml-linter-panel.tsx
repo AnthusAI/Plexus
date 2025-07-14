@@ -6,7 +6,7 @@
  */
 
 import React from 'react'
-import { AlertCircle, CheckCircle, Info, AlertTriangle, ExternalLink } from 'lucide-react'
+import { OctagonX, ThumbsUp, Info, AlertTriangle, ExternalLink, Lightbulb } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -51,11 +51,11 @@ export function YamlLinterPanel({
   const getIcon = () => {
     switch (variant) {
       case 'error':
-        return <AlertCircle className="h-4 w-4" />
+        return <OctagonX className="h-4 w-4" />
       case 'warning':
         return <AlertTriangle className="h-4 w-4" />
       case 'success':
-        return <CheckCircle className="h-4 w-4" />
+        return <ThumbsUp className="h-4 w-4" />
       default:
         return <Info className="h-4 w-4" />
     }
@@ -66,6 +66,11 @@ export function YamlLinterPanel({
   }
 
   const getSummaryText = () => {
+    // For success cases, show "Validation Successful" as the summary text
+    if (result.is_valid && result.messages.length === 1 && result.messages[0].level === 'success') {
+      return 'Validation Successful'
+    }
+    
     if (result.success_message) {
       return result.success_message
     }
@@ -82,46 +87,63 @@ export function YamlLinterPanel({
     return `Found ${parts.join(', ')}`
   }
 
+  const summaryText = getSummaryText()
+
   return (
     <div className={cn(getVariantClasses(), className)}>
-      {/* Simple header */}
-      <div className="flex items-center gap-2 mb-2">
-        {getIcon()}
-        <span className="text-sm font-medium">
-          {getSummaryText()}
-        </span>
-        {hasMessages && (
-          <div className="flex gap-1">
-            {hasErrors && (
-              <Badge variant="destructive" className="h-5 text-xs">
-                {result.error_count}
-              </Badge>
-            )}
-            {hasWarnings && (
-              <Badge variant="secondary" className="h-5 text-xs bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300">
-                {result.warning_count}
-              </Badge>
-            )}
-            {result.info_count > 0 && (
-              <Badge variant="outline" className="h-5 text-xs">
-                {result.info_count}
-              </Badge>
-            )}
+      {/* Simple header - only show if we have summary text */}
+      {summaryText && (
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            {getIcon()}
+            <span className="text-sm font-medium">
+              {summaryText}
+            </span>
           </div>
-        )}
-      </div>
+          {hasMessages && (
+            <div className="flex gap-1">
+              {hasErrors && (
+                <Badge variant="destructive" className="h-5 text-xs">
+                  {result.error_count}
+                </Badge>
+              )}
+              {hasWarnings && (
+                <Badge variant="secondary" className="h-5 text-xs bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300">
+                  {result.warning_count}
+                </Badge>
+              )}
+              {result.info_count > 0 && (
+                <Badge variant="outline" className="h-5 text-xs">
+                  {result.info_count}
+                </Badge>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Always visible messages */}
       {hasMessages && (
         <div className="space-y-2">
-          {result.messages.map((message, index) => (
-            <LintMessageItem
-              key={index}
-              message={message}
-              onClick={onMessageClick}
-              showLineNumber={showLineNumbers}
-            />
-          ))}
+          {result.messages.map((message, index) => {
+            // For success cases, show only the description text, not the full message item
+            if (message.level === 'success' && result.is_valid && result.messages.length === 1) {
+              return (
+                <div key={index} className="text-sm text-muted-foreground">
+                  {message.message}
+                </div>
+              )
+            }
+            
+            return (
+              <LintMessageItem
+                key={index}
+                message={message}
+                onClick={onMessageClick}
+                showLineNumber={showLineNumbers}
+              />
+            )
+          })}
         </div>
       )}
     </div>
@@ -138,13 +160,13 @@ function LintMessageItem({ message, onClick, showLineNumber = true }: LintMessag
   const getMessageIcon = () => {
     switch (message.level) {
       case 'error':
-        return <AlertCircle className="h-3 w-3 text-destructive flex-shrink-0 mt-0.5" />
+        return <OctagonX className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
       case 'warning':
-        return <AlertTriangle className="h-3 w-3 text-yellow-500 flex-shrink-0 mt-0.5" />
+        return <AlertTriangle className="h-4 w-4 text-yellow-500 flex-shrink-0 mt-0.5" />
       case 'success':
-        return <CheckCircle className="h-3 w-3 text-green-500 flex-shrink-0 mt-0.5" />
+        return <ThumbsUp className="h-4 w-4 text-green-500 flex-shrink-0 mt-0.5" />
       default:
-        return <Info className="h-3 w-3 text-blue-500 flex-shrink-0 mt-0.5" />
+        return <Info className="h-4 w-4 text-blue-500 flex-shrink-0 mt-0.5" />
     }
   }
 
@@ -179,8 +201,9 @@ function LintMessageItem({ message, onClick, showLineNumber = true }: LintMessag
               {message.message}
             </div>
             {message.suggestion && (
-              <div className="mt-1 text-xs italic text-foreground">
-                💡 {message.suggestion}
+              <div className="mt-1 text-xs italic text-foreground flex items-center gap-1">
+                <Lightbulb className="h-3 w-3" />
+                {message.suggestion}
               </div>
             )}
           </div>

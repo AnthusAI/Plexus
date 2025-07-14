@@ -447,18 +447,17 @@ class TestTestOllamaCommand:
         assert 'The sky is blue due to Rayleigh scattering.' in result.output
         mock_ollama_test.assert_called_once_with(model='llama2', prompt='Why is the sky blue?')
     
-    @pytest.mark.skip(reason="OpenAI API mocking needs work - actual API calls being made")
     def test_test_ollama_command_openai_provider(self, runner, mock_env_vars):
         """Test test-ollama command with OpenAI provider"""
-        # Prevent actual API calls by mocking at the HTTP level
-        with patch('plexus.cli.AnalyzeCommands.ChatOpenAI') as mock_chat_openai:
+        # Prevent actual API calls by mocking at the correct import path
+        with patch('langchain_openai.ChatOpenAI') as mock_chat_openai:
             mock_llm = Mock()
             mock_response = Mock()
             mock_response.content = "OpenAI response about quantum computing"
             mock_llm.invoke.return_value = mock_response
             mock_chat_openai.return_value = mock_llm
             
-            with patch('plexus.cli.AnalyzeCommands.ChatPromptTemplate') as mock_template:
+            with patch('langchain.prompts.ChatPromptTemplate') as mock_template:
                 mock_prompt_template = Mock()
                 mock_prompt_template.format.return_value = "Formatted prompt"
                 mock_template.from_template.return_value = mock_prompt_template
@@ -471,7 +470,7 @@ class TestTestOllamaCommand:
                 ])
                 
                 assert result.exit_code == 0
-                assert 'OpenAI Response' in result.output
+                assert 'Openai Response' in result.output
                 assert 'OpenAI response about quantum computing' in result.output
     
     def test_test_ollama_command_openai_missing_key(self, runner):
@@ -489,10 +488,9 @@ class TestTestOllamaCommand:
                     "OpenAI API key not provided. Set OPENAI_API_KEY environment variable or pass --openai-api-key"
                 )
     
-    @pytest.mark.skip(reason="OpenAI API mocking needs work - actual API calls being made")
     def test_test_ollama_command_openai_import_error(self, runner, mock_env_vars):
         """Test test-ollama command when OpenAI package is not installed"""
-        with patch('plexus.cli.AnalyzeCommands.ChatOpenAI', side_effect=ImportError("No module named 'langchain_openai'")):
+        with patch('langchain_openai.ChatOpenAI', side_effect=ImportError("No module named 'langchain_openai'")):
             with patch('plexus.cli.AnalyzeCommands.logging') as mock_logging:
                 result = runner.invoke(analyze, [
                     'test-ollama',
