@@ -497,9 +497,22 @@ class Item(BaseModel):
         # Try different identifier values in priority order (reportId first as most unique)
         identifier_values_to_try = []
         if isinstance(identifiers, dict):
+            # Map input keys to their actual stored names and extract values
+            key_mapping = {
+                'reportId': 'report ID',
+                'formId': 'form ID', 
+                'sessionId': 'session ID',
+                'ccId': 'call criteria ID'
+            }
+            
             for key in ['reportId', 'formId', 'sessionId', 'ccId']:
                 if key in identifiers and identifiers[key]:
                     identifier_values_to_try.append(str(identifiers[key]))
+            
+            # Also try direct stored name lookups for backwards compatibility
+            for stored_name in ['report ID', 'form ID', 'session ID', 'call criteria ID']:
+                if stored_name in identifiers and identifiers[stored_name]:
+                    identifier_values_to_try.append(str(identifiers[stored_name]))
         
         if not identifier_values_to_try:
             return None
@@ -509,27 +522,42 @@ class Item(BaseModel):
             for identifier_value in identifier_values_to_try:
                 if debug:
                     logger = logging.getLogger(__name__)
-                    logger.debug(f"[IDENTIFIER LOOKUP] Searching for: {identifier_value}")
+                    logger.info(f"[IDENTIFIER LOOKUP] Searching for: {identifier_value}")
                 
                 identifier = Identifier.find_by_value(identifier_value, account_id, client)
                 if identifier:
+                    if debug:
+                        logger.info(f"[IDENTIFIER LOOKUP] Found identifier: itemId={identifier.itemId} (type: {type(identifier.itemId)}), name={identifier.name}, value={identifier.value}")
+                    
                     # Found identifier, now get the associated Item
-                    item = cls.get_by_id(identifier.itemId, client)
-                    if item:
+                    try:
+                        # Validate and fix itemId before calling get_by_id
+                        item_id = identifier.itemId
+                        if not isinstance(item_id, str) or not item_id.strip():
+                            if debug:
+                                logger.warning(f"[IDENTIFIER LOOKUP] Invalid itemId detected: {repr(item_id)} (type: {type(item_id)}), skipping this identifier")
+                            continue  # Skip this identifier and try the next one
+                        
+                        item = cls.get_by_id(item_id, client)
+                        if item:
+                            if debug:
+                                logger.info(f"[IDENTIFIER LOOKUP] Found Item via identifier: {item.id}")
+                            return {
+                                'id': item.id,
+                                'externalId': item.externalId,
+                                'description': item.description,
+                                'accountId': item.accountId,
+                                'identifiers': item.identifiers,
+                                'text': item.text
+                            }
+                    except Exception as get_by_id_error:
                         if debug:
-                            logger.debug(f"[IDENTIFIER LOOKUP] Found Item via identifier: {item.id}")
-                        return {
-                            'id': item.id,
-                            'externalId': item.externalId,
-                            'description': item.description,
-                            'accountId': item.accountId,
-                            'identifiers': item.identifiers,
-                            'text': item.text
-                        }
+                            logger.error(f"[IDENTIFIER LOOKUP] get_by_id failed for itemId={identifier.itemId}: {get_by_id_error}")
+                        # Continue to try next identifier value
             
             if debug:
                 logger = logging.getLogger(__name__)
-                logger.debug(f"[IDENTIFIER LOOKUP] No Item found for identifier values: {identifier_values_to_try}")
+                logger.info(f"[IDENTIFIER LOOKUP] No Item found for identifier values: {identifier_values_to_try}")
             return None
             
         except Exception as e:
@@ -711,4 +739,70 @@ class Item(BaseModel):
             
             return json.dumps(legacy_identifiers) if legacy_identifiers else None
         except Exception:
+            return None
+    
+    @classmethod
+    def find_by_identifier(
+        cls,
+        client: _BaseAPIClient,
+        account_id: str,
+        identifier_key: str,
+        identifier_value: str,
+        debug: bool = False
+    ) -> Optional['Item']:
+        """
+        Find an Item using a specific identifier (reportId, formId, sessionId, etc.).
+        
+        This method provides a general-purpose way to find Items by any identifier type,
+        not limited to cache-specific use cases.
+        
+        Args:
+            client: API client for database operations
+            account_id: Account ID to scope the search
+            identifier_key: The type of identifier (e.g., 'reportId', 'formId', 'sessionId')
+            identifier_value: The value to search for
+            debug: Enable debug logging
+            
+        Returns:
+            Item object if found, None otherwise
+            
+        Example:
+            # Find item by report ID
+            item = Item.find_by_identifier(client, account_id, 'reportId', '277307013')
+            
+            # Find item by form ID  
+            item = Item.find_by_identifier(client, account_id, 'formId', '12345')
+        """
+        if debug:
+            logger = logging.getLogger(__name__)
+            logger.debug(f"[FIND BY IDENTIFIER] Searching for {identifier_key}={identifier_value} in account {account_id}")
+        
+        try:
+            # Use the existing identifier lookup mechanism from upsert_by_identifiers
+            item_dict = cls._lookup_item_by_identifiers(
+                client=client,
+                account_id=account_id,
+                identifiers={identifier_key: identifier_value},
+                debug=debug
+            )
+            
+            if item_dict:
+                if debug:
+                    logger.info(f"[FIND BY IDENTIFIER] Found item dict: {item_dict}")
+                
+                # Extract the item ID from the returned dictionary
+                item_id = item_dict['id']
+                
+                # Get the full Item object
+                item = cls.get_by_id(item_id, client)
+                return item
+            else:
+                if debug:
+                    logger.info(f"[FIND BY IDENTIFIER] No item found for {identifier_key}={identifier_value}")
+                return None
+                
+        except Exception as e:
+            if debug:
+                logger = logging.getLogger(__name__)
+                logger.error(f"[FIND BY IDENTIFIER] Error searching for {identifier_key}={identifier_value}: {e}")
             return None 
