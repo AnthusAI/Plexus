@@ -456,7 +456,7 @@ export async function listRecentEvaluations(
     
     // Get the account ID if not provided
     if (!accountId) {
-      const ACCOUNT_KEY = 'call-criteria';
+      ;
       const accountResponse = await (client.models.Account as any).list({ 
         filter: { key: { eq: ACCOUNT_KEY } } 
       });

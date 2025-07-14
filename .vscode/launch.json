@@ -53,7 +53,7 @@
             "module": "plexus",
             "args": [
                 "predict",
-                "--scorecard-name", "termlifev1",
+                "--scorecard-name", "example-scorecard-2",
                 "--score-name", "Carrier Access",
                 "--number",
                 "1"
@@ -70,7 +70,7 @@
             "request": "launch",
             "module": "score",
             "args": [
-                "--scorecard-name", "termlifev1",
+                "--scorecard-name", "example-scorecard-2",
                 "--report-id", "260399240"
             ],
             "console": "integratedTerminal",
@@ -88,7 +88,7 @@
                 "batch",
                 "generate",
                 "--account-key",
-                "call-criteria"
+                "${env:PLEXUS_ACCOUNT_KEY}"
             ],
             "console": "integratedTerminal",
             "cwd": "${workspaceFolder}/../Call-Criteria-Python",
@@ -105,7 +105,7 @@
                 "batch",
                 "status",
                 "--account-key",
-                "call-criteria"
+                "${env:PLEXUS_ACCOUNT_KEY}"
             ],
             "console": "integratedTerminal",
             "cwd": "${workspaceFolder}/../Call-Criteria-Python",
@@ -122,7 +122,7 @@
                 "batch",
                 "complete",
                 "--account-key",
-                "call-criteria"
+                "${env:PLEXUS_ACCOUNT_KEY}"
             ],
             "console": "integratedTerminal",
             "cwd": "${workspaceFolder}/../Call-Criteria-Python",

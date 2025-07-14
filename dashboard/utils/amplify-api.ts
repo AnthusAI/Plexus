@@ -116,7 +116,7 @@ export async function listRecentTasks(limit: number = 12): Promise<{ tasks: Proc
     const currentClient = getClient();
 
     // Get the account ID by key
-    const ACCOUNT_KEY = 'call-criteria';
+    ;
     const accountResponse = await listFromModel<Schema['Account']['type']>(
       'Account',
       { filter: { key: { eq: ACCOUNT_KEY } } }

@@ -55,7 +55,7 @@ def basic_graph_config():
         "temperature": 0.0,
         "openai_api_version": "2023-05-15",
         "openai_api_base": "https://test.openai.azure.com",
-        "openai_api_key": "test-key",
+        
         "output": {
             "value": "classification",
             "explanation": "explanation"
@@ -781,7 +781,7 @@ def graph_config_with_edge():
         "temperature": 0.0,
         "openai_api_version": "2023-05-15",
         "openai_api_base": "https://test.openai.azure.com",
-        "openai_api_key": "test-key",
+        
         "output": {
             "value": "classification",
             "explanation": "explanation"
@@ -890,7 +890,7 @@ async def test_conditions_with_edge_fallback():
         "temperature": 0.0,
         "openai_api_version": "2023-05-15",
         "openai_api_base": "https://test.openai.azure.com",
-        "openai_api_key": "test-key",
+        
         "output": {
             "value": "good_call",
             "explanation": "non_qualifying_reason"
@@ -2785,7 +2785,7 @@ async def test_langgraphscore_combined_conditions_and_edge_routing():
         "temperature": 0.0,
         "openai_api_version": "2023-05-15",
         "openai_api_base": "https://test.openai.azure.com",
-        "openai_api_key": "test-key",
+        
         "output": {
             "value": "classification",
             "explanation": "explanation"
@@ -2946,7 +2946,7 @@ async def test_final_node_edge_output_mapping():
         "temperature": 0.0,
         "openai_api_version": "2023-05-15", 
         "openai_api_base": "https://test.openai.azure.com",
-        "openai_api_key": "test-key",
+        
         "output": {
             "value": "final_decision",
             "explanation": "final_reasoning"
@@ -3205,7 +3205,7 @@ async def test_workflow_state_preservation_across_nodes():
         "temperature": 0.0,
         "openai_api_version": "2023-05-15",
         "openai_api_base": "https://test.openai.azure.com", 
-        "openai_api_key": "test-key",
+        
         "output": {
             "value": "final_result",
             "explanation": "final_reasoning"

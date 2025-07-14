@@ -177,7 +177,7 @@ data_source_tests:
     input: |
       class: CallCriteriaDBCache
       searches:
-        - item_list_filename: scorecards/TermLifeAI/high-value-customers.csv
+        - item_list_filename: scorecards/example-scorecard-2/high-value-customers.csv
       balance: false
     expected:
       is_valid: true
@@ -390,7 +390,7 @@ integration_tests:
           number: 2000
           minimum_calibration_count: 3
       searches:
-        - item_list_filename: scorecards/TermLifeAI/high-value-customers.csv
+        - item_list_filename: scorecards/example-scorecard-2/high-value-customers.csv
         - item_list_filename: data/special-cases.txt
       balance: true
     expected:

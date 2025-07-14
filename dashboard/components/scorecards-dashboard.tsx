@@ -44,7 +44,7 @@ import { ScorecardDashboardSkeleton } from "./loading-skeleton"
 import { Task, TaskHeader, TaskContent } from "./Task"
 import { observeTaskUpdates, observeTaskStageUpdates } from "@/utils/subscriptions"
 
-const ACCOUNT_KEY = 'call-criteria'
+
 
 export default function ScorecardsComponent({
   initialSelectedScorecardId = null,

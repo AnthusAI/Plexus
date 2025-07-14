@@ -142,7 +142,7 @@ class Task(BaseModel):
     @classmethod
     def _get_account_id(cls, client) -> str:
         """Get the account ID for the call-criteria account."""
-        account = Account.list_by_key(client, "call-criteria")
+        account = Account.list_by_key(client, os.getenv('PLEXUS_ACCOUNT_KEY', 'default-account'))
         if not account:
             raise ValueError("No account found with key: call-criteria")
         return account.id

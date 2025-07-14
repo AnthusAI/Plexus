@@ -556,7 +556,7 @@ export const WithUniversalCode: Story = {
     variant: 'detail',
     task: createTask('with-universal-code', {
       type: 'Prediction Test',
-      command: 'predict --scorecard "termlifev1" --score "Assumptive Close" --item "276514287" --format json',
+      command: 'predict --scorecard "example-scorecard-2" --score "Assumptive Close" --item "276514287" --format json',
       status: 'COMPLETED',
       stages: sampleStages.map(stage => ({ ...stage, status: 'COMPLETED' as const })),
       output: `# ====================================
@@ -564,7 +564,7 @@ export const WithUniversalCode: Story = {
 # ====================================
 # This Universal Code was generated from a task execution.
 # Task Type: Prediction Test
-# Command: predict --scorecard "termlifev1" --score "Assumptive Close" --item "276514287" --format json
+# Command: predict --scorecard "example-scorecard-2" --score "Assumptive Close" --item "276514287" --format json
 # 
 # The structured output below contains the results and context from the task execution.
 
@@ -584,7 +584,7 @@ prediction_results:
         max_tokens: 150
 
 task_metadata:
-  scorecard: "termlifev1"
+  scorecard: "example-scorecard-2"
   score: "Assumptive Close"
   item_id: "276514287"
   execution_time: "1.2s"
@@ -610,19 +610,19 @@ export const WithAttachmentsAndOutput: Story = {
     variant: 'detail',
     task: createTask('with-attachments-output', {
       type: 'Evaluation Report',
-      command: 'plexus evaluate accuracy --scorecard "termlifev1" --number-of-samples 100',
+      command: 'plexus evaluate accuracy --scorecard "example-scorecard-2" --number-of-samples 100',
       status: 'COMPLETED',
       stages: sampleStages.map(stage => ({ ...stage, status: 'COMPLETED' as const })),
       output: `# ====================================
 # Evaluation Report Output
 # ====================================
 # Generated evaluation results for accuracy testing
-# Scorecard: termlifev1
+# Scorecard: example-scorecard-2
 # Sample Size: 100 items
 # Accuracy: 87.5%
 
 evaluation_summary:
-  scorecard: "termlifev1"
+  scorecard: "example-scorecard-2"
   type: "accuracy"
   total_items: 100
   processed_items: 100
@@ -649,7 +649,7 @@ score_distribution:
         'evaluations/2025-01-06/eval_123456/detailed_results.xlsx',
         'evaluations/2025-01-06/eval_123456/trace_logs.txt'
       ],
-      stdout: `Starting accuracy evaluation for scorecard: termlifev1
+      stdout: `Starting accuracy evaluation for scorecard: example-scorecard-2
 Loading samples... Found 100 items
 Processing items: 100/100 [████████████████████████████████] 100%
 Calculating metrics...

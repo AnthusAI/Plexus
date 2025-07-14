@@ -10,4 +10,5 @@ tmp/
 .langchain.db/
 .plexus_training_data_cache/
 /scorecards/
+.plexus/amplify_outputs.json
 .plexus/

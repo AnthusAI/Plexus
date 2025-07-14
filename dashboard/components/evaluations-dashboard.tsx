@@ -121,7 +121,7 @@ interface RawTaskData {
   data?: RawTask;
 }
 
-const ACCOUNT_KEY = 'call-criteria'
+
 
 const LIST_ACCOUNTS = `
   query ListAccounts($filter: ModelAccountFilterInput) {

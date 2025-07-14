@@ -5,6 +5,8 @@ import type { Schema } from "@/amplify/data/resource"
 import { ModelListResult } from '@/types/shared'
 import { listFromModel } from "@/utils/amplify-helpers"
 
+import { useAccount } from "@/app/contexts/AccountContext"
+
 export const client = generateClient<Schema>()
 
 export interface ReportConfigurationSelectorProps {
@@ -25,9 +27,9 @@ const ReportConfigurationSelector: React.FC<ReportConfigurationSelectorProps> = 
   setSelectedReportConfiguration,
   useMockData = false
 }) => {
+  const { selectedAccount } = useAccount()
   const [reportConfigurations, setReportConfigurations] = useState<Array<{ value: string; label: string }>>([])
   const [isLoading, setIsLoading] = useState(!useMockData)
-  const [accountId, setAccountId] = useState<string | null>(null)
 
   // Debug logging
   useEffect(() => {
@@ -38,52 +40,15 @@ const ReportConfigurationSelector: React.FC<ReportConfigurationSelectorProps> = 
     });
   }, [selectedReportConfiguration, reportConfigurations]);
 
-  // Fetch account ID first (similar to Reports Dashboard)
-  useEffect(() => {
-    const fetchAccountId = async () => {
-      try {
-        const ACCOUNT_KEY = process.env.NEXT_PUBLIC_PLEXUS_ACCOUNT_KEY || 'call-criteria'
-        const accountResponse = await client.graphql({
-          query: `
-            query ListAccounts($filter: ModelAccountFilterInput) {
-              listAccounts(filter: $filter) {
-                items {
-                  id
-                  key
-                }
-              }
-            }
-          `,
-          variables: {
-            filter: { key: { eq: ACCOUNT_KEY } }
-          }
-        })
-
-        if ('data' in accountResponse && accountResponse.data?.listAccounts?.items?.length) {
-          const id = accountResponse.data.listAccounts.items[0].id
-          setAccountId(id)
-        } else {
-          console.warn('No account found with key:', ACCOUNT_KEY)
-        }
-      } catch (err: any) {
-        console.error('Error fetching account:', err)
-      }
-    }
-    
-    if (!useMockData) {
-      fetchAccountId()
-    }
-  }, [useMockData])
-
   // Fetch report configurations when accountId is available
   useEffect(() => {
-    if (useMockData || !accountId) return
+    if (useMockData || !selectedAccount) return
 
     async function fetchReportConfigurations() {
       try {
         setIsLoading(true)
-        if (!accountId) return
-        const { data: configModels } = await listReportConfigurations(accountId)
+        if (!selectedAccount) return
+        const { data: configModels } = await listReportConfigurations(selectedAccount.id)
         
         // Sort by updatedAt descending (most recent first)
         const sortedConfigs = configModels.sort((a, b) => {
@@ -106,7 +71,7 @@ const ReportConfigurationSelector: React.FC<ReportConfigurationSelectorProps> = 
     }
 
     fetchReportConfigurations()
-  }, [accountId, useMockData])
+  }, [selectedAccount, useMockData])
 
   const handleConfigurationChange = (value: string) => {
     console.debug('Report configuration selection changed:', { 

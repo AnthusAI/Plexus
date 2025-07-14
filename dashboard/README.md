@@ -32,7 +32,7 @@ from plexus_dashboard.api.client import PlexusDashboardClient
 # Initialize client with optional context
 client = PlexusDashboardClient(
     context={
-        'account_key': 'call-criteria',
+        'account_key': 'default-account',
         'scorecard_key': 'agent-performance'
     }
 )
@@ -109,7 +109,7 @@ from plexus_dashboard.api.client import PlexusDashboardClient
 
 client = PlexusDashboardClient(
     context={
-        'account_key': 'call-criteria',
+        'account_key': 'default-account',
         'scorecard_key': 'agent-performance'
     }
 )
