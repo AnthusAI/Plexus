@@ -5,8 +5,11 @@ Provides a flexible rule engine for implementing custom validation logic.
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, TYPE_CHECKING
 from dataclasses import dataclass
+
+if TYPE_CHECKING:
+    from .yaml_linter import LintMessage
 
 
 @dataclass

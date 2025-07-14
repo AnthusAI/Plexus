@@ -193,7 +193,7 @@ class YamlLinterTestRunner {
     if (failedTests > 0) {
       report += `=== Failed Tests ===\n`
       results.filter(r => !r.passed).forEach(result => {
-        report += `\n❌ ${result.testCase.name}\n`
+        report += `\n[FAILED] ${result.testCase.name}\n`
         report += `   Description: ${result.testCase.description}\n`
         report += `   Context: ${result.testCase.context}\n`
         report += `   Tags: ${result.testCase.tags.join(', ')}\n`
@@ -206,7 +206,7 @@ class YamlLinterTestRunner {
     if (passedTests > 0) {
       report += `\n=== Passed Tests ===\n`
       results.filter(r => r.passed).forEach(result => {
-        report += `✅ ${result.testCase.name} (${result.testCase.context})\n`
+        report += `[PASSED] ${result.testCase.name} (${result.testCase.context})\n`
       })
     }
 
@@ -224,7 +224,7 @@ class YamlLinterTestRunner {
       report += `Description: ${result.testCase.description}\n`
       report += `Context: ${result.testCase.context}\n`
       report += `Tags: ${result.testCase.tags.join(', ')}\n`
-      report += `Status: ${result.passed ? '✅ PASSED' : '❌ FAILED'}\n`
+      report += `Status: ${result.passed ? '[PASSED]' : '[FAILED]'}\n`
       
       if (!result.passed) {
         report += `Errors:\n`

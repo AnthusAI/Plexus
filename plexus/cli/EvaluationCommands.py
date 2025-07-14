@@ -13,6 +13,11 @@ import traceback
 from typing import Optional
 import numpy as np
 from datetime import datetime, timezone, timedelta
+import tempfile
+import urllib.parse
+import boto3
+from botocore.exceptions import ClientError
+import yaml
 
 from plexus.CustomLogging import logging, set_log_group
 from plexus.Scorecard import Scorecard
@@ -53,6 +58,7 @@ from plexus.dashboard.api.models.task import Task
 from plexus.dashboard.api.client import PlexusDashboardClient
 from plexus.cli.CommandProgress import CommandProgress
 from plexus.cli.task_progress_tracker import TaskProgressTracker, StageConfig
+from plexus.cli.stage_configurations import get_evaluation_stage_configs
 
 from plexus.utils import truncate_dict_strings_inner
 
@@ -61,6 +67,350 @@ def create_client() -> PlexusDashboardClient:
     client = PlexusDashboardClient()
     logging.debug(f"Using API URL: {client.api_url}")
     return client
+
+def get_amplify_bucket():
+    """Get the S3 bucket name from environment variables or fall back to reading amplify_outputs.json."""
+    # First try environment variable (consistent with reporting commands)
+    bucket_name = os.environ.get("AMPLIFY_STORAGE_DATASETS_BUCKET_NAME")
+    if bucket_name:
+        logging.debug(f"Using S3 bucket from environment variable: {bucket_name}")
+        return bucket_name
+    
+    # Fall back to reading from amplify_outputs.json
+    try:
+        amplify_file = 'dashboard/amplify_outputs.json'
+        if not os.path.exists(amplify_file):
+            amplify_file = 'amplify_outputs.json'  # Try root level too
+        
+        with open(amplify_file, 'r') as f:
+            amplify_outputs = yaml.safe_load(f)
+        # Assuming a structure like "storage": {"plugins": {"awsS3StoragePlugin": {"bucket": "..."}}}
+        bucket_name = amplify_outputs['storage']['plugins']['awsS3StoragePlugin']['bucket']
+        logging.debug(f"Using S3 bucket from amplify_outputs.json: {bucket_name}")
+        return bucket_name
+    except (IOError, KeyError, TypeError) as e:
+        logging.error(f"Could not read S3 bucket from environment variable AMPLIFY_STORAGE_DATASETS_BUCKET_NAME or amplify_outputs.json: {e}")
+        return None
+
+def lookup_data_source(client: PlexusDashboardClient, name: Optional[str] = None, 
+                      key: Optional[str] = None, id: Optional[str] = None) -> dict:
+    """Look up a DataSource by name, key, or ID"""
+    if not any([name, key, id]):
+        raise ValueError("Must provide either name, key, or id to look up DataSource")
+    
+    if id:
+        logging.info(f"Looking up DataSource by ID: {id}")
+        query = """
+        query GetDataSource($id: ID!) {
+            getDataSource(id: $id) {
+                id
+                name
+                key
+                currentVersionId
+                attachedFiles
+                yamlConfiguration
+                accountId
+            }
+        }
+        """
+        result = client.execute(query, {'id': id})
+        if not result or 'getDataSource' not in result or not result['getDataSource']:
+            raise ValueError(f"DataSource with ID {id} not found")
+        return result['getDataSource']
+    
+    elif key:
+        logging.info(f"Looking up DataSource by key: {key}")
+        query = """
+        query ListDataSourcesByKey($key: String!) {
+            listDataSourcesByKey(key: $key) {
+                items {
+                    id
+                    name
+                    key
+                    currentVersionId
+                    attachedFiles
+                    yamlConfiguration
+                    accountId
+                }
+            }
+        }
+        """
+        result = client.execute(query, {'key': key})
+        if not result or 'listDataSourcesByKey' not in result or not result['listDataSourcesByKey']['items']:
+            raise ValueError(f"DataSource with key {key} not found")
+        return result['listDataSourcesByKey']['items'][0]
+    
+    else:  # name
+        logging.info(f"Looking up DataSource by name: {name}")
+        query = """
+        query ListDataSourcesByName($name: String!) {
+            listDataSourcesByName(name: $name) {
+                items {
+                    id
+                    name
+                    key
+                    currentVersionId
+                    attachedFiles
+                    yamlConfiguration
+                    accountId
+                }
+            }
+        }
+        """
+        result = client.execute(query, {'name': name})
+        if not result or 'listDataSourcesByName' not in result or not result['listDataSourcesByName']['items']:
+            raise ValueError(f"DataSource with name {name} not found")
+        return result['listDataSourcesByName']['items'][0]
+
+def get_latest_dataset_for_data_source(client: PlexusDashboardClient, data_source_id: str) -> dict:
+    """Get the most recent DataSet for a DataSource by finding its current version"""
+    logging.info(f"Looking up latest dataset for DataSource ID: {data_source_id}")
+    
+    # First, get the DataSource and its current version
+    data_source = lookup_data_source(client, id=data_source_id)
+    current_version_id = data_source.get('currentVersionId')
+    
+    if not current_version_id:
+        raise ValueError(f"DataSource {data_source_id} has no current version")
+    
+    logging.info(f"Found current version ID: {current_version_id}")
+    
+    # Now get datasets for this version
+    query = """
+    query ListDataSetsForDataSourceVersion($dataSourceVersionId: ID!) {
+        listDataSets(filter: {dataSourceVersionId: {eq: $dataSourceVersionId}}) {
+            items {
+                id
+                name
+                description
+                file
+                dataSourceVersionId
+                attachedFiles
+                createdAt
+                updatedAt
+                accountId
+            }
+        }
+    }
+    """
+    result = client.execute(query, {'dataSourceVersionId': current_version_id})
+    if not result or 'listDataSets' not in result or not result['listDataSets']['items']:
+        raise ValueError(f"No datasets found for DataSource version ID {current_version_id}")
+    
+    # Sort by createdAt to get the most recent
+    datasets = result['listDataSets']['items']
+    datasets.sort(key=lambda x: x['createdAt'], reverse=True)
+    latest_dataset = datasets[0]
+    
+    logging.info(f"Found latest dataset: {latest_dataset['id']} (created: {latest_dataset['createdAt']})")
+    return latest_dataset
+
+def get_dataset_by_id(client: PlexusDashboardClient, dataset_id: str) -> dict:
+    """Get a specific DataSet by ID"""
+    logging.info(f"Looking up dataset by ID: {dataset_id}")
+    query = """
+    query GetDataSet($id: ID!) {
+        getDataSet(id: $id) {
+            id
+            name
+            description
+            file
+            dataSourceVersionId
+            attachedFiles
+            createdAt
+            updatedAt
+            accountId
+        }
+    }
+    """
+    result = client.execute(query, {'id': dataset_id})
+    if not result or 'getDataSet' not in result or not result['getDataSet']:
+        raise ValueError(f"Dataset with ID {dataset_id} not found")
+    return result['getDataSet']
+
+def load_samples_from_cloud_dataset(dataset: dict, score_name: str, score_config: dict,
+                                   number_of_samples: Optional[int] = None,
+                                   random_seed: Optional[int] = None,
+                                   progress_callback=None) -> list:
+    """Load samples from a cloud dataset (Parquet file) and convert to evaluation format"""
+    logging.info(f"Loading samples from cloud dataset: {dataset['id']}")
+    
+    # Find data files - check both 'file' field and 'attachedFiles'
+    main_file = dataset.get('file')
+    attached_files = dataset.get('attachedFiles', [])
+    if attached_files is None:
+        attached_files = []
+    
+    # Combine all available files
+    all_files = []
+    if main_file:
+        all_files.append(main_file)
+    all_files.extend(attached_files)
+        
+    logging.info(f"Dataset {dataset['id']} has main file: {main_file}")
+    logging.info(f"Dataset {dataset['id']} has {len(attached_files)} attached files: {attached_files}")
+    logging.info(f"All available files: {all_files}")
+    
+    # Look for Parquet files first (preferred)
+    parquet_files = [f for f in all_files if f.lower().endswith('.parquet')]
+    
+    if parquet_files:
+        data_file_path = parquet_files[0]
+        file_type = 'parquet'
+        logging.info(f"Using Parquet file: {data_file_path}")
+    else:
+        # Fall back to CSV files
+        csv_files = [f for f in all_files if f.lower().endswith('.csv')]
+        if csv_files:
+            data_file_path = csv_files[0]
+            file_type = 'csv'
+            logging.info(f"Using CSV file: {data_file_path}")
+        else:
+            # List available file types for better error message
+            file_extensions = [f.split('.')[-1].lower() for f in all_files if '.' in f]
+            raise ValueError(f"No Parquet or CSV files found in dataset {dataset['id']}. "
+                           f"Main file: {main_file}. "
+                           f"Attached files: {attached_files}. "
+                           f"File extensions found: {file_extensions}")
+    
+    # Handle both full S3 URLs and relative paths
+    if data_file_path.startswith('s3://'):
+        # Full S3 URL - parse normally
+        s3_path = data_file_path[5:]
+        bucket_name, key = s3_path.split('/', 1)
+    else:
+        # Relative path - construct full S3 URL
+        bucket_name = get_amplify_bucket()
+        if not bucket_name:
+            raise ValueError(f"S3 bucket name not found. Cannot download file: {data_file_path}")
+        key = data_file_path
+        full_s3_url = f"s3://{bucket_name}/{key}"
+        logging.info(f"Constructed full S3 URL: {full_s3_url}")
+        data_file_path = full_s3_url  # Update for logging consistency
+    
+    logging.info(f"Downloading from S3 bucket: {bucket_name}, key: {key}")
+    
+    # Download the data file from S3
+    s3_client = boto3.client('s3')
+    
+    try:
+        # Create appropriate temp file extension
+        file_extension = f".{file_type}"
+        with tempfile.NamedTemporaryFile(suffix=file_extension, delete=False) as temp_file:
+            temp_file_path = temp_file.name
+            
+        logging.info(f"Downloading {file_type} file to: {temp_file_path}")
+        s3_client.download_file(bucket_name, key, temp_file_path)
+        
+        # Load the data file into a DataFrame
+        logging.info(f"Loading {file_type} file into DataFrame")
+        if file_type == 'parquet':
+            df = pd.read_parquet(temp_file_path)
+        elif file_type == 'csv':
+            df = pd.read_csv(temp_file_path)
+        else:
+            raise ValueError(f"Unsupported file type: {file_type}")
+        
+        # Clean up the temporary file
+        os.unlink(temp_file_path)
+        
+    except ClientError as e:
+        error_code = e.response['Error']['Code']
+        if error_code == 'NoSuchKey':
+            raise ValueError(f"{file_type.upper()} file not found in S3: {data_file_path}")
+        elif error_code == 'NoSuchBucket':
+            raise ValueError(f"S3 bucket not found: {bucket_name}")
+        else:
+            raise ValueError(f"Failed to download {file_type} file from S3: {str(e)}")
+    except Exception as e:
+        raise ValueError(f"Failed to load {file_type} file: {str(e)}")
+    
+    logging.info(f"Loaded DataFrame with {len(df)} rows and columns: {df.columns.tolist()}")
+    
+    # Sample the dataframe if number_of_samples is specified
+    if number_of_samples and number_of_samples < len(df):
+        logging.info(f"Sampling {number_of_samples} records from {len(df)} total records")
+        df = df.sample(n=number_of_samples, random_state=random_seed)
+        actual_sample_count = number_of_samples
+        logging.info(f"Using random_seed: {random_seed if random_seed is not None else 'None (fully random)'}")
+    else:
+        actual_sample_count = len(df)
+        logging.info(f"Using all {actual_sample_count} records (no sampling needed)")
+
+    # Update progress tracker with actual count
+    if progress_callback and hasattr(progress_callback, '__self__'):
+        tracker = progress_callback.__self__
+        
+        # Set the actual total items count we just discovered
+        new_total = tracker.set_total_items(actual_sample_count)
+        
+        # Verify the total was set correctly before proceeding
+        if new_total != actual_sample_count:
+            raise RuntimeError(f"Failed to set total items to {actual_sample_count}")
+        
+        # Set the status message
+        status_message = f"Successfully loaded {actual_sample_count} samples from cloud dataset"
+        if tracker.current_stage:
+            tracker.current_stage.status_message = status_message
+            # Reset processed items to 0 since we're starting fresh
+            tracker.current_stage.processed_items = 0
+            
+            # Verify stage total_items was updated
+            if tracker.current_stage.total_items != actual_sample_count:
+                raise RuntimeError(f"Stage {tracker.current_stage.name} total_items not updated correctly")
+        
+        # Now update progress - by this point total_items is set to actual_sample_count
+        tracker.update(0, status_message)
+        
+        # Final verification after update
+        if tracker.total_items != actual_sample_count:
+            raise RuntimeError("Total items not maintained after update")
+    elif progress_callback:
+        progress_callback(0)
+
+    # Convert DataFrame to samples in the expected format
+    samples = df.to_dict('records')
+    
+    # Determine the score name column
+    score_name_column_name = score_name
+    if score_config.get('label_score_name'):
+        label_score_name = score_config['label_score_name']
+    else:
+        label_score_name = score_name
+        
+    if score_config.get('label_field'):
+        score_name_column_name = f"{label_score_name} {score_config['label_field']}"
+    else:
+        score_name_column_name = label_score_name
+
+    logging.info(f"Looking for label column: {score_name_column_name}")
+    
+    # Convert to the expected evaluation format
+    processed_samples = []
+    for sample in samples:
+        # Get metadata from the sample if it exists
+        metadata = sample.get('metadata', {})
+        if isinstance(metadata, str):
+            try:
+                metadata = json.loads(metadata)
+            except json.JSONDecodeError:
+                logging.warning(f"Failed to parse metadata as JSON for content_id {sample.get('content_id')}")
+                metadata = {}
+        
+        # Create the sample dictionary with metadata included
+        processed_sample = {
+            'text': sample.get('text', ''),
+            f'{score_name_column_name}_label': sample.get(score_name_column_name, ''),
+            'content_id': sample.get('content_id', ''),
+            'columns': {
+                **{k: v for k, v in sample.items() if k not in ['text', score_name_column_name, 'content_id', 'metadata']},
+                'metadata': metadata  # Include the metadata in the columns
+            }
+        }
+        processed_samples.append(processed_sample)
+    
+    logging.info(f"Converted {len(processed_samples)} samples to evaluation format")
+    return processed_samples
 
 @click.group()
 def evaluate():
@@ -89,6 +439,10 @@ def load_configuration_from_yaml_file(configuration_file_path):
 @click.option('--fresh', is_flag=True, help='Pull fresh, non-cached data from the data lake.')
 @click.option('--visualize', is_flag=True, default=False, help='Generate PNG visualization of LangGraph scores')
 @click.option('--task-id', default=None, type=str, help='Task ID for progress tracking')
+@click.option('--data-source-name', default=None, type=str, help='Name of the cloud data source to use (overrides score data config)')
+@click.option('--data-source-key', default=None, type=str, help='Key of the cloud data source to use (overrides score data config)')
+@click.option('--data-source-id', default=None, type=str, help='ID of the cloud data source to use (overrides score data config)')
+@click.option('--dataset-id', default=None, type=str, help='Specific dataset ID to use (overrides score data config)')
 def accuracy(
     scorecard_name: str,
     use_langsmith_trace: bool,
@@ -100,7 +454,11 @@ def accuracy(
     experiment_label: str,
     fresh: bool,
     visualize: bool,
-    task_id: Optional[str]
+    task_id: Optional[str],
+    data_source_name: Optional[str],
+    data_source_key: Optional[str],
+    data_source_id: Optional[str],
+    dataset_id: Optional[str]
     ):
     """
     Evaluate the accuracy of the scorecard using the current configuration against labeled samples.
@@ -143,22 +501,8 @@ def accuracy(
                 api_key = os.environ.get('PLEXUS_API_KEY')
                 if api_url and api_key:
                     try:
-                        # Initialize TaskProgressTracker with proper stage configs
-                        stage_configs = {
-                            "Setup": StageConfig(
-                                order=1,
-                                status_message="Setting up evaluation..."
-                            ),
-                            "Processing": StageConfig(
-                                order=2,
-                                total_items=number_of_samples,
-                                status_message="Starting processing..."
-                            ),
-                            "Finalizing": StageConfig(
-                                order=3,
-                                status_message="Starting finalization..."
-                            )
-                        }
+                        # Initialize TaskProgressTracker with evaluation-specific stage configs
+                        stage_configs = get_evaluation_stage_configs(total_items=number_of_samples)
 
                         # Create tracker with proper task configuration
                         tracker = TaskProgressTracker(
@@ -172,7 +516,7 @@ def accuracy(
                             metadata={
                                 "type": "Accuracy Evaluation",
                                 "scorecard": scorecard_name,
-                                "task_type": "Accuracy Evaluation"  # Move type to metadata
+                                "task_type": "Accuracy Evaluation"
                             },
                             account_id=account.id
                         )
@@ -332,21 +676,8 @@ def accuracy(
 
             # If we have a task but no tracker yet (Celery path), create the tracker now
             if task and not tracker:
-                stage_configs = {
-                    "Setup": StageConfig(
-                        order=1,
-                        status_message="Setting up evaluation..."
-                    ),
-                    "Processing": StageConfig(
-                        order=2,
-                        total_items=number_of_samples,
-                        status_message="Waiting to start processing..."
-                    ),
-                    "Finalizing": StageConfig(
-                        order=3,
-                        status_message="Waiting to start finalization..."
-                    )
-                }
+                # Use evaluation-specific stage configs
+                stage_configs = get_evaluation_stage_configs(total_items=number_of_samples)
                 
                 # Create tracker with existing task
                 tracker = TaskProgressTracker(
@@ -668,6 +999,43 @@ def accuracy(
                     tracker.update(current_items=0)
                     logging.info("Entered Processing stage")
 
+                    # Check if any cloud dataset options are provided
+                    use_cloud_dataset = any([data_source_name, data_source_key, data_source_id, dataset_id])
+                    cloud_dataset = None
+                    
+                    if use_cloud_dataset:
+                        try:
+                            tracker.current_stage.status_message = "Looking up cloud dataset..."
+                            tracker.update(current_items=0)
+                            
+                            if dataset_id:
+                                # Use specific dataset
+                                logging.info(f"Using specific dataset ID: {dataset_id}")
+                                cloud_dataset = get_dataset_by_id(client, dataset_id)
+                            else:
+                                # Look up data source and get latest dataset
+                                data_source = lookup_data_source(
+                                    client, 
+                                    name=data_source_name, 
+                                    key=data_source_key, 
+                                    id=data_source_id
+                                )
+                                logging.info(f"Found data source: {data_source['name']} (ID: {data_source['id']})")
+                                cloud_dataset = get_latest_dataset_for_data_source(client, data_source['id'])
+                            
+                            logging.info(f"Using cloud dataset: {cloud_dataset['name']} (ID: {cloud_dataset['id']})")
+                            tracker.current_stage.status_message = f"Found cloud dataset: {cloud_dataset['name']}"
+                            tracker.update(current_items=0)
+                            
+                        except Exception as e:
+                            error_msg = f"Failed to lookup cloud dataset: {str(e)}"
+                            logging.error(error_msg)
+                            tracker.current_stage.status_message = error_msg
+                            tracker.update(current_items=0)
+                            if task:
+                                task.fail_processing(error_msg)
+                            raise
+
                     # Process each score while keeping Processing stage active
                     for single_score_name in score_names:
                         logging.info(f"Running experiment for score: {single_score_name}")
@@ -695,9 +1063,7 @@ def accuracy(
                                     listScores(filter: {
                                         and: {
                                             externalId: { eq: $externalId },
-                                            section: {
-                                                scorecardId: { eq: $scorecardId }
-                                            }
+                                            scorecardId: { eq: $scorecardId }
                                         }
                                     }) {
                                         items {
@@ -709,7 +1075,7 @@ def accuracy(
                                 }
                                 """
                                 score_result = client.execute(query, {
-                                    'scorecardId': scorecard_record.id,
+                                    'scorecardId': scorecard_record['id'],
                                     'externalId': int(external_id)
                                 })
                                 
@@ -739,14 +1105,53 @@ def accuracy(
                                             logging.error(f"Failed to update Evaluation record with scoreId: {str(e)}")
                                             # Continue execution even if update fails
                                 else:
-                                    logging.error(f"Could not find Score record for scorecard ID {scorecard_record.id} and external ID {external_id}")
+                                    logging.error(f"Could not find Score record for scorecard ID {scorecard_record['id']} and external ID {external_id}")
                             except Exception as e:
                                 logging.error(f"Error looking up Score record: {str(e)}")
                                 # Continue execution even if lookup fails
                         else:
                             logging.warning(f"No external ID found for score {single_score_name}")
 
-                        if uses_data_driven:
+                        if use_cloud_dataset:
+                            # Override data loading with cloud dataset
+                            if score_config:
+                                # Setup stage - cloud dataset loading
+                                with CommandProgress.track(
+                                    total=tracker.total_items,
+                                    status=f"Loading cloud dataset for {single_score_name}..."
+                                ) as progress:
+                                    tracker.current_stage.status_message = f"Loading cloud dataset for {single_score_name}..."
+                                    tracker.update(current_items=0)
+
+                                    # Define a bound progress callback function
+                                    def progress_callback_fn(self, current):
+                                        progress.update(
+                                            current=current,
+                                            total=tracker.total_items,
+                                            status=f"Loaded {current} of {tracker.total_items} samples"
+                                        )
+                                        self.update(current_items=current)
+                                        self.current_stage.status_message = f"Loaded {current} of {tracker.total_items} samples for {single_score_name}"
+                                    
+                                    # Create a bound method from the function
+                                    bound_progress_callback = types.MethodType(progress_callback_fn, tracker)
+
+                                    single_score_labeled_samples = load_samples_from_cloud_dataset(
+                                        cloud_dataset, single_score_name, score_config,
+                                        number_of_samples=tracker.total_items,
+                                        random_seed=random_seed,
+                                        progress_callback=bound_progress_callback
+                                    )
+                                    
+                                    if single_score_labeled_samples:
+                                        tracker.current_stage.status_message = f"Successfully loaded {len(single_score_labeled_samples)} samples from cloud dataset for {single_score_name}"
+                                        tracker.update(current_items=0)
+                            else:
+                                logging.warning(f"Score '{single_score_name}' not found in scorecard. Skipping.")
+                                tracker.current_stage.status_message = f"Score '{single_score_name}' not found in scorecard. Skipping."
+                                tracker.update(current_items=0)
+                                continue
+                        elif uses_data_driven:
                             if score_config:
                                 # Setup stage - dataset preparation
                                 with CommandProgress.track(
@@ -808,7 +1213,7 @@ def accuracy(
                             'scorecard_id': scorecard_record['id'] if scorecard_record else None  # Pass scorecard ID
                         }
                         
-                        if uses_data_driven:
+                        if use_cloud_dataset or uses_data_driven:
                             if not single_score_labeled_samples:
                                 error_msg = "The dataset is empty. Cannot proceed with the experiment."
                                 logging.error(error_msg)

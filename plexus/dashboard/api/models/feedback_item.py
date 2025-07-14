@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime
-from typing import List, Optional, Dict, Any, TYPE_CHECKING
+from typing import List, Optional, Dict, Any, TYPE_CHECKING, Tuple
 from dataclasses import dataclass, field
 
 from plexus.dashboard.api.models.base import BaseModel
@@ -123,8 +123,10 @@ class FeedbackItem(BaseModel):
         query_parts = list(fields)
         
         for rel_name, rel_fields in relationship_fields.items():
-            # Add handling for relationships like account, scorecard, score if needed
-            pass
+            # Add handling for relationships like item, account, scorecard, score
+            if rel_fields:
+                rel_query = f"{rel_name} {{ {' '.join(rel_fields)} }}"
+                query_parts.append(rel_query)
             
         return f"{{ {' '.join(query_parts)} }}"
 
@@ -699,4 +701,301 @@ class FeedbackItem(BaseModel):
             A string that can be used as a cache key
         """
         # Simple concatenation with a separator
-        return f"{score_id}:{form_id}" 
+        return f"{score_id}:{form_id}"
+
+    @classmethod
+    def upsert_by_cache_key(
+        cls,
+        client: 'PlexusDashboardClient',
+        account_id: str,
+        scorecard_id: str,
+        score_id: str,
+        cache_key: str,
+        initial_answer_value: Optional[str] = None,
+        final_answer_value: Optional[str] = None,
+        initial_comment_value: Optional[str] = None,
+        final_comment_value: Optional[str] = None,
+        edit_comment_value: Optional[str] = None,
+        is_agreement: Optional[bool] = None,
+        edited_at: Optional[str] = None,
+        editor_name: Optional[str] = None,
+        item_id: Optional[str] = None,
+        debug: bool = False
+    ) -> Tuple[str, bool, Optional[str]]:
+        """
+        Create or update a FeedbackItem using cache key lookup for deduplication.
+        
+        Uses the byCacheKey GSI for efficient lookup to prevent duplicates.
+        
+        Args:
+            client: The PlexusDashboardClient instance
+            account_id: Account ID
+            scorecard_id: Scorecard ID  
+            score_id: Score ID
+            cache_key: Cache key for lookup (typically "{score_id}:{form_id}")
+            initial_answer_value: Initial answer value
+            final_answer_value: Final answer value
+            initial_comment_value: Initial comment value
+            final_comment_value: Final comment value
+            edit_comment_value: Edit comment value
+            is_agreement: Whether initial and final answers agree
+            edited_at: ISO timestamp when edited
+            editor_name: Name of editor
+            item_id: Associated Item ID
+            debug: Enable debug logging
+            
+        Returns:
+            Tuple of (feedback_item_id, was_created, error_message)
+            - feedback_item_id: ID of the FeedbackItem (None if error)
+            - was_created: True if created, False if updated
+            - error_message: Error description (None if successful)
+        """
+        try:
+            if debug:
+                logger.debug(f"FeedbackItem upsert_by_cache_key: cache_key={cache_key}, account_id={account_id}")
+            
+            # First, look up existing FeedbackItem by cache key using the GSI
+            existing_item = cls._lookup_feedback_item_by_cache_key(client, cache_key, debug)
+            
+            # Prepare the data payload
+            feedback_data = {
+                "accountId": account_id,
+                "scorecardId": scorecard_id,
+                "scoreId": score_id,
+                "cacheKey": cache_key
+            }
+            
+            # Add optional fields if provided
+            if initial_answer_value is not None:
+                feedback_data["initialAnswerValue"] = initial_answer_value
+            if final_answer_value is not None:
+                feedback_data["finalAnswerValue"] = final_answer_value
+            if initial_comment_value is not None:
+                feedback_data["initialCommentValue"] = initial_comment_value
+            if final_comment_value is not None:
+                feedback_data["finalCommentValue"] = final_comment_value
+            if edit_comment_value is not None:
+                feedback_data["editCommentValue"] = edit_comment_value
+            if is_agreement is not None:
+                feedback_data["isAgreement"] = is_agreement
+            if edited_at is not None:
+                feedback_data["editedAt"] = edited_at
+            if editor_name is not None:
+                feedback_data["editorName"] = editor_name
+            if item_id is not None:
+                feedback_data["itemId"] = item_id
+            
+            if existing_item:
+                # Update existing FeedbackItem
+                if debug:
+                    logger.debug(f"Updating existing FeedbackItem {existing_item.id} with cache_key {cache_key}")
+                
+                updated_item = cls._update_feedback_item(client, existing_item.id, feedback_data, debug)
+                if updated_item:
+                    return updated_item.id, False, None
+                else:
+                    return None, False, "Failed to update existing FeedbackItem"
+            else:
+                # Create new FeedbackItem
+                if debug:
+                    logger.debug(f"Creating new FeedbackItem with cache_key {cache_key}")
+                
+                created_item = cls._create_feedback_item(client, feedback_data, debug)
+                if created_item:
+                    return created_item.id, True, None
+                else:
+                    return None, False, "Failed to create new FeedbackItem"
+                    
+        except Exception as e:
+            error_msg = f"Exception during FeedbackItem upsert: {str(e)}"
+            if debug:
+                logger.error(error_msg)
+                import traceback
+                logger.error(traceback.format_exc())
+            return None, False, error_msg
+
+    @classmethod
+    def _lookup_feedback_item_by_cache_key(
+        cls,
+        client: 'PlexusDashboardClient',
+        cache_key: str,
+        debug: bool = False
+    ) -> Optional['FeedbackItem']:
+        """
+        Look up a FeedbackItem by cache key using the byCacheKey GSI.
+        
+        Args:
+            client: The PlexusDashboardClient instance
+            cache_key: Cache key to search for
+            debug: Enable debug logging
+            
+        Returns:
+            FeedbackItem instance if found, None otherwise
+        """
+        try:
+            if debug:
+                logger.debug(f"Looking up FeedbackItem by cache_key: {cache_key}")
+            
+            # Use the byCacheKey GSI query
+            query = """
+            query GetFeedbackItemByCacheKey($cacheKey: String!, $limit: Int) {
+                listFeedbackItemByCacheKey(cacheKey: $cacheKey, limit: $limit) {
+                    items {
+                        id
+                        accountId
+                        scorecardId
+                        scoreId
+                        cacheKey
+                        initialAnswerValue
+                        finalAnswerValue
+                        initialCommentValue
+                        finalCommentValue
+                        editCommentValue
+                        isAgreement
+                        editedAt
+                        editorName
+                        itemId
+                        createdAt
+                        updatedAt
+                    }
+                }
+            }
+            """
+            
+            variables = {
+                "cacheKey": cache_key,
+                "limit": 1
+            }
+            
+            result = client.execute(query=query, variables=variables)
+            
+            if debug:
+                logger.debug(f"Cache key lookup result: {result}")
+            
+            if result and "listFeedbackItemByCacheKey" in result:
+                items = result["listFeedbackItemByCacheKey"].get("items", [])
+                if items:
+                    if debug:
+                        logger.debug(f"Found existing FeedbackItem with ID: {items[0]['id']}")
+                    return cls.from_dict(items[0], client=client)
+            
+            if debug:
+                logger.debug(f"No existing FeedbackItem found for cache_key: {cache_key}")
+            return None
+            
+        except Exception as e:
+            if debug:
+                logger.error(f"Error looking up FeedbackItem by cache_key {cache_key}: {e}")
+            return None
+
+    @classmethod
+    def _create_feedback_item(
+        cls,
+        client: 'PlexusDashboardClient',
+        feedback_data: Dict[str, Any],
+        debug: bool = False
+    ) -> Optional['FeedbackItem']:
+        """
+        Create a new FeedbackItem.
+        
+        Args:
+            client: The PlexusDashboardClient instance
+            feedback_data: Data for creating the item
+            debug: Enable debug logging
+            
+        Returns:
+            Created FeedbackItem instance or None if failed
+        """
+        try:
+            if debug:
+                logger.debug(f"Creating FeedbackItem with data: {feedback_data}")
+            
+            # Use the existing create method
+            created_item = cls.create(client, feedback_data)
+            
+            if debug and created_item:
+                logger.debug(f"Successfully created FeedbackItem with ID: {created_item.id}")
+            
+            return created_item
+            
+        except Exception as e:
+            if debug:
+                logger.error(f"Error creating FeedbackItem: {e}")
+            return None
+
+    @classmethod
+    def _update_feedback_item(
+        cls,
+        client: 'PlexusDashboardClient',
+        feedback_item_id: str,
+        feedback_data: Dict[str, Any],
+        debug: bool = False
+    ) -> Optional['FeedbackItem']:
+        """
+        Update an existing FeedbackItem.
+        
+        Args:
+            client: The PlexusDashboardClient instance
+            feedback_item_id: ID of the FeedbackItem to update
+            feedback_data: Data for updating the item
+            debug: Enable debug logging
+            
+        Returns:
+            Updated FeedbackItem instance or None if failed
+        """
+        try:
+            if debug:
+                logger.debug(f"Updating FeedbackItem {feedback_item_id} with data: {feedback_data}")
+            
+            # Add the ID to the data for update
+            update_data = feedback_data.copy()
+            update_data["id"] = feedback_item_id
+            
+            # Construct update mutation
+            mutation = """
+            mutation UpdateFeedbackItem($input: UpdateFeedbackItemInput!) {
+                updateFeedbackItem(input: $input) {
+                    id
+                    accountId
+                    scorecardId
+                    scoreId
+                    cacheKey
+                    initialAnswerValue
+                    finalAnswerValue
+                    initialCommentValue
+                    finalCommentValue
+                    editCommentValue
+                    isAgreement
+                    editedAt
+                    editorName
+                    itemId
+                    createdAt
+                    updatedAt
+                }
+            }
+            """
+            
+            variables = {"input": update_data}
+            
+            result = client.execute(query=mutation, variables=variables)
+            
+            if debug:
+                logger.debug(f"Update result: {result}")
+            
+            if result and "updateFeedbackItem" in result and result["updateFeedbackItem"]:
+                updated_data = result["updateFeedbackItem"]
+                updated_item = cls.from_dict(updated_data, client=client)
+                
+                if debug:
+                    logger.debug(f"Successfully updated FeedbackItem with ID: {updated_item.id}")
+                
+                return updated_item
+            else:
+                if debug:
+                    logger.error(f"Update mutation failed: {result}")
+                return None
+                
+        except Exception as e:
+            if debug:
+                logger.error(f"Error updating FeedbackItem {feedback_item_id}: {e}")
+            return None 

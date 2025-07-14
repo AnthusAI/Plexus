@@ -132,6 +132,51 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
   const [promptExpanded, setPromptExpanded] = useState(false);
   const [examplesExpanded, setExamplesExpanded] = useState(false);
   const [selectedTopicIndex, setSelectedTopicIndex] = useState<number>(-1);
+  const [completeTopicsData, setCompleteTopicsData] = useState<any>(null);
+  const [loadingCompleteData, setLoadingCompleteData] = useState(false);
+
+  // Function to fetch complete topics data from attached file
+  const fetchCompleteTopicsData = async () => {
+    if (loadingCompleteData || completeTopicsData) return;
+    
+    const topicsCompleteFile = props.attachedFiles?.find(file => 
+      file.includes('topics_complete.json')
+    );
+    
+    if (!topicsCompleteFile) {
+      console.log('🔍 No topics_complete.json file found in attachedFiles:', props.attachedFiles);
+      return;
+    }
+    
+    try {
+      setLoadingCompleteData(true);
+      console.log('🔍 Fetching complete topics data from:', topicsCompleteFile);
+      
+      // Import AWS Amplify storage method
+      const { downloadData } = await import('aws-amplify/storage');
+      
+      // Use appropriate bucket based on file path
+      const storageOptions = {
+        path: topicsCompleteFile,
+        options: { bucket: 'reportBlockDetails' }
+      };
+      
+      const downloadResult = await downloadData(storageOptions).result;
+      const fileContent = await downloadResult.body.text();
+      const completeData = JSON.parse(fileContent);
+      
+      console.log('🔍 Successfully loaded complete topics data:', {
+        totalTopics: completeData.topics?.length || 0,
+        hasAnalysisMetadata: !!completeData.analysis_metadata
+      });
+      
+      setCompleteTopicsData(completeData);
+    } catch (error) {
+      console.error('❌ Failed to fetch complete topics data:', error);
+    } finally {
+      setLoadingCompleteData(false);
+    }
+  };
   
   // Debug logging to see what we're receiving
   console.log('🔍 TopicAnalysis component received props:', {
@@ -257,7 +302,14 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
         )}
 
         {/* Main Topic Analysis Results */}
-        <TopicAnalysisResults topics={topics} summary={summary} bertopicAnalysis={bertopicAnalysis} />
+        <TopicAnalysisResults 
+          topics={topics} 
+          summary={summary} 
+          bertopicAnalysis={bertopicAnalysis}
+          completeTopicsData={completeTopicsData}
+          loadingCompleteData={loadingCompleteData}
+          fetchCompleteTopicsData={fetchCompleteTopicsData}
+        />
 
         {/* Pipeline Setup */}
         <div className="w-full">
@@ -383,7 +435,10 @@ const TopicAnalysisResults: React.FC<{
   }>;
   summary?: string;
   bertopicAnalysis?: any;
-}> = ({ topics, summary, bertopicAnalysis }) => {
+  completeTopicsData?: any;
+  loadingCompleteData?: boolean;
+  fetchCompleteTopicsData?: () => void;
+}> = ({ topics, summary, bertopicAnalysis, completeTopicsData, loadingCompleteData, fetchCompleteTopicsData }) => {
   const [selectedTopicIndex, setSelectedTopicIndex] = useState<number>(-1);
 
   if (topics.length === 0) {
@@ -440,11 +495,36 @@ const TopicAnalysisResults: React.FC<{
           >
             {topics.map((topic, index) => {
               const isSelected = selectedTopicIndex === index;
+              
+              // Get examples from complete data if available
+              const getTopicExamples = () => {
+                if (topic.examples && topic.examples.length > 0) {
+                  return topic.examples;
+                }
+                
+                if (completeTopicsData?.topics) {
+                  const completeTopic = completeTopicsData.topics.find((t: any) => t.id === topic.id);
+                  return completeTopic?.examples || [];
+                }
+                
+                return [];
+              };
+              
+              const topicExamples = getTopicExamples();
+              
               return (
                 <AccordionItem key={topic.id} value={`item-${index}`} className="mb-4">
-                  <AccordionTrigger className={`py-2 px-3 rounded-lg transition-colors ${
-                    isSelected ? 'bg-primary text-primary-foreground' : 'hover:bg-muted/50'
-                  }`}>
+                  <AccordionTrigger 
+                    className={`py-2 px-3 rounded-lg transition-colors ${
+                      isSelected ? 'bg-primary text-primary-foreground' : 'hover:bg-muted/50'
+                    }`}
+                    onClick={() => {
+                      // Load complete data when a topic is expanded
+                      if ((isSelected || selectedTopicIndex !== index) && fetchCompleteTopicsData) {
+                        fetchCompleteTopicsData();
+                      }
+                    }}
+                  >
                     <div className="flex items-center justify-between w-full pr-4">
                       <span className="font-medium text-left">{cleanTopicName(topic.name)}</span>
                       <Badge variant="secondary" className="border-none bg-card font-normal">{topic.count} items</Badge>
@@ -473,10 +553,18 @@ const TopicAnalysisResults: React.FC<{
                           ))}
                       </div>
                     )}
-                    {topic.examples && topic.examples.length > 0 && (
-                      <TopicExamplesSection examples={topic.examples} />
+                    
+                    {loadingCompleteData && (
+                      <div className="text-xs text-muted-foreground italic">
+                        Loading examples...
+                      </div>
                     )}
-                    {(!topic.examples || topic.examples.length === 0) && (
+                    
+                    {!loadingCompleteData && topicExamples.length > 0 && (
+                      <TopicExamplesSection examples={topicExamples} />
+                    )}
+                    
+                    {!loadingCompleteData && topicExamples.length === 0 && (
                       <div className="text-xs text-muted-foreground italic">
                         No examples available for this topic
                       </div>
