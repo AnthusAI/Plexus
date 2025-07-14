@@ -168,7 +168,7 @@ plexus-dashboard scorecard sync
 
 This will:
 1. Look for YAML files in the `scorecards/` directory
-2. Use the `call-criteria` account key
+2. Use the `default-account` account key
 3. Create or update scorecards in the API to match the YAML files
 
 Custom directory and account:
@@ -214,6 +214,7 @@ Requires these environment variables:
 ```bash
 PLEXUS_API_URL=https://your-api-url
 PLEXUS_API_KEY=your-api-key
+PLEXUS_ACCOUNT_KEY=your-account-key
 ```
 
 You can set these in a `.env` file or export them in your shell.

@@ -74,10 +74,8 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
         }))
         setAccounts(accountsWithParsedSettings)
         if (!selectedAccount) {
-          const defaultAccount = accountsWithParsedSettings.find(
-            account => account.key === 'call-criteria'
-          ) || accountsWithParsedSettings[0]
-          if (defaultAccount) {
+          if (accountsWithParsedSettings.length === 1) {
+            const defaultAccount = accountsWithParsedSettings[0]
             setSelectedAccount(defaultAccount)
             updateVisibleMenuItems(defaultAccount)
           }

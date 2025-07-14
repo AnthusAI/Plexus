@@ -129,7 +129,7 @@ class Evaluation:
         subset_of_score_names = None,
         experiment_label = None,
         max_mismatches_to_report=5,
-        account_key: str = 'call-criteria',
+        account_key: str = os.getenv('PLEXUS_ACCOUNT_KEY', 'default-account'),
         score_id: str = None,
         visualize: bool = False,
         task_id: str = None,

@@ -479,7 +479,7 @@ def accuracy(
             try:
                 # Get the account ID for call-criteria regardless of path
                 logging.info("Looking up call-criteria account...")
-                account = Account.list_by_key(key="call-criteria", client=client)
+                account = Account.list_by_key(key=os.getenv('PLEXUS_ACCOUNT_KEY', 'default-account'), client=client)
                 if not account:
                     raise Exception("Could not find account with key: call-criteria")
                 logging.info(f"Found account: {account.name} ({account.id})")

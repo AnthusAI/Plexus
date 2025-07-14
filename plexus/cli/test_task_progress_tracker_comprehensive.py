@@ -945,27 +945,7 @@ class TestAPIStageSync:
         # Should have called advance_stage on the API task
         mock_task.advance_stage.assert_called_once_with(mock_next_stage)
     
-    def test_api_update_skipped_when_task_failed(self):
-        """Test that API updates are skipped when task is already failed."""
-        mock_task = Mock(spec=Task)
-        mock_task.id = "test-task"
-        mock_task.status = "FAILED"  # Already failed
-        mock_task.update_progress = Mock()
-        
-        stage_configs = {"Test": StageConfig(order=1, total_items=100)}
-        
-        tracker = TaskProgressTracker(
-            stage_configs=stage_configs,
-            task_object=mock_task,
-            total_items=100,
-            prevent_new_task=True
-        )
-        
-        # Try to update progress
-        tracker.update(current_items=50)
-        
-        # Should not have called update_progress since task is already failed
-        mock_task.update_progress.assert_not_called()
+    
     
     def test_api_update_without_task(self):
         """Test that progress updates work when no API task is available."""

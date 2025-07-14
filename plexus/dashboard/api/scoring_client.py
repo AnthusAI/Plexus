@@ -10,7 +10,7 @@ results. It handles:
 
 Example usage:
     # Initialize with account
-    client = ScoringClient.for_account("call-criteria")
+    client = ScoringClient.for_account(os.getenv('PLEXUS_ACCOUNT_KEY', 'default-account'))
     
     # Initialize with full context
     client = ScoringClient.for_scorecard(

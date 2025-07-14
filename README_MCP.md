@@ -20,7 +20,7 @@ Prerequisites:
 *   **Important:** The `mcp` library (installed as a dependency of Plexus) requires **Python 3.10 or newer**. Please ensure your environment meets this requirement.
 *   `python-dotenv` recommended for managing environment variables (`pip install python-dotenv`).
 
-The server requires dashboard credentials (API URL, API Key) which it loads from a `.env` file. The location of this file's directory **must** be specified using the `--env-dir` argument when launching the server via the MCP client configuration.
+The server requires dashboard credentials, which it loads from a `.env` file. The required environment variables are `PLEXUS_API_URL`, `PLEXUS_API_KEY`, and `PLEXUS_ACCOUNT_KEY`. The location of this file's directory **must** be specified using the `--env-dir` argument when launching the server via the MCP client configuration.
 
 ## Server Operation
 
@@ -30,7 +30,7 @@ The MCP server uses the `mcp.server` library to communicate over standard input 
 -   **Output**: Sends JSON MCP responses (like `toolList`, `toolResult`) via `stdout`.
 -   **Logging**: All logs (INFO, DEBUG, WARNING, ERROR) are sent to standard error (`stderr`) to avoid interfering with the protocol on `stdout`.
 
-The `plexus_mcp_wrapper.py` script is responsible for launching the `plexus_mcp_server.py` process with the correct environment and working directory (`Call-Criteria-Python`) and ensuring the `stdout`/`stderr` separation. **You should always launch the server using the wrapper script.**
+The `plexus_mcp_wrapper.py` script is responsible for launching the `plexus_mcp_server.py` process with the correct environment and working directory (`your-project-directory`) and ensuring the `stdout`/`stderr` separation. **You should always launch the server using the wrapper script.**
 
 ## Available Tools
 
@@ -61,17 +61,17 @@ Create or modify the `mcp.json` file in your client's configuration directory (e
 {
   "mcpServers": {
     "plexus-mcp-service": {
-      "command": "/Users/derek.norrbom/miniconda3/bin/python",
+      "command": "/path/to/your/python/interpreter",
       "args": [
-        "/Users/derek.norrbom/Capacity/Plexus/MCP/plexus_mcp_wrapper.py",
+        "/path/to/your/project/Plexus/MCP/plexus_mcp_wrapper.py",
         "--host", "127.0.0.1",
         "--port", "8002",
         "--transport", "stdio",
-        "--env-dir", "/Users/derek.norrbom/Capacity/Call-Criteria-Python"
+        "--env-dir", "/path/to/your/project/your-project-directory"
       ],
       "env": {
         "PYTHONUNBUFFERED": "1",
-        "PYTHONPATH": "/Users/derek.norrbom/Capacity/Plexus"
+        "PYTHONPATH": "/path/to/your/project/Plexus"
       }
     }
   }
@@ -82,9 +82,9 @@ Create or modify the `mcp.json` file in your client's configuration directory (e
 
 *   **`plexus-mcp-service`**: A unique name you give to this server configuration. Tools will be prefixed with this name (e.g., `mcp_plexus-mcp-service_list_plexus_scorecards`).
 *   **`command`**: The absolute path to the Python interpreter used to run the wrapper script.
-*   **`args`**: A list containing the absolute path to the `Plexus/MCP/plexus_mcp_wrapper.py` script, followed by arguments passed to the wrapper/server. **Crucially, this must include `--env-dir` followed by the absolute path to the directory containing the `.env` file** (e.g., `/Users/derek.norrbom/Capacity/Call-Criteria-Python`) which holds the dashboard credentials.
+*   **`args`**: A list containing the absolute path to the `Plexus/MCP/plexus_mcp_wrapper.py` script, followed by arguments passed to the wrapper/server. **Crucially, this must include `--env-dir` followed by the absolute path to the directory containing the `.env` file** (e.g., `/Users/derek.norrbom/Capacity/your-project-directory`) which holds the dashboard credentials.
 *   **`env`**: Environment variables for the server process. `PYTHONUNBUFFERED` is crucial. `PYTHONPATH` helps ensure Python can find the necessary Plexus modules.
-*   **`cwd`**: This key is **omitted** in this working configuration. The wrapper script itself changes the directory to `/Users/derek.norrbom/Capacity/Plexus` before launching the server script, making this setting unnecessary at the client configuration level.
+*   **`cwd`**: This key is **omitted** in this working configuration. The wrapper script itself changes the directory to `/path/to/your/project/Plexus` before launching the server script, making this setting unnecessary at the client configuration level.
 
 After configuring `mcp.json` and restarting your MCP client (e.g., Cursor), the defined tools should become available.
 

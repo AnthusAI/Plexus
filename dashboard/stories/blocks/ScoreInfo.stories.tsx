@@ -37,7 +37,7 @@ export const Basic: Story = {
     position: 0,
     config: {
       class: 'ScoreInfo',
-      scorecard: 'termlifev1',
+      scorecard: 'example-scorecard-2',
       score: 'Temperature Check'
     }
   },

@@ -38,7 +38,7 @@ import { BatchJobProgressBar, BatchJobStatus } from "@/components/ui/batch-job-p
 import { DualPhaseProgressBar } from "@/components/ui/dual-phase-progress-bar"
 import { useParams, usePathname } from 'next/navigation'
 
-const ACCOUNT_KEY = 'call-criteria'
+
 
 type ScorecardType = Schema['Scorecard']['type']
 type ScoreType = Schema['Score']['type']

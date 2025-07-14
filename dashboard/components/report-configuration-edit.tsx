@@ -72,7 +72,7 @@ const UPDATE_REPORT_CONFIGURATION = `
   }
 `
 
-const ACCOUNT_KEY = process.env.NEXT_PUBLIC_PLEXUS_ACCOUNT_KEY || 'call-criteria'
+
 
 const defaultConfiguration = `# Report Configuration
 

@@ -1051,7 +1051,7 @@ def delete(scorecard: str, force: bool):
 
 @scorecards.command()
 @click.option('--scorecard', help='Specific scorecard to pull (accepts ID, name, key, or external ID)')
-@click.option('--account', default='call-criteria', help='Account to pull scorecards from (accepts ID, name, or key)')
+@click.option('--account', help='Account to pull scorecards from (accepts ID, name, or key)')
 @click.option('--output', default='scorecards', help='Directory to save YAML files')
 def pull(scorecard: Optional[str], account: str, output: str):
     """Pull scorecards from the dashboard and save as YAML files."""

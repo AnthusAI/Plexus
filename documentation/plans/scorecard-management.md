@@ -119,7 +119,7 @@ This document outlines the implementation of Plexus's scorecard management syste
 ```yaml
 name: Prime - EDU 3rd Party
 id: 97
-key: primeedu
+key: example-scorecard-1
 
 scores:
   - name: Good Call

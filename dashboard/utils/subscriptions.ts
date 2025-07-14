@@ -141,7 +141,7 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
         const currentClient = getClient();
 
         // Get the account ID by key
-        const ACCOUNT_KEY = 'call-criteria';
+        ;
         const accountResponse = await (currentClient.models.Account as any).list({ 
           filter: { key: { eq: ACCOUNT_KEY } } 
         }) as AmplifyListResult<Schema['Account']['type']>;

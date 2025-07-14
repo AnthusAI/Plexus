@@ -76,7 +76,7 @@ def create_client() -> PlexusDashboardClient:
     return client
 
 @evaluation.command()
-@click.option('--account-key', default='call-criteria', help='Account key identifier')
+@click.option('--account-key', help='Account key identifier')
 @click.option('--type', required=True, help='Type of evaluation (e.g., accuracy, consistency)')
 @click.option('--parameters', type=str, help='JSON string of evaluation parameters')
 @click.option('--metrics', type=str, help='JSON string of evaluation metrics')
@@ -1038,7 +1038,7 @@ def list(account_key: Optional[str], name: Optional[str], key: Optional[str]):
     os.system(f"plexus scorecards list-scorecards {' --account-key ' + account_key if account_key else ''} {' --name ' + name if name else ''} {' --key ' + key if key else ''}")
 
 @scorecards.command()
-@click.option('--account-key', default='call-criteria', help='Account key identifier')
+@click.option('--account-key', help='Account key identifier')
 @click.option('--directory', default='scorecards', help='Directory containing YAML scorecard files')
 def sync(account_key: str, directory: str):
     """Sync YAML scorecards to the API.

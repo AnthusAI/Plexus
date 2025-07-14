@@ -52,7 +52,7 @@ type ReportDisplayData = {
   task?: Task | null;
 };
 
-const ACCOUNT_KEY = process.env.NEXT_PUBLIC_PLEXUS_ACCOUNT_KEY || 'call-criteria'
+
 
 // GraphQL query to list accounts
 const LIST_ACCOUNTS = `
@@ -1100,7 +1100,7 @@ export default function ReportsDashboard({
       const { url } = await shareLinkClient.create({
         resourceType: 'Report', // Use 'Report' as resource type
         resourceId: selectedReportId,
-        accountId: accountId,
+        accountId: selectedAccount.id,
         expiresAt,
         viewOptions
       });
