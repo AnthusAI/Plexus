@@ -4,9 +4,9 @@ import mlflow
 import pandas as pd
 import numpy as np
 import inspect
-import functools
+import re
 from pydantic import BaseModel, ValidationError, field_validator, ConfigDict
-from typing import Optional, Union, List, Any
+from typing import Optional, Union, List, Any, Dict
 from abc import ABC, abstractmethod
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -30,6 +30,8 @@ from plexus.scores.core.ScoreData import ScoreData
 from plexus.scores.core.ScoreVisualization import ScoreVisualization
 from plexus.scores.core.ScoreMLFlow import ScoreMLFlow
 from plexus.scores.core.utils import ensure_report_directory_exists
+
+
 
 class Score(ABC, mlflow.pyfunc.PythonModel,
     # Core Score functionality.   
@@ -55,8 +57,23 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
     - Visualization tools for model performance
     - Cost tracking for API-based models
     - Metrics computation and logging
+    - Automatic result validation based on YAML configuration
 
-    Common usage patterns:
+    ## Validation System
+
+    The Score class automatically validates prediction results against configured
+    validation rules. When a Score has validation configured in its YAML parameters,
+    every call to predict() will automatically validate the returned results.
+
+    Validation rules can specify:
+    - valid_classes: List of allowed result values
+    - patterns: Regex patterns that results must match
+    - minimum_length/maximum_length: String length constraints
+
+    If validation fails, a Score.ValidationError is raised with a descriptive message.
+
+    ## Common Usage Patterns
+
     1. Creating a custom classifier:
         class MyClassifier(Score):
             def predict(self, context, model_input: Score.Input) -> Score.Result:
@@ -67,14 +84,18 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
                     value="Yes" if is_positive(text) else "No"
                 )
 
-    2. Using in a Scorecard:
+    2. Using in a Scorecard with validation:
         scores:
           MyScore:
             class: MyClassifier
+            validation:
+              value:
+                valid_classes: ["Yes", "No", "Maybe"]
+                patterns: ["^NQ - (?!Other$).*"]
             parameters:
               threshold: 0.8
 
-    3. Training a model:
+    3. Training and evaluating:
         classifier = MyClassifier()
         classifier.train_model()
         classifier.evaluate_model()
@@ -85,10 +106,19 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
             text="content to classify",
             metadata={"source": "email"}
         ))
+        # Result is automatically validated against configured rules
 
     The Score class is designed to be extended for different classification approaches
     while maintaining a consistent interface for use in Scorecards and Evaluations.
     """
+
+    class ValidationError(Exception):
+        """Raised when score result validation fails."""
+        def __init__(self, field_name: str, value: Any, message: str):
+            self.field_name = field_name
+            self.value = value
+            self.message = message
+            super().__init__(f"Validation failed for field '{field_name}': {message}")
 
     class SkippedScoreException(Exception):
         """Raised when a score is skipped due to dependency conditions not being met."""
@@ -96,6 +126,18 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
             self.score_name = score_name
             self.reason = reason
             super().__init__(f"Score '{score_name}' was skipped: {reason}")
+
+    class FieldValidation(BaseModel):
+        """Configuration for validating a specific field."""
+        valid_classes: Optional[List[str]] = None
+        patterns: Optional[List[str]] = None
+        minimum_length: Optional[int] = None
+        maximum_length: Optional[int] = None
+
+    class ValidationConfig(BaseModel):
+        """Configuration for result validation."""
+        value: Optional['Score.FieldValidation'] = None
+        explanation: Optional['Score.FieldValidation'] = None
 
     class Parameters(BaseModel):
         """
@@ -105,6 +147,8 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         ----------
         data : dict
             Dictionary containing data-related parameters.
+        validation : ValidationConfig
+            Configuration for validating score results.
         """
         model_config = ConfigDict(protected_namespaces=())
         scorecard_name: Optional[str] = None
@@ -116,6 +160,7 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         number_of_classes: Optional[int] = None
         label_score_name: Optional[str] = None
         label_field: Optional[str] = None
+        validation: Optional['Score.ValidationConfig'] = None
 
         @field_validator('data')
         def convert_data_percentage(cls, value):
@@ -175,7 +220,7 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
             )
         """
         model_config = ConfigDict(protected_namespaces=())
-        text:     str
+        text: str
         metadata: dict = {}
         results: Optional[List[Any]] = None
 
@@ -231,11 +276,11 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         """
         model_config = ConfigDict(protected_namespaces=())
         parameters: 'Score.Parameters'
-        value:      Union[str, bool]
+        value: Union[str, bool]
         explanation: Optional[str] = None
-        confidence:  Optional[float] = None
-        metadata:   dict = {}
-        error:      Optional[str] = None
+        confidence: Optional[float] = None
+        metadata: dict = {}
+        error: Optional[str] = None
 
         def __eq__(self, other):
             if isinstance(other, Score.Result):
@@ -259,6 +304,98 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         def confidence_from_metadata(self) -> Optional[float]:
             """Backwards compatibility: confidence from metadata"""
             return self.metadata.get('confidence') if self.metadata else None
+        
+        def validate(self, validation_config: Optional['Score.ValidationConfig']) -> None:
+            """
+            Validate this result against the provided validation configuration.
+            
+            Parameters
+            ----------
+            validation_config : Score.ValidationConfig, optional
+                The validation configuration to check against
+                
+            Raises
+            ------
+            Score.ValidationError
+                If validation fails for any field
+            """
+            if not validation_config:
+                return
+                
+            # Validate value field
+            if validation_config.value:
+                self._validate_field('value', str(self.value), validation_config.value)
+                
+            # Validate explanation field
+            if validation_config.explanation and self.explanation is not None:
+                self._validate_field('explanation', self.explanation, validation_config.explanation)
+        
+        def _validate_field(self, field_name: str, field_value: str, field_config: 'Score.FieldValidation') -> None:
+            """
+            Validate a single field against its configuration.
+            
+            Parameters
+            ----------
+            field_name : str
+                Name of the field being validated
+            field_value : str
+                Value of the field being validated
+            field_config : Score.FieldValidation
+                Validation configuration for this field
+                
+            Raises
+            ------
+            Score.ValidationError
+                If validation fails
+            """
+            # Check valid_classes
+            if field_config.valid_classes is not None:
+                if field_value not in field_config.valid_classes:
+                    raise Score.ValidationError(
+                        field_name, 
+                        field_value,
+                        f"'{field_value}' is not in valid_classes {field_config.valid_classes}"
+                    )
+            
+            # Check patterns
+            if field_config.patterns is not None:
+                pattern_matched = False
+                for pattern in field_config.patterns:
+                    try:
+                        if re.match(pattern, field_value):
+                            pattern_matched = True
+                            break
+                    except re.error as e:
+                        raise Score.ValidationError(
+                            field_name,
+                            field_value, 
+                            f"Invalid regex pattern '{pattern}': {str(e)}"
+                        )
+                
+                if not pattern_matched:
+                    raise Score.ValidationError(
+                        field_name,
+                        field_value,
+                        f"'{field_value}' does not match any required patterns {field_config.patterns}"
+                    )
+            
+            # Check minimum_length
+            if field_config.minimum_length is not None:
+                if len(field_value) < field_config.minimum_length:
+                    raise Score.ValidationError(
+                        field_name,
+                        field_value,
+                        f"length {len(field_value)} is below minimum_length {field_config.minimum_length}"
+                    )
+            
+            # Check maximum_length
+            if field_config.maximum_length is not None:
+                if len(field_value) > field_config.maximum_length:
+                    raise Score.ValidationError(
+                        field_name,
+                        field_value,
+                        f"length {len(field_value)} exceeds maximum_length {field_config.maximum_length}"
+                    )
         
     def __init__(self, **parameters):
         """
@@ -453,6 +590,103 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
             Either a single Score.Result or a list of Score.Results
         """
         pass
+    
+    def __getattribute__(self, name):
+        """
+        Automatic validation interceptor for predict() method calls.
+        
+        This method intercepts all attribute access on Score instances. When the
+        'predict' method is accessed, it returns a wrapped version that automatically
+        applies validation to the results.
+        
+        ## How It Works
+        
+        1. Normal attribute access (non-predict methods) passes through unchanged
+        2. When predict() is accessed, we wrap it with validation logic
+        3. The wrapper calls the original predict() method implementation
+        4. If validation is configured, results are validated before returning
+        5. If validation fails, Score.ValidationError is raised
+        
+        ## Compatibility
+        
+        The wrapper handles different predict() method signatures:
+        - Standard: predict(self, context, model_input)
+        - Keyword-only: predict(self, *, context, model_input)
+        
+        This ensures compatibility with existing Score implementations while
+        providing automatic validation for all subclasses.
+        
+        Parameters
+        ----------
+        name : str
+            Name of the attribute being accessed
+            
+        Returns
+        -------
+        Any
+            The requested attribute, with predict() methods automatically wrapped
+            for validation
+        """
+        attr = super().__getattribute__(name)
+        
+        # If it's the predict method, wrap it with validation
+        if name == 'predict' and callable(attr):
+            original_predict = attr
+            
+            def validated_predict(*args, **kwargs):
+                # Handle different predict method signatures:
+                # 1. predict(context, model_input) - standard signature
+                # 2. predict(model_input) - legacy signature  
+                # 3. predict(*, context, model_input) - keyword-only signature
+                #
+                # TODO: This complexity can be removed once predict() signatures are standardized.
+                # See: https://github.com/AnthusAI/Plexus/issues/77
+                
+                try:
+                    # Try calling with original arguments
+                    results = original_predict(*args, **kwargs)
+                except TypeError as e:
+                    # If that fails, try to adapt the call based on signature inspection
+                    import inspect
+                    sig = inspect.signature(original_predict)
+                    
+                    # Check if this is a legacy single-argument predict method
+                    if len(sig.parameters) == 1:
+                        # Legacy signature: predict(model_input)
+                        if len(args) == 2:
+                            # Called with (context, model_input), use just model_input
+                            results = original_predict(args[1])
+                        elif len(args) == 1:
+                            # Called with (model_input), pass through
+                            results = original_predict(args[0])
+                        elif 'model_input' in kwargs:
+                            # Called with keyword args
+                            results = original_predict(kwargs['model_input'])
+                        else:
+                            # Re-raise original error if we can't adapt
+                            raise e
+                    else:
+                        # Standard signature but different calling convention
+                        if len(args) == 2:
+                            # Try keyword-only arguments
+                            results = original_predict(context=args[0], model_input=args[1])
+                        else:
+                            # Re-raise original error
+                            raise e
+                
+                # Apply validation if configured
+                if hasattr(self, 'parameters') and self.parameters.validation:
+                    if isinstance(results, list):
+                        for result in results:
+                            result.validate(self.parameters.validation)
+                    else:
+                        results.validate(self.parameters.validation)
+                
+                return results
+            
+            return validated_predict
+        
+        return attr
 
     def is_relevant(self, text):
         """
@@ -579,7 +813,7 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         """
 
         return {
-            "total_cost":  0
+            "total_cost": 0
         }
 
     def get_label_score_name(self):
@@ -614,4 +848,8 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         
         return score_class(**score_parameters)
 
+# Rebuild models to resolve forward references
+Score.FieldValidation.model_rebuild()
+Score.ValidationConfig.model_rebuild()
+Score.Parameters.model_rebuild()
 Score.Result.model_rebuild()
