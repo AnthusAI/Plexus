@@ -3570,17 +3570,7 @@ async def plexus_predict(
                             "attachedFiles": item_data.get('attachedFiles'),
                             "externalId": item_data.get('externalId')
                         }
-                    
-                    # Add trace data if requested
-                    if include_trace:
-                        prediction_result["trace"] = {
-                            "scorecard_id": scorecard_id,
-                            "score_id": found_score['id'],
-                            "score_version_id": found_score.get('championVersionId'),
-                            "execution_timestamp": "2025-01-01T00:00:00Z",
-                            "note": "This is simulated trace data. Real implementation would include detailed execution steps."
-                        }
-                    
+                                        
                     prediction_results_list.append(prediction_result)
                     
                 except Exception as item_error:
