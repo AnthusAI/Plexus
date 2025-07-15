@@ -317,16 +317,36 @@ Validation rules throw exceptions if score results don't match expected formats.
 ```yaml
 validation:
   value:
-    valid_classes: ["Yes", "No", "Maybe"]           # Must be one of these
+    valid_classes: ["Yes", "No", "Maybe"]           # Must be one of these (case-insensitive by default)
     patterns: ["^NQ - (?!Other$).*"]                # Must match regex (NQ- anything except "Other")
     minimum_length: 1                               # Min string length
     maximum_length: 50                              # Max string length
+    case_sensitive: false                           # Case-insensitive comparison (default: false)
   explanation:
     minimum_length: 10
     patterns: [".*evidence.*", ".*found.*"]         # Must contain "evidence" or "found"
 ```
 
 **All constraints must pass (AND logic). Validation runs automatically in `predict()`.**
+
+### Case Sensitivity
+
+By default, `valid_classes` comparisons are **case-insensitive** for convenience:
+
+```yaml
+validation:
+  value:
+    valid_classes: ["Yes", "No"]  # Matches "yes", "YES", "Yes", "no", "NO", "No"
+```
+
+Enable case-sensitive comparison when exact case matters:
+
+```yaml
+validation:
+  value:
+    valid_classes: ["Yes", "No"]
+    case_sensitive: true  # Only matches exact case: "Yes", "No"
+```
 
 ```yaml
 # Simple cases
