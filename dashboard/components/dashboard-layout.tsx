@@ -98,13 +98,13 @@ type Account = Schema['Account']['type']
 
 export const menuItems = [
   { name: "Items", icon: StickyNote, path: "/lab/items" },
-  { name: "Reports", icon: FileBarChart, path: "/lab/reports" },
+  { name: "Feedback", icon: MessageCircleMore, path: "/lab/feedback-queues" },
   { name: "Evaluations", icon: FlaskConical, path: "/lab/evaluations" },
+  { name: "Reports", icon: FileBarChart, path: "/lab/reports" },
   { name: "Scorecards", icon: ListChecks, path: "/lab/scorecards" },
   { name: "Sources", icon: HardDriveDownload, path: "/lab/sources" },
   { name: "Batches", icon: Layers3, path: "/lab/batches" },
   { name: "Activity", icon: Activity, path: "/lab/activity" },
-  { name: "Feedback", icon: MessageCircleMore, path: "/lab/feedback-queues" },
   { name: "Alerts", icon: Siren, path: "/lab/alerts" },
   { name: "Help", icon: CircleHelp, path: "/documentation" },
 ]

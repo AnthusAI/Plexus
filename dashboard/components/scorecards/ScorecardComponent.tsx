@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { Card } from '@/components/ui/card'
-import { MoreHorizontal, Pencil, Database, ListChecks, X, Square, Columns2, Plus, ChevronUp, ChevronDown, ListCheck, ChevronRight, FileText, Key, StickyNote, Edit, IdCard, TestTube } from 'lucide-react'
+import { MoreHorizontal, Pencil, Database, ListChecks, X, Square, Columns2, Plus, ChevronUp, ChevronDown, ListCheck, ChevronRight, FileText, Key, StickyNote, Edit, IdCard, TestTube, MessageCircleMore } from 'lucide-react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { cn } from '@/lib/utils'
 import { CardButton } from '@/components/CardButton'
@@ -61,6 +61,7 @@ interface ScorecardComponentProps extends React.HTMLAttributes<HTMLDivElement> {
   score: ScorecardData
   onEdit?: () => void
   onViewData?: () => void
+  onFeedbackAnalysis?: () => void
   isSelected?: boolean
   onClick?: () => void
   isFullWidth?: boolean
@@ -113,6 +114,7 @@ interface DetailContentProps {
   onToggleFullWidth?: () => void
   onClose?: () => void
   onViewData?: () => void
+  onFeedbackAnalysis?: () => void
   onEdit?: () => void
   onEditChange?: (changes: Partial<ScorecardData>) => void
   onAddSection?: () => void
@@ -136,6 +138,7 @@ export const DetailContent = React.memo(function DetailContent({
   onToggleFullWidth,
   onClose,
   onViewData,
+  onFeedbackAnalysis,
   onEditChange,
   onAddSection,
   onMoveSection,
@@ -529,21 +532,40 @@ export const DetailContent = React.memo(function DetailContent({
         <div className="flex gap-2 ml-4">
           <DropdownMenu.Root>
             <DropdownMenu.Trigger asChild>
-              <CardButton
-                icon={MoreHorizontal}
-                onClick={() => {}}
-                aria-label="More options"
-              />
+              <div onClick={(e) => e.stopPropagation()}>
+                <CardButton
+                  icon={MoreHorizontal}
+                  onClick={() => {}}
+                  aria-label="More options"
+                />
+              </div>
             </DropdownMenu.Trigger>
             <DropdownMenu.Portal>
-              <DropdownMenu.Content align="end" className="min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md z-50">
+              <DropdownMenu.Content 
+                align="end" 
+                className="min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md z-50"
+                onClick={(e) => e.stopPropagation()}
+              >
                 {onViewData && (
                   <DropdownMenu.Item 
                     className="relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
-                    onSelect={onViewData}
+                    onSelect={() => {
+                      onViewData();
+                    }}
                   >
                     <Database className="mr-2 h-4 w-4" />
                     View Data
+                  </DropdownMenu.Item>
+                )}
+                {onFeedbackAnalysis && (
+                  <DropdownMenu.Item 
+                    className="relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                    onSelect={() => {
+                      onFeedbackAnalysis();
+                    }}
+                  >
+                    <MessageCircleMore className="mr-2 h-4 w-4" />
+                    Analyze Feedback
                   </DropdownMenu.Item>
                 )}
               </DropdownMenu.Content>
@@ -917,6 +939,7 @@ export default function ScorecardComponent({
   score, 
   onEdit, 
   onViewData, 
+  onFeedbackAnalysis,
   variant = 'grid', 
   isSelected,
   onClick,
@@ -1073,6 +1096,7 @@ export default function ScorecardComponent({
               onToggleFullWidth={onToggleFullWidth}
               onClose={onClose}
               onViewData={onViewData}
+              onFeedbackAnalysis={onFeedbackAnalysis}
               onEditChange={handleEditChange}
               onAddSection={handleAddSection}
               onMoveSection={handleMoveSection}

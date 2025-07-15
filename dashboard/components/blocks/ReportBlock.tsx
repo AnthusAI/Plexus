@@ -47,6 +47,8 @@ export interface ReportBlockProps {
   title?: string
   /** Optional subtitle for additional context */
   subtitle?: string
+  /** Whether to show the title header section */
+  showTitle?: boolean
   /** Optional notes for the report block */
   notes?: string
   /** Optional error message to display */
@@ -100,6 +102,7 @@ const ReportBlock: BlockComponent = ({
   attachedFiles,
   title,
   subtitle,
+  showTitle = true,
   notes,
   error,
   warning,
@@ -599,9 +602,11 @@ ${Object.entries(config).map(([key, value]) => `${key}: ${formatValue(value)}`).
         <div className="@container">
           <div className="flex @[30rem]:flex-row flex-col @[30rem]:justify-between @[30rem]:items-start">
             <div className="@[30rem]:max-w-[60%]">
-              <h3 className="text-xl font-semibold">
-                {title || name || 'Report'} 
-              </h3>
+              {showTitle && (
+                <h3 className="text-xl font-semibold">
+                  {title || name || 'Report'} 
+                </h3>
+              )}
               {subtitle && (
                 <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>
               )}
