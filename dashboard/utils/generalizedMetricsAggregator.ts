@@ -72,6 +72,11 @@ class SessionStorageCache {
 
   get(key: string): AggregatedData | null {
     try {
+      // Check if we're in a browser environment
+      if (typeof window === 'undefined' || typeof sessionStorage === 'undefined') {
+        return null
+      }
+      
       const cached = sessionStorage.getItem(key)
       if (!cached) {
         console.log('🔍 Cache miss for key:', key.substring(0, 100) + '...')
@@ -102,6 +107,11 @@ class SessionStorageCache {
 
   set(key: string, data: AggregatedData, ttl?: number): void {
     try {
+      // Check if we're in a browser environment
+      if (typeof window === 'undefined' || typeof sessionStorage === 'undefined') {
+        return
+      }
+      
       const cacheEntry = {
         data,
         timestamp: Date.now(),
@@ -120,13 +130,16 @@ class SessionStorageCache {
 
   clear(): void {
     try {
-      // Clear only metrics cache entries
-      const keys = Object.keys(sessionStorage)
-      keys.forEach(key => {
-        if (key.startsWith('metrics_')) {
-          sessionStorage.removeItem(key)
-        }
-      })
+      // Check if we're in a browser environment
+      if (typeof window !== 'undefined' && typeof sessionStorage !== 'undefined') {
+        // Clear only metrics cache entries
+        const keys = Object.keys(sessionStorage)
+        keys.forEach(key => {
+          if (key.startsWith('metrics_')) {
+            sessionStorage.removeItem(key)
+          }
+        })
+      }
     } catch (error) {
       console.warn('Error clearing session storage cache:', error)
     }

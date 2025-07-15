@@ -15,6 +15,7 @@ import { downloadData } from 'aws-amplify/storage';
 import { Button } from '@/components/ui/button';
 import type { DetailFile } from '../blocks/ReportBlock';
 import { FeedbackItemsList, FeedbackItemsView, type FeedbackItem } from '@/components/ui/feedback-item-view';
+import { useFeedbackItemsByAnswers, type FeedbackItemWithRelations } from '@/hooks/use-feedback-items-by-answers';
 
 // Export the AC1 gauge segments for reuse in other components
 export const ac1GaugeSegments: Segment[] = [
@@ -59,6 +60,12 @@ interface ScorecardReportEvaluationProps {
   attachedFiles?: string[] | null;
   className?: string;
   showPrecisionRecall?: boolean;
+  onCellSelection?: (selection: { predicted: string | null; actual: string | null }) => void;
+  // Props for on-demand analysis drill-down
+  scorecardId?: string;
+  accountId?: string;
+  // Prop to determine if this is the only score (for auto-expand behavior)
+  isSingleScore?: boolean;
 }
 
 export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps> = ({ 
@@ -66,9 +73,13 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
   scoreIndex,
   attachedFiles,
   className,
-  showPrecisionRecall = true
+  showPrecisionRecall = true,
+  onCellSelection,
+  scorecardId,
+  accountId,
+  isSingleScore = false
 }) => {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(isSingleScore); // Auto-expand if single score
   
   const [scoreDetailsContent, setScoreDetailsContent] = useState<string | null>(null);
   const [isLoadingScoreDetails, setIsLoadingScoreDetails] = useState(false);
@@ -77,6 +88,13 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
   const [filteredScoreDetails, setFilteredScoreDetails] = useState<any[] | null>(null);
   const [showRawJson, setShowRawJson] = useState(false);
   const [showDetailsSection, setShowDetailsSection] = useState(false);
+  
+  // State for on-demand feedback analysis drill-down
+  const [onDemandItems, setOnDemandItems] = useState<FeedbackItemWithRelations[]>([]);
+  const [showOnDemandDetails, setShowOnDemandDetails] = useState(false);
+  
+  // Hook for fetching feedback items by answers
+  const { fetchFeedbackItems, loading: fetchingItems, error: fetchError } = useFeedbackItemsByAnswers();
 
   const parsedAttachedFiles = useMemo(() => {
     if (Array.isArray(attachedFiles)) {
@@ -208,20 +226,57 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
     }
   }, [activeCellFilter, scoreDetailsContent]);
 
-  const handleConfusionMatrixSelection = (selection: { predicted: string | null; actual: string | null }) => {
+  const handleConfusionMatrixSelection = async (selection: { predicted: string | null; actual: string | null }) => {
     if (selection.predicted && selection.actual) {
       // Store the selected matrix cell values
       console.debug('Selected confusion matrix cell:', selection);
-      setActiveCellFilter({ predicted: selection.predicted, actual: selection.actual });
-      setShowDetailsSection(true);
       
-      // Fetch details if needed and not already loading
-      if (!scoreDetailsContent && scoreDetailsFile && !isLoadingScoreDetails) {
-        fetchScoreDetailsContent();
+      // For ReportBlock usage (when scoreDetailsFile exists), show details section
+      if (scoreDetailsFile) {
+        setActiveCellFilter({ predicted: selection.predicted, actual: selection.actual });
+        setShowDetailsSection(true);
+        
+        if (!scoreDetailsContent && !isLoadingScoreDetails) {
+          fetchScoreDetailsContent();
+        }
       }
+      // For on-demand analysis (when scorecardId and accountId are provided), fetch feedback items
+      else if (scorecardId && accountId && score.id) {
+        const filter = {
+          accountId: accountId,
+          scorecardId: scorecardId,
+          scoreId: score.id,
+          predicted: selection.predicted,
+          actual: selection.actual
+        };
+        
+        setActiveCellFilter({ predicted: selection.predicted, actual: selection.actual });
+        setShowOnDemandDetails(true);
+        
+        console.debug('🔍 Fetching on-demand feedback items for filter:', filter);
+        try {
+          const items = await fetchFeedbackItems(filter);
+          console.debug('✅ Successfully fetched feedback items:', items.length, 'items');
+          setOnDemandItems(items);
+        } catch (error) {
+          console.error('❌ Error fetching feedback items:', error);
+          setOnDemandItems([]);
+        }
+      }
+      
     } else {
       setActiveCellFilter(null);
+      if (scoreDetailsFile) {
+        setShowDetailsSection(false);
+      } else {
+        setShowOnDemandDetails(false);
+        setOnDemandItems([]);
+      }
     }
+    
+    // Always call the external callback if provided (for both ReportBlock and on-demand usage)
+    console.debug('🎯 Calling onCellSelection callback:', selection);
+    onCellSelection?.(selection);
   };
   
   const getAgreementLevel = (ac1: number | null): { label: string; color: string } => {
@@ -442,13 +497,13 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
           <div className="mt-4">
             <ConfusionMatrix 
               data={score.confusion_matrix!}
-              onSelectionChange={scoreDetailsFile ? handleConfusionMatrixSelection : () => {}} 
+              onSelectionChange={(scoreDetailsFile || onCellSelection || (scorecardId && accountId)) ? handleConfusionMatrixSelection : () => {}} 
             />
           </div>
         )}
 
-        {/* Centered expand/collapse UI */}
-        {hasExtendedData && (
+        {/* Centered expand/collapse UI - hide for single scores */}
+        {hasExtendedData && !isSingleScore && (
           <div className="mt-4 flex flex-col items-center">
             <div className="w-full h-px bg-border mb-1"></div>
             <button
@@ -466,7 +521,7 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
         )}
       </div>
       
-      {showDetailsSection && (
+      {showDetailsSection && scoreDetailsFile && (
         <div className="px-4 pb-4">
           <FeedbackItemsView
             items={filteredScoreDetails as FeedbackItem[] || []}
@@ -486,7 +541,34 @@ export const ScorecardReportEvaluation: React.FC<ScorecardReportEvaluationProps>
         </div>
       )}
       
-      {expanded && (
+      {showOnDemandDetails && !scoreDetailsFile && (
+        <div className="px-4 pb-4">
+          <FeedbackItemsView
+            items={onDemandItems}
+            showRawJson={showRawJson}
+            onToggleView={() => setShowRawJson(!showRawJson)}
+            isLoading={fetchingItems}
+            filterInfo={activeCellFilter ? {
+              predicted: activeCellFilter.predicted,
+              actual: activeCellFilter.actual,
+              count: onDemandItems.length
+            } : undefined}
+            onClose={() => {
+              setShowOnDemandDetails(false);
+              setActiveCellFilter(null);
+              setOnDemandItems([]);
+            }}
+          />
+          
+          {fetchError && (
+            <div className="mt-2 p-2 bg-red-100 text-red-800 rounded text-sm">
+              Error fetching feedback items: {fetchError}
+            </div>
+          )}
+        </div>
+      )}
+      
+      {(expanded || isSingleScore) && (
         <div className="px-4 pb-4">
           {(hasClassDistribution || hasPredictedDistribution) && (
             <div className="space-y-6 mb-4">
