@@ -266,7 +266,8 @@ class LangGraphScore(Score, LangChainUser):
                         workflow.add_node(
                             value_setter_name,
                             LangGraphScore.create_value_setter_node(
-                                node_config['output']
+                                node_config['output'],
+                                node_name=value_setter_name
                             )
                         )
                         workflow.add_edge(previous_node, value_setter_name)
@@ -287,7 +288,9 @@ class LangGraphScore(Score, LangChainUser):
                                 workflow.add_node(
                                     value_setter_name, 
                                     LangGraphScore.create_value_setter_node(
-                                        condition.get('output', {})
+                                        condition.get('output', {}),
+                                        node_name=value_setter_name,
+                                        condition_info=condition
                                     )
                                 )
 
@@ -302,7 +305,10 @@ class LangGraphScore(Score, LangChainUser):
                                     fallback_value_setter_name = f"{previous_node}_edge_fallback_value_setter"
                                     workflow.add_node(
                                         fallback_value_setter_name,
-                                        LangGraphScore.create_value_setter_node(edge['output'])
+                                        LangGraphScore.create_value_setter_node(
+                                            edge['output'],
+                                            node_name=fallback_value_setter_name
+                                        )
                                     )
                                     # The fallback routes to the value setter, which then routes to the edge target
                                     workflow.add_edge(fallback_value_setter_name, edge_target if edge_target != 'END' else (end_node or END))
@@ -395,7 +401,8 @@ class LangGraphScore(Score, LangChainUser):
                         workflow.add_node(
                             value_setter_name,
                             LangGraphScore.create_value_setter_node(
-                                edge.get('output', {})
+                                edge.get('output', {}),
+                                node_name=value_setter_name
                             )
                         )
                         # Add edge from previous node to value setter
@@ -423,7 +430,123 @@ class LangGraphScore(Score, LangChainUser):
             final_node_config = next((node for node in graph_config
                                     if node['name'] == final_node_name), None)
             
-            if final_node_config and 'edge' in final_node_config:
+            # Handle conditional routing for the final node
+            if final_node_config and 'conditions' in final_node_config:
+                conditions = final_node_config['conditions']
+                if isinstance(conditions, list):
+                    value_setters = {}
+                    # Create value setter nodes for each condition
+                    for j, condition in enumerate(conditions):
+                        value_setter_name = f"{final_node_name}_value_setter_{j}"
+                        value_setters[condition['value'].lower()] = value_setter_name
+                        workflow.add_node(
+                            value_setter_name, 
+                            LangGraphScore.create_value_setter_node(
+                                condition.get('output', {}),
+                                node_name=value_setter_name,
+                                condition_info=condition
+                            )
+                        )
+
+                    # For final node conditions, the fallback target should be the end_node or END
+                    # Check if there's also an edge clause for fallback
+                    if 'edge' in final_node_config:
+                        edge = final_node_config['edge']
+                        edge_target = edge.get('node', 'END')
+                        
+                        # If edge has output aliasing, create a value setter for the fallback
+                        if 'output' in edge:
+                            fallback_value_setter_name = f"{final_node_name}_edge_fallback_value_setter"
+                            workflow.add_node(
+                                fallback_value_setter_name,
+                                LangGraphScore.create_value_setter_node(edge['output'])
+                            )
+                            # The fallback routes to the value setter, which then routes to the edge target
+                            workflow.add_edge(fallback_value_setter_name, edge_target if edge_target != 'END' else (end_node or END))
+                            default_target = fallback_value_setter_name
+                            logging.info(f"Created final node edge fallback value setter '{fallback_value_setter_name}' -> '{edge_target}' with output aliasing")
+                        else:
+                            default_target = edge_target if edge_target != 'END' else (end_node or END)
+                        
+                        logging.info(f"Using edge target '{edge_target}' as fallback for final node unmatched conditions")
+                    else:
+                        # No edge clause - default fallback is end_node or END
+                        default_target = end_node or END
+                        logging.info(f"Using end target '{default_target}' as fallback for final node unmatched conditions")
+
+                    def create_final_routing_function(conditions, value_setters, fallback_target):
+                        def routing_function(state):
+                            # Enhanced debugging for final node classification routing
+                            logging.info(f"🔍 FINAL NODE CONDITIONAL ROUTING DEBUG for {final_node_name}:")
+                            logging.info(f"  - State type: {type(state)}")
+                            logging.info(f"  - Has classification attr: {hasattr(state, 'classification')}")
+                            
+                            if hasattr(state, 'classification'):
+                                classification_value = getattr(state, 'classification')
+                                logging.info(f"  - classification value: {classification_value!r} (type: {type(classification_value)})")
+                            else:
+                                logging.info(f"  - classification attribute NOT found")
+                            
+                            # Log all available state attributes for debugging
+                            if hasattr(state, 'model_dump'):
+                                state_dict = state.model_dump()
+                                logging.info(f"  - Available state fields: {list(state_dict.keys())}")
+                                
+                                # Truncate the values before logging
+                                truncated_state_dict = truncate_dict_strings(state_dict, 100)
+                                
+                                for key, value in truncated_state_dict.items():
+                                    if key in ['classification', 'explanation', 'completion', 'value']:
+                                        logging.info(f"    {key}: {value!r}")
+                            
+                            # Original routing logic
+                            if hasattr(state, 'classification') and state.classification is not None:
+                                state_value = state.classification.lower()
+                                logging.info(f"  - Normalized state_value: {state_value!r}")
+                                logging.info(f"  - Available value_setters: {list(value_setters.keys())}")
+                                
+                                # Check if we have a value setter for this classification
+                                if state_value in value_setters:
+                                    target = value_setters[state_value]
+                                    logging.info(f"  ✅ FINAL NODE CONDITION MATCH: {state_value} -> {target}")
+                                    return target
+                                else:
+                                    logging.info(f"  ❌ NO FINAL NODE CONDITION MATCH for {state_value}")
+                            else:
+                                logging.info(f"  ❌ NO CLASSIFICATION FIELD or is None, using fallback")
+                            
+                            # Default case - route to fallback target
+                            logging.info(f"  🔄 FINAL NODE FALLBACK: -> {fallback_target}")
+                            return fallback_target
+                        return routing_function
+
+                    # Create a list of valid targets for conditional edges
+                    valid_targets = list(value_setters.values()) + [default_target]
+                    
+                    # Add conditional routing for final node
+                    workflow.add_conditional_edges(
+                        final_node_name,
+                        create_final_routing_function(conditions, value_setters, default_target),
+                        valid_targets
+                    )
+
+                    # Add edges from value setters to their target nodes
+                    for condition in conditions:
+                        value_setter_name = value_setters[condition['value'].lower()]
+                        target_node = condition.get('node', 'END')
+                        if target_node == 'END':
+                            final_target = end_node or END
+                            workflow.add_edge(value_setter_name, final_target)
+                        else:
+                            workflow.add_edge(value_setter_name, target_node)
+                    
+                    logging.info(f"Added final node conditional routing from {final_node_name} with {len(conditions)} conditions and fallback to {default_target}")
+                    
+                    # Return True to indicate we handled the final node's routing
+                    return True
+            
+            # Handle edge configurations for the final node that routes to END (existing logic)
+            elif final_node_config and 'edge' in final_node_config:
                 edge = final_node_config['edge']
                 target_node = edge.get('node')
                 
@@ -469,7 +592,7 @@ class LangGraphScore(Score, LangChainUser):
                     node_class_name = node_configuration_entry['class']
                     node_name = node_configuration_entry['name']
                     try:
-                        node_class = self._import_class(node_class_name)
+                        node_class = LangGraphScore._import_class(node_class_name)
                         if node_class is None:
                             raise ValueError(f"Could not import class {node_class_name}")
                         
@@ -952,30 +1075,107 @@ class LangGraphScore(Score, LangChainUser):
                                                         node_routed_to_end = True
                                                     break
                                     
-                                    # If trace is available, use sophisticated logic
-                                    # If trace is not available, fall back to conservative preservation
-                                    if trace_available:
-                                        condition_fired = (
+                                    # FIXED: Trace-based conditional output detection logic
+                                    # Sophisticated approach: Use trace metadata when available to determine
+                                    # if conditions actually fired, with fallback for backward compatibility
+                                    
+                                    condition_fired = False
+                                    
+                                    # Try trace-based detection first (more accurate)
+                                    if hasattr(state, 'metadata') and state.metadata and 'trace' in state.metadata:
+                                        trace = state.metadata.get('trace', {})
+                                        node_results = trace.get('node_results', [])
+                                        
+                                        if node_results:  # Trace information is available
+                                            # Look for value setter nodes that correspond to this condition
+                                            for node_result in node_results:
+                                                result_node_name = node_result.get('node_name', '')
+                                                
+                                                # Check if this is a value setter for the current node's condition
+                                                if result_node_name.startswith(f"{node_name}_value_setter"):
+                                                    # Check if this value setter is for the condition we're evaluating
+                                                    result_condition = node_result.get('condition', {})
+                                                    result_trigger = result_condition.get('trigger_value', '').lower()
+                                                    condition_trigger = condition.get('value', '').lower()
+                                                    
+                                                    if result_trigger == condition_trigger:
+                                                        # Check if this value setter set the output field we're checking
+                                                        node_output = node_result.get('output', {})
+                                                        if alias in node_output:
+                                                            condition_fired = True
+                                                            logging.info(f"Trace-based detection: Condition fired for {alias} from {result_node_name} (set {alias}={node_output[alias]})")
+                                                            break
+                                                        else:
+                                                            logging.debug(f"Trace-based detection: Value setter {result_node_name} executed but didn't set {alias}")
+                                                
+                                                # Also check the original node for backward compatibility
+                                                elif result_node_name == node_name:
+                                                    # Check if this node's output matches the condition trigger
+                                                    node_output = node_result.get('output', {})
+                                                    node_classification = node_output.get('classification', '').lower()
+                                                    condition_trigger = condition.get('value', '').lower()
+                                                    
+                                                    # Condition fired if node classification matches trigger and routes to END
+                                                    if node_classification == condition_trigger and routes_to_end:
+                                                        condition_fired = True
+                                                        logging.info(f"Trace-based detection: Condition fired for {alias} from {node_name}")
+                                                        break
+                                                    else:
+                                                        logging.debug(f"Trace-based detection: Condition did NOT fire for {alias} from {node_name} (classification={node_classification}, trigger={condition_trigger})")
+                                    
+                                    # Fallback: Pattern matching + legacy preservation (backward compatibility)
+                                    if not condition_fired and not (hasattr(state, 'metadata') and state.metadata and 'trace' in state.metadata):
+                                        # When no trace metadata is available, use fallback logic:
+                                        # 1. If current state would trigger this condition, preserve intended output
+                                        # 2. If current value matches conditional output, preserve it (legacy behavior)
+                                        
+                                        current_classification = getattr(state, 'classification', '').lower() if hasattr(state, 'classification') else ''
+                                        condition_trigger = condition.get('value', '').lower()
+                                        condition_state_field = condition.get('state', 'classification')
+                                        
+                                        # Get the value from the condition's state field
+                                        condition_state_value = getattr(state, condition_state_field, '').lower() if hasattr(state, condition_state_field) else ''
+                                        
+                                        # Check if this condition should fire based on current state
+                                        condition_should_fire = (
                                             routes_to_end and
-                                            values_match and 
-                                            has_value and
-                                            node_routed_to_end  # Only preserve if the node actually routed to END
+                                            condition_state_value == condition_trigger
                                         )
-                                    else:
-                                        # Fallback: preserve if routes to END and values match
-                                        # This maintains backward compatibility with existing tests
-                                        condition_fired = (
+                                        
+                                        # Check if the current value matches what this condition would output (legacy preservation)
+                                        legacy_preservation = (
                                             routes_to_end and
                                             values_match and 
                                             has_value
                                         )
+                                        
+                                        if condition_should_fire:
+                                            # If the condition should fire, preserve the intended output value
+                                            condition_fired = True
+                                            # Override the current value with the intended conditional output
+                                            setattr(state, alias, expected_output_value)
+                                            logging.info(f"Fallback detection: Condition should fire, setting {alias} = {expected_output_value!r} from {node_name} (condition: {condition_state_field}={condition_state_value} == {condition_trigger})")
+                                        elif legacy_preservation:
+                                            # Legacy behavior: if current value matches conditional output, preserve it
+                                            # This handles cases where a condition fired earlier but state changed later
+                                            condition_fired = True
+                                            logging.info(f"Fallback detection: Preserving existing {alias} = {current_alias_value!r} from {node_name} (legacy pattern match)")
+                                        else:
+                                            logging.debug(f"Fallback detection: No preservation for {alias} from {node_name} (should_fire={condition_should_fire}, legacy_match={legacy_preservation})")
+                                    
+                                    # Additional logging for debugging
+                                    logging.debug(f"Conditional detection for {alias} from {node_name}:")
+                                    logging.debug(f"  - routes_to_end: {routes_to_end}")
+                                    logging.debug(f"  - values_match: {values_match} (current={current_alias_value}, expected={expected_output_value})")
+                                    logging.debug(f"  - has_value: {has_value}")
+                                    logging.debug(f"  - condition_fired: {condition_fired}")
                                     
                                     if condition_fired:
                                         logging.info(f"Preserving conditional output {alias} = {current_alias_value!r} from node {node_name} (condition fired)")
                                         skip_alias = True
                                         break
                                     else:
-                                        logging.debug(f"Not preserving {alias} from node {node_name}: condition did not fire (current={current_alias_value}, expected={expected_output_value}, routes_to_end={condition.get('node') == 'END'})")
+                                        logging.debug(f"Not preserving {alias} from node {node_name}: condition did not fire (current={current_alias_value}, expected={expected_output_value}, routes_to_end={routes_to_end})")
                             
                             if skip_alias:
                                 break
@@ -1093,13 +1293,16 @@ class LangGraphScore(Score, LangChainUser):
         return example_refinement_templates
 
     @staticmethod
-    def create_value_setter_node(output_mapping: dict) -> FunctionType:
+    def create_value_setter_node(output_mapping: dict, node_name: str = "value_setter", condition_info: dict = None) -> FunctionType:
         def value_setter(state):
-            logging.debug(f"Value setter processing aliases: {list(output_mapping.keys())}")
+            logging.debug(f"Value setter '{node_name}' processing aliases: {list(output_mapping.keys())}")
             logging.debug(f"Input state dump: {state.model_dump()}")
             
             # Create a new dict with all current state values
             new_state = state.model_dump()
+            
+            # Track what was set for trace logging
+            output_state = {}
             
             # Add aliased values
             for alias, original in output_mapping.items():
@@ -1107,17 +1310,54 @@ class LangGraphScore(Score, LangChainUser):
                     original_value = getattr(state, original)
                     logging.debug(f"Aliasing {original} = {original_value!r} -> {alias}")
                     new_state[alias] = original_value
+                    output_state[alias] = original_value
                     # Also directly set on the state object to ensure it's accessible
                     setattr(state, alias, original_value)
                 else:
                     logging.debug(f"Original field '{original}' not found in state, treating as literal")
                     # If the original isn't a state variable, treat it as a literal value
                     new_state[alias] = original
+                    output_state[alias] = original
                     # Also directly set on the state object
                     setattr(state, alias, original)
             
             # Create new state with extra fields allowed
             combined_state = state.__class__(**new_state)
+            
+            # Add trace logging for conditional output setting
+            if condition_info:
+                logging.info(f"🎯 CONDITIONAL OUTPUT SET by '{node_name}': {output_state}")
+                logging.info(f"   Condition: {condition_info.get('state', 'classification')} = '{condition_info.get('value')}' -> {condition_info.get('node', 'END')}")
+                
+                # Add trace metadata to record that this condition fired
+                if not hasattr(combined_state, 'metadata') or combined_state.metadata is None:
+                    new_state['metadata'] = {}
+                    setattr(combined_state, 'metadata', {})
+                    
+                if 'trace' not in combined_state.metadata:
+                    combined_state.metadata['trace'] = {'node_results': []}
+                    new_state['metadata']['trace'] = {'node_results': []}
+                
+                # Record the conditional execution in trace
+                trace_entry = {
+                    "node_name": node_name,
+                    "input": {"condition_triggered": True},
+                    "output": output_state.copy()
+                }
+                
+                # Add condition trigger info to the trace
+                if condition_info:
+                    trace_entry["condition"] = {
+                        "state_field": condition_info.get('state', 'classification'),
+                        "trigger_value": condition_info.get('value'),
+                        "target_node": condition_info.get('node', 'END')
+                    }
+                
+                combined_state.metadata['trace']['node_results'].append(trace_entry)
+                new_state['metadata']['trace']['node_results'].append(trace_entry)
+                
+                logging.info(f"   Added trace entry for conditional execution: {trace_entry}")
+            
             return combined_state
             
         return value_setter

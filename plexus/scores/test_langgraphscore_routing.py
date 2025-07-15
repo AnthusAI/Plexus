@@ -42,73 +42,131 @@ async def test_conditional_routing_actual_execution():
     IMPORTANT: This test exposes the broken conditional routing system.
     """
     
-    config = {
-        'name': 'Conditional Routing Execution Test',
-        'model_provider': 'ChatOpenAI',
-        'model_name': 'gpt-4o-mini-2024-07-18',
-        'graph': [
-            {
-                'name': 'test_classifier',
-                'class': 'Classifier',
-                'valid_classes': ['Yes', 'No'],
-                'system_message': 'Classify the input',
-                'user_message': 'Input: {{text}}',
-                'conditions': [
-                    {
-                        'state': 'classification',
-                        'value': 'Yes',
-                        'node': 'END',
-                        'output': {
-                            'value': 'Approved',
-                            'reason': 'Positive classification'
-                        }
-                    }
-                ]
-            }
-        ],
-        'output': {
-            'value': 'value',
-            'explanation': 'reason'
-        }
-    }
+    # Mock a Classifier that behaves like the real one
+    class TestClassifierMock:
+        def __init__(self, **kwargs):
+            self.parameters = MagicMock()
+            self.parameters.output = None
+            self.parameters.name = kwargs.get('name', 'test_classifier')
+            self.parameters.valid_classes = kwargs.get('valid_classes', ['Yes', 'No'])
+            
+        class GraphState:
+            def __init__(self, **kwargs):
+                self.text = kwargs.get('text')
+                self.metadata = kwargs.get('metadata')
+                self.results = kwargs.get('results')
+                self.classification = kwargs.get('classification')
+                self.explanation = kwargs.get('explanation')
+                self.value = kwargs.get('value')
+                self.reason = kwargs.get('reason')
+                
+            def model_dump(self):
+                return {
+                    'text': self.text,
+                    'metadata': self.metadata,
+                    'results': self.results,
+                    'classification': self.classification,
+                    'explanation': self.explanation,
+                    'value': self.value,
+                    'reason': self.reason
+                }
+                
+        async def analyze(self, state):
+            # Simulate classification behavior
+            state_dict = state.model_dump() if hasattr(state, 'model_dump') else dict(state)
+            state_dict.update({
+                "classification": "Yes", 
+                "explanation": "Classified as Yes"
+            })
+            return self.GraphState(**state_dict)
+            
+        def build_compiled_workflow(self, graph_state_class):
+            from langgraph.graph import StateGraph, END
+            workflow = StateGraph(graph_state_class)
+            workflow.add_node("analyze", self.analyze)
+            workflow.set_entry_point("analyze")
+            workflow.add_edge("analyze", END)
+            
+            async def invoke_workflow(state):
+                if hasattr(state, 'model_dump'):
+                    state_dict = state.model_dump()
+                else:
+                    state_dict = dict(state)
+                final_state = await self.analyze(graph_state_class(**state_dict))
+                return final_state.model_dump()
+            
+            return invoke_workflow
     
-    # Mock the LLM to return specific classifications
-    with patch('plexus.LangChainUser.LangChainUser._initialize_model') as mock_init_model:
-        mock_model = AsyncMock()
-        mock_init_model.return_value = mock_model
+    # Mock the import
+    original_import = LangGraphScore._import_class
+    @staticmethod  
+    def mock_import_class(class_name):
+        if class_name == "Classifier":
+            return TestClassifierMock
+        else:
+            return original_import(class_name)
+    
+    try:
+        LangGraphScore._import_class = mock_import_class
         
-        # Create the score
-        score = await LangGraphScore.create(**config)
+        config = {
+            'name': 'Conditional Routing Execution Test',
+            'model_provider': 'ChatOpenAI',
+            'model_name': 'gpt-4o-mini-2024-07-18',
+            'graph': [
+                {
+                    'name': 'test_classifier',
+                    'class': 'Classifier',
+                    'valid_classes': ['Yes', 'No'],
+                    'system_message': 'Classify the input',
+                    'user_message': 'Input: {{text}}',
+                    'conditions': [
+                        {
+                            'state': 'classification',
+                            'value': 'Yes',
+                            'node': 'END',
+                            'output': {
+                                'value': 'Approved',
+                                'reason': 'Positive classification'
+                            }
+                        }
+                    ]
+                }
+            ],
+            'output': {
+                'value': 'value',
+                'explanation': 'reason'
+            }
+        }
         
-        # Test: Classification "Yes" should trigger conditional routing
-        mock_model.ainvoke = AsyncMock(return_value=AIMessage(content="Yes"))
-        
-        input_data = Score.Input(
-            text="This should be approved",
-            metadata={},
-            results=[]
-        )
-        
-        result = await score.predict(input_data)
-        
-        print(f"Actual Execution Test - Expected: value='Approved', Got: value='{result.value}'")
-        print(f"Actual Execution Test - Expected: explanation='Positive classification', Got: explanation='{result.metadata.get('explanation')}'")
-        
-        # This will show us if conditional routing works when actually executed
-        # Expected: value="Approved" from conditional output
-        # Current bug: value="No" (defaulted because graph_result['value'] is None)
-        
-        # NOTE: This test currently FAILS due to the conditional routing bug
-        # When the bug is fixed, this should pass
-        try:
-            assert result.value == "Approved", f"Expected 'Approved' from conditional output, got '{result.value}' - this exposes the conditional routing bug"
+        # Mock the LLM initialization
+        with patch('plexus.LangChainUser.LangChainUser._initialize_model') as mock_init_model:
+            mock_model = AsyncMock()
+            mock_init_model.return_value = mock_model
+            
+            # Create the score
+            score = await LangGraphScore.create(**config)
+            
+            input_data = Score.Input(
+                text="This should be approved",
+                metadata={},
+                results=[]
+            )
+            
+            result = await score.predict(input_data)
+            
+            print(f"Actual Execution Test - Expected: value='Approved', Got: value='{result.value}'")
+            print(f"Actual Execution Test - Expected: explanation='Positive classification', Got: explanation='{result.metadata.get('explanation')}'")
+            
+            # This should now work with proper conditional routing
+            assert result.value == "Approved", f"Expected 'Approved' from conditional output, got '{result.value}'"
             assert result.metadata.get('explanation') == "Positive classification", f"Expected 'Positive classification' from conditional output"
             print("✅ Conditional routing works correctly!")
-        except AssertionError as e:
-            print(f"❌ EXPECTED FAILURE: {e}")
-            print("This test documents the broken conditional routing system")
-            # Re-raise to ensure test fails until bug is fixed
-            raise
+            
+            await score.cleanup()
+            
+    finally:
+        LangGraphScore._import_class = original_import
 
 
 @pytest.mark.asyncio
@@ -120,78 +178,137 @@ async def test_production_bug_actual_execution():
     Based on GitHub Issue #80 where conditional outputs are overridden by top-level mappings.
     """
     
-    config = {
-        'name': 'Production Bug Actual Execution',
-        'model_provider': 'ChatOpenAI', 
-        'model_name': 'gpt-4o-mini-2024-07-18',
-        'graph': [
-            {
-                'name': 'device_classifier',
-                'class': 'Classifier',
-                'valid_classes': ['Computer_With_Internet', 'Computer_No_Internet'],
-                'system_message': 'Classify the device type',
-                'user_message': 'Device: {{text}}',
-                'conditions': [
-                    {
-                        'state': 'classification',
-                        'value': 'Computer_With_Internet',
-                        'node': 'END',
-                        'output': {
-                            'value': 'Yes',  # This should be preserved
-                            'explanation': 'Has computer with internet'
-                        }
-                    }
-                ]
-            }
-        ],
-        # THE BUG: This top-level mapping overrides conditional outputs
-        'output': {
-            'value': 'classification',  # This maps value to classification, overriding conditional value
-            'explanation': 'explanation'
-        }
-    }
+    # Mock a Classifier that behaves like the real device classifier
+    class DeviceClassifierMock:
+        def __init__(self, **kwargs):
+            self.parameters = MagicMock()
+            self.parameters.output = None
+            self.parameters.name = kwargs.get('name', 'device_classifier')
+            self.parameters.valid_classes = kwargs.get('valid_classes', ['Computer_With_Internet', 'Computer_No_Internet'])
+            
+        class GraphState:
+            def __init__(self, **kwargs):
+                self.text = kwargs.get('text')
+                self.metadata = kwargs.get('metadata')
+                self.results = kwargs.get('results')
+                self.classification = kwargs.get('classification')
+                self.explanation = kwargs.get('explanation')
+                self.value = kwargs.get('value')
+                
+            def model_dump(self):
+                return {
+                    'text': self.text,
+                    'metadata': self.metadata,
+                    'results': self.results,
+                    'classification': self.classification,
+                    'explanation': self.explanation,
+                    'value': self.value
+                }
+                
+        async def analyze(self, state):
+            # Simulate device classification behavior
+            state_dict = state.model_dump() if hasattr(state, 'model_dump') else dict(state)
+            state_dict.update({
+                "classification": "Computer_With_Internet", 
+                "explanation": "Device classified as computer with internet"
+            })
+            return self.GraphState(**state_dict)
+            
+        def build_compiled_workflow(self, graph_state_class):
+            from langgraph.graph import StateGraph, END
+            workflow = StateGraph(graph_state_class)
+            workflow.add_node("analyze", self.analyze)
+            workflow.set_entry_point("analyze")
+            workflow.add_edge("analyze", END)
+            
+            async def invoke_workflow(state):
+                if hasattr(state, 'model_dump'):
+                    state_dict = state.model_dump()
+                else:
+                    state_dict = dict(state)
+                final_state = await self.analyze(graph_state_class(**state_dict))
+                return final_state.model_dump()
+            
+            return invoke_workflow
     
-    with patch('plexus.LangChainUser.LangChainUser._initialize_model') as mock_init_model:
-        mock_model = AsyncMock()
-        mock_init_model.return_value = mock_model
+    # Mock the import
+    original_import = LangGraphScore._import_class
+    @staticmethod  
+    def mock_import_class(class_name):
+        if class_name == "Classifier":
+            return DeviceClassifierMock
+        else:
+            return original_import(class_name)
+    
+    try:
+        LangGraphScore._import_class = mock_import_class
         
-        score = await LangGraphScore.create(**config)
+        config = {
+            'name': 'Production Bug Actual Execution',
+            'model_provider': 'ChatOpenAI', 
+            'model_name': 'gpt-4o-mini-2024-07-18',
+            'graph': [
+                {
+                    'name': 'device_classifier',
+                    'class': 'Classifier',
+                    'valid_classes': ['Computer_With_Internet', 'Computer_No_Internet'],
+                    'system_message': 'Classify the device type',
+                    'user_message': 'Device: {{text}}',
+                    'conditions': [
+                        {
+                            'state': 'classification',
+                            'value': 'Computer_With_Internet',
+                            'node': 'END',
+                            'output': {
+                                'value': 'Yes',  # This should be preserved
+                                'explanation': 'Has computer with internet'
+                            }
+                        }
+                    ]
+                }
+            ],
+            # THE BUG: This top-level mapping overrides conditional outputs
+            'output': {
+                'value': 'classification',  # This maps value to classification, overriding conditional value
+                'explanation': 'explanation'
+            }
+        }
         
-        # Mock LLM to return the problematic classification
-        mock_model.ainvoke = AsyncMock(return_value=AIMessage(content="Computer_With_Internet"))
-        
-        input_data = Score.Input(
-            text="I have a computer with internet",
-            metadata={},
-            results=[]
-        )
-        
-        result = await score.predict(input_data)
-        
-        print(f"Production Bug Actual Execution:")
-        print(f"  Classification: '{result.metadata.get('classification', 'NOT_SET')}'")
-        print(f"  Expected value: 'Yes' (from conditional output)")
-        print(f"  Actual value: '{result.value}'")
-        
-        # Document the current state of the bug
-        if result.value == "Computer_With_Internet":
-            print("🐛 PRODUCTION BUG REPRODUCED: Top-level output mapping overrode conditional output!")
-        elif result.value == "Yes":
-            print("✅ CONDITIONAL OUTPUT PRESERVED: Bug might be fixed!")
-        elif result.value == "No":
-            print("❓ CONDITIONAL ROUTING NOT WORKING: Shows prerequisite bug where conditions don't trigger")
-        
-        # This test should FAIL with the current bug - result.value will be "No" (from broken routing)
-        # or "Computer_With_Internet" (if routing worked but override bug exists)
-        # When we fix both bugs, this test should pass
-        try:
-            assert result.value == "Yes", f"PRODUCTION BUG: Expected 'Yes' from conditional output, got '{result.value}'"
+        with patch('plexus.LangChainUser.LangChainUser._initialize_model') as mock_init_model:
+            mock_model = AsyncMock()
+            mock_init_model.return_value = mock_model
+            
+            score = await LangGraphScore.create(**config)
+            
+            input_data = Score.Input(
+                text="I have a computer with internet",
+                metadata={},
+                results=[]
+            )
+            
+            result = await score.predict(input_data)
+            
+            print(f"Production Bug Actual Execution:")
+            print(f"  Classification: '{result.metadata.get('classification', 'NOT_SET')}'")
+            print(f"  Expected value: 'Yes' (from conditional output)")
+            print(f"  Actual value: '{result.value}'")
+            
+            # Document the current state of the bug
+            if result.value == "Computer_With_Internet":
+                print("🐛 PRODUCTION BUG REPRODUCED: Top-level output mapping overrode conditional output!")
+            elif result.value == "Yes":
+                print("✅ CONDITIONAL OUTPUT PRESERVED: Bug might be fixed!")
+            elif result.value == "No":
+                print("❓ CONDITIONAL ROUTING NOT WORKING: Shows prerequisite bug where conditions don't trigger")
+            
+            # This should now work with the bug fix
+            assert result.value == "Yes", f"Expected 'Yes' from conditional output, got '{result.value}'"
             print("✅ Production bug is fixed!")
-        except AssertionError as e:
-            print(f"❌ EXPECTED FAILURE: {e}")
-            print("This test documents the production bug from GitHub Issue #80")
-            # Re-raise to ensure test fails until bug is fixed
-            raise
+            
+            await score.cleanup()
+            
+    finally:
+        LangGraphScore._import_class = original_import
 
 
 @pytest.mark.asyncio 
