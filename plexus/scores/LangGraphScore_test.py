@@ -1750,7 +1750,7 @@ async def test_classifier_log_state_explanation_overwriting_bug():
     # Simulate the exact scenario from Classifier.get_parser_node()
     # Step 1: Create initial state (what comes into the parser)
     initial_state = MockGraphState(
-        text="I just want to change the style",
+        text="I just want to change the style of my windows",
         metadata={},
         results={},
         classification=None,  # Not set yet
@@ -2417,8 +2417,8 @@ def test_output_aliasing_with_conditional_preservation():
     graph_config = [
         {
             'name': 'classifier',
-            'conditions': [
-                {
+                'conditions': [
+                    {
                     'output': {'value': 'Yes'}  # This condition sets the 'value' field
                 }
             ]
@@ -5374,11 +5374,11 @@ async def test_token_usage_reset_functionality():
         mock_classifier_class.return_value = mock_instance
         mock_import.return_value = mock_classifier_class
         
-        with patch('plexus.LangChainUser.LangChainUser._initialize_model') as mock_init_model:
-            mock_model = AsyncMock()
+    with patch('plexus.LangChainUser.LangChainUser._initialize_model') as mock_init_model:
+        mock_model = AsyncMock()
             mock_model.with_config = MagicMock(return_value=mock_model)
-            mock_init_model.return_value = mock_model
-            
+        mock_init_model.return_value = mock_model
+        
             try:
                 instance = await LangGraphScore.create(**config)
                 instance.model = mock_model
@@ -5811,7 +5811,7 @@ async def test_critical_output_aliasing_preservation_bug_ddcd5b52():
     # Simulate state after conditional routing has set value="REJECTED"
     state_after_conditional = ProductionBugGraphState(
         text="Production scorecard input",
-        metadata={},
+            metadata={},
         results={},
         classification="APPROVED",  # This is from final classifier
         explanation="Final approval decision",  # Final explanation
@@ -5886,7 +5886,7 @@ async def test_critical_output_aliasing_preservation_bug_ddcd5b52():
     print("✅ CRITICAL OUTPUT ALIASING PRESERVATION TEST PASSED - Production bug remains fixed!")
 
 
-@pytest.mark.asyncio 
+@pytest.mark.asyncio
 async def test_completion_vs_classification_confusion_fix_16707b02():
     """
     CRITICAL TEST: Based on commit 16707b02 - Fixed completion vs classification confusion
@@ -9440,7 +9440,7 @@ async def test_complex_multi_path_workflow_scorecard():
     elif service_b_enrollment:
         classification = "ServiceB"
         explanation = "Service B enrollment detected in metadata"
-    else:
+        else:
         classification = "Neither"
         explanation = "No service enrollments detected in metadata"
     
@@ -9843,6 +9843,163 @@ async def test_trace_based_condition_detection_output_aliasing_fix():
     print("✅ WITHOUT trace: Fallback logic maintains backward compatibility")  
     print("✅ FIRED conditions: Legitimate conditional outputs are preserved")
     print("\n🔧 This fix solves the CS3 TPA PSD IN bug while maintaining existing functionality!")
+
+
+@pytest.mark.asyncio
+async def test_production_conditional_output_override_bug():
+    """
+    Test that reproduces the exact production bug where conditional outputs 
+    are overridden by top-level output mappings.
+    
+    This test matches the exact production configuration:
+    - No node-level output mapping (commented out in production)
+    - Real Classifier behavior simulation
+    - Conditional routing to END with output value: "Yes"
+    - Top-level output mapping value: classification (the bug!)
+    
+    Expected: value should be "Yes" from conditional output
+    Actual: value becomes "Computer_With_Internet" from top-level mapping
+    """
+    
+    # Mock a Classifier that behaves exactly like the real one
+    class ProductionClassifierMock:
+        def __init__(self, **kwargs):
+            self.parameters = MagicMock()
+            # Critical: NO node-level output mapping (matches production)
+            self.parameters.output = None
+            self.parameters.name = kwargs.get('name', 'device_response_analyzer')
+            
+        class GraphState(BaseModel):
+            model_config = ConfigDict(arbitrary_types_allowed=True)
+            text: Optional[str] = None
+            metadata: Optional[dict] = None
+            results: Optional[dict] = None
+            classification: Optional[str] = None
+            explanation: Optional[str] = None
+            # Fields that conditional outputs will set
+            value: Optional[str] = None
+            device_status: Optional[str] = None
+            prospect_response: Optional[str] = None
+            
+        async def analyze(self, state):
+            # Simulate exact production classification behavior
+            state_dict = state.model_dump() if hasattr(state, 'model_dump') else dict(state)
+            state_dict.update({
+                "classification": "Computer_With_Internet", 
+                "explanation": "Prospect Response: Yes. Answer: Computer_With_Internet"
+            })
+            return self.GraphState(**state_dict)
+            
+        def build_compiled_workflow(self, graph_state_class):
+            from langgraph.graph import StateGraph, END
+            workflow = StateGraph(graph_state_class)
+            workflow.add_node("analyze", self.analyze)
+            workflow.set_entry_point("analyze")
+            workflow.add_edge("analyze", END)
+            
+            async def invoke_workflow(state):
+                if hasattr(state, 'model_dump'):
+                    state_dict = state.model_dump()
+                else:
+                    state_dict = dict(state)
+                final_state = await self.analyze(graph_state_class(**state_dict))
+                return final_state.model_dump()
+            
+            return invoke_workflow
+    
+    # Mock the import
+    original_import = LangGraphScore._import_class
+    @staticmethod  
+    def mock_import_class(class_name):
+        if class_name == "ProductionClassifierMock":
+            return ProductionClassifierMock
+        else:
+            return original_import(class_name)
+    
+    try:
+        LangGraphScore._import_class = mock_import_class
+        
+        # Configuration that EXACTLY matches production structure
+        config = {
+            'name': 'Production Conditional Override Bug Reproduction',
+        'model_provider': 'ChatOpenAI', 
+        'model_name': 'gpt-4o-mini-2024-07-18',
+        'graph': [
+            {
+                    'name': 'device_response_analyzer',
+                    'class': 'ProductionClassifierMock',
+                    'valid_classes': [
+                        'Computer_With_Internet',
+                        'Computer_No_Internet', 
+                        'Internet_No_Computer',
+                        'Invalid_Device',
+                        'No_Device',
+                        'Library',
+                        'NoResponse'
+                    ],
+                    # Critical: NO node-level output mapping (matches production)
+                    # In production this is commented out:
+                    # output:
+                    #   device_status: classification
+                    #   prospect_response: explanation
+                'conditions': [
+                    {
+                        'state': 'classification',
+                        'value': 'Computer_With_Internet',
+                        'node': 'END',
+                        'output': {
+                            'value': 'Yes',  # This should be preserved
+                                'explanation': 'The prospect said they have a computer with internet, this is a yes.',
+                                'device_status': 'classification',
+                                'prospect_response': 'explanation'
+                        }
+                    }
+                ]
+            }
+        ],
+            # The problematic top-level output mapping that overrides conditionals
+        'output': {
+                'value': 'classification',  # THIS IS THE BUG!
+            'explanation': 'explanation'
+        }
+    }
+    
+        # Create the score
+        score = await LangGraphScore.create(**config)
+        
+        # Create test input that triggers the condition
+        test_input = Score.Input(
+            text="Agent: Do you have access to a computer with Internet access? Customer: Yes.",
+            metadata={"test": "production_repro"}
+        )
+        
+        # Run prediction
+        result = await score.predict(test_input)
+        
+        print(f"\n=== PRODUCTION BUG REPRODUCTION TEST ===")
+        print(f"Classification result: Computer_With_Internet")
+        print(f"Conditional output should set: value='Yes'")
+        print(f"Top-level mapping tries to set: value=classification='Computer_With_Internet'")
+        print(f"")
+        print(f"Actual result.value: {result.value!r}")
+        print(f"Expected result.value: 'Yes'")
+        print(f"")
+        
+        if result.value == "Computer_With_Internet":
+            print("🐛 BUG REPRODUCED: Top-level output mapping overrode conditional output!")
+            print("   The conditional output set value='Yes' but top-level mapping overwrote it.")
+        elif result.value == "Yes":
+            print("✅ BUG NOT REPRODUCED: Conditional output was properly preserved.")
+        else:
+            print(f"❓ UNEXPECTED RESULT: Got {result.value!r}, expected either 'Yes' or 'Computer_With_Internet'")
+        
+        # The assertion that should fail if the bug is reproduced
+        assert result.value == "Yes", f"PRODUCTION BUG REPRODUCED: Expected 'Yes' (conditional output) but got {result.value!r} (top-level mapping override)"
+        
+        await score.cleanup()
+        
+    finally:
+        LangGraphScore._import_class = original_import
 
 
 print("="*80)
