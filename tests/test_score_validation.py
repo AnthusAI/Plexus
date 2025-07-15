@@ -86,6 +86,84 @@ class TestScoreValidation:
         assert exc_info.value.value == "Maybe"
         assert "'Maybe' is not in valid_classes ['Yes', 'No']" in str(exc_info.value)
     
+    def test_case_insensitive_validation_success(self):
+        """Test case-insensitive validation (default behavior)."""
+        validation_config = Score.ValidationConfig(
+            value=Score.FieldValidation(valid_classes=["Yes", "No", "Maybe"])
+        )
+        
+        # Test different cases - should all pass
+        test_cases = ["yes", "YES", "Yes", "no", "NO", "No", "maybe", "MAYBE", "Maybe"]
+        
+        for test_value in test_cases:
+            result = Score.Result(
+                parameters=Score.Parameters(),
+                value=test_value,
+                explanation="Test explanation"
+            )
+            # Should not raise exception (case-insensitive by default)
+            result.validate(validation_config)
+    
+    def test_case_insensitive_validation_failure(self):
+        """Test case-insensitive validation failure."""
+        validation_config = Score.ValidationConfig(
+            value=Score.FieldValidation(valid_classes=["Yes", "No"])
+        )
+        
+        result = Score.Result(
+            parameters=Score.Parameters(),
+            value="maybe",  # Not in valid_classes even case-insensitively
+            explanation="Test explanation"
+        )
+        
+        with pytest.raises(Score.ValidationError) as exc_info:
+            result.validate(validation_config)
+        
+        assert exc_info.value.field_name == "value"
+        assert exc_info.value.value == "maybe"
+        assert "(case-insensitive)" in str(exc_info.value)
+    
+    def test_case_sensitive_validation_success(self):
+        """Test case-sensitive validation when explicitly enabled."""
+        validation_config = Score.ValidationConfig(
+            value=Score.FieldValidation(
+                valid_classes=["Yes", "No", "Maybe"],
+                case_sensitive=True
+            )
+        )
+        
+        result = Score.Result(
+            parameters=Score.Parameters(),
+            value="Yes",  # Exact case match
+            explanation="Test explanation"
+        )
+        
+        # Should not raise exception
+        result.validate(validation_config)
+    
+    def test_case_sensitive_validation_failure(self):
+        """Test case-sensitive validation failure."""
+        validation_config = Score.ValidationConfig(
+            value=Score.FieldValidation(
+                valid_classes=["Yes", "No"],
+                case_sensitive=True
+            )
+        )
+        
+        result = Score.Result(
+            parameters=Score.Parameters(),
+            value="yes",  # Wrong case, should fail when case_sensitive=True
+            explanation="Test explanation"
+        )
+        
+        with pytest.raises(Score.ValidationError) as exc_info:
+            result.validate(validation_config)
+        
+        assert exc_info.value.field_name == "value"
+        assert exc_info.value.value == "yes"
+        # Should not have "(case-insensitive)" in message for case-sensitive validation
+        assert "(case-insensitive)" not in str(exc_info.value)
+    
     def test_pattern_validation_success(self):
         """Test successful validation with regex patterns."""
         validation_config = Score.ValidationConfig(

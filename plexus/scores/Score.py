@@ -133,6 +133,7 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         patterns: Optional[List[str]] = None
         minimum_length: Optional[int] = None
         maximum_length: Optional[int] = None
+        case_sensitive: bool = False
 
     class ValidationConfig(BaseModel):
         """Configuration for result validation."""
@@ -350,12 +351,24 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
             """
             # Check valid_classes
             if field_config.valid_classes is not None:
-                if field_value not in field_config.valid_classes:
-                    raise Score.ValidationError(
-                        field_name, 
-                        field_value,
-                        f"'{field_value}' is not in valid_classes {field_config.valid_classes}"
-                    )
+                if field_config.case_sensitive:
+                    # Case-sensitive comparison
+                    if field_value not in field_config.valid_classes:
+                        raise Score.ValidationError(
+                            field_name, 
+                            field_value,
+                            f"'{field_value}' is not in valid_classes {field_config.valid_classes}"
+                        )
+                else:
+                    # Case-insensitive comparison (default)
+                    field_value_lower = field_value.lower()
+                    valid_classes_lower = [cls.lower() for cls in field_config.valid_classes]
+                    if field_value_lower not in valid_classes_lower:
+                        raise Score.ValidationError(
+                            field_name, 
+                            field_value,
+                            f"'{field_value}' is not in valid_classes {field_config.valid_classes} (case-insensitive)"
+                        )
             
             # Check patterns
             if field_config.patterns is not None:
