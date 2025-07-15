@@ -40,7 +40,7 @@ type ScoreVersionIndexFields = "scoreId" | "versionNumber" | "isFeatured";
 type ReportConfigurationIndexFields = "accountId" | "name";
 type ReportIndexFields = "accountId" | "reportConfigurationId" | "createdAt" | "updatedAt" | "taskId";
 type ReportBlockIndexFields = "reportId" | "name" | "position" | "dataSetId";
-type FeedbackItemIndexFields = "accountId" | "scorecardId" | "scoreId" | "cacheKey" | "updatedAt" | "itemId" | "initialAnswerValue" | "finalAnswerValue"; // UPDATED: Added predicted/actual value fields for confusion matrix drill-down
+type FeedbackItemIndexFields = "accountId" | "scorecardId" | "scoreId" | "cacheKey" | "updatedAt" | "itemId" | "editedAt";
 type ScorecardExampleItemIndexFields = "scorecardId" | "itemId" | "addedAt";
 type ScorecardProcessedItemIndexFields = "scorecardId" | "itemId" | "processedAt";
 type IdentifierIndexFields = "accountId" | "value" | "name" | "itemId" | "position";
@@ -689,9 +689,6 @@ const schema = a.schema({
             idx("accountId").sortKeys(["scorecardId", "scoreId", "editedAt"]).name("byAccountScorecardScoreEditedAt"),
             idx("cacheKey").name("byCacheKey"), // GSI for FeedbackItem deduplication
             idx("itemId"),
-            idx("accountId").sortKeys(["scorecardId", "scoreId", "initialAnswerValue", "finalAnswerValue"]).name("byAccountScorecardScoreAnswers"),
-            // idx("scorecardId").sortKeys(["scoreId", "initialAnswerValue", "finalAnswerValue"]).name("byScorecardScoreAnswers"),
-            // idx("scoreId").sortKeys(["initialAnswerValue", "finalAnswerValue"]).name("byScoreAnswers")
         ]),
 
     ScorecardExampleItem: a

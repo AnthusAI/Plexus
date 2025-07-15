@@ -28,6 +28,12 @@ export interface ScorecardReportData {
 export interface ScorecardReportProps extends ReportBlockProps {
   showDateRange?: boolean;
   showPrecisionRecall?: boolean;
+  onCellSelection?: (selection: { predicted: string | null; actual: string | null }) => void;
+  drillDownContent?: React.ReactNode;
+  showTitle?: boolean;
+  // Props for on-demand analysis drill-down
+  scorecardId?: string;
+  accountId?: string;
 }
 
 /**
@@ -39,6 +45,11 @@ const ScorecardReport: React.FC<ScorecardReportProps> = ({
   output, 
   showDateRange = true,
   showPrecisionRecall = true,
+  onCellSelection,
+  drillDownContent,
+  showTitle,
+  scorecardId,
+  accountId,
   children,
   ...restProps
 }) => {
@@ -118,6 +129,10 @@ const ScorecardReport: React.FC<ScorecardReportProps> = ({
                   scoreIndex={item.originalIndex} // Pass the ORIGINAL index
                   attachedFiles={restProps.attachedFiles}
                   showPrecisionRecall={showPrecisionRecall}
+                  onCellSelection={onCellSelection}
+                  scorecardId={scorecardId}
+                  accountId={accountId}
+                  isSingleScore={scoreData.scores.length === 1}
                 />
               ))}
           </div>
@@ -222,6 +237,9 @@ const ScorecardReport: React.FC<ScorecardReportProps> = ({
         </div>
       )}
 
+      {/* Drill-down content (rendered within the card) */}
+      {drillDownContent}
+
       {children}
     </>
   );
@@ -235,6 +253,7 @@ const ScorecardReport: React.FC<ScorecardReportProps> = ({
       title={restProps.title || "Scorecard Report"}
       attachedFiles={restProps.attachedFiles}
       log={restProps.log}
+      showTitle={showTitle}
       {...restProps}
     >
       {scoreCardContent}
