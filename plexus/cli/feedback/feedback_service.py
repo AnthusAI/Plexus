@@ -65,6 +65,51 @@ class FeedbackService:
     """
     
     @staticmethod
+    def _extract_preferred_id(item: FeedbackItem) -> Optional[str]:
+        """
+        Extract the preferred ID from a feedback item, prioritizing form_id over external_id.
+        
+        Form IDs always start with '5' and are preferred.
+        Report IDs (external_id) start with '2' and are used as fallback.
+        
+        Args:
+            item: The FeedbackItem to extract ID from
+            
+        Returns:
+            The form_id if available, otherwise external_id, or None if neither exists
+        """
+        # First, try to get form_id from the item's identifiers
+        if hasattr(item, 'item') and item.item and hasattr(item.item, 'identifiers'):
+            identifiers_data = item.item.identifiers
+            
+            # Handle both string (legacy JSON) and dict formats
+            if isinstance(identifiers_data, str):
+                try:
+                    import json
+                    identifiers_list = json.loads(identifiers_data)
+                except (json.JSONDecodeError, TypeError):
+                    identifiers_list = []
+            elif isinstance(identifiers_data, list):
+                identifiers_list = identifiers_data
+            else:
+                identifiers_list = []
+            
+            # Look for form_id in the identifiers
+            for identifier in identifiers_list:
+                if isinstance(identifier, dict):
+                    name = identifier.get('name', '').lower()
+                    if name in ['form', 'form id']:
+                        form_id = identifier.get('value') or identifier.get('id')
+                        if form_id:
+                            return str(form_id)
+        
+        # Fallback to external_id if no form_id found
+        if hasattr(item, 'item') and item.item and hasattr(item.item, 'externalId'):
+            return item.item.externalId
+        
+        return None
+
+    @staticmethod
     def _convert_feedback_item_to_summary(item: FeedbackItem) -> FeedbackItemSummary:
         """
         Convert a FeedbackItem to a token-efficient summary.
@@ -75,10 +120,8 @@ class FeedbackService:
         Returns:
             FeedbackItemSummary with only the fields needed for alignment work
         """
-        # Extract external_id from the related item if available
-        external_id = None
-        if hasattr(item, 'item') and item.item and hasattr(item.item, 'externalId'):
-            external_id = item.item.externalId
+        # Extract preferred ID (form_id if available, otherwise external_id)
+        external_id = FeedbackService._extract_preferred_id(item)
         
         return FeedbackItemSummary(
             item_id=item.itemId,
