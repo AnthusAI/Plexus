@@ -550,7 +550,8 @@ class FeedbackService:
         try:
             # Calculate date range
             start_date = datetime.now(timezone.utc) - timedelta(days=days)
-            end_date = datetime.now(timezone.utc)
+            # Add a small buffer to end_date to catch items created very recently
+            end_date = datetime.now(timezone.utc) + timedelta(minutes=5)
             
             # Use the GSI query for efficient retrieval (same as reporting system)
             query = """
