@@ -87,6 +87,14 @@ def main():
     Plexus Command Line Interface.
     This function is the entry point when the `plexus` command is run.
     """
+    # Load YAML configuration first to set environment variables
+    try:
+        from plexus.config import load_config
+        load_config()
+    except Exception as e:
+        # Don't fail CLI startup if config loading fails, just log a warning
+        logging.warning(f"Failed to load YAML configuration: {e}")
+    
     # Execute the main CLI application object
     # Click will handle parsing arguments and dispatching to the correct command.
     cli()

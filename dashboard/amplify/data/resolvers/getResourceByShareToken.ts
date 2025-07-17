@@ -17,11 +17,11 @@ export const handler: Schema["getResourceByShareToken"]["functionHandler"] = asy
     }
     
     // Get the GraphQL endpoint from environment variables
-    const GRAPHQL_ENDPOINT = process.env.API_PLEXUSDASHBOARD_GRAPHQLAPIENDPOINTOUTPUT;
+    const GRAPHQL_ENDPOINT = process.env.PLEXUS_API_URL;
     const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
     
     if (!GRAPHQL_ENDPOINT) {
-      throw new Error('GraphQL endpoint not found in environment variables');
+      throw new Error('PLEXUS_API_URL not found in environment variables');
     }
     
     // Create a signer for AWS Signature v4
