@@ -120,6 +120,14 @@ try:
     # Import FastMCP
     from fastmcp import FastMCP
     
+    # Load YAML configuration first (before importing Plexus modules)
+    try:
+        from plexus.config import load_config
+        load_config()  # This will set environment variables from YAML config
+        logger.info("YAML configuration loaded successfully")
+    except Exception as e:
+        logger.warning(f"Failed to load YAML configuration: {e}")
+    
     # Try to import the Plexus core modules
     try:
         # Attempt to import Plexus modules for core functionality
@@ -769,7 +777,6 @@ async def plexus_scorecard_info(scorecard_identifier: str) -> Union[str, Dict[st
     try:
         # Import plexus CLI inside function to keep startup fast
         try:
-            # Fix the import to use the correct modules
             from plexus.cli.client_utils import create_client as create_dashboard_client
             from plexus.cli.ScorecardCommands import resolve_scorecard_identifier
             from plexus.dashboard.api.client import PlexusDashboardClient
@@ -890,7 +897,6 @@ async def plexus_reports_list(
     try:
         # Import plexus CLI inside function to keep startup fast
         try:
-            # Fix imports to use the correct modules
             from plexus.cli.client_utils import create_client as create_dashboard_client
             from plexus.dashboard.api.client import PlexusDashboardClient
         except ImportError as e:
@@ -1054,7 +1060,6 @@ async def plexus_report_info(report_id: str) -> Union[str, Dict[str, Any]]:
     try:
         # Import plexus CLI inside function to keep startup fast
         try:
-            # Fix imports to use the correct modules
             from plexus.cli.client_utils import create_client as create_dashboard_client
             from plexus.dashboard.api.client import PlexusDashboardClient
         except ImportError as e:
