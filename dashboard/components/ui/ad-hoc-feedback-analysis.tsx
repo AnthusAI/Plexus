@@ -174,7 +174,7 @@ export const AdHocFeedbackAnalysis: React.FC<AdHocFeedbackAnalysisProps> = ({
           showDateRange={true}
           showPrecisionRecall={false}
           showHeader={showHeader}
-          className="border rounded-lg"
+          className="rounded-lg"
           scorecardId={config.scorecardId}
           scoreId={config.scoreId}
         />
