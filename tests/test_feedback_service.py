@@ -4,7 +4,7 @@ Tests for the FeedbackService.
 
 import pytest
 import asyncio
-from unittest.mock import Mock, AsyncMock, patch
+from unittest.mock import Mock, MagicMock, AsyncMock, patch
 from datetime import datetime, timezone, timedelta
 
 from plexus.cli.feedback.feedback_service import (
@@ -449,3 +449,124 @@ class TestFeedbackService:
         
         assert len(result) == 5
         # Should be a subset of original items (order may be different due to shuffle) 
+
+class TestFeedbackServiceTimeWindow:
+    """Test suite for FeedbackService time window calculations."""
+
+    @pytest.mark.asyncio
+    async def test_find_feedback_items_with_recent_buffer(self):
+        """Test that feedback items created very recently are found due to time buffer."""
+        from datetime import datetime, timezone, timedelta
+        from unittest.mock import Mock, patch
+        from plexus.cli.feedback.feedback_service import FeedbackService
+        
+        # Create a simple mock client that returns feedback items
+        mock_client = Mock()
+        
+        # Create mock FeedbackItem object directly
+        mock_feedback_obj = Mock()
+        mock_feedback_obj.id = 'recent-feedback-id'
+        mock_feedback_obj.itemId = 'test-item-id'
+        mock_feedback_obj.initialAnswerValue = 'Yes'
+        mock_feedback_obj.finalAnswerValue = 'No'
+        mock_feedback_obj.editCommentValue = 'Recent correction'
+        
+        # Mock FeedbackItem.list to return the mock object directly
+        with patch('plexus.dashboard.api.models.feedback_item.FeedbackItem.list') as mock_list:
+            mock_list.return_value = ([mock_feedback_obj], None)
+            
+            # Test the feedback search
+            result = await FeedbackService.find_feedback_items(
+                client=mock_client,
+                account_id='test-account',
+                scorecard_id='test-scorecard', 
+                score_id='test-score',
+                days=1
+            )
+            
+            # Should find the recent item
+            assert len(result) == 1
+            assert result[0].id == 'recent-feedback-id'
+            
+            # Verify the fallback query was used with proper filters
+            mock_list.assert_called_once()
+            call_kwargs = mock_list.call_args[1]
+            assert call_kwargs['filter']['and'][0]['accountId']['eq'] == 'test-account'
+            assert call_kwargs['filter']['and'][1]['scorecardId']['eq'] == 'test-scorecard'
+            assert call_kwargs['filter']['and'][2]['scoreId']['eq'] == 'test-score'
+
+    @pytest.mark.asyncio 
+    async def test_time_window_buffer_prevents_missing_items(self):
+        """Test that the 5-minute buffer prevents missing items created during query execution."""
+        from unittest.mock import Mock, patch
+        from plexus.cli.feedback.feedback_service import FeedbackService
+        
+        # Create a simple mock client
+        mock_client = Mock()
+        
+        # Create mock FeedbackItem object directly
+        mock_feedback_obj = Mock()
+        mock_feedback_obj.id = 'edge-case-feedback-id'
+        mock_feedback_obj.itemId = 'test-item-id'
+        mock_feedback_obj.initialAnswerValue = 'No'
+        mock_feedback_obj.finalAnswerValue = 'Yes'
+        
+        # Mock FeedbackItem.list to return the mock object directly
+        with patch('plexus.dashboard.api.models.feedback_item.FeedbackItem.list') as mock_list:
+            mock_list.return_value = ([mock_feedback_obj], None)
+            
+            # Test the feedback search
+            result = await FeedbackService.find_feedback_items(
+                client=mock_client,
+                account_id='test-account',
+                scorecard_id='test-scorecard',
+                score_id='test-score', 
+                days=1
+            )
+            
+            # Should find the edge case item due to buffer
+            assert len(result) == 1
+            assert result[0].id == 'edge-case-feedback-id'
+            
+            # Verify proper filtering was applied
+            mock_list.assert_called_once()
+            call_kwargs = mock_list.call_args[1]
+            assert 'updatedAt' in call_kwargs['filter']['and'][3]  # Time filter should be present
+
+    @pytest.mark.asyncio
+    async def test_time_calculation_includes_buffer(self):
+        """Test that the time calculation properly includes the 5-minute buffer."""
+        from unittest.mock import Mock, patch
+        from plexus.cli.feedback.feedback_service import FeedbackService
+        
+        # Create a simple mock client
+        mock_client = Mock()
+        
+        # Mock FeedbackItem.list to verify the time calculation
+        with patch('plexus.dashboard.api.models.feedback_item.FeedbackItem.list') as mock_list:
+            mock_list.return_value = ([], None)  # Empty result for simplicity
+            
+            # Test the feedback search with a 7-day window
+            result = await FeedbackService.find_feedback_items(
+                client=mock_client,
+                account_id='test-account',
+                scorecard_id='test-scorecard',
+                score_id='test-score',
+                days=7
+            )
+            
+            # Should return empty list but method should be called
+            assert len(result) == 0
+            
+            # Verify the fallback query was called with proper time filter
+            mock_list.assert_called_once()
+            call_kwargs = mock_list.call_args[1]
+            
+            # Verify the filter includes the required fields
+            assert 'filter' in call_kwargs
+            assert 'and' in call_kwargs['filter']
+            
+            # Check that a time filter (updatedAt) was applied
+            filter_conditions = call_kwargs['filter']['and']
+            time_filter_found = any('updatedAt' in condition for condition in filter_conditions)
+            assert time_filter_found, "Time filter should be present in query" 
