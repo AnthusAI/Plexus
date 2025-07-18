@@ -99,9 +99,7 @@ export interface UseUnifiedMetricsResult {
  */
 // Synchronous cache check function (defined outside the hook to avoid initialization issues)
 const checkCachedDataSync = (accountId: string, config: MetricsConfig): UnifiedMetricsData | null => {
-  try {
-    console.log('🔍 useUnifiedMetrics: Checking for cached data synchronously...', { accountId })
-    
+  try {    
     // Prepare data sources with account ID
     const preparedSources: { [key: string]: MetricsDataSource } = {}
     
@@ -174,11 +172,8 @@ const checkCachedDataSync = (accountId: string, config: MetricsConfig): UnifiedM
     }
 
     if (!hasAllCachedData) {
-      console.log('❌ useUnifiedMetrics: Not all data sources have cached data (sync check)')
       return null
     }
-
-    console.log('✅ useUnifiedMetrics: All data sources have cached data, building unified result (sync)')
 
     // Transform cached results into unified format (same logic as calculateUnifiedMetrics)
     const itemsResult = cachedResults.items
@@ -230,7 +225,6 @@ export function useUnifiedMetrics(config: MetricsConfig): UseUnifiedMetricsResul
   const configKey = useMemo(() => {
     if (!selectedAccount) return null
     const key = getConfigKey(selectedAccount.id, config)
-    console.log('🔑 useUnifiedMetrics: Generated config key:', key)
     return key
   }, [selectedAccount?.id, config])
   
@@ -248,16 +242,6 @@ export function useUnifiedMetrics(config: MetricsConfig): UseUnifiedMetricsResul
         lastFetch: cachedData ? Date.now() : 0
       })
       
-      if (cachedData) {
-        console.log('🚀 useUnifiedMetrics: Initialized global state with cached data', {
-          configKey,
-          itemsPerHour: cachedData.itemsPerHour,
-          scoreResultsPerHour: cachedData.scoreResultsPerHour,
-          chartDataPoints: cachedData.chartData.length
-        })
-      } else {
-        console.log('⏳ useUnifiedMetrics: Initialized global state with no cached data', { configKey })
-      }
     }
     
     return globalMetricsState.get(configKey)!
@@ -369,17 +353,9 @@ export function useUnifiedMetrics(config: MetricsConfig): UseUnifiedMetricsResul
     // Check for cached data first and show it immediately
     const cachedData = checkCachedDataSync(selectedAccount.id, config)
     if (cachedData) {
-      console.log('🚀 useUnifiedMetrics: Showing cached data immediately', {
-        configKey,
-        itemsPerHour: cachedData.itemsPerHour,
-        scoreResultsPerHour: cachedData.scoreResultsPerHour,
-        chartDataPoints: cachedData.chartData.length
-      })
       updateGlobalState({ metrics: cachedData, isLoading: false, error: null, lastFetch: Date.now() })
       return
     }
-
-    console.log('⏳ useUnifiedMetrics: No cached data found, fetching fresh data...', { configKey })
 
     updateGlobalState({ isLoading: true, error: null })
 
@@ -387,7 +363,6 @@ export function useUnifiedMetrics(config: MetricsConfig): UseUnifiedMetricsResul
       const result = await calculateUnifiedMetrics(selectedAccount.id)
       updateGlobalState({ metrics: result, isLoading: false, error: null, lastFetch: Date.now() })
     } catch (err) {
-      console.error('❌ useUnifiedMetrics: Error calculating metrics:', err)
       updateGlobalState({ 
         error: err instanceof Error ? err.message : 'Failed to calculate unified metrics',
         isLoading: false 
@@ -401,16 +376,8 @@ export function useUnifiedMetrics(config: MetricsConfig): UseUnifiedMetricsResul
       return
     }
 
-    console.log('🔄 useUnifiedMetrics: Fetching fresh data in background...', { configKey })
-
     try {
       const result = await calculateUnifiedMetrics(selectedAccount.id)
-      console.log('✅ useUnifiedMetrics: Background fetch complete, updating data smoothly', { 
-        configKey,
-        itemsPerHour: result.itemsPerHour,
-        scoreResultsPerHour: result.scoreResultsPerHour,
-        chartDataPoints: result.chartData.length
-      })
       // Update metrics without changing loading state - smooth update
       updateGlobalState({ metrics: result, error: null, lastFetch: Date.now() })
     } catch (err) {
@@ -434,19 +401,12 @@ export function useUnifiedMetrics(config: MetricsConfig): UseUnifiedMetricsResul
       // We have existing data - show it immediately and fetch in background
       const existingData = currentGlobalState?.metrics || cachedData
       if (existingData) {
-        console.log('🔄 useUnifiedMetrics: Showing existing data during refetch, fetching fresh in background', {
-          configKey,
-          itemsPerHour: existingData.itemsPerHour,
-          scoreResultsPerHour: existingData.scoreResultsPerHour,
-          chartDataPoints: existingData.chartData.length
-        })
         updateGlobalState({ metrics: existingData, isLoading: false, error: null })
         // Fetch fresh data in background without showing loading
         fetchMetricsInBackground()
       }
     } else {
       // No existing data - show loading state for first fetch
-      console.log('🔄 useUnifiedMetrics: No existing data for refetch, showing loading state', { configKey })
       updateGlobalState({ metrics: null, isLoading: true, error: null })
       fetchMetrics()
     }
@@ -487,17 +447,10 @@ export function useUnifiedMetrics(config: MetricsConfig): UseUnifiedMetricsResul
     // Check if we already have data in global state
     const currentGlobalState = globalMetricsState.get(configKey)
     if (currentGlobalState?.metrics) {
-      console.log('✅ useUnifiedMetrics: Using existing global state data, triggering background refresh', { 
-        configKey,
-        itemsPerHour: currentGlobalState.metrics.itemsPerHour,
-        scoreResultsPerHour: currentGlobalState.metrics.scoreResultsPerHour,
-        chartDataPoints: currentGlobalState.metrics.chartData.length
-      })
       // Always trigger a background refresh to get fresh data, but don't show loading
       fetchMetricsInBackground()
     } else {
       // No data available, fetch fresh data (this will show loading only for first time)
-      console.log('⏳ useUnifiedMetrics: No data in global state, fetching fresh data', { configKey })
       fetchMetrics()
     }
 

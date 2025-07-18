@@ -79,7 +79,6 @@ class SessionStorageCache {
       
       const cached = sessionStorage.getItem(key)
       if (!cached) {
-        console.log('🔍 Cache miss for key:', key.substring(0, 100) + '...')
         return null
       }
 
@@ -88,7 +87,6 @@ class SessionStorageCache {
       
       // Check if expired
       if (now - parsed.timestamp > (parsed.ttl || this.DEFAULT_TTL)) {
-        console.log('⏰ Cache expired for key:', key.substring(0, 100) + '...')
         sessionStorage.removeItem(key)
         return null
       }
@@ -118,11 +116,6 @@ class SessionStorageCache {
         ttl: ttl || this.DEFAULT_TTL
       }
       sessionStorage.setItem(key, JSON.stringify(cacheEntry))
-      console.log('💾 Cached data for key:', key.substring(0, 100) + '...', {
-        count: data.count,
-        itemsLength: data.items?.length || 0,
-        ttlMinutes: Math.round((ttl || this.DEFAULT_TTL) / (1000 * 60))
-      })
     } catch (error) {
       console.warn('Error writing to session storage cache:', error)
     }
