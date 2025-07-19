@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react'
 import { Task, TaskHeader, TaskContent, BaseTaskProps } from '@/components/Task'
-import { FlaskConical, Square, X, Split, ChevronLeft, MoreHorizontal, MessageSquareCode } from 'lucide-react'
+import { FlaskConical, Square, X, Split, ChevronLeft, MoreHorizontal, MessageSquareCode, Share, Trash2 } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { CardButton } from '@/components/CardButton'
 import { toast } from '@/components/ui/use-toast'
@@ -154,6 +154,8 @@ export interface EvaluationTaskProps extends Omit<BaseTaskProps<EvaluationTaskDa
   extra?: boolean
   isSelected?: boolean
   commandDisplay?: 'hide' | 'show' | 'full'
+  onShare?: () => void
+  onDelete?: (evaluationId: string) => void
 }
 
 function formatDuration(seconds: number): string {
@@ -926,6 +928,8 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
   extra,
   isSelected,
   commandDisplay: initialCommandDisplay = 'hide',
+  onShare,
+  onDelete,
   ...restProps
 }: EvaluationTaskProps) {
   const [commandDisplay, setCommandDisplay] = useState(initialCommandDisplay);
@@ -1044,17 +1048,40 @@ evaluation:
     variant === 'detail' ? (
       <div className="flex items-center space-x-2">
         <DropdownMenu>
-          <DropdownMenuTrigger asChild>
+          <DropdownMenuTrigger>
             <CardButton
               icon={MoreHorizontal}
-              onClick={() => {}}
+              onClick={() => {
+                console.log('MoreHorizontal button clicked - dropdown should open');
+              }}
             />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onSelect={handleGetCode}>
+            <DropdownMenuItem onSelect={() => {
+              console.log('Get Code menu item selected');
+              handleGetCode();
+            }}>
               <MessageSquareCode className="mr-2 h-4 w-4" />
               Get Code
             </DropdownMenuItem>
+            {onShare && (
+              <DropdownMenuItem onSelect={() => {
+                console.log('Share menu item selected');
+                onShare();
+              }}>
+                <Share className="mr-2 h-4 w-4" />
+                Share
+              </DropdownMenuItem>
+            )}
+            {onDelete && (
+              <DropdownMenuItem onSelect={() => {
+                console.log('Delete menu item selected');
+                onDelete(data.id);
+              }}>
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
         {typeof onToggleFullWidth === 'function' && (
