@@ -443,7 +443,8 @@ const schema = a.schema({
             index("scorecardId").sortKeys(["scoreId", "itemId"]).name("byScorecardScoreItem"),
             index("itemId").sortKeys(["scorecardId", "scoreId"]).name("byItemScorecardScore"),
             index("itemId").sortKeys(["scorecardId", "scoreId", "updatedAt"]).name("byItemScorecardScoreUpdated"),
-            index("accountId").sortKeys(["code", "updatedAt"]).name("byAccountCodeAndUpdatedAt")
+            index("accountId").sortKeys(["code", "updatedAt"]).name("byAccountCodeAndUpdatedAt"),
+            index("accountId").sortKeys(["code", "createdAt"]).name("byAccountCodeAndCreatedAt")
         ]),
 
     BatchJobScoringJob: a
