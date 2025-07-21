@@ -24,15 +24,19 @@ export default function EvaluationClientLayout({
       {/* Custom minimal footer - stays at the bottom */}
       <footer className="py-4 px-6 flex-shrink-0">
         <div className="flex items-center justify-end">
-          <span className="text-sm text-muted-foreground mr-2">powered by</span>
-          <a 
-            href="https://plexus.anth.us" 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="relative w-24 h-8"
-          >
-            <SquareLogo variant={LogoVariant.Wide} />
-          </a>
+          {process.env.NEXT_PUBLIC_MINIMAL_BRANDING !== 'true' && (
+            <div className="flex items-center">
+              <span className="text-sm text-muted-foreground mr-2">powered by</span>
+              <a 
+                href="https://plexus.anth.us" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="relative w-24 h-8"
+              >
+                <SquareLogo variant={LogoVariant.Wide} />
+              </a>
+            </div>
+          )}
         </div>
       </footer>
     </div>
