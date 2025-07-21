@@ -355,6 +355,7 @@ class FeedbackItems(DataCache):
         - IDs: Hash of identifiers with name/value/URL structure
         - {score_name}: Final answer value (ground truth)
         - {score_name} comment: Final explanation/comment with complex logic
+        - {score_name} edit comment: Edit comment from feedback item
         
         Args:
             feedback_items: Sampled feedback items
@@ -364,7 +365,7 @@ class FeedbackItems(DataCache):
             DataFrame with properly formatted rows matching CallCriteriaDBCache format
         """
         print(f"DEBUG: _create_dataset_rows called with {len(feedback_items)} items, score_name='{score_name}'")
-        print(f"DEBUG: This is the NEW implementation that should only create 6 columns")
+        print(f"DEBUG: This is the NEW implementation that should only create 7 columns (including edit comment)")
         rows = []
         
         for i, feedback_item in enumerate(feedback_items):
@@ -411,6 +412,9 @@ class FeedbackItems(DataCache):
             # Score comment: Complex logic for determining the comment
             score_comment = self._determine_score_comment(feedback_item)
             
+            # Edit comment: Direct edit comment from feedback item
+            edit_comment = getattr(feedback_item, 'editCommentValue', None) or ""
+            
             # Build the row with ONLY the specified columns (IDs first, then metadata, then text)
             row = {
                 'content_id': content_id,
@@ -418,7 +422,8 @@ class FeedbackItems(DataCache):
                 'metadata': metadata,
                 'text': text,
                 score_name: score_value,
-                f"{score_name} comment": score_comment
+                f"{score_name} comment": score_comment,
+                f"{score_name} edit comment": edit_comment
             }
             
             rows.append(row)
@@ -432,7 +437,7 @@ class FeedbackItems(DataCache):
         # Create DataFrame with proper column structure even when empty
         if not rows:
             # Create empty DataFrame with expected columns (IDs first, then metadata, then text)
-            columns = ['content_id', 'IDs', 'metadata', 'text', score_name, f"{score_name} comment"]
+            columns = ['content_id', 'IDs', 'metadata', 'text', score_name, f"{score_name} comment", f"{score_name} edit comment"]
             df = pd.DataFrame(columns=columns)
         else:
             df = pd.DataFrame(rows)
@@ -446,6 +451,7 @@ class FeedbackItems(DataCache):
             print(f"DEBUG: Sample row keys: {list(df.iloc[0].to_dict().keys())}")
             print(f"DEBUG: Sample text value: '{df.iloc[0]['text'] if 'text' in df.columns else 'NO TEXT COLUMN'}'")
             print(f"DEBUG: Sample comment value: '{df.iloc[0][f'{score_name} comment'] if f'{score_name} comment' in df.columns else 'NO COMMENT COLUMN'}'")
+            print(f"DEBUG: Sample edit comment value: '{df.iloc[0][f'{score_name} edit comment'] if f'{score_name} edit comment' in df.columns else 'NO EDIT COMMENT COLUMN'}'")
         
         return df
     
