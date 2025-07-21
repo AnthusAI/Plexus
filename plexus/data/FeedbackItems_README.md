@@ -51,23 +51,31 @@ The class implements a sophisticated sampling strategy that prioritizes items wi
 
 ## Dataset Structure
 
-The generated dataset includes these columns:
+The generated dataset includes these columns in CallCriteriaDBCache format:
 
 ### Core Columns
+- **`content_id`**: DynamoDB item ID
+- **`IDs`**: Hash of identifiers with name/value/URL structure
+- **`metadata`**: JSON string of metadata structure
+- **`text`**: Item.text content (transcript/description)
 - **`{score_name}`**: Final answer value (ground truth label)
-- **`{score_name} comment`**: Final comment/explanation
-- **`{score_name} initial`**: Initial answer value (for reference)
-- **`{score_name} initial comment`**: Initial comment (for reference)
-- **`{score_name} edit comment`**: Edit comment (if available)
+- **`{score_name} comment`**: Final comment/explanation (with complex logic for determining best comment)
+- **`{score_name} edit comment`**: Edit comment from feedback item (if available)
 
-### Metadata Columns
-- **`item_id`**: Feedback item ID
-- **`external_id`**: External item ID
-- **`text`**: Item description/content
-- **`identifiers`**: Item identifiers
-- **`scorecard_id`**, **`score_id`**, **`account_id`**: System IDs
-- **`created_at`**, **`updated_at`**, **`edited_at`**: Timestamps
-- **`editor_name`**, **`is_agreement`**: Additional metadata
+### Comment Logic
+The `{score_name} comment` column uses sophisticated logic to determine the best comment:
+1. If edit comment is 'agree' and no final comment, use initial comment
+2. If final comment is 'agree', use initial comment  
+3. Otherwise, favor edit comment over final comment/explanation
+4. Fallback to initial comment if nothing else available
+
+The `{score_name} edit comment` column contains the raw edit comment value directly from the feedback item.
+
+### Metadata Structure
+The `metadata` column contains a JSON object with:
+- Feedback item details (ID, scorecard/score IDs, timestamps, editor info)
+- Associated item details (ID, external ID, timestamps, metadata)
+- System information (account ID, cache key, agreement status)
 
 ## Example Usage
 
@@ -88,7 +96,8 @@ df = feedback_cache.load_dataframe(fresh=True)
 
 # The dataframe now contains sampled feedback items with:
 # - 'Agent Politeness' column containing ground truth labels
-# - 'Agent Politeness comment' column containing explanations
+# - 'Agent Politeness comment' column containing explanations (with complex logic)
+# - 'Agent Politeness edit comment' column containing raw edit comments
 # - Balanced sampling across confusion matrix cells
 # - Prioritization of items with edit comments
 ```

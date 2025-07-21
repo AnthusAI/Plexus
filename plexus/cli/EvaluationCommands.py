@@ -1059,7 +1059,7 @@ def accuracy(
                             # Look up the actual Score record using scorecard ID and external ID
                             try:
                                 query = """
-                                query GetScoreByExternalId($scorecardId: ID!, $externalId: Int!) {
+                                query GetScoreByExternalId($scorecardId: ID!, $externalId: String!) {
                                     listScores(filter: {
                                         and: {
                                             externalId: { eq: $externalId },
@@ -1076,7 +1076,7 @@ def accuracy(
                                 """
                                 score_result = client.execute(query, {
                                     'scorecardId': scorecard_record['id'],
-                                    'externalId': int(external_id)
+                                    'externalId': external_id
                                 })
                                 
                                 if score_result and 'listScores' in score_result and score_result['listScores']['items']:
