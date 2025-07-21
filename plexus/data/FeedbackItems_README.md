@@ -55,6 +55,7 @@ The generated dataset includes these columns in CallCriteriaDBCache format:
 
 ### Core Columns
 - **`content_id`**: DynamoDB item ID
+- **`feedback_item_id`**: Feedback item ID
 - **`IDs`**: Hash of identifiers with name/value/URL structure
 - **`metadata`**: JSON string of metadata structure
 - **`text`**: Item.text content (transcript/description)
