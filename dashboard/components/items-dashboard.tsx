@@ -1132,7 +1132,13 @@ function ItemsDashboardInner() {
           }, 3000);
         }
         
-        return [...newItems, ...updatedItems];
+        // Combine and sort all items by createdAt to maintain consistent ordering
+        const allItems = [...newItems, ...updatedItems];
+        return allItems.sort((a, b) => {
+          const dateA = new Date(a.createdAt || '').getTime();
+          const dateB = new Date(b.createdAt || '').getTime();
+          return dateB - dateA; // DESC order (newest first)
+        });
       });
       
       // Also refresh score result counts silently
@@ -1341,8 +1347,14 @@ function ItemsDashboardInner() {
                     // This prevents existing items from suddenly appearing when they get new score results
                     if (!isErrorFilterActive) {
                       // Not in error filter mode - safe to add items that now match other filters
+                      // Insert in correct createdAt position to maintain sort order
                       const transformedItem = transformItem(updatedItem, { isNew: false });
-                      return [transformedItem, ...prevItems];
+                      const newItems = [...prevItems, transformedItem];
+                      return newItems.sort((a, b) => {
+                        const dateA = new Date(a.createdAt || '').getTime();
+                        const dateB = new Date(b.createdAt || '').getTime();
+                        return dateB - dateA; // DESC order (newest first)
+                      });
                     } else {
                       // In error filter mode - don't add existing items that just got score results
                       // Only new items (handled by item creation subscription) should appear
@@ -1559,12 +1571,13 @@ function ItemsDashboardInner() {
         const useScore = selectedScore !== null && selectedScore !== undefined;
         
         if (isErrorFilterActive) {
-          // Filter by items that have error ScoreResults - load more (client-side filtering)
+          // Filter by items that have error ScoreResults - load more (using GSI for consistency)
           const errorScoreResultsQuery = await graphqlRequest<{
-            listScoreResultByAccountIdAndUpdatedAt: {
+            listScoreResultByAccountIdAndCodeAndCreatedAt: {
               items: Array<{
                 itemId: string;
                 item: any;
+                code?: string;
                 value?: string;
                 explanation?: string;
               }>;
@@ -1572,14 +1585,16 @@ function ItemsDashboardInner() {
             }
           }>(`
             query ListMoreErrorScoreResults($accountId: String!, $limit: Int!, $nextToken: String) {
-              listScoreResultByAccountIdAndUpdatedAt(
+              listScoreResultByAccountIdAndCodeAndCreatedAt(
                 accountId: $accountId,
+                codeCreatedAt: { beginsWith: { code: "5" } },
                 sortDirection: DESC,
                 limit: $limit,
                 nextToken: $nextToken
               ) {
                 items {
                   itemId
+                  code
                   value
                   explanation
                   item {
@@ -1616,26 +1631,11 @@ function ItemsDashboardInner() {
           });
           
           console.debug('- LoadMore Error query response:', errorScoreResultsQuery);
-          console.debug('- LoadMore Raw error ScoreResults found:', errorScoreResultsQuery.data?.listScoreResultByAccountIdAndUpdatedAt?.items?.length || 0);
+          console.debug('- LoadMore Raw error ScoreResults found:', errorScoreResultsQuery.data?.listScoreResultByAccountIdAndCodeAndCreatedAt?.items?.length || 0);
           
-          if (errorScoreResultsQuery.data?.listScoreResultByAccountIdAndUpdatedAt?.items) {
-            // Filter for ScoreResults that indicate errors (client-side filtering)
-            const errorScoreResults = errorScoreResultsQuery.data.listScoreResultByAccountIdAndUpdatedAt.items.filter(result => {
-              // Look for error indicators in the value or explanation
-              const value = result.value?.toLowerCase() || '';
-              const explanation = result.explanation?.toLowerCase() || '';
-              
-              // Check for common error patterns
-              return value.includes('error') || 
-                     value.includes('fail') || 
-                     value.includes('exception') || 
-                     explanation.includes('error') || 
-                     explanation.includes('fail') || 
-                     explanation.includes('exception') ||
-                     explanation.includes('timeout') ||
-                     explanation.includes('not found') ||
-                     explanation.includes('invalid');
-            });
+          if (errorScoreResultsQuery.data?.listScoreResultByAccountIdAndCodeAndCreatedAt?.items) {
+            // ScoreResults are already filtered by error codes (5xx) via GSI
+            const errorScoreResults = errorScoreResultsQuery.data.listScoreResultByAccountIdAndCodeAndCreatedAt.items;
             
             console.debug('- LoadMore Filtered error ScoreResults:', errorScoreResults.length);
             
@@ -1654,7 +1654,7 @@ function ItemsDashboardInner() {
               const dateB = new Date(b.createdAt || '').getTime();
               return dateB - dateA;
             });
-            nextTokenFromDirectQuery = errorScoreResults.length >= 1000 ? errorScoreResultsQuery.data.listScoreResultByAccountIdAndUpdatedAt.nextToken : null;
+            nextTokenFromDirectQuery = errorScoreResults.length >= 1000 ? errorScoreResultsQuery.data.listScoreResultByAccountIdAndCodeAndCreatedAt.nextToken : null;
             console.debug('- ✅ LoadMore Unique error items found:', itemsFromDirectQuery.length);
             
             // Update the set of items with errors (append to existing)
@@ -1883,11 +1883,11 @@ function ItemsDashboardInner() {
           
           // Use the same GSI as the error counting to maintain consistency
           const errorScoreResultsQuery = await graphqlRequest<{
-            listScoreResultByAccountIdAndCodeAndUpdatedAt: {
+            listScoreResultByAccountIdAndCodeAndCreatedAt: {
               items: Array<{
                 id: string;
                 itemId: string;
-                updatedAt: string;
+                createdAt: string;
                 code?: string;
                 value?: string;
                 explanation?: string;
@@ -1897,16 +1897,16 @@ function ItemsDashboardInner() {
             }
           }>(`
             query ListErrorScoreResultsGSI($accountId: String!, $limit: Int!) {
-              listScoreResultByAccountIdAndCodeAndUpdatedAt(
+              listScoreResultByAccountIdAndCodeAndCreatedAt(
                 accountId: $accountId,
-                codeUpdatedAt: { beginsWith: { code: "5" } },
+                codeCreatedAt: { beginsWith: { code: "5" } },
                 sortDirection: DESC,
                 limit: $limit
               ) {
                 items {
                   id
                   itemId
-                  updatedAt
+                  createdAt
                   code
                   value
                   explanation
@@ -1943,10 +1943,10 @@ function ItemsDashboardInner() {
           });
           
           console.debug('- GSI Error query response:', errorScoreResultsQuery);
-          console.debug('- Raw error ScoreResults found from GSI:', errorScoreResultsQuery.data?.listScoreResultByAccountIdAndCodeAndUpdatedAt?.items?.length || 0);
+          console.debug('- Raw error ScoreResults found from GSI:', errorScoreResultsQuery.data?.listScoreResultByAccountIdAndCodeAndCreatedAt?.items?.length || 0);
           
-          if (errorScoreResultsQuery.data?.listScoreResultByAccountIdAndCodeAndUpdatedAt?.items) {
-            const errorScoreResults = errorScoreResultsQuery.data.listScoreResultByAccountIdAndCodeAndUpdatedAt.items;
+          if (errorScoreResultsQuery.data?.listScoreResultByAccountIdAndCodeAndCreatedAt?.items) {
+            const errorScoreResults = errorScoreResultsQuery.data.listScoreResultByAccountIdAndCodeAndCreatedAt.items;
             
             console.debug('- GSI returned error ScoreResults:', errorScoreResults.length);
             
@@ -1972,7 +1972,7 @@ function ItemsDashboardInner() {
               const dateB = new Date(b.createdAt || '').getTime();
               return dateB - dateA;
             });
-            nextTokenFromDirectQuery = errorScoreResults.length >= 1000 ? errorScoreResultsQuery.data.listScoreResultByAccountIdAndCodeAndUpdatedAt.nextToken : null;
+            nextTokenFromDirectQuery = errorScoreResults.length >= 1000 ? errorScoreResultsQuery.data.listScoreResultByAccountIdAndCodeAndCreatedAt.nextToken : null;
             console.debug('- ✅ Unique error items found:', itemsFromDirectQuery.length);
             console.debug('- Sample error items (first 3):', itemsFromDirectQuery.slice(0, 3).map(item => ({ id: item.id, externalId: item.externalId })));
             
@@ -2474,7 +2474,13 @@ function ItemsDashboardInner() {
             }, 3000);
           }
           
-          return [...newItems, ...updatedItems];
+          // Combine and sort all items by createdAt to maintain consistent ordering
+          const allItems = [...newItems, ...updatedItems];
+          return allItems.sort((a, b) => {
+            const dateA = new Date(a.createdAt || '').getTime();
+            const dateB = new Date(b.createdAt || '').getTime();
+            return dateB - dateA; // DESC order (newest first)
+          });
         });
         
       } catch (error) {
@@ -2644,8 +2650,14 @@ function ItemsDashboardInner() {
                   // This prevents existing items from suddenly appearing when they get new score results
                   if (!isErrorFilterActive) {
                     // Not in error filter mode - safe to add items that now match other filters
+                    // Insert in correct createdAt position to maintain sort order
                     const transformedItem = transformItem(updatedItem, { isNew: false });
-                    return [transformedItem, ...prevItems];
+                    const newItems = [...prevItems, transformedItem];
+                    return newItems.sort((a, b) => {
+                      const dateA = new Date(a.createdAt || '').getTime();
+                      const dateB = new Date(b.createdAt || '').getTime();
+                      return dateB - dateA; // DESC order (newest first)
+                    });
                   } else {
                     // In error filter mode - don't add existing items that just got score results
                     // Only new items (handled by item creation subscription) should appear
