@@ -60,6 +60,14 @@ export interface ScoreResult {
   };
   trace?: any | null;
   itemId: string | null;
+  feedbackItem?: {
+    id: string;
+    editCommentValue: string | null;
+    initialAnswerValue?: string | null;
+    finalAnswerValue?: string | null;
+    editorName?: string | null;
+    editedAt?: string | null;
+  } | null;
 }
 
 export interface EvaluationTaskData {

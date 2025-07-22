@@ -42,9 +42,14 @@ interface ScoreResult {
   metadata: {
     human_label: string | null
     correct: boolean
+    human_explanation: string | null
+    text: string | null
   }
   trace: any | null
   itemId: string | null
+  feedbackItem: {
+    editCommentValue: string | null
+  } | null
 }
 
 interface TaskStage {
@@ -441,7 +446,8 @@ function parseScoreResult(result: any): ParsedScoreResult {
     resultValue: result?.value,
     resultMetadataType: result?.metadata ? typeof result.metadata : 'undefined',
     resultExplanation: result?.explanation,
-    resultTrace: result?.trace ? typeof result.trace : 'undefined'
+    resultTrace: result?.trace ? typeof result.trace : 'undefined',
+    resultFeedbackItem: result?.feedbackItem ? typeof result.feedbackItem : 'undefined'
   });
 
   if (!result) {
@@ -458,7 +464,8 @@ function parseScoreResult(result: any): ParsedScoreResult {
         text: null
       },
       trace: null,
-      itemId: null
+      itemId: null,
+      feedbackItem: null
     };
   }
 
@@ -487,6 +494,18 @@ function parseScoreResult(result: any): ParsedScoreResult {
     }
   }
 
+  // LOG DETAILED METADATA INFORMATION FOR DEBUGGING
+  console.log('parseScoreResult metadata analysis:', {
+    resultId: result?.id,
+    rawMetadata: result.metadata,
+    parsedMetadata: parsedMetadata,
+    feedbackItemId: parsedMetadata?.feedback_item_id,
+    resultFeedbackItemId: result.feedbackItemId,
+    resultFeedbackItem: result.feedbackItem,
+    hasDbRelationship: !!result.feedbackItem,
+    editCommentFromRelationship: result.feedbackItem?.editCommentValue
+  });
+
   // Extract results from nested structure if present
   const firstResultKey = parsedMetadata?.results ? 
     Object.keys(parsedMetadata.results)[0] : null
@@ -505,6 +524,11 @@ function parseScoreResult(result: any): ParsedScoreResult {
   const text = scoreResult?.metadata?.text ?? parsedMetadata.text ?? null;
   const itemId = result.itemId || parsedMetadata.item_id?.toString() || null;
 
+  // Parse feedbackItem data
+  const feedbackItem = result.feedbackItem ? {
+    editCommentValue: result.feedbackItem.editCommentValue || null
+  } : null;
+
   console.log('parseScoreResult processed result:', {
     id,
     value,
@@ -512,7 +536,9 @@ function parseScoreResult(result: any): ParsedScoreResult {
     explanation,
     humanLabel,
     correct,
-    hasTrace: !!trace
+    hasTrace: !!trace,
+    hasFeedbackItem: !!feedbackItem,
+    feedbackEditComment: feedbackItem?.editCommentValue
   });
 
   return {
@@ -527,7 +553,8 @@ function parseScoreResult(result: any): ParsedScoreResult {
       text
     },
     trace,
-    itemId
+    itemId,
+    feedbackItem
   };
 }
 
