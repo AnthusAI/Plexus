@@ -176,15 +176,6 @@ export function ItemsGauges({
     return Math.max(Math.ceil(max * 1.2), baselineMax)
   }, [chartData])
   
-  // Debug error indicator conditions
-  console.log('🔧 Error indicator conditions:', {
-    useRealData,
-    hasErrorsLast24h,
-    metricsHasErrors: metrics?.hasErrorsLast24h,
-    onErrorClick: !!onErrorClick,
-    shouldShow: useRealData && hasErrorsLast24h && onErrorClick
-  })
-  
   // For real data usage, show error state if there's an error and no data at all
   if (useRealData && error && !hasHourlyData && !isLoading) {
     return (
