@@ -1059,7 +1059,7 @@ def accuracy(
                             # Look up the actual Score record using scorecard ID and external ID
                             try:
                                 query = """
-                                query GetScoreByExternalId($scorecardId: ID!, $externalId: String!) {
+                                query GetScoreByExternalId($scorecardId: String!, $externalId: String!) {
                                     listScores(filter: {
                                         and: {
                                             externalId: { eq: $externalId },

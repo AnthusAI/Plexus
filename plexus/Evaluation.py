@@ -1624,6 +1624,9 @@ Total cost:       ${expenses['total_cost']:.6f}
             # Ensure we have a valid string value
             value = str(score_result.value) if score_result.value is not None else "N/A"
             
+            # Extract feedback_item_id if available
+            feedback_item_id = score_result.metadata.get('feedback_item_id') if score_result.metadata else None
+            
             # Ensure we have valid metadata
             metadata_dict = {
                 'item_id': result.get('form_id', ''),
@@ -1642,6 +1645,10 @@ Total cost:       ${expenses['total_cost']:.6f}
                 }
             }
             
+            # Add feedback_item_id to metadata if available
+            if feedback_item_id:
+                metadata_dict['feedback_item_id'] = feedback_item_id
+            
             # First, create or upsert the Item record
             # We'll use the content_id as the externalId
             await self._create_or_upsert_item(content_id=content_id, score_result=score_result, result=result)
@@ -1659,6 +1666,10 @@ Total cost:       ${expenses['total_cost']:.6f}
                 'type': 'evaluation'  # Mark this as an evaluation score result
             }
 
+            # Add feedbackItemId as a direct field if available
+            if feedback_item_id:
+                data['feedbackItemId'] = feedback_item_id
+
             # Add trace data if available
             logging.info("Checking for trace data to add to score result...")            
             if score_result.metadata and 'trace' in score_result.metadata:
@@ -1672,6 +1683,29 @@ Total cost:       ${expenses['total_cost']:.6f}
             self.logging.info("Preparing to create score result with data:")
             for key, value in data.items():
                 self.logging.info(f"{key}: {truncate_dict_strings_inner(value)}")
+
+            # Check for and log feedback_item_id if present
+            feedback_item_id = score_result.metadata.get('feedback_item_id') if score_result.metadata else None
+            if feedback_item_id:
+                self.logging.info(f"feedback_item_id: {feedback_item_id}")
+                # Check if it was included in final metadata
+                final_metadata = json.loads(data['metadata'])
+                if 'feedback_item_id' in final_metadata:
+                    self.logging.info(f"feedback_item_id included in final metadata: {final_metadata['feedback_item_id']}")
+                else:
+                    self.logging.info("feedback_item_id NOT included in final metadata")
+                # Check if it was set as direct field
+                if 'feedbackItemId' in data:
+                    self.logging.info(f"feedbackItemId set as direct field: {data['feedbackItemId']}")
+                else:
+                    self.logging.info("feedbackItemId NOT set as direct field")
+            else:
+                self.logging.info("feedback_item_id: None (not found in score_result.metadata)")
+                # Also log what keys are actually in metadata for debugging
+                if score_result.metadata:
+                    self.logging.info(f"Available metadata keys: {list(score_result.metadata.keys())}")
+                else:
+                    self.logging.info("score_result.metadata is None/empty")
 
             # Validate all required fields are present and not None
             required_fields = ['evaluationId', 'itemId', 'accountId', 'scorecardId', 'value', 'metadata', 'code']
@@ -1694,6 +1728,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                     trace
                     code
                     type
+                    feedbackItemId
                 }
             }
             """
