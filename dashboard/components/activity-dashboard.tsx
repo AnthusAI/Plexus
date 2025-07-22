@@ -293,6 +293,9 @@ function transformTaskToActivity(task: ProcessedTask) {
           metadata: any;
           explanation: string | null;
           itemId: string | null;
+          feedbackItem?: {
+            editCommentValue: string | null;
+          } | null;
         }) => ({
           id: result.id,
           value: result.value,
@@ -300,7 +303,8 @@ function transformTaskToActivity(task: ProcessedTask) {
           metadata: result.metadata,
           explanation: result.explanation,
           itemId: result.itemId,
-          trace: null
+          trace: null,
+          feedbackItem: result.feedbackItem || null
         })) || [],
         task: {
           id: task.id,

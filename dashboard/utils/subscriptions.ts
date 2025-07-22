@@ -244,6 +244,14 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
                       trace
                       itemId
                       createdAt
+                      feedbackItem {
+                        id
+                        editCommentValue
+                        initialAnswerValue
+                        finalAnswerValue
+                        editorName
+                        editedAt
+                      }
                       scoringJob {
                         id
                         status
@@ -618,21 +626,29 @@ export function observeScoreResults(evaluationId: string) {
               evaluationId,
               limit: 10000,
               nextToken,
-              fields: [
-                'id',
-                'value',
-                'confidence',
-                'metadata',
-                'explanation',
-                'trace',
-                'correct',
-                'itemId',
-                'accountId',
-                'scoringJobId',
-                'evaluationId',
-                'scorecardId',
-                'createdAt'
-              ]
+              selectionSet: `
+                id
+                value
+                confidence
+                metadata
+                explanation
+                trace
+                correct
+                itemId
+                accountId
+                scoringJobId
+                evaluationId
+                scorecardId
+                createdAt
+                feedbackItem {
+                  id
+                  editCommentValue
+                  initialAnswerValue
+                  finalAnswerValue
+                  editorName
+                  editedAt
+                }
+              `
             }) as AmplifyListResult<Schema['ScoreResult']['type']>;
             
             if (response?.data) {

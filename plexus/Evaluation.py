@@ -718,6 +718,12 @@ class Evaluation:
             logging.warning("'Session ID' column not found. Using content_id as Session ID.")
             df['Session ID'] = df['content_id']
 
+        # Optional: 'feedback_item_id' column can be included to link score results to existing feedback items
+        if 'feedback_item_id' in df.columns:
+            logging.info("Found 'feedback_item_id' column - will link score results to existing feedback items")
+        else:
+            logging.info("No 'feedback_item_id' column found - score results will be created without feedback item links")
+
         fine_tuning_ids = set()
         fine_tuning_ids_file = f"tuning/{self.scorecard_name}/{self.subset_of_score_names[0]}/training_ids.txt"
         original_shape = df.shape
@@ -1455,6 +1461,15 @@ Total cost:       ${expenses['total_cost']:.6f}
                 form_id = columns.get('form_id', '')
                 metadata_string = columns.get('metadata', {})
                 
+                # Get feedback_item_id from the dataset if available
+                feedback_item_id = row.get('feedback_item_id', None)
+                
+                # Debug logging for feedback_item_id
+                if feedback_item_id:
+                    logging.info(f"Found feedback_item_id in dataset: {feedback_item_id}")
+                else:
+                    logging.debug(f"No feedback_item_id found in row. Available columns: {list(row.index) if hasattr(row, 'index') else 'N/A'}")
+                
                 # Initialize human_labels dictionary
                 human_labels = {}
                 
@@ -1574,7 +1589,8 @@ Total cost:       ${expenses['total_cost']:.6f}
                             await self._create_score_result(
                                 score_result=score_result,
                                 content_id=content_id,
-                                result=result
+                                result=result,
+                                feedback_item_id=feedback_item_id
                             )
 
                     except Exception as e:
@@ -1603,7 +1619,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                 logging.info(f"Attempt {attempt + 1} failed with error: {e}. Retrying in {delay} seconds...")
                 await asyncio.sleep(delay)
 
-    async def _create_score_result(self, *, score_result, content_id, result):
+    async def _create_score_result(self, *, score_result, content_id, result, feedback_item_id=None):
         """Create a score result in the dashboard."""
         try:
             # Log the raw inputs
@@ -1612,6 +1628,7 @@ Total cost:       ${expenses['total_cost']:.6f}
             logging.info(f"score_result metadata: {truncate_dict_strings_inner(score_result.metadata)}")
             logging.info(f"content_id: {content_id}")
             logging.info(f"result dict: {truncate_dict_strings_inner(result)}")
+            logging.info(f"feedback_item_id: {feedback_item_id}")
 
             # Validate required attributes are available
             if not hasattr(self, 'experiment_id') or not self.experiment_id:
@@ -1658,6 +1675,11 @@ Total cost:       ${expenses['total_cost']:.6f}
                 'code': '200',  # HTTP response code for successful evaluation
                 'type': 'evaluation'  # Mark this as an evaluation score result
             }
+            
+            # Add feedback item ID if provided from the dataset
+            if feedback_item_id:
+                data['feedbackItemId'] = feedback_item_id
+                logging.info(f"Linking score result to feedback item from dataset: {feedback_item_id}")
 
             # Add trace data if available
             logging.info("Checking for trace data to add to score result...")            
@@ -1694,6 +1716,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                     trace
                     code
                     type
+                    feedbackItemId
                 }
             }
             """
@@ -1836,6 +1859,51 @@ Total cost:       ${expenses['total_cost']:.6f}
             logging.error(f"Error creating/upserting item: {e}")
             logging.error("Error details:", exc_info=True)
             # We'll continue with score result creation even if item creation fails
+
+    # DEPRECATED: This method is no longer used. feedback_item_id now comes directly from the dataset.
+    async def _find_feedback_item(self, *, content_id: str, score_name: str) -> str | None:
+        """Find the feedback item associated with this content_id and score."""
+        try:
+            # Query for feedback items that match the item and score
+            query = """
+            query FindFeedbackItem($accountId: String!, $scorecardId: String!, $scoreId: String!, $itemId: String!) {
+                listFeedbackItems(
+                    filter: {
+                        accountId: { eq: $accountId }
+                        scorecardId: { eq: $scorecardId }
+                        scoreId: { eq: $scoreId }
+                        itemId: { eq: $itemId }
+                    }
+                    limit: 1
+                ) {
+                    items {
+                        id
+                        editCommentValue
+                    }
+                }
+            }
+            """
+            
+            variables = {
+                "accountId": self.account_id,
+                "scorecardId": self.scorecard_id,
+                "scoreId": self.score_id,
+                "itemId": content_id
+            }
+            
+            response = await asyncio.to_thread(self.dashboard_client.execute, query, variables)
+            
+            if response.get('listFeedbackItems', {}).get('items'):
+                feedback_item = response['listFeedbackItems']['items'][0]
+                logging.info(f"Found feedback item for content_id {content_id}: {feedback_item['id']}")
+                return feedback_item['id']
+            else:
+                logging.debug(f"No feedback item found for content_id {content_id} and score {score_name}")
+                return None
+                
+        except Exception as e:
+            logging.warning(f"Error finding feedback item for content_id {content_id}: {e}")
+            return None
 
     async def cleanup(self):
         """Clean up all resources"""

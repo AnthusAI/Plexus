@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { X, Microscope, Scale, MessageSquareMore, UnfoldVertical, Text, View, ChevronDown, ChevronUp, Ellipsis } from 'lucide-react'
+import { X, Microscope, Scale, MessageSquareMore, MessageCircleMore, UnfoldVertical, Text, View, ChevronDown, ChevronUp, Ellipsis } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { CardButton } from '@/components/CardButton'
@@ -20,6 +20,9 @@ export interface ScoreResultData {
   }
   trace?: any | null
   itemId: string | null
+  feedbackItem?: {
+    editCommentValue: string | null
+  } | null
 }
 
 export interface ScoreResultComponentProps {
@@ -145,6 +148,20 @@ export function ScoreResultComponent({
                 isDetail={true}
               />
             </div>
+
+            {result.feedbackItem?.editCommentValue && (
+              <div>
+                <div className="flex items-center mb-1">
+                  <MessageCircleMore className="w-4 h-4 mr-1 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">Feedback edit comment</p>
+                </div>
+                <div className="bg-background rounded-md p-3">
+                  <p className="text-sm whitespace-pre-wrap text-foreground">
+                    {result.feedbackItem.editCommentValue}
+                  </p>
+                </div>
+              </div>
+            )}
 
             {result.explanation && (
               <div>
