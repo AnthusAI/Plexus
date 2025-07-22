@@ -67,7 +67,7 @@ def format_feedback_item_yaml(item: "FeedbackItem", include_metadata: bool = Fal
     """Format a FeedbackItem as a dictionary for YAML output."""
     result = {
         'item_id': getattr(item, "itemId", None),
-        'external_id': getattr(getattr(item, "item", None), "externalId", None) if getattr(item, "item", None) else None,
+        'external_id': FeedbackService._extract_preferred_id(item),
         'initial_value': getattr(item, "initialAnswerValue", None),
         'final_value': getattr(item, "finalAnswerValue", None),
         'initial_explanation': getattr(item, "initialCommentValue", None),
