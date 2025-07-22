@@ -3489,9 +3489,21 @@ async def plexus_predict(
                     try:
                         # Import the CLI prediction components  
                         from plexus.cli.PredictionCommands import select_sample, predict_score, get_scorecard_class
+                        from plexus.Registries import scorecard_registry
+                        from plexus.Scorecard import Scorecard
                         
-                        # Get the scorecard class (same as CLI does)
+                        # Force fresh reload of YAML files by clearing registry cache
+                        logger.info("Clearing scorecard registry to ensure fresh YAML reload...")
+                        scorecard_registry._classes_by_id.clear()
+                        scorecard_registry._classes_by_key.clear()
+                        scorecard_registry._classes_by_name.clear()
+                        scorecard_registry._properties_by_id.clear()
+                        scorecard_registry._properties_by_key.clear()
+                        scorecard_registry._properties_by_name.clear()
+                        
+                        # Get the scorecard class (this will now force reload from YAML files)
                         scorecard_class = get_scorecard_class(scorecard_name)
+                        logger.info(f"Loaded fresh scorecard configuration from YAML files for '{scorecard_name}'")
                         
                         # Get the sample data for the item (same as CLI does)
                         sample_row, used_item_id = select_sample(
@@ -3507,28 +3519,9 @@ async def plexus_predict(
                         # Process the results same as CLI does
                         if prediction_results:
                             if isinstance(prediction_results, list):
-                                prediction = prediction_results[0] if prediction_results else None
-                                if prediction:
-                                    prediction_result = {
-                                        "item_id": target_id,
-                                        "scores": [
-                                            {
-                                                "name": score_name,
-                                                "value": prediction.value,
-                                                "explanation": prediction.explanation,
-                                                "cost": costs
-                                            }
-                                        ]
-                                    }
-                                    # Extract trace information if available
-                                    if hasattr(prediction, 'trace') and include_trace:
-                                        prediction_result["scores"][0]["trace"] = prediction.trace
-                                    elif hasattr(prediction, 'metadata') and prediction.metadata and include_trace:
-                                        prediction_result["scores"][0]["trace"] = prediction.metadata.get('trace')
-                                else:
-                                    raise Exception("No prediction result returned")
-                            else:
-                                # Handle Score.Result object
+                                prediction_results = prediction_results[0]  # Take first result
+                            
+                            if prediction_results:
                                 if hasattr(prediction_results, 'value') and prediction_results.value is not None:
                                     explanation = (
                                         getattr(prediction_results, 'explanation', None) or

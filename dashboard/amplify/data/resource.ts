@@ -30,7 +30,7 @@ type ItemIndexFields = "name" | "description" | "accountId" | "evaluationId" | "
 type ScoringJobIndexFields = "accountId" | "scorecardId" | "itemId" | "status" | 
     "scoreId" | "evaluationId" | "startedAt" | "completedAt" | "errorMessage" | "updatedAt" | "createdAt";
 type ScoreResultIndexFields = "accountId" | "scorecardId" | "itemId" | 
-    "scoringJobId" | "evaluationId" | "scoreVersionId" | "updatedAt" | "createdAt" | "scoreId" | "code" | "type";
+    "scoringJobId" | "evaluationId" | "scoreVersionId" | "updatedAt" | "createdAt" | "scoreId" | "code" | "type" | "feedbackItemId";
 type BatchJobScoringJobIndexFields = "batchJobId" | "scoringJobId";
 type TaskIndexFields = "accountId" | "type" | "status" | "target" | 
     "currentStageId" | "updatedAt" | "scorecardId" | "scoreId";
@@ -426,6 +426,8 @@ const schema = a.schema({
             code: a.string(), // HTTP response code (e.g., "200", "404", "500")
             updatedAt: a.datetime(),
             createdAt: a.datetime(),
+            feedbackItemId: a.string(),
+            feedbackItem: a.belongsTo('FeedbackItem', 'feedbackItemId'),
         })
         .authorization((allow) => [
             allow.publicApiKey(),
@@ -676,6 +678,7 @@ const schema = a.schema({
             isAgreement: a.boolean(),
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
+            scoreResults: a.hasMany('ScoreResult', 'feedbackItemId'),
         })
         .authorization((allow) => [
             allow.publicApiKey(),
