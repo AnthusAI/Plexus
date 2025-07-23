@@ -494,7 +494,7 @@ export class GeneralizedMetricsAggregator {
       // Query by specific scorecard and score
       query = `
         query GetFeedbackItemsForMetrics($accountId: String!, $scorecardId: String!, $scoreId: String!, $startTime: String!, $endTime: String!) {
-          listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt(
+          listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt(
             accountId: $accountId,
             scorecardIdScoreIdUpdatedAt: {
               scorecardId: { eq: $scorecardId },
