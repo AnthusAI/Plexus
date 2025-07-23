@@ -234,6 +234,17 @@ class Scorecard:
         if (score_class is not None):
             logging.info(f"Found score class for: {score}")
 
+            # Check if score is disabled - if isDisabled is True, return 403
+            is_disabled = score_configuration.get('isDisabled')
+            if is_disabled is True:
+                logging.info(f"Score '{score}' is disabled")
+                return [Score.Result(
+                    parameters=Score.Parameters(name=score),
+                    value="DISABLED",
+                    error=f"Score '{score}' is disabled",
+                    code="403"
+                )]
+
             score_configuration.update({
                 'scorecard_name': self.name,
                 'score_name': score
@@ -422,6 +433,26 @@ class Scorecard:
                     raise ValueError(f"No score class found for {score_name}")
                     
                 score_configuration = self.score_registry.get_properties(score_name)
+                
+                # Check if score is disabled - if isDisabled is True, return 403
+                is_disabled = score_configuration.get('isDisabled')
+                if is_disabled is True:
+                    logging.info(f"Score '{score_name}' is disabled")
+                    result = Score.Result(
+                        parameters=Score.Parameters(name=score_name),
+                        value="DISABLED",
+                        error=f"Score '{score_name}' is disabled",
+                        code="403"
+                    )
+                    results_by_score_id[score_id] = result
+                    results.append({
+                        'id': score_id,
+                        'name': score_name,
+                        'result': result
+                    })
+                    logging.info(f"Score {score_name} is disabled - returning 403")
+                    return
+                    
                 score_configuration.update({
                     'scorecard_name': self.name,
                     'score_name': score_name

@@ -499,10 +499,6 @@ class Item(BaseModel):
         # Import here to avoid circular import
         from .identifier import Identifier
         
-        if debug:
-            logger = logging.getLogger(__name__)
-            logger.info(f"[IDENTIFIER LOOKUP] Starting lookup with identifiers: {identifiers}")
-        
         # Extract identifier values for the lookup strategy
         form_id_value = None
         report_id_value = None
@@ -529,40 +525,23 @@ class Item(BaseModel):
         
         # STEP 1: Try formId first (most specific identifier)
         if form_id_value:
-            if debug:
-                logger.info(f"[IDENTIFIER LOOKUP] Primary lookup by formId: {form_id_value}")
-            
-            try:
-                identifier = Identifier.find_by_value(form_id_value, account_id, client)
-                if identifier:
-                    if debug:
-                        logger.info(f"[IDENTIFIER LOOKUP] Found formId identifier: itemId={identifier.itemId}")
-                    
-                    # Validate and get the associated Item
-                    item_id = identifier.itemId
-                    if isinstance(item_id, str) and item_id.strip():
-                        try:
-                            item = cls.get_by_id(item_id, client)
-                            if item:
-                                if debug:
-                                    logger.info(f"[IDENTIFIER LOOKUP] FormId match found: {item.id}")
-                                return {
-                                    'id': item.id,
-                                    'externalId': item.externalId,
-                                    'description': item.description,
-                                    'accountId': item.accountId,
-                                    'identifiers': item.identifiers,
-                                    'text': item.text
-                                }
-                        except Exception as get_by_id_error:
-                            if debug:
-                                logger.error(f"[IDENTIFIER LOOKUP] get_by_id failed for itemId={identifier.itemId}: {get_by_id_error}")
+            identifier = Identifier.find_by_value(form_id_value, account_id, client)
+            if identifier:
                 
-                if debug:
-                    logger.info(f"[IDENTIFIER LOOKUP] FormId {form_id_value} not found, proceeding to report-level lookup")
-            except Exception as e:
-                if debug:
-                    logger.error(f"[IDENTIFIER LOOKUP] Error in formId lookup: {e}")
+                # Validate and get the associated Item
+                item_id = identifier.itemId
+                if isinstance(item_id, str) and item_id.strip():
+                    item = cls.get_by_id(item_id, client)
+                    if item:
+                        return {
+                            'id': item.id,
+                            'externalId': item.externalId,
+                            'description': item.description,
+                            'accountId': item.accountId,
+                            'identifiers': item.identifiers,
+                            'text': item.text
+                        }
+                
         
         # STEP 2: Try reportId/sessionId lookup (for multi-form reports)
         # This handles the case where one report has multiple forms that should share the same Item
@@ -575,49 +554,29 @@ class Item(BaseModel):
             if session_id_value:
                 fallback_values_to_try.append(session_id_value)
             
-            if debug:
-                logger.info(f"[IDENTIFIER LOOKUP] Report-level lookup with values: {fallback_values_to_try}")
-            
-            try:
-                for identifier_value in fallback_values_to_try:
-                    if debug:
-                        logger.info(f"[IDENTIFIER LOOKUP] Report-level searching for: {identifier_value}")
-                    
-                    identifier = Identifier.find_by_value(identifier_value, account_id, client)
-                    if identifier:
-                        if debug:
-                            logger.info(f"[IDENTIFIER LOOKUP] Found report-level identifier: itemId={identifier.itemId}")
-                        
-                        # Validate and get the associated Item
-                        item_id = identifier.itemId
-                        if isinstance(item_id, str) and item_id.strip():
-                            try:
-                                item = cls.get_by_id(item_id, client)
-                                if item:
-                                    # CRITICAL: Validate that this Item should accept the new formId
-                                    # Check if the reportId/sessionId actually matches
-                                    if cls._validate_item_relationship(item, identifiers, debug):
-                                        if debug:
-                                            logger.info(f"[IDENTIFIER LOOKUP] Valid report-level match found: {item.id}")
-                                        return {
-                                            'id': item.id,
-                                            'externalId': item.externalId,
-                                            'description': item.description,
-                                            'accountId': item.accountId,
-                                            'identifiers': item.identifiers,
-                                            'text': item.text
-                                        }
-                                    else:
-                                        if debug:
-                                            logger.warning(f"[IDENTIFIER LOOKUP] Item {item.id} failed relationship validation - possible cross-contamination")
-                                        continue
-                            except Exception as get_by_id_error:
-                                if debug:
-                                    logger.error(f"[IDENTIFIER LOOKUP] get_by_id failed for itemId={identifier.itemId}: {get_by_id_error}")
+            for identifier_value in fallback_values_to_try:
                 
-            except Exception as e:
-                if debug:
-                    logger.error(f"[IDENTIFIER LOOKUP] Error in report-level lookup: {e}")
+                identifier = Identifier.find_by_value(identifier_value, account_id, client)
+                if identifier:
+                    
+                    # Validate and get the associated Item
+                    item_id = identifier.itemId
+                    if isinstance(item_id, str) and item_id.strip():
+                        item = cls.get_by_id(item_id, client)
+                        if item:
+                            # CRITICAL: Validate that this Item should accept the new formId
+                            # Check if the reportId/sessionId actually matches
+                            if cls._validate_item_relationship(item, identifiers, debug):
+                                return {
+                                    'id': item.id,
+                                    'externalId': item.externalId,
+                                    'description': item.description,
+                                    'accountId': item.accountId,
+                                    'identifiers': item.identifiers,
+                                    'text': item.text
+                                }
+                            else:
+                                continue
         
         # STEP 3: Try other identifiers as final fallback (for backward compatibility)
         other_values_to_try = []
@@ -632,43 +591,23 @@ class Item(BaseModel):
                     other_values_to_try.append(str(identifiers[stored_name]))
         
         if other_values_to_try:
-            if debug:
-                logger.info(f"[IDENTIFIER LOOKUP] Final fallback lookup with values: {other_values_to_try}")
-            
-            try:
-                for identifier_value in other_values_to_try:
-                    if debug:
-                        logger.info(f"[IDENTIFIER LOOKUP] Fallback searching for: {identifier_value}")
+            for identifier_value in other_values_to_try:
+                
+                identifier = Identifier.find_by_value(identifier_value, account_id, client)
+                if identifier:
                     
-                    identifier = Identifier.find_by_value(identifier_value, account_id, client)
-                    if identifier:
-                        if debug:
-                            logger.info(f"[IDENTIFIER LOOKUP] Found fallback identifier: itemId={identifier.itemId}")
-                        
-                        item_id = identifier.itemId
-                        if isinstance(item_id, str) and item_id.strip():
-                            try:
-                                item = cls.get_by_id(item_id, client)
-                                if item:
-                                    if debug:
-                                        logger.info(f"[IDENTIFIER LOOKUP] Fallback match found: {item.id}")
-                                    return {
-                                        'id': item.id,
-                                        'externalId': item.externalId,
-                                        'description': item.description,
-                                        'accountId': item.accountId,
-                                        'identifiers': item.identifiers,
-                                        'text': item.text
-                                    }
-                            except Exception as get_by_id_error:
-                                if debug:
-                                    logger.error(f"[IDENTIFIER LOOKUP] get_by_id failed for itemId={identifier.itemId}: {get_by_id_error}")
-            except Exception as e:
-                if debug:
-                    logger.error(f"[IDENTIFIER LOOKUP] Error in fallback lookup: {e}")
-        
-        if debug:
-            logger.info(f"[IDENTIFIER LOOKUP] No Item found for any identifier values")
+                    item_id = identifier.itemId
+                    if isinstance(item_id, str) and item_id.strip():
+                        item = cls.get_by_id(item_id, client)
+                        if item:
+                            return {
+                                'id': item.id,
+                                'externalId': item.externalId,
+                                'description': item.description,
+                                'accountId': item.accountId,
+                                'identifiers': item.identifiers,
+                                'text': item.text
+                            }
         return None
     
     @classmethod
