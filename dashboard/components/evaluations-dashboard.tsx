@@ -223,6 +223,14 @@ const LIST_EVALUATIONS = `
             trace
             itemId
             createdAt
+            feedbackItem {
+              id
+              editCommentValue
+              initialAnswerValue
+              finalAnswerValue
+              editorName
+              editedAt
+            }
           }
         }
       }
