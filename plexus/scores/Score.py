@@ -236,6 +236,7 @@ class Score(ABC, mlflow.pyfunc.PythonModel,
         confidence:  Optional[float] = None
         metadata:   dict = {}
         error:      Optional[str] = None
+        code:       Optional[str] = None
 
         def __eq__(self, other):
             if isinstance(other, Score.Result):
