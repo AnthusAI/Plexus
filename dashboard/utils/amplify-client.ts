@@ -167,6 +167,7 @@ export const amplifyClient = {
       version?: string
       aiProvider?: string
       aiModel?: string
+      isDisabled?: boolean
     }) => {
       const response = await graphqlRequest<{ updateScore: Schema['Score']['type'] }>(`
         mutation UpdateScore($input: UpdateScoreInput!) {
@@ -182,6 +183,7 @@ export const amplifyClient = {
             version
             aiProvider
             aiModel
+            isDisabled
             createdAt
             updatedAt
           }

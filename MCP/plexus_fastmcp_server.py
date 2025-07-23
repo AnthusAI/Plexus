@@ -2040,6 +2040,7 @@ async def plexus_score_info(
                                     description
                                     type
                                     championVersionId
+                                    isDisabled
                                 }}
                             }}
                         }}
@@ -2093,6 +2094,7 @@ async def plexus_score_info(
                                         description
                                         type
                                         championVersionId
+                                        isDisabled
                                     }}
                                 }}
                             }}
@@ -2145,6 +2147,7 @@ async def plexus_score_info(
                 "description": score.get('description'),
                 "type": score.get('type'),
                 "championVersionId": score.get('championVersionId'),
+                "isDisabled": score.get('isDisabled', False),
                 "location": {
                     "scorecardId": scorecard_id,
                     "scorecardName": scorecard['name'],
@@ -2259,6 +2262,7 @@ async def plexus_score_info(
                     "scoreName": score['name'],
                     "scorecardName": scorecard['name'],
                     "sectionName": section['name'],
+                    "isDisabled": score.get('isDisabled', False),
                     "dashboardUrl": get_plexus_url(f"lab/scorecards/{scorecard['id']}/scores/{score['id']}")
                 })
             
@@ -3417,6 +3421,7 @@ async def plexus_predict(
                                 key
                                 externalId
                                 championVersionId
+                                isDisabled
                             }}
                         }}
                     }}

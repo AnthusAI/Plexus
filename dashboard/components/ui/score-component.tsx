@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Checkbox } from '@/components/ui/checkbox'
 import { generateClient } from 'aws-amplify/api'
 import { toast } from 'sonner'
 import { ScoreVersionHistory } from './score-version-history'
@@ -42,6 +43,7 @@ export interface ScoreData {
   icon?: React.ReactNode
   configuration?: string // YAML configuration string
   championVersionId?: string // ID of the champion version
+  isDisabled?: boolean // Whether the score is disabled
 }
 
 interface ScoreVersion {
@@ -337,7 +339,7 @@ const DetailContent = React.memo(({
   }, [currentConfig, score])
 
   // Handle form field changes
-  const handleFormChange = (field: string, value: string) => {
+  const handleFormChange = (field: string, value: string | boolean) => {
     
     // Set editing flag to prevent useEffect from overriding our changes
     setIsEditing(true);
@@ -635,6 +637,21 @@ const DetailContent = React.memo(({
                 placeholder="External ID"
               />
             </div>
+            <div className="flex items-center space-x-2 pt-2">
+              <Checkbox
+                id="isDisabled"
+                checked={parsedConfig.isDisabled || false}
+                onCheckedChange={(checked) => 
+                  handleFormChange('isDisabled', checked as boolean)
+                }
+              />
+              <label
+                htmlFor="isDisabled"
+                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+              >
+                Disabled
+              </label>
+            </div>
             <textarea
               value={versionNote}
               onChange={handleNoteChange}
@@ -848,7 +865,8 @@ const DetailContent = React.memo(({
                     externalId: externalIdValue !== undefined ? String(externalIdValue) : undefined,
                     key: parsed.key,
                     description: parsed.description,
-                    configuration: value // Store the original YAML string
+                    configuration: value, // Store the original YAML string
+                    isDisabled: parsed.isDisabled
                   });
                 } catch (error) {
                   // Handle cancellation errors gracefully
