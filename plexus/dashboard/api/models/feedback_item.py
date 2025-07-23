@@ -198,7 +198,7 @@ class FeedbackItem(BaseModel):
             if index_name == "byAccountScorecardScoreUpdatedAt":
                 if not account_id:
                     raise ValueError("account_id is required when using byAccountScorecardScoreUpdatedAt index")
-                query_name = "listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt"
+                query_name = "listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt"
             else:
                 # Add support for other indexes as needed
                 logger.warning(f"Unknown index name: {index_name}, falling back to standard query")

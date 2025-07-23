@@ -582,6 +582,7 @@ export default function EvaluationsDashboard({
   // Use the new hook for evaluation data
   const { evaluations, isLoading, error, refetch } = useEvaluationData({ 
     accountId,
+    limit: 3, // Temporarily limit to 3 evaluations for performance
     selectedScorecard,
     selectedScore
   });
@@ -874,9 +875,10 @@ export default function EvaluationsDashboard({
             >
             <div className="@container space-y-3 overflow-visible">
               {/* EvaluationTasksGauges at the top - only show when not in mobile selected evaluation view */}
-              {!(selectedEvaluationId && isNarrowViewport) && (
+              {/* Temporarily disabled for performance - loading too much data */}
+              {/* {!(selectedEvaluationId && isNarrowViewport) && (
                 <EvaluationTasksGauges />
-              )}
+              )} */}
               
               {filteredEvaluations.length === 0 ? (
                 <div className="text-sm text-muted-foreground">No evaluations found</div>

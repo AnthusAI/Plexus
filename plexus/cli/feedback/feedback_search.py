@@ -106,7 +106,7 @@ async def fetch_feedback_items_with_gsi(client, account_id: str, scorecard_id: s
             $nextToken: String,
             $sortDirection: ModelSortDirection
         ) {
-            listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt(
+            listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt(
                 accountId: $accountId,
                 scorecardIdScoreIdUpdatedAt: $composite_sk_condition,
                 limit: $limit,
@@ -178,8 +178,8 @@ async def fetch_feedback_items_with_gsi(client, account_id: str, scorecard_id: s
                     # Fall back to the original simple filter approach if GSI fails
                     return await fetch_feedback_items_fallback(client, account_id, scorecard_id, score_id, start_date, end_date)
                 
-                if response and 'listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt' in response:
-                    result = response['listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt']
+                if response and 'listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt' in response:
+                    result = response['listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt']
                     item_dicts = result.get('items', [])
                     
                     # Convert to FeedbackItem objects

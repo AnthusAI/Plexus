@@ -605,7 +605,7 @@ class FeedbackService:
                 $nextToken: String,
                 $sortDirection: ModelSortDirection
             ) {
-                listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt(
+                listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt(
                     accountId: $accountId,
                     scorecardIdScoreIdUpdatedAt: $composite_sk_condition,
                     limit: $limit,
@@ -679,7 +679,7 @@ class FeedbackService:
                     # Fall back to the standard method if GSI fails
                     raise Exception(f"GSI query failed: {response['errors']}")
                 
-                result_data = response.get('listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt', {})
+                result_data = response.get('listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt', {})
                 items_data = result_data.get('items', [])
                 
                 # Convert to FeedbackItem objects
