@@ -310,6 +310,61 @@ data:
   balance: false  # Whether to balance positive/negative examples
 ```
 
+## Validation
+
+Validation rules throw exceptions if score results don't match expected formats.
+
+```yaml
+validation:
+  value:
+    valid_classes: ["Yes", "No", "Maybe"]           # Must be one of these (case-insensitive by default)
+    patterns: ["^NQ - (?!Other$).*"]                # Must match regex (NQ- anything except "Other")
+    minimum_length: 1                               # Min string length
+    maximum_length: 50                              # Max string length
+    case_sensitive: false                           # Case-insensitive comparison (default: false)
+  explanation:
+    minimum_length: 10
+    patterns: [".*evidence.*", ".*found.*"]         # Must contain "evidence" or "found"
+```
+
+**All constraints must pass (AND logic). Validation runs automatically in `predict()`.**
+
+### Case Sensitivity
+
+By default, `valid_classes` comparisons are **case-insensitive** for convenience:
+
+```yaml
+validation:
+  value:
+    valid_classes: ["Yes", "No"]  # Matches "yes", "YES", "Yes", "no", "NO", "No"
+```
+
+Enable case-sensitive comparison when exact case matters:
+
+```yaml
+validation:
+  value:
+    valid_classes: ["Yes", "No"]
+    case_sensitive: true  # Only matches exact case: "Yes", "No"
+```
+
+```yaml
+# Simple cases
+validation:
+  value:
+    valid_classes: ["Yes", "No"]
+
+validation:
+  value:
+    patterns: ["^Critical - .*"]
+
+# Mixed validation - value must be in list AND match pattern
+validation:
+  value:
+    valid_classes: ["Yes", "No", "NQ - Pricing"] 
+    patterns: ["^(Yes|No)$", "^NQ - (?!Other$).*"]
+```
+
 ## Best Practices
 
 1. Use modern `Classifier` over legacy classifier types
@@ -317,4 +372,5 @@ data:
 3. Use descriptive node names and field mappings
 4. Leverage slicers for complex transcript analysis
 5. Include clear system and user prompts
-6. Avoid redundant processing by sharing results between nodes 
+6. Avoid redundant processing by sharing results between nodes
+7. Add validation constraints to ensure consistent score outputs 
