@@ -670,7 +670,8 @@ export function useEvaluationData({
                           },
                           itemId: item.itemId ?? parsedMetadata.item_id?.toString() ?? null,
                           createdAt: item.createdAt || new Date().toISOString(),
-                          trace: item.trace ?? null
+                          trace: item.trace ?? null,
+                          feedbackItem: item.feedbackItem ?? null  // Preserve feedbackItem relationship
                         };
 
                         console.log('Transformed score result in useEvaluationData:', {

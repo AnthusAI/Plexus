@@ -33,10 +33,10 @@ export const handler: Schema["getResourceByShareToken"]["functionHandler"] = asy
       sha256: Sha256
     });
     
-    // Get ShareLink by token
+    // Get ShareLink by token using the dedicated GSI for better reliability
     const shareLinkQuery = `
       query GetShareLinkByToken($token: String!) {
-        listShareLinks(filter: { token: { eq: $token } }) {
+        listShareLinkByToken(token: $token) {
           items {
             id
             token
@@ -84,7 +84,7 @@ export const handler: Schema["getResourceByShareToken"]["functionHandler"] = asy
     }
     
     // Get the ShareLink from the response
-    const shareLinks = shareLinkResponse.data?.listShareLinks?.items || [];
+    const shareLinks = shareLinkResponse.data?.listShareLinkByToken?.items || [];
     
     if (shareLinks.length === 0) {
       throw new Error('Share link not found');

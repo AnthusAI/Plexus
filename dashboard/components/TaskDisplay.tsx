@@ -227,7 +227,8 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
         },
         trace: result.trace ?? scoreResult?.trace ?? null,
         itemId: result.itemId ?? parsedMetadata.item_id?.toString() ?? null,
-        createdAt: result.createdAt
+        createdAt: result.createdAt,
+        feedbackItem: result.feedbackItem ?? null  // Preserve feedbackItem relationship
       };
 
       console.log('Transformed score result in TaskDisplay:', {
