@@ -43,11 +43,11 @@ def test_load_command_success(mock_resolve, runner):
         
         # Mock all the external dependencies
         with patch('plexus.cli.DatasetCommands.PlexusDashboardClient') as mock_client_class:
-            mock_client = AsyncMock()
+            mock_client = MagicMock()
             mock_client_class.return_value = mock_client
             
-            # Mock the GraphQL responses
-            mock_client.execute = AsyncMock(side_effect=[
+            # Mock the GraphQL responses - execute is synchronous, not async
+            mock_client.execute = MagicMock(side_effect=[
                 # Mock response for score query
                 {'getScore': {'id': 'score-123', 'name': 'Test Score', 'championVersionId': 'score-version-123'}},
                 # Mock response for createDataSet
@@ -90,7 +90,7 @@ def test_load_command_source_not_found(mock_resolve, mock_create_client, runner)
     """Test when the data source cannot be resolved."""
     
     # Arrange
-    mock_client = AsyncMock()
+    mock_client = MagicMock()
     mock_create_client.return_value = mock_client
     mock_resolve.return_value = None
     

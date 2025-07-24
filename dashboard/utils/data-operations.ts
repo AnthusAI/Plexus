@@ -81,6 +81,8 @@ export type AmplifyTask = {
   errorDetails?: any;
   stdout?: string | null;
   stderr?: string | null;
+  output?: string | null; // Universal Code YAML output
+  attachedFiles?: string[] | null; // Array of S3 file keys for attachments
   currentStageId?: string | null;
   stages?: LazyLoader<{
     data?: {
@@ -126,6 +128,8 @@ export type ProcessedTask = {
   errorDetails?: string;
   stdout?: string;
   stderr?: string;
+  output?: string; // Universal Code YAML output
+  attachedFiles?: string[]; // Array of S3 file keys for attachments
   currentStageId?: string;
   stages: ProcessedTaskStage[];
   dispatchStatus?: 'DISPATCHED';
@@ -318,6 +322,14 @@ const EVALUATION_FIELDS = `
       trace
       itemId
       createdAt
+      feedbackItem {
+        id
+        editCommentValue
+        initialAnswerValue
+        finalAnswerValue
+        editorName
+        editedAt
+      }
       scoringJob {
         id
         status
@@ -981,7 +993,8 @@ export function transformEvaluation(evaluation: BaseEvaluation): ProcessedEvalua
     explanation: result.explanation ?? null,
     trace: result.trace ?? null,
     itemId: result.itemId ?? null,
-    createdAt: result.createdAt || new Date().toISOString()
+    createdAt: result.createdAt || new Date().toISOString(),
+    feedbackItem: result.feedbackItem ?? null  // Preserve feedbackItem relationship
   }));
 
   // Transform the evaluation into the format expected by components

@@ -22,6 +22,7 @@ import EvaluationTask, { type EvaluationTaskProps, type EvaluationTaskData } fro
 import { observeRecentTasks } from '@/utils/subscriptions'
 import type { AmplifyTask, ProcessedTask } from '@/utils/data-operations'
 import { ActivityDashboardSkeleton } from '@/components/loading-skeleton'
+import { TasksGauges } from './TasksGauges'
 
 type TaskStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
 
@@ -52,6 +53,10 @@ const LIST_TASKS = `
         estimatedCompletionAt
         errorMessage
         errorDetails
+        stdout
+        stderr
+        output
+        attachedFiles
         currentStageId
         scorecardId
         scoreId
@@ -101,6 +106,7 @@ const LIST_TASKS = `
           isDatasetClassDistributionBalanced
           predictedClassDistribution
           isPredictedClassDistributionBalanced
+          universalCode
           scoreResults {
             items {
               id
@@ -287,6 +293,9 @@ function transformTaskToActivity(task: ProcessedTask) {
           metadata: any;
           explanation: string | null;
           itemId: string | null;
+          feedbackItem?: {
+            editCommentValue: string | null;
+          } | null;
         }) => ({
           id: result.id,
           value: result.value,
@@ -294,7 +303,8 @@ function transformTaskToActivity(task: ProcessedTask) {
           metadata: result.metadata,
           explanation: result.explanation,
           itemId: result.itemId,
-          trace: null
+          trace: null,
+          feedbackItem: result.feedbackItem || null
         })) || [],
         task: {
           id: task.id,
@@ -336,13 +346,31 @@ function transformTaskToActivity(task: ProcessedTask) {
     }
   }
 
-  const result: EvaluationTaskProps['task'] = {
+
+  // Debug logging to see task data after transformation
+  console.log('transformTaskToActivity - Task data after processing:', {
     id: task.id,
-    type: String((metadata as any)?.type || task.type),
+    type: task.type,
+    output: task.output ? `${task.output.substring(0, 100)}...` : null,
+    outputLength: task.output?.length,
+    attachedFiles: task.attachedFiles,
+    stdout: task.stdout ? `${task.stdout.substring(0, 50)}...` : null,
+    stderr: task.stderr ? `${task.stderr.substring(0, 50)}...` : null,
+    command: task.command
+  });
+
+  const result = {
+    id: task.id,
+    type: 'Task',
     scorecard,
     score,
     time: timeStr,
     description: task.command,
+    command: task.command,
+    output: task.output,
+    attachedFiles: task.attachedFiles,
+    stdout: task.stdout,
+    stderr: task.stderr,
     data: evaluationData || {
       id: task.id,
       title: `${scorecard} - ${score}`,
@@ -411,7 +439,7 @@ function transformTaskToActivity(task: ProcessedTask) {
     workerNodeId: task.workerNodeId
   }
 
-  return result
+  return result as EvaluationTaskProps['task']
 }
 
 export default function ActivityDashboard({ 
@@ -805,7 +833,12 @@ export default function ActivityDashboard({
                 damping: 30 
               }}
             >
-            <div className="@container">
+            <div className="@container overflow-visible">
+              {/* TasksGauges at the top - only show when not in mobile selected task view */}
+              {!(selectedTask && isNarrowViewport) && (
+                <TasksGauges className="mb-3" />
+              )}
+              
               <div className={`
                 grid gap-3
                 ${selectedTask && !isNarrowViewport && !isFullWidth ? 'grid-cols-1' : 'grid-cols-1 @[640px]:grid-cols-2'}

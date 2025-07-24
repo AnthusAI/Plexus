@@ -17,7 +17,7 @@ import { graphqlRequest } from './amplify-client'
 
 // Base interfaces
 export interface MetricsDataSource {
-  type: 'items' | 'scoreResults' | 'feedbackItems' | 'feedbackItemsByItemCreation'
+  type: 'items' | 'scoreResults' | 'feedbackItems' | 'feedbackItemsByItemCreation' | 'tasks'
   accountId: string
   startTime?: Date
   endTime?: Date
@@ -26,6 +26,7 @@ export interface MetricsDataSource {
   scoreId?: string
   scoreResultType?: string // For scoreResults: "prediction", "evaluation", etc.
   createdByType?: string // For items: "evaluation", "prediction", etc.
+  taskType?: string // For tasks: filter by task type (e.g., "evaluation", "Accuracy Evaluation", etc.)
   // Cache configuration
   cacheKey?: string
   cacheTTL?: number // TTL in milliseconds, default 5 minutes
@@ -62,6 +63,7 @@ class SessionStorageCache {
       source.scoreId || 'all',
       source.scoreResultType || 'all',
       source.createdByType || 'all',
+      source.taskType || 'all',
       source.startTime?.toISOString() || 'all',
       source.endTime?.toISOString() || 'all'
     ]
@@ -70,9 +72,13 @@ class SessionStorageCache {
 
   get(key: string): AggregatedData | null {
     try {
+      // Check if we're in a browser environment
+      if (typeof window === 'undefined' || typeof sessionStorage === 'undefined') {
+        return null
+      }
+      
       const cached = sessionStorage.getItem(key)
       if (!cached) {
-        console.log('🔍 Cache miss for key:', key.substring(0, 100) + '...')
         return null
       }
 
@@ -81,7 +87,6 @@ class SessionStorageCache {
       
       // Check if expired
       if (now - parsed.timestamp > (parsed.ttl || this.DEFAULT_TTL)) {
-        console.log('⏰ Cache expired for key:', key.substring(0, 100) + '...')
         sessionStorage.removeItem(key)
         return null
       }
@@ -100,17 +105,17 @@ class SessionStorageCache {
 
   set(key: string, data: AggregatedData, ttl?: number): void {
     try {
+      // Check if we're in a browser environment
+      if (typeof window === 'undefined' || typeof sessionStorage === 'undefined') {
+        return
+      }
+      
       const cacheEntry = {
         data,
         timestamp: Date.now(),
         ttl: ttl || this.DEFAULT_TTL
       }
       sessionStorage.setItem(key, JSON.stringify(cacheEntry))
-      console.log('💾 Cached data for key:', key.substring(0, 100) + '...', {
-        count: data.count,
-        itemsLength: data.items?.length || 0,
-        ttlMinutes: Math.round((ttl || this.DEFAULT_TTL) / (1000 * 60))
-      })
     } catch (error) {
       console.warn('Error writing to session storage cache:', error)
     }
@@ -118,13 +123,16 @@ class SessionStorageCache {
 
   clear(): void {
     try {
-      // Clear only metrics cache entries
-      const keys = Object.keys(sessionStorage)
-      keys.forEach(key => {
-        if (key.startsWith('metrics_')) {
-          sessionStorage.removeItem(key)
-        }
-      })
+      // Check if we're in a browser environment
+      if (typeof window !== 'undefined' && typeof sessionStorage !== 'undefined') {
+        // Clear only metrics cache entries
+        const keys = Object.keys(sessionStorage)
+        keys.forEach(key => {
+          if (key.startsWith('metrics_')) {
+            sessionStorage.removeItem(key)
+          }
+        })
+      }
     } catch (error) {
       console.warn('Error clearing session storage cache:', error)
     }
@@ -265,6 +273,8 @@ export class GeneralizedMetricsAggregator {
         return this.fetchFeedbackItemsData(source, nextToken);
       case 'feedbackItemsByItemCreation':
         return this.fetchFeedbackItemsByItemCreationData(source, nextToken);
+      case 'tasks':
+        return this.fetchTasksData(source, nextToken);
       default:
         // Ensure this is unreachable, but satisfies TypeScript
         const exhaustiveCheck: never = source.type;
@@ -284,6 +294,19 @@ export class GeneralizedMetricsAggregator {
     if (source.type === 'items' && source.createdByType) {
         processedRecords = processedRecords.filter(record => record.createdByType === source.createdByType);
     }
+    
+    // Filter by task type (in-memory filtering)
+    if (source.type === 'tasks' && source.taskType) {
+        processedRecords = processedRecords.filter(record => {
+            // Support both exact matches and partial matches for evaluation tasks
+            if (source.taskType === 'evaluation') {
+                // Match tasks that contain "evaluation" in their type (case-insensitive)
+                return record.type && record.type.toLowerCase().includes('evaluation');
+            }
+            // For other task types, use exact match
+            return record.type === source.taskType;
+        });
+    }
 
     const count = processedRecords.length;
     let sum = 0;
@@ -300,8 +323,8 @@ export class GeneralizedMetricsAggregator {
         const agreementItems = processedRecords.filter(item => item.isAgreement === true);
         sum = agreementItems.length;
         avg = count > 0 ? sum / count : 0;
-    } else if (source.type === 'items') {
-      // For items, sum and avg are just the count (each item has value 1)
+    } else if (source.type === 'items' || source.type === 'tasks') {
+      // For items and tasks, sum and avg are just the count (each item has value 1)
       sum = count;
       avg = count > 0 ? 1 : 0;
     }
@@ -611,6 +634,49 @@ export class GeneralizedMetricsAggregator {
   }
 
   /**
+   * Fetch Tasks data
+   */
+  private async fetchTasksData(source: MetricsDataSource, nextToken: string | null): Promise<{ records: any[], nextToken: string | null }> {
+    const startTime = source.startTime?.toISOString()
+    const endTime = source.endTime?.toISOString()
+
+    const query = `
+      query GetTasksForMetrics($accountId: String!, $startTime: String!, $endTime: String!, $nextToken: String) {
+        listTaskByAccountIdAndUpdatedAt(
+          accountId: $accountId,
+          updatedAt: { between: [$startTime, $endTime] },
+          limit: 1000,
+          nextToken: $nextToken
+        ) {
+          items {
+            id
+            type
+            status
+            createdAt
+            updatedAt
+            startedAt
+            completedAt
+          }
+          nextToken
+        }
+      }
+    `
+
+    const variables = {
+      accountId: source.accountId,
+      startTime,
+      endTime,
+      nextToken
+    }
+
+    const response = await this.performRequestWithRetry(query, variables);
+    const result = response.data.listTaskByAccountIdAndUpdatedAt;
+    const records = result.items || [];
+    
+    return { records, nextToken: result.nextToken || null };
+  }
+
+  /**
    * Generate chart data from a pre-fetched list of records.
    * This avoids making 24 extra API calls for the chart.
    */
@@ -628,6 +694,22 @@ export class GeneralizedMetricsAggregator {
     let filteredRecords = records;
     if (source.type === 'scoreResults' && source.scoreResultType) {
         filteredRecords = records.filter(record => record.type === source.scoreResultType);
+    }
+    if (source.type === 'tasks' && source.taskType) {
+        filteredRecords = filteredRecords.filter(record => {
+            // Support both exact matches and partial matches for evaluation tasks
+            if (source.taskType === 'evaluation') {
+                // Match tasks that contain "evaluation" in their type (case-insensitive)
+                // or match common evaluation task types like "accuracy", "consistency", "alignment"
+                const taskType = record.type?.toLowerCase() || '';
+                return taskType.includes('evaluation') || 
+                       taskType === 'accuracy' || 
+                       taskType === 'consistency' || 
+                       taskType === 'alignment';
+            }
+            // For other task types, use exact match
+            return record.type === source.taskType;
+        });
     }
 
     filteredRecords.forEach(record => {

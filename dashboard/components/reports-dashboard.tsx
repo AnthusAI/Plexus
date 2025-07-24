@@ -27,6 +27,7 @@ import { ReportsDashboardSkeleton } from "@/components/loading-skeleton"
 import ReportTask, { ReportTaskData } from "@/components/ReportTask" // Import ReportTask with its types
 import { RunReportButton } from '@/components/task-dispatch' // Import direct button
 import ReportConfigurationSelector from "@/components/ReportConfigurationSelector"
+import { parseOutputString } from '@/lib/utils'
 
 // Define types based on Amplify schema
 type Report = Schema['Report']['type'] & {
@@ -836,7 +837,7 @@ export default function ReportsDashboard({
           // Handle case where output is already parsed or is a string
           let outputData;
           try {
-            outputData = typeof block.output === 'string' ? JSON.parse(block.output) : block.output;
+            outputData = typeof block.output === 'string' ? parseOutputString(block.output) : block.output;
           } catch (err) {
             console.error('Error parsing block output:', err);
             outputData = block.output || {};

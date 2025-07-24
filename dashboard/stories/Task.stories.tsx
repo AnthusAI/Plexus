@@ -46,6 +46,10 @@ const createTask = (id: string, overrides = {}) => ({
   time: '2 hours ago',
   description: 'Task Description',
   command: 'python process_data.py --input data.csv --output results.json',
+  output: undefined, // Universal Code YAML output
+  attachedFiles: undefined, // Array of S3 file keys for attachments
+  stdout: undefined, // Task stdout output
+  stderr: undefined, // Task stderr output
   data: {
     id,
     title: 'Sample Task',
@@ -544,4 +548,301 @@ export const StatusMessageErrorOnlyWithoutError: Story = {
       statusMessage: 'This message should not be shown'
     }),
   },
+}
+
+// Universal Code and Attachments Stories
+export const WithUniversalCode: Story = {
+  args: {
+    variant: 'detail',
+    task: createTask('with-universal-code', {
+      type: 'Prediction Test',
+      command: 'predict --scorecard "termlifev1" --score "Assumptive Close" --item "276514287" --format json',
+      status: 'COMPLETED',
+      stages: sampleStages.map(stage => ({ ...stage, status: 'COMPLETED' as const })),
+      output: `# ====================================
+# Task Output Context
+# ====================================
+# This Universal Code was generated from a task execution.
+# Task Type: Prediction Test
+# Command: predict --scorecard "termlifev1" --score "Assumptive Close" --item "276514287" --format json
+# 
+# The structured output below contains the results and context from the task execution.
+
+prediction_results:
+  - item_id: "276514287"
+    text: "I'm looking for a policy that will help secure my family's financial future..."
+    Assumptive Close:
+      value: "Yes"
+      explanation: "The customer's language shows readiness to move forward with a purchase decision. Phrases like 'looking for a policy' and 'secure my family's financial future' indicate strong intent and urgency."
+      cost:
+        input_tokens: 152
+        output_tokens: 48
+        total_cost: 0.0023
+      trace:
+        model: "gpt-4o-mini"
+        temperature: 0.1
+        max_tokens: 150
+
+task_metadata:
+  scorecard: "termlifev1"
+  score: "Assumptive Close"
+  item_id: "276514287"
+  execution_time: "1.2s"
+  timestamp: "2025-01-06T15:30:45Z"`
+    }),
+    isFullWidth: false,
+    onToggleFullWidth: () => console.log('Toggle full width'),
+    onClose: () => console.log('Close'),
+    renderHeader: TaskStoryHeader,
+    renderContent: TaskStoryContent,
+  },
+  decorators: [
+    (StoryFn) => (
+      <div className="w-[800px]">
+        <StoryFn />
+      </div>
+    )
+  ]
+}
+
+export const WithAttachmentsAndOutput: Story = {
+  args: {
+    variant: 'detail',
+    task: createTask('with-attachments-output', {
+      type: 'Evaluation Report',
+      command: 'plexus evaluate accuracy --scorecard "termlifev1" --number-of-samples 100',
+      status: 'COMPLETED',
+      stages: sampleStages.map(stage => ({ ...stage, status: 'COMPLETED' as const })),
+      output: `# ====================================
+# Evaluation Report Output
+# ====================================
+# Generated evaluation results for accuracy testing
+# Scorecard: termlifev1
+# Sample Size: 100 items
+# Accuracy: 87.5%
+
+evaluation_summary:
+  scorecard: "termlifev1"
+  type: "accuracy"
+  total_items: 100
+  processed_items: 100
+  accuracy: 0.875
+  
+detailed_metrics:
+  precision: 0.923
+  recall: 0.851
+  f1_score: 0.885
+  
+confusion_matrix:
+  true_positive: 42
+  false_positive: 3
+  true_negative: 45
+  false_negative: 7
+  
+score_distribution:
+  "Yes": 48
+  "No": 45
+  "Maybe": 7`,
+      attachedFiles: [
+        'evaluations/2025-01-06/eval_123456/output.json',
+        'evaluations/2025-01-06/eval_123456/confusion_matrix.csv',
+        'evaluations/2025-01-06/eval_123456/detailed_results.xlsx',
+        'evaluations/2025-01-06/eval_123456/trace_logs.txt'
+      ],
+      stdout: `Starting accuracy evaluation for scorecard: termlifev1
+Loading samples... Found 100 items
+Processing items: 100/100 [████████████████████████████████] 100%
+Calculating metrics...
+Accuracy: 87.50%
+Precision: 92.31% 
+Recall: 85.07%
+F1 Score: 88.54%
+Evaluation complete! Results saved to output.json`,
+      stderr: `2025-01-06 15:30:12 [WARNING] Item 47 has missing metadata field 'source'
+2025-01-06 15:30:15 [WARNING] Score confidence low (0.3) for item 82
+2025-01-06 15:30:18 [INFO] Batch processing completed with 2 warnings`
+    }),
+    isFullWidth: false,
+    onToggleFullWidth: () => console.log('Toggle full width'),
+    onClose: () => console.log('Close'),
+    renderHeader: TaskStoryHeader,
+    renderContent: TaskStoryContent,
+  },
+  decorators: [
+    (StoryFn) => (
+      <div className="w-[900px]">
+        <StoryFn />
+      </div>
+    )
+  ]
+}
+
+export const WithStdoutOnly: Story = {
+  args: {
+    variant: 'detail',
+    task: createTask('with-stdout', {
+      type: 'Data Processing',
+      command: 'python analyze_data.py --input dataset.csv --output results.json',
+      status: 'COMPLETED',
+      stages: sampleStages.map(stage => ({ ...stage, status: 'COMPLETED' as const })),
+      stdout: `Analyzing dataset.csv...
+Found 1,247 records
+Processing columns: name, age, location, score
+Applying filters...
+Removed 23 invalid records
+Calculating statistics...
+  - Mean score: 78.4
+  - Median score: 81.0
+  - Standard deviation: 12.7
+Generating visualizations...
+Saving results to results.json
+Analysis complete!`
+    }),
+    isFullWidth: false,
+    onToggleFullWidth: () => console.log('Toggle full width'),
+    onClose: () => console.log('Close'),
+    renderHeader: TaskStoryHeader,
+    renderContent: TaskStoryContent,
+  },
+  decorators: [
+    (StoryFn) => (
+      <div className="w-[700px]">
+        <StoryFn />
+      </div>
+    )
+  ]
+}
+
+export const WithStderrOnly: Story = {
+  args: {
+    variant: 'detail',
+    task: createTask('with-stderr', {
+      type: 'Model Training',
+      command: 'python train_model.py --config model_config.yaml',
+      status: 'FAILED',
+      stages: [
+        { ...sampleStages[0], status: 'COMPLETED' as const },
+        { ...sampleStages[1], status: 'FAILED' as const, statusMessage: 'Training failed due to configuration error' },
+        sampleStages[2]
+      ],
+      stderr: `2025-01-06 15:25:10 [ERROR] Configuration file 'model_config.yaml' not found
+2025-01-06 15:25:10 [ERROR] Required parameter 'learning_rate' missing
+2025-01-06 15:25:10 [ERROR] Invalid value for 'batch_size': must be positive integer
+2025-01-06 15:25:10 [FATAL] Cannot proceed with training due to configuration errors
+Traceback (most recent call last):
+  File "train_model.py", line 45, in load_config
+    config = yaml.load(config_file)
+FileNotFoundError: [Errno 2] No such file or directory: 'model_config.yaml'`
+    }),
+    isFullWidth: false,
+    onToggleFullWidth: () => console.log('Toggle full width'),
+    onClose: () => console.log('Close'),
+    renderHeader: TaskStoryHeader,
+    renderContent: TaskStoryContent,
+  },
+  decorators: [
+    (StoryFn) => (
+      <div className="w-[700px]">
+        <StoryFn />
+      </div>
+    )
+  ]
+}
+
+export const AttachmentsOnly: Story = {
+  args: {
+    variant: 'detail',
+    task: createTask('attachments-only', {
+      type: 'Report Generation',
+      command: 'plexus report run --config "Monthly Report"',
+      status: 'COMPLETED',
+      stages: sampleStages.map(stage => ({ ...stage, status: 'COMPLETED' as const })),
+      attachedFiles: [
+        'reports/2025-01/monthly_report.pdf',
+        'reports/2025-01/raw_data.csv',
+        'reports/2025-01/charts/performance_chart.png',
+        'reports/2025-01/charts/trend_analysis.svg',
+        'reports/2025-01/metadata.json'
+      ]
+    }),
+    isFullWidth: false,
+    onToggleFullWidth: () => console.log('Toggle full width'),
+    onClose: () => console.log('Close'),
+    renderHeader: TaskStoryHeader,
+    renderContent: TaskStoryContent,
+  },
+  decorators: [
+    (StoryFn) => (
+      <div className="w-[700px]">
+        <StoryFn />
+      </div>
+    )
+  ]
+}
+
+export const AllOutputTypes: Story = {
+  render: () => {
+    const variants = [
+      {
+        title: 'Grid View (No Output Shown)',
+        variant: 'grid' as const,
+        width: '300px'
+      },
+      {
+        title: 'Detail View - Universal Code Only',
+        variant: 'detail' as const,
+        width: '600px'
+      },
+      {
+        title: 'Detail View - All Output Types',
+        variant: 'detail' as const,
+        width: '800px'
+      }
+    ]
+
+    return (
+      <div className="space-y-8">
+        {variants.map(({ title, variant, width }, index) => (
+          <div key={title}>
+            <div className="text-sm text-muted-foreground mb-4">{title}</div>
+            <div style={{ width }}>
+              <Task
+                variant={variant}
+                task={createTask(`all-output-${index}`, {
+                  type: 'Complex Analysis',
+                  command: 'analyze --input data.json --output results.yaml --verbose',
+                  status: 'COMPLETED',
+                  stages: sampleStages.map(stage => ({ ...stage, status: 'COMPLETED' as const })),
+                  ...(index === 1 ? {
+                    // Universal Code only
+                    output: `analysis_results:
+  total_records: 1500
+  valid_records: 1456
+  accuracy: 0.891
+  performance_metrics:
+    precision: 0.923
+    recall: 0.867`
+                  } : index === 2 ? {
+                    // All output types
+                    output: `analysis_results:
+  total_records: 1500
+  valid_records: 1456
+  accuracy: 0.891`,
+                    attachedFiles: ['analysis/output.json', 'analysis/chart.png'],
+                    stdout: 'Processing complete. Results saved.',
+                    stderr: '2025-01-06 [WARNING] 44 records had missing data'
+                  } : {})
+                })}
+                renderHeader={TaskStoryHeader}
+                renderContent={TaskStoryContent}
+                isFullWidth={false}
+                onToggleFullWidth={() => console.log('Toggle full width')}
+                onClose={() => console.log('Close')}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+    )
+  }
 }

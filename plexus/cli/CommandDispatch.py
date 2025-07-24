@@ -168,12 +168,28 @@ def create_celery_app() -> Celery:
     
     return app
 
-# Create the Celery app instance
-celery_app = create_celery_app()
+# Lazy Celery app instance - created on first access
+_celery_app = None
 
-# Register tasks for both worker and dispatcher
-from .CommandTasks import register_tasks
-execute_command, demo_task = register_tasks(celery_app)
+def get_celery_app():
+    """Get the Celery app instance, creating it lazily on first access."""
+    global _celery_app
+    if _celery_app is None:
+        _celery_app = create_celery_app()
+    return _celery_app
+
+# Lazy task registration - registered on first access
+_tasks_registered = False
+execute_command = None
+demo_task = None
+
+def ensure_tasks_registered():
+    """Ensure tasks are registered, registering them lazily on first access."""
+    global _tasks_registered, execute_command, demo_task
+    if not _tasks_registered:
+        from .CommandTasks import register_tasks
+        execute_command, demo_task = register_tasks(get_celery_app())
+        _tasks_registered = True
 
 @click.group()
 def command():
@@ -213,7 +229,7 @@ def worker(
             raise click.BadParameter(f"Invalid target pattern: {e}")
         
         # Store matcher in app config for task routing
-        celery_app.conf.task_target_matcher = matcher
+        get_celery_app().conf.task_target_matcher = matcher
         logging.info(f"Target patterns: {patterns}")
     else:
         logging.info("No target patterns specified - accepting all targets")
@@ -225,7 +241,8 @@ def worker(
         f"--loglevel={loglevel}",
     ]
     logging.info(f"Starting worker with arguments: {argv}")
-    celery_app.worker_main(argv)
+    ensure_tasks_registered()
+    get_celery_app().worker_main(argv)
 
 @command.command()
 @click.argument('command_string')
@@ -256,6 +273,8 @@ def dispatch(
     
     logging.info(f"Dispatching command: {command_string}")
     logging.info(f"Target: {target}")
+    ensure_tasks_registered()
+    celery_app = get_celery_app()
     logging.debug("Celery app: %s", celery_app)
     logging.debug("Broker URL: %s", celery_app.conf.broker_url)
     logging.debug("Backend URL: %s", celery_app.conf.result_backend)
@@ -452,7 +471,7 @@ def status(task_id: str, loglevel: str) -> None:
     
     try:
         # Attempt to retrieve the task status
-        task = celery_app.AsyncResult(task_id)
+        task = get_celery_app().AsyncResult(task_id)
         
         # Log the Celery state clearly, before anything else
         logging.info(f"CELERY_TASK_STATE: {task.state}")
@@ -491,7 +510,7 @@ def status(task_id: str, loglevel: str) -> None:
 @click.argument('task_id')
 def cancel(task_id: str) -> None:
     """Cancel a running command."""
-    task = celery_app.AsyncResult(task_id)
+    task = get_celery_app().AsyncResult(task_id)
     task.revoke(terminate=True)
     logging.info(f"Cancelled command task: {task_id}")
 
@@ -782,6 +801,162 @@ def _run_demo_task(tracker, progress, task_progress, total_items, min_batch_size
         else:
             # Re-raise unexpected errors
             raise  # Re-raise the original exception after updating the task status
+
+@command.command()  
+@click.option('--active', is_flag=True, help='Show only active tasks')
+@click.option('--scheduled', is_flag=True, help='Show scheduled tasks')
+@click.option('--reserved', is_flag=True, help='Show reserved tasks')
+@click.option('--stats', is_flag=True, help='Show worker statistics')
+@click.option('--workers', is_flag=True, help='Show active workers')
+@click.option('--json', 'output_json', is_flag=True, help='Output as JSON')
+def monitor(active: bool, scheduled: bool, reserved: bool, stats: bool, workers: bool, output_json: bool) -> None:
+    """Monitor Celery workers and tasks."""
+    try:
+        from celery import Celery
+        import json
+        from rich.console import Console
+        from rich.table import Table
+        from rich.panel import Panel
+        from rich.json import JSON
+        
+        console = Console()
+        
+        # Create Celery app with inspect capabilities
+        inspect = get_celery_app().control.inspect()
+        
+        # Default to showing active tasks if no specific option is given
+        if not any([active, scheduled, reserved, stats, workers]):
+            active = True
+            
+        results = {}
+        
+        if active or not any([scheduled, reserved, stats, workers]):
+            console.print("[bold blue]Getting active tasks...[/bold blue]")
+            active_tasks = inspect.active()
+            results['active_tasks'] = active_tasks
+            
+            if output_json:
+                print(json.dumps(active_tasks, indent=2, default=str))
+            else:
+                if active_tasks:
+                    for worker_name, tasks in active_tasks.items():
+                        if tasks:
+                            console.print(f"\n[bold green]Worker: {worker_name}[/bold green]")
+                            table = Table(show_header=True, header_style="bold magenta")
+                            table.add_column("Task ID")
+                            table.add_column("Name")
+                            table.add_column("Args")
+                            table.add_column("Kwargs")
+                            
+                            for task in tasks:
+                                task_id = task.get('id', 'N/A')
+                                task_name = task.get('name', 'N/A')
+                                task_args = str(task.get('args', []))[:50] + "..." if len(str(task.get('args', []))) > 50 else str(task.get('args', []))
+                                task_kwargs = str(task.get('kwargs', {}))[:50] + "..." if len(str(task.get('kwargs', {}))) > 50 else str(task.get('kwargs', {}))
+                                
+                                table.add_row(task_id, task_name, task_args, task_kwargs)
+                            
+                            console.print(table)
+                        else:
+                            console.print(f"\n[bold green]Worker: {worker_name}[/bold green] - No active tasks")
+                else:
+                    console.print("[yellow]No active tasks found[/yellow]")
+        
+        if scheduled:
+            console.print("\n[bold blue]Getting scheduled tasks...[/bold blue]")
+            scheduled_tasks = inspect.scheduled()
+            results['scheduled_tasks'] = scheduled_tasks
+            
+            if output_json:
+                print(json.dumps(scheduled_tasks, indent=2, default=str))
+            else:
+                if scheduled_tasks:
+                    console.print(JSON.from_data(scheduled_tasks))
+                else:
+                    console.print("[yellow]No scheduled tasks found[/yellow]")
+        
+        if reserved:
+            console.print("\n[bold blue]Getting reserved tasks...[/bold blue]")
+            reserved_tasks = inspect.reserved()
+            results['reserved_tasks'] = reserved_tasks
+            
+            if output_json:
+                print(json.dumps(reserved_tasks, indent=2, default=str))
+            else:
+                if reserved_tasks:
+                    console.print(JSON.from_data(reserved_tasks))
+                else:
+                    console.print("[yellow]No reserved tasks found[/yellow]")
+        
+        if stats:
+            console.print("\n[bold blue]Getting worker statistics...[/bold blue]")
+            worker_stats = inspect.stats()
+            results['worker_stats'] = worker_stats
+            
+            if output_json:
+                print(json.dumps(worker_stats, indent=2, default=str))
+            else:
+                if worker_stats:
+                    for worker_name, stats_data in worker_stats.items():
+                        console.print(f"\n[bold green]Worker: {worker_name}[/bold green]")
+                        
+                        # Create a nice table for key stats
+                        stats_table = Table(show_header=True, header_style="bold magenta")
+                        stats_table.add_column("Metric")
+                        stats_table.add_column("Value")
+                        
+                        # Extract key metrics
+                        pool_data = stats_data.get('pool', {})
+                        total_data = stats_data.get('total', {})
+                        
+                        if pool_data:
+                            stats_table.add_row("Pool Processes", str(pool_data.get('processes', 'N/A')))
+                            stats_table.add_row("Pool Max Concurrency", str(pool_data.get('max-concurrency', 'N/A')))
+                        
+                        if total_data:
+                            for key, value in total_data.items():
+                                stats_table.add_row(f"Total {key.title()}", str(value))
+                        
+                        console.print(stats_table)
+                else:
+                    console.print("[yellow]No worker statistics found[/yellow]")
+        
+        if workers:
+            console.print("\n[bold blue]Getting active workers...[/bold blue]")
+            active_workers = inspect.active_queues()
+            results['active_workers'] = active_workers
+            
+            if output_json:
+                print(json.dumps(active_workers, indent=2, default=str))
+            else:
+                if active_workers:
+                    for worker_name, queues in active_workers.items():
+                        console.print(f"\n[bold green]Worker: {worker_name}[/bold green]")
+                        if queues:
+                            queue_table = Table(show_header=True, header_style="bold magenta")
+                            queue_table.add_column("Queue Name")
+                            queue_table.add_column("Exchange")
+                            queue_table.add_column("Routing Key")
+                            
+                            for queue in queues:
+                                queue_name = queue.get('name', 'N/A')
+                                exchange = queue.get('exchange', {}).get('name', 'N/A')
+                                routing_key = queue.get('routing_key', 'N/A')
+                                queue_table.add_row(queue_name, exchange, routing_key)
+                            
+                            console.print(queue_table)
+                        else:
+                            console.print("No queues found")
+                else:
+                    console.print("[yellow]No active workers found[/yellow]")
+        
+        if output_json and len(results) > 1:
+            # If multiple result types and JSON output, print combined results
+            print(json.dumps(results, indent=2, default=str))
+            
+    except Exception as e:
+        console.print(f"[red]Error monitoring Celery: {e}[/red]")
+        logging.error(f"Celery monitoring error: {e}", exc_info=True)
 
 def safequote(value: str) -> str:
     """Safely quote a string value, handling None."""

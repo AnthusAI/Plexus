@@ -1117,6 +1117,7 @@ def pull(scorecard: Optional[str], account: str, output: str):
                                     order
                                     type
                                     externalId
+                                    isDisabled
                                     championVersionId
                                     championVersion {{
                                         id
@@ -1176,6 +1177,7 @@ def pull(scorecard: Optional[str], account: str, output: str):
                         'order': score.get('order'),
                         'type': score.get('type'),
                         'externalId': score.get('externalId', ''),
+                        'disabled': score.get('isDisabled', False),  # Map isDisabled to disabled
                         'championVersionId': score.get('championVersion', {}).get('id', ''),
                         'versions': []
                     }
@@ -1195,6 +1197,10 @@ def pull(scorecard: Optional[str], account: str, output: str):
                                     # This preserves the full YAML structure
                                     # Add section back to the config data
                                     config_data['section'] = section.get('name')
+                                    
+                                    # Ensure disabled status is included in the config
+                                    if 'disabled' not in config_data:
+                                        config_data['disabled'] = score.get('isDisabled', False)
                                     
                                     # Replace score_data with the full config
                                     score_data = config_data
@@ -1513,6 +1519,14 @@ def _process_single_scorecard_push(client, scorecard_identifier: str, account: s
                                 type
                                 order
                                 externalId
+                                isDisabled
+                                championVersionId
+                                championVersion {{
+                                    id
+                                    configuration
+                                    createdAt
+                                    updatedAt
+                                }}
                             }}
                         }}
                     }}
@@ -1567,6 +1581,7 @@ def _process_single_scorecard_push(client, scorecard_identifier: str, account: s
                                     name
                                     key
                                     externalId
+                                    isDisabled
                                     championVersionId
                                     versions {{
                                         items {{
@@ -1594,6 +1609,9 @@ def _process_single_scorecard_push(client, scorecard_identifier: str, account: s
             
             # Create a map of score name to ID within each section
             score_map = {}
+            # Also create a map of externalId to score across all sections
+            external_id_map = {}
+            
             for section in sections:
                 section_name = section.get('name')
                 if section_name not in score_map:
@@ -1602,7 +1620,12 @@ def _process_single_scorecard_push(client, scorecard_identifier: str, account: s
                 scores = section.get('scores', {}).get('items', [])
                 for score in scores:
                     score_name = score.get('name')
+                    score_external_id = score.get('externalId')
                     score_map[section_name][score_name] = score
+                    
+                    # Map external ID to score (if external ID exists)
+                    if score_external_id and score_external_id.strip():
+                        external_id_map[score_external_id] = score
             
             # Process each score in the YAML
             scores_processed = 0
@@ -1644,11 +1667,24 @@ def _process_single_scorecard_push(client, scorecard_identifier: str, account: s
                 else:
                     section_id = section_map[section_name]
                 
-                # Check if score exists
-                if section_name in score_map and score_name in score_map[section_name]:
-                    # Update existing score
+                # Check if score exists - prioritize externalId match over name match
+                yaml_external_id = str(score_data.get('id', ''))
+                existing_score = None
+                score_id = None
+                
+                # First, check if a score with this externalId already exists anywhere
+                if yaml_external_id and yaml_external_id.strip() and yaml_external_id in external_id_map:
+                    existing_score = external_id_map[yaml_external_id]
+                    score_id = existing_score.get('id')
+                    console.print(f"[yellow]Found existing score by externalId '{yaml_external_id}': {existing_score.get('name')}[/yellow]")
+                # If no externalId match, check by name in the specified section
+                elif section_name in score_map and score_name in score_map[section_name]:
                     existing_score = score_map[section_name][score_name]
                     score_id = existing_score.get('id')
+                    console.print(f"[dim]Found existing score by name in section '{section_name}': {score_name}[/dim]")
+                
+                if existing_score:
+                    # Update existing score
                     
                     # Get existing versions for this score
                     existing_versions = existing_score.get('versions', {}).get('items', [])
@@ -1738,6 +1774,48 @@ def _process_single_scorecard_push(client, scorecard_identifier: str, account: s
                         """
                         client.execute(update_external_id_mutation)
                     
+                    # Check if the score name needs to be updated (handle renames)
+                    current_score_name = existing_score.get('name', '')
+                    if score_name != current_score_name:
+                        console.print(f"[yellow]Score name change detected: '{current_score_name}' -> '{score_name}'[/yellow]")
+                        
+                        # Update the score name
+                        update_name_mutation = f"""
+                        mutation UpdateScoreName {{
+                            updateScore(input: {{
+                                id: "{score_id}"
+                                name: "{score_name}"
+                            }}) {{
+                                id
+                                name
+                            }}
+                        }}
+                        """
+                        client.execute(update_name_mutation)
+                    
+                    # Check if the disabled status needs to be updated
+                    yaml_disabled = score_data.get('disabled', False)
+                    current_disabled = existing_score.get('isDisabled', False)
+                    
+                    if yaml_disabled != current_disabled:
+                        console.print(f"[yellow]Disabled status change detected for score: {score_name} - updating to {yaml_disabled}[/yellow]")
+                        
+                        # Update the disabled status
+                        disabled_str = "true" if yaml_disabled else "false"
+                        update_disabled_mutation = f"""
+                        mutation UpdateScoreDisabled {{
+                            updateScore(input: {{
+                                id: "{score_id}"
+                                isDisabled: {disabled_str}
+                            }}) {{
+                                id
+                                name
+                                isDisabled
+                            }}
+                        }}
+                        """
+                        client.execute(update_disabled_mutation)
+                    
                     if create_new_version:
                         # Add parent ID to score_data for the new version
                         if parent_version_id:
@@ -1804,6 +1882,10 @@ def _process_single_scorecard_push(client, scorecard_identifier: str, account: s
                         if not ai_model or ai_model.strip() == '':
                             ai_model = "unknown"
                         
+                        # Handle disabled field
+                        is_disabled = score_data.get('disabled', False)
+                        is_disabled_str = "true" if is_disabled else "false"
+                        
                         update_score_mutation = f"""
                         mutation UpdateScore {{
                             updateScore(input: {{
@@ -1814,11 +1896,13 @@ def _process_single_scorecard_push(client, scorecard_identifier: str, account: s
                                 externalId: "{external_id}"
                                 aiProvider: "{ai_provider}"
                                 aiModel: "{ai_model}"
+                                isDisabled: {is_disabled_str}
                             }}) {{
                                 id
                                 name
                                 championVersionId
                                 externalId
+                                isDisabled
                             }}
                         }}
                         """
@@ -1845,6 +1929,10 @@ def _process_single_scorecard_push(client, scorecard_identifier: str, account: s
                     if not ai_model or ai_model.strip() == '':
                         ai_model = "unknown"
                     
+                    # Handle disabled field
+                    is_disabled = score_data.get('disabled', False)
+                    is_disabled_str = "true" if is_disabled else "false"
+                    
                     create_score_mutation = f"""
                     mutation CreateScore {{
                         createScore(input: {{
@@ -1857,10 +1945,12 @@ def _process_single_scorecard_push(client, scorecard_identifier: str, account: s
                             aiModel: "{ai_model}"
                             sectionId: "{section_id}"
                             scorecardId: "{scorecard_id}"
+                            isDisabled: {is_disabled_str}
                         }}) {{
                             id
                             name
                             externalId
+                            isDisabled
                         }}
                     }}
                     """
@@ -1917,11 +2007,13 @@ def _process_single_scorecard_push(client, scorecard_identifier: str, account: s
                             externalId: "{external_id}"
                             aiProvider: "{ai_provider}"
                             aiModel: "{ai_model}"
+                            isDisabled: {is_disabled_str}
                         }}) {{
                             id
                             name
                             championVersionId
                             externalId
+                            isDisabled
                         }}
                     }}
                     """
@@ -2283,8 +2375,8 @@ def find_duplicates(account: Optional[str], limit: int):
                         
                     except Exception as e:
                         console.print(f"[red]Error deleting scorecard: {e}[/red]")
-                else:
-                    console.print("[yellow]Deletion cancelled[/yellow]")
+                    else:
+                        console.print("[yellow]Deletion cancelled[/yellow]")
     
     except Exception as e:
         console.print(f"[red]Error finding duplicate scorecards: {e}[/red]")

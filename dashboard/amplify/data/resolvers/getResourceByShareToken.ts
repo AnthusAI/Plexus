@@ -17,11 +17,11 @@ export const handler: Schema["getResourceByShareToken"]["functionHandler"] = asy
     }
     
     // Get the GraphQL endpoint from environment variables
-    const GRAPHQL_ENDPOINT = process.env.API_PLEXUSDASHBOARD_GRAPHQLAPIENDPOINTOUTPUT;
+    const GRAPHQL_ENDPOINT = process.env.PLEXUS_API_URL;
     const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
     
     if (!GRAPHQL_ENDPOINT) {
-      throw new Error('GraphQL endpoint not found in environment variables');
+      throw new Error('PLEXUS_API_URL not found in environment variables');
     }
     
     // Create a signer for AWS Signature v4
@@ -33,10 +33,10 @@ export const handler: Schema["getResourceByShareToken"]["functionHandler"] = asy
       sha256: Sha256
     });
     
-    // Get ShareLink by token
+    // Get ShareLink by token using the dedicated GSI for better reliability
     const shareLinkQuery = `
       query GetShareLinkByToken($token: String!) {
-        listShareLinks(filter: { token: { eq: $token } }) {
+        listShareLinkByToken(token: $token) {
           items {
             id
             token
@@ -84,7 +84,7 @@ export const handler: Schema["getResourceByShareToken"]["functionHandler"] = asy
     }
     
     // Get the ShareLink from the response
-    const shareLinks = shareLinkResponse.data?.listShareLinks?.items || [];
+    const shareLinks = shareLinkResponse.data?.listShareLinkByToken?.items || [];
     
     if (shareLinks.length === 0) {
       throw new Error('Share link not found');

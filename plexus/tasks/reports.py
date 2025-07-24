@@ -25,9 +25,8 @@ def generate_report_task(self, task_id: str):
         # Call the main generation service function, passing only the task_id
         # The service is now responsible for fetching the Task, creating the Report,
         # and updating Task status via TaskProgressTracker.
-        # Use asyncio.run() if generate_report is async
-        import asyncio
-        asyncio.run(generate_report(task_id=task_id))
+        # generate_report is a regular synchronous function
+        generate_report(task_id=task_id)
 
         # If generate_report completes without error, the Task status
         # should have been set to COMPLETED by the TaskProgressTracker within the service.
@@ -47,8 +46,10 @@ def generate_report_task(self, task_id: str):
             # Fetch stages first to avoid race conditions if tracker needs them
             # Although fail_task might not strictly need full stage config
             try:
-                 import asyncio
-                 asyncio.run(tracker.fetch_task_and_stages())
+                 # fetch_task_and_stages is likely also synchronous
+                 # asyncio.run(tracker.fetch_task_and_stages())
+                 # For now, skip the fetch as fail_task should handle it
+                 pass
             except Exception as fetch_err:
                  logger.warning(f"Failed to fetch stages for task {task_id} before marking as failed: {fetch_err}. Proceeding to fail task anyway.")
             

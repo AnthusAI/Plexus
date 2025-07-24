@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { MoreHorizontal, X, Square, Columns2, FileStack, ChevronDown, ChevronUp, Award, FileCode, Minimize, Maximize, ArrowDownWideNarrow, Expand, Shrink, TestTube, FlaskConical, FlaskRound, TestTubes } from 'lucide-react'
+import { MoreHorizontal, X, Square, Columns2, FileStack, ChevronDown, ChevronUp, Award, FileCode, Minimize, Maximize, ArrowDownWideNarrow, Expand, Shrink, TestTube, FlaskConical, FlaskRound, TestTubes, ListCheck, MessageCircleMore } from 'lucide-react'
 import { CardButton } from '@/components/CardButton'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Popover from '@radix-ui/react-popover'
@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Checkbox } from '@/components/ui/checkbox'
 import { generateClient } from 'aws-amplify/api'
 import { toast } from 'sonner'
 import { ScoreVersionHistory } from './score-version-history'
@@ -22,7 +23,9 @@ import * as monaco from 'monaco-editor'
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import type { editor } from 'monaco-editor'
-import { defineCustomMonacoThemes, applyMonacoTheme, setupMonacoThemeWatcher, getCommonMonacoOptions } from '@/lib/monaco-theme'
+import { defineCustomMonacoThemes, applyMonacoTheme, setupMonacoThemeWatcher, getCommonMonacoOptions, configureYamlLanguage, validateYamlIndentation } from '@/lib/monaco-theme'
+import { useYamlLinter, useLintMessageHandler } from '@/hooks/use-yaml-linter'
+import YamlLinterPanel from '@/components/ui/yaml-linter-panel'
 import { TestScoreDialog } from '@/components/scorecards/test-score-dialog'
 import { createTask } from '@/utils/data-operations'
 import { useAccount } from '@/app/contexts/AccountContext'
@@ -40,6 +43,7 @@ export interface ScoreData {
   icon?: React.ReactNode
   configuration?: string // YAML configuration string
   championVersionId?: string // ID of the champion version
+  isDisabled?: boolean // Whether the score is disabled
 }
 
 interface ScoreVersion {
@@ -104,11 +108,13 @@ interface ScoreComponentProps extends React.HTMLAttributes<HTMLDivElement> {
   onToggleFullWidth?: () => void
   isFullWidth?: boolean
   onSave?: () => void
+  onFeedbackAnalysis?: () => void
   exampleItems?: Array<{
     id: string
     displayValue: string
   }>
   scorecardName?: string
+  onTaskCreated?: (task: any) => void
 }
 
 interface DetailContentProps {
@@ -119,6 +125,7 @@ interface DetailContentProps {
   onEditChange?: (changes: Partial<ScoreData>) => void
   onSave?: () => void
   onCancel?: () => void
+  onFeedbackAnalysis?: () => void
   hasChanges?: boolean
   versions?: ScoreVersion[]
   championVersionId?: string
@@ -136,6 +143,7 @@ interface DetailContentProps {
   }>
   selectedAccount?: { id: string } | null
   scorecardName?: string
+  onTaskCreated?: (task: any) => void
 }
 
 const GridContent = React.memo(({ 
@@ -159,8 +167,11 @@ const GridContent = React.memo(({
         <div className="text-sm">{displayData.description}</div>
       </div>
       {score.icon && (
-        <div className="text-muted-foreground">
-          {score.icon}
+        <div className="flex flex-col items-center gap-1">
+          <div className="text-muted-foreground">
+            {score.icon}
+          </div>
+          <div className="text-xs text-muted-foreground text-center">Score</div>
         </div>
       )}
     </div>
@@ -236,6 +247,7 @@ const DetailContent = React.memo(({
   onEditChange,
   onSave,
   onCancel,
+  onFeedbackAnalysis,
   hasChanges,
   versions,
   championVersionId,
@@ -250,6 +262,7 @@ const DetailContent = React.memo(({
   exampleItems = [],
   selectedAccount,
   scorecardName,
+  onTaskCreated,
 }: DetailContentProps) => {
   // Get the current version's configuration
   const currentVersion = versions?.find(v => 
@@ -268,6 +281,14 @@ const DetailContent = React.memo(({
   
   // Track if we're currently editing to prevent useEffect from overriding changes
   const [isEditing, setIsEditing] = React.useState(false)
+  
+  // YAML Linting integration
+  const { lintResult, setupMonacoIntegration, jumpToLine } = useYamlLinter({
+    context: 'score',
+    debounceMs: 500,
+    showMonacoMarkers: true
+  })
+  const handleLintMessageClick = useLintMessageHandler(jumpToLine)
   
   // Let ScoreVersionHistory component handle its own featured filtering with smart defaults
   
@@ -318,7 +339,7 @@ const DetailContent = React.memo(({
   }, [currentConfig, score])
 
   // Handle form field changes
-  const handleFormChange = (field: string, value: string) => {
+  const handleFormChange = (field: string, value: string | boolean) => {
     
     // Set editing flag to prevent useEffect from overriding our changes
     setIsEditing(true);
@@ -456,7 +477,7 @@ const DetailContent = React.memo(({
     console.log('Account context:', { selectedAccount });
     
     try {
-      const command = `predict --scorecard-name "${scorecardName || 'Unknown'}" --score-name "${score.name}" --item-id ${itemId}`;
+      const command = `predict --scorecard "${scorecardName || 'Unknown'}" --score "${score.name}" --item ${itemId}`;
       const taskInput = {
         type: 'Score Test',
         target: 'prediction',
@@ -476,6 +497,9 @@ const DetailContent = React.memo(({
         toast.success("Score test dispatched", {
           description: <span className="font-mono text-sm truncate block">{command}</span>
         });
+        
+        // Notify parent component about task creation
+        onTaskCreated?.(task);
       } else {
         console.error("createTask returned null or undefined");
         toast.error("Failed to dispatch score test - no task returned");
@@ -567,13 +591,17 @@ const DetailContent = React.memo(({
 
   return (
     <div className={cn(
-      "w-full flex flex-col min-h-0 h-full",
+      "w-full flex flex-col overflow-y-auto max-h-full",
       isEditorFullscreen && "absolute inset-0 z-10 bg-background p-4 rounded-lg"
     )}>
       {/* Hide the header section when in fullscreen mode */}
       {!isEditorFullscreen && (
         <div className="flex justify-between items-start w-full">
           <div className="space-y-2 flex-1">
+            <div className="flex items-center gap-2 mb-3">
+              <ListCheck className="h-5 w-5 text-foreground" />
+              <span className="text-lg font-semibold">Score</span>
+            </div>
             <Input
               value={parsedConfig.name || ''}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => 
@@ -608,6 +636,21 @@ const DetailContent = React.memo(({
                          placeholder:text-muted-foreground rounded-md"
                 placeholder="External ID"
               />
+            </div>
+            <div className="flex items-center space-x-2 pt-2">
+              <Checkbox
+                id="isDisabled"
+                checked={parsedConfig.isDisabled || false}
+                onCheckedChange={(checked) => 
+                  handleFormChange('isDisabled', checked as boolean)
+                }
+              />
+              <label
+                htmlFor="isDisabled"
+                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+              >
+                Disabled
+              </label>
             </div>
             <textarea
               value={versionNote}
@@ -648,6 +691,12 @@ const DetailContent = React.memo(({
                   <TestTubes className="mr-2 h-4 w-4" />
                   Evaluate Alignment
                 </DropdownMenuItem>
+                {onFeedbackAnalysis && (
+                  <DropdownMenuItem onClick={onFeedbackAnalysis}>
+                    <MessageCircleMore className="mr-2 h-4 w-4" />
+                    Analyze Feedback
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </ShadcnDropdownMenu>
             {onToggleFullWidth && (
@@ -711,6 +760,12 @@ const DetailContent = React.memo(({
                   <TestTubes className="mr-2 h-4 w-4" />
                   Evaluate Alignment
                 </DropdownMenuItem>
+                {onFeedbackAnalysis && (
+                  <DropdownMenuItem onClick={onFeedbackAnalysis}>
+                    <MessageCircleMore className="mr-2 h-4 w-4" />
+                    Analyze Feedback
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </ShadcnDropdownMenu>
           )}
@@ -722,14 +777,14 @@ const DetailContent = React.memo(({
         </div>
       </div>
 
-      {/* YAML Editor - Make it flex to fill available space */}
+      {/* YAML Editor - Fixed height so content below is visible */}
       <div className={cn(
-        "flex-1 flex flex-col min-h-0",
-        isEditorFullscreen ? "mt-2" : "mt-2"
+        "flex flex-col",
+        isEditorFullscreen ? "mt-2 flex-1 min-h-0" : "mt-2"
       )} style={{ transition: 'none' }}>
                   {!isEditorFullscreen ? (
-          // Normal mode: flexible height container
-          <div className="flex-1 bg-background rounded-lg overflow-hidden relative min-h-[300px]">
+          // Normal mode: fixed height container
+          <div className="h-[400px] bg-background rounded-lg overflow-hidden relative">
             <Editor
               height="100%"
               defaultLanguage="yaml"
@@ -742,9 +797,25 @@ const DetailContent = React.memo(({
                 // Store the Monaco instance
                 monacoRef.current = monaco;
                 
+                // Configure YAML language support with enhanced syntax highlighting
+                console.log('Configuring YAML language support...');
+                configureYamlLanguage(monaco);
+                
                 // Apply our custom theme when the editor mounts
+                console.log('Applying Monaco themes...');
                 defineCustomMonacoThemes(monaco);
                 applyMonacoTheme(monaco);
+                
+                // Set up YAML linting integration
+                setupMonacoIntegration(editor, monaco);
+                
+                // Debug: Check if YAML language is registered
+                const registeredLanguages = monaco.languages.getLanguages();
+                const yamlLang = registeredLanguages.find((lang: any) => lang.id === 'yaml');
+                console.log('YAML language registered:', yamlLang ? 'YES' : 'NO');
+                if (yamlLang) {
+                  console.log('YAML language details:', yamlLang);
+                }
                 
                 // Force immediate layout to ensure correct sizing
                 editor.layout();
@@ -761,6 +832,15 @@ const DetailContent = React.memo(({
               }}
               onChange={(value) => {
                 if (!value) return;
+                
+                // Run YAML validation and show indentation errors
+                if (monacoRef.current && editorInstanceRef.current) {
+                  const model = editorInstanceRef.current.getModel();
+                  if (model) {
+                    const markers = validateYamlIndentation(monacoRef.current, model);
+                    monacoRef.current.editor.setModelMarkers(model, 'yaml-validation', markers);
+                  }
+                }
                 
                 try {
                   // Set editing flag to prevent useEffect from overriding our changes
@@ -785,7 +865,8 @@ const DetailContent = React.memo(({
                     externalId: externalIdValue !== undefined ? String(externalIdValue) : undefined,
                     key: parsed.key,
                     description: parsed.description,
-                    configuration: value // Store the original YAML string
+                    configuration: value, // Store the original YAML string
+                    isDisabled: parsed.isDisabled
                   });
                 } catch (error) {
                   // Handle cancellation errors gracefully
@@ -801,89 +882,134 @@ const DetailContent = React.memo(({
             />
           </div>
         ) : (
-          // Fullscreen mode: use the old resizable container
-          <ResizableEditorContainer 
-            height={800}
-            onHeightChange={handleHeightChange}
-            isFullscreen={isEditorFullscreen}
-          >
-          <Editor
-            height="100%"
-            defaultLanguage="yaml"
-            value={currentConfig}
-            key={`editor-${selectedVersionId || championVersionId}`}
-            onMount={(editor, monaco) => {
-              // Store the editor instance
-              editorInstanceRef.current = editor;
-              
-              // Store the Monaco instance
-              monacoRef.current = monaco;
-              
-              // Apply our custom theme when the editor mounts
-              defineCustomMonacoThemes(monaco);
-              applyMonacoTheme(monaco);
-              
-              // Force immediate layout to ensure correct sizing
-              editor.layout();
-              
-              // Add error handling for iPad-specific issues
-              window.addEventListener('error', (event) => {
-                if (event.message === 'Canceled: Canceled' || 
-                    event.error?.message === 'Canceled: Canceled') {
-                  event.preventDefault();
-                  return true; // Prevent the error from propagating
-                }
-                return false;
-              });
-            }}
-            onChange={(value) => {
-              if (!value) return;
-              
-              try {
-                // Set editing flag to prevent useEffect from overriding our changes
-                setIsEditing(true);
-                
-                // Parse YAML to validate it and get values for form
-                const parsed = parseYaml(value)
-                
-                // Extract external ID from all possible formats
-                const externalIdValue = parsed.externalId !== undefined ? 
-                  parsed.externalId : 
-                  (parsed.external_id !== undefined ? parsed.external_id : 
-                   (parsed.id !== undefined ? parsed.id : undefined));
+          // Fullscreen mode: 2-column layout with editor on left and linter on right
+          <div className="flex gap-4 h-full">
+            {/* Monaco Editor - 2/3 width */}
+            <div className="flex-[2] bg-background rounded-lg overflow-hidden relative">
+              <Editor
+                height="100%"
+                defaultLanguage="yaml"
+                value={currentConfig}
+                key={`editor-${selectedVersionId || championVersionId}`}
+                onMount={(editor, monaco) => {
+                  // Store the editor instance
+                  editorInstanceRef.current = editor;
+                  
+                  // Store the Monaco instance
+                  monacoRef.current = monaco;
+                  
+                  // Configure YAML language support with enhanced syntax highlighting
+                  console.log('Configuring YAML language support (fullscreen)...');
+                  configureYamlLanguage(monaco);
+                  
+                  // Apply our custom theme when the editor mounts
+                  console.log('Applying Monaco themes (fullscreen)...');
+                  defineCustomMonacoThemes(monaco);
+                  applyMonacoTheme(monaco);
+                  
+                  // Set up YAML linting integration
+                  setupMonacoIntegration(editor, monaco);
+                  
+                  // Debug: Check if YAML language is registered
+                  const registeredLanguages = monaco.languages.getLanguages();
+                  const yamlLang = registeredLanguages.find((lang: any) => lang.id === 'yaml');
+                  console.log('YAML language registered (fullscreen):', yamlLang ? 'YES' : 'NO');
+                  
+                  // Force immediate layout to ensure correct sizing
+                  editor.layout();
+                  
+                  // Add error handling for iPad-specific issues
+                  window.addEventListener('error', (event) => {
+                    if (event.message === 'Canceled: Canceled' || 
+                        event.error?.message === 'Canceled: Canceled') {
+                      event.preventDefault();
+                      return true; // Prevent the error from propagating
+                    }
+                    return false;
+                  });
+                }}
+                onChange={(value) => {
+                  if (!value) return;
+                  
+                  // Run YAML validation and show indentation errors
+                  if (monacoRef.current && editorInstanceRef.current) {
+                    const model = editorInstanceRef.current.getModel();
+                    if (model) {
+                      const markers = validateYamlIndentation(monacoRef.current, model);
+                      monacoRef.current.editor.setModelMarkers(model, 'yaml-validation', markers);
+                    }
+                  }
+                  
+                  try {
+                    // Set editing flag to prevent useEffect from overriding our changes
+                    setIsEditing(true);
+                    
+                    // Parse YAML to validate it and get values for form
+                    const parsed = parseYaml(value)
+                    
+                    // Extract external ID from all possible formats
+                    const externalIdValue = parsed.externalId !== undefined ? 
+                      parsed.externalId : 
+                      (parsed.external_id !== undefined ? parsed.external_id : 
+                       (parsed.id !== undefined ? parsed.id : undefined));
 
-                
-                // Update our local state
-                setCurrentConfig(value);
-                
-                // Pass the updated configuration to the parent
-                onEditChange?.({
-                  name: parsed.name,
-                  externalId: externalIdValue !== undefined ? String(externalIdValue) : undefined,
-                  key: parsed.key,
-                  description: parsed.description,
-                  configuration: value // Store the original YAML string
-                });
-              } catch (error) {
-                // Handle cancellation errors gracefully
-                if (error instanceof Error && 
-                    (error.message === 'Canceled' || error.message === 'Canceled: Canceled')) {
-                  return; // Just ignore the error
-                }
-                
-                // Ignore other parse errors while typing
-              }
-            }}
-            options={getCommonMonacoOptions(isMobileDevice)}
-          />
-          </ResizableEditorContainer>
+                    
+                    // Update our local state
+                    setCurrentConfig(value);
+                    
+                    // Pass the updated configuration to the parent
+                    onEditChange?.({
+                      name: parsed.name,
+                      externalId: externalIdValue !== undefined ? String(externalIdValue) : undefined,
+                      key: parsed.key,
+                      description: parsed.description,
+                      configuration: value // Store the original YAML string
+                    });
+                  } catch (error) {
+                    // Handle cancellation errors gracefully
+                    if (error instanceof Error && 
+                        (error.message === 'Canceled' || error.message === 'Canceled: Canceled')) {
+                      return; // Just ignore the error
+                    }
+                    
+                    // Ignore other parse errors while typing
+                  }
+                }}
+                options={getCommonMonacoOptions(isMobileDevice)}
+              />
+            </div>
+
+            {/* YAML Linter Panel - 1/3 width on the right */}
+            {lintResult && (
+              <div className="flex-[1] bg-background rounded-lg p-4 overflow-y-auto">
+                <YamlLinterPanel
+                  result={lintResult}
+                  onMessageClick={handleLintMessageClick}
+                  className="text-sm"
+                />
+              </div>
+            )}
+          </div>
         )}
       </div>
+
+      {/* YAML Linter Panel - only show below editor in normal mode (not fullscreen) */}
+      {!isEditorFullscreen && lintResult && (
+        <div className="mt-3">
+          <div className="bg-background rounded-lg p-4">
+            <YamlLinterPanel
+              result={lintResult}
+              onMessageClick={handleLintMessageClick}
+              className="text-sm"
+            />
+          </div>
+        </div>
+      )}
 
       {/* Action buttons - show in both normal and fullscreen modes */}
       {hasChanges && (
         <div className={cn(
-          "mt-4 space-y-4",
+          "mt-3 space-y-4",
           isEditorFullscreen && "mt-4"
         )}>
           <div className={cn(
@@ -920,7 +1046,7 @@ const DetailContent = React.memo(({
 
       {/* Version history - hide in fullscreen mode */}
       {!isEditorFullscreen && versions && (
-        <div className="mt-6 overflow-hidden flex-shrink-0">
+        <div className="mt-3 overflow-hidden flex-shrink-0">
           <ScoreVersionHistory
             versions={versions}
             championVersionId={championVersionId}
@@ -954,8 +1080,10 @@ export function ScoreComponent({
   onToggleFullWidth,
   isFullWidth = false,
   onSave,
+  onFeedbackAnalysis,
   exampleItems = [],
   scorecardName,
+  onTaskCreated,
   className,
   ...props
 }: ScoreComponentProps) {
@@ -1529,6 +1657,7 @@ export function ScoreComponent({
               onEditChange={handleEditChange}
               onSave={onSave || handleSave}
               onCancel={handleCancel}
+              onFeedbackAnalysis={onFeedbackAnalysis}
               hasChanges={hasChanges}
               versions={versions}
               championVersionId={championVersionId}
@@ -1543,6 +1672,7 @@ export function ScoreComponent({
               exampleItems={exampleItems}
               selectedAccount={selectedAccount}
               scorecardName={scorecardName}
+              onTaskCreated={onTaskCreated}
             />
           )}
         </div>

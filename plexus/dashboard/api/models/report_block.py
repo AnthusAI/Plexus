@@ -21,6 +21,7 @@ class ReportBlock(BaseModel):
     name: Optional[str] = None
     log: Optional[str] = None
     attachedFiles: Optional[str] = None  # Renamed from detailsFiles
+    dataSetId: Optional[str] = None  # Optional dataset association
     createdAt: Optional[datetime] = None # Assuming these are set by backend
     updatedAt: Optional[datetime] = None # Assuming these are set by backend
 
@@ -40,6 +41,7 @@ class ReportBlock(BaseModel):
             output # Expecting JSON string from API
             log
             attachedFiles # Renamed from detailsFiles
+            dataSetId
             createdAt
             updatedAt
         """
@@ -78,6 +80,7 @@ class ReportBlock(BaseModel):
         name = data.get('name')
         log = data.get('log')
         attached_files = data.get('attachedFiles')  # Renamed from details_files / detailsFiles
+        data_set_id = data.get('dataSetId')
         position = data.get('position')
         if position is None:
             # Position is required in our plan, raise error or default?
@@ -101,6 +104,7 @@ class ReportBlock(BaseModel):
             name=name,
             log=log,
             attachedFiles=attached_files,  # Renamed from detailsFiles
+            dataSetId=data_set_id,
             createdAt=data['createdAt'],
             updatedAt=data['updatedAt']
             # Removed: client=client
@@ -122,6 +126,7 @@ class ReportBlock(BaseModel):
         name: Optional[str] = None,
         log: Optional[str] = None,
         attachedFiles: Optional[str] = None,  # Renamed from detailsFiles
+        dataSetId: Optional[str] = None,  # Optional dataset association
     ) -> 'ReportBlock':
         """Create a new ReportBlock record via GraphQL mutation."""
         mutation = f"""
@@ -141,6 +146,7 @@ class ReportBlock(BaseModel):
             'name': name,
             'log': log,
             'attachedFiles': attachedFiles,  # Renamed from detailsFiles
+            'dataSetId': dataSetId,  # Optional dataset association
             # createdAt/updatedAt are usually set by the backend automatically
         }
         # Remove keys with None values if the mutation expects them to be absent
@@ -286,7 +292,7 @@ class ReportBlock(BaseModel):
         # Only include fields that are part of the model and were actually passed
         allowed_update_fields = {
             'reportId', 'name', 'position', 'type', 
-            'output', 'log', 'attachedFiles' # Renamed from detailsFiles
+            'output', 'log', 'attachedFiles', 'dataSetId' # Renamed from detailsFiles
         }
         
         # Special handling for specific fields

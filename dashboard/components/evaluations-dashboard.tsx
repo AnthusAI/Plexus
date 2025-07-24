@@ -7,7 +7,7 @@ import type { Schema } from "@/amplify/data/resource"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import { Square, Columns2, X, ChevronDown, ChevronUp, Info, MessageCircleMore, Plus, ThumbsUp, ThumbsDown, Trash2, MoreHorizontal, Eye, RefreshCw, Share } from "lucide-react"
+import { Square, Columns2, X, ChevronDown, ChevronUp, Info, MessageCircleMore, Plus, ThumbsUp, ThumbsDown, Trash2, MoreHorizontal, Eye, RefreshCw, Share, MessageSquareCode } from "lucide-react"
 import { format, formatDistanceToNow, parseISO } from "date-fns"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -64,6 +64,7 @@ import { toast } from "sonner"
 import { shareLinkClient, ShareLinkViewOptions } from "@/utils/share-link-client"
 import { fetchAuthSession } from 'aws-amplify/auth'
 import { ShareResourceModal } from "@/components/share-resource-modal"
+import { EvaluationTasksGauges } from './EvaluationTasksGauges'
 
 type TaskResponse = {
   items: Evaluation[]
@@ -222,6 +223,14 @@ const LIST_EVALUATIONS = `
             trace
             itemId
             createdAt
+            feedbackItem {
+              id
+              editCommentValue
+              initialAnswerValue
+              finalAnswerValue
+              editorName
+              editedAt
+            }
           }
         }
       }
@@ -357,7 +366,12 @@ export function transformEvaluation(evaluation: Schema['Evaluation']['type']) {
     taskKeys: taskData ? Object.keys(taskData) : [],
     hasScoreResults: !!scoreResults?.items?.length,
     rawStages,
-    transformedStages
+    rawStagesType: typeof rawStages,
+    rawStagesKeys: rawStages ? Object.keys(rawStages) : [],
+    rawStagesData: rawStages?.data,
+    rawStagesItems: rawStages?.items,
+    transformedStages,
+    transformedStagesCount: transformedStages?.items?.length
   });
 
   // Transform the evaluation into the format expected by components
@@ -676,32 +690,14 @@ export default function EvaluationsDashboard({
           // Pass the raw score results - they will be standardized in the components
           scoreResults: evaluation.scoreResults
         }}
-        controlButtons={
-          <DropdownMenu>
-            <DropdownMenuTrigger>
-              <CardButton
-                icon={MoreHorizontal}
-                onClick={() => {}}
-                aria-label="More options"
-              />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={copyLinkToClipboard}>
-                <Share className="mr-2 h-4 w-4" />
-                <span>Share</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleDelete(evaluation.id)}>
-                <Trash2 className="mr-2 h-4 w-4" />
-                <span>Delete</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        }
+
         isFullWidth={isFullWidth}
         onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
         onClose={handleCloseEvaluation}
         selectedScoreResultId={selectedScoreResultId}
         onSelectScoreResult={handleScoreResultSelect}
+        onShare={copyLinkToClipboard}
+        onDelete={handleDelete}
       />
     );
   }, [selectedEvaluationId, evaluations, isFullWidth, selectedScoreResultId, handleScoreResultSelect, copyLinkToClipboard, handleDelete, handleCloseEvaluation]);
@@ -876,7 +872,12 @@ export default function EvaluationsDashboard({
                 damping: 30 
               }}
             >
-            <div className="@container">
+            <div className="@container space-y-3 overflow-visible">
+              {/* EvaluationTasksGauges at the top - only show when not in mobile selected evaluation view */}
+              {!(selectedEvaluationId && isNarrowViewport) && (
+                <EvaluationTasksGauges />
+              )}
+              
               {filteredEvaluations.length === 0 ? (
                 <div className="text-sm text-muted-foreground">No evaluations found</div>
               ) : (

@@ -1,26 +1,20 @@
 import React from 'react';
 import { ReportBlockProps } from './ReportBlock';
-import ScorecardReport, { ScorecardReportData } from './ScorecardReport';
+import { FeedbackAnalysisDisplay, type FeedbackAnalysisDisplayData } from '@/components/ui/feedback-analysis-display';
 import * as yaml from 'js-yaml';
-// No need to import FeedbackItemView since it's used in ScorecardReportEvaluation
 
-// For type-safety, create an interface for the data structure
-export interface FeedbackAnalysisData extends ScorecardReportData {
-  overall_ac1: number | null;
-  date_range: {
-    start: string;
-    end: string;
-  };
-  block_title?: string;
-  block_description?: string;
-}
+// Re-export the interface for backward compatibility
+export interface FeedbackAnalysisData extends FeedbackAnalysisDisplayData {}
 
 /**
  * Renders a Feedback Analysis block showing Gwet's AC1 agreement scores.
  * This component displays overall agreement and per-question breakdowns.
- * It extends the base ScorecardReport component.
  * 
- * The confusion matrix now uses FeedbackItemView to display filtered feedback items
+ * This component now uses the reusable FeedbackAnalysisDisplay component
+ * to maintain consistency between server-side report blocks and client-side
+ * ad-hoc analysis.
+ * 
+ * The confusion matrix uses FeedbackItemView to display filtered feedback items
  * in a structured before/after format with toggleable raw JSON view.
  */
 const FeedbackAnalysis: React.FC<ReportBlockProps> = (props) => {
@@ -51,26 +45,22 @@ const FeedbackAnalysis: React.FC<ReportBlockProps> = (props) => {
     return <p>No feedback analysis data available after parsing.</p>;
   }
 
-  // Create a modified output that maps overall_ac1 to overall_agreement for ScorecardReport
-  const modifiedOutput = {
-    ...feedbackData,
-    overall_agreement: feedbackData.overall_ac1
-  };
-
   // Use a meaningful name, ignoring generic block names
   const title = (props.name && !props.name.startsWith('block_')) ? props.name : 'Feedback Analysis';
 
   return (
-    <ScorecardReport 
-      {...props}
-      output={{
-        ...modifiedOutput,
-        // Preserve the original YAML string for the Code button
-        rawOutput: typeof props.output === 'string' ? props.output : undefined
-      }}
+    <FeedbackAnalysisDisplay
+      data={feedbackData}
       title={title}
-      subtitle={feedbackData.block_description || "Inter-rater reliability assessment"}
+      subtitle={feedbackData.block_description}
       showPrecisionRecall={false} // Don't show precision/recall gauges in feedback analysis
+      // Pass through all ReportBlock props for attachments, logs, etc.
+      attachedFiles={props.attachedFiles}
+      log={props.log}
+      rawOutput={typeof props.output === 'string' ? props.output : undefined}
+      id={props.id}
+      position={props.position}
+      config={props.config}
     />
   );
 };

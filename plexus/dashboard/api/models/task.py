@@ -29,6 +29,9 @@ class Task(BaseModel):
     errorDetails: Optional[Dict] = None
     stdout: Optional[str] = None
     stderr: Optional[str] = None
+    output: Optional[str] = None  # Universal Code YAML output
+    error: Optional[str] = None   # Structured error message
+    attachedFiles: Optional[List[str]] = None  # Array of S3 file keys
     currentStageId: Optional[str] = None
     workerNodeId: Optional[str] = None
     dispatchStatus: Optional[str] = None
@@ -56,6 +59,9 @@ class Task(BaseModel):
         errorDetails: Optional[Dict] = None,
         stdout: Optional[str] = None,
         stderr: Optional[str] = None,
+        output: Optional[str] = None,
+        error: Optional[str] = None,
+        attachedFiles: Optional[List[str]] = None,
         currentStageId: Optional[str] = None,
         workerNodeId: Optional[str] = None,
         dispatchStatus: Optional[str] = None,
@@ -80,6 +86,9 @@ class Task(BaseModel):
         self.errorDetails = errorDetails
         self.stdout = stdout
         self.stderr = stderr
+        self.output = output
+        self.error = error
+        self.attachedFiles = attachedFiles
         self.currentStageId = currentStageId
         self.workerNodeId = workerNodeId
         self.dispatchStatus = dispatchStatus
@@ -106,6 +115,9 @@ class Task(BaseModel):
             errorDetails
             stdout
             stderr
+            output
+            error
+            attachedFiles
             currentStageId
             workerNodeId
             dispatchStatus
@@ -758,6 +770,106 @@ class Task(BaseModel):
             logging.error(f"Failed to update stage '{current_stage.name}' status: {str(e)}", exc_info=True)
             raise  # Re-raise to prevent silent failures
 
+    def create_stages_batch(
+        self,
+        stage_configs: List[Dict[str, Any]]
+    ) -> List['TaskStage']:
+        """Create multiple TaskStages in a single GraphQL mutation.
+        
+        Args:
+            stage_configs: List of dictionaries containing stage configuration.
+                          Each dict should have keys: name, order, status, and optional fields.
+        
+        Returns:
+            List[TaskStage]: List of created TaskStage instances
+        """
+        from .task_stage import TaskStage
+        
+        if not stage_configs:
+            return []
+        
+        # Build a batch mutation to create all stages at once
+        mutation_parts = []
+        variables = {}
+        
+        for i, config in enumerate(stage_configs):
+            # Validate required fields
+            if not all(key in config for key in ['name', 'order']):
+                raise ValueError(f"Stage config {i} missing required fields (name, order)")
+            
+            # Prepare input data for this stage
+            stage_input = {
+                'taskId': self.id,
+                'name': config['name'],
+                'order': config['order'],
+                'status': config.get('status', 'PENDING')
+            }
+            
+            # Add optional fields if provided
+            optional_fields = [
+                'statusMessage', 'totalItems', 'processedItems',
+                'startedAt', 'completedAt', 'estimatedCompletionAt'
+            ]
+            for field in optional_fields:
+                if field in config and config[field] is not None:
+                    stage_input[field] = config[field]
+            
+            # Create variable name for this stage
+            var_name = f'stage{i}Input'
+            variables[var_name] = stage_input
+            
+            # Add mutation part for this stage
+            mutation_parts.append(f"""
+                stage{i}: createTaskStage(input: ${var_name}) {{
+                    {TaskStage.fields()}
+                }}
+            """)
+        
+        # Build complete mutation
+        mutation = f"""
+        mutation CreateTaskStagesBatch(
+            {', '.join(f'${var_name}: CreateTaskStageInput!' for var_name in variables.keys())}
+        ) {{
+            {''.join(mutation_parts)}
+        }}
+        """
+        
+        logging.info(f"Executing batch TaskStage creation for {len(stage_configs)} stages")
+        logging.debug(f"Batch mutation variables: {variables}")
+        
+        result = self._client.execute(mutation, variables)
+        
+        # Check for GraphQL errors
+        if 'errors' in result:
+            error_messages = [error.get('message', 'Unknown error') for error in result['errors']]
+            error_str = '; '.join(error_messages)
+            logging.error(f"GraphQL errors creating stages: {error_str}")
+            logging.error(f"Full error response: {result['errors']}")
+            raise Exception(f"Failed to create TaskStages: {error_str}")
+        
+        # Extract stage data from result
+        created_stages = []
+        for i in range(len(stage_configs)):
+            stage_key = f'stage{i}'
+            if stage_key in result:
+                stage_data = result[stage_key]
+                if stage_data:
+                    stage = TaskStage.from_dict(stage_data, self._client)
+                    created_stages.append(stage)
+                else:
+                    logging.error(f"No data returned for stage {i}")
+            else:
+                logging.error(f"Stage {i} not found in result")
+        
+        # Update task's currentStageId to the first stage if we created any
+        if created_stages:
+            first_stage = min(created_stages, key=lambda s: s.order)
+            self.update(currentStageId=first_stage.id)
+            logging.info(f"Set current stage to: {first_stage.name}")
+        
+        logging.info(f"Successfully created {len(created_stages)} stages in batch")
+        return created_stages
+    
     def create_stage(
         self,
         name: str,

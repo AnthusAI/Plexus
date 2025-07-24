@@ -28,6 +28,12 @@ export interface ScorecardReportData {
 export interface ScorecardReportProps extends ReportBlockProps {
   showDateRange?: boolean;
   showPrecisionRecall?: boolean;
+  onCellSelection?: (selection: { predicted: string | null; actual: string | null }) => void;
+  drillDownContent?: React.ReactNode;
+  showTitle?: boolean;
+  // Props for on-demand analysis drill-down
+  scorecardId?: string;
+  accountId?: string;
 }
 
 /**
@@ -39,6 +45,11 @@ const ScorecardReport: React.FC<ScorecardReportProps> = ({
   output, 
   showDateRange = true,
   showPrecisionRecall = true,
+  onCellSelection,
+  drillDownContent,
+  showTitle,
+  scorecardId,
+  accountId,
   children,
   ...restProps
 }) => {
@@ -84,7 +95,8 @@ const ScorecardReport: React.FC<ScorecardReportProps> = ({
   const averageRecall = calculateAverage('recall');
 
   // Determine which gauges to show in the summary
-  const hasAgreementGauge = scoreData.overall_agreement !== undefined;
+  const hasAgreementGauge = typeof scoreData.overall_agreement === 'number';
+  const hasAccuracyGauge = typeof accuracy === 'number';
   const hasPrecisionGauge = showPrecisionRecall && averagePrecision > 0;
   const hasRecallGauge = showPrecisionRecall && averageRecall > 0;
 
@@ -117,6 +129,10 @@ const ScorecardReport: React.FC<ScorecardReportProps> = ({
                   scoreIndex={item.originalIndex} // Pass the ORIGINAL index
                   attachedFiles={restProps.attachedFiles}
                   showPrecisionRecall={showPrecisionRecall}
+                  onCellSelection={onCellSelection}
+                  scorecardId={scorecardId}
+                  accountId={accountId}
+                  isSingleScore={scoreData.scores.length === 1}
                 />
               ))}
           </div>
@@ -158,16 +174,18 @@ const ScorecardReport: React.FC<ScorecardReportProps> = ({
                     )}
                     
                     {/* Accuracy Gauge */}
-                    <div className="flex flex-col items-center px-2">
-                      <div className="w-full min-w-[100px] max-w-[140px] mx-auto">
-                        <Gauge 
-                          value={accuracy} 
-                          title="Accuracy"
-                          segments={accuracySegments}
-                          showTicks={true}
-                        />
+                    {hasAccuracyGauge && (
+                      <div className="flex flex-col items-center px-2">
+                        <div className="w-full min-w-[100px] max-w-[140px] mx-auto">
+                          <Gauge 
+                            value={accuracy ?? 0} 
+                            title="Accuracy"
+                            segments={accuracySegments}
+                            showTicks={true}
+                          />
+                        </div>
                       </div>
-                    </div>
+                    )}
 
                     {/* Precision and Recall gauges - only if showPrecisionRecall is true and we have values */}
                     {hasPrecisionGauge && (
@@ -219,6 +237,9 @@ const ScorecardReport: React.FC<ScorecardReportProps> = ({
         </div>
       )}
 
+      {/* Drill-down content (rendered within the card) */}
+      {drillDownContent}
+
       {children}
     </>
   );
@@ -232,6 +253,7 @@ const ScorecardReport: React.FC<ScorecardReportProps> = ({
       title={restProps.title || "Scorecard Report"}
       attachedFiles={restProps.attachedFiles}
       log={restProps.log}
+      showTitle={showTitle}
       {...restProps}
     >
       {scoreCardContent}

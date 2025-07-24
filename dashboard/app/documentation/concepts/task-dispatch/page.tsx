@@ -95,7 +95,7 @@ export default function TaskDispatchPage() {
                 </code>
                 <code className="text-sm block">
                   # Run evaluation asynchronously<br/>
-                  plexus command dispatch "evaluate accuracy --scorecard-name agent-scorecard --number-of-samples 10"
+                  plexus command dispatch "evaluate accuracy --scorecard agent-scorecard --number-of-samples 10"
                 </code>
               </div>
             </div>
