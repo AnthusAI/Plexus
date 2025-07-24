@@ -21,6 +21,9 @@ import {
   formatFineTuning 
 } from '@/components/diagrams/text-formatting-utils';
 import { IdentifierDisplay } from '../ui/identifier-display';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkBreaks from 'remark-breaks';
 
 interface Identifier {
   id: string;
@@ -77,6 +80,7 @@ interface TopicAnalysisData {
     use_representation_model?: boolean;
     representation_model_provider?: string;
     representation_model_name?: string;
+    system_prompt?: string;
     topics_before?: Array<{
       topic_id: number;
       name: string;
@@ -90,6 +94,18 @@ interface TopicAnalysisData {
       enhanced: boolean;
     }>;
   };
+  task_configuration?: {
+    task_provided: boolean;
+    task_context?: string;
+    final_summarization_enabled: boolean;
+  };
+  final_summarization_configuration?: {
+    model: string;
+    provider: string;
+    custom_prompt_provided: boolean;
+    temperature: number;
+  };
+  final_summary?: string;
   topics?: Array<{
     id: number;
     name: string;
@@ -299,6 +315,11 @@ const TopicAnalysis: React.FC<ReportBlockProps> = (props) => {
               ))}
             </ul>
           </div>
+        )}
+
+        {/* Final Summary Section */}
+        {data.final_summary && (
+          <FinalSummarySection finalSummary={data.final_summary} />
         )}
 
         {/* Main Topic Analysis Results */}
@@ -1525,6 +1546,36 @@ const TopicDistributionChart: React.FC<{
           </Pie>
         </PieChart>
       </ResponsiveContainer>
+    </div>
+  );
+};
+
+/**
+ * Final Summary Section Component
+ * Displays the task-based final summary as a clean introduction
+ */
+const FinalSummarySection: React.FC<{
+  finalSummary: string;
+}> = ({ finalSummary }) => {
+  return (
+    <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:bg-muted prose-pre:text-foreground">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm, remarkBreaks]}
+        components={{
+          p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
+          ul: ({ children }) => <ul className="mb-3 ml-4 list-disc">{children}</ul>,
+          ol: ({ children }) => <ol className="mb-3 ml-4 list-decimal">{children}</ol>,
+          li: ({ children }) => <li className="mb-1">{children}</li>,
+          h1: ({ children }) => <h1 className="text-lg font-semibold mb-3 text-foreground">{children}</h1>,
+          h2: ({ children }) => <h2 className="text-base font-semibold mb-2 text-foreground">{children}</h2>,
+          h3: ({ children }) => <h3 className="text-sm font-medium mb-2 text-foreground">{children}</h3>,
+          blockquote: ({ children }) => <blockquote className="border-l-4 border-muted-foreground/20 pl-4 italic text-muted-foreground">{children}</blockquote>,
+          code: ({ children }) => <code className="bg-muted px-1 py-0.5 rounded text-sm">{children}</code>,
+          pre: ({ children }) => <pre className="bg-muted p-3 rounded overflow-x-auto">{children}</pre>,
+        }}
+      >
+        {finalSummary}
+      </ReactMarkdown>
     </div>
   );
 };
