@@ -48,7 +48,7 @@ export const useFeedbackItemsByAnswers = () => {
       const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000); // 30 days ago
       const endDate = new Date();
       
-      const response: any = await (client.models.FeedbackItem as any).listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt({
+      const response: any = await (client.models.FeedbackItem as any).listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt({
         accountId: filter.accountId,
         scorecardIdScoreIdUpdatedAt: {
           between: [

@@ -215,7 +215,7 @@ export function useFeedbackAnalysis(config: FeedbackAnalysisConfig) {
                 
                 console.log(`🔍 Score ${scoreId} Page ${scorePageCount} query with nextToken: ${scoreNextToken ? 'yes' : 'no'}`);
                 
-                const response: any = await (client.models.FeedbackItem as any).listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt(gsiParams);
+                const response: any = await (client.models.FeedbackItem as any).listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt(gsiParams);
                 
                 if (response.errors && response.errors.length > 0) {
                   console.error(`🚨 GSI query errors for score ${scoreId}:`, response.errors);
@@ -290,7 +290,7 @@ export function useFeedbackAnalysis(config: FeedbackAnalysisConfig) {
 
             console.log(`🔍 GSI Query Page ${pageCount} with params:`, gsiParams);
 
-            const response: any = await (client.models.FeedbackItem as any).listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt(gsiParams);
+            const response: any = await (client.models.FeedbackItem as any).listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt(gsiParams);
 
             console.log(`📄 GSI Response:`, {
               hasData: !!response.data,

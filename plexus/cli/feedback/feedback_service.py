@@ -600,14 +600,14 @@ class FeedbackService:
             query = """
             query ListFeedbackItemsByGSI(
                 $accountId: String!,
-                $composite_sk_condition: ModelFeedbackItemByAccountScorecardScoreUpdatedAtCompositeKeyConditionInput,
+                $composite_sk_condition: ModelFeedbackItemByAccountScorecardScoreEditedAtCompositeKeyConditionInput,
                 $limit: Int,
                 $nextToken: String,
                 $sortDirection: ModelSortDirection
             ) {
-                listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt(
+                listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt(
                     accountId: $accountId,
-                    scorecardIdScoreIdUpdatedAt: $composite_sk_condition,
+                    scorecardIdScoreIdEditedAt: $composite_sk_condition,
                     limit: $limit,
                     nextToken: $nextToken,
                     sortDirection: $sortDirection
@@ -649,12 +649,12 @@ class FeedbackService:
                         {
                             "scorecardId": scorecard_id,
                             "scoreId": score_id,
-                            "updatedAt": start_date.isoformat()
+                            "editedAt": start_date.isoformat()
                         },
                         {
                             "scorecardId": scorecard_id,
                             "scoreId": score_id,
-                            "updatedAt": end_date.isoformat()
+                            "editedAt": end_date.isoformat()
                         }
                     ]
                 },
@@ -679,7 +679,7 @@ class FeedbackService:
                     # Fall back to the standard method if GSI fails
                     raise Exception(f"GSI query failed: {response['errors']}")
                 
-                result_data = response.get('listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndUpdatedAt', {})
+                result_data = response.get('listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt', {})
                 items_data = result_data.get('items', [])
                 
                 # Convert to FeedbackItem objects
@@ -705,7 +705,7 @@ class FeedbackService:
                     {"accountId": {"eq": account_id}},
                     {"scorecardId": {"eq": scorecard_id}},
                     {"scoreId": {"eq": score_id}},
-                    {"updatedAt": {"ge": cutoff_date}}
+                    {"editedAt": {"ge": cutoff_date}}
                 ]
             }
             
