@@ -47,7 +47,7 @@ class TestPlexusFastmcpServer(unittest.TestCase):
         """Test URL construction with default base URL when env var is missing"""
         self.assertEqual(
             get_plexus_url("lab/items"), 
-            "https://plexus.anth.us/lab/items"
+            "https://capacity-plexus.anth.us/lab/items"
         )
     
     @patch.dict(os.environ, {"PLEXUS_APP_URL": "https://plexus.anth.us"})
