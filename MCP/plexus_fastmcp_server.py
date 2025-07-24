@@ -120,6 +120,14 @@ try:
     # Import FastMCP
     from fastmcp import FastMCP
     
+    # Load YAML configuration first (before importing Plexus modules)
+    try:
+        from plexus.config import load_config
+        load_config()  # This will set environment variables from YAML config
+        logger.info("YAML configuration loaded successfully")
+    except Exception as e:
+        logger.warning(f"Failed to load YAML configuration: {e}")
+    
     # Try to import the Plexus core modules
     try:
         # Attempt to import Plexus modules for core functionality
@@ -769,7 +777,6 @@ async def plexus_scorecard_info(scorecard_identifier: str) -> Union[str, Dict[st
     try:
         # Import plexus CLI inside function to keep startup fast
         try:
-            # Fix the import to use the correct modules
             from plexus.cli.client_utils import create_client as create_dashboard_client
             from plexus.cli.ScorecardCommands import resolve_scorecard_identifier
             from plexus.dashboard.api.client import PlexusDashboardClient
@@ -890,7 +897,6 @@ async def plexus_reports_list(
     try:
         # Import plexus CLI inside function to keep startup fast
         try:
-            # Fix imports to use the correct modules
             from plexus.cli.client_utils import create_client as create_dashboard_client
             from plexus.dashboard.api.client import PlexusDashboardClient
         except ImportError as e:
@@ -1054,7 +1060,6 @@ async def plexus_report_info(report_id: str) -> Union[str, Dict[str, Any]]:
     try:
         # Import plexus CLI inside function to keep startup fast
         try:
-            # Fix imports to use the correct modules
             from plexus.cli.client_utils import create_client as create_dashboard_client
             from plexus.dashboard.api.client import PlexusDashboardClient
         except ImportError as e:
@@ -1311,13 +1316,13 @@ async def plexus_report_configurations_list() -> Union[str, List[Dict]]:
 
 @mcp.tool()
 async def plexus_item_last(
-    include_score_results: bool = False
+    minimal: bool = False
 ) -> Union[str, Dict[str, Any]]:
     """
-    Gets the most recent item for the default account, with optional score results.
+    Gets the most recent item for the default account, including score results and feedback items by default.
     
     Parameters:
-    - include_score_results: Whether to include score results for the item (optional, default: False)
+    - minimal: If True, returns minimal info without score results and feedback items (optional, default: False)
     
     Returns:
     - Detailed information about the most recent item
@@ -1393,6 +1398,7 @@ async def plexus_item_last(
             'description': item.description,
             'externalId': item.externalId,
             'isEvaluation': item.isEvaluation,
+            'createdByType': item.createdByType,
             'metadata': item.metadata,
             'identifiers': item.identifiers,
             'attachedFiles': item.attachedFiles,
@@ -1401,10 +1407,13 @@ async def plexus_item_last(
             'url': get_item_url(item.id)
         }
         
-        # Get score results if requested
-        if include_score_results:
+        # Get score results and feedback items by default (unless minimal mode)
+        if not minimal:
             score_results = await _get_score_results_for_item(item.id, client)
             item_dict['scoreResults'] = score_results
+            
+            feedback_items = await _get_feedback_items_for_item(item.id, client)
+            item_dict['feedbackItems'] = feedback_items
         
         logger.info(f"Successfully retrieved latest item: {item.id}")
         return item_dict
@@ -1423,17 +1432,17 @@ async def plexus_item_last(
 @mcp.tool()
 async def plexus_item_info(
     item_id: str,
-    include_score_results: bool = False
+    minimal: bool = False
 ) -> Union[str, Dict[str, Any]]:
     """
-    Gets detailed information about a specific item by its ID, with optional score results.
+    Gets detailed information about a specific item by its ID or external identifier, including score results and feedback items by default.
     
     Parameters:
-    - item_id: The unique ID of the item
-    - include_score_results: Whether to include score results for the item (optional, default: False)
+    - item_id: The unique ID of the item OR an external identifier value (e.g., "277430500")
+    - minimal: If True, returns minimal info without score results and feedback items (optional, default: False)
     
     Returns:
-    - Detailed information about the item
+    - Detailed information about the item including text content, metadata, identifiers, and timestamps
     """
     # Temporarily redirect stdout to capture any unexpected output
     old_stdout = sys.stdout
@@ -1446,6 +1455,7 @@ async def plexus_item_info(
             from plexus.cli.client_utils import create_client as create_dashboard_client
             from plexus.dashboard.api.models.item import Item
             from plexus.dashboard.api.models.score_result import ScoreResult
+            from plexus.utils.identifier_search import find_item_by_identifier
         except ImportError as e:
             logger.error(f"ImportError: {str(e)}", exc_info=True)
             return f"Error: Failed to import Plexus modules: {str(e)}"
@@ -1462,13 +1472,116 @@ async def plexus_item_info(
         if not client:
             return "Error: Could not create dashboard client."
 
-        logger.info(f"Getting item details for ID: {item_id}")
+        logger.info(f"Getting item details for ID/identifier: {item_id}")
         
+        item = None
+        lookup_method = "unknown"
+        
+        # Try direct ID lookup first
         try:
             item = Item.get_by_id(item_id, client)
-            if not item:
-                return f"Item not found: {item_id}"
-            
+            if item:
+                lookup_method = "direct_id"
+                logger.info(f"Found item by direct ID lookup: {item_id}")
+        except ValueError:
+            # Not found by ID, continue to identifier search
+            logger.info(f"Item not found by direct ID, trying identifier search for: {item_id}")
+        except Exception as e:
+            logger.warning(f"Error in direct ID lookup: {str(e)}")
+        
+        # If direct ID lookup failed, try identifier-based lookup
+        if not item:
+            default_account_id = get_default_account_id()
+            if default_account_id:
+                try:
+                    item = find_item_by_identifier(item_id, default_account_id, client)
+                    if item:
+                        lookup_method = "identifier_search"
+                        logger.info(f"Found item by identifier search: {item.id} (identifier: {item_id})")
+                except Exception as e:
+                    logger.warning(f"Error in identifier search: {str(e)}")
+        
+        # If still not found, try Identifiers table GSI lookup as final fallback
+        if not item:
+            default_account_id = get_default_account_id()
+            if default_account_id:
+                try:
+                    # Use the Identifiers table GSI to find items by identifier value
+                    query = """
+                    query GetIdentifierByAccountAndValue($accountId: String!, $value: String!) {
+                        listIdentifierByAccountIdAndValue(
+                            accountId: $accountId,
+                            value: {eq: $value},
+                            limit: 1
+                        ) {
+                            items {
+                                itemId
+                                name
+                                value
+                                url
+                                position
+                                item {
+                                    id
+                                    accountId
+                                    evaluationId
+                                    scoreId
+                                    description
+                                    externalId
+                                    isEvaluation
+                                    text
+                                    metadata
+                                    identifiers
+                                    attachedFiles
+                                    createdAt
+                                    updatedAt
+                                }
+                            }
+                        }
+                    }
+                    """
+                    
+                    result = client.execute(query, {
+                        'accountId': default_account_id,
+                        'value': item_id
+                    })
+                    
+                    if result and 'listIdentifierByAccountIdAndValue' in result:
+                        identifiers = result['listIdentifierByAccountIdAndValue'].get('items', [])
+                        if identifiers:
+                            identifier_data = identifiers[0]
+                            item_data = identifier_data.get('item', {})
+                            
+                            if item_data:
+                                # Create a mock Item object from the data
+                                class MockItem:
+                                    def __init__(self, data):
+                                        for key, value in data.items():
+                                            setattr(self, key, value)
+                                        # Handle datetime parsing
+                                        if hasattr(self, 'createdAt') and self.createdAt:
+                                            from datetime import datetime
+                                            try:
+                                                self.createdAt = datetime.fromisoformat(self.createdAt.replace('Z', '+00:00'))
+                                            except:
+                                                pass
+                                        if hasattr(self, 'updatedAt') and self.updatedAt:
+                                            from datetime import datetime
+                                            try:
+                                                self.updatedAt = datetime.fromisoformat(self.updatedAt.replace('Z', '+00:00'))
+                                            except:
+                                                pass
+                                
+                                item = MockItem(item_data)
+                                lookup_method = f"identifiers_table_gsi (name: {identifier_data.get('name', 'N/A')})"
+                                logger.info(f"Found item by Identifiers table GSI: {item.id} (identifier: {item_id})")
+                    
+                except Exception as e:
+                    logger.warning(f"Error in Identifiers table GSI lookup: {str(e)}")
+        
+        if not item:
+            return f"Item not found: {item_id} (tried direct ID, identifier search, and external ID lookup)"
+        
+        try:
             # Convert item to dictionary format
             item_dict = {
                 'id': item.id,
@@ -1478,28 +1591,34 @@ async def plexus_item_info(
                 'description': item.description,
                 'externalId': item.externalId,
                 'isEvaluation': item.isEvaluation,
+                'createdByType': item.createdByType,
+                'text': item.text,  # Include text content
                 'metadata': item.metadata,
                 'identifiers': item.identifiers,
                 'attachedFiles': item.attachedFiles,
-                'createdAt': item.createdAt.isoformat() if item.createdAt else None,
-                'updatedAt': item.updatedAt.isoformat() if item.updatedAt else None,
-                'url': get_item_url(item.id)
+                'createdAt': item.createdAt.isoformat() if hasattr(item.createdAt, 'isoformat') else item.createdAt,
+                'updatedAt': item.updatedAt.isoformat() if hasattr(item.updatedAt, 'isoformat') else item.updatedAt,
+                'url': get_item_url(item.id),
+                'lookupMethod': lookup_method  # Include how the item was found for debugging
             }
             
-            # Get score results if requested
-            if include_score_results:
+            # Get score results and feedback items by default (unless minimal mode)
+            if not minimal:
                 score_results = await _get_score_results_for_item(item.id, client)
                 item_dict['scoreResults'] = score_results
+                
+                feedback_items = await _get_feedback_items_for_item(item.id, client)
+                item_dict['feedbackItems'] = feedback_items
             
-            logger.info(f"Successfully retrieved item details: {item_id}")
+            logger.info(f"Successfully retrieved item details: {item.id} (lookup method: {lookup_method})")
             return item_dict
             
         except Exception as e:
-            logger.error(f"Error retrieving item {item_id}: {str(e)}", exc_info=True)
-            return f"Error retrieving item {item_id}: {str(e)}"
+            logger.error(f"Error processing item {item.id}: {str(e)}", exc_info=True)
+            return f"Error processing item {item.id}: {str(e)}"
         
     except Exception as e:
-        logger.error(f"Error getting item details for ID '{item_id}': {str(e)}", exc_info=True)
+        logger.error(f"Error getting item details for ID/identifier '{item_id}': {str(e)}", exc_info=True)
         return f"Error getting item details: {str(e)}"
     finally:
         # Check if anything was written to stdout
@@ -1921,6 +2040,7 @@ async def plexus_score_info(
                                     description
                                     type
                                     championVersionId
+                                    isDisabled
                                 }}
                             }}
                         }}
@@ -1974,6 +2094,7 @@ async def plexus_score_info(
                                         description
                                         type
                                         championVersionId
+                                        isDisabled
                                     }}
                                 }}
                             }}
@@ -2026,6 +2147,7 @@ async def plexus_score_info(
                 "description": score.get('description'),
                 "type": score.get('type'),
                 "championVersionId": score.get('championVersionId'),
+                "isDisabled": score.get('isDisabled', False),
                 "location": {
                     "scorecardId": scorecard_id,
                     "scorecardName": scorecard['name'],
@@ -2140,6 +2262,7 @@ async def plexus_score_info(
                     "scoreName": score['name'],
                     "scorecardName": scorecard['name'],
                     "sectionName": section['name'],
+                    "isDisabled": score.get('isDisabled', False),
                     "dashboardUrl": get_plexus_url(f"lab/scorecards/{scorecard['id']}/scores/{score['id']}")
                 })
             
@@ -3298,6 +3421,7 @@ async def plexus_predict(
                                 key
                                 externalId
                                 championVersionId
+                                isDisabled
                             }}
                         }}
                     }}
@@ -3370,9 +3494,21 @@ async def plexus_predict(
                     try:
                         # Import the CLI prediction components  
                         from plexus.cli.PredictionCommands import select_sample, predict_score, get_scorecard_class
+                        from plexus.Registries import scorecard_registry
+                        from plexus.Scorecard import Scorecard
                         
-                        # Get the scorecard class (same as CLI does)
+                        # Force fresh reload of YAML files by clearing registry cache
+                        logger.info("Clearing scorecard registry to ensure fresh YAML reload...")
+                        scorecard_registry._classes_by_id.clear()
+                        scorecard_registry._classes_by_key.clear()
+                        scorecard_registry._classes_by_name.clear()
+                        scorecard_registry._properties_by_id.clear()
+                        scorecard_registry._properties_by_key.clear()
+                        scorecard_registry._properties_by_name.clear()
+                        
+                        # Get the scorecard class (this will now force reload from YAML files)
                         scorecard_class = get_scorecard_class(scorecard_name)
+                        logger.info(f"Loaded fresh scorecard configuration from YAML files for '{scorecard_name}'")
                         
                         # Get the sample data for the item (same as CLI does)
                         sample_row, used_item_id = select_sample(
@@ -3388,28 +3524,9 @@ async def plexus_predict(
                         # Process the results same as CLI does
                         if prediction_results:
                             if isinstance(prediction_results, list):
-                                prediction = prediction_results[0] if prediction_results else None
-                                if prediction:
-                                    prediction_result = {
-                                        "item_id": target_id,
-                                        "scores": [
-                                            {
-                                                "name": score_name,
-                                                "value": prediction.value,
-                                                "explanation": prediction.explanation,
-                                                "cost": costs
-                                            }
-                                        ]
-                                    }
-                                    # Extract trace information if available
-                                    if hasattr(prediction, 'trace') and include_trace:
-                                        prediction_result["scores"][0]["trace"] = prediction.trace
-                                    elif hasattr(prediction, 'metadata') and prediction.metadata and include_trace:
-                                        prediction_result["scores"][0]["trace"] = prediction.metadata.get('trace')
-                                else:
-                                    raise Exception("No prediction result returned")
-                            else:
-                                # Handle Score.Result object
+                                prediction_results = prediction_results[0]  # Take first result
+                            
+                            if prediction_results:
                                 if hasattr(prediction_results, 'value') and prediction_results.value is not None:
                                     explanation = (
                                         getattr(prediction_results, 'explanation', None) or
@@ -3464,17 +3581,7 @@ async def plexus_predict(
                             "attachedFiles": item_data.get('attachedFiles'),
                             "externalId": item_data.get('externalId')
                         }
-                    
-                    # Add trace data if requested
-                    if include_trace:
-                        prediction_result["trace"] = {
-                            "scorecard_id": scorecard_id,
-                            "score_id": found_score['id'],
-                            "score_version_id": found_score.get('championVersionId'),
-                            "execution_timestamp": "2025-01-01T00:00:00Z",
-                            "note": "This is simulated trace data. Real implementation would include detailed execution steps."
-                        }
-                    
+                                        
                     prediction_results_list.append(prediction_result)
                     
                 except Exception as item_error:
@@ -3694,6 +3801,59 @@ async def _get_score_results_for_item(item_id: str, client) -> List[Dict[str, An
         logger.error(f"Error getting score results for item {item_id}: {str(e)}", exc_info=True)
         return []
 
+
+async def _get_feedback_items_for_item(item_id: str, client) -> List[Dict[str, Any]]:
+    """
+    Helper function to get all feedback items for a specific item, sorted by updatedAt descending.
+    This mirrors the functionality from the CLI ItemCommands.get_feedback_items_for_item function.
+    """
+    try:
+        from plexus.dashboard.api.models.feedback_item import FeedbackItem
+        from datetime import datetime
+        
+        # Use the FeedbackItem.list method with filtering
+        feedback_items, _ = FeedbackItem.list(
+            client=client,
+            filter={'itemId': {'eq': item_id}},
+            limit=1000
+        )
+        
+        # Convert to dictionary format and sort by updatedAt descending
+        feedback_items_list = []
+        for fi in feedback_items:
+            fi_dict = {
+                'id': fi.id,
+                'accountId': fi.accountId,
+                'scorecardId': fi.scorecardId,
+                'scoreId': fi.scoreId,
+                'itemId': fi.itemId,
+                'cacheKey': fi.cacheKey,
+                'initialAnswerValue': fi.initialAnswerValue,
+                'finalAnswerValue': fi.finalAnswerValue,
+                'initialCommentValue': fi.initialCommentValue,
+                'finalCommentValue': fi.finalCommentValue,
+                'editCommentValue': fi.editCommentValue,
+                'isAgreement': fi.isAgreement,
+                'editorName': fi.editorName,
+                'editedAt': fi.editedAt.isoformat() if hasattr(fi.editedAt, 'isoformat') and fi.editedAt else fi.editedAt,
+                'createdAt': fi.createdAt.isoformat() if hasattr(fi.createdAt, 'isoformat') and fi.createdAt else fi.createdAt,
+                'updatedAt': fi.updatedAt.isoformat() if hasattr(fi.updatedAt, 'isoformat') and fi.updatedAt else fi.updatedAt,
+            }
+            feedback_items_list.append(fi_dict)
+        
+        # Sort by updatedAt descending
+        feedback_items_list.sort(
+            key=lambda fi: fi.get('updatedAt', '1970-01-01T00:00:00'),
+            reverse=True
+        )
+        
+        return feedback_items_list
+        
+    except Exception as e:
+        logger.error(f"Error getting feedback items for item {item_id}: {str(e)}", exc_info=True)
+        return []
+
+
 # Setup dotenv support for loading environment variables
 def load_env_file(env_dir=None):
     """Load environment variables from .env file."""
@@ -3793,7 +3953,7 @@ def get_plexus_url(path: str) -> str:
     Returns:
     - Full URL string
     """
-    base_url = os.environ.get('PLEXUS_APP_URL', 'https://capacity-plexus.anth.us')
+    base_url = os.environ.get('PLEXUS_APP_URL', 'https://plexus.anth.us')
     # Ensure base URL ends with a slash for urljoin to work correctly
     if not base_url.endswith('/'):
         base_url += '/'

@@ -30,7 +30,7 @@ type ItemIndexFields = "name" | "description" | "accountId" | "evaluationId" | "
 type ScoringJobIndexFields = "accountId" | "scorecardId" | "itemId" | "status" | 
     "scoreId" | "evaluationId" | "startedAt" | "completedAt" | "errorMessage" | "updatedAt" | "createdAt";
 type ScoreResultIndexFields = "accountId" | "scorecardId" | "itemId" | 
-    "scoringJobId" | "evaluationId" | "scoreVersionId" | "updatedAt" | "createdAt" | "scoreId" | "code" | "type";
+    "scoringJobId" | "evaluationId" | "scoreVersionId" | "updatedAt" | "createdAt" | "scoreId" | "code" | "type" | "feedbackItemId";
 type BatchJobScoringJobIndexFields = "batchJobId" | "scoringJobId";
 type TaskIndexFields = "accountId" | "type" | "status" | "target" | 
     "currentStageId" | "updatedAt" | "scorecardId" | "scoreId";
@@ -40,7 +40,7 @@ type ScoreVersionIndexFields = "scoreId" | "versionNumber" | "isFeatured";
 type ReportConfigurationIndexFields = "accountId" | "name";
 type ReportIndexFields = "accountId" | "reportConfigurationId" | "createdAt" | "updatedAt" | "taskId";
 type ReportBlockIndexFields = "reportId" | "name" | "position" | "dataSetId";
-type FeedbackItemIndexFields = "accountId" | "scorecardId" | "scoreId" | "cacheKey" | "updatedAt" | "itemId"; // UPDATED: Renamed externalId to cacheKey and added itemId
+type FeedbackItemIndexFields = "accountId" | "scorecardId" | "scoreId" | "cacheKey" | "updatedAt" | "itemId" | "editedAt";
 type ScorecardExampleItemIndexFields = "scorecardId" | "itemId" | "addedAt";
 type ScorecardProcessedItemIndexFields = "scorecardId" | "itemId" | "processedAt";
 type IdentifierIndexFields = "accountId" | "value" | "name" | "itemId" | "position";
@@ -426,6 +426,8 @@ const schema = a.schema({
             code: a.string(), // HTTP response code (e.g., "200", "404", "500")
             updatedAt: a.datetime(),
             createdAt: a.datetime(),
+            feedbackItemId: a.string(),
+            feedbackItem: a.belongsTo('FeedbackItem', 'feedbackItemId'),
         })
         .authorization((allow) => [
             allow.publicApiKey(),
@@ -442,8 +444,7 @@ const schema = a.schema({
             index("scoreId"),
             index("scorecardId").sortKeys(["scoreId", "itemId"]).name("byScorecardScoreItem"),
             index("itemId").sortKeys(["scorecardId", "scoreId"]).name("byItemScorecardScore"),
-            index("itemId").sortKeys(["scorecardId", "scoreId", "updatedAt"]).name("byItemScorecardScoreUpdated"),
-            index("accountId").sortKeys(["code", "updatedAt"]).name("byAccountCodeAndUpdatedAt")
+            index("itemId").sortKeys(["scorecardId", "scoreId", "updatedAt"]).name("byItemScorecardScoreUpdated")
         ]),
 
     BatchJobScoringJob: a
@@ -677,6 +678,7 @@ const schema = a.schema({
             isAgreement: a.boolean(),
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
+            scoreResults: a.hasMany('ScoreResult', 'feedbackItemId'),
         })
         .authorization((allow) => [
             allow.publicApiKey(),
@@ -688,7 +690,7 @@ const schema = a.schema({
             idx("accountId").sortKeys(["scorecardId", "scoreId", "updatedAt"]).name("byAccountScorecardScoreUpdatedAt"),
             idx("accountId").sortKeys(["scorecardId", "scoreId", "editedAt"]).name("byAccountScorecardScoreEditedAt"),
             idx("cacheKey").name("byCacheKey"), // GSI for FeedbackItem deduplication
-            idx("itemId")
+            idx("itemId"),
         ]),
 
     ScorecardExampleItem: a

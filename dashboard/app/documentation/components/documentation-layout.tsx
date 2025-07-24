@@ -130,6 +130,14 @@ const docSections: DocSidebarItem[] = [
     ],
   },
   {
+    name: "Setup",
+    href: "/documentation/setup",
+    items: [
+      { name: "Quick Start", href: "/documentation/setup/quick-start" },
+      { name: "Configuration Files", href: "/documentation/setup/configuration" },
+    ],
+  },
+  {
     name: "Advanced",
     href: "/documentation/advanced",
     items: [

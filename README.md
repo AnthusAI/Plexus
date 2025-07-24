@@ -95,6 +95,73 @@ Clone this repository. We're not in PyPi yet, so you'll have to install it local
 
 `pip install -e .`
 
+### Configuration
+
+Plexus supports YAML configuration files for managing environment variables and settings. This provides a more organized alternative to using `.env` files.
+
+#### Configuration File Location
+
+Create a configuration file at one of these locations (in order of precedence):
+
+1. `{project}/.plexus/config.yaml` (project-specific, highest priority)
+2. `{project}/.plexus/config.yml`
+3. `~/.plexus/config.yaml` (user-wide, lower priority)
+4. `~/.plexus/config.yml`
+
+#### Configuration Structure
+
+Copy the example configuration and modify it for your environment:
+
+```bash
+cp plexus.yaml.example .plexus/config.yaml
+```
+
+The configuration file supports all Plexus environment variables organized in a hierarchical structure:
+
+```yaml
+# Environment and Debug Settings
+environment: development
+debug: false
+
+# Core Plexus Configuration
+plexus:
+  api_url: https://your-plexus-instance.appsync-api.amazonaws.com/graphql
+  api_key: da2-your-api-key-here
+  app_url: https://plexus.anth.us
+  account_key: your-account-key
+  enable_batching: true
+
+# AWS Configuration
+aws:
+  access_key_id: AKIA-YOUR-ACCESS-KEY
+  secret_access_key: your-secret-access-key
+  region_name: us-west-2
+
+# AI/ML Service APIs
+openai:
+  api_key: sk-your-openai-api-key
+
+anthropic:
+  api_key: sk-ant-api03-your-anthropic-api-key
+```
+
+#### How Configuration Loading Works
+
+1. **Precedence**: Environment variables take precedence over YAML configuration
+2. **Automatic Loading**: Configuration is loaded automatically when using Plexus CLI tools or MCP server
+3. **Validation**: Missing required credentials will show clear error messages
+4. **Logging**: A single log line shows which configuration files were loaded
+
+#### Migration from .env Files
+
+If you're currently using `.env` files, you can migrate by:
+
+1. Converting your `.env` variables to the YAML structure shown above
+2. Moving sensitive credentials to the YAML file
+3. Optionally removing the `.env` file once migration is complete
+
+The YAML configuration provides better organization, supports nested structures, and integrates seamlessly with the existing Plexus tooling.
+
 ### Testing
 
 Run all the tests:

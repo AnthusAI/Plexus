@@ -155,3 +155,205 @@ def test_batch_create_score_results(mock_client):
     call_args = mock_client.execute.call_args[0]
     assert 'batchCreateScoreResults' in call_args[0]
     assert len(call_args[1]['inputs']) == 2
+
+
+# Tests for find_by_cache_key method
+class TestFindByCacheKey:
+    """Test suite for ScoreResult.find_by_cache_key method"""
+    
+    @pytest.fixture
+    def sample_score_result_data(self):
+        """Sample ScoreResult data for mocking responses"""
+        return {
+            'id': 'score-result-123',
+            'value': 'Yes',
+            'explanation': 'Test explanation',
+            'itemId': 'item-123',
+            'scorecardId': 'scorecard-456', 
+            'scoreId': 'score-789',
+            'accountId': 'account-abc',
+            'updatedAt': '2025-07-13T18:55:07.290773+00:00',
+            'createdAt': '2025-07-13T18:55:07.290773+00:00',
+            'metadata': '{"test": "data"}',
+            'confidence': 0.95
+        }
+    
+    @pytest.fixture
+    def mock_gsi_response(self, sample_score_result_data):
+        """Mock GSI query response"""
+        return {
+            'listScoreResultByItemIdAndScorecardIdAndScoreIdAndUpdatedAt': {
+                'items': [sample_score_result_data]
+            }
+        }
+    
+    @pytest.fixture
+    def mock_empty_gsi_response(self):
+        """Mock empty GSI query response (cache miss)"""
+        return {
+            'listScoreResultByItemIdAndScorecardIdAndScoreIdAndUpdatedAt': {
+                'items': []
+            }
+        }
+    
+    def test_find_by_cache_key_success(self, mock_client, mock_gsi_response, sample_score_result_data):
+        """Test successful cache key lookup"""
+        mock_client.execute.return_value = mock_gsi_response
+        
+        result = ScoreResult.find_by_cache_key(
+            client=mock_client,
+            item_id="item-123",
+            scorecard_id="scorecard-456",
+            score_id="score-789"
+        )
+        
+        # Verify we got a ScoreResult object back
+        assert result is not None
+        assert isinstance(result, ScoreResult)
+        assert result.id == sample_score_result_data['id']
+        assert result.value == sample_score_result_data['value']
+        assert result.itemId == sample_score_result_data['itemId']
+        assert result.scorecardId == sample_score_result_data['scorecardId']
+        assert result.scoreId == sample_score_result_data['scoreId']
+        
+        # Verify the GSI query was executed correctly
+        mock_client.execute.assert_called_once()
+        call_args = mock_client.execute.call_args
+        query = call_args[0][0]
+        variables = call_args[0][1]
+        
+        assert 'listScoreResultByItemIdAndScorecardIdAndScoreIdAndUpdatedAt' in query
+        assert 'sortDirection: DESC' in query
+        assert 'limit: 1' in query
+        assert variables == {
+            "itemId": "item-123",
+            "scorecardId": "scorecard-456", 
+            "scoreId": "score-789"
+        }
+    
+    def test_find_by_cache_key_not_found(self, mock_client, mock_empty_gsi_response):
+        """Test cache miss scenario"""
+        mock_client.execute.return_value = mock_empty_gsi_response
+        
+        result = ScoreResult.find_by_cache_key(
+            client=mock_client,
+            item_id="item-nonexistent",
+            scorecard_id="scorecard-nonexistent",
+            score_id="score-nonexistent"
+        )
+        
+        # Should return None for cache miss
+        assert result is None
+        
+        # Verify query was still executed
+        mock_client.execute.assert_called_once()
+    
+    def test_find_by_cache_key_with_account_id(self, mock_client, mock_gsi_response):
+        """Test cache lookup with optional account_id parameter"""
+        mock_client.execute.return_value = mock_gsi_response
+        
+        result = ScoreResult.find_by_cache_key(
+            client=mock_client,
+            item_id="item-123",
+            scorecard_id="scorecard-456",
+            score_id="score-789",
+            account_id="account-abc"  # Optional parameter
+        )
+        
+        assert result is not None
+        
+        # account_id is currently not used in the query, but method should still work
+        mock_client.execute.assert_called_once()
+    
+    def test_find_by_cache_key_exception_handling(self, mock_client):
+        """Test exception handling in find_by_cache_key"""
+        # Mock client to raise an exception
+        mock_client.execute.side_effect = Exception("GraphQL error")
+        
+        # Should not raise exception, should return None
+        result = ScoreResult.find_by_cache_key(
+            client=mock_client,
+            item_id="item-123",
+            scorecard_id="scorecard-456",
+            score_id="score-789"
+        )
+        
+        assert result is None
+        mock_client.execute.assert_called_once()
+    
+    def test_find_by_cache_key_multiple_results_returns_most_recent(self, mock_client, sample_score_result_data):
+        """Test that find_by_cache_key returns the most recent result when multiple exist"""
+        # Create multiple results with different timestamps
+        older_result = sample_score_result_data.copy()
+        older_result['id'] = 'older-result'
+        older_result['updatedAt'] = '2025-07-13T17:00:00.000000+00:00'
+        
+        newer_result = sample_score_result_data.copy()
+        newer_result['id'] = 'newer-result'
+        newer_result['updatedAt'] = '2025-07-13T19:00:00.000000+00:00'
+        
+        # Mock response with multiple items (should be sorted DESC by updatedAt)
+        mock_response = {
+            'listScoreResultByItemIdAndScorecardIdAndScoreIdAndUpdatedAt': {
+                'items': [newer_result]  # GSI should return most recent first due to DESC sort + limit 1
+            }
+        }
+        mock_client.execute.return_value = mock_response
+        
+        result = ScoreResult.find_by_cache_key(
+            client=mock_client,
+            item_id="item-123",
+            scorecard_id="scorecard-456",
+            score_id="score-789"
+        )
+        
+        # Should get the newer result
+        assert result is not None
+        assert result.id == 'newer-result'
+    
+    def test_find_by_cache_key_gsi_query_structure(self, mock_client, mock_gsi_response):
+        """Test that the GSI query is structured correctly"""
+        mock_client.execute.return_value = mock_gsi_response
+        
+        ScoreResult.find_by_cache_key(
+            client=mock_client,
+            item_id="test-item",
+            scorecard_id="test-scorecard", 
+            score_id="test-score"
+        )
+        
+        # Examine the generated query
+        call_args = mock_client.execute.call_args
+        query = call_args[0][0]
+        
+        # Verify key parts of the GSI query
+        assert 'query GetMostRecentScoreResult' in query
+        assert '$itemId: String!' in query
+        assert '$scorecardId: String!' in query
+        assert '$scoreId: String!' in query
+        assert 'itemId: $itemId' in query
+        assert 'beginsWith:' in query
+        assert 'scorecardId: $scorecardId' in query
+        assert 'scoreId: $scoreId' in query
+        assert 'sortDirection: DESC' in query
+        assert 'limit: 1' in query
+    
+    def test_find_by_cache_key_fields_inclusion(self, mock_client, mock_gsi_response):
+        """Test that all ScoreResult fields are included in the query"""
+        mock_client.execute.return_value = mock_gsi_response
+        
+        ScoreResult.find_by_cache_key(
+            client=mock_client,
+            item_id="test-item",
+            scorecard_id="test-scorecard",
+            score_id="test-score"
+        )
+        
+        # Check that ScoreResult.fields() output is included in query
+        call_args = mock_client.execute.call_args
+        query = call_args[0][0]
+        
+        # Should include key fields that ScoreResult.fields() returns
+        expected_fields = ['id', 'value', 'itemId', 'scorecardId', 'scoreId', 'updatedAt', 'createdAt']
+        for field in expected_fields:
+            assert field in query, f"Field {field} should be in the query"

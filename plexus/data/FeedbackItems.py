@@ -46,6 +46,8 @@ class FeedbackItems(DataCache):
         days: int = Field(..., description="Number of days back to search for feedback items")
         limit: Optional[int] = Field(None, description="Maximum total number of items in the dataset")
         limit_per_cell: Optional[int] = Field(None, description="Maximum number of items to sample from each confusion matrix cell")
+        initial_value: Optional[str] = Field(None, description="Filter by original AI prediction value")
+        final_value: Optional[str] = Field(None, description="Filter by corrected human value")
         cache_file: str = Field(default="feedback_items_cache.parquet", description="Cache file name")
         local_cache_directory: str = Field(default='./.plexus_training_data_cache/', description="Local cache directory")
         
@@ -77,7 +79,38 @@ class FeedbackItems(DataCache):
         self.client = create_client()
         self.account_id = resolve_account_id_for_command(self.client, None)
         
+        # Normalize filter values for case-insensitive comparison
+        self.normalized_initial_value = self._normalize_value(self.parameters.initial_value)
+        self.normalized_final_value = self._normalize_value(self.parameters.final_value)
+        
         logger.info(f"Initialized FeedbackItems cache for scorecard='{self.parameters.scorecard}', score='{self.parameters.score}', days={self.parameters.days}")
+
+    def _normalize_value(self, value: Optional[str]) -> Optional[str]:
+        """
+        Normalize a value for case-insensitive comparison.
+        
+        Args:
+            value: The value to normalize
+            
+        Returns:
+            Normalized value (lowercase, stripped) or None
+        """
+        if value is None:
+            return None
+        return str(value).lower().strip()
+    
+    def _normalize_item_value(self, value: Optional[str]) -> Optional[str]:
+        """
+        Normalize an item value for case-insensitive comparison.
+        This method is provided for consistency with the test expectations.
+        
+        Args:
+            value: The value to normalize
+            
+        Returns:
+            Normalized value (lowercase, stripped) or None
+        """
+        return self._normalize_value(value)
 
     def _resolve_identifiers(self) -> Tuple[str, str, str, str]:
         """
@@ -135,7 +168,9 @@ class FeedbackItems(DataCache):
             'score_id': score_id,
             'days': self.parameters.days,
             'limit': self.parameters.limit,
-            'limit_per_cell': self.parameters.limit_per_cell
+            'limit_per_cell': self.parameters.limit_per_cell,
+            'initial_value': self.normalized_initial_value,
+            'final_value': self.normalized_final_value
         }
         params_str = json.dumps(params, sort_keys=True)
         params_hash = hashlib.md5(params_str.encode()).hexdigest()[:8]
@@ -246,17 +281,44 @@ class FeedbackItems(DataCache):
     async def _fetch_feedback_items(self, scorecard_id: str, score_id: str, 
                                    scorecard_name: str, score_name: str) -> List[FeedbackItem]:
         """Fetch feedback items using the FeedbackService."""
-        return await FeedbackService.find_feedback_items(
+        # First, get all items without value filtering (since FeedbackService is case-sensitive)
+        all_items = await FeedbackService.find_feedback_items(
             client=self.client,
             scorecard_id=scorecard_id,
             score_id=score_id,
             account_id=self.account_id,
             days=self.parameters.days,
-            initial_value=None,
-            final_value=None,
+            initial_value=None,  # Don't filter at service level
+            final_value=None,    # Don't filter at service level
             limit=None,  # We'll apply limits after sampling
             prioritize_edit_comments=False
         )
+        
+        # Apply case-insensitive filtering locally if needed
+        if self.parameters.initial_value or self.parameters.final_value:
+            filtered_items = []
+            for item in all_items:
+                matches = True
+                
+                # Case-insensitive initial_value filtering
+                if self.parameters.initial_value:
+                    item_initial = self._normalize_item_value(item.initialAnswerValue)
+                    if item_initial != self.normalized_initial_value:
+                        matches = False
+                
+                # Case-insensitive final_value filtering  
+                if self.parameters.final_value:
+                    item_final = self._normalize_item_value(item.finalAnswerValue)
+                    if item_final != self.normalized_final_value:
+                        matches = False
+                
+                if matches:
+                    filtered_items.append(item)
+            
+            logger.info(f"After case-insensitive filtering: {len(filtered_items)} items (from {len(all_items)} total)")
+            return filtered_items
+        
+        return all_items
 
     def _sample_items_from_confusion_matrix(self, feedback_items: List[FeedbackItem]) -> List[FeedbackItem]:
         """
@@ -350,11 +412,13 @@ class FeedbackItems(DataCache):
         
         Expected columns (EXACTLY these, no extras):
         - content_id: DynamoDB item ID
+        - feedback_item_id: Feedback item ID
         - text: Item.text content
         - metadata: JSON string of metadata structure
         - IDs: Hash of identifiers with name/value/URL structure
         - {score_name}: Final answer value (ground truth)
         - {score_name} comment: Final explanation/comment with complex logic
+        - {score_name} edit comment: Edit comment from feedback item
         
         Args:
             feedback_items: Sampled feedback items
@@ -364,12 +428,15 @@ class FeedbackItems(DataCache):
             DataFrame with properly formatted rows matching CallCriteriaDBCache format
         """
         print(f"DEBUG: _create_dataset_rows called with {len(feedback_items)} items, score_name='{score_name}'")
-        print(f"DEBUG: This is the NEW implementation that should only create 6 columns")
+        print(f"DEBUG: This is the NEW implementation that should only create 8 columns (including feedback_item_id and edit comment)")
         rows = []
         
         for i, feedback_item in enumerate(feedback_items):
             # content_id: Use DynamoDB item ID
             content_id = feedback_item.itemId
+            
+            # feedback_item_id: Use feedback item ID
+            feedback_item_id = feedback_item.id
             
             # text: Get the text content from Item.text (the transcript)
             text = ""
@@ -411,14 +478,19 @@ class FeedbackItems(DataCache):
             # Score comment: Complex logic for determining the comment
             score_comment = self._determine_score_comment(feedback_item)
             
+            # Edit comment: Direct edit comment from feedback item
+            edit_comment = getattr(feedback_item, 'editCommentValue', None) or ""
+            
             # Build the row with ONLY the specified columns (IDs first, then metadata, then text)
             row = {
                 'content_id': content_id,
+                'feedback_item_id': feedback_item_id,
                 'IDs': ids_hash,
                 'metadata': metadata,
                 'text': text,
                 score_name: score_value,
-                f"{score_name} comment": score_comment
+                f"{score_name} comment": score_comment,
+                f"{score_name} edit comment": edit_comment
             }
             
             rows.append(row)
@@ -432,7 +504,7 @@ class FeedbackItems(DataCache):
         # Create DataFrame with proper column structure even when empty
         if not rows:
             # Create empty DataFrame with expected columns (IDs first, then metadata, then text)
-            columns = ['content_id', 'IDs', 'metadata', 'text', score_name, f"{score_name} comment"]
+            columns = ['content_id', 'feedback_item_id', 'IDs', 'metadata', 'text', score_name, f"{score_name} comment", f"{score_name} edit comment"]
             df = pd.DataFrame(columns=columns)
         else:
             df = pd.DataFrame(rows)
@@ -444,8 +516,10 @@ class FeedbackItems(DataCache):
         print(f"DEBUG: FeedbackItems._create_dataset_rows created DataFrame with columns: {list(df.columns)}")
         if len(df) > 0:
             print(f"DEBUG: Sample row keys: {list(df.iloc[0].to_dict().keys())}")
+            print(f"DEBUG: Sample feedback_item_id value: '{df.iloc[0]['feedback_item_id'] if 'feedback_item_id' in df.columns else 'NO FEEDBACK_ITEM_ID COLUMN'}'")
             print(f"DEBUG: Sample text value: '{df.iloc[0]['text'] if 'text' in df.columns else 'NO TEXT COLUMN'}'")
             print(f"DEBUG: Sample comment value: '{df.iloc[0][f'{score_name} comment'] if f'{score_name} comment' in df.columns else 'NO COMMENT COLUMN'}'")
+            print(f"DEBUG: Sample edit comment value: '{df.iloc[0][f'{score_name} edit comment'] if f'{score_name} edit comment' in df.columns else 'NO EDIT COMMENT COLUMN'}'")
         
         return df
     

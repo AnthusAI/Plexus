@@ -15,6 +15,14 @@ export interface ScoreResultWithDetails {
   updatedAt?: string;
   createdAt?: string;
   attachments?: string[] | null;
+  feedbackItem?: {
+    id: string;
+    editCommentValue: string | null;
+    initialAnswerValue?: string | null;
+    finalAnswerValue?: string | null;
+    editorName?: string | null;
+    editedAt?: string | null;
+  } | null;
   scorecard?: {
     id: string;
     name: string;
@@ -81,6 +89,14 @@ export function useItemScoreResults(itemId: string | null) {
                 updatedAt
                 createdAt
                 attachments
+                feedbackItem {
+                  id
+                  editCommentValue
+                  initialAnswerValue
+                  finalAnswerValue
+                  editorName
+                  editedAt
+                }
                 scorecard {
                   id
                   name

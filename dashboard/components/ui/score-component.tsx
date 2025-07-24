@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { MoreHorizontal, X, Square, Columns2, FileStack, ChevronDown, ChevronUp, Award, FileCode, Minimize, Maximize, ArrowDownWideNarrow, Expand, Shrink, TestTube, FlaskConical, FlaskRound, TestTubes, ListCheck } from 'lucide-react'
+import { MoreHorizontal, X, Square, Columns2, FileStack, ChevronDown, ChevronUp, Award, FileCode, Minimize, Maximize, ArrowDownWideNarrow, Expand, Shrink, TestTube, FlaskConical, FlaskRound, TestTubes, ListCheck, MessageCircleMore } from 'lucide-react'
 import { CardButton } from '@/components/CardButton'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Popover from '@radix-ui/react-popover'
@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Checkbox } from '@/components/ui/checkbox'
 import { generateClient } from 'aws-amplify/api'
 import { toast } from 'sonner'
 import { ScoreVersionHistory } from './score-version-history'
@@ -42,6 +43,7 @@ export interface ScoreData {
   icon?: React.ReactNode
   configuration?: string // YAML configuration string
   championVersionId?: string // ID of the champion version
+  isDisabled?: boolean // Whether the score is disabled
 }
 
 interface ScoreVersion {
@@ -106,6 +108,7 @@ interface ScoreComponentProps extends React.HTMLAttributes<HTMLDivElement> {
   onToggleFullWidth?: () => void
   isFullWidth?: boolean
   onSave?: () => void
+  onFeedbackAnalysis?: () => void
   exampleItems?: Array<{
     id: string
     displayValue: string
@@ -122,6 +125,7 @@ interface DetailContentProps {
   onEditChange?: (changes: Partial<ScoreData>) => void
   onSave?: () => void
   onCancel?: () => void
+  onFeedbackAnalysis?: () => void
   hasChanges?: boolean
   versions?: ScoreVersion[]
   championVersionId?: string
@@ -243,6 +247,7 @@ const DetailContent = React.memo(({
   onEditChange,
   onSave,
   onCancel,
+  onFeedbackAnalysis,
   hasChanges,
   versions,
   championVersionId,
@@ -334,7 +339,7 @@ const DetailContent = React.memo(({
   }, [currentConfig, score])
 
   // Handle form field changes
-  const handleFormChange = (field: string, value: string) => {
+  const handleFormChange = (field: string, value: string | boolean) => {
     
     // Set editing flag to prevent useEffect from overriding our changes
     setIsEditing(true);
@@ -632,6 +637,21 @@ const DetailContent = React.memo(({
                 placeholder="External ID"
               />
             </div>
+            <div className="flex items-center space-x-2 pt-2">
+              <Checkbox
+                id="isDisabled"
+                checked={parsedConfig.isDisabled || false}
+                onCheckedChange={(checked) => 
+                  handleFormChange('isDisabled', checked as boolean)
+                }
+              />
+              <label
+                htmlFor="isDisabled"
+                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+              >
+                Disabled
+              </label>
+            </div>
             <textarea
               value={versionNote}
               onChange={handleNoteChange}
@@ -671,6 +691,12 @@ const DetailContent = React.memo(({
                   <TestTubes className="mr-2 h-4 w-4" />
                   Evaluate Alignment
                 </DropdownMenuItem>
+                {onFeedbackAnalysis && (
+                  <DropdownMenuItem onClick={onFeedbackAnalysis}>
+                    <MessageCircleMore className="mr-2 h-4 w-4" />
+                    Analyze Feedback
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </ShadcnDropdownMenu>
             {onToggleFullWidth && (
@@ -734,6 +760,12 @@ const DetailContent = React.memo(({
                   <TestTubes className="mr-2 h-4 w-4" />
                   Evaluate Alignment
                 </DropdownMenuItem>
+                {onFeedbackAnalysis && (
+                  <DropdownMenuItem onClick={onFeedbackAnalysis}>
+                    <MessageCircleMore className="mr-2 h-4 w-4" />
+                    Analyze Feedback
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </ShadcnDropdownMenu>
           )}
@@ -833,7 +865,8 @@ const DetailContent = React.memo(({
                     externalId: externalIdValue !== undefined ? String(externalIdValue) : undefined,
                     key: parsed.key,
                     description: parsed.description,
-                    configuration: value // Store the original YAML string
+                    configuration: value, // Store the original YAML string
+                    isDisabled: parsed.isDisabled
                   });
                 } catch (error) {
                   // Handle cancellation errors gracefully
@@ -1047,6 +1080,7 @@ export function ScoreComponent({
   onToggleFullWidth,
   isFullWidth = false,
   onSave,
+  onFeedbackAnalysis,
   exampleItems = [],
   scorecardName,
   onTaskCreated,
@@ -1623,6 +1657,7 @@ export function ScoreComponent({
               onEditChange={handleEditChange}
               onSave={onSave || handleSave}
               onCancel={handleCancel}
+              onFeedbackAnalysis={onFeedbackAnalysis}
               hasChanges={hasChanges}
               versions={versions}
               championVersionId={championVersionId}

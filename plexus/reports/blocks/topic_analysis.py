@@ -639,9 +639,6 @@ class TopicAnalysis(BaseReportBlock):
                                 topic_id = row.get('Topic', -1)
                                 if topic_id != -1:  # Skip the -1 topic which is usually "noise"
                                     valid_topic_count += 1
-                                    # Only store first 20 topics to reduce DynamoDB record size
-                                    if len(topics_list) >= 20:
-                                        continue
                                     # Get simple keywords list (no weights)
                                     keywords = []
                                     
@@ -825,24 +822,61 @@ class TopicAnalysis(BaseReportBlock):
                                 self._log(f"❌ Failed to load representative documents: {e}", level="ERROR")
                                 # Continue without representative documents
                             
-                            final_output_data["topics"] = topics_list
+                            # Store full topic data as attached file to avoid DynamoDB size limits
+                            # Create a summary for the main record with just essential info
+                            topics_summary = []
+                            for topic in topics_list:
+                                topics_summary.append({
+                                    "id": topic["id"],
+                                    "name": topic["name"],
+                                    "count": topic["count"],
+                                    "keywords": topic["keywords"][:5],  # Limit keywords to reduce size
+                                    "examples_count": len(topic.get("examples", []))  # Just count, not full examples
+                                })
+                            
+                            final_output_data["topics"] = topics_summary
+                            
+                            # Save full topic data to attached file
+                            if report_block_id:
+                                try:
+                                    import json
+                                    full_topics_json = json.dumps({
+                                        "topics": topics_list,
+                                        "total_topics": len(topics_list),
+                                        "analysis_metadata": {
+                                            "num_topics_requested": num_topics,
+                                            "min_topic_size": min_topic_size,
+                                            "top_n_words": top_n_words
+                                        }
+                                    }, indent=2, ensure_ascii=False)
+                                    
+                                    # Attach full topics data as JSON file
+                                    self.attach_detail_file(
+                                        report_block_id=report_block_id,
+                                        file_name="topics_complete.json",
+                                        content=full_topics_json.encode('utf-8'),
+                                        content_type="application/json"
+                                    )
+                                    self._log(f"✅ Saved complete topic data with {len(topics_list)} topics to topics_complete.json")
+                                except Exception as e:
+                                    self._log(f"❌ Failed to save complete topic data: {e}", level="ERROR")
                             
                             # Add before/after comparison to fine_tuning section
                             if before_topics_data:
-                                # Simplify before topics data structure - just topic name and keywords
+                                # Simplify before topics data structure - just topic name and keywords (limit to reduce size)
                                 topics_before_simplified = []
-                                for topic_id, topic_data in list(before_topics_data.items())[:20]:  # Limit to 20
+                                for topic_id, topic_data in list(before_topics_data.items())[:10]:  # Limit to 10 for size
                                     topics_before_simplified.append({
                                         "topic_id": int(topic_id),
                                         "name": topic_data.get('name', f'Topic {topic_id}'),
-                                        "keywords": topic_data.get('keywords', [])
+                                        "keywords": topic_data.get('keywords', [])[:5]  # Limit keywords
                                     })
                                 final_output_data["fine_tuning"]["topics_before"] = topics_before_simplified
                                 self._log(f"✅ Added 'before' topics data to fine-tuning section ({len(topics_before_simplified)} of {len(before_topics_data)} topics)")
                                 
-                                # Create before/after comparison
+                                # Create before/after comparison (limit to reduce size)
                                 comparison = []
-                                for topic in topics_list[:10]:  # Show first 10 topics
+                                for topic in topics_summary[:5]:  # Show first 5 topics from summary
                                     topic_id_str = str(topic["id"])
                                     before_keywords = []
                                     before_name = "N/A"
@@ -874,6 +908,7 @@ class TopicAnalysis(BaseReportBlock):
                             self._log("🎯 TOPIC DISCOVERY RESULTS")
                             self._log("-" * 40)
                             self._log(f"📈 FOUND {len(topics_list)} DISTINCT TOPICS")
+                            self._log(f"📋 Complete topic data saved to topics_complete.json attachment")
                             
                             # Log top topic details for visibility
                             if topics_list:

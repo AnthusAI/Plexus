@@ -66,6 +66,8 @@ interface TaskDisplayProps {
   selectedScoreResultId?: string | null
   onSelectScoreResult?: (id: string | null) => void
   commandDisplay?: 'show' | 'hide'
+  onShare?: () => void
+  onDelete?: (evaluationId: string) => void
 }
 
 function calculateProgress(processedItems?: number | null, totalItems?: number | null): number {
@@ -88,7 +90,9 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
   onSelectScoreResult,
   extra,
   isSelected,
-  commandDisplay: initialCommandDisplay = 'show'
+  commandDisplay: initialCommandDisplay = 'show',
+  onShare,
+  onDelete
 }: TaskDisplayProps) {
   // Add debug logging for onClose prop
   console.log('TaskDisplay component received props:', {
@@ -223,7 +227,8 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
         },
         trace: result.trace ?? scoreResult?.trace ?? null,
         itemId: result.itemId ?? parsedMetadata.item_id?.toString() ?? null,
-        createdAt: result.createdAt
+        createdAt: result.createdAt,
+        feedbackItem: result.feedbackItem ?? null  // Preserve feedbackItem relationship
       };
 
       console.log('Transformed score result in TaskDisplay:', {
@@ -451,7 +456,9 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
       isSelected,
       extra,
       selectedScoreResultId,
-      onSelectScoreResult
+      onSelectScoreResult,
+      onShare,
+      onDelete
     } as EvaluationTaskProps;
 
     return <EvaluationTask {...evaluationTaskProps} variant={variant} />;

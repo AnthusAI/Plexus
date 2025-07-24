@@ -372,20 +372,28 @@ export function observeScoreResults(client: any, evaluationId: string) {
               evaluationId,
               limit: 10000,
               nextToken,
-              fields: [
-                'id',
-                'value',
-                'confidence',
-                'metadata',
-                'explanation',
-                'correct',
-                'itemId',
-                'accountId',
-                'scoringJobId',
-                'evaluationId',
-                'scorecardId',
-                'createdAt'
-              ]
+              selectionSet: `
+                id
+                value
+                confidence
+                metadata
+                explanation
+                correct
+                itemId
+                accountId
+                scoringJobId
+                evaluationId
+                scorecardId
+                createdAt
+                feedbackItem {
+                  id
+                  editCommentValue
+                  initialAnswerValue
+                  finalAnswerValue
+                  editorName
+                  editedAt
+                }
+              `
             })
             
             const pageSize = response?.data?.length || 0

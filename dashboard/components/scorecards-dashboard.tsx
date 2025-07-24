@@ -26,7 +26,8 @@ import {
   Database,
   Columns2,
   Square,
-  X
+  X,
+  MessageCircleMore
 } from "lucide-react"
 import { ScoreCount } from "./scorecards/score-count"
 import { CardButton } from "./CardButton"
@@ -43,6 +44,8 @@ import { useRouter, usePathname, useParams } from "next/navigation"
 import { ScorecardDashboardSkeleton } from "./loading-skeleton"
 import { Task, TaskHeader, TaskContent } from "./Task"
 import { observeTaskUpdates, observeTaskStageUpdates } from "@/utils/subscriptions"
+import { AdHocFeedbackAnalysis } from "@/components/ui/ad-hoc-feedback-analysis"
+import { motion, AnimatePresence } from 'framer-motion'
 
 const ACCOUNT_KEY = 'call-criteria'
 
@@ -99,6 +102,13 @@ export default function ScorecardsComponent({
   const [shouldExpandExamples, setShouldExpandExamples] = useState(false)
   const [selectedTask, setSelectedTask] = useState<any | null>(null)
   const [isTaskViewActive, setIsTaskViewActive] = useState(false)
+  const [feedbackAnalysisPanel, setFeedbackAnalysisPanel] = useState<{
+    isOpen: boolean;
+    scorecardId?: string;
+    scoreId?: string;
+    scoreName?: string;
+    type: 'scorecard' | 'score';
+  } | null>(null)
   const router = useRouter()
   const pathname = usePathname()
   
@@ -296,6 +306,42 @@ export default function ScorecardsComponent({
       setSelectedItem(null);
       setIsCreatingItem(false);
     }
+  };
+
+  // Handle opening feedback analysis for a scorecard
+  const handleScorecardFeedbackAnalysis = (scorecardId: string) => {
+    console.log('Opening feedback analysis for scorecard:', scorecardId);
+    setFeedbackAnalysisPanel({
+      isOpen: true,
+      scorecardId,
+      type: 'scorecard'
+    });
+    // Close task view if open
+    setIsTaskViewActive(false);
+    // If we have a selected score, clear it to show scorecard + feedback layout
+    if (selectedScore) {
+      setSelectedScore(null);
+      setMaximizedScoreId(null);
+    }
+  };
+
+  // Handle opening feedback analysis for a specific score
+  const handleScoreFeedbackAnalysis = (scoreId: string, scoreName?: string, scorecardId?: string) => {
+    console.log('Opening feedback analysis for score:', scoreId);
+    setFeedbackAnalysisPanel({
+      isOpen: true,
+      scoreId,
+      scoreName,
+      scorecardId,
+      type: 'score'
+    });
+    // Close task view if open
+    setIsTaskViewActive(false);
+  };
+
+  // Handle closing feedback analysis panel
+  const handleCloseFeedbackAnalysis = () => {
+    setFeedbackAnalysisPanel(null);
   };
 
   // Handle task closure
@@ -501,6 +547,11 @@ export default function ScorecardsComponent({
       // Reset item selection when selecting a score
       setSelectedItem(null);
       setIsCreatingItem(false);
+      
+      // Close feedback analysis if open when selecting a score
+      if (feedbackAnalysisPanel?.isOpen) {
+        setFeedbackAnalysisPanel(null);
+      }
       
       // Update URL without triggering a navigation/re-render
       if (selectedScorecard) {
@@ -973,23 +1024,44 @@ export default function ScorecardsComponent({
   }
 
   const handleDragStart = (e: React.MouseEvent) => {
-    e.preventDefault()
-    const startX = e.pageX
-    const startWidth = leftPanelWidth
-
+    e.preventDefault();
+    
+    // Get the initial mouse position and panel width
+    const startX = e.clientX;
+    const startWidth = leftPanelWidth;
+    
+    // Get the container element for width calculations
+    const container = e.currentTarget.parentElement;
+    if (!container) return;
+    
+    // Create the drag handler
     const handleDrag = (e: MouseEvent) => {
-      const delta = e.pageX - startX
-      const newWidth = Math.min(Math.max(startWidth + (delta / window.innerWidth) * 100, 30), 70)
-      setLeftPanelWidth(newWidth)
-    }
-
+      // Calculate how far the mouse has moved
+      const deltaX = e.clientX - startX;
+      
+      // Calculate the container width for percentage calculation
+      const containerWidth = container.getBoundingClientRect().width;
+      
+      // Calculate the new width as a percentage of the container
+      const deltaPercentage = (deltaX / containerWidth) * 100;
+      const newWidth = Math.min(Math.max(startWidth + deltaPercentage, 20), 80);
+      
+      setLeftPanelWidth(newWidth);
+    };
+    
+    // Create the cleanup function
     const handleDragEnd = () => {
-      document.removeEventListener('mousemove', handleDrag)
-      document.removeEventListener('mouseup', handleDragEnd)
-    }
-
-    document.addEventListener('mousemove', handleDrag)
-    document.addEventListener('mouseup', handleDragEnd)
+      document.removeEventListener('mousemove', handleDrag);
+      document.removeEventListener('mouseup', handleDragEnd);
+      document.body.style.cursor = '';
+    };
+    
+    // Set the cursor for the entire document during dragging
+    document.body.style.cursor = 'col-resize';
+    
+    // Add the event listeners
+    document.addEventListener('mousemove', handleDrag);
+    document.addEventListener('mouseup', handleDragEnd);
   }
 
   // Add back the renderSelectedScorecard function
@@ -1029,6 +1101,7 @@ export default function ScorecardsComponent({
             console.log('View data for scorecard:', selectedScorecard.id)
             // TODO: Implement data source view
           }}
+          onFeedbackAnalysis={() => handleScorecardFeedbackAnalysis(selectedScorecard.id)}
           isFullWidth={isFullWidth}
           onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
           onClose={handleCloseScorecard}
@@ -1069,18 +1142,8 @@ export default function ScorecardsComponent({
   const renderSelectedScore = () => {
     if (!selectedScore || !processedScore) return null;
 
-    // When in score + task layout, score component takes full width of its container
-    const isInScoreTaskLayout = selectedScore && selectedTask;
-
     return (
-      <div className={cn(
-        "h-full overflow-y-auto overflow-x-hidden",
-        maximizedScoreId ? "w-full" : "",
-        isInScoreTaskLayout ? "w-full" : ""
-      )}
-      style={!maximizedScoreId && !isInScoreTaskLayout ? {
-        width: `${100 - scorecardDetailWidth}%`
-      } : undefined}>
+      <div className="h-full overflow-y-auto overflow-x-hidden w-full">
         <ScoreComponent
           score={processedScore}
           variant="detail"
@@ -1094,7 +1157,12 @@ export default function ScorecardsComponent({
               setSelectedTask(null);
               setIsTaskViewActive(false);
             }
+            // If there's feedback analysis open when closing score, also close it
+            if (feedbackAnalysisPanel?.isOpen) {
+              setFeedbackAnalysisPanel(null);
+            }
           }}
+          onFeedbackAnalysis={() => handleScoreFeedbackAnalysis(selectedScore.id, selectedScore.name, selectedScorecard?.id)}
           exampleItems={scorecardExamples.map(example => {
             // Extract item ID from "item:uuid" format
             const itemId = example.replace('item:', '');
@@ -1226,15 +1294,23 @@ export default function ScorecardsComponent({
     <div className="@container flex flex-col h-full p-3 overflow-hidden">
       <div className="flex flex-1 min-h-0">
         {/* Grid Panel */}
-        <div 
+        <motion.div 
           className={cn(
             "h-full overflow-auto",
-            selectedScore || (selectedScorecard && isFullWidth) || (selectedScorecard && selectedTask) ? "hidden" : selectedScorecard ? "flex" : "w-full",
-            "transition-all duration-200"
+            selectedScore || (selectedScorecard && isFullWidth) || (selectedScorecard && selectedTask) || feedbackAnalysisPanel?.isOpen ? "hidden" : selectedScorecard ? "flex" : "w-full"
           )}
-          style={selectedScorecard && !isFullWidth && !selectedTask ? {
-            width: `${leftPanelWidth}%`
-          } : undefined}
+          animate={{
+            width: selectedScorecard && !isFullWidth && !selectedTask && !feedbackAnalysisPanel?.isOpen 
+              ? `${leftPanelWidth}%`
+              : selectedScore || (selectedScorecard && isFullWidth) || (selectedScorecard && selectedTask) || feedbackAnalysisPanel?.isOpen 
+                ? '0%'
+                : '100%'
+          }}
+          transition={{
+            type: 'spring',
+            stiffness: 300,
+            damping: 30
+          }}
         >
           <div className="space-y-3 w-full">
             <div className="flex justify-end">
@@ -1276,6 +1352,7 @@ export default function ScorecardsComponent({
                           isSelected={selectedScorecard?.id === scorecard.id}
                           onClick={() => handleSelectScorecard(scorecard)}
                           onEdit={() => handleEdit(scorecard)}
+                          onFeedbackAnalysis={() => handleScorecardFeedbackAnalysis(scorecard.id)}
                         />
                       </div>
                     )
@@ -1283,10 +1360,10 @@ export default function ScorecardsComponent({
               </div>
             </div>
           </div>
-        </div>
+        </motion.div>
 
         {/* Resize Handle between Grid and Detail */}
-        {selectedScorecard && !isFullWidth && !selectedScore && !selectedTask && (
+        {selectedScorecard && !isFullWidth && !selectedScore && !selectedTask && !feedbackAnalysisPanel?.isOpen && (
           <div
             className="w-[12px] relative cursor-col-resize flex-shrink-0 group"
             onMouseDown={handleDragStart}
@@ -1298,8 +1375,184 @@ export default function ScorecardsComponent({
 
         {/* Detail Panel Container */}
         <div className="flex-1 flex overflow-hidden">
-          {/* When we have a selected score and task, show score + task layout */}
-          {selectedScore && selectedTask ? (
+          {/* When we have a selected score and feedback analysis, show score + feedback layout */}
+          <AnimatePresence mode="wait">
+            {selectedScore && feedbackAnalysisPanel?.isOpen ? (
+              <motion.div
+                key="score-feedback-layout"
+                initial={{ opacity: 0, x: '100%' }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: '100%' }}
+                transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                className="flex flex-1 overflow-hidden"
+              >
+                {/* Score Component (Left Column) - Explicitly set to 50% */}
+                <div className="w-1/2 overflow-hidden flex-shrink-0">
+                  {renderSelectedScore()}
+                </div>
+                
+                {/* Gap between columns with drag handler */}
+                <motion.div 
+                  className="w-3 flex-shrink-0 relative cursor-col-resize group"
+                  initial={{ opacity: 0, width: 0 }}
+                  animate={{ opacity: 1, width: 12 }}
+                  transition={{ duration: 0.3 }}
+                  onMouseDown={(e: React.MouseEvent) => {
+                    e.preventDefault();
+                    const startX = e.clientX;
+                    const startWidth = 50; // Start from 50% split
+                    const container = e.currentTarget.parentElement;
+                    if (!container) return;
+                    
+                    const handleDrag = (e: MouseEvent) => {
+                      const deltaX = e.clientX - startX;
+                      const containerWidth = container.getBoundingClientRect().width;
+                      const deltaPercentage = (deltaX / containerWidth) * 100;
+                      const newLeftWidth = Math.min(Math.max(startWidth + deltaPercentage, 25), 75);
+                      
+                      // Update both panels dynamically
+                      const leftPanel = container.children[0] as HTMLElement;
+                      const rightPanel = container.children[2] as HTMLElement;
+                      if (leftPanel && rightPanel) {
+                        leftPanel.style.width = `${newLeftWidth}%`;
+                        rightPanel.style.width = `${100 - newLeftWidth}%`;
+                      }
+                    };
+                    
+                    const handleDragEnd = () => {
+                      document.removeEventListener('mousemove', handleDrag);
+                      document.removeEventListener('mouseup', handleDragEnd);
+                      document.body.style.cursor = '';
+                    };
+                    
+                    document.body.style.cursor = 'col-resize';
+                    document.addEventListener('mousemove', handleDrag);
+                    document.addEventListener('mouseup', handleDragEnd);
+                  }}
+                >
+                  <div className="absolute inset-0 rounded-full transition-colors duration-150 
+                    group-hover:bg-accent" />
+                </motion.div>
+                
+                {/* Feedback Analysis Panel (Right Column) - Take remaining space */}
+                <div className="flex-1 overflow-hidden">
+                <div className="h-full overflow-y-auto overflow-x-hidden w-full rounded-lg text-card-foreground hover:bg-accent/50 transition-colors bg-card-selected flex flex-col">
+                  <div className="p-4 w-full flex-1 flex flex-col min-h-0">
+                    <div className="w-full h-full flex flex-col min-h-0">
+                      <div className="flex justify-between items-center mb-4 flex-shrink-0">
+                        <div className="flex items-center gap-2">
+                          <MessageCircleMore className="h-5 w-5 text-foreground" />
+                          <h2 className="text-lg font-semibold">Feedback Analysis</h2>
+                        </div>
+                        <CardButton
+                          icon={X}
+                          onClick={handleCloseFeedbackAnalysis}
+                          aria-label="Close feedback analysis"
+                        />
+                      </div>
+                      <div className="flex-1 overflow-y-auto min-h-0">
+                        <AdHocFeedbackAnalysis
+                          scorecardId={feedbackAnalysisPanel.scorecardId}
+                          scoreId={feedbackAnalysisPanel.scoreId}
+                          scoreName={feedbackAnalysisPanel.scoreName}
+                          showHeader={false}
+                          showConfiguration={true}
+                          defaultDays={7}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                </div>
+              </motion.div>
+            ) : selectedScorecard && feedbackAnalysisPanel?.isOpen && !selectedScore ? (
+              <motion.div
+                key="scorecard-feedback-layout"
+                initial={{ opacity: 0, x: '100%' }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: '100%' }}
+                transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                className="flex flex-1 overflow-hidden"
+              >
+                {/* Scorecard + Feedback Analysis Layout: Scorecard (Left Column) - Explicitly set to 50% */}
+                <div className="w-1/2 overflow-hidden flex-shrink-0">
+                  {renderSelectedScorecard()}
+                </div>
+                
+                {/* Gap between columns with drag handler */}
+                <motion.div 
+                  className="w-3 flex-shrink-0 relative cursor-col-resize group"
+                  initial={{ opacity: 0, width: 0 }}
+                  animate={{ opacity: 1, width: 12 }}
+                  transition={{ duration: 0.3 }}
+                  onMouseDown={(e: React.MouseEvent) => {
+                    e.preventDefault();
+                    const startX = e.clientX;
+                    const startWidth = 50; // Start from 50% split
+                    const container = e.currentTarget.parentElement;
+                    if (!container) return;
+                    
+                    const handleDrag = (e: MouseEvent) => {
+                      const deltaX = e.clientX - startX;
+                      const containerWidth = container.getBoundingClientRect().width;
+                      const deltaPercentage = (deltaX / containerWidth) * 100;
+                      const newLeftWidth = Math.min(Math.max(startWidth + deltaPercentage, 25), 75);
+                      
+                      // Update both panels dynamically
+                      const leftPanel = container.children[0] as HTMLElement;
+                      const rightPanel = container.children[2] as HTMLElement;
+                      if (leftPanel && rightPanel) {
+                        leftPanel.style.width = `${newLeftWidth}%`;
+                        rightPanel.style.width = `${100 - newLeftWidth}%`;
+                      }
+                    };
+                    
+                    const handleDragEnd = () => {
+                      document.removeEventListener('mousemove', handleDrag);
+                      document.removeEventListener('mouseup', handleDragEnd);
+                      document.body.style.cursor = '';
+                    };
+                    
+                    document.body.style.cursor = 'col-resize';
+                    document.addEventListener('mousemove', handleDrag);
+                    document.addEventListener('mouseup', handleDragEnd);
+                  }}
+                >
+                  <div className="absolute inset-0 rounded-full transition-colors duration-150 
+                    group-hover:bg-accent" />
+                </motion.div>
+                
+                {/* Feedback Analysis Panel (Right Column) - Take remaining space */}
+                <div className="flex-1 overflow-hidden">
+                <div className="h-full overflow-y-auto overflow-x-hidden w-full rounded-lg text-card-foreground hover:bg-accent/50 transition-colors bg-card-selected flex flex-col">
+                  <div className="p-4 w-full flex-1 flex flex-col min-h-0">
+                    <div className="w-full h-full flex flex-col min-h-0">
+                      <div className="flex justify-between items-center mb-4 flex-shrink-0">
+                        <div className="flex items-center gap-2">
+                          <MessageCircleMore className="h-5 w-5 text-foreground" />
+                          <h2 className="text-lg font-semibold">Feedback Analysis</h2>
+                        </div>
+                        <CardButton
+                          icon={X}
+                          onClick={handleCloseFeedbackAnalysis}
+                          aria-label="Close feedback analysis"
+                        />
+                      </div>
+                      <div className="flex-1 overflow-y-auto min-h-0">
+                        <AdHocFeedbackAnalysis
+                          scorecardId={feedbackAnalysisPanel.scorecardId}
+                          scoreId={feedbackAnalysisPanel.scoreId}
+                          showHeader={false}
+                          showConfiguration={true}
+                          defaultDays={7}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                </div>
+              </motion.div>
+            ) : selectedScore && selectedTask ? (
             <>
               {/* Score Component (Left Column) */}
               <div className="flex-1 overflow-hidden">
@@ -1337,7 +1590,7 @@ export default function ScorecardsComponent({
               {/* Resize Handle between Scorecard and Score/Item/Task */}
               {(selectedScore || selectedItem || selectedTask) && !maximizedScoreId && (
                 <div
-                  className="w-[12px] relative cursor-col-resize flex-shrink-0 group mx-1"
+                  className="w-[12px] relative cursor-col-resize flex-shrink-0 group"
                   onMouseDown={(e: React.MouseEvent<HTMLDivElement>) => {
                     e.preventDefault()
                     const startX = e.pageX
@@ -1349,7 +1602,7 @@ export default function ScorecardsComponent({
                       const deltaX = e.pageX - startX
                       const containerWidth = container.getBoundingClientRect().width
                       const deltaPercent = (deltaX / containerWidth) * 100
-                      const newDetailWidth = Math.min(Math.max(startDetailWidth + deltaPercent, 30), 70)
+                      const newDetailWidth = Math.min(Math.max(startDetailWidth + deltaPercent, 20), 80)
                       requestAnimationFrame(() => {
                         setScorecardDetailWidth(newDetailWidth)
                       })
@@ -1372,11 +1625,12 @@ export default function ScorecardsComponent({
               )}
               
               {/* Only render these when not in two-column layout */}
-              {!selectedTask && renderSelectedScore()}
-              {!selectedTask && renderSelectedItem()}
+              {!selectedTask && !feedbackAnalysisPanel?.isOpen && renderSelectedScore()}
+              {!selectedTask && !feedbackAnalysisPanel?.isOpen && renderSelectedItem()}
               {!selectedScore && !selectedScorecard && renderSelectedTask()}
             </>
           )}
+          </AnimatePresence>
         </div>
       </div>
 

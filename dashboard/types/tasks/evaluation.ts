@@ -116,6 +116,14 @@ export type TaskData = {
         explanation: string | null
         itemId: string | null
         createdAt: string
+        feedbackItem?: {
+          id: string
+          editCommentValue: string | null
+          initialAnswerValue?: string | null
+          finalAnswerValue?: string | null
+          editorName?: string | null
+          editedAt?: string | null
+        } | null
       }>
     }
   }>

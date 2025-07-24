@@ -168,12 +168,28 @@ def create_celery_app() -> Celery:
     
     return app
 
-# Create the Celery app instance
-celery_app = create_celery_app()
+# Lazy Celery app instance - created on first access
+_celery_app = None
 
-# Register tasks for both worker and dispatcher
-from .CommandTasks import register_tasks
-execute_command, demo_task = register_tasks(celery_app)
+def get_celery_app():
+    """Get the Celery app instance, creating it lazily on first access."""
+    global _celery_app
+    if _celery_app is None:
+        _celery_app = create_celery_app()
+    return _celery_app
+
+# Lazy task registration - registered on first access
+_tasks_registered = False
+execute_command = None
+demo_task = None
+
+def ensure_tasks_registered():
+    """Ensure tasks are registered, registering them lazily on first access."""
+    global _tasks_registered, execute_command, demo_task
+    if not _tasks_registered:
+        from .CommandTasks import register_tasks
+        execute_command, demo_task = register_tasks(get_celery_app())
+        _tasks_registered = True
 
 @click.group()
 def command():
@@ -213,7 +229,7 @@ def worker(
             raise click.BadParameter(f"Invalid target pattern: {e}")
         
         # Store matcher in app config for task routing
-        celery_app.conf.task_target_matcher = matcher
+        get_celery_app().conf.task_target_matcher = matcher
         logging.info(f"Target patterns: {patterns}")
     else:
         logging.info("No target patterns specified - accepting all targets")
@@ -225,7 +241,8 @@ def worker(
         f"--loglevel={loglevel}",
     ]
     logging.info(f"Starting worker with arguments: {argv}")
-    celery_app.worker_main(argv)
+    ensure_tasks_registered()
+    get_celery_app().worker_main(argv)
 
 @command.command()
 @click.argument('command_string')
@@ -256,6 +273,8 @@ def dispatch(
     
     logging.info(f"Dispatching command: {command_string}")
     logging.info(f"Target: {target}")
+    ensure_tasks_registered()
+    celery_app = get_celery_app()
     logging.debug("Celery app: %s", celery_app)
     logging.debug("Broker URL: %s", celery_app.conf.broker_url)
     logging.debug("Backend URL: %s", celery_app.conf.result_backend)
@@ -452,7 +471,7 @@ def status(task_id: str, loglevel: str) -> None:
     
     try:
         # Attempt to retrieve the task status
-        task = celery_app.AsyncResult(task_id)
+        task = get_celery_app().AsyncResult(task_id)
         
         # Log the Celery state clearly, before anything else
         logging.info(f"CELERY_TASK_STATE: {task.state}")
@@ -491,7 +510,7 @@ def status(task_id: str, loglevel: str) -> None:
 @click.argument('task_id')
 def cancel(task_id: str) -> None:
     """Cancel a running command."""
-    task = celery_app.AsyncResult(task_id)
+    task = get_celery_app().AsyncResult(task_id)
     task.revoke(terminate=True)
     logging.info(f"Cancelled command task: {task_id}")
 
@@ -803,7 +822,7 @@ def monitor(active: bool, scheduled: bool, reserved: bool, stats: bool, workers:
         console = Console()
         
         # Create Celery app with inspect capabilities
-        inspect = celery_app.control.inspect()
+        inspect = get_celery_app().control.inspect()
         
         # Default to showing active tasks if no specific option is given
         if not any([active, scheduled, reserved, stats, workers]):
