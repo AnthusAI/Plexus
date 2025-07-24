@@ -223,6 +223,7 @@ def analyze_topics(
     representation_model_name: str = "gpt-4o-mini",
     transformed_df: Optional[pd.DataFrame] = None,
     prompt: Optional[str] = None,
+    system_prompt: Optional[str] = None,
     force_single_representation: bool = True,
     # New configurable parameters for document selection
     nr_docs: int = 100,
@@ -245,7 +246,8 @@ def analyze_topics(
         representation_model_provider: LLM provider for topic naming (default: "openai")
         representation_model_name: Specific model name for topic naming (default: "gpt-4o-mini")
         transformed_df: DataFrame with transformed data including ids column
-        prompt: Custom prompt for topic naming
+        prompt: Custom prompt for topic naming (user prompt)
+        system_prompt: Custom system prompt for topic naming context
         force_single_representation: Use only one representation model to avoid duplicate titles
         nr_docs: Number of representative documents to select per topic (default: 100)
         diversity: Diversity factor for document selection, 0-1 (default: 0.1)
@@ -346,16 +348,24 @@ def analyze_topics(
                 logger.info(f"🔥 REPR_DEBUG:   - diversity: {diversity}")
                 logger.info(f"🔥 REPR_DEBUG:   - prompt length: {len(prompt) if prompt else 0}")
                 
-                representation_model = OpenAI(
-                    client=client, 
-                    model=representation_model_name, 
-                    prompt=prompt,
-                    delay_in_seconds=1,
-                    nr_docs=nr_docs,
-                    diversity=diversity,
-                    doc_length=doc_length,
-                    tokenizer=tokenizer
-                )
+                # Prepare parameters for OpenAI representation model
+                openai_params = {
+                    "client": client,
+                    "model": representation_model_name,
+                    "prompt": prompt,
+                    "delay_in_seconds": 1,
+                    "nr_docs": nr_docs,
+                    "diversity": diversity,
+                    "doc_length": doc_length,
+                    "tokenizer": tokenizer
+                }
+                
+                # Add system prompt if provided (for task-based context)
+                if system_prompt:
+                    openai_params["system_prompt"] = system_prompt
+                    logger.info(f"🔥 REPR_DEBUG: Using task-based system prompt: '{system_prompt[:100]}...'")
+                
+                representation_model = OpenAI(**openai_params)
                 logger.info("✅ OpenAI representation model initialized successfully")
                 
                         
